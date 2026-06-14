@@ -1,0 +1,80 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.focusFramePlaceholder = m.top.findNode("focusFramePlaceholder")
+    m.focusFrame = m.top.findNode("focusFrame")
+    m.bg = m.top.findNode("bg")
+    m.textLabel = m.top.findNode("textLabel")
+    if m.top.fieldWidth = invalid or m.top.fieldWidth <= 0 then m.top.fieldWidth = 624
+    if m.top.fieldHeight = invalid or m.top.fieldHeight <= 0 then m.top.fieldHeight = 56
+    onDimensionsChanged()
+    onTextChanged()
+    onFocusVisualChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' onDimensionsChanged
+'-------------------------------------------------------------------------------
+sub onDimensionsChanged()
+    width = int(m.top.fieldWidth)
+    height = int(m.top.fieldHeight)
+
+    if width <= 0 then width = 624
+    if height <= 0 then height = 56
+
+    if m.bg <> invalid then
+        m.bg.width = width
+        m.bg.height = height
+    end if
+
+    if m.focusFrame <> invalid then
+        m.focusFrame.width = width + 20
+        m.focusFrame.height = height + 20
+    end if
+
+    if m.focusFramePlaceholder <> invalid then
+        m.focusFramePlaceholder.width = width + 20
+        m.focusFramePlaceholder.height = height + 20
+    end if
+
+    if m.textLabel <> invalid then
+        m.textLabel.width = width - 44
+        m.textLabel.translation = [18, int((height - 32) / 2)]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onTextChanged
+'-------------------------------------------------------------------------------
+sub onTextChanged()
+    if m.textLabel = invalid then return
+
+    displayText = m.top.text
+    if displayText = invalid or displayText = "" then
+        displayText = m.top.placeholder
+    end if
+
+    m.textLabel.text = displayText
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusVisualChanged
+'-------------------------------------------------------------------------------
+sub onFocusVisualChanged()
+    if m.bg = invalid then return
+
+    if m.top.hasFocusVisual = true then
+        'if m.focusFramePlaceholder <> invalid then m.focusFramePlaceholder.visible = false
+        if m.focusFrame <> invalid then m.focusFrame.visible = true
+        'm.bg.color = "21405EFF"
+        'm.bg.color = Color().background.tertiary
+    else
+        'if m.focusFramePlaceholder <> invalid then m.focusFramePlaceholder.visible = true
+        if m.focusFrame <> invalid then m.focusFrame.visible = false
+        'm.bg.color = "16263BFF"
+        'm.bg.color = Color().background.tertiary
+    end if
+    '00000040
+    onTextChanged()
+end sub

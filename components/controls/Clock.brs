@@ -1,0 +1,73 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.timeLabel = m.top.findNode("timeLabel")
+    m.clockTimer = m.top.findNode("clockTimer")
+
+    if m.top.clockWidth = invalid or m.top.clockWidth <= 0 then m.top.clockWidth = 160
+    if m.top.clockHeight = invalid or m.top.clockHeight <= 0 then m.top.clockHeight = 40
+    if m.top.color = invalid or m.top.color = 0 then m.top.color = &hF6F7FBFF
+
+    if m.clockTimer <> invalid then
+        m.clockTimer.observeField("fire", "onClockTimerFired")
+        m.clockTimer.control = "start"
+    end if
+
+    onDimensionsChanged()
+    onColorChanged()
+    updateTime()
+end sub
+
+'-------------------------------------------------------------------------------
+' onDimensionsChanged
+'-------------------------------------------------------------------------------
+sub onDimensionsChanged()
+    width = int(m.top.clockWidth)
+    height = int(m.top.clockHeight)
+    if width <= 0 then width = 160
+    if height <= 0 then height = 40
+
+    if m.timeLabel <> invalid then
+        m.timeLabel.width = width
+        m.timeLabel.height = height
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onColorChanged
+'-------------------------------------------------------------------------------
+sub onColorChanged()
+    if m.timeLabel <> invalid then m.timeLabel.color = m.top.color
+end sub
+
+'-------------------------------------------------------------------------------
+' onClockTimerFired
+'-------------------------------------------------------------------------------
+sub onClockTimerFired()
+    updateTime()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateTime
+'-------------------------------------------------------------------------------
+sub updateTime()
+    if m.timeLabel = invalid then return
+
+    now = CreateObject("roDateTime")
+    now.ToLocalTime()
+
+    hour = now.GetHours()
+    minute = now.GetMinutes()
+    indicator = "AM"
+
+    if hour >= 12 then indicator = "PM"
+
+    displayHour = hour mod 12
+    if displayHour = 0 then displayHour = 12
+
+    minuteText = minute.ToStr()
+    if minute < 10 then minuteText = "0" + minuteText
+
+    m.timeLabel.text = displayHour.ToStr() + ":" + minuteText + " " + indicator
+end sub
