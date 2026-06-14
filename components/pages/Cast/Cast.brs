@@ -66,7 +66,7 @@ function getPersonSubtitle(person as object) as string
     personType = FirstNonEmpty([person.Type, person.type], "Unknown")
     role = FirstNonEmpty([person.Role, person.role], "")
 
-    if LCase(personType) = "actor" and role <> "" then return "as " + role
+    if LCase(personType) = "actor" and role <> "" then return role
     return personType
 end function
 
@@ -78,7 +78,7 @@ function getPersonImageUrl(person as object) as string
     tag = FirstNonEmpty([person.PrimaryImageTag, person.primaryImageTag], "")
     if personId = "" or tag = "" then return ""
 
-    return NormalizeServerUrl(m.top.server) + "/Items/" + personId + "/Images/Primary?tag=" + tag + "&maxWidth=195&maxHeight=250&quality=90"
+    return NormalizeServerUrl(m.top.server) + "/Items/" + personId + "/Images/Primary?tag=" + tag + "&maxWidth=195&maxHeight=195&quality=90"
 end function
 
 '-------------------------------------------------------------------------------
