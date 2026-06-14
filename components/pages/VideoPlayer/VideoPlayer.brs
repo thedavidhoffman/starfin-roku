@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("PlayerPage")
+    m.log = CreateLogger("VideoPlayer")
     m.videoPlayer = m.top.findNode("videoPlayer")
     m.statusLabel = m.top.findNode("statusLabel")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
@@ -20,7 +20,7 @@ sub onPlayRequestChanged()
 
     m.statusLabel.text = "Loading video..."
     m.statusLabel.visible = true
-    m.videoPlayer.control = "stop"
+    stopPlayback()
     m.playbackInfoTask.request = request
     m.playbackInfoTask.control = "run"
 end sub
@@ -47,6 +47,7 @@ sub onPlaybackInfoResponse()
 
     m.videoPlayer.content = content
     m.videoPlayer.setFocus(true)
+    disableScreenSaver()
     m.videoPlayer.control = "play"
     m.statusLabel.visible = false
 end sub
@@ -57,11 +58,37 @@ end sub
 sub onVideoStateChanged()
     state = LCase(SafeString(m.videoPlayer.state, ""))
     if state = "error" then
+        enableScreenSaver()
         m.statusLabel.text = "Unable to play this video."
         m.statusLabel.visible = true
     else if state = "finished" then
+        stopPlayback()
         m.top.closeRequested = true
+    else if state = "stopped" then
+        enableScreenSaver()
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' disableScreenSaver
+'-------------------------------------------------------------------------------
+sub disableScreenSaver()
+    m.videoPlayer.disableScreenSaver = true
+end sub
+
+'-------------------------------------------------------------------------------
+' enableScreenSaver
+'-------------------------------------------------------------------------------
+sub enableScreenSaver()
+    m.videoPlayer.disableScreenSaver = false
+end sub
+
+'-------------------------------------------------------------------------------
+' stopPlayback
+'-------------------------------------------------------------------------------
+sub stopPlayback()
+    m.videoPlayer.control = "stop"
+    enableScreenSaver()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -79,7 +106,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
     if key = "back" then
-        m.videoPlayer.control = "stop"
+        stopPlayback()
         m.top.closeRequested = true
         return true
     end if

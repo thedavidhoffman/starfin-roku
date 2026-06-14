@@ -47,9 +47,61 @@ sub initHandlers()
     m.authController.observeField("loginRequired", "authHandleLoginRequired")
     m.authController.observeField("savedSession", "authHandleSavedSessionChanged")
     m.authController.observeField("sessionExpired", "authHandleSessionExpired")
-    m.homePage.observeField("selectedMovie", "playerHandleHomeMovieSelected")
+    m.homePage.observeField("selectedMovie", "movieDetailsHandleHomeMovieSelected")
     m.navigationController.observeField("currentRoute", "navHandleCurrentRouteChanged")
 
+end sub
+
+'===============================================================================
+' Movie Details
+'===============================================================================
+
+'-------------------------------------------------------------------------------
+' movieDetailsHandleHomeMovieSelected
+'-------------------------------------------------------------------------------
+sub movieDetailsHandleHomeMovieSelected()
+    selection = m.homePage.selectedMovie
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    page = CreateObject("roSGNode", "MovieDetails")
+    page.observeField("closeRequested", "movieDetailsHandleCloseRequested")
+    page.observeField("playSelected", "movieDetailsHandlePlaySelected")
+    page.loadRequest = {
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        itemId: selection.itemId
+        item: selection.item
+    }
+
+    resetDynamicPages()
+    m.movieDetailsPage = page
+    m.dynamicPageHost.appendChild(page)
+    m.homePage.visible = false
+    m.header.visible = false
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' movieDetailsHandlePlaySelected
+'-------------------------------------------------------------------------------
+sub movieDetailsHandlePlaySelected()
+    selection = m.movieDetailsPage.playSelected
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    playerShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' movieDetailsHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub movieDetailsHandleCloseRequested()
+    resetDynamicPages()
+    m.homePage.visible = true
+    m.header.visible = true
+    m.homePage.callFunc("activate")
 end sub
 
 '===============================================================================
@@ -57,14 +109,13 @@ end sub
 '===============================================================================
 
 '-------------------------------------------------------------------------------
-' playerHandleHomeMovieSelected
+' playerShow
 '-------------------------------------------------------------------------------
-sub playerHandleHomeMovieSelected()
-    selection = m.homePage.selectedMovie
+sub playerShow(selection as object)
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
-    player = CreateObject("roSGNode", "PlayerPage")
+    player = CreateObject("roSGNode", "VideoPlayer")
     player.observeField("closeRequested", "playerHandleCloseRequested")
     player.playRequest = {
         server: m.session.server
@@ -74,8 +125,8 @@ sub playerHandleHomeMovieSelected()
         item: selection.item
     }
 
-    resetDynamicPages()
-    m.playerPage = player
+    if m.movieDetailsPage <> invalid then m.movieDetailsPage.visible = false
+    m.videoPlayer = player
     m.dynamicPageHost.appendChild(player)
     m.homePage.visible = false
     m.header.visible = false
@@ -86,11 +137,19 @@ end sub
 ' playerHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub playerHandleCloseRequested()
-    resetDynamicPages()
-    m.playerPage = invalid
-    m.homePage.visible = true
-    m.header.visible = true
-    m.homePage.callFunc("activate")
+    if m.videoPlayer <> invalid then
+        m.dynamicPageHost.removeChild(m.videoPlayer)
+        m.videoPlayer = invalid
+    end if
+
+    if m.movieDetailsPage <> invalid then
+        m.movieDetailsPage.visible = true
+        m.movieDetailsPage.callFunc("activate")
+    else
+        m.homePage.visible = true
+        m.header.visible = true
+        m.homePage.callFunc("activate")
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -288,6 +347,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub resetDynamicPages()
     m.yourStatsPage = invalid
+    m.movieDetailsPage = invalid
+    m.videoPlayer = invalid
     childCount = m.dynamicPageHost.getChildCount()
     if childCount > 0 then m.dynamicPageHost.removeChildrenIndex(childCount, 0)
 end sub

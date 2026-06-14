@@ -19,10 +19,10 @@ sub executeRequest()
     action = request.action
     if action = "login" then
         m.top.response = login(request)
-    else if action = "authorize" then
-        m.top.response = Authentication_AuthorizeToken(request)
-    else if action = "logout" then
-        m.top.response = Authentication_Logout(request)
+    ' else if action = "authorize" then
+    '     m.top.response = Authentication_AuthorizeToken(request)
+    ' else if action = "logout" then
+    '     m.top.response = Authentication_Logout(request)
     else
         m.top.response = { ok: false, errorMessage: "Unknown request action." }
     end if

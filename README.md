@@ -4,21 +4,9 @@ This project is open source, and contributions are welcome. If you're interested
 
 Forks are part of open source but if your goal is to fix bugs, add features, or improve compatibility, contributing those changes back here is greatly appreciated.
 
-# ROKU STARTER KIT
+# CODE FOUNDATIONS
 
-This repository contains a starter Roku application. It has the base foundation for a Roku application as well as an application framework with concerns such as:
-
-## Sample authentication
-
-The login screen is prefilled with dummy values so the starter app can be launched
-without connecting to a real backend. The authentication code in
-`source/api/Authentication.brs` is stubbed to accept that sample login and return a
-dummy authenticated session.
-
-Before using this project for a real channel, replace the sample login values and
-stubbed authentication response with the authentication flow your app needs. Wire
-the login, token validation, logout behavior, and session payload shape to match
-your own API.
+The code for this app is NOT a fork of the Jellyfin Roku code repo. IMHO the Jellyfin Roku code base isn't a good starting point as the code isn't structured very well. But the Jellyfin Roku code is an excellent reference for how to do things. Instead I used all of my learnings from the [ABSTV Roku app](https://github.com/thedavidhoffman/abs-tv-roku) I build as a Roku client for [Audiobookshelf](https://www.audiobookshelf.org/) as a foundation for this app (stripping it down to its bare essentials without any Audiobookshelf stuff as a starting base).
 
 ## Fork renaming checklist
 

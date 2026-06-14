@@ -412,7 +412,7 @@ function buildImageUrl(itemId as string, imageType as string, tag as string) as 
     if request = invalid then return ""
 
     url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    if tag <> "" then url = url + "?tag=" + tag + "&maxWidth=300&quality=90"
+    if tag <> "" then url = url + "?tag=" + tag + "&maxHeight=375&maxWidth=250&quality=90"
     return url
 end function
 
