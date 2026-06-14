@@ -96,6 +96,7 @@ end sub
 sub focusPlayButton()
     m.pageState.focusArea = "play"
     m.playButton.hasFocusVisual = true
+    m.cast.callFunc("deactivate")
     m.top.setFocus(true)
 end sub
 
@@ -282,6 +283,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "back" then
         m.top.closeRequested = true
+        return true
+    end if
+
+    if key = "up" and m.cast.isInFocusChain() then
+        focusPlayButton()
         return true
     end if
 

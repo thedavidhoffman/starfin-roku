@@ -4,6 +4,7 @@
 sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.castRows = m.top.findNode("castRows")
+    m.castRows.observeField("focusExitUp", "onCastRowsFocusExitUp")
     m.top.visible = false
 end sub
 
@@ -39,6 +40,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     if m.top.hasItems = true then
+        m.castRows.drawFocusFeedback = true
         m.castRows.setFocus(true)
     else
         m.top.setFocus(true)
@@ -46,18 +48,19 @@ sub activate()
 end sub
 
 '-------------------------------------------------------------------------------
-' onKeyEvent
+' deactivate
 '-------------------------------------------------------------------------------
-function onKeyEvent(key as string, press as boolean) as boolean
-    if press = false then return false
+sub deactivate()
+    m.castRows.setFocus(false)
+    m.castRows.drawFocusFeedback = false
+end sub
 
-    if key = "up" then
-        m.top.focusExitUp = true
-        return true
-    end if
-
-    return false
-end function
+'-------------------------------------------------------------------------------
+' onCastRowsFocusExitUp
+'-------------------------------------------------------------------------------
+sub onCastRowsFocusExitUp()
+    m.top.focusExitUp = true
+end sub
 
 '-------------------------------------------------------------------------------
 ' getPersonSubtitle
