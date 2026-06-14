@@ -78,7 +78,7 @@ function getPersonImageUrl(person as object) as string
     tag = FirstNonEmpty([person.PrimaryImageTag, person.primaryImageTag], "")
     if personId = "" or tag = "" then return ""
 
-    return NormalizeServerUrl(m.top.server) + "/Items/" + personId + "/Images/Primary?tag=" + tag + "&maxWidth=234&maxHeight=330&quality=90"
+    return NormalizeServerUrl(m.top.server) + "/Items/" + personId + "/Images/Primary?tag=" + tag + "&maxWidth=195&maxHeight=250&quality=90"
 end function
 
 '-------------------------------------------------------------------------------
