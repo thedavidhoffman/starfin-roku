@@ -4,9 +4,10 @@
 sub init()
     m.log = CreateLogger("Movie")
     m.backdrop = m.top.findNode("backdrop")
-    m.poster = m.top.findNode("poster")
+    m.titleLogo = m.top.findNode("titleLogo")
     m.titleLabel = m.top.findNode("titleLabel")
     m.metaLabel = m.top.findNode("metaLabel")
+    m.metaDetailLabel = m.top.findNode("metaDetailLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
     m.playButton = m.top.findNode("playButton")
     m.cast = m.top.findNode("cast")
@@ -14,6 +15,7 @@ sub init()
     m.movieTask = m.top.findNode("movieTask")
 
     m.movieTask.observeField("response", "onMovieResponse")
+    m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.pageState = {
         request: invalid
@@ -62,19 +64,82 @@ end sub
 sub renderMovie(item as dynamic)
     if isAssocArray(item) = false then return
 
-    m.titleLabel.text = getItemTitle(item)
-    m.metaLabel.text = getMetaText(item)
+    renderTitle(item)
+    m.metaLabel.text = getPrimaryMetaText(item)
+    m.metaDetailLabel.text = getSecondaryMetaText(item)
     m.overviewLabel.text = FirstNonEmpty([item.Overview, item.overview], "")
     m.cast.people = getPeople(item)
-
-    posterUrl = getImageUrl(item, "Primary", 330, 495)
-    m.poster.visible = posterUrl <> ""
-    m.poster.uri = posterUrl
 
     backdropUrl = getBackdropUrl(item)
     m.backdrop.visible = backdropUrl <> ""
     m.backdrop.uri = backdropUrl
 end sub
+
+'-------------------------------------------------------------------------------
+' renderTitle
+'-------------------------------------------------------------------------------
+sub renderTitle(item as dynamic)
+    logoUrl = getImageUrl(item, "Logo", 600, 300)
+    hasLogo = logoUrl <> ""
+
+    m.titleLogo.visible = hasLogo
+    m.titleLabel.visible = hasLogo = false
+
+    if hasLogo then
+        m.titleLogo.width = 600
+        m.titleLogo.height = 220
+        m.titleLogo.translation = [0, 0]
+        m.titleLogo.uri = logoUrl
+        m.titleLabel.text = ""
+    else
+        m.titleLogo.uri = ""
+        m.titleLogo.translation = [0, 0]
+        m.titleLabel.text = getItemTitle(item)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onTitleLogoLoadStatusChanged
+'-------------------------------------------------------------------------------
+sub onTitleLogoLoadStatusChanged()
+    if LCase(SafeString(m.titleLogo.loadStatus, "")) <> "ready" then return
+
+    bitmapWidth = m.titleLogo.bitmapWidth
+    bitmapHeight = m.titleLogo.bitmapHeight
+    if bitmapWidth = invalid or bitmapHeight = invalid then return
+    if bitmapWidth <= 0 or bitmapHeight <= 0 then return
+
+    maxWidth = 600
+    maxHeight = 220
+    logoRatio = bitmapWidth / bitmapHeight
+    boxRatio = maxWidth / maxHeight
+
+    if logoRatio > boxRatio then
+        fittedWidth = maxWidth
+        fittedHeight = int(maxWidth / logoRatio)
+    else
+        fittedHeight = maxHeight
+        fittedWidth = int(maxHeight * logoRatio)
+    end if
+
+    if fittedWidth < 1 then fittedWidth = 1
+    if fittedHeight < 1 then fittedHeight = 1
+
+    m.titleLogo.width = fittedWidth
+    m.titleLogo.height = fittedHeight
+    m.titleLogo.translation = [0, getLogoBottomAlignedY(fittedHeight)]
+end sub
+
+'-------------------------------------------------------------------------------
+' getLogoBottomAlignedY
+'-------------------------------------------------------------------------------
+function getLogoBottomAlignedY(logoHeight as integer) as integer
+    metaTop = 230
+    logoGap = 40
+    y = metaTop - logoGap - logoHeight
+    if y < 0 then return 0
+    return y
+end function
 
 '-------------------------------------------------------------------------------
 ' activate
@@ -137,9 +202,9 @@ function getItemTitle(item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getMetaText
+' getPrimaryMetaText
 '-------------------------------------------------------------------------------
-function getMetaText(item as dynamic) as string
+function getPrimaryMetaText(item as dynamic) as string
     parts = []
 
     year = FirstNonEmpty([item.ProductionYear], "")
@@ -152,13 +217,37 @@ function getMetaText(item as dynamic) as string
     rating = FirstNonEmpty([item.OfficialRating], "")
     if rating <> "" then parts.Push(rating)
 
+    communityRating = getRatingText(FirstNonEmpty([item.CommunityRating], ""))
+    if communityRating <> "" then parts.Push("Rating " + communityRating)
+
+    return joinText(parts, "  •  ")
+end function
+
+'-------------------------------------------------------------------------------
+' getRatingText
+'-------------------------------------------------------------------------------
+function getRatingText(value as dynamic) as string
+    if value = invalid then return ""
+
+    rating = val(value.ToStr())
+    if rating <= 0 then return ""
+
+    return (int((rating * 10) + 0.5) / 10).ToStr()
+end function
+
+'-------------------------------------------------------------------------------
+' getSecondaryMetaText
+'-------------------------------------------------------------------------------
+function getSecondaryMetaText(item as dynamic) as string
+    parts = []
+
     genres = getGenreText(item)
     if genres <> "" then parts.Push(genres)
 
-    communityRating = FirstNonEmpty([item.CommunityRating], "")
-    if communityRating <> "" then parts.Push("Rating " + communityRating)
+    directorText = getDirectorText(item)
+    if directorText <> "" then parts.Push(directorText)
 
-    return joinText(parts, "  |  ")
+    return joinText(parts, "     ")
 end function
 
 '-------------------------------------------------------------------------------
@@ -193,6 +282,27 @@ function getGenreText(item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
+' getDirectorText
+'-------------------------------------------------------------------------------
+function getDirectorText(item as dynamic) as string
+    directors = []
+    if item.People = invalid then return ""
+
+    for each person in item.People
+        if person = invalid then continue for
+        personType = LCase(FirstNonEmpty([person.Type, person.type], ""))
+        if personType = "director" then
+            name = FirstNonEmpty([person.Name, person.name], "")
+            if name <> "" then directors.Push(name)
+        end if
+    end for
+
+    if directors.Count() = 0 then return ""
+    if directors.Count() = 1 then return "Director " + directors[0]
+    return "Directors " + joinText(directors, ", ")
+end function
+
+'-------------------------------------------------------------------------------
 ' getPeople
 '-------------------------------------------------------------------------------
 function getPeople(item as dynamic) as object
@@ -224,6 +334,7 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
 
     tag = ""
     if imageType = "Primary" and item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
+    if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
     if imageType = "Backdrop" and item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
     if tag = "" then return ""
 
@@ -238,7 +349,9 @@ function buildImageUrl(itemId as string, imageType as string, tag as string, wid
     if request = invalid then return ""
 
     url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    return url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+    url = url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+    if imageType = "Logo" then url = url + "&format=Png"
+    return url
 end function
 
 '-------------------------------------------------------------------------------
