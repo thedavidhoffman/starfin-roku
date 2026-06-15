@@ -4,17 +4,15 @@
 sub init()
     m.log = CreateLogger("TVSeason")
     m.backdrop = m.top.findNode("backdrop")
-    m.poster = m.top.findNode("poster")
     m.seriesLabel = m.top.findNode("seriesLabel")
     m.titleLabel = m.top.findNode("titleLabel")
     m.metaLabel = m.top.findNode("metaLabel")
-    m.overviewLabel = m.top.findNode("overviewLabel")
     m.episodesList = m.top.findNode("episodesList")
     m.statusLabel = m.top.findNode("statusLabel")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
 
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
-    m.episodesList.observeField("itemSelected", "onEpisodeSelected")
+    m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
     m.pageState = {
         request: invalid
         season: invalid
@@ -26,11 +24,14 @@ end sub
 ' onEpisodeSelected
 '-------------------------------------------------------------------------------
 sub onEpisodeSelected()
-    selected = m.episodesList.itemSelected
-    if selected = invalid then return
+    selected = m.episodesList.rowItemSelected
+    if selected = invalid or selected.Count() < 2 then return
     if m.episodesList.content = invalid then return
 
-    episodeNode = m.episodesList.content.getChild(selected)
+    row = m.episodesList.content.getChild(selected[0])
+    if row = invalid then return
+
+    episodeNode = row.getChild(selected[1])
     if episodeNode = invalid then return
 
     episode = episodeNode.raw
@@ -92,11 +93,6 @@ sub renderSeason(item as dynamic)
     m.seriesLabel.text = FirstNonEmpty([item.SeriesName, item.seriesName], "")
     m.titleLabel.text = getItemTitle(item)
     m.metaLabel.text = getMetaText(item)
-    m.overviewLabel.text = FirstNonEmpty([item.Overview, item.overview], "")
-
-    posterUrl = getImageUrl(item, "Primary", 240, 360)
-    m.poster.visible = posterUrl <> ""
-    m.poster.uri = posterUrl
 
     backdropUrl = getBackdropUrl(item)
     m.backdrop.visible = backdropUrl <> ""
@@ -108,24 +104,27 @@ end sub
 '-------------------------------------------------------------------------------
 sub renderEpisodes(episodes as object)
     content = CreateObject("roSGNode", "ContentNode")
+    row = content.createChild("ContentNode")
 
     for each episode in episodes
         if isAssocArray(episode) = false then continue for
 
-        child = content.createChild("ContentNode")
-        child.title = getEpisodeTitle(episode)
+        child = row.createChild("ContentNode")
+        child.title = getItemTitle(episode)
         child.description = FirstNonEmpty([episode.Overview, episode.overview], "")
         child.HDPosterUrl = getImageUrl(episode, "Primary", 530, 298)
         child.AddFields({
             itemId: SafeString(FirstNonEmpty([episode.Id, episode.id], ""), "")
             itemType: SafeString(FirstNonEmpty([episode.Type, episode.type], ""), "")
+            episodeNumber: getEpisodeNumberText(episode)
+            episodeDate: getEpisodeDateText(episode)
             metaText: getEpisodeMetaText(episode)
             raw: episode
         })
     end for
 
     m.episodesList.content = content
-    m.episodesList.visible = content.getChildCount() > 0
+    m.episodesList.visible = row.getChildCount() > 0
 end sub
 
 '-------------------------------------------------------------------------------
@@ -143,18 +142,18 @@ sub focusEpisodesIfActive()
     if m.episodesList.visible <> true then return
     if m.episodesList.content = invalid then return
     if m.episodesList.content.getChildCount() = 0 then return
+    if m.episodesList.content.getChild(0).getChildCount() = 0 then return
 
     m.episodesList.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
-' getEpisodeTitle
+' getEpisodeNumberText
 '-------------------------------------------------------------------------------
-function getEpisodeTitle(item as dynamic) as string
-    title = getItemTitle(item)
+function getEpisodeNumberText(item as dynamic) as string
     indexText = FirstNonEmpty([item.IndexNumber], "")
-    if indexText <> "" then return indexText + ". " + title
-    return title
+    if indexText <> "" then return "Episode " + SafeString(indexText, "")
+    return "Episode"
 end function
 
 '-------------------------------------------------------------------------------
@@ -182,6 +181,22 @@ function getAiredDateText(item as dynamic) as string
     airedDate = FirstNonEmpty([item.PremiereDate, item.AirDate, item.DateCreated], "")
     if Len(airedDate) >= 10 then return Left(airedDate, 10)
     return airedDate
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeDateText
+'-------------------------------------------------------------------------------
+function getEpisodeDateText(item as dynamic) as string
+    airedDate = getAiredDateText(item)
+    if Len(airedDate) < 10 then return airedDate
+
+    year = Left(airedDate, 4)
+    monthNumber = val(Mid(airedDate, 6, 2))
+    day = val(Mid(airedDate, 9, 2))
+    if monthNumber < 1 or monthNumber > 12 or day < 1 then return airedDate
+
+    monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return day.ToStr() + " " + monthNames[monthNumber - 1] + " " + year
 end function
 
 '-------------------------------------------------------------------------------

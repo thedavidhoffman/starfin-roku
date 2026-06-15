@@ -4,9 +4,9 @@
 sub init()
     m.placeholder = m.top.findNode("placeholder")
     m.poster = m.top.findNode("poster")
-    m.focusRing = m.top.findNode("focusRing")
+    m.episodeNumber = m.top.findNode("episodeNumber")
+    m.episodeDate = m.top.findNode("episodeDate")
     m.title = m.top.findNode("title")
-    m.metadata = m.top.findNode("metadata")
     m.description = m.top.findNode("description")
 end sub
 
@@ -17,8 +17,9 @@ sub onItemContentChanged()
     item = m.top.itemContent
     if item = invalid then return
 
+    m.episodeNumber.text = UCase(SafeString(item.episodeNumber, ""))
+    m.episodeDate.text = SafeString(item.episodeDate, "")
     m.title.text = SafeString(item.title, "")
-    m.metadata.text = SafeString(item.metaText, "")
     m.description.text = SafeString(item.description, "")
 
     imageUrl = SafeString(item.HDPosterUrl, "")
@@ -31,5 +32,9 @@ end sub
 ' onItemHasFocusChanged
 '-------------------------------------------------------------------------------
 sub onItemHasFocusChanged()
-    m.focusRing.visible = m.top.itemHasFocus = true
+    if m.top.itemHasFocus = true then
+        m.episodeNumber.font = "font:TinyBoldSystemFont"
+    else
+        m.episodeNumber.font = "font:TinySystemFont"
+    end if
 end sub
