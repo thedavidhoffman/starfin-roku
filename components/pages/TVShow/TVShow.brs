@@ -3,11 +3,7 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("TVShow")
-    m.backdrop = m.top.findNode("backdrop")
-    m.poster = m.top.findNode("poster")
-    m.titleLabel = m.top.findNode("titleLabel")
-    m.metaLabel = m.top.findNode("metaLabel")
-    m.overviewLabel = m.top.findNode("overviewLabel")
+    m.mediaShell = m.top.findNode("mediaShell")
     m.seasonsGrid = m.top.findNode("seasonsGrid")
     m.statusLabel = m.top.findNode("statusLabel")
     m.tvShowTask = m.top.findNode("tvShowTask")
@@ -94,17 +90,14 @@ end sub
 sub renderSeries(item as dynamic)
     if isAssocArray(item) = false then return
 
-    m.titleLabel.text = getItemTitle(item)
-    m.metaLabel.text = getMetaText(item)
-    m.overviewLabel.text = FirstNonEmpty([item.Overview, item.overview], "")
-
-    posterUrl = getImageUrl(item, "Primary", 300, 450)
-    m.poster.visible = posterUrl <> ""
-    m.poster.uri = posterUrl
-
-    backdropUrl = getBackdropUrl(item)
-    m.backdrop.visible = backdropUrl <> ""
-    m.backdrop.uri = backdropUrl
+    m.mediaShell.mediaContent = {
+        backdropUrl: getBackdropUrl(item)
+        logoUrl: getImageUrl(item, "Logo", 600, 300)
+        title: getItemTitle(item)
+        metaLine1: getMetaText(item)
+        metaLine2: getGenreText(item)
+        overview: FirstNonEmpty([item.Overview, item.overview], "")
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -177,13 +170,10 @@ function getMetaText(item as dynamic) as string
     rating = FirstNonEmpty([item.OfficialRating], "")
     if rating <> "" then parts.Push(rating)
 
-    genres = getGenreText(item)
-    if genres <> "" then parts.Push(genres)
-
-    communityRating = FirstNonEmpty([item.CommunityRating], "")
+    communityRating = MediaMetadata_FormatRating(FirstNonEmpty([item.CommunityRating], ""))
     if communityRating <> "" then parts.Push("Rating " + communityRating)
 
-    return joinText(parts, "  |  ")
+    return joinText(parts, MediaMetadata_BulletSeparator())
 end function
 
 '-------------------------------------------------------------------------------
@@ -235,6 +225,7 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
 
     tag = ""
     if imageType = "Primary" and item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
+    if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
     if imageType = "Backdrop" and item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
     if tag = "" then return ""
 
@@ -249,7 +240,9 @@ function buildImageUrl(itemId as string, imageType as string, tag as string, wid
     if request = invalid then return ""
 
     url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    return url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+    url = url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+    if imageType = "Logo" then url = url + "&format=Png"
+    return url
 end function
 
 '-------------------------------------------------------------------------------

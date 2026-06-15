@@ -3,19 +3,13 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("Movie")
-    m.backdrop = m.top.findNode("backdrop")
-    m.titleLogo = m.top.findNode("titleLogo")
-    m.titleLabel = m.top.findNode("titleLabel")
-    m.metaLabel = m.top.findNode("metaLabel")
-    m.metaDetailLabel = m.top.findNode("metaDetailLabel")
-    m.overviewLabel = m.top.findNode("overviewLabel")
+    m.mediaShell = m.top.findNode("mediaShell")
     m.playButton = m.top.findNode("playButton")
     m.cast = m.top.findNode("cast")
     m.statusLabel = m.top.findNode("statusLabel")
     m.movieTask = m.top.findNode("movieTask")
 
     m.movieTask.observeField("response", "onMovieResponse")
-    m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.pageState = {
         request: invalid
@@ -64,82 +58,16 @@ end sub
 sub renderMovie(item as dynamic)
     if isAssocArray(item) = false then return
 
-    renderTitle(item)
-    m.metaLabel.text = getPrimaryMetaText(item)
-    m.metaDetailLabel.text = getSecondaryMetaText(item)
-    m.overviewLabel.text = FirstNonEmpty([item.Overview, item.overview], "")
+    m.mediaShell.mediaContent = {
+        backdropUrl: getBackdropUrl(item)
+        logoUrl: getImageUrl(item, "Logo", 600, 300)
+        title: getItemTitle(item)
+        metaLine1: getPrimaryMetaText(item)
+        metaLine2: getSecondaryMetaText(item)
+        overview: FirstNonEmpty([item.Overview, item.overview], "")
+    }
     m.cast.people = getPeople(item)
-
-    backdropUrl = getBackdropUrl(item)
-    m.backdrop.visible = backdropUrl <> ""
-    m.backdrop.uri = backdropUrl
 end sub
-
-'-------------------------------------------------------------------------------
-' renderTitle
-'-------------------------------------------------------------------------------
-sub renderTitle(item as dynamic)
-    logoUrl = getImageUrl(item, "Logo", 600, 300)
-    hasLogo = logoUrl <> ""
-
-    m.titleLogo.visible = hasLogo
-    m.titleLabel.visible = hasLogo = false
-
-    if hasLogo then
-        m.titleLogo.width = 600
-        m.titleLogo.height = 220
-        m.titleLogo.translation = [0, 0]
-        m.titleLogo.uri = logoUrl
-        m.titleLabel.text = ""
-    else
-        m.titleLogo.uri = ""
-        m.titleLogo.translation = [0, 0]
-        m.titleLabel.text = getItemTitle(item)
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' onTitleLogoLoadStatusChanged
-'-------------------------------------------------------------------------------
-sub onTitleLogoLoadStatusChanged()
-    if LCase(SafeString(m.titleLogo.loadStatus, "")) <> "ready" then return
-
-    bitmapWidth = m.titleLogo.bitmapWidth
-    bitmapHeight = m.titleLogo.bitmapHeight
-    if bitmapWidth = invalid or bitmapHeight = invalid then return
-    if bitmapWidth <= 0 or bitmapHeight <= 0 then return
-
-    maxWidth = 600
-    maxHeight = 220
-    logoRatio = bitmapWidth / bitmapHeight
-    boxRatio = maxWidth / maxHeight
-
-    if logoRatio > boxRatio then
-        fittedWidth = maxWidth
-        fittedHeight = int(maxWidth / logoRatio)
-    else
-        fittedHeight = maxHeight
-        fittedWidth = int(maxHeight * logoRatio)
-    end if
-
-    if fittedWidth < 1 then fittedWidth = 1
-    if fittedHeight < 1 then fittedHeight = 1
-
-    m.titleLogo.width = fittedWidth
-    m.titleLogo.height = fittedHeight
-    m.titleLogo.translation = [0, getLogoBottomAlignedY(fittedHeight)]
-end sub
-
-'-------------------------------------------------------------------------------
-' getLogoBottomAlignedY
-'-------------------------------------------------------------------------------
-function getLogoBottomAlignedY(logoHeight as integer) as integer
-    metaTop = 230
-    logoGap = 40
-    y = metaTop - logoGap - logoHeight
-    if y < 0 then return 0
-    return y
-end function
 
 '-------------------------------------------------------------------------------
 ' activate
@@ -217,25 +145,12 @@ function getPrimaryMetaText(item as dynamic) as string
     rating = FirstNonEmpty([item.OfficialRating], "")
     if rating <> "" then parts.Push(rating)
 
-    communityRating = getRatingText(FirstNonEmpty([item.CommunityRating], ""))
+    communityRating = MediaMetadata_FormatRating(FirstNonEmpty([item.CommunityRating], ""))
     if communityRating <> "" then parts.Push("Rating " + communityRating)
 
-    return joinText(parts, "  •  ")
+    return joinText(parts, MediaMetadata_BulletSeparator())
 end function
 
-'-------------------------------------------------------------------------------
-' getRatingText
-'-------------------------------------------------------------------------------
-function getRatingText(value as dynamic) as string
-    if value = invalid then return ""
-
-    rating = val(value.ToStr())
-    if rating <= 0 then return ""
-
-    return (int((rating * 10) + 0.5) / 10).ToStr()
-end function
-
-'-------------------------------------------------------------------------------
 ' getSecondaryMetaText
 '-------------------------------------------------------------------------------
 function getSecondaryMetaText(item as dynamic) as string

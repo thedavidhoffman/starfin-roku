@@ -3,6 +3,9 @@
 - log out
 - normalize server url... grrrr
 
+# home page
+- homerow custom highlight/focus
+
 # movie details
 - redesign
 - "more like this"
@@ -12,6 +15,7 @@
 - can we call an api somewhere to get filmography data?
 
 # tv show page
+- add espisode count badge to season poster
 
 # tv season page
 - seasons nav
