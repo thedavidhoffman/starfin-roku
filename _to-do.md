@@ -6,9 +6,16 @@
 # home page
 - homerow custom highlight/focus
 
+# library
+- movies
+- tv shows
+- display { grid, table }
+
 # movie details
-- redesign
 - "more like this"
+
+# media shell
+- description hover and dialog
 
 # cast/crew page
 - wire up
@@ -16,6 +23,8 @@
 
 # tv show page
 - add espisode count badge to season poster
+- cast and crew
+- custom highlight/focus
 
 # tv season page
 - seasons nav
@@ -29,6 +38,7 @@
     - media info
     - don't roll
     - end of episode list, "back to top"
+- cast and crew
 
 common label on mainscene for updates, remove loading from individual pages
 
@@ -37,3 +47,8 @@ common label on mainscene for updates, remove loading from individual pages
 - transport controls
 - closed captions
 - playback settings (resolution, bit rate, audio track)
+
+# settings
+- image display type { poster, thumbnail }
+- image display size { small, medium, large }
+- image caption display [ title, director, year ]

@@ -111,8 +111,7 @@ sub renderSeasons(seasons as object)
 
         child = content.createChild("ContentNode")
         child.title = getItemTitle(season)
-        child.description = getSeasonSubtitle(season)
-        child.HDPosterUrl = getImageUrl(season, "Primary", 180, 270)
+        child.HDPosterUrl = getImageUrl(season, "Primary", 208, 312)
         child.AddFields({
             itemId: SafeString(FirstNonEmpty([season.Id, season.id], ""), "")
             itemType: SafeString(FirstNonEmpty([season.Type, season.type], ""), "")
