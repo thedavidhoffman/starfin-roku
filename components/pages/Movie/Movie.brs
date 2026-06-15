@@ -139,7 +139,7 @@ function getPrimaryMetaText(item as dynamic) as string
     if year = "" then year = getYearFromDate(FirstNonEmpty([item.PremiereDate], ""))
     if year <> "" then parts.Push(year)
 
-    runtime = getRuntimeText(item.RunTimeTicks)
+    runtime = MediaMetadata_FormatRuntime(item.RunTimeTicks)
     if runtime <> "" then parts.Push(runtime)
 
     rating = FirstNonEmpty([item.OfficialRating], "")
@@ -165,22 +165,6 @@ function getSecondaryMetaText(item as dynamic) as string
     return joinText(parts, "     ")
 end function
 
-'-------------------------------------------------------------------------------
-' getRuntimeText
-'-------------------------------------------------------------------------------
-function getRuntimeText(runTimeTicks as dynamic) as string
-    if runTimeTicks = invalid then return ""
-
-    minutes = int(val(runTimeTicks.ToStr()) / 600000000)
-    if minutes <= 0 then return ""
-
-    hours = int(minutes / 60)
-    remainingMinutes = minutes mod 60
-    if hours > 0 then return hours.ToStr() + "h " + remainingMinutes.ToStr() + "m"
-    return minutes.ToStr() + "m"
-end function
-
-'-------------------------------------------------------------------------------
 ' getYearFromDate
 '-------------------------------------------------------------------------------
 function getYearFromDate(value as string) as string

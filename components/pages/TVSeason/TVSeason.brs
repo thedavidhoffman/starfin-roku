@@ -115,10 +115,11 @@ sub renderEpisodes(episodes as object)
         child = content.createChild("ContentNode")
         child.title = getEpisodeTitle(episode)
         child.description = FirstNonEmpty([episode.Overview, episode.overview], "")
-        child.HDPosterUrl = getImageUrl(episode, "Primary", 400, 250)
+        child.HDPosterUrl = getImageUrl(episode, "Primary", 530, 298)
         child.AddFields({
             itemId: SafeString(FirstNonEmpty([episode.Id, episode.id], ""), "")
             itemType: SafeString(FirstNonEmpty([episode.Type, episode.type], ""), "")
+            metaText: getEpisodeMetaText(episode)
             raw: episode
         })
     end for
@@ -154,6 +155,33 @@ function getEpisodeTitle(item as dynamic) as string
     indexText = FirstNonEmpty([item.IndexNumber], "")
     if indexText <> "" then return indexText + ". " + title
     return title
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeMetaText
+'-------------------------------------------------------------------------------
+function getEpisodeMetaText(item as dynamic) as string
+    parts = []
+
+    runtime = MediaMetadata_FormatRuntime(item.RunTimeTicks)
+    if runtime <> "" then parts.Push(runtime)
+
+    communityRating = MediaMetadata_FormatRating(FirstNonEmpty([item.CommunityRating], ""))
+    if communityRating <> "" then parts.Push("Rating " + communityRating)
+
+    airedDate = getAiredDateText(item)
+    if airedDate <> "" then parts.Push("Aired: " + airedDate)
+
+    return joinText(parts, MediaMetadata_BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getAiredDateText
+'-------------------------------------------------------------------------------
+function getAiredDateText(item as dynamic) as string
+    airedDate = FirstNonEmpty([item.PremiereDate, item.AirDate, item.DateCreated], "")
+    if Len(airedDate) >= 10 then return Left(airedDate, 10)
+    return airedDate
 end function
 
 '-------------------------------------------------------------------------------

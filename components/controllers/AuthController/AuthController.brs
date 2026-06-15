@@ -27,6 +27,7 @@ sub onResumeRequested()
             action: "authorize"
             server: m.savedSession.server
             token: m.savedSession.token
+            userId: m.savedSession.userId
         })
     else
         publishLoginRequired("Enter your Audiobookshelf server to begin.")
@@ -87,6 +88,7 @@ function hasSavedSession() as boolean
     if m.savedSession = invalid then return false
     if m.savedSession.token = invalid or m.savedSession.token = "" then return false
     if m.savedSession.server = invalid or m.savedSession.server = "" then return false
+    if m.savedSession.userId = invalid or m.savedSession.userId = "" then return false
 
     return true
 end function
