@@ -95,6 +95,7 @@ sub tvSeasonHandleTVShowSeasonSelected()
 
     page = CreateObject("roSGNode", "TVSeason")
     page.observeField("closeRequested", "tvSeasonHandleCloseRequested")
+    page.observeField("selectedEpisode", "tvSeasonHandleEpisodeSelected")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -111,6 +112,17 @@ sub tvSeasonHandleTVShowSeasonSelected()
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' tvSeasonHandleEpisodeSelected
+'-------------------------------------------------------------------------------
+sub tvSeasonHandleEpisodeSelected()
+    selection = m.tvSeasonPage.selectedEpisode
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    playerShow(selection)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -216,6 +228,7 @@ sub playerShow(selection as object)
     }
 
     if m.moviePage <> invalid then m.moviePage.visible = false
+    if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     m.videoPlayer = player
     m.dynamicPageHost.appendChild(player)
     m.homePage.visible = false
@@ -235,6 +248,9 @@ sub playerHandleCloseRequested()
     if m.moviePage <> invalid then
         m.moviePage.visible = true
         m.moviePage.callFunc("activate")
+    else if m.tvSeasonPage <> invalid then
+        m.tvSeasonPage.visible = true
+        m.tvSeasonPage.callFunc("activate")
     else
         m.homePage.visible = true
         m.header.visible = true

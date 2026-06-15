@@ -14,10 +14,32 @@ sub init()
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
 
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
+    m.episodesList.observeField("itemSelected", "onEpisodeSelected")
     m.pageState = {
         request: invalid
         season: invalid
         episodes: []
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onEpisodeSelected
+'-------------------------------------------------------------------------------
+sub onEpisodeSelected()
+    selected = m.episodesList.itemSelected
+    if selected = invalid then return
+    if m.episodesList.content = invalid then return
+
+    episodeNode = m.episodesList.content.getChild(selected)
+    if episodeNode = invalid then return
+
+    episode = episodeNode.raw
+    episodeId = SafeString(FirstNonEmpty([episode.Id, episode.id, episodeNode.itemId], ""), "")
+    if episodeId = "" then return
+
+    m.top.selectedEpisode = {
+        itemId: episodeId
+        item: episode
     }
 end sub
 
