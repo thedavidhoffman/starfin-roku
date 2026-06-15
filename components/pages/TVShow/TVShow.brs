@@ -2,23 +2,49 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("MovieDetails")
+    m.log = CreateLogger("TVShow")
     m.backdrop = m.top.findNode("backdrop")
     m.poster = m.top.findNode("poster")
     m.titleLabel = m.top.findNode("titleLabel")
     m.metaLabel = m.top.findNode("metaLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
-    m.playButton = m.top.findNode("playButton")
-    m.cast = m.top.findNode("cast")
+    m.seasonsGrid = m.top.findNode("seasonsGrid")
     m.statusLabel = m.top.findNode("statusLabel")
-    m.movieDetailsTask = m.top.findNode("movieDetailsTask")
+    m.tvShowTask = m.top.findNode("tvShowTask")
 
-    m.movieDetailsTask.observeField("response", "onMovieDetailsResponse")
-    m.cast.observeField("focusExitUp", "onCastFocusExitUp")
+    m.tvShowTask.observeField("response", "onTVShowResponse")
+    m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
     m.pageState = {
         request: invalid
-        item: invalid
-        focusArea: "play"
+        series: invalid
+        seasons: []
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onSeasonSelected
+'-------------------------------------------------------------------------------
+sub onSeasonSelected()
+    selected = m.seasonsGrid.itemSelected
+    if selected = invalid then return
+    if m.seasonsGrid.content = invalid then return
+
+    seasonNode = m.seasonsGrid.content.getChild(selected)
+    if seasonNode = invalid then return
+
+    season = seasonNode.raw
+    seasonId = SafeString(FirstNonEmpty([season.Id, season.id, seasonNode.itemId], ""), "")
+    if seasonId = "" then return
+
+    series = m.pageState.series
+    request = m.pageState.request
+    if request = invalid then return
+
+    m.top.selectedSeason = {
+        seriesId: SafeString(FirstNonEmpty([request.itemId], ""), "")
+        seasonId: seasonId
+        series: series
+        season: season
     }
 end sub
 
@@ -30,44 +56,49 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
-    m.pageState.item = request.item
-    m.cast.server = request.server
-    setStatus("Loading movie...")
-    renderMovie(request.item)
+    m.pageState.series = request.item
+    setStatus("Loading series...")
+    renderSeries(request.item)
+    renderSeasons([])
 
-    m.movieDetailsTask.request = request
-    m.movieDetailsTask.control = "run"
+    m.tvShowTask.request = request
+    m.tvShowTask.control = "run"
 end sub
 
 '-------------------------------------------------------------------------------
-' onMovieDetailsResponse
+' onTVShowResponse
 '-------------------------------------------------------------------------------
-sub onMovieDetailsResponse()
-    response = m.movieDetailsTask.response
+sub onTVShowResponse()
+    response = m.tvShowTask.response
     if response = invalid then return
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load this movie."))
+        setStatus(SafeString(response.errorMessage, "Unable to load this series."))
         return
     end if
 
-    m.pageState.item = response.payload
-    renderMovie(response.payload)
+    payload = response.payload
+    if payload = invalid then return
+
+    m.pageState.series = payload.series
+    m.pageState.seasons = getItemsFromPayload(payload.seasons)
+    renderSeries(payload.series)
+    renderSeasons(m.pageState.seasons)
     setStatus("")
+    focusSeasonsIfActive()
 end sub
 
 '-------------------------------------------------------------------------------
-' renderMovie
+' renderSeries
 '-------------------------------------------------------------------------------
-sub renderMovie(item as dynamic)
+sub renderSeries(item as dynamic)
     if isAssocArray(item) = false then return
 
     m.titleLabel.text = getItemTitle(item)
     m.metaLabel.text = getMetaText(item)
     m.overviewLabel.text = FirstNonEmpty([item.Overview, item.overview], "")
-    m.cast.people = getPeople(item)
 
-    posterUrl = getImageUrl(item, "Primary", 330, 495)
+    posterUrl = getImageUrl(item, "Primary", 300, 450)
     m.poster.visible = posterUrl <> ""
     m.poster.uri = posterUrl
 
@@ -77,63 +108,54 @@ sub renderMovie(item as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
+' renderSeasons
+'-------------------------------------------------------------------------------
+sub renderSeasons(seasons as object)
+    content = CreateObject("roSGNode", "ContentNode")
+
+    for each season in seasons
+        if isAssocArray(season) = false then continue for
+
+        child = content.createChild("ContentNode")
+        child.title = getItemTitle(season)
+        child.description = getSeasonSubtitle(season)
+        child.HDPosterUrl = getImageUrl(season, "Primary", 180, 270)
+        child.AddFields({
+            itemId: SafeString(FirstNonEmpty([season.Id, season.id], ""), "")
+            itemType: SafeString(FirstNonEmpty([season.Type, season.type], ""), "")
+            raw: season
+        })
+    end for
+
+    m.seasonsGrid.content = content
+    m.seasonsGrid.visible = content.getChildCount() > 0
+end sub
+
+'-------------------------------------------------------------------------------
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    focusPlayButton()
-end sub
-
-'-------------------------------------------------------------------------------
-' onCastFocusExitUp
-'-------------------------------------------------------------------------------
-sub onCastFocusExitUp()
-    focusPlayButton()
-end sub
-
-'-------------------------------------------------------------------------------
-' focusPlayButton
-'-------------------------------------------------------------------------------
-sub focusPlayButton()
-    m.pageState.focusArea = "play"
-    m.playButton.hasFocusVisual = true
-    m.cast.callFunc("deactivate")
     m.top.setFocus(true)
+    focusSeasonsIfActive()
 end sub
 
 '-------------------------------------------------------------------------------
-' focusCast
+' focusSeasonsIfActive
 '-------------------------------------------------------------------------------
-sub focusCast()
-    if m.cast.visible <> true or m.cast.hasItems <> true then return
+sub focusSeasonsIfActive()
+    if m.seasonsGrid.visible <> true then return
+    if m.seasonsGrid.content = invalid then return
+    if m.seasonsGrid.content.getChildCount() = 0 then return
 
-    m.pageState.focusArea = "cast"
-    m.playButton.hasFocusVisual = false
-    m.cast.callFunc("activate")
-end sub
-
-'-------------------------------------------------------------------------------
-' playCurrentMovie
-'-------------------------------------------------------------------------------
-sub playCurrentMovie()
-    item = m.pageState.item
-    request = m.pageState.request
-    if request = invalid or item = invalid then return
-
-    itemId = SafeString(FirstNonEmpty([item.Id, item.id, request.itemId], ""), "")
-    if itemId = "" then return
-
-    m.top.playSelected = {
-        itemId: itemId
-        item: item
-    }
+    m.seasonsGrid.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
 ' getItemTitle
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
-    if isAssocArray(item) = false then return "Movie"
-    return FirstNonEmpty([item.Name, item.name, item.title], "Movie")
+    if isAssocArray(item) = false then return "Series"
+    return FirstNonEmpty([item.Name, item.name, item.title], "Series")
 end function
 
 '-------------------------------------------------------------------------------
@@ -146,8 +168,11 @@ function getMetaText(item as dynamic) as string
     if year = "" then year = getYearFromDate(FirstNonEmpty([item.PremiereDate], ""))
     if year <> "" then parts.Push(year)
 
-    runtime = getRuntimeText(item.RunTimeTicks)
-    if runtime <> "" then parts.Push(runtime)
+    episodeCount = FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
+    if episodeCount <> "" then parts.Push(SafeString(episodeCount, "") + " episodes")
+
+    status = FirstNonEmpty([item.Status, item.status], "")
+    if status <> "" then parts.Push(status)
 
     rating = FirstNonEmpty([item.OfficialRating], "")
     if rating <> "" then parts.Push(rating)
@@ -162,18 +187,12 @@ function getMetaText(item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getRuntimeText
+' getSeasonSubtitle
 '-------------------------------------------------------------------------------
-function getRuntimeText(runTimeTicks as dynamic) as string
-    if runTimeTicks = invalid then return ""
-
-    minutes = int(val(runTimeTicks.ToStr()) / 600000000)
-    if minutes <= 0 then return ""
-
-    hours = int(minutes / 60)
-    remainingMinutes = minutes mod 60
-    if hours > 0 then return hours.ToStr() + "h " + remainingMinutes.ToStr() + "m"
-    return minutes.ToStr() + "m"
+function getSeasonSubtitle(item as dynamic) as string
+    count = FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
+    if count = "" then return ""
+    return SafeString(count, "") + " episodes"
 end function
 
 '-------------------------------------------------------------------------------
@@ -190,14 +209,6 @@ end function
 function getGenreText(item as dynamic) as string
     if item.Genres = invalid then return ""
     return joinText(item.Genres, ", ")
-end function
-
-'-------------------------------------------------------------------------------
-' getPeople
-'-------------------------------------------------------------------------------
-function getPeople(item as dynamic) as object
-    if item.People = invalid then return []
-    return item.People
 end function
 
 '-------------------------------------------------------------------------------
@@ -242,6 +253,22 @@ function buildImageUrl(itemId as string, imageType as string, tag as string, wid
 end function
 
 '-------------------------------------------------------------------------------
+' getItemsFromPayload
+'-------------------------------------------------------------------------------
+function getItemsFromPayload(payload as dynamic) as object
+    if payload = invalid then return []
+
+    payloadType = Type(payload)
+    if payloadType = "roArray" then return payload
+    if isAssocArray(payload) = false then return []
+
+    if payload.Items <> invalid then return payload.Items
+    if payload.items <> invalid then return payload.items
+
+    return []
+end function
+
+'-------------------------------------------------------------------------------
 ' joinText
 '-------------------------------------------------------------------------------
 function joinText(values as dynamic, separator as string) as string
@@ -283,21 +310,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "back" then
         m.top.closeRequested = true
-        return true
-    end if
-
-    if key = "up" and m.cast.isInFocusChain() then
-        focusPlayButton()
-        return true
-    end if
-
-    if key = "down" and m.pageState.focusArea = "play" then
-        focusCast()
-        return true
-    end if
-
-    if (key = "OK" or key = "play") and m.pageState.focusArea = "play" then
-        playCurrentMovie()
         return true
     end if
 

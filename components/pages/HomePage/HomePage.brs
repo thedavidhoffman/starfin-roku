@@ -50,12 +50,20 @@ sub onHomeRowItemSelected()
     if itemNode = invalid then return
 
     item = itemNode.raw
-    if isPlayableMovie(item) = false then return
+    itemId = SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
+    if itemId = "" then return
 
-    m.top.selectedMovie = {
-        itemId: SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
-        item: item
-    }
+    if isPlayableMovie(item) then
+        m.top.selectedMovie = {
+            itemId: itemId
+            item: item
+        }
+    else if isTVSeries(item) then
+        m.top.selectedSeries = {
+            itemId: itemId
+            item: item
+        }
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -394,6 +402,16 @@ function isPlayableMovie(item as dynamic) as boolean
 
     itemType = LCase(FirstNonEmpty([item.Type, item.type], ""))
     return itemType = "movie" or itemType = "video"
+end function
+
+'-------------------------------------------------------------------------------
+' isTVSeries
+'-------------------------------------------------------------------------------
+function isTVSeries(item as dynamic) as boolean
+    if isAssocArray(item) = false then return false
+
+    itemType = LCase(FirstNonEmpty([item.Type, item.type], ""))
+    return itemType = "series"
 end function
 
 '-------------------------------------------------------------------------------
