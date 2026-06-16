@@ -11,6 +11,7 @@ sub init()
 
     m.movieTask.observeField("response", "onMovieResponse")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
+    m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.pageState = {
         request: invalid
         item: invalid
@@ -81,6 +82,17 @@ end sub
 '-------------------------------------------------------------------------------
 sub onCastFocusExitUp()
     focusPlayButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastPersonSelected
+'-------------------------------------------------------------------------------
+sub onCastPersonSelected()
+    selection = m.cast.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    m.top.selectedPerson = selection
 end sub
 
 '-------------------------------------------------------------------------------

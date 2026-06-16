@@ -1,14 +1,13 @@
 # auth
-- persist login, do auth check when we have a token in the registry
 - log out
 - normalize server url... grrrr
+
+# header
 
 # home page
 - homerow custom highlight/focus
 
 # library
-- movies
-- tv shows
 - display { grid, table }
 
 # movie details
@@ -18,11 +17,10 @@
 - description hover and dialog
 
 # cast/crew page
-- wire up
 - can we call an api somewhere to get filmography data?
 
 # tv show page
-- add espisode count badge to season poster
+- add episode count badge to season poster
 - cast and crew
 - custom highlight/focus
 
@@ -49,6 +47,14 @@ common label on mainscene for updates, remove loading from individual pages
 - playback settings (resolution, bit rate, audio track)
 
 # settings
-- image display type { poster, thumbnail }
-- image display size { small, medium, large }
+TV/MOVIES/COLLECTIONS
+    - image display type { poster, thumbnail }
+    - image display size { small, medium, large }
 - image caption display [ title, director, year ]
+- tv episodes display as { single row, grid }
+
+# hit list for being able to start beta testing
+- channel graphic
+- header in place with branding
+- save/track progress
+- timeline preview images and left/right scrubbing

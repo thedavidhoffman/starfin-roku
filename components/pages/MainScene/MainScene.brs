@@ -247,6 +247,7 @@ sub tvShowShow(selection as object, shouldReset as boolean)
     m.tvShowPage = page
     m.dynamicPageHost.appendChild(page)
     if m.libraryPage <> invalid then m.libraryPage.visible = false
+    if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
@@ -324,7 +325,10 @@ sub tvShowHandleCloseRequested()
         m.tvShowPage = invalid
     end if
 
-    if m.libraryPage <> invalid then
+    if m.personPage <> invalid then
+        m.personPage.visible = true
+        m.personPage.callFunc("activate")
+    else if m.libraryPage <> invalid then
         m.libraryPage.visible = true
         m.libraryPage.callFunc("activate")
     else
@@ -360,6 +364,7 @@ sub movieShow(selection as object, shouldReset as boolean)
     page = CreateObject("roSGNode", "Movie")
     page.observeField("closeRequested", "movieHandleCloseRequested")
     page.observeField("playSelected", "movieHandlePlaySelected")
+    page.observeField("selectedPerson", "personHandleMoviePersonSelected")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -372,6 +377,7 @@ sub movieShow(selection as object, shouldReset as boolean)
     m.moviePage = page
     m.dynamicPageHost.appendChild(page)
     if m.libraryPage <> invalid then m.libraryPage.visible = false
+    if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
@@ -388,6 +394,94 @@ sub movieHandlePlaySelected()
     playerShow(selection)
 end sub
 
+'===============================================================================
+' Person
+'===============================================================================
+
+'-------------------------------------------------------------------------------
+' personHandleMoviePersonSelected
+'-------------------------------------------------------------------------------
+sub personHandleMoviePersonSelected()
+    selection = m.moviePage.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    personShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' personShow
+'-------------------------------------------------------------------------------
+sub personShow(selection as object)
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    if m.moviePage <> invalid then m.personSourceMoviePage = m.moviePage
+
+    page = CreateObject("roSGNode", "Person")
+    page.observeField("closeRequested", "personHandleCloseRequested")
+    page.observeField("selectedMovie", "personHandleMovieSelected")
+    page.observeField("selectedSeries", "personHandleSeriesSelected")
+    page.loadRequest = {
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        itemId: selection.itemId
+        item: selection.item
+    }
+
+    m.personPage = page
+    m.dynamicPageHost.appendChild(page)
+    if m.moviePage <> invalid then m.moviePage.visible = false
+    m.homePage.visible = false
+    m.header.visible = false
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' personHandleMovieSelected
+'-------------------------------------------------------------------------------
+sub personHandleMovieSelected()
+    selection = m.personPage.selectedMovie
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    movieShow(selection, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' personHandleSeriesSelected
+'-------------------------------------------------------------------------------
+sub personHandleSeriesSelected()
+    selection = m.personPage.selectedSeries
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    tvShowShow(selection, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' personHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub personHandleCloseRequested()
+    if m.personPage <> invalid then
+        m.dynamicPageHost.removeChild(m.personPage)
+        m.personPage = invalid
+    end if
+
+    if m.moviePage = invalid and m.personSourceMoviePage <> invalid then m.moviePage = m.personSourceMoviePage
+    m.personSourceMoviePage = invalid
+
+    if m.moviePage <> invalid then
+        m.moviePage.visible = true
+        m.moviePage.callFunc("activate")
+    else
+        m.homePage.visible = true
+        m.header.visible = true
+        m.homePage.callFunc("activate")
+    end if
+end sub
+
 '-------------------------------------------------------------------------------
 ' movieHandleCloseRequested
 '-------------------------------------------------------------------------------
@@ -397,7 +491,11 @@ sub movieHandleCloseRequested()
         m.moviePage = invalid
     end if
 
-    if m.libraryPage <> invalid then
+    if m.personPage <> invalid then
+        if m.personSourceMoviePage <> invalid then m.moviePage = m.personSourceMoviePage
+        m.personPage.visible = true
+        m.personPage.callFunc("activate")
+    else if m.libraryPage <> invalid then
         m.libraryPage.visible = true
         m.libraryPage.callFunc("activate")
     else
@@ -662,6 +760,8 @@ sub resetDynamicPages()
     m.moviePage = invalid
     m.tvShowPage = invalid
     m.tvSeasonPage = invalid
+    m.personPage = invalid
+    m.personSourceMoviePage = invalid
     m.videoPlayer = invalid
     childCount = m.dynamicPageHost.getChildCount()
     if childCount > 0 then m.dynamicPageHost.removeChildrenIndex(childCount, 0)
