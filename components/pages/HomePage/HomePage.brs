@@ -238,7 +238,7 @@ end sub
 ' addRow
 '-------------------------------------------------------------------------------
 sub addRow(key as string, title as string, items as object)
-    content = buildRowContent(title, items)
+    content = buildRowContent(key, title, items)
     if content.getChildCount() = 0 then
         if m.homeState.rows.DoesExist(key) then m.homeState.rows.Delete(key)
         return
@@ -250,9 +250,10 @@ end sub
 '-------------------------------------------------------------------------------
 ' buildRowContent
 '-------------------------------------------------------------------------------
-function buildRowContent(title as string, items as object) as object
+function buildRowContent(key as string, title as string, items as object) as object
     content = CreateObject("roSGNode", "ContentNode")
     content.title = title
+    imageAspect = getRowImageAspect(key)
 
     for each item in items
         if isAssocArray(item) = false then continue for
@@ -260,10 +261,11 @@ function buildRowContent(title as string, items as object) as object
         child = content.createChild("ContentNode")
         child.title = getItemTitle(item)
         child.description = getItemSubtitle(item)
-        child.HDPosterUrl = getItemImageUrl(item)
+        child.HDPosterUrl = getItemImageUrl(item, imageAspect)
         child.AddFields({
             itemId: SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
             itemType: SafeString(FirstNonEmpty([item.Type, item.type], ""), "")
+            imageAspect: imageAspect
             raw: item
         })
     end for
@@ -272,17 +274,47 @@ function buildRowContent(title as string, items as object) as object
 end function
 
 '-------------------------------------------------------------------------------
+' getRowImageAspect
+'-------------------------------------------------------------------------------
+function getRowImageAspect(key as string) as string
+    if key = "libraries" then return "wide"
+    return "poster"
+end function
+
+'-------------------------------------------------------------------------------
 ' renderRows
 '-------------------------------------------------------------------------------
 sub renderRows()
     content = CreateObject("roSGNode", "ContentNode")
+    rowHeights = []
+    rowSpacings = []
+    rowItemSizes = []
+    rowItemSpacings = []
+    showRowLabels = []
+    showRowCounters = []
+    rowLabelOffsets = []
 
     for each key in m.homeState.rowOrder
         if m.homeState.rows.DoesExist(key) then
+            layout = getRowLayout(key)
             content.appendChild(m.homeState.rows[key])
+            rowHeights.Push(layout.height)
+            rowSpacings.Push(layout.spacingAfter)
+            rowItemSizes.Push([layout.width, layout.height])
+            rowItemSpacings.Push([18, 0])
+            showRowLabels.Push(true)
+            showRowCounters.Push(true)
+            rowLabelOffsets.Push([0, 0])
         end if
     end for
 
+    m.homeRows.rowHeights = rowHeights
+    m.homeRows.rowSpacings = rowSpacings
+    m.homeRows.rowItemSize = rowItemSizes
+    m.homeRows.rowItemSpacing = rowItemSpacings
+    m.homeRows.showRowLabel = showRowLabels
+    m.homeRows.showRowCounter = showRowCounters
+    m.homeRows.rowLabelOffset = rowLabelOffsets
     m.homeRows.content = content
 
     if hasRenderedRows() then
@@ -292,10 +324,25 @@ sub renderRows()
 end sub
 
 '-------------------------------------------------------------------------------
+' getRowLayout
+'-------------------------------------------------------------------------------
+function getRowLayout(key as string) as object
+    if getRowImageAspect(key) = "wide" then
+        return { width: 350, height: 257, spacingAfter: 74 }
+    end if
+
+    return { width: 250, height: 435, spacingAfter: 74 }
+end function
+
+'-------------------------------------------------------------------------------
 ' clearRows
 '-------------------------------------------------------------------------------
 sub clearRows()
     m.homeRows.content = CreateObject("roSGNode", "ContentNode")
+    m.homeRows.rowHeights = []
+    m.homeRows.rowSpacings = []
+    m.homeRows.rowItemSize = [[250, 435]]
+    m.homeRows.rowItemSpacing = [[18, 0]]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -372,26 +419,35 @@ end function
 '-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
-function getItemImageUrl(item as dynamic) as string
+function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if isAssocArray(item) = false then return ""
 
     directUrl = FirstNonEmpty([item.ImageURL, item.imageURL, item.ImageUrl, item.imageUrl, item.thumbnailURL, item.PrimaryImageUrl], "")
     if directUrl <> "" then return directUrl
 
+    imageSize = getImageSize(imageAspect)
     itemId = FirstNonEmpty([item.Id, item.id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
-    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag)
+    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
 
     parentThumbId = FirstNonEmpty([item.ParentThumbItemId, item.ParentThumbImageItemId], "")
     parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
-    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag)
+    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
 
     seriesId = FirstNonEmpty([item.SeriesId], "")
     seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
-    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag)
+    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
 
     return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getImageSize
+'-------------------------------------------------------------------------------
+function getImageSize(imageAspect as string) as object
+    if imageAspect = "wide" then return { width: 350, height: 197 }
+    return { width: 250, height: 375 }
 end function
 
 '-------------------------------------------------------------------------------
@@ -425,12 +481,12 @@ end function
 '-------------------------------------------------------------------------------
 ' buildImageUrl
 '-------------------------------------------------------------------------------
-function buildImageUrl(itemId as string, imageType as string, tag as string) as string
+function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
     request = m.homeState.request
     if request = invalid then return ""
 
     url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    if tag <> "" then url = url + "?tag=" + tag + "&maxHeight=375&maxWidth=250&quality=90"
+    if tag <> "" then url = url + "?tag=" + tag + "&maxHeight=" + height.ToStr() + "&maxWidth=" + width.ToStr() + "&quality=90"
     return url
 end function
 
