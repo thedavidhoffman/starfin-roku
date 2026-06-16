@@ -53,7 +53,18 @@ sub onHomeRowItemSelected()
     itemId = SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
     if itemId = "" then return
 
-    if isPlayableMovie(item) then
+    if isCollectionsLibrary(item) then
+        m.top.selectedCollections = {
+            libraryId: itemId
+            item: item
+        }
+    else if isMediaLibrary(item) then
+        m.top.selectedLibrary = {
+            libraryId: itemId
+            collectionType: getCollectionType(item)
+            item: item
+        }
+    else if isPlayableMovie(item) then
         m.top.selectedMovie = {
             itemId: itemId
             item: item
@@ -476,6 +487,29 @@ end function
 function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
+end function
+
+'-------------------------------------------------------------------------------
+' getCollectionType
+'-------------------------------------------------------------------------------
+function getCollectionType(item as dynamic) as string
+    if isAssocArray(item) = false then return ""
+    return LCase(FirstNonEmpty([item.CollectionType, item.collectionType], ""))
+end function
+
+'-------------------------------------------------------------------------------
+' isMediaLibrary
+'-------------------------------------------------------------------------------
+function isMediaLibrary(item as dynamic) as boolean
+    collectionType = getCollectionType(item)
+    return collectionType = "movies" or collectionType = "tvshows"
+end function
+
+'-------------------------------------------------------------------------------
+' isCollectionsLibrary
+'-------------------------------------------------------------------------------
+function isCollectionsLibrary(item as dynamic) as boolean
+    return getCollectionType(item) = "boxsets"
 end function
 
 '-------------------------------------------------------------------------------

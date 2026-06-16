@@ -49,8 +49,165 @@ sub initHandlers()
     m.authController.observeField("sessionExpired", "authHandleSessionExpired")
     m.homePage.observeField("selectedMovie", "movieHandleHomeMovieSelected")
     m.homePage.observeField("selectedSeries", "tvShowHandleHomeSeriesSelected")
+    m.homePage.observeField("selectedLibrary", "libraryHandleHomeLibrarySelected")
+    m.homePage.observeField("selectedCollections", "collectionsHandleHomeCollectionsSelected")
     m.navigationController.observeField("currentRoute", "navHandleCurrentRouteChanged")
 
+end sub
+
+'===============================================================================
+' Collections
+'===============================================================================
+
+'-------------------------------------------------------------------------------
+' collectionsHandleHomeCollectionsSelected
+'-------------------------------------------------------------------------------
+sub collectionsHandleHomeCollectionsSelected()
+    selection = m.homePage.selectedCollections
+    if selection = invalid then return
+    if selection.libraryId = invalid or selection.libraryId = "" then return
+
+    page = CreateObject("roSGNode", "Collections")
+    page.observeField("closeRequested", "collectionsHandleCloseRequested")
+    page.observeField("selectedCollection", "collectionsHandleCollectionSelected")
+    page.loadRequest = {
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        libraryId: selection.libraryId
+        title: FirstNonEmpty([selection.item.Name, selection.item.name], "Collections")
+        item: selection.item
+    }
+
+    resetDynamicPages()
+    m.collectionsPage = page
+    m.dynamicPageHost.appendChild(page)
+    m.homePage.visible = false
+    m.header.visible = false
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' collectionsHandleCollectionSelected
+'-------------------------------------------------------------------------------
+sub collectionsHandleCollectionSelected()
+    selection = m.collectionsPage.selectedCollection
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    libraryShow({
+        libraryId: selection.itemId
+        collectionType: "collection"
+        title: FirstNonEmpty([selection.item.Name, selection.item.name], "Collection")
+        item: selection.item
+    }, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' collectionsHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub collectionsHandleCloseRequested()
+    resetDynamicPages()
+    m.homePage.visible = true
+    m.header.visible = true
+    m.homePage.callFunc("activate")
+end sub
+
+'===============================================================================
+' Library
+'===============================================================================
+
+'-------------------------------------------------------------------------------
+' libraryHandleHomeLibrarySelected
+'-------------------------------------------------------------------------------
+sub libraryHandleHomeLibrarySelected()
+    selection = m.homePage.selectedLibrary
+    if selection = invalid then return
+    if selection.libraryId = invalid or selection.libraryId = "" then return
+
+    libraryShow({
+        libraryId: selection.libraryId
+        collectionType: selection.collectionType
+        title: FirstNonEmpty([selection.item.Name, selection.item.name], "Library")
+        item: selection.item
+    }, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' libraryShow
+'-------------------------------------------------------------------------------
+sub libraryShow(selection as object, fromCollections as boolean)
+    if selection = invalid then return
+    if selection.libraryId = invalid or selection.libraryId = "" then return
+
+    page = CreateObject("roSGNode", "Library")
+    page.observeField("closeRequested", "libraryHandleCloseRequested")
+    page.observeField("selectedMovie", "libraryHandleMovieSelected")
+    page.observeField("selectedSeries", "libraryHandleSeriesSelected")
+    page.loadRequest = {
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        libraryId: selection.libraryId
+        includeItemTypes: getLibraryIncludeItemTypes(SafeString(selection.collectionType, ""))
+        title: SafeString(selection.title, "Library")
+        item: selection.item
+        fromCollections: fromCollections
+    }
+
+    if fromCollections <> true then resetDynamicPages()
+    m.libraryPage = page
+    m.dynamicPageHost.appendChild(page)
+    if m.collectionsPage <> invalid then m.collectionsPage.visible = false
+    m.homePage.visible = false
+    m.header.visible = false
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' getLibraryIncludeItemTypes
+'-------------------------------------------------------------------------------
+function getLibraryIncludeItemTypes(collectionType as string) as string
+    if collectionType = "tvshows" then return "Series"
+    if collectionType = "collection" then return "Movie,Series"
+    return "Movie"
+end function
+
+'-------------------------------------------------------------------------------
+' libraryHandleMovieSelected
+'-------------------------------------------------------------------------------
+sub libraryHandleMovieSelected()
+    selection = m.libraryPage.selectedMovie
+    if selection = invalid then return
+    movieShow(selection, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' libraryHandleSeriesSelected
+'-------------------------------------------------------------------------------
+sub libraryHandleSeriesSelected()
+    selection = m.libraryPage.selectedSeries
+    if selection = invalid then return
+    tvShowShow(selection, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' libraryHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub libraryHandleCloseRequested()
+    if m.libraryPage <> invalid then
+        m.dynamicPageHost.removeChild(m.libraryPage)
+        m.libraryPage = invalid
+    end if
+
+    if m.collectionsPage <> invalid then
+        m.collectionsPage.visible = true
+        m.collectionsPage.callFunc("activate")
+    else
+        m.homePage.visible = true
+        m.header.visible = true
+        m.homePage.callFunc("activate")
+    end if
 end sub
 
 '===============================================================================
@@ -65,6 +222,16 @@ sub tvShowHandleHomeSeriesSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    tvShowShow(selection, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' tvShowShow
+'-------------------------------------------------------------------------------
+sub tvShowShow(selection as object, shouldReset as boolean)
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
     page = CreateObject("roSGNode", "TVShow")
     page.observeField("closeRequested", "tvShowHandleCloseRequested")
     page.observeField("selectedSeason", "tvSeasonHandleTVShowSeasonSelected")
@@ -76,9 +243,10 @@ sub tvShowHandleHomeSeriesSelected()
         item: selection.item
     }
 
-    resetDynamicPages()
+    if shouldReset then resetDynamicPages()
     m.tvShowPage = page
     m.dynamicPageHost.appendChild(page)
+    if m.libraryPage <> invalid then m.libraryPage.visible = false
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
@@ -137,6 +305,9 @@ sub tvSeasonHandleCloseRequested()
     if m.tvShowPage <> invalid then
         m.tvShowPage.visible = true
         m.tvShowPage.callFunc("activate")
+    else if m.libraryPage <> invalid then
+        m.libraryPage.visible = true
+        m.libraryPage.callFunc("activate")
     else
         m.homePage.visible = true
         m.header.visible = true
@@ -148,10 +319,20 @@ end sub
 ' tvShowHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub tvShowHandleCloseRequested()
-    resetDynamicPages()
-    m.homePage.visible = true
-    m.header.visible = true
-    m.homePage.callFunc("activate")
+    if m.tvShowPage <> invalid then
+        m.dynamicPageHost.removeChild(m.tvShowPage)
+        m.tvShowPage = invalid
+    end if
+
+    if m.libraryPage <> invalid then
+        m.libraryPage.visible = true
+        m.libraryPage.callFunc("activate")
+    else
+        resetDynamicPages()
+        m.homePage.visible = true
+        m.header.visible = true
+        m.homePage.callFunc("activate")
+    end if
 end sub
 
 '===============================================================================
@@ -166,6 +347,16 @@ sub movieHandleHomeMovieSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    movieShow(selection, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' movieShow
+'-------------------------------------------------------------------------------
+sub movieShow(selection as object, shouldReset as boolean)
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
     page = CreateObject("roSGNode", "Movie")
     page.observeField("closeRequested", "movieHandleCloseRequested")
     page.observeField("playSelected", "movieHandlePlaySelected")
@@ -177,9 +368,10 @@ sub movieHandleHomeMovieSelected()
         item: selection.item
     }
 
-    resetDynamicPages()
+    if shouldReset then resetDynamicPages()
     m.moviePage = page
     m.dynamicPageHost.appendChild(page)
+    if m.libraryPage <> invalid then m.libraryPage.visible = false
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
@@ -200,10 +392,20 @@ end sub
 ' movieHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub movieHandleCloseRequested()
-    resetDynamicPages()
-    m.homePage.visible = true
-    m.header.visible = true
-    m.homePage.callFunc("activate")
+    if m.moviePage <> invalid then
+        m.dynamicPageHost.removeChild(m.moviePage)
+        m.moviePage = invalid
+    end if
+
+    if m.libraryPage <> invalid then
+        m.libraryPage.visible = true
+        m.libraryPage.callFunc("activate")
+    else
+        resetDynamicPages()
+        m.homePage.visible = true
+        m.header.visible = true
+        m.homePage.callFunc("activate")
+    end if
 end sub
 
 '===============================================================================
@@ -453,6 +655,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub resetDynamicPages()
     m.yourStatsPage = invalid
+    m.collectionsPage = invalid
+    m.libraryPage = invalid
     m.moviePage = invalid
     m.tvShowPage = invalid
     m.tvSeasonPage = invalid
