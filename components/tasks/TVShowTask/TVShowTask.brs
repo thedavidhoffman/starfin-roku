@@ -49,7 +49,7 @@ function loadSeries(request as object) as object
     params = {
         userId: SafeString(request.userId, "")
         fields: "Genres,People,Overview,Studios"
-        enableImageTypes: "Primary,Backdrop,Thumb"
+        enableImageTypes: "Primary,Backdrop,Thumb,Logo"
         imageTypeLimit: 1
         enableTotalRecordCount: false
     }

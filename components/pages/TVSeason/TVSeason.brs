@@ -3,9 +3,9 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("TVSeason")
-    m.backdrop = m.top.findNode("backdrop")
+    m.showLogo = m.top.findNode("showLogo")
     m.seriesLabel = m.top.findNode("seriesLabel")
-    m.titleLabel = m.top.findNode("titleLabel")
+    m.seasonLabel = m.top.findNode("seasonLabel")
     m.metaLabel = m.top.findNode("metaLabel")
     m.episodesList = m.top.findNode("episodesList")
     m.statusLabel = m.top.findNode("statusLabel")
@@ -91,12 +91,26 @@ sub renderSeason(item as dynamic)
     if isAssocArray(item) = false then return
 
     m.seriesLabel.text = FirstNonEmpty([item.SeriesName, item.seriesName], "")
-    m.titleLabel.text = getItemTitle(item)
+    m.seasonLabel.text = getItemTitle(item)
     m.metaLabel.text = getMetaText(item)
+    renderShowLogo()
+end sub
 
-    backdropUrl = getBackdropUrl(item)
-    m.backdrop.visible = backdropUrl <> ""
-    m.backdrop.uri = backdropUrl
+'-------------------------------------------------------------------------------
+' renderShowLogo
+'-------------------------------------------------------------------------------
+sub renderShowLogo()
+    request = m.pageState.request
+    if request = invalid then
+        m.showLogo.visible = false
+        m.seriesLabel.visible = true
+        return
+    end if
+
+    logoUrl = getImageUrl(request.series, "Logo", 600, 300)
+    m.showLogo.visible = logoUrl <> ""
+    m.showLogo.uri = logoUrl
+    m.seriesLabel.visible = logoUrl = ""
 end sub
 
 '-------------------------------------------------------------------------------
@@ -235,19 +249,6 @@ function getYearFromDate(value as string) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getBackdropUrl
-'-------------------------------------------------------------------------------
-function getBackdropUrl(item as dynamic) as string
-    if item = invalid then return ""
-    if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
-        itemId = FirstNonEmpty([item.Id, item.id], "")
-        return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], 1920, 1080)
-    end if
-
-    return getImageUrl(item, "Primary", 1920, 1080)
-end function
-
-'-------------------------------------------------------------------------------
 ' getImageUrl
 '-------------------------------------------------------------------------------
 function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
@@ -258,6 +259,7 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
 
     tag = ""
     if imageType = "Primary" and item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
+    if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
     if imageType = "Backdrop" and item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
     if tag = "" then return ""
 
@@ -272,7 +274,9 @@ function buildImageUrl(itemId as string, imageType as string, tag as string, wid
     if request = invalid then return ""
 
     url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    return url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+    imageUrl = url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+    if imageType = "Logo" then imageUrl = imageUrl + "&format=Png"
+    return imageUrl
 end function
 
 '-------------------------------------------------------------------------------
