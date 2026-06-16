@@ -35,9 +35,8 @@ function ThemeDefault() as object
             tertiary: &h12112BFF
         }
         text: {
-            heading: &hF3F7FBFF
-            primary: &hD5E0EAFF
-            secondary: &hA8B7C8FF
+            primary: &hF3F7FBFF
+            secondary: &hB9C7D6FF
         }
         accent: {
             primary: &hE09B42FF
@@ -64,10 +63,6 @@ function ThemeDefault() as object
             focus: {
                 transparentFootprint: "pkg:/images/focus/transparent_focus_footprint.9.png"
             }
-        }
-        dialog: {
-            backdrop: BACKGROUND_SECONDARY
-            background: BACKGROUND_PRIMARY
         }
     }
 end function

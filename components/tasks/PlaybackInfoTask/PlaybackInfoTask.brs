@@ -21,10 +21,10 @@ sub executeRequest()
         UserId: SafeString(request.userId, "")
         IsPlayback: true
         AutoOpenLiveStream: true
-        MaxStreamingBitrate: "140000000"
-        MaxStaticBitrate: "140000000"
-        EnableDirectPlay: false
-        EnableDirectStream: false
+        MaxStreamingBitrate: "120000000"
+        MaxStaticBitrate: "100000000"
+        EnableDirectPlay: true
+        EnableDirectStream: true
     }
 
     url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + "/PlaybackInfo" + Url_BuildQueryString(params)
@@ -171,33 +171,8 @@ end function
 ' buildPlaybackInfoBody
 '-------------------------------------------------------------------------------
 function buildPlaybackInfoBody() as string
-    transcodingProfile = Json_Object([
-        Json_Pair("Type", "Video")
-        Json_Pair("Container", "ts")
-        Json_Pair("Context", "Streaming")
-        Json_Pair("Protocol", "hls")
-        Json_Pair("AudioCodec", "aac")
-        Json_Pair("VideoCodec", "h264")
-        Json_Pair("MaxAudioChannels", "2")
-        Json_NumberPair("MinSegments", 1)
-        Json_NumberPair("SegmentLength", 6)
-        Json_BooleanPair("BreakOnNonKeyFrames", false)
-    ])
-
-    deviceProfile = Json_Object([
-        Json_Pair("Name", "Starfish Roku")
-        Json_NumberPair("MaxStreamingBitrate", 140000000)
-        Json_NumberPair("MaxStaticBitrate", 140000000)
-        Json_NumberPair("MusicStreamingTranscodingBitrate", 192000)
-        Json_String("DirectPlayProfiles") + ":[]"
-        Json_String("TranscodingProfiles") + ":[" + transcodingProfile + "]"
-        Json_String("ContainerProfiles") + ":[]"
-        Json_String("CodecProfiles") + ":[]"
-        Json_String("SubtitleProfiles") + ":[]"
-    ])
-
     return Json_Object([
-        Json_String("DeviceProfile") + ":" + deviceProfile
+        Json_String("DeviceProfile") + ":" + DeviceCapabilities_BuildDeviceProfileJson()
     ])
 end function
 

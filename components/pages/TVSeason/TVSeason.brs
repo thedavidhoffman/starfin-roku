@@ -41,6 +41,8 @@ sub onEpisodeSelected()
     m.top.selectedEpisode = {
         itemId: episodeId
         item: episode
+        playbackQueue: buildPlaybackQueue(m.pageState.episodes)
+        playbackQueueIndex: selected[1]
     }
 end sub
 
@@ -293,6 +295,27 @@ function getItemsFromPayload(payload as dynamic) as object
     if payload.items <> invalid then return payload.items
 
     return []
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaybackQueue
+'-------------------------------------------------------------------------------
+function buildPlaybackQueue(episodes as object) as object
+    queue = []
+
+    for each episode in episodes
+        if isAssocArray(episode) = false then continue for
+
+        episodeId = SafeString(FirstNonEmpty([episode.Id, episode.id], ""), "")
+        if episodeId = "" then continue for
+
+        queue.Push({
+            itemId: episodeId
+            item: episode
+        })
+    end for
+
+    return queue
 end function
 
 '-------------------------------------------------------------------------------

@@ -66,7 +66,7 @@ function loadEpisodes(request as object) as object
     params = {
         userId: SafeString(request.userId, "")
         seasonId: SafeString(request.seasonId, "")
-        fields: "MediaStreams,MediaSources,Overview"
+        fields: "MediaStreams,MediaSources,Overview,Trickplay"
     }
 
     url = NormalizeServerUrl(request.server) + "/Shows/" + request.seriesId + "/Episodes" + Url_BuildQueryString(params)

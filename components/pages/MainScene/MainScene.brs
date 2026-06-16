@@ -427,6 +427,8 @@ sub playerShow(selection as object)
         userId: m.session.userId
         itemId: selection.itemId
         item: selection.item
+        playbackQueue: selection.playbackQueue
+        playbackQueueIndex: selection.playbackQueueIndex
     }
 
     if m.moviePage <> invalid then m.moviePage.visible = false
