@@ -19,6 +19,7 @@ sub executeRequest()
 
     params = {
         UserId: SafeString(request.userId, "")
+        StartTimeTicks: getStartPositionTicks(request)
         IsPlayback: true
         AutoOpenLiveStream: true
         MaxStreamingBitrate: "120000000"
@@ -59,6 +60,7 @@ sub executeRequest()
         streamUrl: streamInfo.streamUrl
         streamFormat: streamInfo.streamFormat
         playSessionId: streamInfo.playSessionId
+        startPositionTicks: getStartPositionTicks(request)
     }
 end sub
 
@@ -204,6 +206,18 @@ function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
 
     if firstAudioIndex <> -1 then return firstAudioIndex
     return 1
+end function
+
+'-------------------------------------------------------------------------------
+' getStartPositionTicks
+'-------------------------------------------------------------------------------
+function getStartPositionTicks(request as dynamic) as longinteger
+    if request = invalid then return 0
+
+    if request.startPositionTicks <> invalid then return request.startPositionTicks
+    if request.StartPositionTicks <> invalid then return request.StartPositionTicks
+
+    return PlaybackProgress_GetTicksFromItem(request.item)
 end function
 
 '-------------------------------------------------------------------------------

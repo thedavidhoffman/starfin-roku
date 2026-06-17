@@ -12,6 +12,9 @@ end sub
 sub initReferences()
     m.placeholder = m.top.findNode("placeholder")
     m.poster = m.top.findNode("poster")
+    m.progressBorder = m.top.findNode("progressBorder")
+    m.progressBackground = m.top.findNode("progressBackground")
+    m.progressFill = m.top.findNode("progressFill")
     m.episodeNumber = m.top.findNode("episodeNumber")
     m.episodeDate = m.top.findNode("episodeDate")
     m.title = m.top.findNode("title")
@@ -48,11 +51,37 @@ sub onItemContentChanged()
     m.title.text = SafeString(item.title, "")
     m.description.text = SafeString(item.description, "")
     applyLayout(isSeasonSummary)
+    updateProgress(item, isSeasonSummary)
 
     imageUrl = SafeString(item.HDPosterUrl, "")
     m.poster.visible = imageUrl <> ""
     m.placeholder.visible = imageUrl = ""
     m.poster.uri = imageUrl
+end sub
+
+'-------------------------------------------------------------------------------
+' updateProgress
+'-------------------------------------------------------------------------------
+sub updateProgress(item as object, isSeasonSummary as boolean)
+    progressWidth = 0
+    if item.progressWidth <> invalid then progressWidth = int(item.progressWidth)
+    if progressWidth = 0 and item.progressPercent <> invalid then
+        progress = item.progressPercent
+        if progress > 100 then progress = 100
+        if progress > 0 then progressWidth = int(510 * (progress / 100))
+    end if
+
+    visible = isSeasonSummary <> true and progressWidth > 0
+    m.progressBorder.visible = visible
+    m.progressBackground.visible = visible
+    m.progressFill.visible = visible
+    if visible <> true then
+        m.progressFill.width = 0
+        return
+    end if
+
+    if progressWidth > 510 then progressWidth = 510
+    m.progressFill.width = progressWidth
 end sub
 
 '-------------------------------------------------------------------------------

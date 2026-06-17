@@ -7,15 +7,19 @@ sub init()
     m.seriesLabel = m.top.findNode("seriesLabel")
     m.seasonLabel = m.top.findNode("seasonLabel")
     m.episodesList = m.top.findNode("episodesList")
+    m.leftChevron = m.top.findNode("leftChevron")
+    m.rightChevron = m.top.findNode("rightChevron")
     m.statusLabel = m.top.findNode("statusLabel")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
 
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
+    m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
     m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
     m.pageState = {
         request: invalid
         season: invalid
         episodes: []
+        episodeWindowStart: 0
     }
 end sub
 
@@ -44,6 +48,7 @@ sub onEpisodeSelected()
     m.top.selectedEpisode = {
         itemId: episodeId
         item: episode
+        startPositionTicks: PlaybackProgress_GetTicksFromItem(episode)
         playbackQueue: buildPlaybackQueue(m.pageState.episodes)
         playbackQueueIndex: selected[1] - 1
     }
@@ -72,6 +77,7 @@ sub playFirstEpisode()
     m.top.selectedEpisode = {
         itemId: SafeString(FirstNonEmpty([firstEpisode.Id, firstEpisode.id], ""), "")
         item: firstEpisode
+        startPositionTicks: PlaybackProgress_GetTicksFromItem(firstEpisode)
         playbackQueue: buildPlaybackQueue(episodes)
         playbackQueueIndex: 0
     }
@@ -114,7 +120,15 @@ sub onTVSeasonResponse()
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
     setStatus("")
+    updateChevrons()
     focusEpisodesIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onEpisodeFocused
+'-------------------------------------------------------------------------------
+sub onEpisodeFocused()
+    updateChevrons()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -166,12 +180,15 @@ sub renderEpisodes(episodes as object)
             episodeNumber: getEpisodeNumberText(episode)
             episodeDate: getEpisodeDateText(episode)
             metaText: getEpisodeMetaText(episode)
+            progressPercent: getProgressPercent(episode)
+            progressWidth: getProgressWidth(episode)
             raw: episode
         })
     end for
 
     m.episodesList.content = content
     m.episodesList.visible = row.getChildCount() > 0
+    m.pageState.episodeWindowStart = 0
 end sub
 
 '-------------------------------------------------------------------------------
@@ -180,6 +197,9 @@ end sub
 sub clearEpisodes()
     m.episodesList.content = CreateObject("roSGNode", "ContentNode")
     m.episodesList.visible = false
+    m.pageState.episodeWindowStart = 0
+    m.leftChevron.visible = false
+    m.rightChevron.visible = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -257,7 +277,57 @@ sub focusEpisodesIfActive()
     if m.episodesList.content.getChild(0).getChildCount() = 0 then return
 
     m.episodesList.setFocus(true)
+    updateChevrons()
 end sub
+
+'-------------------------------------------------------------------------------
+' updateChevrons
+'-------------------------------------------------------------------------------
+sub updateChevrons()
+    overflow = getEpisodeOverflowState()
+    m.leftChevron.visible = overflow.left
+    m.rightChevron.visible = overflow.right
+end sub
+
+'-------------------------------------------------------------------------------
+' getEpisodeOverflowState
+'-------------------------------------------------------------------------------
+function getEpisodeOverflowState() as object
+    state = { left: false, right: false }
+    visibleItemCount = 3
+
+    if m.episodesList.content = invalid then return state
+    if m.episodesList.content.getChildCount() = 0 then return state
+
+    row = m.episodesList.content.getChild(0)
+    if row = invalid then return state
+
+    itemCount = row.getChildCount()
+    if itemCount <= visibleItemCount then return state
+
+    focused = m.episodesList.rowItemFocused
+    finalWindowStart = itemCount - visibleItemCount
+    windowStart = m.pageState.episodeWindowStart
+    if windowStart = invalid then windowStart = 0
+
+    if focused <> invalid and focused.Count() >= 2 then
+        focusedIndex = focused[1]
+        if focusedIndex < windowStart then
+            windowStart = focusedIndex
+        else if focusedIndex >= windowStart + visibleItemCount then
+            windowStart = focusedIndex - visibleItemCount + 1
+        end if
+    end if
+
+    if windowStart < 0 then windowStart = 0
+    if windowStart > finalWindowStart then windowStart = finalWindowStart
+    m.pageState.episodeWindowStart = windowStart
+
+    state.left = windowStart > 0
+    state.right = (windowStart + visibleItemCount) < itemCount
+
+    return state
+end function
 
 '-------------------------------------------------------------------------------
 ' getEpisodeNumberText
@@ -317,6 +387,44 @@ end function
 function getItemTitle(item as dynamic) as string
     if isAssocArray(item) = false then return ""
     return FirstNonEmpty([item.Name, item.name, item.title], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressPercent
+'-------------------------------------------------------------------------------
+function getProgressPercent(item as dynamic) as float
+    if isAssocArray(item) = false then return 0
+
+    if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
+        playedPercentage = item.UserData.PlayedPercentage
+        if playedPercentage <= 0 then return 0
+        if playedPercentage > 100 then return 100
+        return playedPercentage
+    end if
+
+    if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
+
+    progressTicks = PlaybackProgress_GetTicksFromItem(item)
+    if progressTicks <= 0 then return 0
+
+    progressPercent = (progressTicks / item.RunTimeTicks) * 100
+    if progressPercent > 100 then return 100
+
+    return progressPercent
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressWidth
+'-------------------------------------------------------------------------------
+function getProgressWidth(item as dynamic) as integer
+    progressPercent = getProgressPercent(item)
+    if progressPercent <= 0 then return 0
+
+    progressWidth = int(510 * (progressPercent / 100))
+    if progressWidth < 1 then return 1
+    if progressWidth > 510 then return 510
+
+    return progressWidth
 end function
 
 '-------------------------------------------------------------------------------
@@ -425,6 +533,7 @@ function buildPlaybackQueue(episodes as object) as object
         queue.Push({
             itemId: episodeId
             item: episode
+            startPositionTicks: PlaybackProgress_GetTicksFromItem(episode)
         })
     end for
 

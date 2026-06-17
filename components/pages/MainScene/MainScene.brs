@@ -579,6 +579,7 @@ sub playerShow(selection as object)
         userId: m.session.userId
         itemId: selection.itemId
         item: selection.item
+        startPositionTicks: PlaybackProgress_GetTicksFromSelection(selection)
         playbackQueue: selection.playbackQueue
         playbackQueueIndex: selection.playbackQueueIndex
     }

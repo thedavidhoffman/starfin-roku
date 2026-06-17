@@ -19,7 +19,7 @@ sub executeRequest()
 
     params = {
         userId: SafeString(request.userId, "")
-        fields: "Chapters,Trickplay,Genres,People,MediaSources,MediaStreams,Overview"
+        fields: "Chapters,Trickplay,Genres,People,MediaSources,MediaStreams,Overview,UserData"
     }
 
     url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)

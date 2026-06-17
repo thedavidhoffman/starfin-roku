@@ -7,11 +7,14 @@ sub init()
     m.playbackControls = m.top.findNode("playbackControls")
     m.statusLabel = m.top.findNode("statusLabel")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
+    m.playstateTask = m.top.findNode("playstateTask")
     m.controlsHideTimer = m.top.findNode("controlsHideTimer")
+    m.playstateTimer = m.top.findNode("playstateTimer")
 
     m.playback = {
         isSeeking: false
         isPlaying: false
+        hasReportedStart: false
         previewPosition: 0
         position: 0
         duration: 0
@@ -21,6 +24,7 @@ sub init()
         token: ""
         userId: ""
         itemId: ""
+        playSessionId: ""
     }
     m.queue = {
         items: []
@@ -36,6 +40,7 @@ sub init()
     m.playbackControls.observeField("playPausePressed", "onPlayPausePressed")
     m.playbackControls.observeField("nextPressed", "onNextPressed")
     m.controlsHideTimer.observeField("fire", "onControlsHideTimerFire")
+    m.playstateTimer.observeField("fire", "onPlaystateTimerFire")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -81,6 +86,7 @@ sub applyPlaybackResponse(response as object, request as object)
         token: SafeString(request.token, "")
         userId: SafeString(request.userId, "")
         itemId: SafeString(request.itemId, "")
+        playSessionId: SafeString(response.playSessionId, "")
     }
     m.queue = {
         items: getPlaybackQueue(request.playbackQueue)
@@ -92,6 +98,7 @@ sub applyPlaybackResponse(response as object, request as object)
     content.url = response.streamUrl
     content.streamFormat = response.streamFormat
     content.title = getItemTitle(item)
+    content.PlayStart = PlaybackProgress_TicksToSeconds(response.startPositionTicks)
     content.AddHeader("Authorization", JellyfinAuth_BuildPlaybackHeader(request.token, request.userId))
 
     m.playback.duration = getRuntimeSeconds(item)
@@ -115,13 +122,26 @@ end sub
 sub onVideoStateChanged()
     state = LCase(SafeString(m.videoPlayer.state, ""))
     if state = "error" then
+        reportPlaystateStop()
         enableScreenSaver()
         m.statusLabel.text = "Unable to play this video."
         m.statusLabel.visible = true
     else if state = "finished" then
+        reportPlaystateStop()
         stopPlayback()
         m.top.closeRequested = true
+    else if state = "playing" then
+        if m.playback.hasReportedStart = true then
+            reportPlaystateUpdate()
+        else
+            reportPlaystateStart()
+        end if
+        m.playstateTimer.control = "start"
+    else if state = "paused" then
+        m.playstateTimer.control = "stop"
+        reportPlaystateUpdate()
     else if state = "stopped" then
+        reportPlaystateStop()
         enableScreenSaver()
     end if
 
@@ -159,6 +179,13 @@ sub onControlsHideTimerFire()
 end sub
 
 '-------------------------------------------------------------------------------
+' onPlaystateTimerFire
+'-------------------------------------------------------------------------------
+sub onPlaystateTimerFire()
+    reportPlaystateUpdate()
+end sub
+
+'-------------------------------------------------------------------------------
 ' disableScreenSaver
 '-------------------------------------------------------------------------------
 sub disableScreenSaver()
@@ -177,6 +204,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub stopPlayback()
     hideControls()
+    reportPlaystateStop()
     m.videoPlayer.control = "stop"
     enableScreenSaver()
 end sub
@@ -349,9 +377,71 @@ function buildQueuePlayRequest(index as integer, item as object) as object
         userId: m.session.userId
         itemId: item.itemId
         item: item.item
+        startPositionTicks: PlaybackProgress_GetTicksFromSelection(item)
         playbackQueue: m.queue.items
         playbackQueueIndex: index
     }
+end function
+
+'-------------------------------------------------------------------------------
+' reportPlaystateStart
+'-------------------------------------------------------------------------------
+sub reportPlaystateStart()
+    if m.playback.hasReportedStart = true then return
+
+    reportPlaystate("start")
+    m.playback.hasReportedStart = true
+end sub
+
+'-------------------------------------------------------------------------------
+' reportPlaystateUpdate
+'-------------------------------------------------------------------------------
+sub reportPlaystateUpdate()
+    if m.playback.hasReportedStart <> true then return
+
+    reportPlaystate("update")
+end sub
+
+'-------------------------------------------------------------------------------
+' reportPlaystateStop
+'-------------------------------------------------------------------------------
+sub reportPlaystateStop()
+    if m.playback.hasReportedStart <> true then return
+
+    m.playstateTimer.control = "stop"
+    reportPlaystate("stop")
+    m.playback.hasReportedStart = false
+end sub
+
+'-------------------------------------------------------------------------------
+' reportPlaystate
+'-------------------------------------------------------------------------------
+sub reportPlaystate(status as string)
+    if m.session = invalid then return
+    if m.session.server = "" or m.session.token = "" or m.session.itemId = "" then return
+
+    position = m.videoPlayer.position
+    isPaused = LCase(SafeString(m.videoPlayer.state, "")) = "paused"
+    m.log.write("Playstate " + status + " itemId=" + m.session.itemId + " position=" + SafeString(position, "") + " paused=" + boolToText(isPaused))
+
+    m.playstateTask.request = {
+        server: m.session.server
+        token: m.session.token
+        itemId: m.session.itemId
+        playSessionId: m.session.playSessionId
+        status: status
+        position: position
+        isPaused: isPaused
+    }
+    m.playstateTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' boolToText
+'-------------------------------------------------------------------------------
+function boolToText(value as boolean) as string
+    if value = true then return "true"
+    return "false"
 end function
 
 '-------------------------------------------------------------------------------
