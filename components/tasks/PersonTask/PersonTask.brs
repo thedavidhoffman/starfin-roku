@@ -48,7 +48,7 @@ end sub
 function loadPerson(request as object) as object
     params = {
         userId: SafeString(request.userId, "")
-        fields: "Overview"
+        fields: "Overview,ExternalUrls"
     }
 
     url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)

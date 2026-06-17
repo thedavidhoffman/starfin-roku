@@ -420,6 +420,7 @@ sub personShow(selection as object)
 
     page = CreateObject("roSGNode", "Person")
     page.observeField("closeRequested", "personHandleCloseRequested")
+    page.observeField("selectedFilmography", "filmographyHandlePersonFilmographySelected")
     page.observeField("selectedMovie", "personHandleMovieSelected")
     page.observeField("selectedSeries", "personHandleSeriesSelected")
     page.loadRequest = {
@@ -475,6 +476,59 @@ sub personHandleCloseRequested()
     if m.moviePage <> invalid then
         m.moviePage.visible = true
         m.moviePage.callFunc("activate")
+    else
+        m.homePage.visible = true
+        m.header.visible = true
+        m.homePage.callFunc("activate")
+    end if
+end sub
+
+'===============================================================================
+' Filmography
+'===============================================================================
+
+'-------------------------------------------------------------------------------
+' filmographyHandlePersonFilmographySelected
+'-------------------------------------------------------------------------------
+sub filmographyHandlePersonFilmographySelected()
+    selection = m.personPage.selectedFilmography
+    if selection = invalid then return
+    if selection.personId = invalid or selection.personId = "" then return
+
+    filmographyShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' filmographyShow
+'-------------------------------------------------------------------------------
+sub filmographyShow(selection as object)
+    if selection = invalid then return
+    if selection.personId = invalid or selection.personId = "" then return
+
+    page = CreateObject("roSGNode", "Filmography")
+    page.observeField("closeRequested", "filmographyHandleCloseRequested")
+    page.loadRequest = selection
+
+    m.filmographyPage = page
+    m.dynamicPageHost.appendChild(page)
+    if m.personPage <> invalid then m.personPage.visible = false
+    m.homePage.visible = false
+    m.header.visible = false
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' filmographyHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub filmographyHandleCloseRequested()
+    if m.filmographyPage <> invalid then
+        m.dynamicPageHost.removeChild(m.filmographyPage)
+        m.filmographyPage = invalid
+    end if
+
+    if m.personPage <> invalid then
+        m.personPage.visible = true
+        m.personPage.callFunc("activate")
     else
         m.homePage.visible = true
         m.header.visible = true
@@ -762,6 +816,7 @@ sub resetDynamicPages()
     m.tvSeasonPage = invalid
     m.personPage = invalid
     m.personSourceMoviePage = invalid
+    m.filmographyPage = invalid
     m.videoPlayer = invalid
     childCount = m.dynamicPageHost.getChildCount()
     if childCount > 0 then m.dynamicPageHost.removeChildrenIndex(childCount, 0)

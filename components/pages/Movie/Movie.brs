@@ -74,7 +74,11 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    focusPlayButton()
+    if m.pageState.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
+        focusCast()
+    else
+        focusPlayButton()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

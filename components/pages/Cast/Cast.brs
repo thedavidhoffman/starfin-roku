@@ -5,7 +5,11 @@ sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.castRows = m.top.findNode("castRows")
     m.castRows.observeField("focusExitUp", "onCastRowsFocusExitUp")
+    m.castRows.observeField("rowItemFocused", "onCastRowItemFocused")
     m.castRows.observeField("rowItemSelected", "onCastRowItemSelected")
+    m.focusState = {
+        rowItem: [0, 0]
+    }
     m.top.visible = false
 end sub
 
@@ -46,6 +50,7 @@ end sub
 sub activate()
     if m.top.hasItems = true then
         m.castRows.drawFocusFeedback = true
+        restoreLastFocusedCastItem()
         m.castRows.setFocus(true)
     else
         m.top.setFocus(true)
@@ -68,10 +73,18 @@ sub onCastRowsFocusExitUp()
 end sub
 
 '-------------------------------------------------------------------------------
+' onCastRowItemFocused
+'-------------------------------------------------------------------------------
+sub onCastRowItemFocused()
+    saveFocusedCastItem(m.castRows.rowItemFocused)
+end sub
+
+'-------------------------------------------------------------------------------
 ' onCastRowItemSelected
 '-------------------------------------------------------------------------------
 sub onCastRowItemSelected()
     selected = m.castRows.rowItemSelected
+    saveFocusedCastItem(selected)
     if selected = invalid or selected.Count() < 2 then return
     if m.castRows.content = invalid then return
 
@@ -89,6 +102,45 @@ sub onCastRowItemSelected()
         item: itemNode.raw
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' restoreLastFocusedCastItem
+'-------------------------------------------------------------------------------
+sub restoreLastFocusedCastItem()
+    rowItem = getValidRowItem(m.focusState.rowItem)
+    if rowItem = invalid then return
+
+    m.castRows.jumpToRowItem = rowItem
+end sub
+
+'-------------------------------------------------------------------------------
+' saveFocusedCastItem
+'-------------------------------------------------------------------------------
+sub saveFocusedCastItem(rowItem as dynamic)
+    rowItem = getValidRowItem(rowItem)
+    if rowItem = invalid then return
+
+    m.focusState.rowItem = rowItem
+end sub
+
+'-------------------------------------------------------------------------------
+' getValidRowItem
+'-------------------------------------------------------------------------------
+function getValidRowItem(rowItem as dynamic) as dynamic
+    if rowItem = invalid or rowItem.Count() < 2 then return invalid
+    if m.castRows.content = invalid then return invalid
+
+    rowIndex = rowItem[0]
+    itemIndex = rowItem[1]
+    if rowIndex < 0 or itemIndex < 0 then return invalid
+    if rowIndex >= m.castRows.content.getChildCount() then return invalid
+
+    row = m.castRows.content.getChild(rowIndex)
+    if row = invalid then return invalid
+    if itemIndex >= row.getChildCount() then return invalid
+
+    return [rowIndex, itemIndex]
+end function
 
 '-------------------------------------------------------------------------------
 ' getPersonSubtitle

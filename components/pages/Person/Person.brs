@@ -9,6 +9,7 @@ sub init()
     m.lifeLabel = m.top.findNode("lifeLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
     m.statusLabel = m.top.findNode("statusLabel")
+    m.filmographyButton = m.top.findNode("filmographyButton")
     m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
     m.relatedRows = m.top.findNode("relatedRows")
     m.personTask = m.top.findNode("personTask")
@@ -19,6 +20,7 @@ sub init()
     m.pageState = {
         request: invalid
         person: invalid
+        filmography: invalid
         focusArea: "person"
     }
 end sub
@@ -32,6 +34,7 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.person = request.item
+    m.pageState.filmography = invalid
     clearRelated()
     setStatus("Loading person...")
     renderPerson(request.item)
@@ -77,6 +80,14 @@ sub renderPerson(person as dynamic)
     m.backdrop.visible = backdropUrl <> ""
     m.backdrop.uri = backdropUrl
     m.relatedTitleLabel.text = "More with " + getPersonName(person)
+
+    m.pageState.filmography = buildFilmographySelection(person, imageUrl)
+    m.filmographyButton.visible = m.pageState.filmography <> invalid
+    if m.filmographyButton.visible = true and m.pageState.focusArea <> "related" then
+        focusFilmographyButton()
+    else
+        updateFocusVisual()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -125,9 +136,22 @@ end sub
 sub activate()
     if m.relatedRows.visible = true and m.pageState.focusArea = "related" then
         m.relatedRows.setFocus(true)
+    else if m.filmographyButton.visible = true then
+        focusFilmographyButton()
     else
         m.top.setFocus(true)
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' focusFilmographyButton
+'-------------------------------------------------------------------------------
+sub focusFilmographyButton()
+    if m.filmographyButton.visible <> true then return
+
+    m.pageState.focusArea = "filmography"
+    m.filmographyButton.hasFocusVisual = true
+    m.filmographyButton.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -137,6 +161,7 @@ sub focusRelated()
     if m.relatedRows.visible <> true then return
 
     m.pageState.focusArea = "related"
+    m.filmographyButton.hasFocusVisual = false
     m.relatedRows.setFocus(true)
 end sub
 
@@ -144,8 +169,21 @@ end sub
 ' focusPerson
 '-------------------------------------------------------------------------------
 sub focusPerson()
-    m.pageState.focusArea = "person"
-    m.top.setFocus(true)
+    if m.filmographyButton.visible = true then
+        focusFilmographyButton()
+    else
+        m.pageState.focusArea = "person"
+        m.filmographyButton.hasFocusVisual = false
+        m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' selectFilmography
+'-------------------------------------------------------------------------------
+sub selectFilmography()
+    if m.pageState.filmography = invalid then return
+    m.top.selectedFilmography = m.pageState.filmography
 end sub
 
 '-------------------------------------------------------------------------------
@@ -182,6 +220,64 @@ end sub
 function getPersonName(person as dynamic) as string
     if isAssocArray(person) = false then return "Person"
     return FirstNonEmpty([person.Name, person.name, person.title], "Person")
+end function
+
+'-------------------------------------------------------------------------------
+' buildFilmographySelection
+'-------------------------------------------------------------------------------
+function buildFilmographySelection(person as dynamic, imageUrl as string) as dynamic
+    tmdbId = getTmdbPersonId(person)
+    if tmdbId = "" then return invalid
+
+    return {
+        personId: tmdbId
+        name: getPersonName(person)
+        imageUrl: imageUrl
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getTmdbPersonId
+'-------------------------------------------------------------------------------
+function getTmdbPersonId(person as dynamic) as string
+    if isAssocArray(person) = false then return ""
+    externalUrls = person.ExternalUrls
+    if externalUrls = invalid then externalUrls = person.externalUrls
+    if externalUrls = invalid then return ""
+
+    for each externalUrl in externalUrls
+        if isAssocArray(externalUrl) = false then continue for
+
+        name = LCase(FirstNonEmpty([externalUrl.Name, externalUrl.name], ""))
+        if name = "tmdb" then
+            url = FirstNonEmpty([externalUrl.Url, externalUrl.url], "")
+            return getTrailingUrlSegment(url)
+        end if
+    end for
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getTrailingUrlSegment
+'-------------------------------------------------------------------------------
+function getTrailingUrlSegment(url as string) as string
+    if url = "" then return ""
+
+    while Right(url, 1) = "/"
+        url = Left(url, Len(url) - 1)
+    end while
+
+    slashIndex = 0
+    for i = Len(url) to 1 step -1
+        if Mid(url, i, 1) = "/" then
+            slashIndex = i
+            exit for
+        end if
+    end for
+
+    if slashIndex = 0 then return url
+    return Mid(url, slashIndex + 1)
 end function
 
 '-------------------------------------------------------------------------------
@@ -335,6 +431,14 @@ sub setStatus(message as string)
 end sub
 
 '-------------------------------------------------------------------------------
+' updateFocusVisual
+'-------------------------------------------------------------------------------
+sub updateFocusVisual()
+    hasFocusVisual = m.filmographyButton.visible = true and m.pageState.focusArea <> "related"
+    m.filmographyButton.hasFocusVisual = hasFocusVisual
+end sub
+
+'-------------------------------------------------------------------------------
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
@@ -345,7 +449,12 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = "down" and m.pageState.focusArea = "person" then
+    if key = "OK" and (m.pageState.focusArea = "filmography" or (m.pageState.focusArea = "person" and m.filmographyButton.visible = true)) then
+        selectFilmography()
+        return true
+    end if
+
+    if key = "down" and (m.pageState.focusArea = "person" or m.pageState.focusArea = "filmography") then
         focusRelated()
         return true
     end if

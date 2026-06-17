@@ -1,0 +1,101 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = CreateLogger("FilmographyTask")
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    validationError = validateRequest(request)
+    if validationError <> invalid then
+        m.top.response = validationError
+        return
+    end if
+
+    url = "https://api.themoviedb.org/3/person/" + request.personId + "/combined_credits" + Url_BuildQueryString({
+        
+    })
+
+    result = HttpClient_Request(url, "GET", invalid, invalid)
+    if result.ok <> true then
+        result.AddReplace("action", "filmography")
+        m.top.response = result
+        return
+    end if
+
+    m.top.response = {
+        ok: true
+        action: "filmography"
+        personId: SafeString(request.personId, "")
+        payload: buildFilmographyItems(result.data)
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' buildFilmographyItems
+'-------------------------------------------------------------------------------
+function buildFilmographyItems(payload as dynamic) as object
+    items = []
+    if payload = invalid or payload.cast = invalid then return items
+
+    for each credit in payload.cast
+        if isAssocArray(credit) = false then continue for
+
+        title = FirstNonEmpty([credit.title, credit.name], "")
+        if title = "" then continue for
+        releaseDate = getCreditDate(credit)
+        if releaseDate = "" then continue for
+
+        items.Push({
+            sort_date: releaseDate
+            release_date: formatCreditYear(releaseDate)
+            title: title
+            character: FirstNonEmpty([credit.character], "")
+            poster_path: FirstNonEmpty([credit.poster_path], "")
+            overview: FirstNonEmpty([credit.overview], "")
+            raw: credit
+        })
+    end for
+
+    items.SortBy("sort_date")
+    return items
+end function
+
+'-------------------------------------------------------------------------------
+' getCreditDate
+'-------------------------------------------------------------------------------
+function getCreditDate(credit as object) as string
+    originalDate = FirstNonEmpty([credit.release_date, credit.first_air_date], "")
+    return FirstNonEmpty([credit.first_credit_air_date, originalDate], "")
+end function
+
+'-------------------------------------------------------------------------------
+' formatCreditYear
+'-------------------------------------------------------------------------------
+function formatCreditYear(value as string) as string
+    if Len(value) < 4 then return ""
+    return Left(value, 4)
+end function
+
+'-------------------------------------------------------------------------------
+' validateRequest
+'-------------------------------------------------------------------------------
+function validateRequest(request as dynamic) as dynamic
+    if request = invalid then return { ok: false, action: "filmography", errorMessage: "Invalid filmography request." }
+    if request.personId = invalid or request.personId = "" then return { ok: false, action: "filmography", errorMessage: "Invalid TMDB person." }
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' isAssocArray
+'-------------------------------------------------------------------------------
+function isAssocArray(value as dynamic) as boolean
+    valueType = Type(value)
+    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
+end function
