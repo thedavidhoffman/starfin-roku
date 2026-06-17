@@ -6,7 +6,6 @@ sub init()
     m.showLogo = m.top.findNode("showLogo")
     m.seriesLabel = m.top.findNode("seriesLabel")
     m.seasonLabel = m.top.findNode("seasonLabel")
-    m.metaLabel = m.top.findNode("metaLabel")
     m.episodesList = m.top.findNode("episodesList")
     m.statusLabel = m.top.findNode("statusLabel")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
@@ -33,6 +32,10 @@ sub onEpisodeSelected()
 
     episodeNode = row.getChild(selected[1])
     if episodeNode = invalid then return
+    if SafeString(episodeNode.itemType, "") = "SeasonSummary" then
+        playFirstEpisode()
+        return
+    end if
 
     episode = episodeNode.raw
     episodeId = SafeString(FirstNonEmpty([episode.Id, episode.id, episodeNode.itemId], ""), "")
@@ -42,7 +45,35 @@ sub onEpisodeSelected()
         itemId: episodeId
         item: episode
         playbackQueue: buildPlaybackQueue(m.pageState.episodes)
-        playbackQueueIndex: selected[1]
+        playbackQueueIndex: selected[1] - 1
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' playFirstEpisode
+'-------------------------------------------------------------------------------
+sub playFirstEpisode()
+    episodes = m.pageState.episodes
+    if episodes = invalid or episodes.Count() = 0 then return
+
+    firstEpisode = invalid
+    for each episode in episodes
+        if isAssocArray(episode) = false then continue for
+
+        episodeId = SafeString(FirstNonEmpty([episode.Id, episode.id], ""), "")
+        if episodeId <> "" then
+            firstEpisode = episode
+            exit for
+        end if
+    end for
+
+    if firstEpisode = invalid then return
+
+    m.top.selectedEpisode = {
+        itemId: SafeString(FirstNonEmpty([firstEpisode.Id, firstEpisode.id], ""), "")
+        item: firstEpisode
+        playbackQueue: buildPlaybackQueue(episodes)
+        playbackQueueIndex: 0
     }
 end sub
 
@@ -57,7 +88,7 @@ sub onLoadRequestChanged()
     m.pageState.season = request.season
     setStatus("Loading season...")
     renderSeason(request.season)
-    renderEpisodes([])
+    clearEpisodes()
 
     m.tvSeasonTask.request = request
     m.tvSeasonTask.control = "run"
@@ -94,7 +125,6 @@ sub renderSeason(item as dynamic)
 
     m.seriesLabel.text = FirstNonEmpty([item.SeriesName, item.seriesName], "")
     m.seasonLabel.text = getItemTitle(item)
-    m.metaLabel.text = getMetaText(item)
     renderShowLogo()
 end sub
 
@@ -121,6 +151,7 @@ end sub
 sub renderEpisodes(episodes as object)
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
+    appendSeasonSummaryItem(row)
 
     for each episode in episodes
         if isAssocArray(episode) = false then continue for
@@ -142,6 +173,71 @@ sub renderEpisodes(episodes as object)
     m.episodesList.content = content
     m.episodesList.visible = row.getChildCount() > 0
 end sub
+
+'-------------------------------------------------------------------------------
+' clearEpisodes
+'-------------------------------------------------------------------------------
+sub clearEpisodes()
+    m.episodesList.content = CreateObject("roSGNode", "ContentNode")
+    m.episodesList.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' appendSeasonSummaryItem
+'-------------------------------------------------------------------------------
+sub appendSeasonSummaryItem(row as object)
+    season = m.pageState.season
+    if row = invalid or isAssocArray(season) = false then return
+
+    child = row.createChild("ContentNode")
+    child.title = getItemTitle(season)
+    child.description = getSeasonSummaryDescription(season)
+    child.HDPosterUrl = getSeasonBackgroundUrl(season)
+    child.AddFields({
+        itemId: ""
+        itemType: "SeasonSummary"
+        episodeNumber: getSeasonEpisodeCountText(season)
+        episodeDate: getSeasonYearText(season)
+        metaText: getMetaText(season)
+        raw: season
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' getSeasonSummaryDescription
+'-------------------------------------------------------------------------------
+function getSeasonSummaryDescription(season as dynamic) as string
+    description = FirstNonEmpty([season.Overview, season.overview], "")
+    if description <> "" then return description
+
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    series = request.series
+    if isAssocArray(series) = false then return ""
+
+    return FirstNonEmpty([series.Overview, series.overview], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonEpisodeCountText
+'-------------------------------------------------------------------------------
+function getSeasonEpisodeCountText(season as dynamic) as string
+    episodeCount = FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
+    if episodeCount = "" then return ""
+
+    return SafeString(episodeCount, "") + " episodes"
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonYearText
+'-------------------------------------------------------------------------------
+function getSeasonYearText(season as dynamic) as string
+    year = FirstNonEmpty([season.ProductionYear], "")
+    if year <> "" then return SafeString(year, "")
+
+    return getYearFromDate(FirstNonEmpty([season.PremiereDate], ""))
+end function
 
 '-------------------------------------------------------------------------------
 ' activate
@@ -262,10 +358,27 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
     tag = ""
     if imageType = "Primary" and item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
     if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
+    if imageType = "Thumb" and item.ImageTags <> invalid and item.ImageTags.Thumb <> invalid then tag = item.ImageTags.Thumb
     if imageType = "Backdrop" and item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
     if tag = "" then return ""
 
     return buildImageUrl(itemId, imageType, tag, width, height)
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonBackgroundUrl
+'-------------------------------------------------------------------------------
+function getSeasonBackgroundUrl(season as dynamic) as string
+    request = m.pageState.request
+    if request <> invalid then
+        imageUrl = getImageUrl(request.series, "Thumb", 530, 298)
+        if imageUrl <> "" then return imageUrl
+
+        imageUrl = getImageUrl(request.series, "Backdrop", 530, 298)
+        if imageUrl <> "" then return imageUrl
+    end if
+
+    return ""
 end function
 
 '-------------------------------------------------------------------------------

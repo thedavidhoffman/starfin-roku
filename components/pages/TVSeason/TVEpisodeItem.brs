@@ -16,6 +16,10 @@ sub initReferences()
     m.episodeDate = m.top.findNode("episodeDate")
     m.title = m.top.findNode("title")
     m.description = m.top.findNode("description")
+    m.layout = {
+        titleY: 356
+        descriptionY: 398
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -35,16 +39,35 @@ end sub
 sub onItemContentChanged()
     item = m.top.itemContent
     if item = invalid then return
+    isSeasonSummary = SafeString(item.itemType, "") = "SeasonSummary"
 
-    m.episodeNumber.text = UCase(SafeString(item.episodeNumber, ""))
+    episodeNumber = SafeString(item.episodeNumber, "")
+    if item.preserveEpisodeNumberCase <> true then episodeNumber = UCase(episodeNumber)
+    m.episodeNumber.text = episodeNumber
     m.episodeDate.text = SafeString(item.episodeDate, "")
     m.title.text = SafeString(item.title, "")
     m.description.text = SafeString(item.description, "")
+    applyLayout(isSeasonSummary)
 
     imageUrl = SafeString(item.HDPosterUrl, "")
     m.poster.visible = imageUrl <> ""
     m.placeholder.visible = imageUrl = ""
     m.poster.uri = imageUrl
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLayout
+'-------------------------------------------------------------------------------
+sub applyLayout(isSeasonSummary as boolean)
+    m.episodeNumber.visible = true
+    m.episodeDate.visible = true
+    m.title.visible = isSeasonSummary <> true
+
+    if isSeasonSummary = true then
+        m.description.translation = [0, m.layout.titleY]
+    else
+        m.description.translation = [0, m.layout.descriptionY]
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
