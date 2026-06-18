@@ -24,6 +24,7 @@ sub executeRequest()
         Filters: "IsResumable"
         MediaTypes: "Video"
         excludeItemTypes: "Book"
+        Fields: "SeriesInfo"
         EnableTotalRecordCount: false
     }
 

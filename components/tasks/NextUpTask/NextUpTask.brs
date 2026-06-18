@@ -26,6 +26,7 @@ sub executeRequest()
         EnableRewatching: getBoolean(request.enableRewatching, false)
         DisableFirstEpisode: false
         limit: getInteger(request.limit, 26)
+        Fields: "SeriesInfo"
         EnableTotalRecordCount: false
     }
 

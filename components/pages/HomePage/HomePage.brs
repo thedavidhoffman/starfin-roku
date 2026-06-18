@@ -270,13 +270,16 @@ function buildRowContent(key as string, title as string, items as object) as obj
         if isAssocArray(item) = false then continue for
 
         child = content.createChild("ContentNode")
-        child.title = getItemTitle(item)
-        child.description = getItemSubtitle(item)
+        child.title = getHomeItemTitle(key, item)
+        child.description = getHomeItemSubtitle(key, item)
         child.HDPosterUrl = getItemImageUrl(item, imageAspect)
         child.AddFields({
             itemId: SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
             itemType: SafeString(FirstNonEmpty([item.Type, item.type], ""), "")
             imageAspect: imageAspect
+            homeTitle: child.title
+            homeSubtitle: child.description
+            showSubtitle: shouldShowHomeItemSubtitle(key)
             raw: item
         })
     end for
@@ -288,7 +291,7 @@ end function
 ' getRowImageAspect
 '-------------------------------------------------------------------------------
 function getRowImageAspect(key as string) as string
-    if key = "libraries" then return "wide"
+    if key = "libraries" or key = "continueWatching" or key = "nextUp" then return "wide"
     return "poster"
 end function
 
@@ -315,7 +318,7 @@ sub renderRows()
             rowItemSpacings.Push([18, 0])
             showRowLabels.Push(true)
             showRowCounters.Push(true)
-            rowLabelOffsets.Push([0, 0])
+            rowLabelOffsets.Push([0, 10])
         end if
     end for
 
@@ -338,11 +341,22 @@ end sub
 ' getRowLayout
 '-------------------------------------------------------------------------------
 function getRowLayout(key as string) as object
-    if getRowImageAspect(key) = "wide" then
-        return { width: 350, height: 257, spacingAfter: 74 }
+    if key = "libraries" then
+        return { width: 440, height: 306, spacingAfter: 74 }
     end if
 
-    return { width: 250, height: 435, spacingAfter: 74 }
+    if getRowImageAspect(key) = "wide" then
+        return { width: 440, height: 348, spacingAfter: 74 }
+    end if
+
+    return { width: 250, height: 463, spacingAfter: 74 }
+end function
+
+'-------------------------------------------------------------------------------
+' shouldShowHomeItemSubtitle
+'-------------------------------------------------------------------------------
+function shouldShowHomeItemSubtitle(key as string) as boolean
+    return key <> "libraries"
 end function
 
 '-------------------------------------------------------------------------------
@@ -428,6 +442,102 @@ function getItemSubtitle(item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
+' getHomeItemTitle
+'-------------------------------------------------------------------------------
+function getHomeItemTitle(key as string, item as dynamic) as string
+    itemType = LCase(SafeString(FirstNonEmpty([item.Type, item.type], ""), ""))
+    if itemType = "movie" then
+        movieName = FirstNonEmpty([item.Name, item.name, item.title], "")
+        if movieName <> "" then return movieName
+    end if
+
+    if isPlaybackProgressRow(key) then
+        if itemType = "episode" then
+            seriesName = getEpisodeSeriesName(item)
+            if seriesName <> "" then return seriesName
+        end if
+    end if
+
+    return getItemTitle(item)
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaybackProgressRow
+'-------------------------------------------------------------------------------
+function isPlaybackProgressRow(key as string) as boolean
+    return key = "continueWatching" or key = "nextUp"
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeSeriesName
+'-------------------------------------------------------------------------------
+function getEpisodeSeriesName(item as dynamic) as string
+    if isAssocArray(item) = false then return ""
+
+    return FirstNonEmpty([item.SeriesName, item.seriesName], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getHomeItemSubtitle
+'-------------------------------------------------------------------------------
+function getHomeItemSubtitle(key as string, item as dynamic) as string
+    if key = "libraries" then return ""
+
+    itemType = LCase(SafeString(FirstNonEmpty([item.Type, item.type], ""), ""))
+    if isLatestMediaRow(key) and itemType = "series" then
+        seriesYearRange = getSeriesYearRange(item)
+        if seriesYearRange <> "" then return seriesYearRange
+    end if
+
+    if itemType = "movie" then
+        productionYear = FirstNonEmpty([item.ProductionYear, item.productionYear], "")
+        if productionYear <> "" then return SafeString(productionYear, "")
+    end if
+
+    if isPlaybackProgressRow(key) then
+        if itemType = "episode" then
+            episodeName = FirstNonEmpty([item.Name, item.name, item.title], "")
+            if episodeName <> "" then return episodeName
+        end if
+    end if
+
+    return getItemSubtitle(item)
+end function
+
+'-------------------------------------------------------------------------------
+' isLatestMediaRow
+'-------------------------------------------------------------------------------
+function isLatestMediaRow(key as string) as boolean
+    return Left(key, 7) = "latest:"
+end function
+
+'-------------------------------------------------------------------------------
+' getSeriesYearRange
+'-------------------------------------------------------------------------------
+function getSeriesYearRange(item as dynamic) as string
+    productionYear = FirstNonEmpty([item.ProductionYear, item.productionYear], "")
+    if productionYear = "" then return ""
+
+    status = LCase(FirstNonEmpty([item.Status, item.status], ""))
+    if status = "continuing" then return SafeString(productionYear, "") + " - Present"
+
+    if status = "ended" then
+        endYear = getYearFromDate(FirstNonEmpty([item.EndDate, item.endDate], ""))
+        if endYear <> "" then return SafeString(productionYear, "") + " - " + endYear
+    end if
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getYearFromDate
+'-------------------------------------------------------------------------------
+function getYearFromDate(value as string) as string
+    if Len(value) < 4 then return ""
+    return Left(value, 4)
+end function
+
+'-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
@@ -457,7 +567,7 @@ end function
 ' getImageSize
 '-------------------------------------------------------------------------------
 function getImageSize(imageAspect as string) as object
-    if imageAspect = "wide" then return { width: 350, height: 197 }
+    if imageAspect = "wide" then return { width: 440, height: 248 }
     return { width: 250, height: 375 }
 end function
 
