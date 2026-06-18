@@ -4,7 +4,9 @@
 sub init()
     m.log = CreateLogger("HomePage")
     m.statusLabel = m.top.findNode("statusLabel")
-    m.homeRows = m.top.findNode("homeRows")
+    m.shelvesGroup = m.top.findNode("shelvesGroup")
+    m.shelvesAnimation = m.top.findNode("shelvesAnimation")
+    m.shelvesTranslation = m.top.findNode("shelvesTranslation")
 
     m.tasks = {
         libraries: m.top.findNode("librariesTask")
@@ -24,32 +26,34 @@ sub init()
     m.tasks.liveTvOnNow.observeField("response", "onSectionResponse")
     m.tasks.myList.observeField("response", "onSectionResponse")
     m.tasks.favorites.observeField("response", "onSectionResponse")
-    m.homeRows.observeField("rowItemSelected", "onHomeRowItemSelected")
-
     m.homeState = {
         request: invalid
         rows: {}
         rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList", "favorites"]
         latestLibraries: {}
         latestTasks: []
+        shelfNodes: []
+        shelfPositions: []
+        focusedShelfIndex: 0
+        shelfOffsetY: 0
     }
 end sub
 
 '-------------------------------------------------------------------------------
-' onHomeRowItemSelected
+' onHomeShelfSelected
 '-------------------------------------------------------------------------------
-sub onHomeRowItemSelected()
-    selected = m.homeRows.rowItemSelected
-    if selected = invalid or selected.Count() < 2 then return
-    if m.homeRows.content = invalid then return
+sub onHomeShelfSelected(event as object)
+    selection = event.getData()
+    if selection = invalid then return
 
-    row = m.homeRows.content.getChild(selected[0])
-    if row = invalid then return
+    item = selection.item
+    selectHomeItem(item)
+end sub
 
-    itemNode = row.getChild(selected[1])
-    if itemNode = invalid then return
-
-    item = itemNode.raw
+'-------------------------------------------------------------------------------
+' selectHomeItem
+'-------------------------------------------------------------------------------
+sub selectHomeItem(item as dynamic)
     itemId = SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
     if itemId = "" then return
 
@@ -82,7 +86,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     if hasRenderedRows() then
-        m.homeRows.setFocus(true)
+        focusShelf(m.homeState.focusedShelfIndex)
     else
         m.top.setFocus(true)
     end if
@@ -100,6 +104,10 @@ sub onLoadRequestChanged()
     m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList", "favorites"]
     m.homeState.latestLibraries = {}
     m.homeState.latestTasks = []
+    m.homeState.shelfNodes = []
+    m.homeState.shelfPositions = []
+    m.homeState.focusedShelfIndex = 0
+    m.homeState.shelfOffsetY = 0
 
     clearRows()
     setStatus("Loading home...")
@@ -264,6 +272,7 @@ end sub
 function buildRowContent(key as string, title as string, items as object) as object
     content = CreateObject("roSGNode", "ContentNode")
     content.title = title
+    content.AddFields({ rowKey: key })
     imageAspect = getRowImageAspect(key)
 
     for each item in items
@@ -299,41 +308,45 @@ end function
 ' renderRows
 '-------------------------------------------------------------------------------
 sub renderRows()
-    content = CreateObject("roSGNode", "ContentNode")
-    rowHeights = []
-    rowSpacings = []
-    rowItemSizes = []
-    rowItemSpacings = []
-    showRowLabels = []
-    showRowCounters = []
-    rowLabelOffsets = []
+    clearShelfNodes()
+
+    shelfNodes = []
+    shelfPositions = []
+    shelfY = 0
+    shelfIndex = 0
 
     for each key in m.homeState.rowOrder
         if m.homeState.rows.DoesExist(key) then
             layout = getRowLayout(key)
-            content.appendChild(m.homeState.rows[key])
-            rowHeights.Push(layout.height)
-            rowSpacings.Push(layout.spacingAfter)
-            rowItemSizes.Push([layout.width, layout.height])
-            rowItemSpacings.Push([18, 0])
-            showRowLabels.Push(true)
-            showRowCounters.Push(true)
-            rowLabelOffsets.Push([0, 10])
+            shelf = CreateObject("roSGNode", "HomeShelf")
+            shelf.rowIndex = shelfIndex
+            shelf.layout = layout
+            shelf.rowContent = m.homeState.rows[key]
+            shelf.translation = [0, shelfY]
+            shelf.observeField("selectedItem", "onHomeShelfSelected")
+            shelf.observeField("focusExitUp", "onHomeShelfFocusExitUp")
+            shelf.observeField("focusExitDown", "onHomeShelfFocusExitDown")
+
+            m.shelvesGroup.appendChild(shelf)
+            shelfNodes.Push(shelf)
+            shelfPositions.Push({ top: shelfY, bottom: shelfY + getShelfHeight(layout) })
+
+            shelfY = shelfY + getShelfHeight(layout) + layout.spacingAfter
+            shelfIndex = shelfIndex + 1
         end if
     end for
 
-    m.homeRows.rowHeights = rowHeights
-    m.homeRows.rowSpacings = rowSpacings
-    m.homeRows.rowItemSize = rowItemSizes
-    m.homeRows.rowItemSpacing = rowItemSpacings
-    m.homeRows.showRowLabel = showRowLabels
-    m.homeRows.showRowCounter = showRowCounters
-    m.homeRows.rowLabelOffset = rowLabelOffsets
-    m.homeRows.content = content
+    m.homeState.shelfNodes = shelfNodes
+    m.homeState.shelfPositions = shelfPositions
+    if m.homeState.focusedShelfIndex >= shelfNodes.Count() then
+        m.homeState.focusedShelfIndex = shelfNodes.Count() - 1
+    end if
+    if m.homeState.focusedShelfIndex < 0 then m.homeState.focusedShelfIndex = 0
+    updateShelfScroll(false)
 
     if hasRenderedRows() then
         setStatus("")
-        if m.top.hasFocus() then m.homeRows.setFocus(true)
+        focusShelf(m.homeState.focusedShelfIndex)
     end if
 end sub
 
@@ -342,14 +355,21 @@ end sub
 '-------------------------------------------------------------------------------
 function getRowLayout(key as string) as object
     if key = "libraries" then
-        return { width: 440, height: 306, spacingAfter: 74 }
+        return { width: 485, height: 306, itemSizeWidth: 1728, itemSpacing: -27, spacingAfter: 74, focusBitmapUri: "pkg:/images/masks/home-page-thumbnail-focus-485x306.png" }
     end if
 
     if getRowImageAspect(key) = "wide" then
-        return { width: 440, height: 348, spacingAfter: 74 }
+        return { width: 485, height: 348, itemSizeWidth: 1728, itemSpacing: -27, spacingAfter: 74, focusBitmapUri: "pkg:/images/masks/home-page-thumbnail-focus-485x348.png" }
     end if
 
-    return { width: 250, height: 463, spacingAfter: 74 }
+    return { width: 295, height: 463, itemSizeWidth: 1728, itemSpacing: -27, spacingAfter: 74, focusBitmapUri: "pkg:/images/masks/home-page-poster-focus-295x463.png" }
+end function
+
+'-------------------------------------------------------------------------------
+' getShelfHeight
+'-------------------------------------------------------------------------------
+function getShelfHeight(layout as object) as integer
+    return 50 + layout.height
 end function
 
 '-------------------------------------------------------------------------------
@@ -360,22 +380,107 @@ function shouldShowHomeItemSubtitle(key as string) as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' onHomeShelfFocusExitUp
+'-------------------------------------------------------------------------------
+sub onHomeShelfFocusExitUp()
+    moveShelfFocus(-1)
+end sub
+
+'-------------------------------------------------------------------------------
+' onHomeShelfFocusExitDown
+'-------------------------------------------------------------------------------
+sub onHomeShelfFocusExitDown()
+    moveShelfFocus(1)
+end sub
+
+'-------------------------------------------------------------------------------
+' moveShelfFocus
+'-------------------------------------------------------------------------------
+sub moveShelfFocus(delta as integer)
+    targetIndex = m.homeState.focusedShelfIndex + delta
+    if targetIndex < 0 or targetIndex >= m.homeState.shelfNodes.Count() then return
+
+    focusShelf(targetIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusShelf
+'-------------------------------------------------------------------------------
+sub focusShelf(index as integer)
+    if m.homeState.shelfNodes.Count() = 0 then return
+    if index < 0 then index = 0
+    if index >= m.homeState.shelfNodes.Count() then index = m.homeState.shelfNodes.Count() - 1
+
+    m.homeState.focusedShelfIndex = index
+    updateShelfScroll(true)
+
+    shelf = m.homeState.shelfNodes[index]
+    if shelf <> invalid then shelf.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' updateShelfScroll
+'-------------------------------------------------------------------------------
+sub updateShelfScroll(animated as boolean)
+    if m.homeState.shelfPositions.Count() = 0 then
+        m.shelvesGroup.translation = [0, 0]
+        m.homeState.shelfOffsetY = 0
+        return
+    end if
+
+    index = m.homeState.focusedShelfIndex
+    if index < 0 then index = 0
+    if index >= m.homeState.shelfPositions.Count() then index = m.homeState.shelfPositions.Count() - 1
+
+    position = m.homeState.shelfPositions[index]
+    targetOffsetY = 0 - position.top
+
+    setShelvesOffset(targetOffsetY, animated)
+end sub
+
+'-------------------------------------------------------------------------------
+' setShelvesOffset
+'-------------------------------------------------------------------------------
+sub setShelvesOffset(offsetY as integer, animated as boolean)
+    if offsetY = m.homeState.shelfOffsetY then return
+
+    startTranslation = m.shelvesGroup.translation
+    endTranslation = [0, offsetY]
+    m.homeState.shelfOffsetY = offsetY
+
+    if animated = true then
+        m.shelvesTranslation.keyValue = [startTranslation, endTranslation]
+        m.shelvesAnimation.control = "start"
+    else
+        m.shelvesGroup.translation = endTranslation
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' clearShelfNodes
+'-------------------------------------------------------------------------------
+sub clearShelfNodes()
+    childCount = m.shelvesGroup.getChildCount()
+    if childCount > 0 then m.shelvesGroup.removeChildrenIndex(childCount, 0)
+end sub
+
+'-------------------------------------------------------------------------------
 ' clearRows
 '-------------------------------------------------------------------------------
 sub clearRows()
-    m.homeRows.content = CreateObject("roSGNode", "ContentNode")
-    m.homeRows.rowHeights = []
-    m.homeRows.rowSpacings = []
-    m.homeRows.rowItemSize = [[250, 435]]
-    m.homeRows.rowItemSpacing = [[18, 0]]
+    clearShelfNodes()
+    m.homeState.shelfNodes = []
+    m.homeState.shelfPositions = []
+    m.homeState.focusedShelfIndex = 0
+    m.homeState.shelfOffsetY = 0
+    m.shelvesGroup.translation = [0, 0]
 end sub
 
 '-------------------------------------------------------------------------------
 ' hasRenderedRows
 '-------------------------------------------------------------------------------
 function hasRenderedRows() as boolean
-    if m.homeRows = invalid or m.homeRows.content = invalid then return false
-    return m.homeRows.content.getChildCount() > 0
+    return m.homeState.shelfNodes.Count() > 0
 end function
 
 '-------------------------------------------------------------------------------
@@ -673,5 +778,22 @@ end sub
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+
+    if key = "up" then
+        moveShelfFocus(-1)
+        return true
+    end if
+
+    if key = "down" then
+        moveShelfFocus(1)
+        return true
+    end if
+
+    if hasRenderedRows() and m.top.isInFocusChain() = false then
+        focusShelf(m.homeState.focusedShelfIndex)
+        return true
+    end if
+
     return false
 end function
