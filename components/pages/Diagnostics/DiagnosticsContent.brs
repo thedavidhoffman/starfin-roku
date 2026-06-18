@@ -141,11 +141,11 @@ function getApplicationRegistryText() as object
         { key: "username", value: auth.username }
         { key: "userId", value: auth.userId }
         { key: "token", value: truncateText(auth.token, 40) + "..." }
-        { key: keys.seriesDisplay, value: settings[keys.seriesDisplay] }
-        { key: keys.itemDisplay, value: settings[keys.itemDisplay] }
-        { key: keys.gridColumns, value: settings[keys.gridColumns] }
-        { key: keys.screensaverType, value: settings[keys.screensaverType] }
-        { key: keys.screensaverDelay, value: settings[keys.screensaverDelay] }
+        { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
+        { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
+        { key: keys.collectionDisplay, value: settings[keys.collectionDisplay] }
+        { key: keys.homeLibraryThumbnails, value: settings[keys.homeLibraryThumbnails] }
+        { key: keys.tmdbApiKey, value: truncateText(settings[keys.tmdbApiKey], 40) }
     ])
 end function
 

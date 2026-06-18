@@ -51,6 +51,10 @@ sub initHandlers()
     m.homePage.observeField("selectedSeries", "tvShowHandleHomeSeriesSelected")
     m.homePage.observeField("selectedLibrary", "libraryHandleHomeLibrarySelected")
     m.homePage.observeField("selectedCollections", "collectionsHandleHomeCollectionsSelected")
+    m.homePage.observeField("focusExitUp", "navHandleHomeFocusExitUp")
+    m.header.observeField("downSelected", "navHandleHeaderDownSelected")
+    m.header.observeField("overlayRequested", "navHandleHeaderOverlayRequested")
+    m.overlayHost.observeField("closed", "navHandleOverlayClosed")
     m.navigationController.observeField("currentRoute", "navHandleCurrentRouteChanged")
 
 end sub
@@ -757,6 +761,77 @@ end sub
 '===============================================================================
 ' Navigation / Header / Search
 '===============================================================================
+
+'-------------------------------------------------------------------------------
+' navHandleHomeFocusExitUp
+'-------------------------------------------------------------------------------
+sub navHandleHomeFocusExitUp()
+    if m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusHeader")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleHeaderDownSelected
+'-------------------------------------------------------------------------------
+sub navHandleHeaderDownSelected()
+    if m.homePage <> invalid and m.homePage.visible = true then
+        m.homePage.callFunc("activate")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleHeaderOverlayRequested
+'-------------------------------------------------------------------------------
+sub navHandleHeaderOverlayRequested()
+    request = m.header.overlayRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleOverlayClosed
+'-------------------------------------------------------------------------------
+sub navHandleOverlayClosed()
+    closed = m.overlayHost.closed
+    if closed = invalid then return
+
+    request = closed.request
+    if request <> invalid and request.id = "settings" and m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusHeader")
+        return
+    end if
+
+    focusActiveSurface()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusActiveSurface
+'-------------------------------------------------------------------------------
+sub focusActiveSurface()
+    if m.videoPlayer <> invalid then
+        m.videoPlayer.setFocus(true)
+    else if m.filmographyPage <> invalid then
+        m.filmographyPage.callFunc("activate")
+    else if m.personPage <> invalid then
+        m.personPage.callFunc("activate")
+    else if m.moviePage <> invalid then
+        m.moviePage.callFunc("activate")
+    else if m.tvSeasonPage <> invalid then
+        m.tvSeasonPage.callFunc("activate")
+    else if m.tvShowPage <> invalid then
+        m.tvShowPage.callFunc("activate")
+    else if m.libraryPage <> invalid then
+        m.libraryPage.callFunc("activate")
+    else if m.collectionsPage <> invalid then
+        m.collectionsPage.callFunc("activate")
+    else if m.homePage <> invalid and m.homePage.visible = true then
+        m.homePage.callFunc("activate")
+    else if m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusHeader")
+    end if
+end sub
 
 '-------------------------------------------------------------------------------
 ' navShowApp

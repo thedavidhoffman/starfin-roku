@@ -27,6 +27,7 @@ sub initReferences()
     m.libraryButton = m.top.findNode("libraryButton")
     m.seriesButton = m.top.findNode("seriesButton")
     m.searchButton = m.top.findNode("searchButton")
+    m.settingsButton = m.top.findNode("settingsButton")
     m.currentLibraryButton = m.top.findNode("currentLibraryButton")
     m.userMenuButton = m.top.findNode("userMenuButton")
     m.accountDropdownMenu = m.top.findNode("accountDropdownMenu")
@@ -43,6 +44,7 @@ sub initHandlers()
     m.libraryButton.observeField("buttonSelected", "onLibraryPressed")
     m.seriesButton.observeField("buttonSelected", "onSeriesPressed")
     m.searchButton.observeField("buttonSelected", "onSearchPressed")
+    m.settingsButton.observeField("buttonSelected", "onSettingsPressed")
     m.currentLibraryButton.observeField("buttonSelected", "onCurrentLibraryPressed")
     m.userMenuButton.observeField("buttonSelected", "onUserMenuPressed")
     m.accountDropdownMenu.observeField("selectedItem", "onAccountDropdownItemSelected")
@@ -61,6 +63,7 @@ sub initStyle()
     m.libraryButton.headerBgColor = headerBgColor
     m.seriesButton.headerBgColor = headerBgColor
     m.searchButton.headerBgColor = headerBgColor
+    m.settingsButton.headerBgColor = headerBgColor
     m.currentLibraryButton.headerBgColor = headerBgColor
     m.userMenuButton.headerBgColor = headerBgColor
     m.accountDropdownMenu.headerBgColor = headerBgColor
@@ -275,6 +278,7 @@ sub rebuildFocusableHeaderButtons()
     m.focusableHeaderButtons.Push(m.libraryButton)
     m.focusableHeaderButtons.Push(m.seriesButton)
     m.focusableHeaderButtons.Push(m.searchButton)
+    m.focusableHeaderButtons.Push(m.settingsButton)
     m.focusableHeaderButtons.Push(m.userMenuButton)
 end sub
 
@@ -364,6 +368,14 @@ sub onSearchPressed()
 end sub
 
 '-------------------------------------------------------------------------------
+' onSettingsPressed
+'-------------------------------------------------------------------------------
+sub onSettingsPressed()
+    closeMenu()
+    requestSettingsOverlay()
+end sub
+
+'-------------------------------------------------------------------------------
 ' onCurrentLibraryPressed
 '-------------------------------------------------------------------------------
 sub onCurrentLibraryPressed()
@@ -385,6 +397,7 @@ sub setActiveHeaderButton(activeButtonName as string)
     m.libraryButton.isActive = (activeButtonName = "library")
     m.seriesButton.isActive = (activeButtonName = "series")
     m.searchButton.isActive = (activeButtonName = "search")
+    m.settingsButton.isActive = false
     m.userMenuButton.isActive = (activeButtonName = "userMenu")
 end sub
 
@@ -408,17 +421,24 @@ sub onAccountDropdownItemSelected()
 
     closeMenu()
     if selectedItem.id = "settings" then
-        m.top.overlayRequested = {
-            id: "settings"
-            componentName: "SettingsDialog"
-            closeField: "closeRequested"
-            openFunction: "openSettings"
-        }
+        requestSettingsOverlay()
     else if selectedItem.id = "yourStats" then
         m.top.yourStatsSelected = true
     else if selectedItem.id = "logout" then
         m.top.logoutSelected = true
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' requestSettingsOverlay
+'-------------------------------------------------------------------------------
+sub requestSettingsOverlay()
+    m.top.overlayRequested = {
+        id: "settings"
+        componentName: "SettingsDialog"
+        closeField: "closeRequested"
+        openFunction: "openSettings"
+    }
 end sub
 
 '-------------------------------------------------------------------------------

@@ -15,11 +15,11 @@ end function
 '-------------------------------------------------------------------------------
 function SettingsStore_Keys() as object
     return {
-        seriesDisplay: "series-display"
-        itemDisplay: "item-display"
-        gridColumns: "grid-columns"
-        screensaverType: "screensaver-type"
-        screensaverDelay: "screensaver-delay"
+        tvLibraryDisplay: "tv-library-display"
+        movieLibraryDisplay: "movie-library-display"
+        collectionDisplay: "collection-display"
+        homeLibraryThumbnails: "home-library-thumbnails"
+        tmdbApiKey: "tmdb-api-key"
     }
 end function
 
@@ -29,25 +29,25 @@ end function
 function SettingsStore_Defaults() as object
     keys = SettingsStore_Keys()
     defaults = {}
-    defaults[keys.seriesDisplay] = "collapse"
-    defaults[keys.itemDisplay] = "grid"
-    defaults[keys.gridColumns] = "6"
-    defaults[keys.screensaverType] = "off"
-    defaults[keys.screensaverDelay] = "1"
+    defaults[keys.tvLibraryDisplay] = "poster"
+    defaults[keys.movieLibraryDisplay] = "poster"
+    defaults[keys.collectionDisplay] = "poster"
+    defaults[keys.homeLibraryThumbnails] = "jellyfin"
+    defaults[keys.tmdbApiKey] = ""
     return defaults
 end function
 
 '-------------------------------------------------------------------------------
 ' SettingsStore_Save
 '-------------------------------------------------------------------------------
-sub SettingsStore_Save(seriesDisplay as string, itemDisplay as string, gridColumns as string, screensaverType as string, screensaverDelay as string)
+sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionDisplay as string, homeLibraryThumbnails as string, tmdbApiKey as string)
     settingsStore = GetSettingsStore()
     keys = SettingsStore_Keys()
-    settingsStore.Write(keys.seriesDisplay, seriesDisplay)
-    settingsStore.Write(keys.itemDisplay, itemDisplay)
-    settingsStore.Write(keys.gridColumns, gridColumns)
-    settingsStore.Write(keys.screensaverType, screensaverType)
-    settingsStore.Write(keys.screensaverDelay, screensaverDelay)
+    settingsStore.Write(keys.tvLibraryDisplay, tvLibraryDisplay)
+    settingsStore.Write(keys.movieLibraryDisplay, movieLibraryDisplay)
+    settingsStore.Write(keys.collectionDisplay, collectionDisplay)
+    settingsStore.Write(keys.homeLibraryThumbnails, homeLibraryThumbnails)
+    settingsStore.Write(keys.tmdbApiKey, tmdbApiKey)
     settingsStore.Flush()
 end sub
 
@@ -59,20 +59,20 @@ function SettingsStore_Load() as object
     keys = SettingsStore_Keys()
     defaults = SettingsStore_Defaults()
     values = settingsStore.ReadMulti([
-        keys.seriesDisplay
-        keys.itemDisplay
-        keys.gridColumns
-        keys.screensaverType
-        keys.screensaverDelay
+        keys.tvLibraryDisplay
+        keys.movieLibraryDisplay
+        keys.collectionDisplay
+        keys.homeLibraryThumbnails
+        keys.tmdbApiKey
     ])
     if values = invalid then values = {}
 
     settings = {}
-    settings[keys.seriesDisplay] = SettingsStore_GetValue(values, keys.seriesDisplay, defaults[keys.seriesDisplay])
-    settings[keys.itemDisplay] = SettingsStore_GetValue(values, keys.itemDisplay, defaults[keys.itemDisplay])
-    settings[keys.gridColumns] = SettingsStore_GetValue(values, keys.gridColumns, defaults[keys.gridColumns])
-    settings[keys.screensaverType] = SettingsStore_GetValue(values, keys.screensaverType, defaults[keys.screensaverType])
-    settings[keys.screensaverDelay] = SettingsStore_GetValue(values, keys.screensaverDelay, defaults[keys.screensaverDelay])
+    settings[keys.tvLibraryDisplay] = SettingsStore_GetValue(values, keys.tvLibraryDisplay, defaults[keys.tvLibraryDisplay])
+    settings[keys.movieLibraryDisplay] = SettingsStore_GetValue(values, keys.movieLibraryDisplay, defaults[keys.movieLibraryDisplay])
+    settings[keys.collectionDisplay] = SettingsStore_GetValue(values, keys.collectionDisplay, defaults[keys.collectionDisplay])
+    settings[keys.homeLibraryThumbnails] = SettingsStore_GetValue(values, keys.homeLibraryThumbnails, defaults[keys.homeLibraryThumbnails])
+    settings[keys.tmdbApiKey] = SettingsStore_GetValue(values, keys.tmdbApiKey, defaults[keys.tmdbApiKey])
     return settings
 end function
 
@@ -82,11 +82,11 @@ end function
 sub SettingsStore_Clear()
     settingsStore = GetSettingsStore()
     keys = SettingsStore_Keys()
-    settingsStore.Delete(keys.seriesDisplay)
-    settingsStore.Delete(keys.itemDisplay)
-    settingsStore.Delete(keys.gridColumns)
-    settingsStore.Delete(keys.screensaverType)
-    settingsStore.Delete(keys.screensaverDelay)
+    settingsStore.Delete(keys.tvLibraryDisplay)
+    settingsStore.Delete(keys.movieLibraryDisplay)
+    settingsStore.Delete(keys.collectionDisplay)
+    settingsStore.Delete(keys.homeLibraryThumbnails)
+    settingsStore.Delete(keys.tmdbApiKey)
     settingsStore.Flush()
 end sub
 
@@ -120,11 +120,11 @@ function SettingsStore_AreEqual(left as dynamic, right as dynamic) as boolean
     if left = invalid or right = invalid then return false
 
     keys = SettingsStore_Keys()
-    if SettingsStore_GetSettingValue(left, keys.seriesDisplay) <> SettingsStore_GetSettingValue(right, keys.seriesDisplay) then return false
-    if SettingsStore_GetSettingValue(left, keys.itemDisplay) <> SettingsStore_GetSettingValue(right, keys.itemDisplay) then return false
-    if SettingsStore_GetSettingValue(left, keys.gridColumns) <> SettingsStore_GetSettingValue(right, keys.gridColumns) then return false
-    if SettingsStore_GetSettingValue(left, keys.screensaverType) <> SettingsStore_GetSettingValue(right, keys.screensaverType) then return false
-    if SettingsStore_GetSettingValue(left, keys.screensaverDelay) <> SettingsStore_GetSettingValue(right, keys.screensaverDelay) then return false
+    if SettingsStore_GetSettingValue(left, keys.tvLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.tvLibraryDisplay) then return false
+    if SettingsStore_GetSettingValue(left, keys.movieLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.movieLibraryDisplay) then return false
+    if SettingsStore_GetSettingValue(left, keys.collectionDisplay) <> SettingsStore_GetSettingValue(right, keys.collectionDisplay) then return false
+    if SettingsStore_GetSettingValue(left, keys.homeLibraryThumbnails) <> SettingsStore_GetSettingValue(right, keys.homeLibraryThumbnails) then return false
+    if SettingsStore_GetSettingValue(left, keys.tmdbApiKey) <> SettingsStore_GetSettingValue(right, keys.tmdbApiKey) then return false
 
     return true
 end function

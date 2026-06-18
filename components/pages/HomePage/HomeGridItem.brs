@@ -3,6 +3,7 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.posterMask = m.top.findNode("posterMask")
+    m.imageBackground = m.top.findNode("imageBackground")
     m.poster = m.top.findNode("poster")
     m.title = m.top.findNode("title")
     m.subtitle = m.top.findNode("subtitle")
@@ -20,6 +21,7 @@ sub onItemContentChanged()
     m.title.text = FirstNonEmpty([item.homeTitle, item.title], "")
     m.subtitle.text = FirstNonEmpty([item.homeSubtitle, item.description], "")
     m.subtitle.visible = showSubtitle
+    m.imageBackground.visible = item.showImageBackground = true
     imageUrl = SafeString(item.HDPosterUrl, "")
     m.poster.visible = imageUrl <> ""
     m.poster.uri = imageUrl
@@ -34,6 +36,8 @@ sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
         m.posterMask.maskSize = [440, 248]
         m.poster.width = 440
         m.poster.height = 248
+        m.imageBackground.width = 440
+        m.imageBackground.height = 248
         m.title.width = 440
         m.title.translation = [0, 261]
         m.subtitle.width = 440
@@ -51,6 +55,8 @@ sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
         m.posterMask.maskSize = [250, 375]
         m.poster.width = 250
         m.poster.height = 375
+        m.imageBackground.width = 250
+        m.imageBackground.height = 375
         m.title.width = 250
         m.title.translation = [0, 388]
         m.title.height = 48

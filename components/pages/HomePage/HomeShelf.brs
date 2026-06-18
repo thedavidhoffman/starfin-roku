@@ -8,6 +8,7 @@ sub init()
     m.items.observeField("rowItemSelected", "onRowItemSelected")
     m.items.observeField("focusExitUp", "onFocusExitUp")
     m.items.observeField("focusExitDown", "onFocusExitDown")
+    onFocusExitAvailabilityChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -15,6 +16,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     m.items.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusExitAvailabilityChanged
+'-------------------------------------------------------------------------------
+sub onFocusExitAvailabilityChanged()
+    if m.items = invalid then return
+
+    m.items.canFocusExitUp = m.top.canFocusExitUp
+    m.items.canFocusExitDown = m.top.canFocusExitDown
 end sub
 
 '-------------------------------------------------------------------------------

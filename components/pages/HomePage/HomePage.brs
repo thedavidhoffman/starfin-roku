@@ -281,7 +281,8 @@ function buildRowContent(key as string, title as string, items as object) as obj
         child = content.createChild("ContentNode")
         child.title = getHomeItemTitle(key, item)
         child.description = getHomeItemSubtitle(key, item)
-        child.HDPosterUrl = getItemImageUrl(item, imageAspect)
+        imageUrl = getHomeItemImageUrl(key, item, imageAspect)
+        child.HDPosterUrl = imageUrl
         child.AddFields({
             itemId: SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
             itemType: SafeString(FirstNonEmpty([item.Type, item.type], ""), "")
@@ -289,6 +290,7 @@ function buildRowContent(key as string, title as string, items as object) as obj
             homeTitle: child.title
             homeSubtitle: child.description
             showSubtitle: shouldShowHomeItemSubtitle(key)
+            showImageBackground: shouldShowHomeItemImageBackground(key, item, imageUrl)
             raw: item
         })
     end for
@@ -323,6 +325,7 @@ sub renderRows()
             shelf.layout = layout
             shelf.rowContent = m.homeState.rows[key]
             shelf.translation = [0, shelfY]
+            shelf.canFocusExitUp = shelfIndex > 0
             shelf.observeField("selectedItem", "onHomeShelfSelected")
             shelf.observeField("focusExitUp", "onHomeShelfFocusExitUp")
             shelf.observeField("focusExitDown", "onHomeShelfFocusExitDown")
@@ -334,6 +337,10 @@ sub renderRows()
             shelfY = shelfY + getShelfHeight(layout) + layout.spacingAfter
             shelfIndex = shelfIndex + 1
         end if
+    end for
+
+    for i = 0 to shelfNodes.Count() - 1
+        shelfNodes[i].canFocusExitDown = i < shelfNodes.Count() - 1
     end for
 
     m.homeState.shelfNodes = shelfNodes
@@ -396,12 +403,13 @@ end sub
 '-------------------------------------------------------------------------------
 ' moveShelfFocus
 '-------------------------------------------------------------------------------
-sub moveShelfFocus(delta as integer)
+function moveShelfFocus(delta as integer) as boolean
     targetIndex = m.homeState.focusedShelfIndex + delta
-    if targetIndex < 0 or targetIndex >= m.homeState.shelfNodes.Count() then return
+    if targetIndex < 0 or targetIndex >= m.homeState.shelfNodes.Count() then return false
 
     focusShelf(targetIndex)
-end sub
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' focusShelf
@@ -658,6 +666,27 @@ end function
 '-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
+function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as string) as string
+    imageUrl = getItemImageUrl(item, imageAspect)
+    if imageUrl <> "" then return imageUrl
+
+    if key = "libraries" and isCollectionsLibrary(item) then
+        return "pkg:/images/libraries/collections.png"
+    end if
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' shouldShowHomeItemImageBackground
+'-------------------------------------------------------------------------------
+function shouldShowHomeItemImageBackground(key as string, item as dynamic, imageUrl as string) as boolean
+    return key = "libraries" and isCollectionsLibrary(item) and imageUrl = "pkg:/images/libraries/collections.png"
+end function
+
+'-------------------------------------------------------------------------------
+' getItemImageUrl
+'-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if isAssocArray(item) = false then return ""
 
@@ -781,13 +810,13 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
     if key = "up" then
-        moveShelfFocus(-1)
+        if moveShelfFocus(-1) then return true
+        m.top.focusExitUp = true
         return true
     end if
 
     if key = "down" then
-        moveShelfFocus(1)
-        return true
+        return moveShelfFocus(1)
     end if
 
     if hasRenderedRows() and m.top.isInFocusChain() = false then
