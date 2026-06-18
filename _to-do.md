@@ -25,17 +25,13 @@
 - custom highlight/focus
 
 # tv season page
-- seasons nav
 - episode list
-    - larger image
     - length
     - rating
     - marked episode as watched
     - marked episode as unwatched
     - add to favorites
     - media info
-    - don't roll
-    - end of episode list, "back to top"
 - cast and crew
 
 common label on mainscene for updates, remove loading from individual pages

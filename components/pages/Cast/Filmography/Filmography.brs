@@ -3,11 +3,13 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("Filmography")
-    m.personImage = m.top.findNode("personImage")
     m.titleLabel = m.top.findNode("titleLabel")
     m.statusLabel = m.top.findNode("statusLabel")
     m.filmographyList = m.top.findNode("filmographyList")
+    m.previewBackground = m.top.findNode("previewBackground")
+    m.previewPosterMask = m.top.findNode("previewPosterMask")
     m.previewPoster = m.top.findNode("previewPoster")
+    m.movieTitleLabel = m.top.findNode("movieTitleLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
     m.filmographyTask = m.top.findNode("filmographyTask")
 
@@ -27,8 +29,6 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.titleLabel.text = SafeString(request.name, "Filmography")
-    m.personImage.uri = SafeString(request.imageUrl, "")
-    m.personImage.visible = m.personImage.uri <> ""
     renderItems([])
     renderPreview(invalid)
     setStatus("Loading filmography...")
@@ -99,23 +99,48 @@ end sub
 '-------------------------------------------------------------------------------
 sub renderPreview(item as dynamic)
     if item = invalid then
+        m.previewBackground.visible = false
+        m.previewPosterMask.visible = false
         m.previewPoster.uri = ""
-        m.previewPoster.visible = false
+        m.movieTitleLabel.text = ""
         m.overviewLabel.text = ""
         return
     end if
 
+    m.previewBackground.visible = true
+    m.movieTitleLabel.text = formatPreviewTitle(item)
+
     posterPath = SafeString(item.posterPath, "")
     if posterPath <> "" then
         m.previewPoster.uri = "https://image.tmdb.org/t/p/w342" + posterPath
-        m.previewPoster.visible = true
+        m.previewPosterMask.visible = true
     else
         m.previewPoster.uri = ""
-        m.previewPoster.visible = false
+        m.previewPosterMask.visible = false
     end if
 
     m.overviewLabel.text = SafeString(item.overview, "")
 end sub
+
+'-------------------------------------------------------------------------------
+' formatPreviewTitle
+'-------------------------------------------------------------------------------
+function formatPreviewTitle(item as object) as string
+    title = SafeString(item.title, "")
+    year = releaseYear(SafeString(item.releaseDate, ""))
+    if year = "" then return title
+
+    return title + " (" + year + ")"
+end function
+
+'-------------------------------------------------------------------------------
+' releaseYear
+'-------------------------------------------------------------------------------
+function releaseYear(releaseDate as string) as string
+    if Len(releaseDate) < 4 then return ""
+
+    return Left(releaseDate, 4)
+end function
 
 '-------------------------------------------------------------------------------
 ' activate

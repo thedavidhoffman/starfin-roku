@@ -8,7 +8,6 @@ sub init()
     m.characterLabel = m.top.findNode("characterLabel")
 
     initStyles()
-    m.top.observeField("focusPercent", "onFocusPercentChanged")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -40,8 +39,24 @@ sub onItemContentChanged()
 end sub
 
 '-------------------------------------------------------------------------------
-' onFocusPercentChanged
+' onItemHasFocusChanged
 '-------------------------------------------------------------------------------
-sub onFocusPercentChanged()
-    m.focusBg.visible = m.top.focusPercent > 0.5
+sub onItemHasFocusChanged()
+    colors = Color()
+    hasFocus = m.top.itemHasFocus = true
+    m.focusBg.visible = hasFocus
+
+    if hasFocus = true then
+        m.dateLabel.color = colors.text.primary
+        m.dateLabel.font = "font:SmallBoldSystemFont"
+        m.titleLabel.color = colors.text.primary
+        m.titleLabel.font = "font:SmallBoldSystemFont"
+        m.characterLabel.color = colors.text.primary
+    else
+        m.dateLabel.color = colors.text.secondary
+        m.dateLabel.font = "font:SmallSystemFont"
+        m.titleLabel.color = colors.text.primary
+        m.titleLabel.font = "font:SmallSystemFont"
+        m.characterLabel.color = colors.text.secondary
+    end if
 end sub
