@@ -55,6 +55,7 @@ function loadSeries(request as object) as object
     }
 
     url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)
+    m.log.write(url)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -70,6 +71,7 @@ function loadSeasons(request as object) as object
     }
 
     url = NormalizeServerUrl(request.server) + "/Shows/" + request.itemId + "/Seasons" + Url_BuildQueryString(params)
+    m.log.write(url)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 

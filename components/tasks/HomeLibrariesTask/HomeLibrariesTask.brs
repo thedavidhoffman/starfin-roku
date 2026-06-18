@@ -20,6 +20,7 @@ sub executeRequest()
     url = NormalizeServerUrl(request.server) + "/userviews" + Url_BuildQueryString({
         userId: getUserId(request)
     })
+    m.log.write(url)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         m.top.response = withAction(response, "libraries")

@@ -77,6 +77,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getJson(request as object, action as string, path as string, params as object) as object
     url = NormalizeServerUrl(request.server) + path + Url_BuildQueryString(params)
+    m.log.write(url)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then return withAction(response, action)
 
