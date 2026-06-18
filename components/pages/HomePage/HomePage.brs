@@ -496,12 +496,25 @@ function getHomeItemSubtitle(key as string, item as dynamic) as string
 
     if isPlaybackProgressRow(key) then
         if itemType = "episode" then
-            episodeName = FirstNonEmpty([item.Name, item.name, item.title], "")
+            episodeName = getEpisodeDisplaySubtitle(item)
             if episodeName <> "" then return episodeName
         end if
     end if
 
     return getItemSubtitle(item)
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeDisplaySubtitle
+'-------------------------------------------------------------------------------
+function getEpisodeDisplaySubtitle(item as dynamic) as string
+    episodeName = FirstNonEmpty([item.Name, item.name, item.title], "")
+    seasonNumber = FirstNonEmpty([item.ParentIndexNumber, item.parentIndexNumber], "")
+    episodeNumber = FirstNonEmpty([item.IndexNumber, item.indexNumber], "")
+
+    if seasonNumber = "" or episodeNumber = "" then return episodeName
+
+    return "S" + SafeString(seasonNumber, "") + "E" + SafeString(episodeNumber, "") + " - " + episodeName
 end function
 
 '-------------------------------------------------------------------------------
