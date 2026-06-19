@@ -9,7 +9,9 @@ sub init()
     m.episodesList = m.top.findNode("episodesList")
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
+    m.castDownCue = m.top.findNode("castDownCue")
     m.cast = m.top.findNode("cast")
+    m.episodesUpCue = m.top.findNode("episodesUpCue")
     m.episodeOptionsOverlay = m.top.findNode("episodeOptionsOverlay")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
@@ -18,6 +20,7 @@ sub init()
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
     m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
     m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
+    m.episodesList.observeField("focusExitDown", "onEpisodesFocusExitDown")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.episodeOptionsOverlay.observeField("closeRequested", "onEpisodeOptionsClosed")
@@ -31,8 +34,15 @@ sub init()
     }
     m.layout = {
         castDefaultY: 950
-        castFocusedY: 324
+        castFocusedY: 699
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onEpisodesFocusExitDown
+'-------------------------------------------------------------------------------
+sub onEpisodesFocusExitDown()
+    if m.pageState.focusArea = "episodes" then focusCast()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -258,7 +268,6 @@ sub updatePeopleForFocusedItem()
     if itemId = "" or itemId = m.pageState.focusedItemId then return
 
     m.pageState.focusedItemId = itemId
-    renderPeopleSection([])
     request = m.pageState.request
     if request = invalid then return
 
@@ -277,6 +286,7 @@ end sub
 sub renderPeopleSection(people as object)
     m.cast.people = people
     updatePeopleSectionLayout()
+    updateNavigationCues()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -285,9 +295,20 @@ end sub
 sub updatePeopleSectionLayout()
     if m.pageState.focusArea = "cast" then
         m.cast.translation = [96, m.layout.castFocusedY]
+        m.cast.visible = m.cast.hasItems = true
     else
         m.cast.translation = [96, m.layout.castDefaultY]
+        m.cast.visible = false
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' updateNavigationCues
+'-------------------------------------------------------------------------------
+sub updateNavigationCues()
+    hasCast = m.cast.hasItems = true
+    m.castDownCue.visible = m.pageState.focusArea = "episodes" and hasCast
+    m.episodesUpCue.visible = m.pageState.focusArea = "cast"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -356,6 +377,8 @@ sub clearEpisodes()
     m.pageState.episodeWindowStart = 0
     m.leftChevron.visible = false
     m.rightChevron.visible = false
+    m.castDownCue.visible = false
+    m.episodesUpCue.visible = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -435,6 +458,7 @@ sub focusEpisodesIfActive()
 
     m.pageState.focusArea = "episodes"
     updatePeopleSectionLayout()
+    updateNavigationCues()
     m.cast.callFunc("deactivate")
     m.top.setFocus(true)
     m.episodesList.setFocus(true)
@@ -445,10 +469,11 @@ end sub
 ' focusCast
 '-------------------------------------------------------------------------------
 sub focusCast()
-    if m.cast.visible <> true or m.cast.hasItems <> true then return
+    if m.cast.hasItems <> true then return
 
     m.pageState.focusArea = "cast"
     updatePeopleSectionLayout()
+    updateNavigationCues()
     m.cast.callFunc("activate")
 end sub
 
@@ -782,7 +807,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = "down" and m.pageState.focusArea = "episodes" and m.cast.visible = true and m.cast.hasItems = true then
+    if key = "down" and m.pageState.focusArea = "episodes" and m.cast.hasItems = true then
         focusCast()
         return true
     end if
