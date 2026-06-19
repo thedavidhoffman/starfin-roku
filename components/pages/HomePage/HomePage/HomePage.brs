@@ -3,7 +3,6 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("HomePage")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.shelvesGroup = m.top.findNode("shelvesGroup")
     m.shelvesAnimation = m.top.findNode("shelvesAnimation")
     m.shelvesTranslation = m.top.findNode("shelvesTranslation")
@@ -65,7 +64,7 @@ sub selectHomeItem(item as dynamic)
     else if isMediaLibrary(item) then
         m.top.selectedLibrary = {
             libraryId: itemId
-            collectionType: getCollectionType(item)
+            collectionType: item.CollectionType
             item: item
         }
     else if isPlayableMovie(item) then
@@ -110,7 +109,7 @@ sub onLoadRequestChanged()
     m.homeState.shelfOffsetY = 0
 
     clearRows()
-    setStatus("Loading home...")
+    setStatus("Loading...")
 
     runTask(m.tasks.libraries, request)
     runTask(m.tasks.continueWatching, request)
@@ -667,14 +666,28 @@ end function
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as string) as string
+    
+    if key = "libraries" and shouldUseStarfishLibraryCards() then
+        if item.CollectionType = "boxsets" then return "pkg:/images/libraries/collections.png"
+        if item.CollectionType = "movies" then return "pkg:/images/libraries/movies.png"
+        if item.CollectionType = "tvshows" then return "pkg:/images/libraries/tv.png"
+    end if
+
     imageUrl = getItemImageUrl(item, imageAspect)
     if imageUrl <> "" then return imageUrl
 
-    if key = "libraries" and isCollectionsLibrary(item) then
-        return "pkg:/images/libraries/collections.png"
-    end if
-
     return ""
+
+end function
+
+'-------------------------------------------------------------------------------
+' shouldUseStarfishLibraryCards
+'-------------------------------------------------------------------------------
+function shouldUseStarfishLibraryCards() as boolean
+    settings = SettingsStore_Load()
+    keys = SettingsStore_Keys()
+
+    return SettingsStore_GetSettingValue(settings, keys.homeLibraryThumbnails) = "starfish"
 end function
 
 '-------------------------------------------------------------------------------
@@ -747,26 +760,17 @@ function isAssocArray(value as dynamic) as boolean
 end function
 
 '-------------------------------------------------------------------------------
-' getCollectionType
-'-------------------------------------------------------------------------------
-function getCollectionType(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-    return LCase(FirstNonEmpty([item.CollectionType, item.collectionType], ""))
-end function
-
-'-------------------------------------------------------------------------------
 ' isMediaLibrary
 '-------------------------------------------------------------------------------
 function isMediaLibrary(item as dynamic) as boolean
-    collectionType = getCollectionType(item)
-    return collectionType = "movies" or collectionType = "tvshows"
+    return item.CollectionType = "movies" or item.CollectionType = "tvshows"
 end function
 
 '-------------------------------------------------------------------------------
 ' isCollectionsLibrary
 '-------------------------------------------------------------------------------
 function isCollectionsLibrary(item as dynamic) as boolean
-    return getCollectionType(item) = "boxsets"
+    return item.CollectionType = "boxsets"
 end function
 
 '-------------------------------------------------------------------------------
@@ -799,8 +803,8 @@ end function
 ' setStatus
 '-------------------------------------------------------------------------------
 sub setStatus(message as string)
-    m.statusLabel.text = message
-    m.statusLabel.visible = message <> ""
+    scene = m.top.getScene()
+    if scene <> invalid then scene.callFunc("statusSetMessage", message)
 end sub
 
 '-------------------------------------------------------------------------------

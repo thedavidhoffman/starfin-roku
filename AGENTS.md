@@ -19,6 +19,7 @@
 
 - Assign color fields with integer hex literals, such as `m.title.color = &h0F1A2AFF`, not string values like `"0x0F1A2AFF"`.
 - Do not use `FormatJson()` for outbound API request bodies. Roku lowercases JSON object keys during serialization, which breaks case-sensitive API fields such as Audiobookshelf `supportedMimeTypes`; build request JSON explicitly when key casing matters.
+- API response fields are PascalCase; access API data with PascalCase field names such as `item.CollectionType`, not mixed fallback expressions like `FirstNonEmpty([item.CollectionType, item.collectionType], "")`.
 
 ## BrightScript naming
 
@@ -29,6 +30,7 @@
 ## SceneGraph architecture
 
 - Keep `MainScene` focused on app-shell orchestration: top-level visibility, routing between major surfaces, global focus recovery, and app exit handling.
+- Set app-level status messages through `MainScene.statusSetMessage()` using the shared `StatusLabel`; do not add page-local status labels for surfaces that can use the shared app-shell status message.
 - Prefer putting feature-specific API tasks, response handling, local loading state, and local navigation state inside the component that owns that feature. For example, Library should own library loading/drilldown, HomePage should own personalized shelf loading, Player should own playback session requests, and auth/session persistence should live in an auth-focused controller rather than in `MainScene`.
 - Component-to-`MainScene` communication should be narrow and event-like: selected item, auth error, close requested, or a completed high-level action. Avoid bubbling low-level task requests through `MainScene` when the originating component can own the task safely.
 - For repeatable SceneGraph event fields, prefer `type="boolean"` with `alwaysNotify="true"` over integer counters. For repeatable events that need payload data, use the payload type (such as `assocarray`) with `alwaysNotify="true"` rather than adding a synthetic `counter` field. Keep counters only when the number itself is meaningful or needed for async request/response correlation.

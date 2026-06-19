@@ -19,14 +19,12 @@ end sub
 sub initReferences()
     m.authenticatedContent = m.top.findNode("authenticatedContent")
     m.authController = m.top.findNode("authController")
-    m.cacheController = m.top.findNode("cacheController")
     m.header = m.top.findNode("header")
     m.homePage = m.top.findNode("homePage")
     m.login = m.top.findNode("login")
     m.overlayHost = m.top.findNode("overlayHost")
     m.statusLabel = m.top.findNode("statusLabel")
     m.dynamicPageHost = m.top.findNode("dynamicPageHost")
-    m.navigationController = m.top.findNode("navigationController")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -55,7 +53,6 @@ sub initHandlers()
     m.header.observeField("downSelected", "navHandleHeaderDownSelected")
     m.header.observeField("overlayRequested", "navHandleHeaderOverlayRequested")
     m.overlayHost.observeField("closed", "navHandleOverlayClosed")
-    m.navigationController.observeField("currentRoute", "navHandleCurrentRouteChanged")
 
 end sub
 
@@ -630,7 +627,7 @@ end sub
 ' statusSetMessage
 '-------------------------------------------------------------------------------
 sub statusSetMessage(message as dynamic)
-    m.statusLabel.text = SafeString(message, "")
+    if m.statusLabel <> invalid then m.statusLabel.text = SafeString(message, "")
 end sub
 
 '===============================================================================
@@ -665,7 +662,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub authShowLogin(message as string)
     m.login.statusMessage = message
-    m.navigationController.callFunc("reset", { id: "login" })
+    navShowLoginRoute()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -839,21 +836,7 @@ end sub
 sub navShowApp()
     loadRequest = buildSessionLoadRequest()
     m.homePage.loadRequest = loadRequest
-    m.navigationController.callFunc("reset", { id: "app" })
-end sub
-
-'-------------------------------------------------------------------------------
-' navHandleCurrentRouteChanged
-'-------------------------------------------------------------------------------
-sub navHandleCurrentRouteChanged()
-    route = m.navigationController.currentRoute
-    if route = invalid then return
-
-    if route.id = "login" then
-        navShowLoginRoute()
-    else if route.id = "app" then
-        navShowAppRoute()
-    end if
+    navShowAppRoute()
 end sub
 
 '-------------------------------------------------------------------------------
