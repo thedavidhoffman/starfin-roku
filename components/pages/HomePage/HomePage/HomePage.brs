@@ -109,7 +109,7 @@ sub onLoadRequestChanged()
     m.homeState.shelfOffsetY = 0
 
     clearRows()
-    setStatus("Loading...")
+    Status_SetLoading()
 
     runTask(m.tasks.libraries, request)
     runTask(m.tasks.continueWatching, request)
@@ -176,7 +176,7 @@ function shouldIgnoreResponse(response as dynamic) as boolean
     if response = invalid then return true
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load a home section."))
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load a home section."))
         return true
     end if
 
@@ -351,7 +351,7 @@ sub renderRows()
     updateShelfScroll(false)
 
     if hasRenderedRows() then
-        setStatus("")
+        Status_ClearMessage()
         focusShelf(m.homeState.focusedShelfIndex)
     end if
 end sub
@@ -798,14 +798,6 @@ function cloneRequest(request as object) as object
 
     return clone
 end function
-
-'-------------------------------------------------------------------------------
-' setStatus
-'-------------------------------------------------------------------------------
-sub setStatus(message as string)
-    scene = m.top.getScene()
-    if scene <> invalid then scene.callFunc("statusSetMessage", message)
-end sub
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

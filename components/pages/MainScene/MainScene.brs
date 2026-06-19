@@ -6,7 +6,6 @@ sub init()
     initReferences()
     initValues()
     initHandlers()
-    initSettings()
 
     authSyncSavedSessionToLogin()
     authRequestResumeSession()
@@ -23,7 +22,6 @@ sub initReferences()
     m.homePage = m.top.findNode("homePage")
     m.login = m.top.findNode("login")
     m.overlayHost = m.top.findNode("overlayHost")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.dynamicPageHost = m.top.findNode("dynamicPageHost")
 end sub
 
@@ -614,20 +612,6 @@ sub playerHandleCloseRequested()
         m.header.visible = true
         m.homePage.callFunc("activate")
     end if
-end sub
-
-'-------------------------------------------------------------------------------
-' initSettings
-'-------------------------------------------------------------------------------
-sub initSettings()
-    m.displaySettings = SettingsStore_Load()
-end sub
-
-'-------------------------------------------------------------------------------
-' statusSetMessage
-'-------------------------------------------------------------------------------
-sub statusSetMessage(message as dynamic)
-    if m.statusLabel <> invalid then m.statusLabel.text = SafeString(message, "")
 end sub
 
 '===============================================================================

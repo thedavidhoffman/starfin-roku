@@ -9,7 +9,6 @@ sub init()
     m.episodesList = m.top.findNode("episodesList")
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
 
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
@@ -92,7 +91,7 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.season = request.season
-    setStatus("Loading season...")
+    Status_SetLoading()
     renderSeason(request.season)
     clearEpisodes()
 
@@ -108,7 +107,7 @@ sub onTVSeasonResponse()
     if response = invalid then return
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load this season."))
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load tv season."))
         return
     end if
 
@@ -119,7 +118,7 @@ sub onTVSeasonResponse()
     m.pageState.episodes = getItemsFromPayload(payload.episodes)
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
-    setStatus("")
+    Status_ClearMessage()
     updateChevrons()
     focusEpisodesIfActive()
 end sub
@@ -567,20 +566,13 @@ function isAssocArray(value as dynamic) as boolean
 end function
 
 '-------------------------------------------------------------------------------
-' setStatus
-'-------------------------------------------------------------------------------
-sub setStatus(message as string)
-    m.statusLabel.text = message
-    m.statusLabel.visible = message <> ""
-end sub
-
-'-------------------------------------------------------------------------------
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
     if key = "back" then
+        Status_ClearMessage()
         m.top.closeRequested = true
         return true
     end if
