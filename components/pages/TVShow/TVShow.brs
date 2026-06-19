@@ -3,17 +3,27 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("TVShow")
+    m.contentGroup = m.top.findNode("contentGroup")
     m.mediaShell = m.top.findNode("mediaShell")
+    m.seasonsLabel = m.top.findNode("seasonsLabel")
     m.seasonsGrid = m.top.findNode("seasonsGrid")
+    m.cast = m.top.findNode("cast")
     m.statusLabel = m.top.findNode("statusLabel")
     m.tvShowTask = m.top.findNode("tvShowTask")
 
     m.tvShowTask.observeField("response", "onTVShowResponse")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
+    m.cast.observeField("focusExitUp", "onCastFocusExitUp")
+    m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.pageState = {
         request: invalid
         series: invalid
         seasons: []
+        focusArea: "seasons"
+    }
+    m.layout = {
+        contentDefault: [96, 0]
+        contentCastFocused: [96, -397]
     }
 end sub
 
@@ -53,6 +63,11 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.series = request.item
+    m.pageState.focusArea = "seasons"
+    m.contentGroup.translation = m.layout.contentDefault
+    setSeasonsVisible(true)
+    m.cast.server = request.server
+    m.cast.people = []
     setStatus("Loading series...")
     renderSeries(request.item)
     renderSeasons([])
@@ -98,6 +113,7 @@ sub renderSeries(item as dynamic)
         metaLine2: getGenreText(item)
         overview: FirstNonEmpty([item.Overview, item.overview], "")
     }
+    m.cast.people = getPeople(item)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -124,22 +140,69 @@ sub renderSeasons(seasons as object)
 end sub
 
 '-------------------------------------------------------------------------------
+' setSeasonsVisible
+'-------------------------------------------------------------------------------
+sub setSeasonsVisible(isVisible as boolean)
+    hasSeasons = m.seasonsGrid.content <> invalid and m.seasonsGrid.content.getChildCount() > 0
+    visible = isVisible and hasSeasons
+    m.seasonsLabel.visible = visible
+    m.seasonsGrid.visible = visible
+end sub
+
+'-------------------------------------------------------------------------------
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    m.top.setFocus(true)
-    focusSeasonsIfActive()
+    if m.pageState.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
+        focusCast()
+    else
+        focusSeasonsIfActive()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
 ' focusSeasonsIfActive
 '-------------------------------------------------------------------------------
 sub focusSeasonsIfActive()
-    if m.seasonsGrid.visible <> true then return
     if m.seasonsGrid.content = invalid then return
     if m.seasonsGrid.content.getChildCount() = 0 then return
 
+    m.pageState.focusArea = "seasons"
+    m.contentGroup.translation = m.layout.contentDefault
+    setSeasonsVisible(true)
+    m.cast.callFunc("deactivate")
+    m.top.setFocus(true)
     m.seasonsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusCast
+'-------------------------------------------------------------------------------
+sub focusCast()
+    if m.cast.visible <> true or m.cast.hasItems <> true then return
+
+    m.pageState.focusArea = "cast"
+    m.contentGroup.translation = m.layout.contentCastFocused
+    setSeasonsVisible(false)
+    m.cast.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastFocusExitUp
+'-------------------------------------------------------------------------------
+sub onCastFocusExitUp()
+    focusSeasonsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastPersonSelected
+'-------------------------------------------------------------------------------
+sub onCastPersonSelected()
+    selection = m.cast.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    m.top.selectedPerson = selection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -198,6 +261,14 @@ end function
 function getGenreText(item as dynamic) as string
     if item.Genres = invalid then return ""
     return joinText(item.Genres, ", ")
+end function
+
+'-------------------------------------------------------------------------------
+' getPeople
+'-------------------------------------------------------------------------------
+function getPeople(item as dynamic) as object
+    if item = invalid or item.People = invalid then return []
+    return item.People
 end function
 
 '-------------------------------------------------------------------------------
@@ -302,6 +373,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "back" then
         m.top.closeRequested = true
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "seasons" and m.cast.visible = true and m.cast.hasItems = true then
+        focusCast()
         return true
     end if
 
