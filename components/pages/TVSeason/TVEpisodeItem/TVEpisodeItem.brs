@@ -21,7 +21,7 @@ sub initReferences()
     m.description = m.top.findNode("description")
     m.layout = {
         titleY: 356
-        descriptionY: 398
+        descriptionY: 402
     }
 end sub
 
@@ -45,7 +45,6 @@ sub onItemContentChanged()
     isSeasonSummary = SafeString(item.itemType, "") = "SeasonSummary"
 
     episodeNumber = SafeString(item.episodeNumber, "")
-    if item.preserveEpisodeNumberCase <> true then episodeNumber = UCase(episodeNumber)
     m.episodeNumber.text = episodeNumber
     m.episodeDate.text = SafeString(item.episodeDate, "")
     m.title.text = SafeString(item.title, "")

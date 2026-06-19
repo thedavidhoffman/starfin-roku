@@ -14,6 +14,7 @@
 ## Roku XML style
 
 - Prefix literal XML color values with `0x`, such as `color="0xF3F7FBFF"`.
+- Use dash-case for image filenames, such as `star-rating.png`; do not use underscores in new image filenames.
 
 ## BrightScript style
 

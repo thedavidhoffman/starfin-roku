@@ -9,11 +9,13 @@ sub init()
     m.episodesList = m.top.findNode("episodesList")
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
+    m.episodeOptionsOverlay = m.top.findNode("episodeOptionsOverlay")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
 
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
     m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
     m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
+    m.episodeOptionsOverlay.observeField("closeRequested", "onEpisodeOptionsClosed")
     m.pageState = {
         request: invalid
         season: invalid
@@ -27,13 +29,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onEpisodeSelected()
     selected = m.episodesList.rowItemSelected
-    if selected = invalid or selected.Count() < 2 then return
-    if m.episodesList.content = invalid then return
-
-    row = m.episodesList.content.getChild(selected[0])
-    if row = invalid then return
-
-    episodeNode = row.getChild(selected[1])
+    episodeNode = getEpisodeNodeAtPosition(selected)
     if episodeNode = invalid then return
     if SafeString(episodeNode.itemType, "") = "SeasonSummary" then
         playFirstEpisode()
@@ -52,6 +48,52 @@ sub onEpisodeSelected()
         playbackQueueIndex: selected[1] - 1
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' getEpisodeNodeAtPosition
+'-------------------------------------------------------------------------------
+function getEpisodeNodeAtPosition(position as dynamic) as object
+    if position = invalid or position.Count() < 2 then return invalid
+    if m.episodesList.content = invalid then return invalid
+
+    row = m.episodesList.content.getChild(position[0])
+    if row = invalid then return invalid
+
+    return row.getChild(position[1])
+end function
+
+'-------------------------------------------------------------------------------
+' getFocusedEpisodeNode
+'-------------------------------------------------------------------------------
+function getFocusedEpisodeNode() as object
+    return getEpisodeNodeAtPosition(m.episodesList.rowItemFocused)
+end function
+
+'-------------------------------------------------------------------------------
+' getFocusedEpisodeImageColumnX
+'-------------------------------------------------------------------------------
+function getFocusedEpisodeImageColumnX() as float
+    return getFocusedEpisodeItemX() + 20 - (16.75 / 2)
+end function
+
+'-------------------------------------------------------------------------------
+' getFocusedEpisodeItemX
+'-------------------------------------------------------------------------------
+function getFocusedEpisodeItemX() as float
+    focused = m.episodesList.rowItemFocused
+    if focused = invalid or focused.Count() < 2 then return 80.75
+
+    gutter = 16.75
+    rowListX = 80.75
+    rowItemWidth = 575
+    windowStart = m.pageState.episodeWindowStart
+    if windowStart = invalid then windowStart = 0
+
+    visibleIndex = focused[1] - windowStart
+    if visibleIndex < 0 then visibleIndex = 0
+
+    return rowListX + (visibleIndex * (rowItemWidth + gutter))
+end function
 
 '-------------------------------------------------------------------------------
 ' playFirstEpisode
@@ -124,6 +166,13 @@ sub onTVSeasonResponse()
 end sub
 
 '-------------------------------------------------------------------------------
+' onEpisodeOptionsClosed
+'-------------------------------------------------------------------------------
+sub onEpisodeOptionsClosed()
+    focusEpisodesIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
 ' onEpisodeFocused
 '-------------------------------------------------------------------------------
 sub onEpisodeFocused()
@@ -178,7 +227,8 @@ sub renderEpisodes(episodes as object)
             itemType: SafeString(FirstNonEmpty([episode.Type, episode.type], ""), "")
             episodeNumber: getEpisodeNumberText(episode)
             episodeDate: getEpisodeDateText(episode)
-            metaText: getEpisodeMetaText(episode)
+            durationText: getEpisodeDurationText(episode)
+            ratingText: getEpisodeRatingText(episode)
             progressPercent: getProgressPercent(episode)
             progressWidth: getProgressWidth(episode)
             raw: episode
@@ -217,7 +267,8 @@ sub appendSeasonSummaryItem(row as object)
         itemType: "SeasonSummary"
         episodeNumber: getSeasonEpisodeCountText(season)
         episodeDate: getSeasonYearText(season)
-        metaText: getMetaText(season)
+        durationText: ""
+        ratingText: ""
         raw: season
     })
 end sub
@@ -338,21 +389,38 @@ function getEpisodeNumberText(item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getEpisodeMetaText
+' getEpisodeDurationText
 '-------------------------------------------------------------------------------
-function getEpisodeMetaText(item as dynamic) as string
-    parts = []
+function getEpisodeDurationText(item as dynamic) as string
+    if isAssocArray(item) = false then return ""
+    if item.RunTimeTicks = invalid then return ""
 
-    runtime = MediaMetadata_FormatRuntime(item.RunTimeTicks)
-    if runtime <> "" then parts.Push(runtime)
+    minutes = int(val(item.RunTimeTicks.ToStr()) / 600000000)
+    if minutes <= 0 then return ""
 
-    communityRating = MediaMetadata_FormatRating(FirstNonEmpty([item.CommunityRating], ""))
-    if communityRating <> "" then parts.Push("Rating " + communityRating)
+    hours = int(minutes / 60)
+    remainingMinutes = minutes mod 60
+    if hours > 0 and remainingMinutes > 0 then return hours.ToStr() + " hr " + remainingMinutes.ToStr() + " min"
+    if hours > 0 then return hours.ToStr() + " hr"
 
-    airedDate = getAiredDateText(item)
-    if airedDate <> "" then parts.Push("Aired: " + airedDate)
+    return minutes.ToStr() + " min"
+end function
 
-    return joinText(parts, MediaMetadata_BulletSeparator())
+'-------------------------------------------------------------------------------
+' getEpisodeRatingText
+'-------------------------------------------------------------------------------
+function getEpisodeRatingText(item as dynamic) as string
+    if isAssocArray(item) = false then return ""
+    if item.CommunityRating = invalid then return ""
+
+    rating = val(item.CommunityRating.ToStr())
+    if rating <= 0 then return ""
+
+    rounded = int((rating * 10) + 0.5)
+    whole = int(rounded / 10)
+    decimal = rounded mod 10
+
+    return whole.ToStr() + "." + decimal.ToStr()
 end function
 
 '-------------------------------------------------------------------------------
@@ -570,6 +638,27 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+
+    if m.episodeOptionsOverlay.visible = true then
+        if key = "back" then
+            m.episodeOptionsOverlay.callFunc("close")
+            return true
+        end if
+
+        return false
+    end if
+
+    if key = "options" then
+        episodeNode = getFocusedEpisodeNode()
+        if episodeNode = invalid then return true
+
+        m.episodeOptionsOverlay.episodeContent = episodeNode.raw
+        m.episodeOptionsOverlay.episodeItemContent = episodeNode
+        m.episodeOptionsOverlay.episodeItemX = getFocusedEpisodeItemX()
+        m.episodeOptionsOverlay.episodeImageColumnX = getFocusedEpisodeImageColumnX()
+        m.episodeOptionsOverlay.callFunc("open")
+        return true
+    end if
 
     if key = "back" then
         Status_ClearMessage()

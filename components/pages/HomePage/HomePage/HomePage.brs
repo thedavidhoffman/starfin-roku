@@ -361,14 +361,14 @@ end sub
 '-------------------------------------------------------------------------------
 function getRowLayout(key as string) as object
     if key = "libraries" then
-        return { width: 485, height: 306, itemSizeWidth: 1728, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/masks/home-page-thumbnail-focus-485x306.png" }
+        return { width: 485, height: 306, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/masks/home-page-thumbnail-focus-485x306.png" }
     end if
 
     if getRowImageAspect(key) = "wide" then
-        return { width: 485, height: 348, itemSizeWidth: 1728, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/masks/home-page-thumbnail-focus-485x348.png" }
+        return { width: 485, height: 348, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/masks/home-page-thumbnail-focus-485x348.png" }
     end if
 
-    return { width: 295, height: 463, itemSizeWidth: 1728, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/masks/home-page-poster-focus-295x463.png" }
+    return { width: 295, height: 463, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/masks/home-page-poster-focus-295x463.png" }
 end function
 
 '-------------------------------------------------------------------------------
