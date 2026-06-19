@@ -9,5 +9,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
+    if key = "down" then
+        m.top.focusExitDown = true
+        return true
+    end if
+
     return false
 end function

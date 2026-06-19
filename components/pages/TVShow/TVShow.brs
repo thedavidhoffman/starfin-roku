@@ -7,12 +7,15 @@ sub init()
     m.mediaShell = m.top.findNode("mediaShell")
     m.seasonsLabel = m.top.findNode("seasonsLabel")
     m.seasonsGrid = m.top.findNode("seasonsGrid")
+    m.castDownCue = m.top.findNode("castDownCue")
     m.cast = m.top.findNode("cast")
+    m.seasonsUpCue = m.top.findNode("seasonsUpCue")
     m.statusLabel = m.top.findNode("statusLabel")
     m.tvShowTask = m.top.findNode("tvShowTask")
 
     m.tvShowTask.observeField("response", "onTVShowResponse")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
+    m.cast.observeField("hasItems", "onCastHasItemsChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.pageState = {
@@ -25,6 +28,13 @@ sub init()
         contentDefault: [96, 0]
         contentCastFocused: [96, -397]
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastHasItemsChanged
+'-------------------------------------------------------------------------------
+sub onCastHasItemsChanged()
+    updateNavigationCues()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -66,6 +76,7 @@ sub onLoadRequestChanged()
     m.pageState.focusArea = "seasons"
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
+    updateNavigationCues()
     m.cast.server = request.server
     m.cast.people = []
     setStatus("Loading series...")
@@ -137,6 +148,7 @@ sub renderSeasons(seasons as object)
 
     m.seasonsGrid.content = content
     m.seasonsGrid.visible = content.getChildCount() > 0
+    updateNavigationCues()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -147,6 +159,15 @@ sub setSeasonsVisible(isVisible as boolean)
     visible = isVisible and hasSeasons
     m.seasonsLabel.visible = visible
     m.seasonsGrid.visible = visible
+end sub
+
+'-------------------------------------------------------------------------------
+' updateNavigationCues
+'-------------------------------------------------------------------------------
+sub updateNavigationCues()
+    hasCast = m.cast.visible = true and m.cast.hasItems = true
+    m.castDownCue.visible = m.pageState.focusArea = "seasons" and hasCast
+    m.seasonsUpCue.visible = m.pageState.focusArea = "cast"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -170,6 +191,7 @@ sub focusSeasonsIfActive()
     m.pageState.focusArea = "seasons"
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
+    updateNavigationCues()
     m.cast.callFunc("deactivate")
     m.top.setFocus(true)
     m.seasonsGrid.setFocus(true)
@@ -184,6 +206,7 @@ sub focusCast()
     m.pageState.focusArea = "cast"
     m.contentGroup.translation = m.layout.contentCastFocused
     setSeasonsVisible(false)
+    updateNavigationCues()
     m.cast.callFunc("activate")
 end sub
 

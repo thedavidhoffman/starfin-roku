@@ -5,12 +5,23 @@ sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.castRows = m.top.findNode("castRows")
     m.castRows.observeField("focusExitUp", "onCastRowsFocusExitUp")
+    m.castRows.observeField("focusExitDown", "onCastRowsFocusExitDown")
     m.castRows.observeField("rowItemFocused", "onCastRowItemFocused")
     m.castRows.observeField("rowItemSelected", "onCastRowItemSelected")
     m.focusState = {
         rowItem: [0, 0]
     }
+    onTitleChanged()
     m.top.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' onTitleChanged
+'-------------------------------------------------------------------------------
+sub onTitleChanged()
+    title = SafeString(m.top.title, "")
+    if title = "" then title = "Cast & Crew"
+    m.titleLabel.text = title
 end sub
 
 '-------------------------------------------------------------------------------
@@ -70,6 +81,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onCastRowsFocusExitUp()
     m.top.focusExitUp = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastRowsFocusExitDown
+'-------------------------------------------------------------------------------
+sub onCastRowsFocusExitDown()
+    m.top.focusExitDown = true
 end sub
 
 '-------------------------------------------------------------------------------

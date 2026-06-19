@@ -49,7 +49,7 @@ end sub
 function loadSeason(request as object) as object
     params = {
         userId: SafeString(request.userId, "")
-        fields: "Genres,Overview,Studios"
+        fields: "Genres,People,Overview,Studios"
         enableImageTypes: "Primary,Backdrop,Thumb"
         imageTypeLimit: 1
         enableTotalRecordCount: false

@@ -276,6 +276,7 @@ sub tvSeasonHandleTVShowSeasonSelected()
     page = CreateObject("roSGNode", "TVSeason")
     page.observeField("closeRequested", "tvSeasonHandleCloseRequested")
     page.observeField("selectedEpisode", "tvSeasonHandleEpisodeSelected")
+    page.observeField("selectedPerson", "personHandleTVSeasonPersonSelected")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -427,7 +428,9 @@ sub personShow(selection as object)
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
-    if m.tvShowPage <> invalid then
+    if m.tvSeasonPage <> invalid then
+        m.personSourceTvSeasonPage = m.tvSeasonPage
+    else if m.tvShowPage <> invalid then
         m.personSourceTvShowPage = m.tvShowPage
     else if m.moviePage <> invalid then
         m.personSourceMoviePage = m.moviePage
@@ -448,11 +451,23 @@ sub personShow(selection as object)
 
     m.personPage = page
     m.dynamicPageHost.appendChild(page)
+    if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     if m.moviePage <> invalid then m.moviePage.visible = false
     if m.tvShowPage <> invalid then m.tvShowPage.visible = false
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' personHandleTVSeasonPersonSelected
+'-------------------------------------------------------------------------------
+sub personHandleTVSeasonPersonSelected()
+    selection = m.tvSeasonPage.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    personShow(selection)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -488,10 +503,15 @@ sub personHandleCloseRequested()
 
     if m.moviePage = invalid and m.personSourceMoviePage <> invalid then m.moviePage = m.personSourceMoviePage
     if m.tvShowPage = invalid and m.personSourceTvShowPage <> invalid then m.tvShowPage = m.personSourceTvShowPage
+    if m.tvSeasonPage = invalid and m.personSourceTvSeasonPage <> invalid then m.tvSeasonPage = m.personSourceTvSeasonPage
     m.personSourceMoviePage = invalid
     m.personSourceTvShowPage = invalid
+    m.personSourceTvSeasonPage = invalid
 
-    if m.tvShowPage <> invalid then
+    if m.tvSeasonPage <> invalid then
+        m.tvSeasonPage.visible = true
+        m.tvSeasonPage.callFunc("activate")
+    else if m.tvShowPage <> invalid then
         m.tvShowPage.visible = true
         m.tvShowPage.callFunc("activate")
     else if m.moviePage <> invalid then

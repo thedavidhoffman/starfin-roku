@@ -9,18 +9,29 @@ sub init()
     m.episodesList = m.top.findNode("episodesList")
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
+    m.cast = m.top.findNode("cast")
     m.episodeOptionsOverlay = m.top.findNode("episodeOptionsOverlay")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
+    m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
 
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
+    m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
     m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
     m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
+    m.cast.observeField("focusExitUp", "onCastFocusExitUp")
+    m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.episodeOptionsOverlay.observeField("closeRequested", "onEpisodeOptionsClosed")
     m.pageState = {
         request: invalid
         season: invalid
         episodes: []
         episodeWindowStart: 0
+        focusArea: "episodes"
+        focusedItemId: ""
+    }
+    m.layout = {
+        castDefaultY: 950
+        castFocusedY: 324
     }
 end sub
 
@@ -133,6 +144,11 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.season = request.season
+    m.pageState.focusArea = "episodes"
+    m.pageState.focusedItemId = ""
+    m.cast.server = request.server
+    m.cast.title = "Cast & Crew"
+    renderPeopleSection([])
     Status_SetLoading()
     renderSeason(request.season)
     clearEpisodes()
@@ -160,6 +176,7 @@ sub onTVSeasonResponse()
     m.pageState.episodes = getItemsFromPayload(payload.episodes)
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
+    updatePeopleForFocusedItem()
     Status_ClearMessage()
     updateChevrons()
     focusEpisodesIfActive()
@@ -177,6 +194,38 @@ end sub
 '-------------------------------------------------------------------------------
 sub onEpisodeFocused()
     updateChevrons()
+    updatePeopleForFocusedItem()
+end sub
+
+'-------------------------------------------------------------------------------
+' onEpisodeDetailsResponse
+'-------------------------------------------------------------------------------
+sub onEpisodeDetailsResponse()
+    response = m.episodeDetailsTask.response
+    if response = invalid then return
+    if response.ok <> true then return
+    if SafeString(response.itemId, "") <> m.pageState.focusedItemId then return
+
+    people = getPeople(response.payload)
+    renderPeopleSection(people)
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastFocusExitUp
+'-------------------------------------------------------------------------------
+sub onCastFocusExitUp()
+    focusEpisodesIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastPersonSelected
+'-------------------------------------------------------------------------------
+sub onCastPersonSelected()
+    selection = m.cast.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    m.top.selectedPerson = selection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -191,6 +240,64 @@ sub renderSeason(item as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
+' updatePeopleForFocusedItem
+'-------------------------------------------------------------------------------
+sub updatePeopleForFocusedItem()
+    episodeNode = getFocusedEpisodeNode()
+    if episodeNode = invalid then return
+
+    itemType = SafeString(episodeNode.itemType, "")
+    if itemType = "SeasonSummary" then
+        m.pageState.focusedItemId = ""
+        people = getPeople(m.pageState.season)
+        renderPeopleSection(people)
+        return
+    end if
+
+    itemId = SafeString(episodeNode.itemId, "")
+    if itemId = "" or itemId = m.pageState.focusedItemId then return
+
+    m.pageState.focusedItemId = itemId
+    renderPeopleSection([])
+    request = m.pageState.request
+    if request = invalid then return
+
+    m.episodeDetailsTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+    }
+    m.episodeDetailsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' renderPeopleSection
+'-------------------------------------------------------------------------------
+sub renderPeopleSection(people as object)
+    m.cast.people = people
+    updatePeopleSectionLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' updatePeopleSectionLayout
+'-------------------------------------------------------------------------------
+sub updatePeopleSectionLayout()
+    if m.pageState.focusArea = "cast" then
+        m.cast.translation = [96, m.layout.castFocusedY]
+    else
+        m.cast.translation = [96, m.layout.castDefaultY]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getPeople
+'-------------------------------------------------------------------------------
+function getPeople(item as dynamic) as object
+    if item = invalid or item.People = invalid then return []
+    return item.People
+end function
+
 ' renderShowLogo
 '-------------------------------------------------------------------------------
 sub renderShowLogo()
@@ -326,8 +433,23 @@ sub focusEpisodesIfActive()
     if m.episodesList.content.getChildCount() = 0 then return
     if m.episodesList.content.getChild(0).getChildCount() = 0 then return
 
+    m.pageState.focusArea = "episodes"
+    updatePeopleSectionLayout()
+    m.cast.callFunc("deactivate")
+    m.top.setFocus(true)
     m.episodesList.setFocus(true)
     updateChevrons()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusCast
+'-------------------------------------------------------------------------------
+sub focusCast()
+    if m.cast.visible <> true or m.cast.hasItems <> true then return
+
+    m.pageState.focusArea = "cast"
+    updatePeopleSectionLayout()
+    m.cast.callFunc("activate")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -657,6 +779,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
         m.episodeOptionsOverlay.episodeItemX = getFocusedEpisodeItemX()
         m.episodeOptionsOverlay.episodeImageColumnX = getFocusedEpisodeImageColumnX()
         m.episodeOptionsOverlay.callFunc("open")
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "episodes" and m.cast.visible = true and m.cast.hasItems = true then
+        focusCast()
         return true
     end if
 
