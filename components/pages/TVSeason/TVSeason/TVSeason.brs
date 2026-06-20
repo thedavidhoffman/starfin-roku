@@ -3,46 +3,50 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("TVSeason")
-    m.showLogo = m.top.findNode("showLogo")
-    m.seriesLabel = m.top.findNode("seriesLabel")
-    m.seasonLabel = m.top.findNode("seasonLabel")
-    m.episodesList = m.top.findNode("episodesList")
-    m.leftChevron = m.top.findNode("leftChevron")
-    m.rightChevron = m.top.findNode("rightChevron")
-    m.castDownCue = m.top.findNode("castDownCue")
-    m.cast = m.top.findNode("cast")
-    m.episodesUpCue = m.top.findNode("episodesUpCue")
-    m.episodeOptionsOverlay = m.top.findNode("episodeOptionsOverlay")
-    m.tvSeasonTask = m.top.findNode("tvSeasonTask")
-    m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
-
-    m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
-    m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
-    m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
-    m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
-    m.episodesList.observeField("focusExitDown", "onEpisodesFocusExitDown")
-    m.cast.observeField("focusExitUp", "onCastFocusExitUp")
-    m.cast.observeField("selectedPerson", "onCastPersonSelected")
-    m.episodeOptionsOverlay.observeField("closeRequested", "onEpisodeOptionsClosed")
+    initReferences()
+    initHandlers()
     m.pageState = {
         request: invalid
         season: invalid
         episodes: []
         episodeWindowStart: 0
         focusArea: "episodes"
-        focusedItemId: ""
     }
-    m.layout = {
-        castDefaultY: 950
-        castFocusedY: 699
-    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.showLogo = m.top.findNode("showLogo")
+    m.seriesLabel = m.top.findNode("seriesLabel")
+    m.seasonLabel = m.top.findNode("seasonLabel")
+    m.episodesList = m.top.findNode("episodesList")
+    m.episodeDetails = m.top.findNode("episodeDetails")
+    m.leftChevron = m.top.findNode("leftChevron")
+    m.rightChevron = m.top.findNode("rightChevron")
+    m.downChevron = m.top.findNode("downChevron")
+    m.upChevron = m.top.findNode("upChevron")
+    m.tvSeasonTask = m.top.findNode("tvSeasonTask")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
+    m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
+    m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
+    m.episodesList.observeField("focusExitDown", "onEpisodesFocusExitDown")
+    m.episodeDetails.observeField("closeRequested", "onEpisodeDetailsCloseRequested")
+    m.episodeDetails.observeField("selectedPerson", "onEpisodeDetailsPersonSelected")
 end sub
 
 '-------------------------------------------------------------------------------
 ' onEpisodesFocusExitDown
 '-------------------------------------------------------------------------------
 sub onEpisodesFocusExitDown()
-    if m.pageState.focusArea = "episodes" then focusCast()
+    if m.pageState.focusArea = "episodes" then focusEpisodeDetails()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -58,7 +62,7 @@ sub onEpisodeSelected()
     end if
 
     episode = episodeNode.raw
-    episodeId = SafeString(FirstNonEmpty([episode.Id, episode.id, episodeNode.itemId], ""), "")
+    episodeId = SafeString(FirstNonEmpty([episode.Id, episodeNode.itemId], ""), "")
     if episodeId = "" then return
 
     m.top.selectedEpisode = {
@@ -90,33 +94,6 @@ function getFocusedEpisodeNode() as object
     return getEpisodeNodeAtPosition(m.episodesList.rowItemFocused)
 end function
 
-'-------------------------------------------------------------------------------
-' getFocusedEpisodeImageColumnX
-'-------------------------------------------------------------------------------
-function getFocusedEpisodeImageColumnX() as float
-    return getFocusedEpisodeItemX() + 20 - (16.75 / 2)
-end function
-
-'-------------------------------------------------------------------------------
-' getFocusedEpisodeItemX
-'-------------------------------------------------------------------------------
-function getFocusedEpisodeItemX() as float
-    focused = m.episodesList.rowItemFocused
-    if focused = invalid or focused.Count() < 2 then return 80.75
-
-    gutter = 16.75
-    rowListX = 80.75
-    rowItemWidth = 575
-    windowStart = m.pageState.episodeWindowStart
-    if windowStart = invalid then windowStart = 0
-
-    visibleIndex = focused[1] - windowStart
-    if visibleIndex < 0 then visibleIndex = 0
-
-    return rowListX + (visibleIndex * (rowItemWidth + gutter))
-end function
-
-'-------------------------------------------------------------------------------
 ' playFirstEpisode
 '-------------------------------------------------------------------------------
 sub playFirstEpisode()
@@ -127,7 +104,7 @@ sub playFirstEpisode()
     for each episode in episodes
         if isAssocArray(episode) = false then continue for
 
-        episodeId = SafeString(FirstNonEmpty([episode.Id, episode.id], ""), "")
+        episodeId = SafeString(episode.Id, "")
         if episodeId <> "" then
             firstEpisode = episode
             exit for
@@ -137,7 +114,7 @@ sub playFirstEpisode()
     if firstEpisode = invalid then return
 
     m.top.selectedEpisode = {
-        itemId: SafeString(FirstNonEmpty([firstEpisode.Id, firstEpisode.id], ""), "")
+        itemId: SafeString(firstEpisode.Id, "")
         item: firstEpisode
         startPositionTicks: PlaybackProgress_GetTicksFromItem(firstEpisode)
         playbackQueue: buildPlaybackQueue(episodes)
@@ -155,13 +132,10 @@ sub onLoadRequestChanged()
     m.pageState.request = request
     m.pageState.season = request.season
     m.pageState.focusArea = "episodes"
-    m.pageState.focusedItemId = ""
-    m.cast.server = request.server
-    m.cast.title = "Cast & Crew"
-    renderPeopleSection([])
+    clearEpisodes()
+    m.episodeDetails.loadRequest = request
     Status_SetLoading()
     renderSeason(request.season)
-    clearEpisodes()
 
     m.tvSeasonTask.request = request
     m.tvSeasonTask.control = "run"
@@ -180,22 +154,17 @@ sub onTVSeasonResponse()
     end if
 
     payload = response.payload
-    if payload = invalid then return
+    if payload = invalid then
+        Status_SetMessage("Unable to load tv season.")
+        return
+    end if
 
     m.pageState.season = payload.season
     m.pageState.episodes = getItemsFromPayload(payload.episodes)
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
-    updatePeopleForFocusedItem()
     Status_ClearMessage()
     updateChevrons()
-    focusEpisodesIfActive()
-end sub
-
-'-------------------------------------------------------------------------------
-' onEpisodeOptionsClosed
-'-------------------------------------------------------------------------------
-sub onEpisodeOptionsClosed()
     focusEpisodesIfActive()
 end sub
 
@@ -204,34 +173,21 @@ end sub
 '-------------------------------------------------------------------------------
 sub onEpisodeFocused()
     updateChevrons()
-    updatePeopleForFocusedItem()
+    if m.episodeDetails.visible = true then updateEpisodeDetails()
 end sub
 
 '-------------------------------------------------------------------------------
-' onEpisodeDetailsResponse
+' onEpisodeDetailsCloseRequested
 '-------------------------------------------------------------------------------
-sub onEpisodeDetailsResponse()
-    response = m.episodeDetailsTask.response
-    if response = invalid then return
-    if response.ok <> true then return
-    if SafeString(response.itemId, "") <> m.pageState.focusedItemId then return
-
-    people = getPeople(response.payload)
-    renderPeopleSection(people)
-end sub
-
-'-------------------------------------------------------------------------------
-' onCastFocusExitUp
-'-------------------------------------------------------------------------------
-sub onCastFocusExitUp()
+sub onEpisodeDetailsCloseRequested()
     focusEpisodesIfActive()
 end sub
 
 '-------------------------------------------------------------------------------
-' onCastPersonSelected
+' onEpisodeDetailsPersonSelected
 '-------------------------------------------------------------------------------
-sub onCastPersonSelected()
-    selection = m.cast.selectedPerson
+sub onEpisodeDetailsPersonSelected()
+    selection = m.episodeDetails.selectedPerson
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
@@ -244,81 +200,12 @@ end sub
 sub renderSeason(item as dynamic)
     if isAssocArray(item) = false then return
 
-    m.seriesLabel.text = FirstNonEmpty([item.SeriesName, item.seriesName], "")
+    m.seriesLabel.text = FirstNonEmpty([item.SeriesName], "")
     m.seasonLabel.text = getItemTitle(item)
     renderShowLogo()
 end sub
 
 '-------------------------------------------------------------------------------
-' updatePeopleForFocusedItem
-'-------------------------------------------------------------------------------
-sub updatePeopleForFocusedItem()
-    episodeNode = getFocusedEpisodeNode()
-    if episodeNode = invalid then return
-
-    itemType = SafeString(episodeNode.itemType, "")
-    if itemType = "SeasonSummary" then
-        m.pageState.focusedItemId = ""
-        people = getPeople(m.pageState.season)
-        renderPeopleSection(people)
-        return
-    end if
-
-    itemId = SafeString(episodeNode.itemId, "")
-    if itemId = "" or itemId = m.pageState.focusedItemId then return
-
-    m.pageState.focusedItemId = itemId
-    request = m.pageState.request
-    if request = invalid then return
-
-    m.episodeDetailsTask.request = {
-        server: request.server
-        token: request.token
-        userId: request.userId
-        itemId: itemId
-    }
-    m.episodeDetailsTask.control = "run"
-end sub
-
-'-------------------------------------------------------------------------------
-' renderPeopleSection
-'-------------------------------------------------------------------------------
-sub renderPeopleSection(people as object)
-    m.cast.people = people
-    updatePeopleSectionLayout()
-    updateNavigationCues()
-end sub
-
-'-------------------------------------------------------------------------------
-' updatePeopleSectionLayout
-'-------------------------------------------------------------------------------
-sub updatePeopleSectionLayout()
-    if m.pageState.focusArea = "cast" then
-        m.cast.translation = [96, m.layout.castFocusedY]
-        m.cast.visible = m.cast.hasItems = true
-    else
-        m.cast.translation = [96, m.layout.castDefaultY]
-        m.cast.visible = false
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' updateNavigationCues
-'-------------------------------------------------------------------------------
-sub updateNavigationCues()
-    hasCast = m.cast.hasItems = true
-    m.castDownCue.visible = m.pageState.focusArea = "episodes" and hasCast
-    m.episodesUpCue.visible = m.pageState.focusArea = "cast"
-end sub
-
-'-------------------------------------------------------------------------------
-' getPeople
-'-------------------------------------------------------------------------------
-function getPeople(item as dynamic) as object
-    if item = invalid or item.People = invalid then return []
-    return item.People
-end function
-
 ' renderShowLogo
 '-------------------------------------------------------------------------------
 sub renderShowLogo()
@@ -348,15 +235,13 @@ sub renderEpisodes(episodes as object)
 
         child = row.createChild("ContentNode")
         child.title = getItemTitle(episode)
-        child.description = FirstNonEmpty([episode.Overview, episode.overview], "")
+        child.description = FirstNonEmpty([episode.Overview], "")
         child.HDPosterUrl = getImageUrl(episode, "Primary", 530, 298)
         child.AddFields({
-            itemId: SafeString(FirstNonEmpty([episode.Id, episode.id], ""), "")
-            itemType: SafeString(FirstNonEmpty([episode.Type, episode.type], ""), "")
+            itemId: SafeString(FirstNonEmpty([episode.Id], ""), "")
+            itemType: SafeString(FirstNonEmpty([episode.Type], ""), "")
             episodeNumber: getEpisodeNumberText(episode)
             episodeDate: getEpisodeDateText(episode)
-            durationText: getEpisodeDurationText(episode)
-            ratingText: getEpisodeRatingText(episode)
             progressPercent: getProgressPercent(episode)
             progressWidth: getProgressWidth(episode)
             raw: episode
@@ -374,11 +259,22 @@ end sub
 sub clearEpisodes()
     m.episodesList.content = CreateObject("roSGNode", "ContentNode")
     m.episodesList.visible = false
+    m.episodeDetails.visible = false
+    m.episodeDetails.itemContent = invalid
     m.pageState.episodeWindowStart = 0
     m.leftChevron.visible = false
     m.rightChevron.visible = false
-    m.castDownCue.visible = false
-    m.episodesUpCue.visible = false
+    showDetailsChevron(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateEpisodeDetails
+'-------------------------------------------------------------------------------
+sub updateEpisodeDetails()
+    focusedEpisode = getFocusedEpisodeNode()
+    if focusedEpisode = invalid then return
+
+    m.episodeDetails.itemContent = focusedEpisode
 end sub
 
 '-------------------------------------------------------------------------------
@@ -397,8 +293,6 @@ sub appendSeasonSummaryItem(row as object)
         itemType: "SeasonSummary"
         episodeNumber: getSeasonEpisodeCountText(season)
         episodeDate: getSeasonYearText(season)
-        durationText: ""
-        ratingText: ""
         raw: season
     })
 end sub
@@ -407,7 +301,7 @@ end sub
 ' getSeasonSummaryDescription
 '-------------------------------------------------------------------------------
 function getSeasonSummaryDescription(season as dynamic) as string
-    description = FirstNonEmpty([season.Overview, season.overview], "")
+    description = FirstNonEmpty([season.Overview], "")
     if description <> "" then return description
 
     request = m.pageState.request
@@ -416,7 +310,7 @@ function getSeasonSummaryDescription(season as dynamic) as string
     series = request.series
     if isAssocArray(series) = false then return ""
 
-    return FirstNonEmpty([series.Overview, series.overview], "")
+    return FirstNonEmpty([series.Overview], "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -451,30 +345,40 @@ end sub
 ' focusEpisodesIfActive
 '-------------------------------------------------------------------------------
 sub focusEpisodesIfActive()
-    if m.episodesList.visible <> true then return
     if m.episodesList.content = invalid then return
     if m.episodesList.content.getChildCount() = 0 then return
     if m.episodesList.content.getChild(0).getChildCount() = 0 then return
 
     m.pageState.focusArea = "episodes"
-    updatePeopleSectionLayout()
-    updateNavigationCues()
-    m.cast.callFunc("deactivate")
+    m.episodesList.visible = true
+    m.episodeDetails.visible = false
+    m.episodeDetails.callFunc("deactivate")
+    showDetailsChevron(false)
     m.top.setFocus(true)
     m.episodesList.setFocus(true)
     updateChevrons()
 end sub
 
 '-------------------------------------------------------------------------------
-' focusCast
+' focusEpisodeDetails
 '-------------------------------------------------------------------------------
-sub focusCast()
-    if m.cast.hasItems <> true then return
+sub focusEpisodeDetails()
+    m.pageState.focusArea = "details"
+    m.episodesList.visible = false
+    updateEpisodeDetails()
+    m.episodeDetails.visible = true
+    m.leftChevron.visible = false
+    m.rightChevron.visible = false
+    showDetailsChevron(true)
+    m.episodeDetails.callFunc("activate")
+end sub
 
-    m.pageState.focusArea = "cast"
-    updatePeopleSectionLayout()
-    updateNavigationCues()
-    m.cast.callFunc("activate")
+'-------------------------------------------------------------------------------
+' showDetailsChevron
+'-------------------------------------------------------------------------------
+sub showDetailsChevron(isDetailsVisible as boolean)
+    m.downChevron.visible = isDetailsVisible <> true
+    m.upChevron.visible = isDetailsVisible = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -535,42 +439,6 @@ function getEpisodeNumberText(item as dynamic) as string
     return "Episode"
 end function
 
-'-------------------------------------------------------------------------------
-' getEpisodeDurationText
-'-------------------------------------------------------------------------------
-function getEpisodeDurationText(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-    if item.RunTimeTicks = invalid then return ""
-
-    minutes = int(val(item.RunTimeTicks.ToStr()) / 600000000)
-    if minutes <= 0 then return ""
-
-    hours = int(minutes / 60)
-    remainingMinutes = minutes mod 60
-    if hours > 0 and remainingMinutes > 0 then return hours.ToStr() + " hr " + remainingMinutes.ToStr() + " min"
-    if hours > 0 then return hours.ToStr() + " hr"
-
-    return minutes.ToStr() + " min"
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeRatingText
-'-------------------------------------------------------------------------------
-function getEpisodeRatingText(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-    if item.CommunityRating = invalid then return ""
-
-    rating = val(item.CommunityRating.ToStr())
-    if rating <= 0 then return ""
-
-    rounded = int((rating * 10) + 0.5)
-    whole = int(rounded / 10)
-    decimal = rounded mod 10
-
-    return whole.ToStr() + "." + decimal.ToStr()
-end function
-
-'-------------------------------------------------------------------------------
 ' getAiredDateText
 '-------------------------------------------------------------------------------
 function getAiredDateText(item as dynamic) as string
@@ -600,7 +468,7 @@ end function
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
     if isAssocArray(item) = false then return ""
-    return FirstNonEmpty([item.Name, item.name, item.title], "")
+    return FirstNonEmpty([item.Name], "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -642,25 +510,6 @@ function getProgressWidth(item as dynamic) as integer
 end function
 
 '-------------------------------------------------------------------------------
-' getMetaText
-'-------------------------------------------------------------------------------
-function getMetaText(item as dynamic) as string
-    parts = []
-
-    episodeCount = FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
-    if episodeCount <> "" then parts.Push(SafeString(episodeCount, "") + " episodes")
-
-    year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = getYearFromDate(FirstNonEmpty([item.PremiereDate], ""))
-    if year <> "" then parts.Push(year)
-
-    rating = FirstNonEmpty([item.OfficialRating], "")
-    if rating <> "" then parts.Push(rating)
-
-    return joinText(parts, "  |  ")
-end function
-
-'-------------------------------------------------------------------------------
 ' getYearFromDate
 '-------------------------------------------------------------------------------
 function getYearFromDate(value as string) as string
@@ -674,7 +523,7 @@ end function
 function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
     if item = invalid then return ""
 
-    itemId = FirstNonEmpty([item.Id, item.id], "")
+    itemId = FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
 
     tag = ""
@@ -727,8 +576,6 @@ function getItemsFromPayload(payload as dynamic) as object
     if isAssocArray(payload) = false then return []
 
     if payload.Items <> invalid then return payload.Items
-    if payload.items <> invalid then return payload.items
-
     return []
 end function
 
@@ -741,7 +588,7 @@ function buildPlaybackQueue(episodes as object) as object
     for each episode in episodes
         if isAssocArray(episode) = false then continue for
 
-        episodeId = SafeString(FirstNonEmpty([episode.Id, episode.id], ""), "")
+        episodeId = SafeString(FirstNonEmpty([episode.Id], ""), "")
         if episodeId = "" then continue for
 
         queue.Push({
@@ -786,29 +633,8 @@ end function
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
-    if m.episodeOptionsOverlay.visible = true then
-        if key = "back" then
-            m.episodeOptionsOverlay.callFunc("close")
-            return true
-        end if
-
-        return false
-    end if
-
-    if key = "options" then
-        episodeNode = getFocusedEpisodeNode()
-        if episodeNode = invalid then return true
-
-        m.episodeOptionsOverlay.episodeContent = episodeNode.raw
-        m.episodeOptionsOverlay.episodeItemContent = episodeNode
-        m.episodeOptionsOverlay.episodeItemX = getFocusedEpisodeItemX()
-        m.episodeOptionsOverlay.episodeImageColumnX = getFocusedEpisodeImageColumnX()
-        m.episodeOptionsOverlay.callFunc("open")
-        return true
-    end if
-
-    if key = "down" and m.pageState.focusArea = "episodes" and m.cast.hasItems = true then
-        focusCast()
+    if key = "down" and m.pageState.focusArea = "episodes" then
+        focusEpisodeDetails()
         return true
     end if
 
