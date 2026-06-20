@@ -2,8 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.placeholder = m.top.findNode("placeholder")
-    m.poster = m.top.findNode("poster")
+    m.episodePoster = m.top.findNode("episodePoster")
     m.episodeNumber = m.top.findNode("episodeNumber")
     m.episodeDate = m.top.findNode("episodeDate")
     m.title = m.top.findNode("title")
@@ -60,10 +59,7 @@ sub onItemContentChanged()
     m.episodeDate.text = SafeString(item.episodeDate, "")
     applyLayout(title)
 
-    imageUrl = SafeString(item.HDPosterUrl, "")
-    m.poster.visible = imageUrl <> ""
-    m.placeholder.visible = imageUrl = ""
-    m.poster.uri = imageUrl
+    m.episodePoster.itemContent = item
     loadItemDetails()
 end sub
 
@@ -155,9 +151,7 @@ sub clearContent()
     m.title.visible = true
     m.description.text = ""
     m.description.translation = [590, m.layout.descriptionY]
-    m.poster.uri = ""
-    m.poster.visible = false
-    m.placeholder.visible = true
+    m.episodePoster.itemContent = invalid
     m.state.itemId = ""
     m.cast.people = []
 end sub
