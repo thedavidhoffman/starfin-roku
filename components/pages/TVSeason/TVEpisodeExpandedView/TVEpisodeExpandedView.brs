@@ -7,6 +7,7 @@ sub init()
     m.episodeDate = m.top.findNode("episodeDate")
     m.title = m.top.findNode("title")
     m.description = m.top.findNode("description")
+    m.mediaToolbar = m.top.findNode("mediaToolbar")
     m.cast = m.top.findNode("cast")
     m.layout = {
         titleY: 38
@@ -15,6 +16,7 @@ sub init()
     initStyles()
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
+    m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.state = {
@@ -161,7 +163,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     m.top.setFocus(true)
-    m.cast.callFunc("activate")
+    m.mediaToolbar.callFunc("activate")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -173,10 +175,17 @@ sub deactivate()
 end sub
 
 '-------------------------------------------------------------------------------
+' onMediaToolbarFocusExitDown
+'-------------------------------------------------------------------------------
+sub onMediaToolbarFocusExitDown()
+    m.cast.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
 ' onCastFocusExitUp
 '-------------------------------------------------------------------------------
 sub onCastFocusExitUp()
-    m.top.closeRequested = true
+    m.mediaToolbar.callFunc("activate")
 end sub
 
 '-------------------------------------------------------------------------------
