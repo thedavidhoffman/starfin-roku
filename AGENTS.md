@@ -1,11 +1,5 @@
 # AGENTS.md
 
-## audiobookshelf reference
-
-- Before changing Audiobookshelf API calls, playback-session handling, media metadata mapping, or playlist/chapter behavior, review the linked Audiobookshelf docs for the relevant endpoint/response shape.
-- audiobookshelf API git repo: https://github.com/audiobookshelf/audiobookshelf-api-docs
-- audiobookshelf server git repo: https://github.com/advplyr/audiobookshelf
-
 ## Roku reference
 
 - https://github.com/rokudev/samples
@@ -19,7 +13,7 @@
 ## BrightScript style
 
 - Assign color fields with integer hex literals, such as `m.title.color = &h0F1A2AFF`, not string values like `"0x0F1A2AFF"`.
-- Do not use `FormatJson()` for outbound API request bodies. Roku lowercases JSON object keys during serialization, which breaks case-sensitive API fields such as Audiobookshelf `supportedMimeTypes`; build request JSON explicitly when key casing matters.
+- Do not use `FormatJson()` for outbound API request bodies. Roku lowercases JSON object keys during serialization, which breaks case-sensitive API fields.
 - API response fields are PascalCase; access API data with PascalCase field names such as `item.CollectionType`, not mixed fallback expressions like `FirstNonEmpty([item.CollectionType, item.collectionType], "")`.
 
 ## BrightScript naming

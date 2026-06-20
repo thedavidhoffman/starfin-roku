@@ -4,9 +4,16 @@
 sub init()
     m.placeholder = m.top.findNode("placeholder")
     m.poster = m.top.findNode("poster")
+    m.episodeNumber = m.top.findNode("episodeNumber")
+    m.episodeDate = m.top.findNode("episodeDate")
     m.title = m.top.findNode("title")
     m.description = m.top.findNode("description")
     m.cast = m.top.findNode("cast")
+    m.layout = {
+        titleY: 38
+        descriptionY: 92
+    }
+    initStyles()
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
@@ -15,6 +22,15 @@ sub init()
         request: invalid
         itemId: ""
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' initStyles
+'-------------------------------------------------------------------------------
+sub initStyles()
+    colors = Color()
+    m.episodeNumber.color = colors.text.secondary
+    m.episodeDate.color = colors.text.secondary
 end sub
 
 '-------------------------------------------------------------------------------
@@ -37,8 +53,12 @@ sub onItemContentChanged()
         return
     end if
 
-    m.title.text = SafeString(item.title, "")
+    title = SafeString(item.title, "")
+    m.title.text = title
     m.description.text = SafeString(item.description, "")
+    m.episodeNumber.text = SafeString(item.episodeNumber, "")
+    m.episodeDate.text = SafeString(item.episodeDate, "")
+    applyLayout(title)
 
     imageUrl = SafeString(item.HDPosterUrl, "")
     m.poster.visible = imageUrl <> ""
@@ -46,6 +66,37 @@ sub onItemContentChanged()
     m.poster.uri = imageUrl
     loadItemDetails()
 end sub
+
+'-------------------------------------------------------------------------------
+' applyLayout
+'-------------------------------------------------------------------------------
+sub applyLayout(title as string)
+    hideTitle = isSeasonNumberTitle(title)
+    m.title.visible = hideTitle <> true
+    if hideTitle = true then
+        m.description.translation = [590, m.layout.titleY]
+    else
+        m.description.translation = [590, m.layout.descriptionY]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' isSeasonNumberTitle
+'-------------------------------------------------------------------------------
+function isSeasonNumberTitle(title as string) as boolean
+    value = LCase(String_Trim(title))
+    if Left(value, 7) <> "season " then return false
+
+    seasonNumber = String_Trim(Mid(value, 8))
+    if seasonNumber = "" then return false
+
+    for i = 1 to Len(seasonNumber)
+        char = Mid(seasonNumber, i, 1)
+        if char < "0" or char > "9" then return false
+    end for
+
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' loadItemDetails
@@ -98,8 +149,12 @@ end sub
 ' clearContent
 '-------------------------------------------------------------------------------
 sub clearContent()
+    m.episodeNumber.text = ""
+    m.episodeDate.text = ""
     m.title.text = ""
+    m.title.visible = true
     m.description.text = ""
+    m.description.translation = [590, m.layout.descriptionY]
     m.poster.uri = ""
     m.poster.visible = false
     m.placeholder.visible = true

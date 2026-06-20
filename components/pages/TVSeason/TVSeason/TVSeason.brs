@@ -338,7 +338,11 @@ end function
 '-------------------------------------------------------------------------------
 sub activate()
     m.top.setFocus(true)
-    focusEpisodesIfActive()
+    if m.pageState.focusArea = "details" and m.episodeDetails.visible = true then
+        m.episodeDetails.callFunc("activate")
+    else
+        focusEpisodesIfActive()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
