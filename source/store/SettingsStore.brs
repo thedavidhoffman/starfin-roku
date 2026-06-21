@@ -18,7 +18,7 @@ function SettingsStore_Keys() as object
         tvLibraryDisplay: "tv-library-display"
         movieLibraryDisplay: "movie-library-display"
         collectionDisplay: "collection-display"
-        homeLibraryThumbnails: "home-library-thumbnails"
+        tvEpisodeListDisplay: "tv-ep-list-scroll"
         tmdbApiKey: "tmdb-api-key"
     }
 end function
@@ -32,7 +32,7 @@ function SettingsStore_Defaults() as object
     defaults[keys.tvLibraryDisplay] = "poster"
     defaults[keys.movieLibraryDisplay] = "poster"
     defaults[keys.collectionDisplay] = "poster"
-    defaults[keys.homeLibraryThumbnails] = "jellyfin"
+    defaults[keys.tvEpisodeListDisplay] = "horizontal"
     defaults[keys.tmdbApiKey] = ""
     return defaults
 end function
@@ -40,13 +40,13 @@ end function
 '-------------------------------------------------------------------------------
 ' SettingsStore_Save
 '-------------------------------------------------------------------------------
-sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionDisplay as string, homeLibraryThumbnails as string, tmdbApiKey as string)
+sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionDisplay as string, tvEpisodeListDisplay as string, tmdbApiKey as string)
     settingsStore = GetSettingsStore()
     keys = SettingsStore_Keys()
     settingsStore.Write(keys.tvLibraryDisplay, tvLibraryDisplay)
     settingsStore.Write(keys.movieLibraryDisplay, movieLibraryDisplay)
     settingsStore.Write(keys.collectionDisplay, collectionDisplay)
-    settingsStore.Write(keys.homeLibraryThumbnails, homeLibraryThumbnails)
+    settingsStore.Write(keys.tvEpisodeListDisplay, tvEpisodeListDisplay)
     settingsStore.Write(keys.tmdbApiKey, tmdbApiKey)
     settingsStore.Flush()
 end sub
@@ -62,7 +62,7 @@ function SettingsStore_Load() as object
         keys.tvLibraryDisplay
         keys.movieLibraryDisplay
         keys.collectionDisplay
-        keys.homeLibraryThumbnails
+        keys.tvEpisodeListDisplay
         keys.tmdbApiKey
     ])
     if values = invalid then values = {}
@@ -71,7 +71,7 @@ function SettingsStore_Load() as object
     settings[keys.tvLibraryDisplay] = SettingsStore_GetValue(values, keys.tvLibraryDisplay, defaults[keys.tvLibraryDisplay])
     settings[keys.movieLibraryDisplay] = SettingsStore_GetValue(values, keys.movieLibraryDisplay, defaults[keys.movieLibraryDisplay])
     settings[keys.collectionDisplay] = SettingsStore_GetValue(values, keys.collectionDisplay, defaults[keys.collectionDisplay])
-    settings[keys.homeLibraryThumbnails] = SettingsStore_GetValue(values, keys.homeLibraryThumbnails, defaults[keys.homeLibraryThumbnails])
+    settings[keys.tvEpisodeListDisplay] = SettingsStore_GetValue(values, keys.tvEpisodeListDisplay, defaults[keys.tvEpisodeListDisplay])
     settings[keys.tmdbApiKey] = SettingsStore_GetValue(values, keys.tmdbApiKey, defaults[keys.tmdbApiKey])
     return settings
 end function
@@ -85,7 +85,7 @@ sub SettingsStore_Clear()
     settingsStore.Delete(keys.tvLibraryDisplay)
     settingsStore.Delete(keys.movieLibraryDisplay)
     settingsStore.Delete(keys.collectionDisplay)
-    settingsStore.Delete(keys.homeLibraryThumbnails)
+    settingsStore.Delete(keys.tvEpisodeListDisplay)
     settingsStore.Delete(keys.tmdbApiKey)
     settingsStore.Flush()
 end sub
@@ -123,7 +123,7 @@ function SettingsStore_AreEqual(left as dynamic, right as dynamic) as boolean
     if SettingsStore_GetSettingValue(left, keys.tvLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.tvLibraryDisplay) then return false
     if SettingsStore_GetSettingValue(left, keys.movieLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.movieLibraryDisplay) then return false
     if SettingsStore_GetSettingValue(left, keys.collectionDisplay) <> SettingsStore_GetSettingValue(right, keys.collectionDisplay) then return false
-    if SettingsStore_GetSettingValue(left, keys.homeLibraryThumbnails) <> SettingsStore_GetSettingValue(right, keys.homeLibraryThumbnails) then return false
+    if SettingsStore_GetSettingValue(left, keys.tvEpisodeListDisplay) <> SettingsStore_GetSettingValue(right, keys.tvEpisodeListDisplay) then return false
     if SettingsStore_GetSettingValue(left, keys.tmdbApiKey) <> SettingsStore_GetSettingValue(right, keys.tmdbApiKey) then return false
 
     return true

@@ -45,7 +45,7 @@ sub saveSettings()
     if SettingsStore_AreEqual(settings, m.originalSettings) then return
 
     keys = SettingsStore_Keys()
-    SettingsStore_Save(settings[keys.tvLibraryDisplay], settings[keys.movieLibraryDisplay], settings[keys.collectionDisplay], settings[keys.homeLibraryThumbnails], settings[keys.tmdbApiKey])
+    SettingsStore_Save(settings[keys.tvLibraryDisplay], settings[keys.movieLibraryDisplay], settings[keys.collectionDisplay], settings[keys.tvEpisodeListDisplay], settings[keys.tmdbApiKey])
     m.top.savedSettings = settings
     m.top.settingsSaved = true
 end sub

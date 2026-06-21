@@ -6,7 +6,7 @@ sub init()
         tvLibraryOptions: m.top.findNode("tvLibraryOptions")
         movieLibraryOptions: m.top.findNode("movieLibraryOptions")
         collectionDisplayOptions: m.top.findNode("collectionDisplayOptions")
-        homeLibraryThumbnailsOptions: m.top.findNode("homeLibraryThumbnailsOptions")
+        tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
     }
     m.focusState = {
@@ -17,7 +17,7 @@ sub init()
         m.settingsControls.tvLibraryOptions
         m.settingsControls.movieLibraryOptions
         m.settingsControls.collectionDisplayOptions
-        m.settingsControls.homeLibraryThumbnailsOptions
+        m.settingsControls.tvEpisodeListDisplayOptions
         m.settingsControls.tmdbApiKeyInput
     ]
 
@@ -25,7 +25,7 @@ sub init()
     initDisplayOptions(m.settingsControls.tvLibraryOptions)
     initDisplayOptions(m.settingsControls.movieLibraryOptions)
     initDisplayOptions(m.settingsControls.collectionDisplayOptions)
-    initHomeLibraryThumbnailsOptions()
+    initTVEpisodeListDisplayOptions()
     loadSettingsValues()
 end sub
 
@@ -45,17 +45,17 @@ sub initDisplayOptions(options as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' initHomeLibraryThumbnailsOptions
+' initTVEpisodeListDisplayOptions
 '-------------------------------------------------------------------------------
-sub initHomeLibraryThumbnailsOptions()
-    options = m.settingsControls.homeLibraryThumbnailsOptions
+sub initTVEpisodeListDisplayOptions()
+    options = m.settingsControls.tvEpisodeListDisplayOptions
     if options = invalid then return
 
     content = CreateObject("roSGNode", "ContentNode")
-    jellyfinOption = content.createChild("ContentNode")
-    jellyfinOption.title = "Use Jellyfin images"
-    starfishOption = content.createChild("ContentNode")
-    starfishOption.title = "Use Starfish cards"
+    horizontalOption = content.createChild("ContentNode")
+    horizontalOption.title = "Horizontal"
+    verticalOption = content.createChild("ContentNode")
+    verticalOption.title = "Vertical"
 
     options.content = content
 end sub
@@ -71,7 +71,7 @@ sub loadSettingsValues()
     setDisplayOption(m.settingsControls.tvLibraryOptions, settings[keys.tvLibraryDisplay])
     setDisplayOption(m.settingsControls.movieLibraryOptions, settings[keys.movieLibraryDisplay])
     setDisplayOption(m.settingsControls.collectionDisplayOptions, settings[keys.collectionDisplay])
-    setHomeLibraryThumbnailsOption(settings[keys.homeLibraryThumbnails])
+    setTVEpisodeListDisplayOption(settings[keys.tvEpisodeListDisplay])
 
     if m.settingsControls.tmdbApiKeyInput <> invalid then
         m.settingsControls.tmdbApiKeyInput.text = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
@@ -143,7 +143,7 @@ function getSettingsValues() as object
     settings[keys.tvLibraryDisplay] = getDisplayOptionValue(m.settingsControls.tvLibraryOptions)
     settings[keys.movieLibraryDisplay] = getDisplayOptionValue(m.settingsControls.movieLibraryOptions)
     settings[keys.collectionDisplay] = getDisplayOptionValue(m.settingsControls.collectionDisplayOptions)
-    settings[keys.homeLibraryThumbnails] = getHomeLibraryThumbnailsValue()
+    settings[keys.tvEpisodeListDisplay] = getTVEpisodeListDisplayValue()
     settings[keys.tmdbApiKey] = getTextInputValue(m.settingsControls.tmdbApiKeyInput)
     return settings
 end function
@@ -177,7 +177,7 @@ end function
 ' focusLeftColumn
 '-------------------------------------------------------------------------------
 function focusLeftColumn() as boolean
-    if m.focusState.activeIndex = 3 then return focusField(0, getFocusedItemIndex(m.settingsControls.homeLibraryThumbnailsOptions))
+    if m.focusState.activeIndex = 3 then return focusField(0, getFocusedItemIndex(m.settingsControls.tvEpisodeListDisplayOptions))
     if m.focusState.activeIndex = 4 then return focusField(1, invalid)
 
     return false
@@ -267,16 +267,16 @@ function getDisplayOptionValue(options as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
-' setHomeLibraryThumbnailsOption
+' setTVEpisodeListDisplayOption
 '-------------------------------------------------------------------------------
-sub setHomeLibraryThumbnailsOption(value as dynamic)
-    options = m.settingsControls.homeLibraryThumbnailsOptions
+sub setTVEpisodeListDisplayOption(value as dynamic)
+    options = m.settingsControls.tvEpisodeListDisplayOptions
     if options = invalid then return
 
-    thumbnailValue = "jellyfin"
-    if value <> invalid and value <> "" then thumbnailValue = value.ToStr()
+    displayValue = "horizontal"
+    if value <> invalid and value <> "" then displayValue = value.ToStr()
 
-    if LCase(thumbnailValue) = "starfish" then
+    if LCase(displayValue) = "vertical" then
         options.checkedItem = 1
     else
         options.checkedItem = 0
@@ -284,11 +284,11 @@ sub setHomeLibraryThumbnailsOption(value as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' getHomeLibraryThumbnailsValue
+' getTVEpisodeListDisplayValue
 '-------------------------------------------------------------------------------
-function getHomeLibraryThumbnailsValue() as string
-    if getCheckedItemIndex(m.settingsControls.homeLibraryThumbnailsOptions) = 1 then return "starfish"
-    return "jellyfin"
+function getTVEpisodeListDisplayValue() as string
+    if getCheckedItemIndex(m.settingsControls.tvEpisodeListDisplayOptions) = 1 then return "vertical"
+    return "horizontal"
 end function
 
 '-------------------------------------------------------------------------------

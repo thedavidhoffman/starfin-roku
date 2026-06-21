@@ -666,28 +666,12 @@ end function
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as string) as string
-    
-    if key = "libraries" and shouldUseStarfishLibraryCards() then
-        if item.CollectionType = "boxsets" then return "pkg:/images/libraries/collections.png"
-        if item.CollectionType = "movies" then return "pkg:/images/libraries/movies.png"
-        if item.CollectionType = "tvshows" then return "pkg:/images/libraries/tv.png"
-    end if
-
     imageUrl = getItemImageUrl(item, imageAspect)
     if imageUrl <> "" then return imageUrl
 
+    if key = "libraries" and isCollectionsLibrary(item) then return "pkg:/images/libraries/collections.png"
+
     return ""
-
-end function
-
-'-------------------------------------------------------------------------------
-' shouldUseStarfishLibraryCards
-'-------------------------------------------------------------------------------
-function shouldUseStarfishLibraryCards() as boolean
-    settings = SettingsStore_Load()
-    keys = SettingsStore_Keys()
-
-    return SettingsStore_GetSettingValue(settings, keys.homeLibraryThumbnails) = "starfish"
 end function
 
 '-------------------------------------------------------------------------------

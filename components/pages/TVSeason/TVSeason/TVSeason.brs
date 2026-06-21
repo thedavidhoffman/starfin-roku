@@ -10,6 +10,7 @@ sub init()
         season: invalid
         episodes: []
         episodeWindowStart: 0
+        episodeListScroll: "horizontal"
         focusArea: "episodes"
     }
 end sub
@@ -22,11 +23,10 @@ sub initReferences()
     m.seriesLabel = m.top.findNode("seriesLabel")
     m.seasonLabel = m.top.findNode("seasonLabel")
     m.episodesList = m.top.findNode("episodesList")
+    m.episodesGrid = m.top.findNode("episodesGrid")
     m.episodeDetails = m.top.findNode("episodeDetails")
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
-    m.downChevron = m.top.findNode("downChevron")
-    m.upChevron = m.top.findNode("upChevron")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
 end sub
 
@@ -37,41 +37,17 @@ sub initHandlers()
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
     m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
     m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
-    m.episodesList.observeField("focusExitDown", "onEpisodesFocusExitDown")
+    m.episodesGrid.observeField("itemFocused", "onEpisodeFocused")
+    m.episodesGrid.observeField("itemSelected", "onEpisodeSelected")
     m.episodeDetails.observeField("closeRequested", "onEpisodeDetailsCloseRequested")
     m.episodeDetails.observeField("selectedPerson", "onEpisodeDetailsPersonSelected")
-end sub
-
-'-------------------------------------------------------------------------------
-' onEpisodesFocusExitDown
-'-------------------------------------------------------------------------------
-sub onEpisodesFocusExitDown()
-    if m.pageState.focusArea = "episodes" then focusEpisodeDetails()
 end sub
 
 '-------------------------------------------------------------------------------
 ' onEpisodeSelected
 '-------------------------------------------------------------------------------
 sub onEpisodeSelected()
-    selected = m.episodesList.rowItemSelected
-    episodeNode = getEpisodeNodeAtPosition(selected)
-    if episodeNode = invalid then return
-    if SafeString(episodeNode.itemType, "") = "SeasonSummary" then
-        playFirstEpisode()
-        return
-    end if
-
-    episode = episodeNode.raw
-    episodeId = SafeString(FirstNonEmpty([episode.Id, episodeNode.itemId], ""), "")
-    if episodeId = "" then return
-
-    m.top.selectedEpisode = {
-        itemId: episodeId
-        item: episode
-        startPositionTicks: PlaybackProgress_GetTicksFromItem(episode)
-        playbackQueue: buildPlaybackQueue(m.pageState.episodes)
-        playbackQueueIndex: selected[1] - 1
-    }
+    focusEpisodeDetails()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -88,39 +64,23 @@ function getEpisodeNodeAtPosition(position as dynamic) as object
 end function
 
 '-------------------------------------------------------------------------------
+' getGridEpisodeNodeAtPosition
+'-------------------------------------------------------------------------------
+function getGridEpisodeNodeAtPosition(position as dynamic) as object
+    if position = invalid then return invalid
+    if m.episodesGrid.content = invalid then return invalid
+    if position < 0 or position >= m.episodesGrid.content.getChildCount() then return invalid
+
+    return m.episodesGrid.content.getChild(position)
+end function
+
+'-------------------------------------------------------------------------------
 ' getFocusedEpisodeNode
 '-------------------------------------------------------------------------------
 function getFocusedEpisodeNode() as object
+    if isVerticalEpisodeList() then return getGridEpisodeNodeAtPosition(m.episodesGrid.itemFocused)
     return getEpisodeNodeAtPosition(m.episodesList.rowItemFocused)
 end function
-
-' playFirstEpisode
-'-------------------------------------------------------------------------------
-sub playFirstEpisode()
-    episodes = m.pageState.episodes
-    if episodes = invalid or episodes.Count() = 0 then return
-
-    firstEpisode = invalid
-    for each episode in episodes
-        if isAssocArray(episode) = false then continue for
-
-        episodeId = SafeString(episode.Id, "")
-        if episodeId <> "" then
-            firstEpisode = episode
-            exit for
-        end if
-    end for
-
-    if firstEpisode = invalid then return
-
-    m.top.selectedEpisode = {
-        itemId: SafeString(firstEpisode.Id, "")
-        item: firstEpisode
-        startPositionTicks: PlaybackProgress_GetTicksFromItem(firstEpisode)
-        playbackQueue: buildPlaybackQueue(episodes)
-        playbackQueueIndex: 0
-    }
-end sub
 
 '-------------------------------------------------------------------------------
 ' onLoadRequestChanged
@@ -131,6 +91,7 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.season = request.season
+    m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
     m.pageState.focusArea = "episodes"
     clearEpisodes()
     m.episodeDetails.loadRequest = request
@@ -226,30 +187,24 @@ end sub
 ' renderEpisodes
 '-------------------------------------------------------------------------------
 sub renderEpisodes(episodes as object)
-    content = CreateObject("roSGNode", "ContentNode")
-    row = content.createChild("ContentNode")
+    rowContent = CreateObject("roSGNode", "ContentNode")
+    row = rowContent.createChild("ContentNode")
+    gridContent = CreateObject("roSGNode", "ContentNode")
+
     appendSeasonSummaryItem(row)
+    appendSeasonSummaryItem(gridContent)
 
     for each episode in episodes
         if isAssocArray(episode) = false then continue for
 
-        child = row.createChild("ContentNode")
-        child.title = getItemTitle(episode)
-        child.description = FirstNonEmpty([episode.Overview], "")
-        child.HDPosterUrl = getImageUrl(episode, "Primary", 530, 298)
-        child.AddFields({
-            itemId: SafeString(FirstNonEmpty([episode.Id], ""), "")
-            itemType: SafeString(FirstNonEmpty([episode.Type], ""), "")
-            episodeNumber: getEpisodeNumberText(episode)
-            episodeDate: getEpisodeDateText(episode)
-            progressPercent: getProgressPercent(episode)
-            progressWidth: getProgressWidth(episode)
-            raw: episode
-        })
+        appendEpisodeItem(row, episode)
+        appendEpisodeItem(gridContent, episode)
     end for
 
-    m.episodesList.content = content
-    m.episodesList.visible = row.getChildCount() > 0
+    hasEpisodes = row.getChildCount() > 0
+    m.episodesList.content = rowContent
+    m.episodesGrid.content = gridContent
+    setEpisodeListVisible(hasEpisodes)
     m.pageState.episodeWindowStart = 0
 end sub
 
@@ -258,13 +213,33 @@ end sub
 '-------------------------------------------------------------------------------
 sub clearEpisodes()
     m.episodesList.content = CreateObject("roSGNode", "ContentNode")
+    m.episodesGrid.content = CreateObject("roSGNode", "ContentNode")
     m.episodesList.visible = false
+    m.episodesGrid.visible = false
     m.episodeDetails.visible = false
     m.episodeDetails.itemContent = invalid
     m.pageState.episodeWindowStart = 0
     m.leftChevron.visible = false
     m.rightChevron.visible = false
-    showDetailsChevron(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' appendEpisodeItem
+'-------------------------------------------------------------------------------
+sub appendEpisodeItem(parent as object, episode as object)
+    child = parent.createChild("ContentNode")
+    child.title = getItemTitle(episode)
+    child.description = FirstNonEmpty([episode.Overview], "")
+    child.HDPosterUrl = getImageUrl(episode, "Primary", 530, 298)
+    child.AddFields({
+        itemId: SafeString(FirstNonEmpty([episode.Id], ""), "")
+        itemType: SafeString(FirstNonEmpty([episode.Type], ""), "")
+        episodeNumber: getEpisodeNumberText(episode)
+        episodeDate: getEpisodeDateText(episode)
+        progressPercent: getProgressPercent(episode)
+        progressWidth: getProgressWidth(episode)
+        raw: episode
+    })
 end sub
 
 '-------------------------------------------------------------------------------
@@ -296,6 +271,56 @@ sub appendSeasonSummaryItem(row as object)
         raw: season
     })
 end sub
+
+'-------------------------------------------------------------------------------
+' hasEpisodeItems
+'-------------------------------------------------------------------------------
+function hasEpisodeItems() as boolean
+    if isVerticalEpisodeList() then
+        return m.episodesGrid.content <> invalid and m.episodesGrid.content.getChildCount() > 0
+    end if
+
+    if m.episodesList.content = invalid then return false
+    if m.episodesList.content.getChildCount() = 0 then return false
+
+    row = m.episodesList.content.getChild(0)
+    return row <> invalid and row.getChildCount() > 0
+end function
+
+'-------------------------------------------------------------------------------
+' setEpisodeListVisible
+'-------------------------------------------------------------------------------
+sub setEpisodeListVisible(isVisible as boolean)
+    m.episodesList.visible = isVisible and isVerticalEpisodeList() = false
+    m.episodesGrid.visible = isVisible and isVerticalEpisodeList()
+end sub
+
+'-------------------------------------------------------------------------------
+' getActiveEpisodeList
+'-------------------------------------------------------------------------------
+function getActiveEpisodeList() as object
+    if isVerticalEpisodeList() then return m.episodesGrid
+    return m.episodesList
+end function
+
+'-------------------------------------------------------------------------------
+' isVerticalEpisodeList
+'-------------------------------------------------------------------------------
+function isVerticalEpisodeList() as boolean
+    return m.pageState.episodeListScroll = "vertical"
+end function
+
+'-------------------------------------------------------------------------------
+' getTVEpisodeListScrollSetting
+'-------------------------------------------------------------------------------
+function getTVEpisodeListScrollSetting() as string
+    settings = SettingsStore_Load()
+    keys = SettingsStore_Keys()
+    value = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
+
+    if LCase(value) = "vertical" then return "vertical"
+    return "horizontal"
+end function
 
 '-------------------------------------------------------------------------------
 ' getSeasonSummaryDescription
@@ -349,17 +374,14 @@ end sub
 ' focusEpisodesIfActive
 '-------------------------------------------------------------------------------
 sub focusEpisodesIfActive()
-    if m.episodesList.content = invalid then return
-    if m.episodesList.content.getChildCount() = 0 then return
-    if m.episodesList.content.getChild(0).getChildCount() = 0 then return
+    if hasEpisodeItems() = false then return
 
     m.pageState.focusArea = "episodes"
-    m.episodesList.visible = true
+    setEpisodeListVisible(true)
     m.episodeDetails.visible = false
     m.episodeDetails.callFunc("deactivate")
-    showDetailsChevron(false)
     m.top.setFocus(true)
-    m.episodesList.setFocus(true)
+    getActiveEpisodeList().setFocus(true)
     updateChevrons()
 end sub
 
@@ -369,26 +391,24 @@ end sub
 sub focusEpisodeDetails()
     m.pageState.focusArea = "details"
     m.episodesList.visible = false
+    m.episodesGrid.visible = false
     updateEpisodeDetails()
     m.episodeDetails.visible = true
     m.leftChevron.visible = false
     m.rightChevron.visible = false
-    showDetailsChevron(true)
     m.episodeDetails.callFunc("activate")
-end sub
-
-'-------------------------------------------------------------------------------
-' showDetailsChevron
-'-------------------------------------------------------------------------------
-sub showDetailsChevron(isDetailsVisible as boolean)
-    m.downChevron.visible = isDetailsVisible <> true
-    m.upChevron.visible = isDetailsVisible = true
 end sub
 
 '-------------------------------------------------------------------------------
 ' updateChevrons
 '-------------------------------------------------------------------------------
 sub updateChevrons()
+    if isVerticalEpisodeList() then
+        m.leftChevron.visible = false
+        m.rightChevron.visible = false
+        return
+    end if
+
     overflow = getEpisodeOverflowState()
     m.leftChevron.visible = overflow.left
     m.rightChevron.visible = overflow.right
@@ -636,11 +656,6 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
-
-    if key = "down" and m.pageState.focusArea = "episodes" then
-        focusEpisodeDetails()
-        return true
-    end if
 
     if key = "back" then
         Status_ClearMessage()

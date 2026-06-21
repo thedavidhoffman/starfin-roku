@@ -144,7 +144,7 @@ function getApplicationRegistryText() as object
         { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
         { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
         { key: keys.collectionDisplay, value: settings[keys.collectionDisplay] }
-        { key: keys.homeLibraryThumbnails, value: settings[keys.homeLibraryThumbnails] }
+        { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
         { key: keys.tmdbApiKey, value: truncateText(settings[keys.tmdbApiKey], 40) }
     ])
 end function

@@ -1,11 +1,11 @@
 ---
 name: roku-rowlist-focus
-description: Build or debug animated Roku SceneGraph RowList focus highlights, especially custom focusBitmapUri assets for mixed item sizes, thumbnail/poster rows, padded focus canvases, and alignment issues where the highlight is offset or inset from the visible image.
+description: Build or debug animated Roku SceneGraph RowList and MarkupGrid focus highlights, especially custom focusBitmapUri assets for mixed item sizes, thumbnail/poster rows, padded focus canvases, and alignment issues where the highlight is offset or inset from the visible image.
 ---
 
 # Roku RowList Focus
 
-Use this skill when implementing or fixing animated `RowList` focus highlights in Roku SceneGraph.
+Use this skill when implementing or fixing animated `RowList` or `MarkupGrid` focus highlights in Roku SceneGraph.
 
 ## Core Rule
 
@@ -18,7 +18,7 @@ Keep animated focus on the `RowList` when the highlight should glide between ite
 
 ## Geometry Pattern
 
-The focus bitmap is positioned by the `RowList` relative to the row item canvas, not relative to the visible thumbnail/poster alone.
+The focus bitmap is positioned by the list component relative to the item canvas, not relative to the visible thumbnail/poster alone. `RowList` and `MarkupGrid` can anchor the same bitmap differently, so a bitmap tuned for one component may drift in the other.
 
 For a reliable custom focus:
 
@@ -28,15 +28,22 @@ For a reliable custom focus:
 4. If the ring needs breathing room outside the image, increase `rowItemSize` and inset the item content; do not just add transparent padding to the PNG.
 5. If increasing `rowItemSize` changes visual gaps, compensate with `rowItemSpacing`.
 
-## Working Example From This Repo
+## Working Examples From This Repo
 
-`TVSeason` works because the item canvas and focus bitmap agree:
+`TVSeason` horizontal episode scrolling works because the item canvas and RowList-tuned focus bitmap agree:
 
 - `TVSeason.xml` uses `rowItemSize="[[575,590]]"`.
-- `TVEpisodeItem.xml` uses `contentGroup translation="[20,0]"`.
+- `TVEpisodeRowListItem.xml` uses `contentGroup translation="[20,0]"`.
 - The thumbnail mask is inside that group at `translation="[0,38]"` with size `530x298`.
-- The focus asset is `rounded-episode-thumbnail-focus-575x590.png`.
+- The RowList focus asset is `rounded-episode-thumbnail-horizontal-focus-575x590.png`.
 - The ring is drawn inside the `575x590` canvas around the translated thumbnail area, not around a standalone `530x298` image at origin.
+
+`TVSeason` vertical episode scrolling uses a `MarkupGrid` with the same item component, but it needs its own focus asset:
+
+- The MarkupGrid uses `itemSize="[575,590]"`.
+- The vertical focus asset is `rounded-episode-thumbnail-vertical-focus-575x590.png`.
+- The horizontal asset has non-transparent bounds starting around `x=38`; the vertical asset starts around `x=20` to match the item content inset.
+- Do not reuse a RowList-tuned bitmap on MarkupGrid without checking bounds; MarkupGrid may show the RowList compensation as a visible offset.
 
 For HomePage, use the same structure:
 
@@ -89,12 +96,16 @@ $bmp = [System.Drawing.Bitmap]::FromFile("images\masks\focus.png")
 Confirm:
 
 - PNG width and height match the referenced `rowItemSize`.
+- For MarkupGrid, PNG width and height match `itemSize`.
 - Non-transparent bounds line up with the image location inside the item component.
 - The ring is not drawn at `x=0` if the item image is inset.
 - The ring is not inset into the visible image unless that is intentional.
+- If the same item component appears in both RowList and MarkupGrid, inspect both rendered alignments before sharing one asset.
 
 ## Common Mistake
 
 Do not copy transparent padding from a working focus PNG without also copying the item layout that makes the padding correct.
 
 If a working item has `contentGroup translation="[20,0]"` and the new item image starts at `x=0`, copying the same padded focus bitmap will make the ring look offset or inset.
+
+Also do not assume `RowList` and `MarkupGrid` anchor `focusBitmapUri` identically. If a focus ring is correct in RowList but shifted in MarkupGrid, keep separate dash-case assets such as `*-horizontal-focus-<width>x<height>.png` and `*-vertical-focus-<width>x<height>.png`.
