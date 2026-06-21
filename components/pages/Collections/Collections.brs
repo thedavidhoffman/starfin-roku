@@ -189,14 +189,18 @@ end function
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
     if imageAspect = "wide" then
-        m.collectionsGrid.itemSize = [485, 348]
-        m.collectionsGrid.itemSpacing = [34, 26]
-        m.collectionsGrid.numColumns = 3
-        m.collectionsGrid.numRows = 2
-        m.collectionsGrid.focusBitmapUri = "pkg:/images/library/library-thumbnail-focus-485x348.png"
+        m.titleLabel.translation = [23, 120]
+        m.collectionsGrid.translation = [23, 208]
+        m.collectionsGrid.itemSize = [465, 348]
+        m.collectionsGrid.itemSpacing = [0, 11]
+        m.collectionsGrid.numColumns = 4
+        m.collectionsGrid.numRows = 3
+        m.collectionsGrid.focusBitmapUri = "pkg:/images/library/library-thumbnail-focus-465x348.png"
         return
     end if
 
+    m.titleLabel.translation = [96, 120]
+    m.collectionsGrid.translation = [96, 208]
     m.collectionsGrid.itemSize = [295, 463]
     m.collectionsGrid.itemSpacing = [-11, 26]
     m.collectionsGrid.numColumns = 6

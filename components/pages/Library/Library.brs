@@ -201,10 +201,10 @@ end function
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
     if imageAspect = "wide" then
-        m.titleLabel.translation = [48, 120]
-        m.itemsGrid.translation = [48, 208]
+        m.titleLabel.translation = [23, 120]
+        m.itemsGrid.translation = [23, 208]
         m.itemsGrid.itemSize = [465, 348]
-        m.itemsGrid.itemSpacing = [-17, 11]
+        m.itemsGrid.itemSpacing = [0, 11]
         m.itemsGrid.numColumns = 4
         m.itemsGrid.numRows = 3
         m.itemsGrid.focusBitmapUri = "pkg:/images/library/library-thumbnail-focus-465x348.png"
