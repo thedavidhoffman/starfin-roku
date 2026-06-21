@@ -420,11 +420,7 @@ sub onAccountDropdownItemSelected()
     if selectedItem = invalid then return
 
     closeMenu()
-    if selectedItem.id = "settings" then
-        requestSettingsOverlay()
-    else if selectedItem.id = "yourStats" then
-        m.top.yourStatsSelected = true
-    else if selectedItem.id = "logout" then
+    if selectedItem.id = "logout" then
         m.top.logoutSelected = true
     end if
 end sub
@@ -546,8 +542,6 @@ end sub
 '-------------------------------------------------------------------------------
 function getAccountDropdownItems() as object
     return [
-        { id: "settings", text: "Settings" }
-        { id: "yourStats", text: "Your Stats" }
         { id: "logout", text: "Logout" }
     ]
 end function

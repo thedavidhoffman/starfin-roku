@@ -289,7 +289,7 @@ function buildRowContent(key as string, title as string, items as object) as obj
             homeTitle: child.title
             homeSubtitle: child.description
             showSubtitle: shouldShowHomeItemSubtitle(key)
-            showImageBackground: shouldShowHomeItemImageBackground(key, item, imageUrl)
+            showImageBackground: false
             raw: item
         })
     end for
@@ -669,16 +669,7 @@ function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as stri
     imageUrl = getItemImageUrl(item, imageAspect)
     if imageUrl <> "" then return imageUrl
 
-    if key = "libraries" and isCollectionsLibrary(item) then return "pkg:/images/libraries/collections.png"
-
     return ""
-end function
-
-'-------------------------------------------------------------------------------
-' shouldShowHomeItemImageBackground
-'-------------------------------------------------------------------------------
-function shouldShowHomeItemImageBackground(key as string, item as dynamic, imageUrl as string) as boolean
-    return key = "libraries" and isCollectionsLibrary(item) and imageUrl = "pkg:/images/libraries/collections.png"
 end function
 
 '-------------------------------------------------------------------------------
