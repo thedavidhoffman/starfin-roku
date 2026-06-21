@@ -82,7 +82,7 @@ sub collectionsHandleHomeCollectionsSelected()
     m.collectionsPage = page
     m.dynamicPageHost.appendChild(page)
     m.homePage.visible = false
-    m.header.visible = false
+    m.header.visible = true
     page.callFunc("activate")
 end sub
 
@@ -159,7 +159,7 @@ sub libraryShow(selection as object, fromCollections as boolean)
     m.dynamicPageHost.appendChild(page)
     if m.collectionsPage <> invalid then m.collectionsPage.visible = false
     m.homePage.visible = false
-    m.header.visible = false
+    m.header.visible = true
     page.callFunc("activate")
 end sub
 
@@ -317,9 +317,11 @@ sub tvSeasonHandleCloseRequested()
 
     if m.tvShowPage <> invalid then
         m.tvShowPage.visible = true
+        m.header.visible = false
         m.tvShowPage.callFunc("activate")
     else if m.libraryPage <> invalid then
         m.libraryPage.visible = true
+        m.header.visible = true
         m.libraryPage.callFunc("activate")
     else
         m.homePage.visible = true
@@ -339,9 +341,11 @@ sub tvShowHandleCloseRequested()
 
     if m.personPage <> invalid then
         m.personPage.visible = true
+        m.header.visible = true
         m.personPage.callFunc("activate")
     else if m.libraryPage <> invalid then
         m.libraryPage.visible = true
+        m.header.visible = true
         m.libraryPage.callFunc("activate")
     else
         resetDynamicPages()
@@ -455,7 +459,7 @@ sub personShow(selection as object)
     if m.moviePage <> invalid then m.moviePage.visible = false
     if m.tvShowPage <> invalid then m.tvShowPage.visible = false
     m.homePage.visible = false
-    m.header.visible = false
+    m.header.visible = true
     page.callFunc("activate")
 end sub
 
@@ -510,12 +514,15 @@ sub personHandleCloseRequested()
 
     if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.visible = true
+        m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
     else if m.tvShowPage <> invalid then
         m.tvShowPage.visible = true
+        m.header.visible = false
         m.tvShowPage.callFunc("activate")
     else if m.moviePage <> invalid then
         m.moviePage.visible = true
+        m.header.visible = false
         m.moviePage.callFunc("activate")
     else
         m.homePage.visible = true
@@ -554,7 +561,7 @@ sub filmographyShow(selection as object)
     m.dynamicPageHost.appendChild(page)
     if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false
-    m.header.visible = false
+    m.header.visible = true
     page.callFunc("activate")
 end sub
 
@@ -589,9 +596,11 @@ sub movieHandleCloseRequested()
     if m.personPage <> invalid then
         if m.personSourceMoviePage <> invalid then m.moviePage = m.personSourceMoviePage
         m.personPage.visible = true
+        m.header.visible = true
         m.personPage.callFunc("activate")
     else if m.libraryPage <> invalid then
         m.libraryPage.visible = true
+        m.header.visible = true
         m.libraryPage.callFunc("activate")
     else
         resetDynamicPages()
@@ -630,7 +639,7 @@ sub playerShow(selection as object)
     m.videoPlayer = player
     m.dynamicPageHost.appendChild(player)
     m.homePage.visible = false
-    m.header.visible = false
+    m.header.visible = true
     player.setFocus(true)
 end sub
 
@@ -645,9 +654,11 @@ sub playerHandleCloseRequested()
 
     if m.moviePage <> invalid then
         m.moviePage.visible = true
+        m.header.visible = false
         m.moviePage.callFunc("activate")
     else if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.visible = true
+        m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
     else
         m.homePage.visible = true
