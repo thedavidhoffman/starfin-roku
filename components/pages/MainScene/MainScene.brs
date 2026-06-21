@@ -31,6 +31,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initValues()
     m.session = invalid
+    m.settings = SettingsStore_Load()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -70,6 +71,7 @@ sub collectionsHandleHomeCollectionsSelected()
     page = CreateObject("roSGNode", "Collections")
     page.observeField("closeRequested", "collectionsHandleCloseRequested")
     page.observeField("selectedCollection", "collectionsHandleCollectionSelected")
+    page.settings = m.settings
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -145,11 +147,13 @@ sub libraryShow(selection as object, fromCollections as boolean)
     page.observeField("closeRequested", "libraryHandleCloseRequested")
     page.observeField("selectedMovie", "libraryHandleMovieSelected")
     page.observeField("selectedSeries", "libraryHandleSeriesSelected")
+    page.settings = m.settings
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
         userId: m.session.userId
         libraryId: selection.libraryId
+        collectionType: SafeString(selection.collectionType, "")
         includeItemTypes: getLibraryIncludeItemTypes(SafeString(selection.collectionType, ""))
         title: SafeString(selection.title, "Library")
         item: selection.item
@@ -280,6 +284,7 @@ sub tvSeasonHandleTVShowSeasonSelected()
     page.observeField("closeRequested", "tvSeasonHandleCloseRequested")
     page.observeField("selectedEpisode", "tvSeasonHandleEpisodeSelected")
     page.observeField("selectedPerson", "personHandleTVSeasonPersonSelected")
+    page.settings = m.settings
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -842,6 +847,7 @@ sub navHandleOverlayClosed()
 
     request = closed.request
     if request <> invalid and request.id = "settings" and m.header <> invalid and m.header.visible = true then
+        applySettingsFromOverlay(closed.overlay)
         m.header.callFunc("focusHeader")
         return
     end if
@@ -880,9 +886,41 @@ end sub
 ' navShowApp
 '-------------------------------------------------------------------------------
 sub navShowApp()
+    m.settings = SettingsStore_Load()
     loadRequest = buildSessionLoadRequest()
     m.homePage.loadRequest = loadRequest
     navShowAppRoute()
+end sub
+
+'-------------------------------------------------------------------------------
+' applySettingsFromOverlay
+'-------------------------------------------------------------------------------
+sub applySettingsFromOverlay(overlay as dynamic)
+    if overlay = invalid then return
+    if overlay.settingsSaved <> true then return
+    if overlay.savedSettings = invalid then return
+
+    m.settings = overlay.savedSettings
+    fanOutSettings()
+end sub
+
+'-------------------------------------------------------------------------------
+' fanOutSettings
+'-------------------------------------------------------------------------------
+sub fanOutSettings()
+    applySettingsToPage(m.collectionsPage)
+    applySettingsToPage(m.libraryPage)
+    applySettingsToPage(m.tvSeasonPage)
+end sub
+
+'-------------------------------------------------------------------------------
+' applySettingsToPage
+'-------------------------------------------------------------------------------
+sub applySettingsToPage(page as dynamic)
+    if page = invalid then return
+    if m.settings = invalid then return
+
+    page.settings = m.settings
 end sub
 
 '-------------------------------------------------------------------------------

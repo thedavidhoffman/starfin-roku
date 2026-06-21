@@ -12,7 +12,17 @@ sub init()
     m.pageState = {
         request: invalid
         items: []
+        imageAspect: "poster"
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    m.pageState.imageAspect = getLibraryImageAspect()
+    applyGridLayout(m.pageState.imageAspect)
+    renderItems(m.pageState.items)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -23,7 +33,9 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    m.pageState.imageAspect = getLibraryImageAspect()
     m.titleLabel.text = SafeString(request.title, "Library")
+    applyGridLayout(m.pageState.imageAspect)
     Status_SetLoading()
     renderItems([])
 
@@ -76,14 +88,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub renderItems(items as object)
     content = CreateObject("roSGNode", "ContentNode")
+    imageAspect = m.pageState.imageAspect
 
     for each item in items
         if isAssocArray(item) = false then continue for
 
         child = content.createChild("ContentNode")
-        child.HDPosterUrl = getItemImageUrl(item)
+        child.HDPosterUrl = getItemImageUrl(item, imageAspect)
         child.AddFields({
-            imageAspect: "poster"
+            imageAspect: imageAspect
             raw: item
         })
     end for
@@ -114,16 +127,98 @@ end sub
 '-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
-function getItemImageUrl(item as dynamic) as string
+function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if isAssocArray(item) = false then return ""
 
     itemId = FirstNonEmpty([item.Id], "")
-    tag = ""
-    if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
-    if itemId <> "" and tag <> "" then return buildImageUrl(itemId, "Primary", tag, 250, 375)
+    if itemId = "" then return ""
+
+    if imageAspect = "wide" then
+        imageUrl = getImageUrlForType(itemId, item, "Thumb", 440, 248)
+        if imageUrl <> "" then return imageUrl
+
+        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 440, 248)
+        if imageUrl <> "" then return imageUrl
+
+        return getImageUrlForType(itemId, item, "Primary", 440, 248)
+    end if
+
+    return getImageUrlForType(itemId, item, "Primary", 250, 375)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageUrlForType
+'-------------------------------------------------------------------------------
+function getImageUrlForType(itemId as string, item as dynamic, imageType as string, width as integer, height as integer) as string
+    tag = getImageTag(item, imageType)
+    if tag = "" then return ""
+
+    return buildImageUrl(itemId, imageType, tag, width, height)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageTag
+'-------------------------------------------------------------------------------
+function getImageTag(item as dynamic, imageType as string) as string
+    if item = invalid then return ""
+
+    if imageType = "Backdrop" then
+        if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then return item.BackdropImageTags[0]
+        return ""
+    end if
+
+    if item.ImageTags = invalid then return ""
+    if imageType = "Primary" and item.ImageTags.Primary <> invalid then return item.ImageTags.Primary
+    if imageType = "Thumb" and item.ImageTags.Thumb <> invalid then return item.ImageTags.Thumb
 
     return ""
 end function
+
+'-------------------------------------------------------------------------------
+' getLibraryImageAspect
+'-------------------------------------------------------------------------------
+function getLibraryImageAspect() as string
+    settings = m.top.settings
+    keys = SettingsStore_Keys()
+    settingKey = keys.movieLibraryDisplay
+
+    request = m.pageState.request
+    collectionType = ""
+    if request <> invalid then collectionType = SafeString(request.collectionType, "")
+
+    if collectionType = "tvshows" then
+        settingKey = keys.tvLibraryDisplay
+    else if collectionType = "collection" then
+        settingKey = keys.collectionDisplay
+    end if
+
+    if LCase(settings[settingKey]) = "thumbnail" then return "wide"
+    return "poster"
+end function
+
+'-------------------------------------------------------------------------------
+' applyGridLayout
+'-------------------------------------------------------------------------------
+sub applyGridLayout(imageAspect as string)
+    if imageAspect = "wide" then
+        m.titleLabel.translation = [48, 120]
+        m.itemsGrid.translation = [48, 208]
+        m.itemsGrid.itemSize = [465, 348]
+        m.itemsGrid.itemSpacing = [-17, 11]
+        m.itemsGrid.numColumns = 4
+        m.itemsGrid.numRows = 3
+        m.itemsGrid.focusBitmapUri = "pkg:/images/library/library-thumbnail-focus-465x348.png"
+        return
+    end if
+
+    m.titleLabel.translation = [96, 120]
+    m.itemsGrid.translation = [96, 208]
+    m.itemsGrid.itemSize = [295, 463]
+    m.itemsGrid.itemSpacing = [-11, 26]
+    m.itemsGrid.numColumns = 6
+    m.itemsGrid.numRows = 2
+    m.itemsGrid.focusBitmapUri = "pkg:/images/library/library-poster-focus-295x463.png"
+end sub
 
 '-------------------------------------------------------------------------------
 ' buildImageUrl

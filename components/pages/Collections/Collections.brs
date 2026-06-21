@@ -12,7 +12,17 @@ sub init()
     m.pageState = {
         request: invalid
         collections: []
+        imageAspect: "poster"
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    m.pageState.imageAspect = getCollectionImageAspect()
+    applyGridLayout(m.pageState.imageAspect)
+    renderCollections(m.pageState.collections)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -23,7 +33,9 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    m.pageState.imageAspect = getCollectionImageAspect()
     m.titleLabel.text = SafeString(request.title, "Collections")
+    applyGridLayout(m.pageState.imageAspect)
     Status_SetLoading()
     renderCollections([])
 
@@ -75,14 +87,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub renderCollections(collections as object)
     content = CreateObject("roSGNode", "ContentNode")
+    imageAspect = m.pageState.imageAspect
 
     for each item in collections
         if isAssocArray(item) = false then continue for
 
         child = content.createChild("ContentNode")
-        child.HDPosterUrl = getItemImageUrl(item)
+        child.HDPosterUrl = getItemImageUrl(item, imageAspect)
         child.AddFields({
-            imageAspect: "poster"
+            imageAspect: imageAspect
             raw: item
         })
     end for
@@ -113,16 +126,83 @@ end sub
 '-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
-function getItemImageUrl(item as dynamic) as string
+function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if isAssocArray(item) = false then return ""
 
     itemId = FirstNonEmpty([item.Id], "")
-    tag = ""
-    if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
-    if itemId <> "" and tag <> "" then return buildImageUrl(itemId, "Primary", tag, 250, 375)
+    if itemId = "" then return ""
+
+    if imageAspect = "wide" then
+        imageUrl = getImageUrlForType(itemId, item, "Thumb", 440, 248)
+        if imageUrl <> "" then return imageUrl
+
+        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 440, 248)
+        if imageUrl <> "" then return imageUrl
+
+        return getImageUrlForType(itemId, item, "Primary", 440, 248)
+    end if
+
+    return getImageUrlForType(itemId, item, "Primary", 250, 375)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageUrlForType
+'-------------------------------------------------------------------------------
+function getImageUrlForType(itemId as string, item as dynamic, imageType as string, width as integer, height as integer) as string
+    tag = getImageTag(item, imageType)
+    if tag = "" then return ""
+
+    return buildImageUrl(itemId, imageType, tag, width, height)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageTag
+'-------------------------------------------------------------------------------
+function getImageTag(item as dynamic, imageType as string) as string
+    if item = invalid then return ""
+
+    if imageType = "Backdrop" then
+        if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then return item.BackdropImageTags[0]
+        return ""
+    end if
+
+    if item.ImageTags = invalid then return ""
+    if imageType = "Primary" and item.ImageTags.Primary <> invalid then return item.ImageTags.Primary
+    if imageType = "Thumb" and item.ImageTags.Thumb <> invalid then return item.ImageTags.Thumb
 
     return ""
 end function
+
+'-------------------------------------------------------------------------------
+' getCollectionImageAspect
+'-------------------------------------------------------------------------------
+function getCollectionImageAspect() as string
+    keys = SettingsStore_Keys()
+    value = m.top.settings[keys.collectionDisplay]
+
+    if LCase(value) = "thumbnail" then return "wide"
+    return "poster"
+end function
+
+'-------------------------------------------------------------------------------
+' applyGridLayout
+'-------------------------------------------------------------------------------
+sub applyGridLayout(imageAspect as string)
+    if imageAspect = "wide" then
+        m.collectionsGrid.itemSize = [485, 348]
+        m.collectionsGrid.itemSpacing = [34, 26]
+        m.collectionsGrid.numColumns = 3
+        m.collectionsGrid.numRows = 2
+        m.collectionsGrid.focusBitmapUri = "pkg:/images/library/library-thumbnail-focus-485x348.png"
+        return
+    end if
+
+    m.collectionsGrid.itemSize = [295, 463]
+    m.collectionsGrid.itemSpacing = [-11, 26]
+    m.collectionsGrid.numColumns = 6
+    m.collectionsGrid.numRows = 2
+    m.collectionsGrid.focusBitmapUri = "pkg:/images/library/library-poster-focus-295x463.png"
+end sub
 
 '-------------------------------------------------------------------------------
 ' buildImageUrl

@@ -103,6 +103,19 @@ sub onLoadRequestChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
+
+    if m.pageState.focusArea = "episodes" then
+        setEpisodeListVisible(hasEpisodeItems())
+        updateChevrons()
+        focusEpisodesIfActive()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
 ' onTVSeasonResponse
 '-------------------------------------------------------------------------------
 sub onTVSeasonResponse()
@@ -314,9 +327,8 @@ end function
 ' getTVEpisodeListScrollSetting
 '-------------------------------------------------------------------------------
 function getTVEpisodeListScrollSetting() as string
-    settings = SettingsStore_Load()
     keys = SettingsStore_Keys()
-    value = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
+    value = m.top.settings[keys.tvEpisodeListDisplay]
 
     if LCase(value) = "vertical" then return "vertical"
     return "horizontal"
