@@ -84,11 +84,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    if hasRenderedRows() then
-        focusShelf(m.homeState.focusedShelfIndex)
-    else
-        m.top.setFocus(true)
-    end if
+    refreshHomeData()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -99,6 +95,18 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.homeState.request = request
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshHomeData
+'-------------------------------------------------------------------------------
+sub refreshHomeData()
+    request = m.homeState.request
+    if request = invalid then
+        m.top.setFocus(true)
+        return
+    end if
+
     m.homeState.rows = {}
     m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList", "favorites"]
     m.homeState.latestLibraries = {}
@@ -668,6 +676,9 @@ end function
 function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as string) as string
     imageUrl = getItemImageUrl(item, imageAspect)
     if imageUrl <> "" then return imageUrl
+
+    if imageAspect = "wide" then return "pkg:/images/homepage/home-page-thumbnail-placeholder.png"
+    if imageAspect = "poster" then return "pkg:/images/homepage/home-page-poster-placeholder.png"
 
     return ""
 end function
