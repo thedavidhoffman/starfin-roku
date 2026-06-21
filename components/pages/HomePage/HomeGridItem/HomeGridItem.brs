@@ -32,7 +32,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
     if imageAspect = "wide" then
-        m.posterMask.maskUri = "pkg:/images/masks/home-page-thumbnail-440x248.png"
+        m.posterMask.maskUri = "pkg:/images/homepage/home-page-thumbnail-mask-440x248.png"
         m.posterMask.maskSize = [440, 248]
         m.poster.width = 440
         m.poster.height = 248
@@ -51,7 +51,7 @@ sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
             m.title.numLines = 2
         end if
     else
-        m.posterMask.maskUri = "pkg:/images/masks/rounded-poster-250x375.png"
+        m.posterMask.maskUri = "pkg:/images/homepage/home-page-poster-mask-250x375.png"
         m.posterMask.maskSize = [250, 375]
         m.poster.width = 250
         m.poster.height = 375
