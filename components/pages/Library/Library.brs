@@ -201,7 +201,7 @@ end function
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
     if imageAspect = "wide" then
-        m.titleLabel.translation = [23, 120]
+        m.titleLabel.translation = [460, 120]
         m.itemsGrid.translation = [23, 208]
         m.itemsGrid.itemSize = [465, 348]
         m.itemsGrid.itemSpacing = [0, 11]
@@ -211,7 +211,7 @@ sub applyGridLayout(imageAspect as string)
         return
     end if
 
-    m.titleLabel.translation = [96, 120]
+    m.titleLabel.translation = [460, 120]
     m.itemsGrid.translation = [96, 208]
     m.itemsGrid.itemSize = [295, 463]
     m.itemsGrid.itemSpacing = [-11, 26]
