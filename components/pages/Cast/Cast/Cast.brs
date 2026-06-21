@@ -36,7 +36,7 @@ sub onCastChanged()
         for each person in people
             if isAssocArray(person) = false then continue for
 
-            personName = FirstNonEmpty([person.Name, person.name], "")
+            personName = FirstNonEmpty([person.Name], "")
             if personName = "" then continue for
 
             personNode = row.createChild("ContentNode")
@@ -44,7 +44,7 @@ sub onCastChanged()
             personNode.description = getPersonSubtitle(person)
             personNode.HDPosterUrl = getPersonImageUrl(person)
             personNode.AddFields({
-                itemId: FirstNonEmpty([person.Id, person.id], "")
+                itemId: FirstNonEmpty([person.Id], "")
                 raw: person
             })
         end for
@@ -164,8 +164,8 @@ end function
 ' getPersonSubtitle
 '-------------------------------------------------------------------------------
 function getPersonSubtitle(person as object) as string
-    personType = FirstNonEmpty([person.Type, person.type], "Unknown")
-    role = FirstNonEmpty([person.Role, person.role], "")
+    personType = FirstNonEmpty([person.Type], "Unknown")
+    role = FirstNonEmpty([person.Role], "")
 
     if LCase(personType) = "actor" and role <> "" then return role
     return personType
@@ -175,8 +175,8 @@ end function
 ' getPersonImageUrl
 '-------------------------------------------------------------------------------
 function getPersonImageUrl(person as object) as string
-    personId = FirstNonEmpty([person.Id, person.id], "")
-    tag = FirstNonEmpty([person.PrimaryImageTag, person.primaryImageTag], "")
+    personId = FirstNonEmpty([person.Id], "")
+    tag = FirstNonEmpty([person.PrimaryImageTag], "")
     if personId = "" or tag = "" then return "pkg:/images/cast/person-placeholder-195x195.png"
 
     return NormalizeServerUrl(m.top.server) + "/Items/" + personId + "/Images/Primary?tag=" + tag + "&maxWidth=195&maxHeight=195&quality=90"

@@ -53,7 +53,7 @@ end sub
 ' selectHomeItem
 '-------------------------------------------------------------------------------
 sub selectHomeItem(item as dynamic)
-    itemId = SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
+    itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId = "" then return
 
     if isCollectionsLibrary(item) then
@@ -201,11 +201,11 @@ sub queueLatestMediaRows(libraries as object)
     for each item in libraries
         if isAssocArray(item) = false then continue for
 
-        collectionType = LCase(FirstNonEmpty([item.CollectionType, item.collectionType], ""))
+        collectionType = LCase(FirstNonEmpty([item.CollectionType], ""))
         if collectionType <> "boxsets" and collectionType <> "livetv" and collectionType <> "program" then
             library = {
-                id: SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
-                name: FirstNonEmpty([item.Name, item.name], "Library")
+                id: SafeString(FirstNonEmpty([item.Id], ""), "")
+                name: FirstNonEmpty([item.Name], "Library")
                 collectionType: collectionType
             }
 
@@ -286,18 +286,11 @@ function buildRowContent(key as string, title as string, items as object) as obj
         if isAssocArray(item) = false then continue for
 
         child = content.createChild("ContentNode")
-        child.title = getHomeItemTitle(key, item)
-        child.description = getHomeItemSubtitle(key, item)
         imageUrl = getHomeItemImageUrl(key, item, imageAspect)
         child.HDPosterUrl = imageUrl
         child.AddFields({
-            itemId: SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
-            itemType: SafeString(FirstNonEmpty([item.Type, item.type], ""), "")
             imageAspect: imageAspect
-            homeTitle: child.title
-            homeSubtitle: child.description
             showSubtitle: shouldShowHomeItemSubtitle(key)
-            showImageBackground: false
             raw: item
         })
     end for
@@ -546,139 +539,11 @@ function getFavoriteItems(payload as dynamic) as object
 end function
 
 '-------------------------------------------------------------------------------
-' getItemTitle
-'-------------------------------------------------------------------------------
-function getItemTitle(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-    return FirstNonEmpty([item.Name, item.name, item.SeriesName, item.Album, item.Type], "Untitled")
-end function
-
-'-------------------------------------------------------------------------------
-' getItemSubtitle
-'-------------------------------------------------------------------------------
-function getItemSubtitle(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-    return FirstNonEmpty([item.SeriesName, item.AlbumArtist, item.Album, item.CollectionType, item.Type], "")
-end function
-
-'-------------------------------------------------------------------------------
-' getHomeItemTitle
-'-------------------------------------------------------------------------------
-function getHomeItemTitle(key as string, item as dynamic) as string
-    itemType = LCase(SafeString(FirstNonEmpty([item.Type, item.type], ""), ""))
-    if itemType = "movie" then
-        movieName = FirstNonEmpty([item.Name, item.name, item.title], "")
-        if movieName <> "" then return movieName
-    end if
-
-    if isPlaybackProgressRow(key) then
-        if itemType = "episode" then
-            seriesName = getEpisodeSeriesName(item)
-            if seriesName <> "" then return seriesName
-        end if
-    end if
-
-    return getItemTitle(item)
-end function
-
-'-------------------------------------------------------------------------------
-' isPlaybackProgressRow
-'-------------------------------------------------------------------------------
-function isPlaybackProgressRow(key as string) as boolean
-    return key = "continueWatching" or key = "nextUp"
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeSeriesName
-'-------------------------------------------------------------------------------
-function getEpisodeSeriesName(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-
-    return FirstNonEmpty([item.SeriesName, item.seriesName], "")
-end function
-
-'-------------------------------------------------------------------------------
-' getHomeItemSubtitle
-'-------------------------------------------------------------------------------
-function getHomeItemSubtitle(key as string, item as dynamic) as string
-    if key = "libraries" then return ""
-
-    itemType = LCase(SafeString(FirstNonEmpty([item.Type, item.type], ""), ""))
-    if isLatestMediaRow(key) and itemType = "series" then
-        seriesYearRange = getSeriesYearRange(item)
-        if seriesYearRange <> "" then return seriesYearRange
-    end if
-
-    if itemType = "movie" then
-        productionYear = FirstNonEmpty([item.ProductionYear, item.productionYear], "")
-        if productionYear <> "" then return SafeString(productionYear, "")
-    end if
-
-    if isPlaybackProgressRow(key) then
-        if itemType = "episode" then
-            episodeName = getEpisodeDisplaySubtitle(item)
-            if episodeName <> "" then return episodeName
-        end if
-    end if
-
-    return getItemSubtitle(item)
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeDisplaySubtitle
-'-------------------------------------------------------------------------------
-function getEpisodeDisplaySubtitle(item as dynamic) as string
-    episodeName = FirstNonEmpty([item.Name, item.name, item.title], "")
-    seasonNumber = FirstNonEmpty([item.ParentIndexNumber, item.parentIndexNumber], "")
-    episodeNumber = FirstNonEmpty([item.IndexNumber, item.indexNumber], "")
-
-    if seasonNumber = "" or episodeNumber = "" then return episodeName
-
-    return "S" + SafeString(seasonNumber, "") + "E" + SafeString(episodeNumber, "") + " - " + episodeName
-end function
-
-'-------------------------------------------------------------------------------
-' isLatestMediaRow
-'-------------------------------------------------------------------------------
-function isLatestMediaRow(key as string) as boolean
-    return Left(key, 7) = "latest:"
-end function
-
-'-------------------------------------------------------------------------------
-' getSeriesYearRange
-'-------------------------------------------------------------------------------
-function getSeriesYearRange(item as dynamic) as string
-    productionYear = FirstNonEmpty([item.ProductionYear, item.productionYear], "")
-    if productionYear = "" then return ""
-
-    status = LCase(FirstNonEmpty([item.Status, item.status], ""))
-    if status = "continuing" then return SafeString(productionYear, "") + " - Present"
-
-    if status = "ended" then
-        endYear = getYearFromDate(FirstNonEmpty([item.EndDate, item.endDate], ""))
-        if endYear <> "" then return SafeString(productionYear, "") + " - " + endYear
-    end if
-
-    return ""
-end function
-
-'-------------------------------------------------------------------------------
-' getYearFromDate
-'-------------------------------------------------------------------------------
-function getYearFromDate(value as string) as string
-    if Len(value) < 4 then return ""
-    return Left(value, 4)
-end function
-
-'-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as string) as string
     imageUrl = getItemImageUrl(item, imageAspect)
     if imageUrl <> "" then return imageUrl
-
-    if imageAspect = "wide" then return "pkg:/images/homepage/home-page-thumbnail-placeholder.png"
-    if imageAspect = "poster" then return "pkg:/images/homepage/home-page-poster-placeholder.png"
 
     return ""
 end function
@@ -689,11 +554,11 @@ end function
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if isAssocArray(item) = false then return ""
 
-    directUrl = FirstNonEmpty([item.ImageURL, item.imageURL, item.ImageUrl, item.imageUrl, item.thumbnailURL, item.PrimaryImageUrl], "")
+    directUrl = FirstNonEmpty([item.ImageURL, item.ImageUrl, item.PrimaryImageUrl], "")
     if directUrl <> "" then return directUrl
 
     imageSize = getImageSize(imageAspect)
-    itemId = FirstNonEmpty([item.Id, item.id], "")
+    itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
     if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
@@ -723,7 +588,7 @@ end function
 function isPlayableMovie(item as dynamic) as boolean
     if isAssocArray(item) = false then return false
 
-    itemType = LCase(FirstNonEmpty([item.Type, item.type], ""))
+    itemType = LCase(FirstNonEmpty([item.Type], ""))
     return itemType = "movie" or itemType = "video"
 end function
 
@@ -733,7 +598,7 @@ end function
 function isTVSeries(item as dynamic) as boolean
     if isAssocArray(item) = false then return false
 
-    itemType = LCase(FirstNonEmpty([item.Type, item.type], ""))
+    itemType = LCase(FirstNonEmpty([item.Type], ""))
     return itemType = "series"
 end function
 

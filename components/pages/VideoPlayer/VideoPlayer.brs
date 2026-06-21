@@ -214,7 +214,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
     if item = invalid then return "Video"
-    return FirstNonEmpty([item.Name, item.name, item.title], "Video")
+    return FirstNonEmpty([item.Name], "Video")
 end function
 
 '-------------------------------------------------------------------------------
@@ -225,7 +225,6 @@ function getRuntimeSeconds(item as dynamic) as float
 
     runtimeTicks = 0
     if item.RunTimeTicks <> invalid then runtimeTicks = item.RunTimeTicks
-    if runtimeTicks = 0 and item.runtimeTicks <> invalid then runtimeTicks = item.runtimeTicks
     if runtimeTicks = 0 then return 0
 
     return runtimeTicks / 10000000

@@ -49,7 +49,7 @@ sub onSeasonSelected()
     if seasonNode = invalid then return
 
     season = seasonNode.raw
-    seasonId = SafeString(FirstNonEmpty([season.Id, season.id, seasonNode.itemId], ""), "")
+    seasonId = SafeString(FirstNonEmpty([season.Id, seasonNode.itemId], ""), "")
     if seasonId = "" then return
 
     series = m.pageState.series
@@ -122,7 +122,7 @@ sub renderSeries(item as dynamic)
         title: getItemTitle(item)
         metaLine1: getMetaText(item)
         metaLine2: getGenreText(item)
-        overview: FirstNonEmpty([item.Overview, item.overview], "")
+        overview: FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)
 end sub
@@ -140,8 +140,8 @@ sub renderSeasons(seasons as object)
         child.title = getItemTitle(season)
         child.HDPosterUrl = getImageUrl(season, "Primary", 208, 312)
         child.AddFields({
-            itemId: SafeString(FirstNonEmpty([season.Id, season.id], ""), "")
-            itemType: SafeString(FirstNonEmpty([season.Type, season.type], ""), "")
+            itemId: SafeString(FirstNonEmpty([season.Id], ""), "")
+            itemType: SafeString(FirstNonEmpty([season.Type], ""), "")
             raw: season
         })
     end for
@@ -233,7 +233,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
     if isAssocArray(item) = false then return "Series"
-    return FirstNonEmpty([item.Name, item.name, item.title], "Series")
+    return FirstNonEmpty([item.Name], "Series")
 end function
 
 '-------------------------------------------------------------------------------
@@ -249,7 +249,7 @@ function getMetaText(item as dynamic) as string
     episodeCount = FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
     if episodeCount <> "" then parts.Push(SafeString(episodeCount, "") + " episodes")
 
-    status = FirstNonEmpty([item.Status, item.status], "")
+    status = FirstNonEmpty([item.Status], "")
     if status <> "" then parts.Push(status)
 
     rating = FirstNonEmpty([item.OfficialRating], "")
@@ -300,7 +300,7 @@ end function
 function getBackdropUrl(item as dynamic) as string
     if item = invalid then return ""
     if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
-        itemId = FirstNonEmpty([item.Id, item.id], "")
+        itemId = FirstNonEmpty([item.Id], "")
         return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], 1920, 1080)
     end if
 
@@ -313,7 +313,7 @@ end function
 function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
     if item = invalid then return ""
 
-    itemId = FirstNonEmpty([item.Id, item.id], "")
+    itemId = FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
 
     tag = ""

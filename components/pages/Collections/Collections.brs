@@ -62,7 +62,7 @@ sub onCollectionSelected()
     if node = invalid then return
 
     item = node.raw
-    itemId = SafeString(FirstNonEmpty([item.Id, item.id, node.itemId], ""), "")
+    itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId = "" then return
 
     m.top.selectedCollection = {
@@ -81,11 +81,8 @@ sub renderCollections(collections as object)
         if isAssocArray(item) = false then continue for
 
         child = content.createChild("ContentNode")
-        child.title = getItemTitle(item)
         child.HDPosterUrl = getItemImageUrl(item)
         child.AddFields({
-            itemId: SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
-            itemType: SafeString(FirstNonEmpty([item.Type, item.type], ""), "")
             imageAspect: "poster"
             raw: item
         })
@@ -115,20 +112,12 @@ sub focusCollectionsIfActive()
 end sub
 
 '-------------------------------------------------------------------------------
-' getItemTitle
-'-------------------------------------------------------------------------------
-function getItemTitle(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-    return FirstNonEmpty([item.Name, item.name, item.title], "Untitled")
-end function
-
-'-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic) as string
     if isAssocArray(item) = false then return ""
 
-    itemId = FirstNonEmpty([item.Id, item.id], "")
+    itemId = FirstNonEmpty([item.Id], "")
     tag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
     if itemId <> "" and tag <> "" then return buildImageUrl(itemId, "Primary", tag, 250, 375)

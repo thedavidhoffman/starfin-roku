@@ -65,7 +65,7 @@ sub renderMovie(item as dynamic)
         title: getItemTitle(item)
         metaLine1: getPrimaryMetaText(item)
         metaLine2: getSecondaryMetaText(item)
-        overview: FirstNonEmpty([item.Overview, item.overview], "")
+        overview: FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)
 end sub
@@ -128,7 +128,7 @@ sub playCurrentMovie()
     request = m.pageState.request
     if request = invalid or item = invalid then return
 
-    itemId = SafeString(FirstNonEmpty([item.Id, item.id, request.itemId], ""), "")
+    itemId = SafeString(FirstNonEmpty([item.Id, request.itemId], ""), "")
     if itemId = "" then return
 
     m.top.playSelected = {
@@ -142,7 +142,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
     if isAssocArray(item) = false then return "Movie"
-    return FirstNonEmpty([item.Name, item.name, item.title], "Movie")
+    return FirstNonEmpty([item.Name], "Movie")
 end function
 
 '-------------------------------------------------------------------------------
@@ -205,9 +205,9 @@ function getDirectorText(item as dynamic) as string
 
     for each person in item.People
         if person = invalid then continue for
-        personType = LCase(FirstNonEmpty([person.Type, person.type], ""))
+        personType = LCase(FirstNonEmpty([person.Type], ""))
         if personType = "director" then
-            name = FirstNonEmpty([person.Name, person.name], "")
+            name = FirstNonEmpty([person.Name], "")
             if name <> "" then directors.Push(name)
         end if
     end for
@@ -231,7 +231,7 @@ end function
 function getBackdropUrl(item as dynamic) as string
     if item = invalid then return ""
     if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
-        itemId = FirstNonEmpty([item.Id, item.id], "")
+        itemId = FirstNonEmpty([item.Id], "")
         return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], 1920, 1080)
     end if
 
@@ -244,7 +244,7 @@ end function
 function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
     if item = invalid then return ""
 
-    itemId = FirstNonEmpty([item.Id, item.id], "")
+    itemId = FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
 
     tag = ""

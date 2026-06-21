@@ -74,7 +74,7 @@ sub collectionsHandleHomeCollectionsSelected()
         token: m.session.token
         userId: m.session.userId
         libraryId: selection.libraryId
-        title: FirstNonEmpty([selection.item.Name, selection.item.name], "Collections")
+        title: FirstNonEmpty([selection.item.Name], "Collections")
         item: selection.item
     }
 
@@ -97,7 +97,7 @@ sub collectionsHandleCollectionSelected()
     libraryShow({
         libraryId: selection.itemId
         collectionType: "collection"
-        title: FirstNonEmpty([selection.item.Name, selection.item.name], "Collection")
+        title: FirstNonEmpty([selection.item.Name], "Collection")
         item: selection.item
     }, true)
 end sub
@@ -127,7 +127,7 @@ sub libraryHandleHomeLibrarySelected()
     libraryShow({
         libraryId: selection.libraryId
         collectionType: selection.collectionType
-        title: FirstNonEmpty([selection.item.Name, selection.item.name], "Library")
+        title: FirstNonEmpty([selection.item.Name], "Library")
         item: selection.item
     }, false)
 end sub

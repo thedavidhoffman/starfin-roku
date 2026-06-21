@@ -70,7 +70,7 @@ sub renderPerson(person as dynamic)
 
     m.nameLabel.text = getPersonName(person)
     m.lifeLabel.text = getLifeText(person)
-    m.overviewLabel.text = FirstNonEmpty([person.Overview, person.overview], "Biographical information for this person is not currently available.")
+    m.overviewLabel.text = FirstNonEmpty([person.Overview], "Biographical information for this person is not currently available.")
 
     imageUrl = getPersonImageUrl(person, 300, 450)
     m.personImage.visible = imageUrl <> ""
@@ -100,17 +100,12 @@ sub renderRelated(items as object)
     for each item in items
         if isAssocArray(item) = false then continue for
 
-        itemId = SafeString(FirstNonEmpty([item.Id, item.id], ""), "")
-        itemType = SafeString(FirstNonEmpty([item.Type, item.type], ""), "")
+        itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
         if itemId = "" then continue for
 
         child = row.createChild("ContentNode")
-        child.title = getItemTitle(item)
-        child.description = getItemSubtitle(item)
         child.HDPosterUrl = getItemImageUrl(item)
         child.AddFields({
-            itemId: itemId
-            itemType: itemType
             imageAspect: "poster"
             raw: item
         })
@@ -200,13 +195,14 @@ sub onRelatedItemSelected()
     itemNode = row.getChild(selected[1])
     if itemNode = invalid then return
 
+    item = itemNode.raw
     selection = {
-        itemId: SafeString(itemNode.itemId, "")
-        item: itemNode.raw
+        itemId: SafeString(FirstNonEmpty([item.Id], ""), "")
+        item: item
     }
     if selection.itemId = "" then return
 
-    itemType = LCase(SafeString(itemNode.itemType, ""))
+    itemType = LCase(SafeString(FirstNonEmpty([item.Type], ""), ""))
     if itemType = "movie" or itemType = "video" then
         m.top.selectedMovie = selection
     else if itemType = "series" then
@@ -219,7 +215,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getPersonName(person as dynamic) as string
     if isAssocArray(person) = false then return "Person"
-    return FirstNonEmpty([person.Name, person.name, person.title], "Person")
+    return FirstNonEmpty([person.Name], "Person")
 end function
 
 '-------------------------------------------------------------------------------
@@ -242,15 +238,14 @@ end function
 function getTmdbPersonId(person as dynamic) as string
     if isAssocArray(person) = false then return ""
     externalUrls = person.ExternalUrls
-    if externalUrls = invalid then externalUrls = person.externalUrls
     if externalUrls = invalid then return ""
 
     for each externalUrl in externalUrls
         if isAssocArray(externalUrl) = false then continue for
 
-        name = LCase(FirstNonEmpty([externalUrl.Name, externalUrl.name], ""))
+        name = LCase(FirstNonEmpty([externalUrl.Name], ""))
         if name = "tmdb" then
-            url = FirstNonEmpty([externalUrl.Url, externalUrl.url], "")
+            url = FirstNonEmpty([externalUrl.Url], "")
             return getTrailingUrlSegment(url)
         end if
     end for
@@ -306,27 +301,6 @@ function formatDate(value as string) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getItemTitle
-'-------------------------------------------------------------------------------
-function getItemTitle(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-    return FirstNonEmpty([item.Name, item.name, item.SeriesName, item.Type], "Untitled")
-end function
-
-'-------------------------------------------------------------------------------
-' getItemSubtitle
-'-------------------------------------------------------------------------------
-function getItemSubtitle(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
-
-    year = FirstNonEmpty([item.ProductionYear], "")
-    itemType = FirstNonEmpty([item.Type, item.type], "")
-    if year <> "" and itemType <> "" then return year + "  " + itemType
-
-    return FirstNonEmpty([year, itemType], "")
-end function
-
-'-------------------------------------------------------------------------------
 ' getItemsFromPayload
 '-------------------------------------------------------------------------------
 function getItemsFromPayload(payload as dynamic) as object
@@ -344,7 +318,7 @@ end function
 function getBackdropUrl(item as dynamic) as string
     if item = invalid then return ""
     if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
-        itemId = FirstNonEmpty([item.Id, item.id], "")
+        itemId = FirstNonEmpty([item.Id], "")
         return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], 1920, 1080)
     end if
 
@@ -357,11 +331,11 @@ end function
 function getPersonImageUrl(person as dynamic, width as integer, height as integer) as string
     if isAssocArray(person) = false then return ""
 
-    directUrl = FirstNonEmpty([person.ImageURL, person.imageURL, person.ImageUrl, person.imageUrl, person.PrimaryImageUrl], "")
+    directUrl = FirstNonEmpty([person.ImageURL, person.ImageUrl, person.PrimaryImageUrl], "")
     if directUrl <> "" then return directUrl
 
-    itemId = FirstNonEmpty([person.Id, person.id], "")
-    tag = FirstNonEmpty([person.PrimaryImageTag, person.primaryImageTag], "")
+    itemId = FirstNonEmpty([person.Id], "")
+    tag = FirstNonEmpty([person.PrimaryImageTag], "")
     if tag = "" and person.ImageTags <> invalid and person.ImageTags.Primary <> invalid then tag = person.ImageTags.Primary
     if itemId = "" then return ""
 
@@ -374,7 +348,7 @@ end function
 function getItemImageUrl(item as dynamic) as string
     if isAssocArray(item) = false then return ""
 
-    itemId = FirstNonEmpty([item.Id, item.id], "")
+    itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
     if itemId <> "" then return buildImageUrl(itemId, "Primary", primaryTag, 250, 375)

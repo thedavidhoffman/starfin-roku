@@ -69,7 +69,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub logPlaybackRequest(request as object, url as string, body as string)
     itemName = ""
-    if request.item <> invalid then itemName = FirstNonEmpty([request.item.Name, request.item.name, request.item.title], "")
+    if request.item <> invalid then itemName = FirstNonEmpty([request.item.Name], "")
 
     m.log.write("PlaybackInfo request itemId=" + SafeString(request.itemId, "") + " title=" + itemName)
     m.log.write("PlaybackInfo request URL: " + maskUrl(url))
