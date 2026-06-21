@@ -6,7 +6,6 @@ sub init()
     m.mediaShell = m.top.findNode("mediaShell")
     m.playButton = m.top.findNode("playButton")
     m.cast = m.top.findNode("cast")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.movieTask = m.top.findNode("movieTask")
 
     m.movieTask.observeField("response", "onMovieResponse")
@@ -29,7 +28,7 @@ sub onLoadRequestChanged()
     m.pageState.request = request
     m.pageState.item = request.item
     m.cast.server = request.server
-    setStatus("Loading movie...")
+    Status_SetLoading()
     renderMovie(request.item)
 
     m.movieTask.request = request
@@ -44,13 +43,13 @@ sub onMovieResponse()
     if response = invalid then return
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load this movie."))
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load this movie."))
         return
     end if
 
     m.pageState.item = response.payload
     renderMovie(response.payload)
-    setStatus("")
+    Status_ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -294,14 +293,6 @@ function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
-
-'-------------------------------------------------------------------------------
-' setStatus
-'-------------------------------------------------------------------------------
-sub setStatus(message as string)
-    m.statusLabel.text = message
-    m.statusLabel.visible = message <> ""
-end sub
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

@@ -23,6 +23,7 @@ sub initReferences()
     m.login = m.top.findNode("login")
     m.overlayHost = m.top.findNode("overlayHost")
     m.dynamicPageHost = m.top.findNode("dynamicPageHost")
+    m.statusLabel = m.top.findNode("statusLabel")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -106,6 +107,7 @@ end sub
 ' collectionsHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub collectionsHandleCloseRequested()
+    clearStatus()
     resetDynamicPages()
     m.homePage.visible = true
     m.header.visible = true
@@ -194,6 +196,7 @@ end sub
 ' libraryHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub libraryHandleCloseRequested()
+    clearStatus()
     if m.libraryPage <> invalid then
         m.dynamicPageHost.removeChild(m.libraryPage)
         m.libraryPage = invalid
@@ -310,6 +313,7 @@ end sub
 ' tvSeasonHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub tvSeasonHandleCloseRequested()
+    clearStatus()
     if m.tvSeasonPage <> invalid then
         m.dynamicPageHost.removeChild(m.tvSeasonPage)
         m.tvSeasonPage = invalid
@@ -334,6 +338,7 @@ end sub
 ' tvShowHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub tvShowHandleCloseRequested()
+    clearStatus()
     if m.tvShowPage <> invalid then
         m.dynamicPageHost.removeChild(m.tvShowPage)
         m.tvShowPage = invalid
@@ -500,6 +505,7 @@ end sub
 ' personHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub personHandleCloseRequested()
+    clearStatus()
     if m.personPage <> invalid then
         m.dynamicPageHost.removeChild(m.personPage)
         m.personPage = invalid
@@ -569,6 +575,7 @@ end sub
 ' filmographyHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub filmographyHandleCloseRequested()
+    clearStatus()
     if m.filmographyPage <> invalid then
         m.dynamicPageHost.removeChild(m.filmographyPage)
         m.filmographyPage = invalid
@@ -588,6 +595,7 @@ end sub
 ' movieHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub movieHandleCloseRequested()
+    clearStatus()
     if m.moviePage <> invalid then
         m.dynamicPageHost.removeChild(m.moviePage)
         m.moviePage = invalid
@@ -647,6 +655,7 @@ end sub
 ' playerHandleCloseRequested
 '-------------------------------------------------------------------------------
 sub playerHandleCloseRequested()
+    clearStatus()
     if m.videoPlayer <> invalid then
         m.dynamicPageHost.removeChild(m.videoPlayer)
         m.videoPlayer = invalid
@@ -880,6 +889,7 @@ end sub
 ' navShowLoginRoute
 '-------------------------------------------------------------------------------
 sub navShowLoginRoute()
+    clearStatus()
     m.login.visible = true
     m.authenticatedContent.visible = false
     m.homePage.visible = false
@@ -891,6 +901,7 @@ end sub
 ' navShowAppRoute
 '-------------------------------------------------------------------------------
 sub navShowAppRoute()
+    clearStatus()
     m.login.visible = false
     m.authenticatedContent.visible = true
     m.homePage.visible = true
@@ -904,6 +915,7 @@ end sub
 ' resetDynamicPages
 '-------------------------------------------------------------------------------
 sub resetDynamicPages()
+    clearStatus()
     m.yourStatsPage = invalid
     m.collectionsPage = invalid
     m.libraryPage = invalid
@@ -916,6 +928,13 @@ sub resetDynamicPages()
     m.videoPlayer = invalid
     childCount = m.dynamicPageHost.getChildCount()
     if childCount > 0 then m.dynamicPageHost.removeChildrenIndex(childCount, 0)
+end sub
+
+'-------------------------------------------------------------------------------
+' clearStatus
+'-------------------------------------------------------------------------------
+sub clearStatus()
+    m.statusLabel.callFunc("clearMessage")
 end sub
 
 '-------------------------------------------------------------------------------

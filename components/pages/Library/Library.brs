@@ -4,7 +4,6 @@
 sub init()
     m.log = CreateLogger("Library")
     m.titleLabel = m.top.findNode("titleLabel")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.libraryTask = m.top.findNode("libraryTask")
 
@@ -25,7 +24,7 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.titleLabel.text = SafeString(request.title, "Library")
-    setStatus("Loading library...")
+    Status_SetLoading()
     renderItems([])
 
     m.libraryTask.request = request
@@ -40,13 +39,13 @@ sub onLibraryResponse()
     if response = invalid then return
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load library."))
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load library."))
         return
     end if
 
     m.pageState.items = getItemsFromPayload(response.payload)
     renderItems(m.pageState.items)
-    setStatus("")
+    Status_ClearMessage()
     focusItemsIfActive()
 end sub
 
@@ -172,14 +171,6 @@ function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
-
-'-------------------------------------------------------------------------------
-' setStatus
-'-------------------------------------------------------------------------------
-sub setStatus(message as string)
-    m.statusLabel.text = message
-    m.statusLabel.visible = message <> ""
-end sub
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

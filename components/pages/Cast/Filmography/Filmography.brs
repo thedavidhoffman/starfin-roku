@@ -4,7 +4,6 @@
 sub init()
     m.log = CreateLogger("Filmography")
     m.titleLabel = m.top.findNode("titleLabel")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.filmographyList = m.top.findNode("filmographyList")
     m.previewBackground = m.top.findNode("previewBackground")
     m.previewPosterMask = m.top.findNode("previewPosterMask")
@@ -31,7 +30,7 @@ sub onLoadRequestChanged()
     m.titleLabel.text = SafeString(request.name, "Filmography")
     renderItems([])
     renderPreview(invalid)
-    setStatus("Loading filmography...")
+    Status_SetLoading()
 
     m.filmographyTask.request = {
         personId: SafeString(request.personId, "")
@@ -47,12 +46,12 @@ sub onFilmographyResponse()
     if response = invalid then return
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load filmography."))
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load filmography."))
         return
     end if
 
     renderItems(response.payload)
-    setStatus("")
+    Status_ClearMessage()
     focusListIfActive()
 end sub
 
@@ -165,14 +164,6 @@ function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
-
-'-------------------------------------------------------------------------------
-' setStatus
-'-------------------------------------------------------------------------------
-sub setStatus(message as string)
-    m.statusLabel.text = message
-    m.statusLabel.visible = message <> ""
-end sub
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

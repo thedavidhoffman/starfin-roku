@@ -5,7 +5,6 @@ sub init()
     m.log = CreateLogger("VideoPlayer")
     m.videoPlayer = m.top.findNode("videoPlayer")
     m.playbackControls = m.top.findNode("playbackControls")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
     m.playstateTask = m.top.findNode("playstateTask")
     m.controlsHideTimer = m.top.findNode("controlsHideTimer")
@@ -50,8 +49,7 @@ sub onPlayRequestChanged()
     request = m.top.playRequest
     if request = invalid then return
 
-    m.statusLabel.text = "Loading video..."
-    m.statusLabel.visible = true
+    Status_SetLoading()
     stopPlayback()
 
     m.playbackInfoTask.request = request
@@ -66,8 +64,7 @@ sub onPlaybackInfoResponse()
     if response = invalid then return
 
     if response.ok <> true then
-        m.statusLabel.text = SafeString(response.errorMessage, "Unable to play this item.")
-        m.statusLabel.visible = true
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to play this item."))
         return
     end if
 
@@ -113,7 +110,7 @@ sub applyPlaybackResponse(response as object, request as object)
     m.videoPlayer.setFocus(true)
     disableScreenSaver()
     m.videoPlayer.control = "play"
-    m.statusLabel.visible = false
+    Status_ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -124,8 +121,7 @@ sub onVideoStateChanged()
     if state = "error" then
         reportPlaystateStop()
         enableScreenSaver()
-        m.statusLabel.text = "Unable to play this video."
-        m.statusLabel.visible = true
+        Status_SetMessage("Unable to play this video.")
     else if state = "finished" then
         reportPlaystateStop()
         stopPlayback()

@@ -10,7 +10,6 @@ sub init()
     m.castDownCue = m.top.findNode("castDownCue")
     m.cast = m.top.findNode("cast")
     m.seasonsUpCue = m.top.findNode("seasonsUpCue")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.tvShowTask = m.top.findNode("tvShowTask")
 
     m.tvShowTask.observeField("response", "onTVShowResponse")
@@ -79,7 +78,7 @@ sub onLoadRequestChanged()
     updateNavigationCues()
     m.cast.server = request.server
     m.cast.people = []
-    setStatus("Loading series...")
+    Status_SetLoading()
     renderSeries(request.item)
     renderSeasons([])
 
@@ -95,7 +94,7 @@ sub onTVShowResponse()
     if response = invalid then return
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load this series."))
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load this series."))
         return
     end if
 
@@ -106,7 +105,7 @@ sub onTVShowResponse()
     m.pageState.seasons = getItemsFromPayload(payload.seasons)
     renderSeries(payload.series)
     renderSeasons(m.pageState.seasons)
-    setStatus("")
+    Status_ClearMessage()
     focusSeasonsIfActive()
 end sub
 
@@ -379,14 +378,6 @@ function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
-
-'-------------------------------------------------------------------------------
-' setStatus
-'-------------------------------------------------------------------------------
-sub setStatus(message as string)
-    m.statusLabel.text = message
-    m.statusLabel.visible = message <> ""
-end sub
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

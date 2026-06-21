@@ -4,7 +4,6 @@
 sub init()
     m.log = CreateLogger("Collections")
     m.titleLabel = m.top.findNode("titleLabel")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.collectionsGrid = m.top.findNode("collectionsGrid")
     m.collectionsTask = m.top.findNode("collectionsTask")
 
@@ -25,7 +24,7 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.titleLabel.text = SafeString(request.title, "Collections")
-    setStatus("Loading collections...")
+    Status_SetLoading()
     renderCollections([])
 
     m.collectionsTask.request = request
@@ -40,13 +39,13 @@ sub onCollectionsResponse()
     if response = invalid then return
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load collections."))
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load collections."))
         return
     end if
 
     m.pageState.collections = getItemsFromPayload(response.payload)
     renderCollections(m.pageState.collections)
-    setStatus("")
+    Status_ClearMessage()
     focusCollectionsIfActive()
 end sub
 
@@ -154,14 +153,6 @@ function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
-
-'-------------------------------------------------------------------------------
-' setStatus
-'-------------------------------------------------------------------------------
-sub setStatus(message as string)
-    m.statusLabel.text = message
-    m.statusLabel.visible = message <> ""
-end sub
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

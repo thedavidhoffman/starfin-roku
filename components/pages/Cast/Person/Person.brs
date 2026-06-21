@@ -8,7 +8,6 @@ sub init()
     m.nameLabel = m.top.findNode("nameLabel")
     m.lifeLabel = m.top.findNode("lifeLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
-    m.statusLabel = m.top.findNode("statusLabel")
     m.filmographyButton = m.top.findNode("filmographyButton")
     m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
     m.relatedRows = m.top.findNode("relatedRows")
@@ -36,7 +35,7 @@ sub onLoadRequestChanged()
     m.pageState.person = request.item
     m.pageState.filmography = invalid
     clearRelated()
-    setStatus("Loading person...")
+    Status_SetLoading()
     renderPerson(request.item)
 
     m.personTask.request = request
@@ -51,7 +50,7 @@ sub onPersonResponse()
     if response = invalid then return
 
     if response.ok <> true then
-        setStatus(SafeString(response.errorMessage, "Unable to load this person."))
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load this person."))
         return
     end if
 
@@ -59,7 +58,7 @@ sub onPersonResponse()
     m.pageState.person = person
     renderPerson(person)
     renderRelated(getItemsFromPayload(response.payload.items))
-    setStatus("")
+    Status_ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -395,14 +394,6 @@ function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
-
-'-------------------------------------------------------------------------------
-' setStatus
-'-------------------------------------------------------------------------------
-sub setStatus(message as string)
-    m.statusLabel.text = message
-    m.statusLabel.visible = message <> ""
-end sub
 
 '-------------------------------------------------------------------------------
 ' updateFocusVisual
