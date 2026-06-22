@@ -63,6 +63,7 @@ sub onItemContentChanged()
     applyLayout(title)
 
     m.episodePoster.itemContent = item
+    m.mediaToolbar.isWatched = isItemWatched(item)
     loadItemDetails()
 end sub
 
@@ -155,6 +156,7 @@ sub clearContent()
     m.description.text = ""
     m.description.translation = [590, m.layout.descriptionY]
     m.episodePoster.itemContent = invalid
+    m.mediaToolbar.isWatched = false
     m.state.itemId = ""
     m.cast.people = []
 end sub
@@ -227,6 +229,17 @@ end function
 function getPeople(item as dynamic) as object
     if item = invalid or item.People = invalid then return []
     return item.People
+end function
+
+'-------------------------------------------------------------------------------
+' isItemWatched
+'-------------------------------------------------------------------------------
+function isItemWatched(item as dynamic) as boolean
+    if item = invalid then return false
+    if item.raw = invalid then return false
+    if item.raw.UserData = invalid then return false
+
+    return item.raw.UserData.Played = true
 end function
 
 '-------------------------------------------------------------------------------

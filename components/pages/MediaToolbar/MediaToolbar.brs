@@ -6,6 +6,7 @@ sub init()
     m.playButton = m.top.findNode("playButton")
     m.markWatchedButton = m.top.findNode("markWatchedButton")
     m.markUnwatchedButton = m.top.findNode("markUnwatchedButton")
+    m.moreButton = m.top.findNode("moreButton")
     m.playButton.observeField("buttonSelected", "onPlayButtonSelected")
     m.toolbarLayout = {
         collapsedWidth: 64
@@ -14,9 +15,9 @@ sub init()
     }
     m.focusState = {
         focusedIndex: 0
-        buttons: [m.playButton, m.markWatchedButton, m.markUnwatchedButton]
+        buttons: []
     }
-    layoutButtons()
+    updateToolbarButtons()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -31,6 +32,7 @@ end sub
 ' focusButton
 '-------------------------------------------------------------------------------
 sub focusButton(index as integer)
+    updateToolbarButtons()
     if index < 0 then index = 0
     if index >= m.focusState.buttons.Count() then index = m.focusState.buttons.Count() - 1
 
@@ -68,6 +70,35 @@ function getButtonExpandedWidth(button as object) as integer
 
     return m.toolbarLayout.defaultExpandedWidth
 end function
+
+'-------------------------------------------------------------------------------
+' onWatchedStateChanged
+'-------------------------------------------------------------------------------
+sub onWatchedStateChanged()
+    updateToolbarButtons()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateToolbarButtons
+'-------------------------------------------------------------------------------
+sub updateToolbarButtons()
+    isWatched = m.top.isWatched = true
+    m.markWatchedButton.visible = isWatched <> true
+    m.markUnwatchedButton.visible = isWatched
+
+    if isWatched then
+        m.focusState.buttons = [m.playButton, m.markUnwatchedButton, m.moreButton]
+    else
+        m.focusState.buttons = [m.playButton, m.markWatchedButton, m.moreButton]
+    end if
+
+    if m.focusState.focusedIndex >= m.focusState.buttons.Count() then
+        m.focusState.focusedIndex = m.focusState.buttons.Count() - 1
+    end if
+
+    if m.focusState.focusedIndex < 0 then m.focusState.focusedIndex = 0
+    layoutButtons()
+end sub
 
 '-------------------------------------------------------------------------------
 ' onPlayButtonSelected
