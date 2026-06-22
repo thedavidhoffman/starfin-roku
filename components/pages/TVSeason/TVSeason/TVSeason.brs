@@ -41,6 +41,7 @@ sub initHandlers()
     m.episodesGrid.observeField("itemSelected", "onEpisodeSelected")
     m.episodeDetails.observeField("closeRequested", "onEpisodeDetailsCloseRequested")
     m.episodeDetails.observeField("selectedPerson", "onEpisodeDetailsPersonSelected")
+    m.episodeDetails.observeField("playSelected", "onEpisodeDetailsPlaySelected")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -155,6 +156,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub onEpisodeDetailsCloseRequested()
     focusEpisodesIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onEpisodeDetailsPlaySelected
+'-------------------------------------------------------------------------------
+sub onEpisodeDetailsPlaySelected()
+    selection = buildFocusedEpisodePlaySelection()
+    if selection = invalid then return
+
+    m.top.selectedEpisode = selection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -616,6 +627,31 @@ function getItemsFromPayload(payload as dynamic) as object
 end function
 
 '-------------------------------------------------------------------------------
+' buildFocusedEpisodePlaySelection
+'-------------------------------------------------------------------------------
+function buildFocusedEpisodePlaySelection() as dynamic
+    node = getFocusedEpisodeNode()
+    if node = invalid then return invalid
+
+    itemId = SafeString(node.itemId, "")
+    if itemId = "" then return invalid
+
+    item = node.raw
+    if isAssocArray(item) = false then return invalid
+
+    playbackQueue = buildPlaybackQueue(m.pageState.episodes)
+    playbackQueueIndex = getPlaybackQueueIndex(playbackQueue, itemId)
+
+    return {
+        itemId: itemId
+        item: item
+        startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
+        playbackQueue: playbackQueue
+        playbackQueueIndex: playbackQueueIndex
+    }
+end function
+
+'-------------------------------------------------------------------------------
 ' buildPlaybackQueue
 '-------------------------------------------------------------------------------
 function buildPlaybackQueue(episodes as object) as object
@@ -635,6 +671,20 @@ function buildPlaybackQueue(episodes as object) as object
     end for
 
     return queue
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackQueueIndex
+'-------------------------------------------------------------------------------
+function getPlaybackQueueIndex(playbackQueue as object, itemId as string) as integer
+    if playbackQueue = invalid then return 0
+
+    for i = 0 to playbackQueue.Count() - 1
+        item = playbackQueue[i]
+        if item <> invalid and SafeString(item.itemId, "") = itemId then return i
+    end for
+
+    return 0
 end function
 
 '-------------------------------------------------------------------------------

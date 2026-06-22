@@ -88,6 +88,17 @@ sub activate()
 end sub
 
 '-------------------------------------------------------------------------------
+' focusHome
+'-------------------------------------------------------------------------------
+sub focusHome()
+    if m.homeState.shelfNodes.Count() > 0 then
+        focusShelf(m.homeState.focusedShelfIndex)
+    else
+        m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
 ' onLoadRequestChanged
 '-------------------------------------------------------------------------------
 sub onLoadRequestChanged()

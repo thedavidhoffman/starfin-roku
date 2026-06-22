@@ -17,6 +17,7 @@ sub init()
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
     m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
+    m.mediaToolbar.observeField("playSelected", "onMediaToolbarPlaySelected")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.state = {
@@ -179,6 +180,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onMediaToolbarFocusExitDown()
     m.cast.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaToolbarPlaySelected
+'-------------------------------------------------------------------------------
+sub onMediaToolbarPlaySelected()
+    m.top.playSelected = true
 end sub
 
 '-------------------------------------------------------------------------------

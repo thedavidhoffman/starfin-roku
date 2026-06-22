@@ -469,7 +469,7 @@ sub personShow(selection as object)
     if m.moviePage <> invalid then m.moviePage.visible = false
     if m.tvShowPage <> invalid then m.tvShowPage.visible = false
     m.homePage.visible = false
-    m.header.visible = true
+    m.header.visible = false
     page.callFunc("activate")
 end sub
 
@@ -572,7 +572,7 @@ sub filmographyShow(selection as object)
     m.dynamicPageHost.appendChild(page)
     if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false
-    m.header.visible = true
+    m.header.visible = false
     page.callFunc("activate")
 end sub
 
@@ -588,6 +588,7 @@ sub filmographyHandleCloseRequested()
 
     if m.personPage <> invalid then
         m.personPage.visible = true
+        m.header.visible = false
         m.personPage.callFunc("activate")
     else
         m.homePage.visible = true
@@ -609,7 +610,7 @@ sub movieHandleCloseRequested()
     if m.personPage <> invalid then
         if m.personSourceMoviePage <> invalid then m.moviePage = m.personSourceMoviePage
         m.personPage.visible = true
-        m.header.visible = true
+        m.header.visible = false
         m.personPage.callFunc("activate")
     else if m.libraryPage <> invalid then
         m.libraryPage.visible = true
@@ -652,7 +653,7 @@ sub playerShow(selection as object)
     m.videoPlayer = player
     m.dynamicPageHost.appendChild(player)
     m.homePage.visible = false
-    m.header.visible = true
+    m.header.visible = false
     player.setFocus(true)
 end sub
 
@@ -824,7 +825,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub navHandleHeaderDownSelected()
     if m.homePage <> invalid and m.homePage.visible = true then
-        m.homePage.callFunc("activate")
+        m.homePage.callFunc("focusHome")
     end if
 end sub
 
@@ -876,7 +877,7 @@ sub focusActiveSurface()
     else if m.collectionsPage <> invalid then
         m.collectionsPage.callFunc("activate")
     else if m.homePage <> invalid and m.homePage.visible = true then
-        m.homePage.callFunc("activate")
+        m.homePage.callFunc("focusHome")
     else if m.header <> invalid and m.header.visible = true then
         m.header.callFunc("focusHeader")
     end if
