@@ -207,7 +207,7 @@ sub applyGridLayout(imageAspect as string)
         m.itemsGrid.itemSpacing = [0, 11]
         m.itemsGrid.numColumns = 4
         m.itemsGrid.numRows = 3
-        m.itemsGrid.focusBitmapUri = "pkg:/images/library/library-thumbnail-focus-465x348.png"
+        m.itemsGrid.focusBitmapUri = "pkg:/images/library/thumbnail-focus-465x348.png"
         return
     end if
 
@@ -217,7 +217,7 @@ sub applyGridLayout(imageAspect as string)
     m.itemsGrid.itemSpacing = [-11, 26]
     m.itemsGrid.numColumns = 6
     m.itemsGrid.numRows = 2
-    m.itemsGrid.focusBitmapUri = "pkg:/images/library/library-poster-focus-295x463.png"
+    m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
 end sub
 
 '-------------------------------------------------------------------------------

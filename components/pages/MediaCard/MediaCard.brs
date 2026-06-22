@@ -120,8 +120,8 @@ function getImageUrl(item as object, imageAspect as string) as string
     imageUrl = SafeString(item.HDPosterUrl, "")
     if imageUrl <> "" then return imageUrl
 
-    if imageAspect = "wide" then return "pkg:/images/media-card/media-card-thumbnail-placeholder-440x248.png"
-    return "pkg:/images/media-card/media-card-poster-placeholder-250x375.png"
+    if imageAspect = "wide" then return "pkg:/images/media-card/thumbnail-placeholder-440x248.png"
+    return "pkg:/images/media-card/poster-placeholder-250x375.png"
 end function
 
 '-------------------------------------------------------------------------------
@@ -129,7 +129,7 @@ end function
 '-------------------------------------------------------------------------------
 sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
     if imageAspect = "wide" then
-        m.posterMask.maskUri = "pkg:/images/media-card/media-card-thumbnail-mask-440x248.png"
+        m.posterMask.maskUri = "pkg:/images/media-card/thumbnail-mask-440x248.png"
         m.posterMask.maskSize = [440, 248]
         m.poster.width = 440
         m.poster.height = 248
@@ -146,7 +146,7 @@ sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
             m.title.numLines = 2
         end if
     else
-        m.posterMask.maskUri = "pkg:/images/media-card/media-card-poster-mask-250x375.png"
+        m.posterMask.maskUri = "pkg:/images/media-card/poster-mask-250x375.png"
         m.posterMask.maskSize = [250, 375]
         m.poster.width = 250
         m.poster.height = 375
