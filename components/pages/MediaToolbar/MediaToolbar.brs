@@ -18,7 +18,9 @@ sub init()
     m.focusState = {
         focusedIndex: 0
         buttons: []
+        hasFocus: false
     }
+    m.top.observeField("focusedChild", "onFocusChanged")
     updateToolbarButtons()
 end sub
 
@@ -26,8 +28,18 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    m.focusState.hasFocus = true
     m.top.setFocus(true)
     focusButton(m.focusState.focusedIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    m.focusState.hasFocus = false
+    m.top.setFocus(false)
+    layoutButtons()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -42,12 +54,25 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusButton(index as integer)
     updateToolbarButtons()
+    if m.focusState.buttons.Count() = 0 then return
     if index < 0 then index = 0
     if index >= m.focusState.buttons.Count() then index = m.focusState.buttons.Count() - 1
 
     m.focusState.focusedIndex = index
+    m.focusState.hasFocus = true
     layoutButtons()
     m.focusState.buttons[index].setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusChanged
+'-------------------------------------------------------------------------------
+sub onFocusChanged()
+    hasFocus = m.top.isInFocusChain()
+    if m.focusState.hasFocus = hasFocus then return
+
+    m.focusState.hasFocus = hasFocus
+    layoutButtons()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -59,7 +84,7 @@ sub layoutButtons()
         button = m.focusState.buttons[i]
         button.translation = [x, 0]
 
-        if i = m.focusState.focusedIndex then
+        if m.focusState.hasFocus = true and i = m.focusState.focusedIndex then
             x = x + getButtonExpandedWidth(button)
         else
             x = x + m.toolbarLayout.collapsedWidth

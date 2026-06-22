@@ -13,7 +13,7 @@ sub init()
         iconX: 16
         iconY: 13
         textX: 60
-        textY: 13
+        textY: 15
     }
     m.top.observeField("focusedChild", "onFocusChanged")
     onTextChanged()

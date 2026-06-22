@@ -2,20 +2,40 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    initHandlers()
+    initStyles()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.logoBanner = m.top.findNode("logoBanner")
     m.episodePoster = m.top.findNode("episodePoster")
-    m.episodeNumber = m.top.findNode("episodeNumber")
-    m.episodeDate = m.top.findNode("episodeDate")
+    m.secondaryMetadata = m.top.findNode("secondaryMetadata")
     m.title = m.top.findNode("title")
     m.description = m.top.findNode("description")
     m.mediaToolbar = m.top.findNode("mediaToolbar")
     m.cast = m.top.findNode("cast")
     m.layout = {
-        titleY: 38
-        descriptionY: 92
+        descriptionX: 666
+        titleY: 288
+        descriptionY: 342
     }
-    initStyles()
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
     m.watchedTask = m.top.findNode("watchedTask")
+    m.state = {
+        request: invalid
+        itemId: ""
+        focusArea: "toolbar"
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
@@ -24,10 +44,6 @@ sub init()
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
-    m.state = {
-        request: invalid
-        itemId: ""
-    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -35,8 +51,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyles()
     colors = Color()
-    m.episodeNumber.color = colors.text.secondary
-    m.episodeDate.color = colors.text.secondary
+    m.secondaryMetadata.color = colors.text.secondary
 end sub
 
 '-------------------------------------------------------------------------------
@@ -45,9 +60,82 @@ end sub
 sub onLoadRequestChanged()
     m.state.request = m.top.loadRequest
     m.state.itemId = ""
-    if m.state.request <> invalid then m.cast.server = m.state.request.server
+    if m.state.request <> invalid then
+        m.cast.server = m.state.request.server
+        renderLogoBanner()
+    else
+        clearLogoBanner()
+    end if
     loadItemDetails()
 end sub
+
+'-------------------------------------------------------------------------------
+' renderLogoBanner
+'-------------------------------------------------------------------------------
+sub renderLogoBanner()
+    request = m.state.request
+    if request = invalid then
+        clearLogoBanner()
+        return
+    end if
+
+    m.logoBanner.title = getSeriesTitle(request)
+    m.logoBanner.logoUrl = getSeriesLogoUrl(request)
+end sub
+
+'-------------------------------------------------------------------------------
+' clearLogoBanner
+'-------------------------------------------------------------------------------
+sub clearLogoBanner()
+    m.logoBanner.title = ""
+    m.logoBanner.logoUrl = ""
+end sub
+
+'-------------------------------------------------------------------------------
+' getSeriesTitle
+'-------------------------------------------------------------------------------
+function getSeriesTitle(request as dynamic) as string
+    if request = invalid then return ""
+    if request.series <> invalid then return FirstNonEmpty([request.series.Name], "")
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getSeriesLogoUrl
+'-------------------------------------------------------------------------------
+function getSeriesLogoUrl(request as dynamic) as string
+    if request = invalid or request.series = invalid then return ""
+
+    return getImageUrl(request.series, "Logo", 600, 300)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageUrl
+'-------------------------------------------------------------------------------
+function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
+    if item = invalid then return ""
+
+    itemId = FirstNonEmpty([item.Id], "")
+    if itemId = "" then return ""
+
+    tag = ""
+    if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
+    if tag = "" then return ""
+
+    return buildImageUrl(itemId, imageType, tag, width, height)
+end function
+
+'-------------------------------------------------------------------------------
+' buildImageUrl
+'-------------------------------------------------------------------------------
+function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
+    request = m.state.request
+    if request = invalid then return ""
+
+    url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
+    return url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90&format=Png"
+end function
 
 '-------------------------------------------------------------------------------
 ' onItemContentChanged
@@ -59,17 +147,15 @@ sub onItemContentChanged()
         return
     end if
 
-    title = SafeString(item.title, "")
+    title = getDisplayTitle(item)
     m.title.text = title
     m.description.text = SafeString(item.description, "")
-    m.episodeNumber.text = SafeString(item.episodeNumber, "")
-    m.episodeDate.text = SafeString(item.episodeDate, "")
+    m.secondaryMetadata.text = getSecondaryMetadataText(item)
     applyLayout(title)
 
     m.episodePoster.itemContent = item
     m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
     m.mediaToolbar.isWatched = isItemWatched(item)
-    m.mediaToolbar.callFunc("resetFocus")
     loadItemDetails()
 end sub
 
@@ -80,9 +166,9 @@ sub applyLayout(title as string)
     hideTitle = isSeasonNumberTitle(title)
     m.title.visible = hideTitle <> true
     if hideTitle = true then
-        m.description.translation = [590, m.layout.titleY]
+        m.description.translation = [m.layout.descriptionX, m.layout.titleY]
     else
-        m.description.translation = [590, m.layout.descriptionY]
+        m.description.translation = [m.layout.descriptionX, m.layout.descriptionY]
     end if
 end sub
 
@@ -102,6 +188,83 @@ function isSeasonNumberTitle(title as string) as boolean
     end for
 
     return true
+end function
+
+'-------------------------------------------------------------------------------
+' getSecondaryMetadataText
+'-------------------------------------------------------------------------------
+function getSecondaryMetadataText(item as dynamic) as string
+    if item = invalid then return ""
+    if SafeString(item.itemType, "") = "SeasonSummary" then return ""
+
+    raw = item.raw
+    if raw = invalid then return ""
+
+    parts = []
+
+    dateText = SafeString(item.episodeDate, "")
+    if dateText <> "" then parts.Push(dateText)
+
+    runtimeText = MediaMetadata_FormatRuntime(raw.RunTimeTicks)
+    if runtimeText <> "" then parts.Push(runtimeText)
+
+    ratingText = getRatingText(raw)
+    if ratingText <> "" then parts.Push(ratingText)
+
+    return joinText(parts, MediaMetadata_BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getRatingText
+'-------------------------------------------------------------------------------
+function getRatingText(item as dynamic) as string
+    rating = MediaMetadata_FormatRating(item.CommunityRating)
+    if rating = "" then return ""
+
+    return "Rating " + rating
+end function
+
+'-------------------------------------------------------------------------------
+' joinText
+'-------------------------------------------------------------------------------
+function joinText(values as dynamic, separator as string) as string
+    if values = invalid then return ""
+
+    result = ""
+    for each value in values
+        text = SafeString(value, "")
+        if text = "" then continue for
+
+        if result <> "" then result = result + separator
+        result = result + text
+    end for
+
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' getDisplayTitle
+'-------------------------------------------------------------------------------
+function getDisplayTitle(item as dynamic) as string
+    title = SafeString(item.title, "")
+    if item = invalid or SafeString(item.itemType, "") = "SeasonSummary" then return title
+    if item.raw = invalid then return title
+
+    prefix = getEpisodeTitlePrefix(item.raw)
+    if prefix = "" then return title
+
+    return prefix + title
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeTitlePrefix
+'-------------------------------------------------------------------------------
+function getEpisodeTitlePrefix(item as dynamic) as string
+    seasonNumber = SafeString(item.ParentIndexNumber, "")
+    episodeNumber = SafeString(item.IndexNumber, "")
+    if seasonNumber = "" or episodeNumber = "" then return ""
+
+    return "S" + seasonNumber + "E" + episodeNumber + ": "
 end function
 
 '-------------------------------------------------------------------------------
@@ -155,12 +318,11 @@ end sub
 ' clearContent
 '-------------------------------------------------------------------------------
 sub clearContent()
-    m.episodeNumber.text = ""
-    m.episodeDate.text = ""
+    m.secondaryMetadata.text = ""
     m.title.text = ""
     m.title.visible = true
     m.description.text = ""
-    m.description.translation = [590, m.layout.descriptionY]
+    m.description.translation = [m.layout.descriptionX, m.layout.descriptionY]
     m.episodePoster.itemContent = invalid
     m.mediaToolbar.supportsWatchedActions = false
     m.mediaToolbar.isWatched = false
@@ -173,7 +335,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     m.top.setFocus(true)
-    m.mediaToolbar.callFunc("activate")
+    if m.state.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
+        m.cast.callFunc("activate")
+    else
+        focusMediaToolbar()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -188,13 +354,24 @@ end sub
 ' resetFocus
 '-------------------------------------------------------------------------------
 sub resetFocus()
+    m.state.focusArea = "toolbar"
     m.mediaToolbar.callFunc("resetFocus")
+end sub
+
+'-------------------------------------------------------------------------------
+' focusMediaToolbar
+'-------------------------------------------------------------------------------
+sub focusMediaToolbar()
+    m.state.focusArea = "toolbar"
+    m.mediaToolbar.callFunc("activate")
 end sub
 
 '-------------------------------------------------------------------------------
 ' onMediaToolbarFocusExitDown
 '-------------------------------------------------------------------------------
 sub onMediaToolbarFocusExitDown()
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "cast"
     m.cast.callFunc("activate")
 end sub
 
@@ -202,7 +379,8 @@ end sub
 ' onMediaToolbarPlaySelected
 '-------------------------------------------------------------------------------
 sub onMediaToolbarPlaySelected()
-    m.top.playSelected = true
+    if m.top.playSelection = invalid then return
+    m.top.selectedEpisode = m.top.playSelection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -275,7 +453,7 @@ end sub
 ' onCastFocusExitUp
 '-------------------------------------------------------------------------------
 sub onCastFocusExitUp()
-    m.mediaToolbar.callFunc("activate")
+    focusMediaToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -286,6 +464,7 @@ sub onCastPersonSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    m.state.focusArea = "cast"
     m.top.selectedPerson = selection
 end sub
 
@@ -340,65 +519,32 @@ end function
 '-------------------------------------------------------------------------------
 sub updateItemWatchedState(item as dynamic, isWatched as boolean)
     if item = invalid or item.raw = invalid then return
-    if item.raw.UserData = invalid then item.raw.UserData = {}
 
-    item.raw.UserData.Played = isWatched
+    raw = item.raw
+    if raw.UserData = invalid then raw.UserData = {}
+
+    raw.UserData.Played = isWatched
     if SafeString(item.itemType, "") = "SeasonSummary" then
         if isWatched then
-            item.raw.UserData.UnplayedItemCount = 0
+            raw.UserData.UnplayedItemCount = 0
         else
-            item.raw.UserData.UnplayedItemCount = 1
+            raw.UserData.UnplayedItemCount = 1
         end if
     end if
 
     if isWatched then
-        item.raw.UserData.PlayedPercentage = 0
-        item.raw.UserData.PlaybackPositionTicks = 0
+        raw.UserData.PlayedPercentage = 0
+        raw.UserData.PlaybackPositionTicks = 0
     else
-        item.raw.UserData.PlayedPercentage = 0
+        raw.UserData.PlayedPercentage = 0
     end if
+
+    item.raw = raw
 end sub
 
 '-------------------------------------------------------------------------------
 ' refreshPoster
 '-------------------------------------------------------------------------------
 sub refreshPoster()
-    item = m.top.itemContent
-    m.episodePoster.itemContent = invalid
-    m.episodePoster.itemContent = item
+    m.episodePoster.callFunc("refresh")
 end sub
-
-'-------------------------------------------------------------------------------
-' getEpisodeDurationText
-'-------------------------------------------------------------------------------
-function getEpisodeDurationText(item as dynamic) as string
-    if item = invalid then return ""
-    if item.RunTimeTicks = invalid then return ""
-
-    minutes = int(val(item.RunTimeTicks.ToStr()) / 600000000)
-    if minutes <= 0 then return ""
-
-    hours = int(minutes / 60)
-    remainingMinutes = minutes mod 60
-    if hours > 0 and remainingMinutes > 0 then return hours.ToStr() + " hr " + remainingMinutes.ToStr() + " min"
-    if hours > 0 then return hours.ToStr() + " hr"
-
-    return minutes.ToStr() + " min"
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeRatingText
-'-------------------------------------------------------------------------------
-function getEpisodeRatingText(item as dynamic) as string
-    if item = invalid then return ""
-    if item.CommunityRating = invalid then return ""
-
-    rating = val(item.CommunityRating.ToStr())
-    if rating <= 0 then return ""
-
-    rounded = int((rating * 10) + 0.5)
-    whole = int(rounded / 10)
-    decimal = rounded mod 10
-
-    return whole.ToStr() + "." + decimal.ToStr()
-end function

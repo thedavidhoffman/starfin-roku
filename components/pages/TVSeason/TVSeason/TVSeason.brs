@@ -19,12 +19,10 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.showLogo = m.top.findNode("showLogo")
-    m.seriesLabel = m.top.findNode("seriesLabel")
+    m.logoBanner = m.top.findNode("logoBanner")
     m.seasonLabel = m.top.findNode("seasonLabel")
     m.episodesList = m.top.findNode("episodesList")
     m.episodesGrid = m.top.findNode("episodesGrid")
-    m.episodeDetails = m.top.findNode("episodeDetails")
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
@@ -39,17 +37,16 @@ sub initHandlers()
     m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
     m.episodesGrid.observeField("itemFocused", "onEpisodeFocused")
     m.episodesGrid.observeField("itemSelected", "onEpisodeSelected")
-    m.episodeDetails.observeField("closeRequested", "onEpisodeDetailsCloseRequested")
-    m.episodeDetails.observeField("selectedPerson", "onEpisodeDetailsPersonSelected")
-    m.episodeDetails.observeField("playSelected", "onEpisodeDetailsPlaySelected")
-    m.episodeDetails.observeField("watchedStateChanged", "onEpisodeWatchedStateChanged")
 end sub
 
 '-------------------------------------------------------------------------------
 ' onEpisodeSelected
 '-------------------------------------------------------------------------------
 sub onEpisodeSelected()
-    focusEpisodeDetails()
+    selection = buildFocusedEpisodeDetailsSelection()
+    if selection = invalid then return
+
+    m.top.selectedEpisodeDetails = selection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -96,7 +93,6 @@ sub onLoadRequestChanged()
     m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
     m.pageState.focusArea = "episodes"
     clearEpisodes()
-    m.episodeDetails.loadRequest = request
     Status_SetLoading()
     renderSeason(request.season)
 
@@ -149,31 +145,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onEpisodeFocused()
     updateChevrons()
-    if m.episodeDetails.visible = true then updateEpisodeDetails()
 end sub
 
 '-------------------------------------------------------------------------------
-' onEpisodeDetailsCloseRequested
+' onWatchedStateChange
 '-------------------------------------------------------------------------------
-sub onEpisodeDetailsCloseRequested()
-    focusEpisodesIfActive()
-end sub
-
-'-------------------------------------------------------------------------------
-' onEpisodeDetailsPlaySelected
-'-------------------------------------------------------------------------------
-sub onEpisodeDetailsPlaySelected()
-    selection = buildFocusedEpisodePlaySelection()
-    if selection = invalid then return
-
-    m.top.selectedEpisode = selection
-end sub
-
-'-------------------------------------------------------------------------------
-' onEpisodeWatchedStateChanged
-'-------------------------------------------------------------------------------
-sub onEpisodeWatchedStateChanged()
-    change = m.episodeDetails.watchedStateChanged
+sub onWatchedStateChange()
+    change = m.top.watchedStateChange
     if change = invalid then return
 
     itemId = SafeString(change.itemId, "")
@@ -183,23 +161,6 @@ sub onEpisodeWatchedStateChanged()
     updateEpisodeWatchedState(itemId, isWatched)
     renderEpisodes(m.pageState.episodes)
     restoreEpisodeFocus(itemId)
-
-    if m.pageState.focusArea = "details" then
-        m.episodesList.visible = false
-        m.episodesGrid.visible = false
-        m.episodeDetails.itemContent = getEpisodeNodeById(itemId)
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' onEpisodeDetailsPersonSelected
-'-------------------------------------------------------------------------------
-sub onEpisodeDetailsPersonSelected()
-    selection = m.episodeDetails.selectedPerson
-    if selection = invalid then return
-    if selection.itemId = invalid or selection.itemId = "" then return
-
-    m.top.selectedPerson = selection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -208,27 +169,20 @@ end sub
 sub renderSeason(item as dynamic)
     if isAssocArray(item) = false then return
 
-    m.seriesLabel.text = FirstNonEmpty([item.SeriesName], "")
+    m.logoBanner.title = FirstNonEmpty([item.SeriesName], "")
+    m.logoBanner.logoUrl = getSeriesLogoUrl()
     m.seasonLabel.text = getItemTitle(item)
-    renderShowLogo()
 end sub
 
 '-------------------------------------------------------------------------------
-' renderShowLogo
+' getSeriesLogoUrl
 '-------------------------------------------------------------------------------
-sub renderShowLogo()
+function getSeriesLogoUrl() as string
     request = m.pageState.request
-    if request = invalid then
-        m.showLogo.visible = false
-        m.seriesLabel.visible = true
-        return
-    end if
+    if request = invalid then return ""
 
-    logoUrl = getImageUrl(request.series, "Logo", 600, 300)
-    m.showLogo.visible = logoUrl <> ""
-    m.showLogo.uri = logoUrl
-    m.seriesLabel.visible = logoUrl = ""
-end sub
+    return getImageUrl(request.series, "Logo", 600, 300)
+end function
 
 '-------------------------------------------------------------------------------
 ' renderEpisodes
@@ -263,8 +217,6 @@ sub clearEpisodes()
     m.episodesGrid.content = CreateObject("roSGNode", "ContentNode")
     m.episodesList.visible = false
     m.episodesGrid.visible = false
-    m.episodeDetails.visible = false
-    m.episodeDetails.itemContent = invalid
     m.pageState.episodeWindowStart = 0
     m.leftChevron.visible = false
     m.rightChevron.visible = false
@@ -290,14 +242,18 @@ sub appendEpisodeItem(parent as object, episode as object)
 end sub
 
 '-------------------------------------------------------------------------------
-' updateEpisodeDetails
+' buildFocusedEpisodeDetailsSelection
 '-------------------------------------------------------------------------------
-sub updateEpisodeDetails()
+function buildFocusedEpisodeDetailsSelection() as dynamic
     focusedEpisode = getFocusedEpisodeNode()
-    if focusedEpisode = invalid then return
+    if focusedEpisode = invalid then return invalid
 
-    m.episodeDetails.itemContent = focusedEpisode
-end sub
+    return {
+        loadRequest: m.pageState.request
+        itemContent: focusedEpisode
+        playSelection: buildEpisodePlaySelection(focusedEpisode)
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' getEpisodeNodeById
@@ -437,11 +393,7 @@ end function
 '-------------------------------------------------------------------------------
 sub activate()
     m.top.setFocus(true)
-    if m.pageState.focusArea = "details" and m.episodeDetails.visible = true then
-        m.episodeDetails.callFunc("activate")
-    else
-        focusEpisodesIfActive()
-    end if
+    focusEpisodesIfActive()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -452,26 +404,9 @@ sub focusEpisodesIfActive()
 
     m.pageState.focusArea = "episodes"
     setEpisodeListVisible(true)
-    m.episodeDetails.visible = false
-    m.episodeDetails.callFunc("deactivate")
     m.top.setFocus(true)
     getActiveEpisodeList().setFocus(true)
     updateChevrons()
-end sub
-
-'-------------------------------------------------------------------------------
-' focusEpisodeDetails
-'-------------------------------------------------------------------------------
-sub focusEpisodeDetails()
-    m.pageState.focusArea = "details"
-    m.episodesList.visible = false
-    m.episodesGrid.visible = false
-    updateEpisodeDetails()
-    m.episodeDetails.visible = true
-    m.leftChevron.visible = false
-    m.rightChevron.visible = false
-    m.episodeDetails.callFunc("resetFocus")
-    m.episodeDetails.callFunc("activate")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -830,10 +765,9 @@ function getItemsFromPayload(payload as dynamic) as object
 end function
 
 '-------------------------------------------------------------------------------
-' buildFocusedEpisodePlaySelection
+' buildEpisodePlaySelection
 '-------------------------------------------------------------------------------
-function buildFocusedEpisodePlaySelection() as dynamic
-    node = getFocusedEpisodeNode()
+function buildEpisodePlaySelection(node as dynamic) as dynamic
     if node = invalid then return invalid
 
     itemId = SafeString(node.itemId, "")

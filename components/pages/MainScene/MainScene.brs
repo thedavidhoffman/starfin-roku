@@ -282,8 +282,7 @@ sub tvSeasonHandleTVShowSeasonSelected()
 
     page = CreateObject("roSGNode", "TVSeason")
     page.observeField("closeRequested", "tvSeasonHandleCloseRequested")
-    page.observeField("selectedEpisode", "tvSeasonHandleEpisodeSelected")
-    page.observeField("selectedPerson", "personHandleTVSeasonPersonSelected")
+    page.observeField("selectedEpisodeDetails", "tvEpisodeHandleTVSeasonEpisodeSelected")
     page.settings = m.settings
     page.loadRequest = {
         server: m.session.server
@@ -304,14 +303,85 @@ sub tvSeasonHandleTVShowSeasonSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' tvSeasonHandleEpisodeSelected
+' tvEpisodeHandleTVSeasonEpisodeSelected
 '-------------------------------------------------------------------------------
-sub tvSeasonHandleEpisodeSelected()
-    selection = m.tvSeasonPage.selectedEpisode
+sub tvEpisodeHandleTVSeasonEpisodeSelected()
+    selection = m.tvSeasonPage.selectedEpisodeDetails
+    if selection = invalid then return
+
+    tvEpisodeShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' tvEpisodeShow
+'-------------------------------------------------------------------------------
+sub tvEpisodeShow(selection as object)
+    if selection = invalid then return
+    if selection.itemContent = invalid then return
+
+    page = CreateObject("roSGNode", "TVEpisode")
+    page.observeField("closeRequested", "tvEpisodeHandleCloseRequested")
+    page.observeField("selectedEpisode", "tvEpisodeHandleEpisodeSelected")
+    page.observeField("selectedPerson", "personHandleTVEpisodePersonSelected")
+    page.observeField("watchedStateChanged", "tvEpisodeHandleWatchedStateChanged")
+    page.loadRequest = selection.loadRequest
+    page.itemContent = selection.itemContent
+    page.playSelection = selection.playSelection
+
+    m.tvEpisodePage = page
+    m.dynamicPageHost.appendChild(page)
+    if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
+    m.homePage.visible = false
+    m.header.visible = false
+    page.callFunc("resetFocus")
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' tvEpisodeHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub tvEpisodeHandleCloseRequested()
+    clearStatus()
+    if m.tvEpisodePage <> invalid then
+        m.dynamicPageHost.removeChild(m.tvEpisodePage)
+        m.tvEpisodePage = invalid
+    end if
+
+    if m.tvSeasonPage <> invalid then
+        m.tvSeasonPage.visible = true
+        m.header.visible = false
+        m.tvSeasonPage.callFunc("activate")
+    else if m.tvShowPage <> invalid then
+        m.tvShowPage.visible = true
+        m.header.visible = false
+        m.tvShowPage.callFunc("activate")
+    else
+        m.homePage.visible = true
+        m.header.visible = true
+        m.homePage.callFunc("activate")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' tvEpisodeHandleEpisodeSelected
+'-------------------------------------------------------------------------------
+sub tvEpisodeHandleEpisodeSelected()
+    selection = m.tvEpisodePage.selectedEpisode
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
     playerShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' tvEpisodeHandleWatchedStateChanged
+'-------------------------------------------------------------------------------
+sub tvEpisodeHandleWatchedStateChanged()
+    if m.tvEpisodePage = invalid then return
+    change = m.tvEpisodePage.watchedStateChanged
+    if change = invalid then return
+
+    if m.tvSeasonPage <> invalid then m.tvSeasonPage.watchedStateChange = change
 end sub
 
 '-------------------------------------------------------------------------------
@@ -442,11 +512,13 @@ sub personShow(selection as object)
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
-    if m.tvSeasonPage <> invalid then
+    if m.tvEpisodePage <> invalid and m.tvEpisodePage.visible = true then
+        m.personSourceTvEpisodePage = m.tvEpisodePage
+    else if m.tvSeasonPage <> invalid and m.tvSeasonPage.visible = true then
         m.personSourceTvSeasonPage = m.tvSeasonPage
-    else if m.tvShowPage <> invalid then
+    else if m.tvShowPage <> invalid and m.tvShowPage.visible = true then
         m.personSourceTvShowPage = m.tvShowPage
-    else if m.moviePage <> invalid then
+    else if m.moviePage <> invalid and m.moviePage.visible = true then
         m.personSourceMoviePage = m.moviePage
     end if
 
@@ -465,6 +537,7 @@ sub personShow(selection as object)
 
     m.personPage = page
     m.dynamicPageHost.appendChild(page)
+    if m.tvEpisodePage <> invalid then m.tvEpisodePage.visible = false
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     if m.moviePage <> invalid then m.moviePage.visible = false
     if m.tvShowPage <> invalid then m.tvShowPage.visible = false
@@ -474,10 +547,10 @@ sub personShow(selection as object)
 end sub
 
 '-------------------------------------------------------------------------------
-' personHandleTVSeasonPersonSelected
+' personHandleTVEpisodePersonSelected
 '-------------------------------------------------------------------------------
-sub personHandleTVSeasonPersonSelected()
-    selection = m.tvSeasonPage.selectedPerson
+sub personHandleTVEpisodePersonSelected()
+    selection = m.tvEpisodePage.selectedPerson
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
@@ -519,11 +592,17 @@ sub personHandleCloseRequested()
     if m.moviePage = invalid and m.personSourceMoviePage <> invalid then m.moviePage = m.personSourceMoviePage
     if m.tvShowPage = invalid and m.personSourceTvShowPage <> invalid then m.tvShowPage = m.personSourceTvShowPage
     if m.tvSeasonPage = invalid and m.personSourceTvSeasonPage <> invalid then m.tvSeasonPage = m.personSourceTvSeasonPage
+    if m.tvEpisodePage = invalid and m.personSourceTvEpisodePage <> invalid then m.tvEpisodePage = m.personSourceTvEpisodePage
     m.personSourceMoviePage = invalid
     m.personSourceTvShowPage = invalid
     m.personSourceTvSeasonPage = invalid
+    m.personSourceTvEpisodePage = invalid
 
-    if m.tvSeasonPage <> invalid then
+    if m.tvEpisodePage <> invalid then
+        m.tvEpisodePage.visible = true
+        m.header.visible = false
+        m.tvEpisodePage.callFunc("activate")
+    else if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.visible = true
         m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
@@ -649,6 +728,7 @@ sub playerShow(selection as object)
     }
 
     if m.moviePage <> invalid then m.moviePage.visible = false
+    if m.tvEpisodePage <> invalid then m.tvEpisodePage.visible = false
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     m.videoPlayer = player
     m.dynamicPageHost.appendChild(player)
@@ -671,6 +751,10 @@ sub playerHandleCloseRequested()
         m.moviePage.visible = true
         m.header.visible = false
         m.moviePage.callFunc("activate")
+    else if m.tvEpisodePage <> invalid then
+        m.tvEpisodePage.visible = true
+        m.header.visible = false
+        m.tvEpisodePage.callFunc("activate")
     else if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.visible = true
         m.header.visible = false
@@ -868,6 +952,8 @@ sub focusActiveSurface()
         m.personPage.callFunc("activate")
     else if m.moviePage <> invalid then
         m.moviePage.callFunc("activate")
+    else if m.tvEpisodePage <> invalid then
+        m.tvEpisodePage.callFunc("activate")
     else if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.callFunc("activate")
     else if m.tvShowPage <> invalid then
@@ -961,8 +1047,12 @@ sub resetDynamicPages()
     m.moviePage = invalid
     m.tvShowPage = invalid
     m.tvSeasonPage = invalid
+    m.tvEpisodePage = invalid
     m.personPage = invalid
     m.personSourceMoviePage = invalid
+    m.personSourceTvEpisodePage = invalid
+    m.personSourceTvSeasonPage = invalid
+    m.personSourceTvShowPage = invalid
     m.filmographyPage = invalid
     m.videoPlayer = invalid
     childCount = m.dynamicPageHost.getChildCount()
