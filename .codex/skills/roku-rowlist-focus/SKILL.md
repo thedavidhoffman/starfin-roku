@@ -35,14 +35,17 @@ For a reliable custom focus:
 - `TVSeason.xml` uses `rowItemSize="[[575,590]]"`.
 - `TVEpisodeRowListItem.xml` uses `contentGroup translation="[20,0]"`.
 - The thumbnail mask is inside that group at `translation="[0,38]"` with size `530x298`.
-- The RowList focus asset is `rounded-episode-thumbnail-horizontal-focus-575x590.png`.
+- The RowList focus asset is `episode-thumbnail-horizontal-focus-575x590.png`.
 - The ring is drawn inside the `575x590` canvas around the translated thumbnail area, not around a standalone `530x298` image at origin.
+- The horizontal asset is RowList-compensated: its non-transparent bounds start around `x=38`, while Roku renders it visually like the thumbnail starts at `x=20`.
+- Keep the right edge tuned to the same visual spacing as overlay badges. For the current episode watched badge, the horizontal focus asset ends around `x=568`, which renders like the vertical asset's `x=550` edge after RowList compensation.
 
 `TVSeason` vertical episode scrolling uses a `MarkupGrid` with the same item component, but it needs its own focus asset:
 
 - The MarkupGrid uses `itemSize="[575,590]"`.
-- The vertical focus asset is `rounded-episode-thumbnail-vertical-focus-575x590.png`.
+- The vertical focus asset is `episode-thumbnail-vertical-focus-575x590.png`.
 - The horizontal asset has non-transparent bounds starting around `x=38`; the vertical asset starts around `x=20` to match the item content inset.
+- The vertical asset's right edge is around `x=550`, not `x=555`, so the watched indicator has matching top/right spacing inside the focus border.
 - Do not reuse a RowList-tuned bitmap on MarkupGrid without checking bounds; MarkupGrid may show the RowList compensation as a visible offset.
 
 For HomePage, use the same structure:
