@@ -56,11 +56,9 @@ sub onFocusVisualChanged()
         width = m.layout.expandedWidth
         if m.top.expandedWidth <> invalid and m.top.expandedWidth > 0 then width = m.top.expandedWidth
         m.background.width = width
-        m.textLabel.visible = true
     else
         m.background.uri = "pkg:/images/buttons/media-toolbar-button-unfocused.9.png"
         m.background.width = m.layout.collapsedWidth
-        m.textLabel.visible = false
     end if
 
     m.background.height = m.layout.height
@@ -69,7 +67,10 @@ sub onFocusVisualChanged()
     m.iconPoster.translation = [m.layout.iconX, m.layout.iconY]
     m.textLabel.translation = [m.layout.textX, m.layout.textY]
     m.textLabel.width = m.background.width - m.layout.textX - 16
-    m.textLabel.color = &h000B25FF
+    m.textLabel.visible = hasFocus
+    if hasFocus then
+        m.textLabel.color = &h000B25FF
+    end if
     onIconChanged()
 end sub
 
