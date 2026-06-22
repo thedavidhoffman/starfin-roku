@@ -8,6 +8,8 @@ sub init()
     m.markUnwatchedButton = m.top.findNode("markUnwatchedButton")
     m.moreButton = m.top.findNode("moreButton")
     m.playButton.observeField("buttonSelected", "onPlayButtonSelected")
+    m.markWatchedButton.observeField("buttonSelected", "onMarkWatchedButtonSelected")
+    m.markUnwatchedButton.observeField("buttonSelected", "onMarkUnwatchedButtonSelected")
     m.toolbarLayout = {
         collapsedWidth: 64
         defaultExpandedWidth: 168
@@ -26,6 +28,13 @@ end sub
 sub activate()
     m.top.setFocus(true)
     focusButton(m.focusState.focusedIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' resetFocus
+'-------------------------------------------------------------------------------
+sub resetFocus()
+    focusButton(0)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -79,14 +88,30 @@ sub onWatchedStateChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' focusWatchedAction
+'-------------------------------------------------------------------------------
+sub focusWatchedAction()
+    updateToolbarButtons()
+    if m.focusState.buttons.Count() < 2 then
+        focusButton(0)
+        return
+    end if
+
+    focusButton(1)
+end sub
+
+'-------------------------------------------------------------------------------
 ' updateToolbarButtons
 '-------------------------------------------------------------------------------
 sub updateToolbarButtons()
     isWatched = m.top.isWatched = true
-    m.markWatchedButton.visible = isWatched <> true
-    m.markUnwatchedButton.visible = isWatched
+    supportsWatchedActions = m.top.supportsWatchedActions <> false
+    m.markWatchedButton.visible = supportsWatchedActions and (isWatched <> true)
+    m.markUnwatchedButton.visible = supportsWatchedActions and (isWatched = true)
 
-    if isWatched then
+    if supportsWatchedActions <> true then
+        m.focusState.buttons = [m.playButton, m.moreButton]
+    else if isWatched then
         m.focusState.buttons = [m.playButton, m.markUnwatchedButton, m.moreButton]
     else
         m.focusState.buttons = [m.playButton, m.markWatchedButton, m.moreButton]
@@ -105,6 +130,20 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlayButtonSelected()
     m.top.playSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onMarkWatchedButtonSelected
+'-------------------------------------------------------------------------------
+sub onMarkWatchedButtonSelected()
+    m.top.markAsWatchedSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onMarkUnwatchedButtonSelected
+'-------------------------------------------------------------------------------
+sub onMarkUnwatchedButtonSelected()
+    m.top.markAsUnwatchedSelected = true
 end sub
 
 '-------------------------------------------------------------------------------

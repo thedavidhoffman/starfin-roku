@@ -21,7 +21,6 @@ sub executeRequest()
         
     })
 
-    m.log.write(url)
     result = HttpClient_Request(url, "GET", invalid, invalid)
     if result.ok <> true then
         result.AddReplace("action", "filmography")

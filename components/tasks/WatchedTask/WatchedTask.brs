@@ -41,7 +41,6 @@ function markAsWatched(request as object) as object
     }
 
     url = NormalizeServerUrl(request.server) + "/UserPlayedItems/" + request.itemId + Url_BuildQueryString(params)
-    m.log.write(url)
     result = HttpClient_Request(url, "POST", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "MarkAsWatched")
@@ -69,7 +68,6 @@ function markAsUnwatched(request as object) as object
     }
 
     url = NormalizeServerUrl(request.server) + "/UserPlayedItems/" + request.itemId + Url_BuildQueryString(params)
-    m.log.write(url)
     result = HttpClient_Request(url, "DELETE", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "MarkAsUnwatched")

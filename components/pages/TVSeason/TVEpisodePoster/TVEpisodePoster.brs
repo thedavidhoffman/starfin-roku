@@ -48,6 +48,14 @@ end sub
 ' updateProgress
 '-------------------------------------------------------------------------------
 sub updateProgress(item as dynamic, isSeasonSummary as boolean)
+    if isItemPlayed(item) then
+        m.progressBorder.visible = false
+        m.progressBackground.visible = false
+        m.progressFill.visible = false
+        m.progressFill.width = 0
+        return
+    end if
+
     progressWidth = 0
     if item <> invalid then
         if item.progressWidth <> invalid then progressWidth = int(item.progressWidth)
@@ -75,12 +83,24 @@ end sub
 ' updateWatchedIndicator
 '-------------------------------------------------------------------------------
 sub updateWatchedIndicator(item as dynamic, isSeasonSummary as boolean)
-    if item = invalid or isSeasonSummary = true then
+    if item = invalid then
         m.watchedIndicator.visible = false
         return
     end if
 
-    raw = item.raw
-    isPlayed = raw <> invalid and raw.UserData <> invalid and raw.UserData.Played = true
-    m.watchedIndicator.visible = isPlayed
+    m.watchedIndicator.visible = isItemPlayed(item)
 end sub
+
+'-------------------------------------------------------------------------------
+' isItemPlayed
+'-------------------------------------------------------------------------------
+function isItemPlayed(item as dynamic) as boolean
+    if item = invalid then return false
+
+    raw = item.raw
+    if SafeString(item.itemType, "") = "SeasonSummary" then
+        return raw <> invalid and raw.UserData <> invalid and raw.UserData.UnplayedItemCount = 0
+    end if
+
+    return raw <> invalid and raw.UserData <> invalid and raw.UserData.Played = true
+end function

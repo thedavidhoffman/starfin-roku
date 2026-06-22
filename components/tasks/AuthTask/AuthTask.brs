@@ -39,7 +39,6 @@ function login(request as object) as object
     ])
 
     loginUrl = request.server + "/Users/AuthenticateByName?format=json"
-    m.log.write(loginUrl)
     result = HttpClient_Request(loginUrl, "POST", invalid, body, {
         Authorization: JellyfinAuth_BuildClientHeader()
     })
@@ -84,7 +83,6 @@ function authorize(request as object) as object
     ' AboutMe(), with a fallback AuthenticateByName call using an empty password.
     ' We validate the token directly against the current user endpoint instead.
     userUrl = NormalizeServerUrl(request.server) + "/Users/" + SafeString(request.userId, "")
-    m.log.write(userUrl)
     result = HttpClient_Request(userUrl, "GET", request.token, invalid, {
         Authorization: JellyfinAuth_BuildPlaybackHeader(request.token, request.userId)
     })

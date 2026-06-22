@@ -31,7 +31,6 @@ sub executeRequest()
     }
 
     url = NormalizeServerUrl(request.server) + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
-    m.log.write(url)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         response.AddReplace("action", "library")

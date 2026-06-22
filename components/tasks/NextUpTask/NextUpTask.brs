@@ -35,7 +35,6 @@ sub executeRequest()
     end if
 
     url = NormalizeServerUrl(request.server) + "/shows/nextup" + Url_BuildQueryString(params)
-    m.log.write(url)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         m.top.response = withAction(response, "nextUp")

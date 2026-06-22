@@ -42,6 +42,7 @@ sub initHandlers()
     m.episodeDetails.observeField("closeRequested", "onEpisodeDetailsCloseRequested")
     m.episodeDetails.observeField("selectedPerson", "onEpisodeDetailsPersonSelected")
     m.episodeDetails.observeField("playSelected", "onEpisodeDetailsPlaySelected")
+    m.episodeDetails.observeField("watchedStateChanged", "onEpisodeWatchedStateChanged")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -169,6 +170,28 @@ sub onEpisodeDetailsPlaySelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' onEpisodeWatchedStateChanged
+'-------------------------------------------------------------------------------
+sub onEpisodeWatchedStateChanged()
+    change = m.episodeDetails.watchedStateChanged
+    if change = invalid then return
+
+    itemId = SafeString(change.itemId, "")
+    if itemId = "" then return
+
+    isWatched = change.isWatched = true
+    updateEpisodeWatchedState(itemId, isWatched)
+    renderEpisodes(m.pageState.episodes)
+    restoreEpisodeFocus(itemId)
+
+    if m.pageState.focusArea = "details" then
+        m.episodesList.visible = false
+        m.episodesGrid.visible = false
+        m.episodeDetails.itemContent = getEpisodeNodeById(itemId)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
 ' onEpisodeDetailsPersonSelected
 '-------------------------------------------------------------------------------
 sub onEpisodeDetailsPersonSelected()
@@ -277,6 +300,34 @@ sub updateEpisodeDetails()
 end sub
 
 '-------------------------------------------------------------------------------
+' getEpisodeNodeById
+'-------------------------------------------------------------------------------
+function getEpisodeNodeById(itemId as string) as dynamic
+    if isVerticalEpisodeList() then
+        if m.episodesGrid.content = invalid then return invalid
+
+        for i = 0 to m.episodesGrid.content.getChildCount() - 1
+            child = m.episodesGrid.content.getChild(i)
+            if child <> invalid and SafeString(child.itemId, "") = itemId then return child
+        end for
+
+        return invalid
+    end if
+
+    if m.episodesList.content = invalid or m.episodesList.content.getChildCount() = 0 then return invalid
+
+    row = m.episodesList.content.getChild(0)
+    if row = invalid then return invalid
+
+    for i = 0 to row.getChildCount() - 1
+        child = row.getChild(i)
+        if child <> invalid and SafeString(child.itemId, "") = itemId then return child
+    end for
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
 ' appendSeasonSummaryItem
 '-------------------------------------------------------------------------------
 sub appendSeasonSummaryItem(row as object)
@@ -288,7 +339,7 @@ sub appendSeasonSummaryItem(row as object)
     child.description = getSeasonSummaryDescription(season)
     child.HDPosterUrl = getSeasonBackgroundUrl(season)
     child.AddFields({
-        itemId: ""
+        itemId: SafeString(FirstNonEmpty([season.Id], ""), "")
         itemType: "SeasonSummary"
         episodeNumber: getSeasonEpisodeCountText(season)
         episodeDate: getSeasonYearText(season)
@@ -419,6 +470,7 @@ sub focusEpisodeDetails()
     m.episodeDetails.visible = true
     m.leftChevron.visible = false
     m.rightChevron.visible = false
+    m.episodeDetails.callFunc("resetFocus")
     m.episodeDetails.callFunc("activate")
 end sub
 
@@ -523,6 +575,7 @@ end function
 '-------------------------------------------------------------------------------
 function getProgressPercent(item as dynamic) as float
     if isAssocArray(item) = false then return 0
+    if item.UserData <> invalid and item.UserData.Played = true then return 0
 
     if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
         playedPercentage = item.UserData.PlayedPercentage
@@ -554,6 +607,156 @@ function getProgressWidth(item as dynamic) as integer
     if progressWidth > 510 then return 510
 
     return progressWidth
+end function
+
+'-------------------------------------------------------------------------------
+' updateEpisodeWatchedState
+'-------------------------------------------------------------------------------
+sub updateEpisodeWatchedState(itemId as string, isWatched as boolean)
+    if isAssocArray(m.pageState.season) and SafeString(FirstNonEmpty([m.pageState.season.Id], ""), "") = itemId then
+        updateItemWatchedState(m.pageState.season, isWatched)
+        updateSeasonEpisodesWatchedState(isWatched)
+        return
+    end if
+
+    for each episode in m.pageState.episodes
+        if isAssocArray(episode) = false then continue for
+        if SafeString(FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
+
+        wasWatched = isItemWatched(episode)
+        updateItemWatchedState(episode, isWatched)
+        updateSeasonUnplayedCount(wasWatched, isWatched)
+        return
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSeasonEpisodesWatchedState
+'-------------------------------------------------------------------------------
+sub updateSeasonEpisodesWatchedState(isWatched as boolean)
+    for each episode in m.pageState.episodes
+        updateItemWatchedState(episode, isWatched)
+    end for
+
+    if isAssocArray(m.pageState.season) = false then return
+    if m.pageState.season.UserData = invalid then m.pageState.season.UserData = {}
+
+    if isWatched then
+        m.pageState.season.UserData.UnplayedItemCount = 0
+    else
+        m.pageState.season.UserData.UnplayedItemCount = getEpisodeCount()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSeasonUnplayedCount
+'-------------------------------------------------------------------------------
+sub updateSeasonUnplayedCount(wasWatched as boolean, isWatched as boolean)
+    if isAssocArray(m.pageState.season) = false then return
+    if m.pageState.season.UserData = invalid then m.pageState.season.UserData = {}
+
+    current = m.pageState.season.UserData.UnplayedItemCount
+    if current = invalid then current = countUnplayedEpisodes()
+    current = int(current)
+
+    if isWatched then
+        if wasWatched <> true and current > 0 then current = current - 1
+    else
+        if wasWatched = true or current = 0 then current = current + 1
+    end if
+
+    if current < 0 then current = 0
+    m.pageState.season.UserData.UnplayedItemCount = current
+end sub
+
+'-------------------------------------------------------------------------------
+' countUnplayedEpisodes
+'-------------------------------------------------------------------------------
+function countUnplayedEpisodes() as integer
+    count = 0
+    for each episode in m.pageState.episodes
+        if isAssocArray(episode) and isItemWatched(episode) <> true then count = count + 1
+    end for
+
+    return count
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeCount
+'-------------------------------------------------------------------------------
+function getEpisodeCount() as integer
+    if m.pageState.episodes = invalid then return 0
+    return m.pageState.episodes.Count()
+end function
+
+'-------------------------------------------------------------------------------
+' isItemWatched
+'-------------------------------------------------------------------------------
+function isItemWatched(item as dynamic) as boolean
+    if isAssocArray(item) = false then return false
+    if item.UserData = invalid then return false
+
+    return item.UserData.Played = true
+end function
+
+'-------------------------------------------------------------------------------
+' updateItemWatchedState
+'-------------------------------------------------------------------------------
+sub updateItemWatchedState(item as dynamic, isWatched as boolean)
+    if isAssocArray(item) = false then return
+    if item.UserData = invalid then item.UserData = {}
+
+    item.UserData.Played = isWatched
+    if isWatched then
+        item.UserData.PlayedPercentage = 0
+        item.UserData.PlaybackPositionTicks = 0
+    else
+        item.UserData.PlayedPercentage = 0
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreEpisodeFocus
+'-------------------------------------------------------------------------------
+sub restoreEpisodeFocus(itemId as string)
+    index = getEpisodeContentIndex(itemId)
+    if index < 0 then return
+
+    if isVerticalEpisodeList() then
+        m.episodesGrid.jumpToItem = index
+    else
+        m.episodesList.jumpToRowItem = [0, index]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getEpisodeContentIndex
+'-------------------------------------------------------------------------------
+function getEpisodeContentIndex(itemId as string) as integer
+    if itemId = "" then return -1
+
+    if isVerticalEpisodeList() then
+        if m.episodesGrid.content = invalid then return -1
+
+        for i = 0 to m.episodesGrid.content.getChildCount() - 1
+            child = m.episodesGrid.content.getChild(i)
+            if child <> invalid and SafeString(child.itemId, "") = itemId then return i
+        end for
+
+        return -1
+    end if
+
+    if m.episodesList.content = invalid or m.episodesList.content.getChildCount() = 0 then return -1
+
+    row = m.episodesList.content.getChild(0)
+    if row = invalid then return -1
+
+    for i = 0 to row.getChildCount() - 1
+        child = row.getChild(i)
+        if child <> invalid and SafeString(child.itemId, "") = itemId then return i
+    end for
+
+    return -1
 end function
 
 '-------------------------------------------------------------------------------

@@ -25,7 +25,6 @@ sub executeRequest()
 
     url = NormalizeServerUrl(request.server) + endpoint
     body = buildPlaystateBody(request)
-    m.log.write(url)
     m.log.write("Posting " + SafeString(request.status, "") + " itemId=" + SafeString(request.itemId, "") + " positionTicks=" + SafeString(getPositionTicks(request.position), "") + " endpoint=" + endpoint)
     result = HttpClient_Request(url, "POST", invalid, body, JellyfinAuth_BuildTokenHeaders(request.token))
     result.AddReplace("action", "playstate")

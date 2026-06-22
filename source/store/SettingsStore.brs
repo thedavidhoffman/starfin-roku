@@ -32,7 +32,7 @@ function SettingsStore_Defaults() as object
     defaults[keys.tvLibraryDisplay] = "poster"
     defaults[keys.movieLibraryDisplay] = "poster"
     defaults[keys.collectionDisplay] = "poster"
-    defaults[keys.tvEpisodeListDisplay] = "horizontal"
+    defaults[keys.tvEpisodeListDisplay] = "vertical"
     defaults[keys.tmdbApiKey] = ""
     return defaults
 end function

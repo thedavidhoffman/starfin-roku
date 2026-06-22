@@ -72,7 +72,6 @@ sub logPlaybackRequest(request as object, url as string, body as string)
     if request.item <> invalid then itemName = FirstNonEmpty([request.item.Name], "")
 
     m.log.write("PlaybackInfo request itemId=" + SafeString(request.itemId, "") + " title=" + itemName)
-    m.log.write("PlaybackInfo request URL: " + maskUrl(url))
     m.log.write("PlaybackInfo request body:")
     m.log.writeJson(body, 2)
 end sub

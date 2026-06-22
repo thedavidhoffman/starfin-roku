@@ -15,9 +15,13 @@ sub init()
     }
     initStyles()
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
+    m.watchedTask = m.top.findNode("watchedTask")
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
+    m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
     m.mediaToolbar.observeField("playSelected", "onMediaToolbarPlaySelected")
+    m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
+    m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.state = {
@@ -63,7 +67,9 @@ sub onItemContentChanged()
     applyLayout(title)
 
     m.episodePoster.itemContent = item
+    m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
     m.mediaToolbar.isWatched = isItemWatched(item)
+    m.mediaToolbar.callFunc("resetFocus")
     loadItemDetails()
 end sub
 
@@ -156,6 +162,7 @@ sub clearContent()
     m.description.text = ""
     m.description.translation = [590, m.layout.descriptionY]
     m.episodePoster.itemContent = invalid
+    m.mediaToolbar.supportsWatchedActions = false
     m.mediaToolbar.isWatched = false
     m.state.itemId = ""
     m.cast.people = []
@@ -178,6 +185,13 @@ sub deactivate()
 end sub
 
 '-------------------------------------------------------------------------------
+' resetFocus
+'-------------------------------------------------------------------------------
+sub resetFocus()
+    m.mediaToolbar.callFunc("resetFocus")
+end sub
+
+'-------------------------------------------------------------------------------
 ' onMediaToolbarFocusExitDown
 '-------------------------------------------------------------------------------
 sub onMediaToolbarFocusExitDown()
@@ -189,6 +203,72 @@ end sub
 '-------------------------------------------------------------------------------
 sub onMediaToolbarPlaySelected()
     m.top.playSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onMarkAsWatchedSelected
+'-------------------------------------------------------------------------------
+sub onMarkAsWatchedSelected()
+    runWatchedTask("MarkAsWatched")
+end sub
+
+'-------------------------------------------------------------------------------
+' onMarkAsUnwatchedSelected
+'-------------------------------------------------------------------------------
+sub onMarkAsUnwatchedSelected()
+    runWatchedTask("MarkAsUnwatched")
+end sub
+
+'-------------------------------------------------------------------------------
+' runWatchedTask
+'-------------------------------------------------------------------------------
+sub runWatchedTask(action as string)
+    item = m.top.itemContent
+    request = m.state.request
+    if item = invalid or request = invalid then return
+    if canMarkWatched(item) <> true then return
+
+    itemId = SafeString(item.itemId, "")
+    if itemId = "" then return
+
+    m.watchedTask.request = {
+        action: action
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+    }
+    m.watchedTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onWatchedTaskResponse
+'-------------------------------------------------------------------------------
+sub onWatchedTaskResponse()
+    response = m.watchedTask.response
+    if response = invalid then return
+
+    if response.ok <> true then
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to update watched state."))
+        return
+    end if
+
+    item = m.top.itemContent
+    if item = invalid then return
+
+    itemId = SafeString(response.itemId, "")
+    if itemId = "" or itemId <> SafeString(item.itemId, "") then return
+
+    isWatched = SafeString(response.action, "") = "MarkAsWatched"
+    updateItemWatchedState(item, isWatched)
+    refreshPoster()
+    m.mediaToolbar.isWatched = isWatched
+    m.mediaToolbar.callFunc("focusWatchedAction")
+    m.top.watchedStateChanged = {
+        itemId: itemId
+        isWatched: isWatched
+    }
+    Status_ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -238,9 +318,55 @@ function isItemWatched(item as dynamic) as boolean
     if item = invalid then return false
     if item.raw = invalid then return false
     if item.raw.UserData = invalid then return false
+    if SafeString(item.itemType, "") = "SeasonSummary" then
+        return item.raw.UserData.UnplayedItemCount = 0
+    end if
 
     return item.raw.UserData.Played = true
 end function
+
+'-------------------------------------------------------------------------------
+' canMarkWatched
+'-------------------------------------------------------------------------------
+function canMarkWatched(item as dynamic) as boolean
+    if item = invalid then return false
+    if SafeString(item.itemId, "") = "" then return false
+
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' updateItemWatchedState
+'-------------------------------------------------------------------------------
+sub updateItemWatchedState(item as dynamic, isWatched as boolean)
+    if item = invalid or item.raw = invalid then return
+    if item.raw.UserData = invalid then item.raw.UserData = {}
+
+    item.raw.UserData.Played = isWatched
+    if SafeString(item.itemType, "") = "SeasonSummary" then
+        if isWatched then
+            item.raw.UserData.UnplayedItemCount = 0
+        else
+            item.raw.UserData.UnplayedItemCount = 1
+        end if
+    end if
+
+    if isWatched then
+        item.raw.UserData.PlayedPercentage = 0
+        item.raw.UserData.PlaybackPositionTicks = 0
+    else
+        item.raw.UserData.PlayedPercentage = 0
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshPoster
+'-------------------------------------------------------------------------------
+sub refreshPoster()
+    item = m.top.itemContent
+    m.episodePoster.itemContent = invalid
+    m.episodePoster.itemContent = item
+end sub
 
 '-------------------------------------------------------------------------------
 ' getEpisodeDurationText

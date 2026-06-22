@@ -11,11 +11,13 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
         return { ok: false, errorMessage: message }
     end if
 
-   if method = invalid or method = "" then
+    if method = invalid or method = "" then
         message = "Invalid http request: method is invalid."
         log.error(message)
         return { ok: false, errorMessage: message }
     end if
+
+    normalizedMethod = UCase(method)
 
     ' IMPORTANT...
     ' do NOT check for invalid token here login requests don't have
@@ -44,25 +46,34 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
 
     responseText = ""
     status = 0
-    if method = "POST" then
+    logUrl = __HttpClient_MaskUrl(url)
+    log.write("[" + normalizedMethod + "] " + logUrl)
+    if normalizedMethod = "POST" then
         transfer.AddHeader("Content-Type", "application/json")
         requestStarted = transfer.AsyncPostFromString(__InvalidToEmpty(body))
     else
+        transfer.SetRequest(normalizedMethod)
         requestStarted = transfer.AsyncGetToString()
     end if
 
     if requestStarted <> true then
-        return { ok: false, status: 0, errorMessage: "Unable to start the request to the Audiobookshelf server." }
+        message = "Unable to start the server request."
+        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=0 message=" + message)
+        return { ok: false, status: 0, errorMessage: message }
     end if
 
     msg = wait(30000, port)
     if msg = invalid then
         transfer.AsyncCancel()
-        return { ok: false, status: 0, errorMessage: "The Audiobookshelf server request timed out." }
+        message = "The server request timed out."
+        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=0 message=" + message)
+        return { ok: false, status: 0, errorMessage: message }
     end if
 
     if type(msg) <> "roUrlEvent" then
-        return { ok: false, status: 0, errorMessage: "Unexpected response from the Audiobookshelf server." }
+        message = "Unexpected server response."
+        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=0 message=" + message)
+        return { ok: false, status: 0, errorMessage: message }
     end if
 
     status = msg.GetResponseCode()
@@ -71,11 +82,15 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
     contentType = __GetResponseHeader(responseHeaders, "content-type")
 
     if status = 0 then
-        return { ok: false, status: status, errorMessage: "Unable to reach the Audiobookshelf server." }
+        message = "Unable to reach the server."
+        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=" + status.ToStr() + " message=" + message)
+        return { ok: false, status: status, errorMessage: message }
     end if
 
     if status = 401 and token <> invalid and token <> "" then
-        return { ok: false, status: status, authExpired: true, errorMessage: "Your session has expired. Please sign in again." }
+        message = "Your session has expired. Please sign in again."
+        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=" + status.ToStr() + " message=" + message)
+        return { ok: false, status: status, authExpired: true, errorMessage: message }
     end if
 
     data = invalid
@@ -93,10 +108,58 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
         else if msg.GetFailureReason() <> invalid and String_Trim(msg.GetFailureReason()) <> "" then
             message = String_Trim(msg.GetFailureReason())
         end if
+        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=" + status.ToStr() + " message=" + message)
         return { ok: false, status: status, errorMessage: message, responseText: responseText }
     end if
 
     return { ok: true, status: status, data: data, responseText: responseText }
+end function
+
+'-------------------------------------------------------------------------------
+' MaskUrl
+'-------------------------------------------------------------------------------
+function __HttpClient_MaskUrl(url as Dynamic) as String
+    text = SafeString(url, "")
+    if text = "" then return ""
+
+    text = __HttpClient_MaskQueryValue(text, "api_key")
+    text = __HttpClient_MaskQueryValue(text, "token")
+    text = __HttpClient_MaskQueryValue(text, "ApiKey")
+    text = __HttpClient_MaskQueryValue(text, "X-Emby-Token")
+
+    return text
+end function
+
+'-------------------------------------------------------------------------------
+' MaskQueryValue
+'-------------------------------------------------------------------------------
+function __HttpClient_MaskQueryValue(url as String, name as String) as String
+    queryStart = Instr(1, url, "?")
+    if queryStart = 0 then return url
+
+    lowerUrl = LCase(url)
+    lowerName = LCase(name)
+    searchStart = queryStart + 1
+
+    while true
+        keyStart = Instr(searchStart, lowerUrl, lowerName + "=")
+        if keyStart = 0 then exit while
+
+        isQueryKey = keyStart = queryStart + 1 or Mid(url, keyStart - 1, 1) = "&"
+        if isQueryKey = true then
+            valueStart = keyStart + Len(name) + 1
+            valueEnd = Instr(valueStart, url, "&")
+            if valueEnd = 0 then valueEnd = Len(url) + 1
+
+            url = Left(url, valueStart - 1) + "[redacted]" + Mid(url, valueEnd)
+            lowerUrl = LCase(url)
+            searchStart = valueStart + Len("[redacted]")
+        else
+            searchStart = keyStart + Len(name) + 1
+        end if
+    end while
+
+    return url
 end function
 
 '-------------------------------------------------------------------------------

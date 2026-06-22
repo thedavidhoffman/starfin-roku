@@ -23,7 +23,6 @@ sub executeRequest()
     }
 
     url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)
-    m.log.write(url)
     result = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "tvEpisodeDetails")
