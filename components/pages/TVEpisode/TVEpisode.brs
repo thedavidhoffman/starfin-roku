@@ -19,7 +19,7 @@ sub initReferences()
     m.mediaToolbar = m.top.findNode("mediaToolbar")
     m.cast = m.top.findNode("cast")
     m.layout = {
-        descriptionX: 666
+        descriptionX: 755
         titleY: 288
         descriptionY: 342
     }

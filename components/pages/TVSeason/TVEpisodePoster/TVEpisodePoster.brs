@@ -2,13 +2,95 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.posterMask = m.top.findNode("posterMask")
     m.placeholder = m.top.findNode("placeholder")
     m.poster = m.top.findNode("poster")
     m.progressBorder = m.top.findNode("progressBorder")
     m.progressBackground = m.top.findNode("progressBackground")
     m.progressFill = m.top.findNode("progressFill")
     m.watchedIndicator = m.top.findNode("watchedIndicator")
+    m.layout = {
+        defaultWidth: 530
+        defaultHeight: 298
+        progressMarginX: 10
+        progressBottom: 10
+        progressHeight: 10
+        progressBorderPadding: 1
+        watchedSize: 58
+        watchedTop: 10
+        watchedRight: 11
+    }
+    applyPosterLayout()
 end sub
+
+'-------------------------------------------------------------------------------
+' onPosterSizeChanged
+'-------------------------------------------------------------------------------
+sub onPosterSizeChanged()
+    applyPosterLayout()
+    refresh()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPosterLayout
+'-------------------------------------------------------------------------------
+sub applyPosterLayout()
+    width = getPosterWidth()
+    height = getPosterHeight()
+    progressWidth = getProgressTrackWidth(width)
+    progressY = height - m.layout.progressBottom - m.layout.progressHeight
+
+    m.posterMask.maskSize = [width, height]
+    m.placeholder.width = width
+    m.placeholder.height = height
+    m.poster.width = width
+    m.poster.height = height
+
+    m.progressBorder.translation = [m.layout.progressMarginX - m.layout.progressBorderPadding, progressY - m.layout.progressBorderPadding]
+    m.progressBorder.width = progressWidth + (m.layout.progressBorderPadding * 2)
+    m.progressBorder.height = m.layout.progressHeight + (m.layout.progressBorderPadding * 2)
+
+    m.progressBackground.translation = [m.layout.progressMarginX, progressY]
+    m.progressBackground.width = progressWidth
+    m.progressBackground.height = m.layout.progressHeight
+
+    m.progressFill.translation = [m.layout.progressMarginX, progressY]
+    m.progressFill.height = m.layout.progressHeight
+
+    m.watchedIndicator.width = m.layout.watchedSize
+    m.watchedIndicator.height = m.layout.watchedSize
+    m.watchedIndicator.translation = [width - m.layout.watchedRight - m.layout.watchedSize, m.layout.watchedTop]
+end sub
+
+'-------------------------------------------------------------------------------
+' getPosterWidth
+'-------------------------------------------------------------------------------
+function getPosterWidth() as integer
+    width = m.top.posterWidth
+    if width = invalid or width <= 0 then return m.layout.defaultWidth
+
+    return width
+end function
+
+'-------------------------------------------------------------------------------
+' getPosterHeight
+'-------------------------------------------------------------------------------
+function getPosterHeight() as integer
+    height = m.top.posterHeight
+    if height = invalid or height <= 0 then return m.layout.defaultHeight
+
+    return height
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressTrackWidth
+'-------------------------------------------------------------------------------
+function getProgressTrackWidth(posterWidth as integer) as integer
+    width = posterWidth - (m.layout.progressMarginX * 2)
+    if width < 0 then return 0
+
+    return width
+end function
 
 '-------------------------------------------------------------------------------
 ' onItemContentChanged
@@ -55,6 +137,7 @@ end sub
 ' updateProgress
 '-------------------------------------------------------------------------------
 sub updateProgress(item as dynamic, isSeasonSummary as boolean)
+    trackWidth = getProgressTrackWidth(getPosterWidth())
     if isItemPlayed(item) then
         m.progressBorder.visible = false
         m.progressBackground.visible = false
@@ -69,7 +152,7 @@ sub updateProgress(item as dynamic, isSeasonSummary as boolean)
         if progressWidth = 0 and item.progressPercent <> invalid then
             progress = item.progressPercent
             if progress > 100 then progress = 100
-            if progress > 0 then progressWidth = int(510 * (progress / 100))
+            if progress > 0 then progressWidth = int(trackWidth * (progress / 100))
         end if
     end if
 
@@ -82,7 +165,7 @@ sub updateProgress(item as dynamic, isSeasonSummary as boolean)
         return
     end if
 
-    if progressWidth > 510 then progressWidth = 510
+    if progressWidth > trackWidth then progressWidth = trackWidth
     m.progressFill.width = progressWidth
 end sub
 
