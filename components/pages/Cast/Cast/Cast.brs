@@ -167,7 +167,7 @@ function getPersonSubtitle(person as object) as string
     personType = FirstNonEmpty([person.Type], "Unknown")
     role = FirstNonEmpty([person.Role], "")
 
-    if LCase(personType) = "actor" and role <> "" then return role
+    if role <> "" then return role
     return personType
 end function
 
