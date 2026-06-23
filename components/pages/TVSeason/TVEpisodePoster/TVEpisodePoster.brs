@@ -12,7 +12,7 @@ sub init()
         defaultHeight: 298
         progressMarginX: 10
         progressBottom: 10
-        progressHeight: 10
+        progressHeight: 15
         watchedSize: 58
         watchedTop: 10
         watchedRight: 11

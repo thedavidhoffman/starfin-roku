@@ -40,6 +40,8 @@ sub onProgressChanged()
 
     if progressWidth < 0 then progressWidth = 0
     if progressWidth > width then progressWidth = width
+    if progressWidth > 0 and progressWidth < getBarHeight() then progressWidth = getBarHeight()
+    if progressWidth > width then progressWidth = width
 
     m.fill.width = progressWidth
 end sub
