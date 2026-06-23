@@ -270,13 +270,46 @@ function buildEpisodeLoadRequest(node as dynamic) as dynamic
         userId: request.userId
         seriesId: request.seriesId
         seasonId: request.seasonId
-        series: request.series
-        season: request.season
+        series: buildSeriesIdentity(request, playSelection.item)
+        season: buildSeasonIdentity(request)
         itemId: playSelection.itemId
         item: playSelection.item
+        posterUrl: SafeString(node.HDPosterUrl, "")
         startPositionTicks: playSelection.startPositionTicks
         playbackQueue: playSelection.playbackQueue
         playbackQueueIndex: playSelection.playbackQueueIndex
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildSeriesIdentity
+'-------------------------------------------------------------------------------
+function buildSeriesIdentity(request as object, item as dynamic) as object
+    seriesName = ""
+    seriesId = ""
+    if request.series <> invalid then seriesName = FirstNonEmpty([request.series.Name], "")
+    if item <> invalid then
+        seriesId = FirstNonEmpty([item.SeriesId], "")
+        seriesName = FirstNonEmpty([item.SeriesName, seriesName], "")
+    end if
+
+    return {
+        Id: FirstNonEmpty([request.seriesId, seriesId], "")
+        Name: seriesName
+        logoUrl: getSeriesLogoUrl()
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildSeasonIdentity
+'-------------------------------------------------------------------------------
+function buildSeasonIdentity(request as object) as object
+    seasonName = ""
+    if request.season <> invalid then seasonName = FirstNonEmpty([request.season.Name], "")
+
+    return {
+        Id: FirstNonEmpty([request.seasonId], "")
+        Name: seasonName
     }
 end function
 

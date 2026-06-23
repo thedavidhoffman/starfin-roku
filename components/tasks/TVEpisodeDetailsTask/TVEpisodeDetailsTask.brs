@@ -17,27 +17,56 @@ sub executeRequest()
         return
     end if
 
-    params = {
-        userId: SafeString(request.userId, "")
-        fields: "People,Overview,MediaStreams,MediaSources,UserData"
-    }
-
-    url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)
-    result = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
-    if result.ok <> true then
-        result.AddReplace("action", "tvEpisodeDetails")
-        result.AddReplace("itemId", SafeString(request.itemId, ""))
-        m.top.response = result
+    episodeResult = loadEpisode(request)
+    if episodeResult.ok <> true then
+        episodeResult.AddReplace("action", "tvEpisodeDetails")
+        episodeResult.AddReplace("itemId", SafeString(request.itemId, ""))
+        m.top.response = episodeResult
         return
+    end if
+
+    series = invalid
+    seriesId = SafeString(episodeResult.data.SeriesId, "")
+    if seriesId <> "" then
+        seriesResult = loadSeries(request, seriesId)
+        if seriesResult <> invalid and seriesResult.ok = true then series = seriesResult.data
     end if
 
     m.top.response = {
         ok: true
         action: "tvEpisodeDetails"
         itemId: SafeString(request.itemId, "")
-        payload: result.data
+        payload: episodeResult.data
+        series: series
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' loadEpisode
+'-------------------------------------------------------------------------------
+function loadEpisode(request as object) as object
+    params = {
+        userId: SafeString(request.userId, "")
+        fields: "People,Overview,MediaStreams,MediaSources,UserData"
+    }
+
+    url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)
+    return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' loadSeries
+'-------------------------------------------------------------------------------
+function loadSeries(request as object, seriesId as string) as object
+    params = {
+        userId: SafeString(request.userId, "")
+        enableImageTypes: "Logo"
+        imageTypeLimit: 1
+    }
+
+    url = NormalizeServerUrl(request.server) + "/Items/" + seriesId + Url_BuildQueryString(params)
+    return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+end function
 
 '-------------------------------------------------------------------------------
 ' validateRequest

@@ -68,6 +68,7 @@ sub onLoadRequestChanged()
     if m.state.request <> invalid then
         m.cast.server = m.state.request.server
         renderLogoBanner()
+        renderInitialEpisodeContent()
     else
         clearLogoBanner()
     end if
@@ -84,8 +85,8 @@ sub renderLogoBanner()
         return
     end if
 
-    m.logoBanner.title = getSeriesTitle(request)
     m.logoBanner.logoUrl = getSeriesLogoUrl(request)
+    m.logoBanner.title = ""
 end sub
 
 '-------------------------------------------------------------------------------
@@ -97,20 +98,13 @@ sub clearLogoBanner()
 end sub
 
 '-------------------------------------------------------------------------------
-' getSeriesTitle
-'-------------------------------------------------------------------------------
-function getSeriesTitle(request as dynamic) as string
-    if request = invalid then return ""
-    if request.series <> invalid then return FirstNonEmpty([request.series.Name], "")
-
-    return ""
-end function
-
-'-------------------------------------------------------------------------------
 ' getSeriesLogoUrl
 '-------------------------------------------------------------------------------
 function getSeriesLogoUrl(request as dynamic) as string
     if request = invalid or request.series = invalid then return ""
+
+    logoUrl = FirstNonEmpty([request.series.logoUrl], "")
+    if logoUrl <> "" then return logoUrl
 
     return getImageUrl(request.series, "Logo", 600, 300)
 end function
@@ -306,17 +300,39 @@ sub onEpisodeDetailsResponse()
     if response.ok <> true then return
     if SafeString(response.itemId, "") <> m.state.itemId then return
 
-    applyEpisodeDetails(response.payload)
+    applySeriesDetails(response.series)
+    applyEpisodeDetails(response.payload, shouldKeepRequestPoster(response.payload))
     m.cast.people = getPeople(response.payload)
+end sub
+
+'-------------------------------------------------------------------------------
+' renderInitialEpisodeContent
+'-------------------------------------------------------------------------------
+sub renderInitialEpisodeContent()
+    request = m.state.request
+    if request = invalid or request.item = invalid then return
+
+    applyEpisodeDetails(request.item, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' applySeriesDetails
+'-------------------------------------------------------------------------------
+sub applySeriesDetails(series as dynamic)
+    if series = invalid then return
+    if m.state.request = invalid then return
+
+    m.state.request.series = series
+    renderLogoBanner()
 end sub
 
 '-------------------------------------------------------------------------------
 ' applyEpisodeDetails
 '-------------------------------------------------------------------------------
-sub applyEpisodeDetails(details as dynamic)
+sub applyEpisodeDetails(details as dynamic, useRequestPoster as boolean)
     if details = invalid then return
 
-    item = buildEpisodeContentNode(details)
+    item = buildEpisodeContentNode(details, useRequestPoster)
     m.state.itemContent = item
     m.state.playSelection = buildPlaySelection(details)
     renderEpisodeContent(item)
@@ -325,11 +341,11 @@ end sub
 '-------------------------------------------------------------------------------
 ' buildEpisodeContentNode
 '-------------------------------------------------------------------------------
-function buildEpisodeContentNode(details as dynamic) as object
+function buildEpisodeContentNode(details as dynamic, useRequestPoster as boolean) as object
     content = CreateObject("roSGNode", "ContentNode")
     content.title = FirstNonEmpty([details.Name], "")
     content.description = FirstNonEmpty([details.Overview], "")
-    content.HDPosterUrl = getEpisodePosterUrl(details)
+    content.HDPosterUrl = getEpisodePosterUrl(details, useRequestPoster)
     content.AddFields({
         itemId: SafeString(FirstNonEmpty([details.Id], ""), "")
         itemType: SafeString(FirstNonEmpty([details.Type], ""), "")
@@ -368,7 +384,12 @@ end function
 '-------------------------------------------------------------------------------
 ' getEpisodePosterUrl
 '-------------------------------------------------------------------------------
-function getEpisodePosterUrl(item as dynamic) as string
+function getEpisodePosterUrl(item as dynamic, useRequestPoster as boolean) as string
+    if useRequestPoster then
+        requestPosterUrl = getRequestPosterUrl(item)
+        if requestPosterUrl <> "" then return requestPosterUrl
+    end if
+
     itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
@@ -383,6 +404,27 @@ function getEpisodePosterUrl(item as dynamic) as string
     if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, 619, 348)
 
     return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getRequestPosterUrl
+'-------------------------------------------------------------------------------
+function getRequestPosterUrl(item as dynamic) as string
+    request = m.state.request
+    if request = invalid then return ""
+
+    requestItemId = FirstNonEmpty([request.itemId], "")
+    itemId = FirstNonEmpty([item.Id], "")
+    if requestItemId = "" or itemId = "" or requestItemId <> itemId then return ""
+
+    return FirstNonEmpty([request.posterUrl], "")
+end function
+
+'-------------------------------------------------------------------------------
+' shouldKeepRequestPoster
+'-------------------------------------------------------------------------------
+function shouldKeepRequestPoster(item as dynamic) as boolean
+    return getRequestPosterUrl(item) <> ""
 end function
 
 '-------------------------------------------------------------------------------
