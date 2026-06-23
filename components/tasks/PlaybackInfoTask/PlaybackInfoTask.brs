@@ -19,6 +19,7 @@ sub executeRequest()
 
     requestedAudioStreamIndex = getPlaybackRequestAudioStreamIndex(request)
     requestedSubtitleStreamIndex = getPlaybackRequestSubtitleStreamIndex(request)
+    displaySize = DeviceCapabilities_GetDisplaySize()
     requestedMediaSourceId = getPlaybackRequestMediaSourceId(request)
     requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
     requestedMediaSource = getPlaybackRequestMediaSource(request)
@@ -35,6 +36,7 @@ sub executeRequest()
     }
 
     if forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    m.log.write("Device profile display cap width=" + SafeString(displaySize.width, "") + " height=" + SafeString(displaySize.height, "") + " source=" + SafeString(displaySize.source, ""))
     m.log.write("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
     if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
     if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex

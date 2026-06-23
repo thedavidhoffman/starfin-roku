@@ -2,6 +2,7 @@
 ' DeviceCapabilities_BuildDeviceProfileJson
 '-------------------------------------------------------------------------------
 function DeviceCapabilities_BuildDeviceProfileJson() as string
+    displaySize = DeviceCapabilities_GetDisplaySize()
     return Json_Object([
         Json_Pair("Name", "Starfish Roku")
         Json_NumberPair("MaxStreamingBitrate", 120000000)
@@ -10,9 +11,34 @@ function DeviceCapabilities_BuildDeviceProfileJson() as string
         Json_String("DirectPlayProfiles") + ":[" + Json_JoinParts(__DeviceCapabilities_DirectPlayProfiles()) + "]"
         Json_String("TranscodingProfiles") + ":[" + Json_JoinParts(__DeviceCapabilities_TranscodingProfiles()) + "]"
         Json_String("ContainerProfiles") + ":[]"
-        Json_String("CodecProfiles") + ":[]"
-        Json_String("SubtitleProfiles") + ":[]"
+        Json_String("CodecProfiles") + ":[" + Json_JoinParts(__DeviceCapabilities_CodecProfiles(displaySize)) + "]"
+        Json_String("SubtitleProfiles") + ":[" + Json_JoinParts(__DeviceCapabilities_SubtitleProfiles()) + "]"
     ])
+end function
+
+'-------------------------------------------------------------------------------
+' DeviceCapabilities_GetDisplaySize
+'-------------------------------------------------------------------------------
+function DeviceCapabilities_GetDisplaySize() as object
+    fallback = { width: 1920, height: 1080, source: "fallback" }
+    deviceInfo = CreateObject("roDeviceInfo")
+    if deviceInfo = invalid then return fallback
+
+    displayMode = SafeString(deviceInfo.GetDisplayMode(), "")
+    displaySize = __DeviceCapabilities_DisplaySizeFromText(displayMode)
+    if __DeviceCapabilities_IsValidDisplaySize(displaySize) then
+        displaySize.source = "displayMode"
+        return displaySize
+    end if
+
+    uiResolution = SafeString(deviceInfo.GetUIResolution(), "")
+    displaySize = __DeviceCapabilities_DisplaySizeFromText(uiResolution)
+    if __DeviceCapabilities_IsValidDisplaySize(displaySize) then
+        displaySize.source = "uiResolution"
+        return displaySize
+    end if
+
+    return fallback
 end function
 
 '-------------------------------------------------------------------------------
@@ -93,6 +119,61 @@ function __DeviceCapabilities_TranscodingProfiles() as object
 end function
 
 '-------------------------------------------------------------------------------
+' __DeviceCapabilities_CodecProfiles
+'-------------------------------------------------------------------------------
+function __DeviceCapabilities_CodecProfiles(displaySize as object) as object
+    if displaySize = invalid then displaySize = { width: 1920, height: 1080 }
+
+    return [
+        Json_Object([
+            Json_Pair("Type", "Video")
+            Json_String("Conditions") + ":[" + Json_JoinParts([
+                __DeviceCapabilities_ProfileConditionJson("LessThanEqual", "Width", displaySize.width.ToStr())
+                __DeviceCapabilities_ProfileConditionJson("LessThanEqual", "Height", displaySize.height.ToStr())
+            ]) + "]"
+            Json_String("ApplyConditions") + ":[]"
+        ])
+    ]
+end function
+
+'-------------------------------------------------------------------------------
+' __DeviceCapabilities_ProfileConditionJson
+'-------------------------------------------------------------------------------
+function __DeviceCapabilities_ProfileConditionJson(conditionType as string, condition as string, value as string) as string
+    return Json_Object([
+        Json_Pair("Condition", conditionType)
+        Json_Pair("Property", condition)
+        Json_Pair("Value", value)
+        Json_BooleanPair("IsRequired", true)
+    ])
+end function
+
+'-------------------------------------------------------------------------------
+' __DeviceCapabilities_SubtitleProfiles
+'-------------------------------------------------------------------------------
+function __DeviceCapabilities_SubtitleProfiles() as object
+    return [
+        __DeviceCapabilities_SubtitleProfileJson("srt", "External")
+        __DeviceCapabilities_SubtitleProfileJson("vtt", "External")
+        __DeviceCapabilities_SubtitleProfileJson("ass", "Encode")
+        __DeviceCapabilities_SubtitleProfileJson("ssa", "Encode")
+        __DeviceCapabilities_SubtitleProfileJson("pgs", "Encode")
+        __DeviceCapabilities_SubtitleProfileJson("dvdsub", "Encode")
+        __DeviceCapabilities_SubtitleProfileJson("subrip", "Encode")
+    ]
+end function
+
+'-------------------------------------------------------------------------------
+' __DeviceCapabilities_SubtitleProfileJson
+'-------------------------------------------------------------------------------
+function __DeviceCapabilities_SubtitleProfileJson(format as string, method as string) as string
+    return Json_Object([
+        Json_Pair("Format", format)
+        Json_Pair("Method", method)
+    ])
+end function
+
+'-------------------------------------------------------------------------------
 ' __DeviceCapabilities_TranscodingAudioCodecs
 '-------------------------------------------------------------------------------
 function __DeviceCapabilities_TranscodingAudioCodecs(deviceInfo as object) as string
@@ -161,6 +242,32 @@ end function
 function __DeviceCapabilities_CanDecodeAudio(deviceInfo as object, codec as string, container as string) as boolean
     result = deviceInfo.CanDecodeAudio({ Codec: codec, Container: container })
     return result <> invalid and result.Result = true
+end function
+
+'-------------------------------------------------------------------------------
+' __DeviceCapabilities_DisplaySizeFromText
+'-------------------------------------------------------------------------------
+function __DeviceCapabilities_DisplaySizeFromText(value as string) as object
+    text = LCase(SafeString(value, ""))
+    if text = "" then return invalid
+
+    if Instr(1, text, "2160") > 0 or Instr(1, text, "4k") > 0 or Instr(1, text, "uhd") > 0 then return { width: 3840, height: 2160 }
+    if Instr(1, text, "1080") > 0 or Instr(1, text, "fhd") > 0 then return { width: 1920, height: 1080 }
+    if Instr(1, text, "720") > 0 or Instr(1, text, "hd") > 0 then return { width: 1280, height: 720 }
+    if Instr(1, text, "480") > 0 or Instr(1, text, "sd") > 0 then return { width: 720, height: 480 }
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' __DeviceCapabilities_IsValidDisplaySize
+'-------------------------------------------------------------------------------
+function __DeviceCapabilities_IsValidDisplaySize(displaySize as dynamic) as boolean
+    if displaySize = invalid then return false
+    if displaySize.width = invalid or displaySize.height = invalid then return false
+    if displaySize.width < 640 or displaySize.height < 360 then return false
+
+    return true
 end function
 
 '-------------------------------------------------------------------------------
