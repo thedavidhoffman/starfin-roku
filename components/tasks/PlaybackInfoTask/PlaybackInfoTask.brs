@@ -17,6 +17,10 @@ sub executeRequest()
         return
     end if
 
+    requestedAudioStreamIndex = getPlaybackRequestAudioStreamIndex(request)
+    requestedMediaSourceId = getPlaybackRequestMediaSourceId(request)
+    requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
+    forceTranscode = shouldForceTranscodeAudio(requestedAudioStream)
     params = {
         UserId: SafeString(request.userId, "")
         StartTimeTicks: getStartPositionTicks(request)
@@ -24,9 +28,13 @@ sub executeRequest()
         AutoOpenLiveStream: true
         MaxStreamingBitrate: "120000000"
         MaxStaticBitrate: "100000000"
-        EnableDirectPlay: true
-        EnableDirectStream: true
+        EnableDirectPlay: forceTranscode <> true
+        EnableDirectStream: forceTranscode <> true
     }
+
+    if forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
+    if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex
 
     url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + "/PlaybackInfo" + Url_BuildQueryString(params)
     body = buildPlaybackInfoBody()
@@ -42,7 +50,7 @@ sub executeRequest()
 
     logPlaybackResponse(result.data)
 
-    streamInfo = buildStreamInfo(request, result.data)
+    streamInfo = buildStreamInfo(request, result.data, requestedAudioStreamIndex)
     if streamInfo.ok <> true then
         m.log.error(streamInfo.errorMessage)
         m.top.response = streamInfo
@@ -135,7 +143,7 @@ end function
 '-------------------------------------------------------------------------------
 ' buildStreamInfo
 '-------------------------------------------------------------------------------
-function buildStreamInfo(request as object, playbackInfo as dynamic) as object
+function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAudioStreamIndex as integer) as object
     mediaSource = firstMediaSource(playbackInfo)
     if mediaSource = invalid then
         return { ok: false, action: "playbackInfo", errorMessage: "The selected item has no playable media source." }
@@ -145,19 +153,22 @@ function buildStreamInfo(request as object, playbackInfo as dynamic) as object
     container = SafeString(mediaSource.Container, "")
     playSessionId = SafeString(playbackInfo.PlaySessionId, "")
     streamUrl = SafeString(mediaSource.TranscodingUrl, "")
+    audioStreamIndex = getResolvedAudioStreamIndex(mediaSource, requestedAudioStreamIndex)
     if streamUrl <> "" then
         streamUrl = buildServerUrl(request.server, streamUrl)
         streamFormat = "hls"
+        playbackMethod = "transcode"
     else
         streamFormat = getStreamFormat(container)
         streamUrl = NormalizeServerUrl(request.server) + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString({
             Static: true
             MediaSourceId: mediaSourceId
-            AudioStreamIndex: getDefaultAudioStreamIndex(mediaSource)
+            AudioStreamIndex: audioStreamIndex
             Container: container
             PlaySessionId: playSessionId
             api_key: request.token
         })
+        playbackMethod = "direct"
     end if
 
     return {
@@ -165,7 +176,101 @@ function buildStreamInfo(request as object, playbackInfo as dynamic) as object
         streamUrl: streamUrl
         streamFormat: streamFormat
         playSessionId: playSessionId
+        playbackMethod: playbackMethod
+        mediaSourceId: mediaSourceId
+        videoStreamIndex: getDefaultVideoStreamIndex(mediaSource)
+        audioStreamIndex: audioStreamIndex
     }
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestMediaSourceId
+'-------------------------------------------------------------------------------
+function getPlaybackRequestMediaSourceId(request as dynamic) as string
+    if request = invalid then return ""
+    if request.mediaSourceId <> invalid then return SafeString(request.mediaSourceId, "")
+
+    item = request.item
+    if item = invalid or item.MediaSources = invalid or item.MediaSources.Count() = 0 then return ""
+    mediaSource = item.MediaSources[0]
+    if mediaSource = invalid then return ""
+
+    return SafeString(mediaSource.Id, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestAudioStreamIndex
+'-------------------------------------------------------------------------------
+function getPlaybackRequestAudioStreamIndex(request as dynamic) as integer
+    if request = invalid then return -1
+    if request.audioStreamIndex <> invalid then return int(request.audioStreamIndex)
+
+    return getDefaultAudioStreamIndexFromStreams(getPlaybackRequestMediaStreams(request))
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestMediaStreams
+'-------------------------------------------------------------------------------
+function getPlaybackRequestMediaStreams(request as dynamic) as dynamic
+    if request = invalid or request.item = invalid then return invalid
+
+    item = request.item
+    if item.MediaStreams <> invalid then return item.MediaStreams
+    if item.mediaStreams <> invalid then return item.mediaStreams
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestMediaStream
+'-------------------------------------------------------------------------------
+function getPlaybackRequestMediaStream(request as dynamic, streamIndex as integer) as dynamic
+    mediaStreams = getPlaybackRequestMediaStreams(request)
+    if mediaStreams = invalid then return invalid
+    if streamIndex < 0 or streamIndex >= mediaStreams.Count() then return invalid
+
+    mediaStream = mediaStreams[streamIndex]
+    if mediaStream <> invalid then mediaStream.AddReplace("arrayIndex", streamIndex)
+    return mediaStream
+end function
+
+'-------------------------------------------------------------------------------
+' shouldForceTranscodeAudio
+'-------------------------------------------------------------------------------
+function shouldForceTranscodeAudio(mediaStream as dynamic) as boolean
+    if mediaStream = invalid then return false
+    if LCase(SafeString(mediaStream.Type, "")) <> "audio" then return false
+    if LCase(SafeString(mediaStream.Codec, "")) <> "aac" then return false
+    if mediaStream.Channels = invalid then return false
+
+    return int(mediaStream.Channels) > 2
+end function
+
+'-------------------------------------------------------------------------------
+' logForcedTranscodeReason
+'-------------------------------------------------------------------------------
+sub logForcedTranscodeReason(mediaStream as dynamic)
+    m.log.write("Forcing transcode because selected audio is multichannel AAC. Index=" + SafeString(mediaStream.arrayIndex, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+end sub
+
+'-------------------------------------------------------------------------------
+' getDefaultAudioStreamIndexFromStreams
+'-------------------------------------------------------------------------------
+function getDefaultAudioStreamIndexFromStreams(mediaStreams as dynamic) as integer
+    if mediaStreams = invalid then return -1
+
+    firstAudioIndex = -1
+    for i = 0 to mediaStreams.Count() - 1
+        mediaStream = mediaStreams[i]
+        if mediaStream = invalid then continue for
+        if LCase(SafeString(mediaStream.Type, "")) = "audio" then
+            streamIndex = i
+            if firstAudioIndex = -1 then firstAudioIndex = streamIndex
+            if mediaStream.IsDefault = true then return streamIndex
+        end if
+    end for
+
+    return firstAudioIndex
 end function
 
 '-------------------------------------------------------------------------------
@@ -194,10 +299,11 @@ function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
     if mediaSource = invalid or mediaSource.MediaStreams = invalid then return 1
 
     firstAudioIndex = -1
-    for each mediaStream in mediaSource.MediaStreams
+    for i = 0 to mediaSource.MediaStreams.Count() - 1
+        mediaStream = mediaSource.MediaStreams[i]
+        if mediaStream = invalid then continue for
         if LCase(SafeString(mediaStream.Type, "")) = "audio" then
-            streamIndex = -1
-            if mediaStream.Index <> invalid then streamIndex = mediaStream.Index
+            streamIndex = i
             if firstAudioIndex = -1 then firstAudioIndex = streamIndex
             if mediaStream.IsDefault = true then return streamIndex
         end if
@@ -205,6 +311,32 @@ function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
 
     if firstAudioIndex <> -1 then return firstAudioIndex
     return 1
+end function
+
+'-------------------------------------------------------------------------------
+' getResolvedAudioStreamIndex
+'-------------------------------------------------------------------------------
+function getResolvedAudioStreamIndex(mediaSource as dynamic, requestedAudioStreamIndex as integer) as integer
+    if requestedAudioStreamIndex >= 0 then return requestedAudioStreamIndex
+
+    return getDefaultAudioStreamIndex(mediaSource)
+end function
+
+'-------------------------------------------------------------------------------
+' getDefaultVideoStreamIndex
+'-------------------------------------------------------------------------------
+function getDefaultVideoStreamIndex(mediaSource as dynamic) as integer
+    if mediaSource = invalid or mediaSource.MediaStreams = invalid then return 0
+
+    for i = 0 to mediaSource.MediaStreams.Count() - 1
+        mediaStream = mediaSource.MediaStreams[i]
+        if mediaStream = invalid then continue for
+        if LCase(SafeString(mediaStream.Type, "")) = "video" then
+            return i
+        end if
+    end for
+
+    return 0
 end function
 
 '-------------------------------------------------------------------------------
@@ -258,6 +390,7 @@ function maskUrl(url as dynamic) as string
     if text = "" then return ""
 
     text = maskQueryValue(text, "api_key")
+    text = maskQueryValue(text, "ApiKey")
     text = maskQueryValue(text, "token")
     text = maskQueryValue(text, "X-Emby-Token")
 

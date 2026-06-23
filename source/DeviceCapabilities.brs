@@ -96,14 +96,16 @@ end function
 ' __DeviceCapabilities_TranscodingAudioCodecs
 '-------------------------------------------------------------------------------
 function __DeviceCapabilities_TranscodingAudioCodecs(deviceInfo as object) as string
-    codecs = ["aac"]
-    candidates = ["ac3", "eac3", "mp3", "vorbis", "opus", "flac", "alac", "dts"]
+    codecs = []
+    candidates = ["ac3", "eac3", "aac", "mp3", "vorbis", "opus", "flac", "alac", "dts"]
 
     for each codec in candidates
         if __DeviceCapabilities_CanDecodeAudio(deviceInfo, codec, "ts") or __DeviceCapabilities_CanDecodeAudio(deviceInfo, codec, "mp4") then
             __DeviceCapabilities_AddUnique(codecs, codec)
         end if
     end for
+
+    if codecs.Count() = 0 then codecs.Push("aac")
 
     return codecs.Join(",")
 end function
