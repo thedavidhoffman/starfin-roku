@@ -20,7 +20,8 @@ sub executeRequest()
     requestedAudioStreamIndex = getPlaybackRequestAudioStreamIndex(request)
     requestedMediaSourceId = getPlaybackRequestMediaSourceId(request)
     requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
-    forceTranscode = shouldForceTranscodeAudio(requestedAudioStream)
+    requestedMediaSource = getPlaybackRequestMediaSource(request)
+    forceTranscode = shouldForceTranscodeAudio(requestedAudioStream, requestedMediaSource)
     params = {
         UserId: SafeString(request.userId, "")
         StartTimeTicks: getStartPositionTicks(request)
@@ -190,12 +191,21 @@ function getPlaybackRequestMediaSourceId(request as dynamic) as string
     if request = invalid then return ""
     if request.mediaSourceId <> invalid then return SafeString(request.mediaSourceId, "")
 
-    item = request.item
-    if item = invalid or item.MediaSources = invalid or item.MediaSources.Count() = 0 then return ""
-    mediaSource = item.MediaSources[0]
+    mediaSource = getPlaybackRequestMediaSource(request)
     if mediaSource = invalid then return ""
 
     return SafeString(mediaSource.Id, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestMediaSource
+'-------------------------------------------------------------------------------
+function getPlaybackRequestMediaSource(request as dynamic) as dynamic
+    if request = invalid then return invalid
+    item = request.item
+    if item = invalid or item.MediaSources = invalid or item.MediaSources.Count() = 0 then return invalid
+    mediaSource = item.MediaSources[0]
+    return mediaSource
 end function
 
 '-------------------------------------------------------------------------------
@@ -237,20 +247,31 @@ end function
 '-------------------------------------------------------------------------------
 ' shouldForceTranscodeAudio
 '-------------------------------------------------------------------------------
-function shouldForceTranscodeAudio(mediaStream as dynamic) as boolean
+function shouldForceTranscodeAudio(mediaStream as dynamic, mediaSource as dynamic) as boolean
     if mediaStream = invalid then return false
     if LCase(SafeString(mediaStream.Type, "")) <> "audio" then return false
     if LCase(SafeString(mediaStream.Codec, "")) <> "aac" then return false
     if mediaStream.Channels = invalid then return false
+    if int(mediaStream.Channels) <= 2 then return false
 
-    return int(mediaStream.Channels) > 2
+    deviceInfo = CreateObject("roDeviceInfo")
+    container = ""
+    if mediaSource <> invalid then container = SafeString(mediaSource.Container, "")
+    decodeInfo = {
+        Codec: SafeString(mediaStream.Codec, "")
+        ChCnt: int(mediaStream.Channels)
+    }
+    if container <> "" then decodeInfo.Container = container
+
+    result = deviceInfo.CanDecodeAudio(decodeInfo)
+    return result = invalid or result.Result <> true
 end function
 
 '-------------------------------------------------------------------------------
 ' logForcedTranscodeReason
 '-------------------------------------------------------------------------------
 sub logForcedTranscodeReason(mediaStream as dynamic)
-    m.log.write("Forcing transcode because selected audio is multichannel AAC. Index=" + SafeString(mediaStream.arrayIndex, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+    m.log.write("Forcing transcode because selected multichannel AAC audio is not device-decodable. Index=" + SafeString(mediaStream.arrayIndex, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
 end sub
 
 '-------------------------------------------------------------------------------
