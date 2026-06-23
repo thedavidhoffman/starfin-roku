@@ -756,7 +756,7 @@ sub playerShow(selection as object)
 
     player = CreateObject("roSGNode", "VideoPlayer")
     player.observeField("closeRequested", "playerHandleCloseRequested")
-    player.playRequest = {
+    playRequest = {
         server: m.session.server
         token: m.session.token
         userId: m.session.userId
@@ -766,6 +766,9 @@ sub playerShow(selection as object)
         playbackQueue: selection.playbackQueue
         playbackQueueIndex: selection.playbackQueueIndex
     }
+    if selection.audioStreamIndex <> invalid then playRequest.AddReplace("audioStreamIndex", selection.audioStreamIndex)
+    if selection.subtitleStreamIndex <> invalid then playRequest.AddReplace("subtitleStreamIndex", selection.subtitleStreamIndex)
+    player.playRequest = playRequest
 
     if m.moviePage <> invalid then m.moviePage.visible = false
     if m.tvEpisodePage <> invalid then m.tvEpisodePage.visible = false

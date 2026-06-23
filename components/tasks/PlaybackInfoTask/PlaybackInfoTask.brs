@@ -18,6 +18,7 @@ sub executeRequest()
     end if
 
     requestedAudioStreamIndex = getPlaybackRequestAudioStreamIndex(request)
+    requestedSubtitleStreamIndex = getPlaybackRequestSubtitleStreamIndex(request)
     requestedMediaSourceId = getPlaybackRequestMediaSourceId(request)
     requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
     requestedMediaSource = getPlaybackRequestMediaSource(request)
@@ -34,8 +35,10 @@ sub executeRequest()
     }
 
     if forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    m.log.write("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
     if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
     if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex
+    if requestedSubtitleStreamIndex >= -1 then params.SubtitleStreamIndex = requestedSubtitleStreamIndex
 
     url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + "/PlaybackInfo" + Url_BuildQueryString(params)
     body = buildPlaybackInfoBody()
@@ -51,7 +54,7 @@ sub executeRequest()
 
     logPlaybackResponse(result.data)
 
-    streamInfo = buildStreamInfo(request, result.data, requestedAudioStreamIndex)
+    streamInfo = buildStreamInfo(request, result.data, requestedAudioStreamIndex, requestedSubtitleStreamIndex)
     if streamInfo.ok <> true then
         m.log.error(streamInfo.errorMessage)
         m.top.response = streamInfo
@@ -144,7 +147,7 @@ end function
 '-------------------------------------------------------------------------------
 ' buildStreamInfo
 '-------------------------------------------------------------------------------
-function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAudioStreamIndex as integer) as object
+function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAudioStreamIndex as integer, requestedSubtitleStreamIndex as integer) as object
     mediaSource = firstMediaSource(playbackInfo)
     if mediaSource = invalid then
         return { ok: false, action: "playbackInfo", errorMessage: "The selected item has no playable media source." }
@@ -157,18 +160,21 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
     audioStreamIndex = getResolvedAudioStreamIndex(mediaSource, requestedAudioStreamIndex)
     if streamUrl <> "" then
         streamUrl = buildServerUrl(request.server, streamUrl)
+        if requestedSubtitleStreamIndex >= -1 then streamUrl = ensureQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
         streamFormat = "hls"
         playbackMethod = "transcode"
     else
         streamFormat = getStreamFormat(container)
-        streamUrl = NormalizeServerUrl(request.server) + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString({
+        streamParams = {
             Static: true
             MediaSourceId: mediaSourceId
             AudioStreamIndex: audioStreamIndex
             Container: container
             PlaySessionId: playSessionId
             api_key: request.token
-        })
+        }
+        if requestedSubtitleStreamIndex >= -1 then streamParams.SubtitleStreamIndex = requestedSubtitleStreamIndex
+        streamUrl = NormalizeServerUrl(request.server) + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
         playbackMethod = "direct"
     end if
 
@@ -181,6 +187,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         mediaSourceId: mediaSourceId
         videoStreamIndex: getDefaultVideoStreamIndex(mediaSource)
         audioStreamIndex: audioStreamIndex
+        subtitleStreamIndex: requestedSubtitleStreamIndex
     }
 end function
 
@@ -219,6 +226,16 @@ function getPlaybackRequestAudioStreamIndex(request as dynamic) as integer
 end function
 
 '-------------------------------------------------------------------------------
+' getPlaybackRequestSubtitleStreamIndex
+'-------------------------------------------------------------------------------
+function getPlaybackRequestSubtitleStreamIndex(request as dynamic) as integer
+    if request = invalid then return -2
+    if request.subtitleStreamIndex <> invalid then return int(request.subtitleStreamIndex)
+
+    return -2
+end function
+
+'-------------------------------------------------------------------------------
 ' getPlaybackRequestMediaStreams
 '-------------------------------------------------------------------------------
 function getPlaybackRequestMediaStreams(request as dynamic) as dynamic
@@ -237,6 +254,16 @@ end function
 function getPlaybackRequestMediaStream(request as dynamic, streamIndex as integer) as dynamic
     mediaStreams = getPlaybackRequestMediaStreams(request)
     if mediaStreams = invalid then return invalid
+
+    for i = 0 to mediaStreams.Count() - 1
+        mediaStream = mediaStreams[i]
+        if mediaStream = invalid then continue for
+        if getMediaStreamIndex(mediaStream, i) = streamIndex then
+            mediaStream.AddReplace("arrayIndex", i)
+            return mediaStream
+        end if
+    end for
+
     if streamIndex < 0 or streamIndex >= mediaStreams.Count() then return invalid
 
     mediaStream = mediaStreams[streamIndex]
@@ -285,7 +312,7 @@ function getDefaultAudioStreamIndexFromStreams(mediaStreams as dynamic) as integ
         mediaStream = mediaStreams[i]
         if mediaStream = invalid then continue for
         if LCase(SafeString(mediaStream.Type, "")) = "audio" then
-            streamIndex = i
+            streamIndex = getMediaStreamIndex(mediaStream, i)
             if firstAudioIndex = -1 then firstAudioIndex = streamIndex
             if mediaStream.IsDefault = true then return streamIndex
         end if
@@ -314,6 +341,40 @@ function buildServerUrl(server as string, path as string) as string
 end function
 
 '-------------------------------------------------------------------------------
+' ensureQueryParam
+'-------------------------------------------------------------------------------
+function ensureQueryParam(url as string, name as string, value as string) as string
+    if hasQueryParam(url, name) then return url
+
+    separator = "?"
+    if Instr(1, url, "?") > 0 then separator = "&"
+
+    return url + separator + Encode_Url(name) + "=" + Encode_Url(value)
+end function
+
+'-------------------------------------------------------------------------------
+' hasQueryParam
+'-------------------------------------------------------------------------------
+function hasQueryParam(url as string, name as string) as boolean
+    queryStart = Instr(1, url, "?")
+    if queryStart = 0 then return false
+
+    lowerUrl = LCase(url)
+    lowerName = LCase(name)
+    searchStart = queryStart + 1
+
+    while true
+        keyStart = Instr(searchStart, lowerUrl, lowerName + "=")
+        if keyStart = 0 then return false
+        if keyStart = queryStart + 1 or Mid(url, keyStart - 1, 1) = "&" then return true
+
+        searchStart = keyStart + Len(name) + 1
+    end while
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
 ' getDefaultAudioStreamIndex
 '-------------------------------------------------------------------------------
 function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
@@ -324,7 +385,7 @@ function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
         mediaStream = mediaSource.MediaStreams[i]
         if mediaStream = invalid then continue for
         if LCase(SafeString(mediaStream.Type, "")) = "audio" then
-            streamIndex = i
+            streamIndex = getMediaStreamIndex(mediaStream, i)
             if firstAudioIndex = -1 then firstAudioIndex = streamIndex
             if mediaStream.IsDefault = true then return streamIndex
         end if
@@ -353,11 +414,19 @@ function getDefaultVideoStreamIndex(mediaSource as dynamic) as integer
         mediaStream = mediaSource.MediaStreams[i]
         if mediaStream = invalid then continue for
         if LCase(SafeString(mediaStream.Type, "")) = "video" then
-            return i
+            return getMediaStreamIndex(mediaStream, i)
         end if
     end for
 
     return 0
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaStreamIndex
+'-------------------------------------------------------------------------------
+function getMediaStreamIndex(mediaStream as dynamic, fallback as integer) as integer
+    if mediaStream <> invalid and mediaStream.Index <> invalid then return int(mediaStream.Index)
+    return fallback
 end function
 
 '-------------------------------------------------------------------------------
