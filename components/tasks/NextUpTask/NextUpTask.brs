@@ -22,6 +22,7 @@ sub executeRequest()
         SortBy: "DatePlayed"
         SortOrder: "Descending"
         ImageTypeLimit: 1
+        EnableImageTypes: "Primary,Backdrop,Thumb"
         UserId: getUserId(request)
         EnableRewatching: getBoolean(request.enableRewatching, false)
         DisableFirstEpisode: false

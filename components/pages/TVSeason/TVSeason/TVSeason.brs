@@ -247,11 +247,36 @@ end sub
 function buildFocusedEpisodeDetailsSelection() as dynamic
     focusedEpisode = getFocusedEpisodeNode()
     if focusedEpisode = invalid then return invalid
+    if SafeString(focusedEpisode.itemType, "") = "SeasonSummary" then return invalid
 
     return {
-        loadRequest: m.pageState.request
-        itemContent: focusedEpisode
-        playSelection: buildEpisodePlaySelection(focusedEpisode)
+        loadRequest: buildEpisodeLoadRequest(focusedEpisode)
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildEpisodeLoadRequest
+'-------------------------------------------------------------------------------
+function buildEpisodeLoadRequest(node as dynamic) as dynamic
+    playSelection = buildEpisodePlaySelection(node)
+    if playSelection = invalid then return invalid
+
+    request = m.pageState.request
+    if request = invalid then return invalid
+
+    return {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        seriesId: request.seriesId
+        seasonId: request.seasonId
+        series: request.series
+        season: request.season
+        itemId: playSelection.itemId
+        item: playSelection.item
+        startPositionTicks: playSelection.startPositionTicks
+        playbackQueue: playSelection.playbackQueue
+        playbackQueueIndex: playSelection.playbackQueueIndex
     }
 end function
 

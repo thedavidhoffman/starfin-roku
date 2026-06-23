@@ -25,6 +25,8 @@ sub executeRequest()
         MediaTypes: "Video"
         excludeItemTypes: "Book"
         Fields: "SeriesInfo"
+        EnableImageTypes: "Primary,Backdrop,Thumb"
+        ImageTypeLimit: 1
         EnableTotalRecordCount: false
     }
 

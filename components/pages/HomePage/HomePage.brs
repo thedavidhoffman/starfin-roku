@@ -67,6 +67,11 @@ sub selectHomeItem(item as dynamic)
             collectionType: item.CollectionType
             item: item
         }
+    else if isTVEpisode(item) then
+        m.top.selectedEpisode = {
+            itemId: itemId
+            item: item
+        }
     else if isPlayableMovie(item) then
         m.top.selectedMovie = {
             itemId: itemId
@@ -553,8 +558,69 @@ end function
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as string) as string
+    if key = "continueWatching" or key = "nextUp" then
+        imageUrl = getResumeRowImageUrl(item, imageAspect)
+        if imageUrl <> "" then return imageUrl
+    end if
+
     imageUrl = getItemImageUrl(item, imageAspect)
     if imageUrl <> "" then return imageUrl
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getResumeRowImageUrl
+'-------------------------------------------------------------------------------
+function getResumeRowImageUrl(item as dynamic, imageAspect as string) as string
+    if isAssocArray(item) = false then return ""
+
+    itemType = LCase(FirstNonEmpty([item.Type], ""))
+    if itemType = "episode" then return getSeriesThumbnailImageUrl(item, imageAspect)
+    if itemType = "movie" or itemType = "video" then return getMovieThumbnailImageUrl(item, imageAspect)
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getMovieThumbnailImageUrl
+'-------------------------------------------------------------------------------
+function getMovieThumbnailImageUrl(item as dynamic, imageAspect as string) as string
+    imageSize = getImageSize(imageAspect)
+    itemId = FirstNonEmpty([item.Id], "")
+
+    thumbTag = getImageTag(item, "Thumb")
+    if itemId <> "" and thumbTag <> "" then return buildImageUrl(itemId, "Thumb", thumbTag, imageSize.width, imageSize.height)
+
+    backdropTag = getBackdropImageTag(item)
+    if itemId <> "" and backdropTag <> "" then return buildImageUrl(itemId, "Backdrop", backdropTag, imageSize.width, imageSize.height)
+
+    primaryTag = getImageTag(item, "Primary")
+    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getSeriesThumbnailImageUrl
+'-------------------------------------------------------------------------------
+function getSeriesThumbnailImageUrl(item as dynamic, imageAspect as string) as string
+    imageSize = getImageSize(imageAspect)
+
+    parentThumbId = FirstNonEmpty([item.ParentThumbItemId, item.ParentThumbImageItemId], "")
+    parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
+    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
+
+    seriesId = FirstNonEmpty([item.SeriesId], "")
+    seriesThumbTag = FirstNonEmpty([item.SeriesThumbImageTag], "")
+    if seriesId <> "" and seriesThumbTag <> "" then return buildImageUrl(seriesId, "Thumb", seriesThumbTag, imageSize.width, imageSize.height)
+
+    parentBackdropId = FirstNonEmpty([item.ParentBackdropItemId], "")
+    parentBackdropTag = getParentBackdropImageTag(item)
+    if parentBackdropId <> "" and parentBackdropTag <> "" then return buildImageUrl(parentBackdropId, "Backdrop", parentBackdropTag, imageSize.width, imageSize.height)
+
+    seriesPrimaryTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
+    if seriesId <> "" and seriesPrimaryTag <> "" then return buildImageUrl(seriesId, "Primary", seriesPrimaryTag, imageSize.width, imageSize.height)
 
     return ""
 end function
@@ -586,6 +652,36 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
 end function
 
 '-------------------------------------------------------------------------------
+' getImageTag
+'-------------------------------------------------------------------------------
+function getImageTag(item as dynamic, imageType as string) as string
+    if item = invalid or item.ImageTags = invalid then return ""
+
+    tag = item.ImageTags[imageType]
+    return FirstNonEmpty([tag], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getBackdropImageTag
+'-------------------------------------------------------------------------------
+function getBackdropImageTag(item as dynamic) as string
+    if item = invalid then return ""
+    if item.BackdropImageTags = invalid or item.BackdropImageTags.Count() = 0 then return ""
+
+    return FirstNonEmpty([item.BackdropImageTags[0]], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getParentBackdropImageTag
+'-------------------------------------------------------------------------------
+function getParentBackdropImageTag(item as dynamic) as string
+    if item = invalid then return ""
+    if item.ParentBackdropImageTags = invalid or item.ParentBackdropImageTags.Count() = 0 then return ""
+
+    return FirstNonEmpty([item.ParentBackdropImageTags[0]], "")
+end function
+
+'-------------------------------------------------------------------------------
 ' getImageSize
 '-------------------------------------------------------------------------------
 function getImageSize(imageAspect as string) as object
@@ -601,6 +697,16 @@ function isPlayableMovie(item as dynamic) as boolean
 
     itemType = LCase(FirstNonEmpty([item.Type], ""))
     return itemType = "movie" or itemType = "video"
+end function
+
+'-------------------------------------------------------------------------------
+' isTVEpisode
+'-------------------------------------------------------------------------------
+function isTVEpisode(item as dynamic) as boolean
+    if isAssocArray(item) = false then return false
+
+    itemType = LCase(FirstNonEmpty([item.Type], ""))
+    return itemType = "episode"
 end function
 
 '-------------------------------------------------------------------------------

@@ -47,6 +47,7 @@ sub initHandlers()
     m.authController.observeField("sessionExpired", "authHandleSessionExpired")
     m.homePage.observeField("selectedMovie", "movieHandleHomeMovieSelected")
     m.homePage.observeField("selectedSeries", "tvShowHandleHomeSeriesSelected")
+    m.homePage.observeField("selectedEpisode", "tvEpisodeHandleHomeEpisodeSelected")
     m.homePage.observeField("selectedLibrary", "libraryHandleHomeLibrarySelected")
     m.homePage.observeField("selectedCollections", "collectionsHandleHomeCollectionsSelected")
     m.homePage.observeField("focusExitUp", "navHandleHomeFocusExitUp")
@@ -313,11 +314,31 @@ sub tvEpisodeHandleTVSeasonEpisodeSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' tvEpisodeHandleHomeEpisodeSelected
+'-------------------------------------------------------------------------------
+sub tvEpisodeHandleHomeEpisodeSelected()
+    selection = m.homePage.selectedEpisode
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    loadRequest = buildHomeEpisodeLoadRequest(selection)
+    if loadRequest = invalid then return
+
+    episodeSelection = {
+        loadRequest: loadRequest
+    }
+
+    resetDynamicPages()
+    tvEpisodeShow(episodeSelection)
+end sub
+
+'-------------------------------------------------------------------------------
 ' tvEpisodeShow
 '-------------------------------------------------------------------------------
 sub tvEpisodeShow(selection as object)
     if selection = invalid then return
-    if selection.itemContent = invalid then return
+    if selection.loadRequest = invalid then return
+    if selection.loadRequest.itemId = invalid or selection.loadRequest.itemId = "" then return
 
     page = CreateObject("roSGNode", "TVEpisode")
     page.observeField("closeRequested", "tvEpisodeHandleCloseRequested")
@@ -325,8 +346,6 @@ sub tvEpisodeShow(selection as object)
     page.observeField("selectedPerson", "personHandleTVEpisodePersonSelected")
     page.observeField("watchedStateChanged", "tvEpisodeHandleWatchedStateChanged")
     page.loadRequest = selection.loadRequest
-    page.itemContent = selection.itemContent
-    page.playSelection = selection.playSelection
 
     m.tvEpisodePage = page
     m.dynamicPageHost.appendChild(page)
@@ -336,6 +355,27 @@ sub tvEpisodeShow(selection as object)
     page.callFunc("resetFocus")
     page.callFunc("activate")
 end sub
+
+'-------------------------------------------------------------------------------
+' buildHomeEpisodeLoadRequest
+'-------------------------------------------------------------------------------
+function buildHomeEpisodeLoadRequest(selection as object) as object
+    item = selection.item
+    if item = invalid then return invalid
+
+    return {
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        itemId: selection.itemId
+        item: item
+        series: {
+            Id: FirstNonEmpty([item.SeriesId], "")
+            Name: FirstNonEmpty([item.SeriesName], "")
+        }
+        startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' tvEpisodeHandleCloseRequested

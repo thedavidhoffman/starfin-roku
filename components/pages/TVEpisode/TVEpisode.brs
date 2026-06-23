@@ -28,6 +28,8 @@ sub initReferences()
     m.state = {
         request: invalid
         itemId: ""
+        itemContent: invalid
+        playSelection: invalid
         focusArea: "toolbar"
     }
 end sub
@@ -60,6 +62,9 @@ end sub
 sub onLoadRequestChanged()
     m.state.request = m.top.loadRequest
     m.state.itemId = ""
+    m.state.itemContent = invalid
+    m.state.playSelection = invalid
+    clearContent()
     if m.state.request <> invalid then
         m.cast.server = m.state.request.server
         renderLogoBanner()
@@ -138,10 +143,9 @@ function buildImageUrl(itemId as string, imageType as string, tag as string, wid
 end function
 
 '-------------------------------------------------------------------------------
-' onItemContentChanged
+' renderEpisodeContent
 '-------------------------------------------------------------------------------
-sub onItemContentChanged()
-    item = m.top.itemContent
+sub renderEpisodeContent(item as dynamic)
     if item = invalid then
         clearContent()
         return
@@ -156,7 +160,6 @@ sub onItemContentChanged()
     m.episodePoster.itemContent = item
     m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
     m.mediaToolbar.isWatched = isItemWatched(item)
-    loadItemDetails()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -271,19 +274,11 @@ end function
 ' loadItemDetails
 '-------------------------------------------------------------------------------
 sub loadItemDetails()
-    item = m.top.itemContent
     request = m.state.request
-    if item = invalid then return
+    if request = invalid then return
 
-    itemType = SafeString(item.itemType, "")
-    if itemType = "SeasonSummary" then
-        m.state.itemId = ""
-        m.cast.people = getPeople(item.raw)
-        return
-    end if
-
-    itemId = SafeString(item.itemId, "")
-    if itemId = "" or request = invalid then
+    itemId = SafeString(request.itemId, "")
+    if itemId = "" then
         m.state.itemId = ""
         m.cast.people = []
         return
@@ -311,8 +306,156 @@ sub onEpisodeDetailsResponse()
     if response.ok <> true then return
     if SafeString(response.itemId, "") <> m.state.itemId then return
 
+    applyEpisodeDetails(response.payload)
     m.cast.people = getPeople(response.payload)
 end sub
+
+'-------------------------------------------------------------------------------
+' applyEpisodeDetails
+'-------------------------------------------------------------------------------
+sub applyEpisodeDetails(details as dynamic)
+    if details = invalid then return
+
+    item = buildEpisodeContentNode(details)
+    m.state.itemContent = item
+    m.state.playSelection = buildPlaySelection(details)
+    renderEpisodeContent(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' buildEpisodeContentNode
+'-------------------------------------------------------------------------------
+function buildEpisodeContentNode(details as dynamic) as object
+    content = CreateObject("roSGNode", "ContentNode")
+    content.title = FirstNonEmpty([details.Name], "")
+    content.description = FirstNonEmpty([details.Overview], "")
+    content.HDPosterUrl = getEpisodePosterUrl(details)
+    content.AddFields({
+        itemId: SafeString(FirstNonEmpty([details.Id], ""), "")
+        itemType: SafeString(FirstNonEmpty([details.Type], ""), "")
+        episodeNumber: getEpisodeNumberText(details)
+        episodeDate: getEpisodeDateText(details)
+        progressPercent: getProgressPercent(details)
+        progressWidth: getProgressWidth(details)
+        raw: details
+    })
+
+    return content
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaySelection
+'-------------------------------------------------------------------------------
+function buildPlaySelection(details as dynamic) as dynamic
+    request = m.state.request
+    if request = invalid then return invalid
+
+    itemId = SafeString(FirstNonEmpty([details.Id, request.itemId], ""), "")
+    if itemId = "" then return invalid
+
+    startPositionTicks = PlaybackProgress_GetTicksFromItem(details)
+    if request.startPositionTicks <> invalid then startPositionTicks = request.startPositionTicks
+
+    return {
+        itemId: itemId
+        item: details
+        startPositionTicks: startPositionTicks
+        playbackQueue: request.playbackQueue
+        playbackQueueIndex: request.playbackQueueIndex
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodePosterUrl
+'-------------------------------------------------------------------------------
+function getEpisodePosterUrl(item as dynamic) as string
+    itemId = FirstNonEmpty([item.Id], "")
+    primaryTag = ""
+    if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
+    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, 619, 348)
+
+    parentThumbId = FirstNonEmpty([item.ParentThumbItemId], "")
+    parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
+    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, 619, 348)
+
+    seriesId = FirstNonEmpty([item.SeriesId], "")
+    seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
+    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, 619, 348)
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeNumberText
+'-------------------------------------------------------------------------------
+function getEpisodeNumberText(item as dynamic) as string
+    indexText = FirstNonEmpty([item.IndexNumber], "")
+    if indexText <> "" then return "Episode " + SafeString(indexText, "")
+    return "Episode"
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeDateText
+'-------------------------------------------------------------------------------
+function getEpisodeDateText(item as dynamic) as string
+    airedDate = getAiredDateText(item)
+    if Len(airedDate) < 10 then return airedDate
+
+    year = Left(airedDate, 4)
+    monthNumber = val(Mid(airedDate, 6, 2))
+    day = val(Mid(airedDate, 9, 2))
+    if monthNumber < 1 or monthNumber > 12 or day < 1 then return airedDate
+
+    monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return day.ToStr() + " " + monthNames[monthNumber - 1] + " " + year
+end function
+
+'-------------------------------------------------------------------------------
+' getAiredDateText
+'-------------------------------------------------------------------------------
+function getAiredDateText(item as dynamic) as string
+    airedDate = FirstNonEmpty([item.PremiereDate, item.AirDate, item.DateCreated], "")
+    if Len(airedDate) >= 10 then return Left(airedDate, 10)
+    return airedDate
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressPercent
+'-------------------------------------------------------------------------------
+function getProgressPercent(item as dynamic) as float
+    if item.UserData <> invalid and item.UserData.Played = true then return 0
+
+    if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
+        playedPercentage = item.UserData.PlayedPercentage
+        if playedPercentage <= 0 then return 0
+        if playedPercentage > 100 then return 100
+        return playedPercentage
+    end if
+
+    if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
+
+    progressTicks = PlaybackProgress_GetTicksFromItem(item)
+    if progressTicks <= 0 then return 0
+
+    progressPercent = (progressTicks / item.RunTimeTicks) * 100
+    if progressPercent > 100 then return 100
+
+    return progressPercent
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressWidth
+'-------------------------------------------------------------------------------
+function getProgressWidth(item as dynamic) as integer
+    progressPercent = getProgressPercent(item)
+    if progressPercent <= 0 then return 0
+
+    progressWidth = int(510 * (progressPercent / 100))
+    if progressWidth < 1 then return 1
+    if progressWidth > 510 then return 510
+
+    return progressWidth
+end function
 
 '-------------------------------------------------------------------------------
 ' clearContent
@@ -326,7 +469,8 @@ sub clearContent()
     m.episodePoster.itemContent = invalid
     m.mediaToolbar.supportsWatchedActions = false
     m.mediaToolbar.isWatched = false
-    m.state.itemId = ""
+    m.state.itemContent = invalid
+    m.state.playSelection = invalid
     m.cast.people = []
 end sub
 
@@ -379,8 +523,8 @@ end sub
 ' onMediaToolbarPlaySelected
 '-------------------------------------------------------------------------------
 sub onMediaToolbarPlaySelected()
-    if m.top.playSelection = invalid then return
-    m.top.selectedEpisode = m.top.playSelection
+    if m.state.playSelection = invalid then return
+    m.top.selectedEpisode = m.state.playSelection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -401,7 +545,7 @@ end sub
 ' runWatchedTask
 '-------------------------------------------------------------------------------
 sub runWatchedTask(action as string)
-    item = m.top.itemContent
+    item = m.state.itemContent
     request = m.state.request
     if item = invalid or request = invalid then return
     if canMarkWatched(item) <> true then return
@@ -431,7 +575,7 @@ sub onWatchedTaskResponse()
         return
     end if
 
-    item = m.top.itemContent
+    item = m.state.itemContent
     if item = invalid then return
 
     itemId = SafeString(response.itemId, "")
@@ -540,6 +684,10 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
     end if
 
     item.raw = raw
+    m.state.itemContent = item
+    if m.state.playSelection <> invalid then
+        m.state.playSelection.item = raw
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

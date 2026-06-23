@@ -6,10 +6,19 @@ sub init()
     m.playButton = m.top.findNode("playButton")
     m.markWatchedButton = m.top.findNode("markWatchedButton")
     m.markUnwatchedButton = m.top.findNode("markUnwatchedButton")
-    m.moreButton = m.top.findNode("moreButton")
+    m.seriesButton = m.top.findNode("seriesButton")
+    m.subtitlesButton = m.top.findNode("subtitlesButton")
+    m.audioButton = m.top.findNode("audioButton")
+    m.videoButton = m.top.findNode("videoButton")
+    m.seasonButton = m.top.findNode("seasonButton")
     m.playButton.observeField("buttonSelected", "onPlayButtonSelected")
     m.markWatchedButton.observeField("buttonSelected", "onMarkWatchedButtonSelected")
     m.markUnwatchedButton.observeField("buttonSelected", "onMarkUnwatchedButtonSelected")
+    m.seriesButton.observeField("buttonSelected", "onSeriesButtonSelected")
+    m.subtitlesButton.observeField("buttonSelected", "onSubtitlesButtonSelected")
+    m.audioButton.observeField("buttonSelected", "onAudioButtonSelected")
+    m.videoButton.observeField("buttonSelected", "onVideoButtonSelected")
+    m.seasonButton.observeField("buttonSelected", "onSeasonButtonSelected")
     m.toolbarLayout = {
         collapsedWidth: 64
         defaultExpandedWidth: 168
@@ -135,11 +144,11 @@ sub updateToolbarButtons()
     m.markUnwatchedButton.visible = supportsWatchedActions and (isWatched = true)
 
     if supportsWatchedActions <> true then
-        m.focusState.buttons = [m.playButton, m.moreButton]
+        m.focusState.buttons = [m.playButton, m.subtitlesButton, m.audioButton, m.videoButton, m.seriesButton, m.seasonButton]
     else if isWatched then
-        m.focusState.buttons = [m.playButton, m.markUnwatchedButton, m.moreButton]
+        m.focusState.buttons = [m.playButton, m.markUnwatchedButton, m.subtitlesButton, m.audioButton, m.videoButton, m.seriesButton, m.seasonButton]
     else
-        m.focusState.buttons = [m.playButton, m.markWatchedButton, m.moreButton]
+        m.focusState.buttons = [m.playButton, m.markWatchedButton, m.subtitlesButton, m.audioButton, m.videoButton, m.seriesButton, m.seasonButton]
     end if
 
     if m.focusState.focusedIndex >= m.focusState.buttons.Count() then
@@ -169,6 +178,41 @@ end sub
 '-------------------------------------------------------------------------------
 sub onMarkUnwatchedButtonSelected()
     m.top.markAsUnwatchedSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onSeriesButtonSelected
+'-------------------------------------------------------------------------------
+sub onSeriesButtonSelected()
+    m.top.seriesSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onSubtitlesButtonSelected
+'-------------------------------------------------------------------------------
+sub onSubtitlesButtonSelected()
+    m.top.subtitlesSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onAudioButtonSelected
+'-------------------------------------------------------------------------------
+sub onAudioButtonSelected()
+    m.top.audioSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoButtonSelected
+'-------------------------------------------------------------------------------
+sub onVideoButtonSelected()
+    m.top.videoSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onSeasonButtonSelected
+'-------------------------------------------------------------------------------
+sub onSeasonButtonSelected()
+    m.top.seasonSelected = true
 end sub
 
 '-------------------------------------------------------------------------------

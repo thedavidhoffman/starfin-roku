@@ -4,6 +4,7 @@
 sub init()
     m.posterMask = m.top.findNode("posterMask")
     m.poster = m.top.findNode("poster")
+    m.progressBar = m.top.findNode("progressBar")
     m.title = m.top.findNode("title")
     m.subtitle = m.top.findNode("subtitle")
 end sub
@@ -24,6 +25,7 @@ sub onItemContentChanged()
     imageUrl = getImageUrl(item, imageAspect)
     m.poster.visible = true
     m.poster.uri = imageUrl
+    updateProgress(item, imageAspect)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -133,6 +135,7 @@ sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
         m.posterMask.maskSize = [440, 248]
         m.poster.width = 440
         m.poster.height = 248
+        applyProgressLayout(440, 248)
         m.title.width = 440
         m.title.translation = [0, 261]
         m.subtitle.width = 440
@@ -150,6 +153,7 @@ sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
         m.posterMask.maskSize = [250, 375]
         m.poster.width = 250
         m.poster.height = 375
+        applyProgressLayout(250, 375)
         m.title.width = 250
         m.title.translation = [0, 388]
         m.title.height = 48
@@ -158,3 +162,83 @@ sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
         m.subtitle.translation = [0, 426]
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' applyProgressLayout
+'-------------------------------------------------------------------------------
+sub applyProgressLayout(width as integer, height as integer)
+    marginX = 10
+    progressHeight = 10
+    progressBottom = 10
+    progressWidth = width - (marginX * 2)
+    progressY = height - progressBottom - progressHeight
+
+    m.progressBar.translation = [marginX, progressY]
+    m.progressBar.barWidth = progressWidth
+    m.progressBar.barHeight = progressHeight
+end sub
+
+'-------------------------------------------------------------------------------
+' updateProgress
+'-------------------------------------------------------------------------------
+sub updateProgress(item as object, imageAspect as string)
+    trackWidth = getProgressTrackWidth(imageAspect)
+    progressWidth = getProgressWidth(getRawItem(item), trackWidth)
+    visible = progressWidth > 0
+
+    m.progressBar.visible = visible
+
+    if visible <> true then
+        m.progressBar.progressWidth = 0
+        return
+    end if
+
+    m.progressBar.progressWidth = progressWidth
+end sub
+
+'-------------------------------------------------------------------------------
+' getProgressTrackWidth
+'-------------------------------------------------------------------------------
+function getProgressTrackWidth(imageAspect as string) as integer
+    if imageAspect = "wide" then return 420
+    return 230
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressWidth
+'-------------------------------------------------------------------------------
+function getProgressWidth(item as dynamic, trackWidth as integer) as integer
+    progressPercent = getProgressPercent(item)
+    if progressPercent <= 0 then return 0
+
+    progressWidth = int(trackWidth * (progressPercent / 100))
+    if progressWidth < 1 then return 1
+    if progressWidth > trackWidth then return trackWidth
+
+    return progressWidth
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressPercent
+'-------------------------------------------------------------------------------
+function getProgressPercent(item as dynamic) as float
+    if item = invalid then return 0
+    if item.UserData <> invalid and item.UserData.Played = true then return 0
+
+    if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
+        playedPercentage = item.UserData.PlayedPercentage
+        if playedPercentage <= 0 then return 0
+        if playedPercentage > 100 then return 100
+        return playedPercentage
+    end if
+
+    if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
+
+    progressTicks = PlaybackProgress_GetTicksFromItem(item)
+    if progressTicks <= 0 then return 0
+
+    progressPercent = (progressTicks / item.RunTimeTicks) * 100
+    if progressPercent > 100 then return 100
+
+    return progressPercent
+end function
