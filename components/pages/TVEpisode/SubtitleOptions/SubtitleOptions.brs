@@ -10,6 +10,7 @@ sub init()
     m.subtitleList.observeField("checkedItem", "onSubtitleListCheckedItemChanged")
     m.state = {
         isUpdatingCheckedItem: false
+        pendingSelection: invalid
     }
     m.layout = {
         panelX: 600
@@ -39,6 +40,7 @@ end sub
 ' openOptions
 '-------------------------------------------------------------------------------
 sub openOptions()
+    m.state.pendingSelection = getSelectionForCheckedItem()
     m.top.visible = true
     m.top.setFocus(true)
     if hasSubtitleStreams() then
@@ -50,6 +52,7 @@ end sub
 ' closeOptions
 '-------------------------------------------------------------------------------
 sub closeOptions()
+    publishPendingSelection()
     m.top.visible = false
     m.top.closeRequested = true
 end sub
@@ -185,12 +188,11 @@ end sub
 sub selectSubtitleListIndex(selectedIndex as dynamic)
     if selectedIndex = invalid or selectedIndex <= 0 then
         m.subtitleList.checkedItem = 0
-        m.top.selectedSubtitle = {
+        m.state.pendingSelection = {
             isOff: true
             streamIndex: -1
             label: "Off"
         }
-        closeOptions()
         return
     end if
 
@@ -199,14 +201,48 @@ sub selectSubtitleListIndex(selectedIndex as dynamic)
 
     stream = m.top.subtitleStreams[streamIndex]
     m.subtitleList.checkedItem = selectedIndex
-    m.top.selectedSubtitle = {
+    m.state.pendingSelection = {
         isOff: false
         streamIndex: getStreamIndex(stream, streamIndex)
         stream: stream
         label: getSubtitleLabel(stream)
     }
-    closeOptions()
 end sub
+
+'-------------------------------------------------------------------------------
+' publishPendingSelection
+'-------------------------------------------------------------------------------
+sub publishPendingSelection()
+    if m.state.pendingSelection = invalid then m.state.pendingSelection = getSelectionForCheckedItem()
+    if m.state.pendingSelection = invalid then return
+
+    m.top.selectedSubtitle = m.state.pendingSelection
+end sub
+
+'-------------------------------------------------------------------------------
+' getSelectionForCheckedItem
+'-------------------------------------------------------------------------------
+function getSelectionForCheckedItem() as dynamic
+    selectedIndex = getCheckedItemIndex()
+    if selectedIndex <= 0 then
+        return {
+            isOff: true
+            streamIndex: -1
+            label: "Off"
+        }
+    end if
+
+    streamIndex = selectedIndex - 1
+    if hasSubtitleStreams() <> true or streamIndex >= m.top.subtitleStreams.Count() then return invalid
+
+    stream = m.top.subtitleStreams[streamIndex]
+    return {
+        isOff: false
+        streamIndex: getStreamIndex(stream, streamIndex)
+        stream: stream
+        label: getSubtitleLabel(stream)
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' getStreamIndex

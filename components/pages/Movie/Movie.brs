@@ -91,6 +91,8 @@ sub renderMovie(item as dynamic)
         overview: FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)
+    m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(item).Count()
+    m.mediaToolbar.audioStreamCount = getAudioStreams(item).Count()
     m.mediaToolbar.isWatched = isItemWatched(item)
 end sub
 

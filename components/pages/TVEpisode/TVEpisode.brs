@@ -12,21 +12,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub initReferences()
     m.log = CreateLogger("TVEpisode")
-    m.logoBanner = m.top.findNode("logoBanner")
-    m.episodePosition = m.top.findNode("episodePosition")
-    m.episodePoster = m.top.findNode("episodePoster")
-    m.secondaryMetadata = m.top.findNode("secondaryMetadata")
-    m.title = m.top.findNode("title")
-    m.description = m.top.findNode("description")
+    m.mediaShell = m.top.findNode("mediaShell")
     m.mediaToolbar = m.top.findNode("mediaToolbar")
     m.subtitleOptions = m.top.findNode("subtitleOptions")
     m.audioOptions = m.top.findNode("audioOptions")
     m.cast = m.top.findNode("cast")
-    m.layout = {
-        descriptionX: 755
-        titleY: 298
-        descriptionY: 352
-    }
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
     m.watchedTask = m.top.findNode("watchedTask")
     m.state = {
@@ -67,8 +57,6 @@ end sub
 ' initStyles
 '-------------------------------------------------------------------------------
 sub initStyles()
-    colors = Color()
-    m.secondaryMetadata.color = colors.text.secondary
 end sub
 
 '-------------------------------------------------------------------------------
@@ -87,34 +75,9 @@ sub onLoadRequestChanged()
     clearContent()
     if m.state.request <> invalid then
         m.cast.server = m.state.request.server
-        renderLogoBanner()
         renderInitialEpisodeContent()
-    else
-        clearLogoBanner()
     end if
     loadItemDetails()
-end sub
-
-'-------------------------------------------------------------------------------
-' renderLogoBanner
-'-------------------------------------------------------------------------------
-sub renderLogoBanner()
-    request = m.state.request
-    if request = invalid then
-        clearLogoBanner()
-        return
-    end if
-
-    m.logoBanner.logoUrl = getSeriesLogoUrl(request)
-    m.logoBanner.title = ""
-end sub
-
-'-------------------------------------------------------------------------------
-' clearLogoBanner
-'-------------------------------------------------------------------------------
-sub clearLogoBanner()
-    m.logoBanner.title = ""
-    m.logoBanner.logoUrl = ""
 end sub
 
 '-------------------------------------------------------------------------------
@@ -166,33 +129,25 @@ sub renderEpisodeContent(item as dynamic)
     end if
 
     title = getDisplayTitle(item)
-    m.episodePosition.text = getEpisodePositionText(item)
-    m.title.text = title
-    m.description.text = SafeString(item.description, "")
-    m.secondaryMetadata.text = getSecondaryMetadataText(item)
-    applyLayout(title)
+    m.mediaShell.mediaContent = {
+        backdropUrl: SafeString(item.HDPosterUrl, "")
+        logoUrl: ""
+        title: title
+        metaLine1: getEpisodePositionText(item)
+        metaLine2: getSecondaryMetadataText(item)
+        overview: SafeString(item.description, "")
+    }
 
-    m.episodePoster.itemContent = item
     if isSeasonDetailsItem(item) then
         m.mediaToolbar.mediaType = "tv-season"
     else
         m.mediaToolbar.mediaType = "tv-episode"
     end if
+    rawItem = item.raw
+    m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(rawItem).Count()
+    m.mediaToolbar.audioStreamCount = getAudioStreams(rawItem).Count()
     m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
     m.mediaToolbar.isWatched = isItemWatched(item)
-end sub
-
-'-------------------------------------------------------------------------------
-' applyLayout
-'-------------------------------------------------------------------------------
-sub applyLayout(title as string)
-    hideTitle = isSeasonNumberTitle(title)
-    m.title.visible = hideTitle <> true
-    if hideTitle = true then
-        m.description.translation = [m.layout.descriptionX, m.layout.titleY]
-    else
-        m.description.translation = [m.layout.descriptionX, m.layout.descriptionY]
-    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -377,7 +332,7 @@ sub onEpisodeDetailsResponse()
     if SafeString(response.itemId, "") <> m.state.itemId then return
 
     applySeriesDetails(response.series)
-    applyEpisodeDetails(response.payload, shouldKeepRequestPoster(response.payload))
+    applyEpisodeDetails(response.payload, false)
     m.cast.people = getPeople(response.payload)
 end sub
 
@@ -399,7 +354,6 @@ sub applySeriesDetails(series as dynamic)
     if m.state.request = invalid then return
 
     m.state.request.series = series
-    renderLogoBanner()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -471,15 +425,15 @@ function getEpisodePosterUrl(item as dynamic, useRequestPoster as boolean) as st
     itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
-    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, 619, 348)
+    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, 1920, 1080)
 
     parentThumbId = FirstNonEmpty([item.ParentThumbItemId], "")
     parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
-    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, 619, 348)
+    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, 1920, 1080)
 
     seriesId = FirstNonEmpty([item.SeriesId], "")
     seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
-    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, 619, 348)
+    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, 1920, 1080)
 
     return ""
 end function
@@ -581,16 +535,19 @@ end function
 ' clearContent
 '-------------------------------------------------------------------------------
 sub clearContent()
-    m.episodePosition.text = ""
-    m.secondaryMetadata.text = ""
-    m.title.text = ""
-    m.title.visible = true
-    m.description.text = ""
-    m.description.translation = [m.layout.descriptionX, m.layout.descriptionY]
-    m.episodePoster.itemContent = invalid
+    m.mediaShell.mediaContent = {
+        backdropUrl: ""
+        logoUrl: ""
+        title: ""
+        metaLine1: ""
+        metaLine2: ""
+        overview: ""
+    }
     m.mediaToolbar.supportsWatchedActions = false
     m.mediaToolbar.isWatched = false
     m.mediaToolbar.mediaType = "tv-episode"
+    m.mediaToolbar.subtitleStreamCount = 0
+    m.mediaToolbar.audioStreamCount = 0
     m.state.itemContent = invalid
     m.state.playSelection = invalid
     m.cast.people = []
@@ -781,7 +738,6 @@ sub onWatchedTaskResponse()
 
     isWatched = SafeString(response.action, "") = "MarkAsWatched"
     updateItemWatchedState(item, isWatched)
-    refreshPoster()
     m.mediaToolbar.isWatched = isWatched
     m.mediaToolbar.callFunc("focusWatchedAction")
     m.top.watchedStateChanged = {
@@ -966,11 +922,4 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
     if m.state.playSelection <> invalid then
         m.state.playSelection.item = raw
     end if
-end sub
-
-'-------------------------------------------------------------------------------
-' refreshPoster
-'-------------------------------------------------------------------------------
-sub refreshPoster()
-    m.episodePoster.callFunc("refresh")
 end sub

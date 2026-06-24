@@ -129,6 +129,13 @@ sub onMediaTypeChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onStreamCountsChanged
+'-------------------------------------------------------------------------------
+sub onStreamCountsChanged()
+    updateToolbarButtons()
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusWatchedAction
 '-------------------------------------------------------------------------------
 sub focusWatchedAction()
@@ -150,17 +157,20 @@ sub updateToolbarButtons()
     mediaType = m.top.mediaType
     isMovie = mediaType = "movie"
     isSeason = mediaType = "tv-season"
+    hasSubtitleOptions = m.top.subtitleStreamCount > 0
+    hasAudioOptions = m.top.audioStreamCount > 1
     m.markWatchedButton.visible = supportsWatchedActions and (isWatched <> true)
     m.markUnwatchedButton.visible = supportsWatchedActions and (isWatched = true)
-    m.subtitlesButton.visible = isSeason <> true
-    m.audioButton.visible = isSeason <> true
+    m.subtitlesButton.visible = isSeason <> true and hasSubtitleOptions
+    m.audioButton.visible = isSeason <> true and hasAudioOptions
     m.videoButton.visible = isSeason <> true and isMovie <> true
     m.seriesButton.visible = isMovie <> true
     m.seasonButton.visible = isMovie <> true
 
     streamButtons = []
     if isSeason <> true then
-        streamButtons = [m.subtitlesButton, m.audioButton]
+        if hasSubtitleOptions then streamButtons.Push(m.subtitlesButton)
+        if hasAudioOptions then streamButtons.Push(m.audioButton)
         if isMovie <> true then streamButtons.Push(m.videoButton)
     end if
 

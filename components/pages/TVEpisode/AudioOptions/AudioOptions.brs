@@ -10,6 +10,7 @@ sub init()
     m.audioList.observeField("checkedItem", "onAudioListCheckedItemChanged")
     m.state = {
         isUpdatingCheckedItem: false
+        pendingSelection: invalid
     }
     m.layout = {
         panelX: 600
@@ -39,6 +40,7 @@ end sub
 ' openOptions
 '-------------------------------------------------------------------------------
 sub openOptions()
+    m.state.pendingSelection = getSelectionForCheckedItem()
     m.top.visible = true
     m.top.setFocus(true)
     if hasAudioStreams() then
@@ -50,6 +52,7 @@ end sub
 ' closeOptions
 '-------------------------------------------------------------------------------
 sub closeOptions()
+    publishPendingSelection()
     m.top.visible = false
     m.top.closeRequested = true
 end sub
@@ -187,13 +190,37 @@ sub selectAudioListIndex(selectedIndex as dynamic)
 
     stream = m.top.audioStreams[selectedIndex]
     m.audioList.checkedItem = selectedIndex
-    m.top.selectedAudio = {
+    m.state.pendingSelection = {
         streamIndex: getStreamIndex(stream, selectedIndex)
         stream: stream
         label: getAudioLabel(stream)
     }
-    closeOptions()
 end sub
+
+'-------------------------------------------------------------------------------
+' publishPendingSelection
+'-------------------------------------------------------------------------------
+sub publishPendingSelection()
+    if m.state.pendingSelection = invalid then m.state.pendingSelection = getSelectionForCheckedItem()
+    if m.state.pendingSelection = invalid then return
+
+    m.top.selectedAudio = m.state.pendingSelection
+end sub
+
+'-------------------------------------------------------------------------------
+' getSelectionForCheckedItem
+'-------------------------------------------------------------------------------
+function getSelectionForCheckedItem() as dynamic
+    selectedIndex = getCheckedItemIndex()
+    if hasAudioStreams() <> true or selectedIndex < 0 or selectedIndex >= m.top.audioStreams.Count() then return invalid
+
+    stream = m.top.audioStreams[selectedIndex]
+    return {
+        streamIndex: getStreamIndex(stream, selectedIndex)
+        stream: stream
+        label: getAudioLabel(stream)
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' getStreamIndex
