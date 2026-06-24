@@ -24,6 +24,7 @@ sub executeRequest()
     requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
     requestedMediaSource = getPlaybackRequestMediaSource(request)
     forceTranscode = shouldForceTranscodeAudio(requestedAudioStream, requestedMediaSource)
+    forceStreamSelection = shouldForceStreamSelection(request, requestedMediaSource, requestedAudioStreamIndex)
     params = {
         UserId: SafeString(request.userId, "")
         StartTimeTicks: getStartPositionTicks(request)
@@ -31,11 +32,12 @@ sub executeRequest()
         AutoOpenLiveStream: true
         MaxStreamingBitrate: "120000000"
         MaxStaticBitrate: "100000000"
-        EnableDirectPlay: forceTranscode <> true
+        EnableDirectPlay: forceTranscode <> true and forceStreamSelection <> true
         EnableDirectStream: forceTranscode <> true
     }
 
     if forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    if forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
     m.log.write("Device profile display cap width=" + SafeString(displaySize.width, "") + " height=" + SafeString(displaySize.height, "") + " source=" + SafeString(displaySize.source, ""))
     m.log.write("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
     if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
@@ -297,10 +299,28 @@ function shouldForceTranscodeAudio(mediaStream as dynamic, mediaSource as dynami
 end function
 
 '-------------------------------------------------------------------------------
+' shouldForceStreamSelection
+'-------------------------------------------------------------------------------
+function shouldForceStreamSelection(request as dynamic, mediaSource as dynamic, requestedAudioStreamIndex as integer) as boolean
+    if request = invalid or request.audioStreamIndex = invalid then return false
+    if requestedAudioStreamIndex < 0 then return false
+
+    defaultAudioStreamIndex = getDefaultAudioStreamIndex(mediaSource)
+    return requestedAudioStreamIndex <> defaultAudioStreamIndex
+end function
+
+'-------------------------------------------------------------------------------
 ' logForcedTranscodeReason
 '-------------------------------------------------------------------------------
 sub logForcedTranscodeReason(mediaStream as dynamic)
     m.log.write("Forcing transcode because selected multichannel AAC audio is not device-decodable. Index=" + SafeString(mediaStream.arrayIndex, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+end sub
+
+'-------------------------------------------------------------------------------
+' logForcedStreamSelection
+'-------------------------------------------------------------------------------
+sub logForcedStreamSelection(mediaStream as dynamic)
+    m.log.write("Disabling direct play because a non-default audio stream was selected. Index=" + SafeString(mediaStream.Index, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
 end sub
 
 '-------------------------------------------------------------------------------

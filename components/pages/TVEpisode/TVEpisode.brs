@@ -173,6 +173,11 @@ sub renderEpisodeContent(item as dynamic)
     applyLayout(title)
 
     m.episodePoster.itemContent = item
+    if isSeasonDetailsItem(item) then
+        m.mediaToolbar.mediaType = "tv-season"
+    else
+        m.mediaToolbar.mediaType = "tv-episode"
+    end if
     m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
     m.mediaToolbar.isWatched = isItemWatched(item)
 end sub
@@ -213,7 +218,7 @@ end function
 '-------------------------------------------------------------------------------
 function getSecondaryMetadataText(item as dynamic) as string
     if item = invalid then return ""
-    if SafeString(item.itemType, "") = "SeasonSummary" then return ""
+    if isSeasonDetailsItem(item) then return getSeasonMetadataText(item.raw)
 
     raw = item.raw
     if raw = invalid then return ""
@@ -273,6 +278,7 @@ end function
 '-------------------------------------------------------------------------------
 function getEpisodePositionText(item as dynamic) as string
     if item = invalid or item.raw = invalid then return ""
+    if isSeasonDetailsItem(item) then return getSeasonPositionText(item.raw)
 
     seasonNumber = SafeString(item.raw.ParentIndexNumber, "")
     episodeNumber = SafeString(item.raw.IndexNumber, "")
@@ -282,6 +288,56 @@ function getEpisodePositionText(item as dynamic) as string
     if episodeNumber <> "" then parts.Push("Episode " + episodeNumber)
 
     return joinText(parts, MediaMetadata_BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonMetadataText
+'-------------------------------------------------------------------------------
+function getSeasonMetadataText(item as dynamic) as string
+    if item = invalid then return ""
+
+    parts = []
+
+    count = FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
+    if count <> "" then parts.Push(SafeString(count, "") + " episodes")
+
+    year = FirstNonEmpty([item.ProductionYear], "")
+    if year = "" then year = getYearFromDate(FirstNonEmpty([item.PremiereDate], ""))
+    if year <> "" then parts.Push(SafeString(year, ""))
+
+    return joinText(parts, MediaMetadata_BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getYearFromDate
+'-------------------------------------------------------------------------------
+function getYearFromDate(value as string) as string
+    if Len(value) < 4 then return ""
+    return Left(value, 4)
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonPositionText
+'-------------------------------------------------------------------------------
+function getSeasonPositionText(item as dynamic) as string
+    seasonNumber = SafeString(item.IndexNumber, "")
+    if seasonNumber <> "" then return "Season " + seasonNumber
+
+    title = SafeString(item.Name, "")
+    if isSeasonNumberTitle(title) then return title
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' isSeasonDetailsItem
+'-------------------------------------------------------------------------------
+function isSeasonDetailsItem(item as dynamic) as boolean
+    itemType = SafeString(item.itemType, "")
+    if itemType = "SeasonSummary" or itemType = "Season" then return true
+    if item.raw = invalid then return false
+
+    return SafeString(item.raw.Type, "") = "Season"
 end function
 
 '-------------------------------------------------------------------------------
@@ -534,6 +590,7 @@ sub clearContent()
     m.episodePoster.itemContent = invalid
     m.mediaToolbar.supportsWatchedActions = false
     m.mediaToolbar.isWatched = false
+    m.mediaToolbar.mediaType = "tv-episode"
     m.state.itemContent = invalid
     m.state.playSelection = invalid
     m.cast.people = []
@@ -782,8 +839,10 @@ function getSubtitleStreams(item as dynamic) as object
     if item = invalid or item.MediaStreams = invalid then return []
 
     subtitleStreams = []
-    for each stream in item.MediaStreams
+    for i = 0 to item.MediaStreams.Count() - 1
+        stream = item.MediaStreams[i]
         if stream <> invalid and LCase(SafeString(stream.Type, "")) = "subtitle" then
+            if stream.Index = invalid then stream.AddReplace("sourceIndex", i)
             subtitleStreams.Push(stream)
         end if
     end for
@@ -798,8 +857,10 @@ function getAudioStreams(item as dynamic) as object
     if item = invalid or item.MediaStreams = invalid then return []
 
     audioStreams = []
-    for each stream in item.MediaStreams
+    for i = 0 to item.MediaStreams.Count() - 1
+        stream = item.MediaStreams[i]
         if stream <> invalid and LCase(SafeString(stream.Type, "")) = "audio" then
+            if stream.Index = invalid then stream.AddReplace("sourceIndex", i)
             audioStreams.Push(stream)
         end if
     end for

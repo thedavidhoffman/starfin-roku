@@ -213,6 +213,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getStreamIndex(stream as dynamic, fallback as integer) as integer
     if stream <> invalid and stream.Index <> invalid then return int(stream.Index)
+    if stream <> invalid and stream.sourceIndex <> invalid then return int(stream.sourceIndex)
     return fallback
 end function
 

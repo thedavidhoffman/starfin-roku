@@ -122,6 +122,13 @@ sub onWatchedStateChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onMediaTypeChanged
+'-------------------------------------------------------------------------------
+sub onMediaTypeChanged()
+    updateToolbarButtons()
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusWatchedAction
 '-------------------------------------------------------------------------------
 sub focusWatchedAction()
@@ -140,16 +147,33 @@ end sub
 sub updateToolbarButtons()
     isWatched = m.top.isWatched = true
     supportsWatchedActions = m.top.supportsWatchedActions <> false
+    mediaType = m.top.mediaType
+    isMovie = mediaType = "movie"
+    isSeason = mediaType = "tv-season"
     m.markWatchedButton.visible = supportsWatchedActions and (isWatched <> true)
     m.markUnwatchedButton.visible = supportsWatchedActions and (isWatched = true)
+    m.subtitlesButton.visible = isSeason <> true
+    m.audioButton.visible = isSeason <> true
+    m.videoButton.visible = isSeason <> true and isMovie <> true
+    m.seriesButton.visible = isMovie <> true
+    m.seasonButton.visible = isMovie <> true
+
+    streamButtons = []
+    if isSeason <> true then
+        streamButtons = [m.subtitlesButton, m.audioButton]
+        if isMovie <> true then streamButtons.Push(m.videoButton)
+    end if
 
     if supportsWatchedActions <> true then
-        m.focusState.buttons = [m.playButton, m.subtitlesButton, m.audioButton, m.videoButton, m.seriesButton, m.seasonButton]
+        m.focusState.buttons = [m.playButton]
     else if isWatched then
-        m.focusState.buttons = [m.playButton, m.markUnwatchedButton, m.subtitlesButton, m.audioButton, m.videoButton, m.seriesButton, m.seasonButton]
+        m.focusState.buttons = [m.playButton, m.markUnwatchedButton]
     else
-        m.focusState.buttons = [m.playButton, m.markWatchedButton, m.subtitlesButton, m.audioButton, m.videoButton, m.seriesButton, m.seasonButton]
+        m.focusState.buttons = [m.playButton, m.markWatchedButton]
     end if
+
+    m.focusState.buttons.Append(streamButtons)
+    if isMovie <> true then m.focusState.buttons.Append([m.seriesButton, m.seasonButton])
 
     if m.focusState.focusedIndex >= m.focusState.buttons.Count() then
         m.focusState.focusedIndex = m.focusState.buttons.Count() - 1

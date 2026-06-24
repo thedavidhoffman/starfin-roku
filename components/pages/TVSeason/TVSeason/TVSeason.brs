@@ -247,7 +247,6 @@ end sub
 function buildFocusedEpisodeDetailsSelection() as dynamic
     focusedEpisode = getFocusedEpisodeNode()
     if focusedEpisode = invalid then return invalid
-    if SafeString(focusedEpisode.itemType, "") = "SeasonSummary" then return invalid
 
     return {
         loadRequest: buildEpisodeLoadRequest(focusedEpisode)
