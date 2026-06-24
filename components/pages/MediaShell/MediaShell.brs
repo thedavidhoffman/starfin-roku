@@ -10,6 +10,10 @@ sub init()
         activeUrl: ""
         pendingUrl: ""
     }
+    m.logoState = {
+        url: ""
+        title: ""
+    }
     m.titleLogo = m.top.findNode("titleLogo")
     m.titleLabel = m.top.findNode("titleLabel")
     m.metaLabel = m.top.findNode("metaLabel")
@@ -114,16 +118,23 @@ end sub
 sub renderTitle(title as string, logoUrl as string)
     hasLogo = logoUrl <> ""
 
-    m.titleLogo.visible = hasLogo
     m.titleLabel.visible = hasLogo = false
 
     if hasLogo then
+        m.titleLabel.text = ""
+        m.logoState.title = title
+        if logoUrl = m.logoState.url and SafeString(m.titleLogo.uri, "") = logoUrl then return
+
+        m.logoState.url = logoUrl
+        m.titleLogo.visible = false
         m.titleLogo.width = 600
         m.titleLogo.height = 220
         m.titleLogo.translation = [0, 0]
         m.titleLogo.uri = logoUrl
-        m.titleLabel.text = ""
     else
+        m.logoState.url = ""
+        m.logoState.title = ""
+        m.titleLogo.visible = false
         m.titleLogo.uri = ""
         m.titleLogo.translation = [0, 0]
         m.titleLabel.text = title
@@ -134,7 +145,16 @@ end sub
 ' onTitleLogoLoadStatusChanged
 '-------------------------------------------------------------------------------
 sub onTitleLogoLoadStatusChanged()
-    if LCase(SafeString(m.titleLogo.loadStatus, "")) <> "ready" then return
+    loadStatus = LCase(SafeString(m.titleLogo.loadStatus, ""))
+    if loadStatus = "failed" then
+        m.titleLogo.visible = false
+        m.titleLabel.visible = true
+        m.titleLabel.text = SafeString(m.logoState.title, "")
+        return
+    end if
+
+    if loadStatus <> "ready" then return
+    if SafeString(m.titleLogo.uri, "") <> m.logoState.url then return
 
     bitmapWidth = m.titleLogo.bitmapWidth
     bitmapHeight = m.titleLogo.bitmapHeight
@@ -160,6 +180,7 @@ sub onTitleLogoLoadStatusChanged()
     m.titleLogo.width = fittedWidth
     m.titleLogo.height = fittedHeight
     m.titleLogo.translation = [0, getLogoBottomAlignedY(fittedHeight)]
+    m.titleLogo.visible = true
 end sub
 
 '-------------------------------------------------------------------------------
