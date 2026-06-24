@@ -41,6 +41,7 @@ sub initHandlers()
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
     m.mediaToolbar.observeField("playSelected", "onMediaToolbarPlaySelected")
+    m.mediaToolbar.observeField("restartSelected", "onMediaToolbarRestartSelected")
     m.mediaToolbar.observeField("subtitlesSelected", "onMediaToolbarSubtitlesSelected")
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
@@ -146,6 +147,7 @@ sub renderEpisodeContent(item as dynamic)
     rawItem = item.raw
     m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(rawItem).Count()
     m.mediaToolbar.audioStreamCount = getAudioStreams(rawItem).Count()
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(rawItem))
     m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
     m.mediaToolbar.isWatched = isItemWatched(item)
 end sub
@@ -548,6 +550,7 @@ sub clearContent()
     m.mediaToolbar.mediaType = "tv-episode"
     m.mediaToolbar.subtitleStreamCount = 0
     m.mediaToolbar.audioStreamCount = 0
+    m.mediaToolbar.resumePositionSeconds = 0
     m.state.itemContent = invalid
     m.state.playSelection = invalid
     m.cast.people = []
@@ -607,6 +610,33 @@ sub onMediaToolbarPlaySelected()
     m.log.write("Play selected audioStreamIndex=" + SafeString(m.state.playSelection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(m.state.playSelection.subtitleStreamIndex, ""))
     m.top.selectedEpisode = m.state.playSelection
 end sub
+
+'-------------------------------------------------------------------------------
+' onMediaToolbarRestartSelected
+'-------------------------------------------------------------------------------
+sub onMediaToolbarRestartSelected()
+    if m.state.playSelection = invalid then return
+
+    selection = buildRestartSelection(m.state.playSelection)
+    applySelectedStreamsToPlaySelection(selection)
+    m.log.write("Restart selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
+    m.top.selectedEpisode = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' buildRestartSelection
+'-------------------------------------------------------------------------------
+function buildRestartSelection(selection as dynamic) as dynamic
+    restartSelection = {
+        itemId: selection.itemId
+        item: selection.item
+        startPositionTicks: 0
+        playbackQueue: selection.playbackQueue
+        playbackQueueIndex: selection.playbackQueueIndex
+    }
+
+    return restartSelection
+end function
 
 '-------------------------------------------------------------------------------
 ' onMediaToolbarSubtitlesSelected
@@ -738,6 +768,7 @@ sub onWatchedTaskResponse()
 
     isWatched = SafeString(response.action, "") = "MarkAsWatched"
     updateItemWatchedState(item, isWatched)
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item.raw))
     m.mediaToolbar.isWatched = isWatched
     m.mediaToolbar.callFunc("focusWatchedAction")
     m.top.watchedStateChanged = {

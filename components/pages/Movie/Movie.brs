@@ -15,6 +15,7 @@ sub init()
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
     m.mediaToolbar.observeField("playSelected", "onMediaToolbarPlaySelected")
+    m.mediaToolbar.observeField("restartSelected", "onMediaToolbarRestartSelected")
     m.mediaToolbar.observeField("subtitlesSelected", "onMediaToolbarSubtitlesSelected")
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
@@ -93,6 +94,7 @@ sub renderMovie(item as dynamic)
     m.cast.people = getPeople(item)
     m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(item).Count()
     m.mediaToolbar.audioStreamCount = getAudioStreams(item).Count()
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isItemWatched(item)
 end sub
 
@@ -157,21 +159,44 @@ end sub
 ' onMediaToolbarPlaySelected
 '-------------------------------------------------------------------------------
 sub onMediaToolbarPlaySelected()
+    selection = buildPlaySelection(invalid)
+    if selection = invalid then return
+
+    m.log.write("Play selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
+    m.top.playSelected = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaToolbarRestartSelected
+'-------------------------------------------------------------------------------
+sub onMediaToolbarRestartSelected()
+    selection = buildPlaySelection(0)
+    if selection = invalid then return
+
+    m.log.write("Restart selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
+    m.top.playSelected = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' buildPlaySelection
+'-------------------------------------------------------------------------------
+function buildPlaySelection(startPositionTicks as dynamic) as dynamic
     item = m.pageState.item
     request = m.pageState.request
-    if request = invalid or item = invalid then return
+    if request = invalid or item = invalid then return invalid
 
     itemId = SafeString(FirstNonEmpty([item.Id, request.itemId], ""), "")
-    if itemId = "" then return
+    if itemId = "" then return invalid
 
     selection = {
         itemId: itemId
         item: item
     }
+    if startPositionTicks <> invalid then selection.AddReplace("startPositionTicks", startPositionTicks)
+
     applySelectedStreamsToPlaySelection(selection)
-    m.log.write("Play selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
-    m.top.playSelected = selection
-end sub
+    return selection
+end function
 
 '-------------------------------------------------------------------------------
 ' onMediaToolbarSubtitlesSelected
@@ -299,6 +324,7 @@ sub onWatchedTaskResponse()
 
     isWatched = SafeString(response.action, "") = "MarkAsWatched"
     updateItemWatchedState(item, isWatched)
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isWatched
     m.mediaToolbar.callFunc("focusWatchedAction")
     Status_ClearMessage()

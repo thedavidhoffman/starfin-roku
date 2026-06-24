@@ -3,6 +3,8 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.toolbarItems = m.top.findNode("toolbarItems")
+    m.resumeButton = m.top.findNode("resumeButton")
+    m.restartButton = m.top.findNode("restartButton")
     m.playButton = m.top.findNode("playButton")
     m.markWatchedButton = m.top.findNode("markWatchedButton")
     m.markUnwatchedButton = m.top.findNode("markUnwatchedButton")
@@ -11,6 +13,8 @@ sub init()
     m.audioButton = m.top.findNode("audioButton")
     m.videoButton = m.top.findNode("videoButton")
     m.seasonButton = m.top.findNode("seasonButton")
+    m.resumeButton.observeField("buttonSelected", "onResumeButtonSelected")
+    m.restartButton.observeField("buttonSelected", "onRestartButtonSelected")
     m.playButton.observeField("buttonSelected", "onPlayButtonSelected")
     m.markWatchedButton.observeField("buttonSelected", "onMarkWatchedButtonSelected")
     m.markUnwatchedButton.observeField("buttonSelected", "onMarkUnwatchedButtonSelected")
@@ -136,6 +140,13 @@ sub onStreamCountsChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onResumePositionChanged
+'-------------------------------------------------------------------------------
+sub onResumePositionChanged()
+    updateToolbarButtons()
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusWatchedAction
 '-------------------------------------------------------------------------------
 sub focusWatchedAction()
@@ -159,6 +170,11 @@ sub updateToolbarButtons()
     isSeason = mediaType = "tv-season"
     hasSubtitleOptions = m.top.subtitleStreamCount > 0
     hasAudioOptions = m.top.audioStreamCount > 1
+    hasResumeProgress = m.top.resumePositionSeconds > 0
+    m.resumeButton.visible = hasResumeProgress
+    m.restartButton.visible = hasResumeProgress
+    m.playButton.visible = hasResumeProgress <> true
+    m.resumeButton.text = "Resume"
     m.markWatchedButton.visible = supportsWatchedActions and (isWatched <> true)
     m.markUnwatchedButton.visible = supportsWatchedActions and (isWatched = true)
     m.subtitlesButton.visible = isSeason <> true and hasSubtitleOptions
@@ -175,11 +191,20 @@ sub updateToolbarButtons()
     end if
 
     if supportsWatchedActions <> true then
-        m.focusState.buttons = [m.playButton]
+        m.focusState.buttons = []
     else if isWatched then
-        m.focusState.buttons = [m.playButton, m.markUnwatchedButton]
+        m.focusState.buttons = []
     else
-        m.focusState.buttons = [m.playButton, m.markWatchedButton]
+        m.focusState.buttons = []
+    end if
+
+    if hasResumeProgress then m.focusState.buttons.Push(m.resumeButton)
+    if hasResumeProgress then m.focusState.buttons.Push(m.restartButton)
+    if hasResumeProgress <> true then m.focusState.buttons.Push(m.playButton)
+    if supportsWatchedActions = true and isWatched then
+        m.focusState.buttons.Push(m.markUnwatchedButton)
+    else if supportsWatchedActions = true then
+        m.focusState.buttons.Push(m.markWatchedButton)
     end if
 
     m.focusState.buttons.Append(streamButtons)
@@ -191,6 +216,20 @@ sub updateToolbarButtons()
 
     if m.focusState.focusedIndex < 0 then m.focusState.focusedIndex = 0
     layoutButtons()
+end sub
+
+'-------------------------------------------------------------------------------
+' onResumeButtonSelected
+'-------------------------------------------------------------------------------
+sub onResumeButtonSelected()
+    m.top.playSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onRestartButtonSelected
+'-------------------------------------------------------------------------------
+sub onRestartButtonSelected()
+    m.top.restartSelected = true
 end sub
 
 '-------------------------------------------------------------------------------
