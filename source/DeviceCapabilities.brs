@@ -42,6 +42,13 @@ function DeviceCapabilities_GetDisplaySize() as object
 end function
 
 '-------------------------------------------------------------------------------
+' DeviceCapabilities_GetMaxScreenImageSize
+'-------------------------------------------------------------------------------
+function DeviceCapabilities_GetMaxScreenImageSize() as object
+    return DeviceCapabilities_GetDisplaySize()
+end function
+
+'-------------------------------------------------------------------------------
 ' __DeviceCapabilities_DirectPlayProfiles
 '-------------------------------------------------------------------------------
 function __DeviceCapabilities_DirectPlayProfiles() as object

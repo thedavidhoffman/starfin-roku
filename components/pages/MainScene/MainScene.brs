@@ -284,6 +284,7 @@ sub tvSeasonHandleTVShowSeasonSelected()
     page = CreateObject("roSGNode", "TVSeason")
     page.observeField("closeRequested", "tvSeasonHandleCloseRequested")
     page.observeField("selectedEpisodeDetails", "tvEpisodeHandleTVSeasonEpisodeSelected")
+    page.observeField("seasonWatchedStateChanged", "tvShowHandleTVSeasonWatchedStateChanged")
     page.settings = m.settings
     page.loadRequest = {
         server: m.session.server
@@ -422,6 +423,17 @@ sub tvEpisodeHandleWatchedStateChanged()
     if change = invalid then return
 
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.watchedStateChange = change
+end sub
+
+'-------------------------------------------------------------------------------
+' tvShowHandleTVSeasonWatchedStateChanged
+'-------------------------------------------------------------------------------
+sub tvShowHandleTVSeasonWatchedStateChanged()
+    if m.tvSeasonPage = invalid then return
+    change = m.tvSeasonPage.seasonWatchedStateChanged
+    if change = invalid then return
+
+    if m.tvShowPage <> invalid then m.tvShowPage.seasonWatchedStateChange = change
 end sub
 
 '-------------------------------------------------------------------------------

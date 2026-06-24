@@ -40,14 +40,68 @@ sub onItemContentChanged()
     if item = invalid then return
     isSeasonSummary = SafeString(item.itemType, "") = "SeasonSummary"
 
-    episodeNumber = SafeString(item.episodeNumber, "")
-    m.episodeNumber.text = episodeNumber
-    m.episodeDate.text = SafeString(item.episodeDate, "")
+    m.episodeNumber.text = getNumberText(item, isSeasonSummary)
+    m.episodeDate.text = getDateText(item, isSeasonSummary)
     m.title.text = SafeString(item.title, "")
     m.description.text = SafeString(item.description, "")
     applyLayout(isSeasonSummary)
     m.episodePoster.itemContent = item
 end sub
+
+'-------------------------------------------------------------------------------
+' getNumberText
+'-------------------------------------------------------------------------------
+function getNumberText(item as dynamic, isSeasonSummary as boolean) as string
+    if isSeasonSummary then return getEpisodeCountText(item.episodeCount)
+
+    indexText = SafeString(item.episodeIndexNumber, "")
+    if indexText <> "" then return "Episode " + indexText
+    return "Episode"
+end function
+
+'-------------------------------------------------------------------------------
+' getDateText
+'-------------------------------------------------------------------------------
+function getDateText(item as dynamic, isSeasonSummary as boolean) as string
+    if isSeasonSummary then return SafeString(item.seasonYear, "")
+
+    return getEpisodeDateText(item)
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeCountText
+'-------------------------------------------------------------------------------
+function getEpisodeCountText(count as dynamic) as string
+    countText = SafeString(count, "")
+    if countText = "" then return ""
+
+    return countText + " episodes"
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeDateText
+'-------------------------------------------------------------------------------
+function getEpisodeDateText(item as dynamic) as string
+    airedDate = getAiredDateText(item)
+    if Len(airedDate) < 10 then return airedDate
+
+    year = Left(airedDate, 4)
+    monthNumber = val(Mid(airedDate, 6, 2))
+    day = val(Mid(airedDate, 9, 2))
+    if monthNumber < 1 or monthNumber > 12 or day < 1 then return airedDate
+
+    monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return day.ToStr() + " " + monthNames[monthNumber - 1] + " " + year
+end function
+
+'-------------------------------------------------------------------------------
+' getAiredDateText
+'-------------------------------------------------------------------------------
+function getAiredDateText(item as dynamic) as string
+    airedDate = FirstNonEmpty([item.premiereDate, item.airDate, item.dateCreated], "")
+    if Len(airedDate) >= 10 then return Left(airedDate, 10)
+    return airedDate
+end function
 
 '-------------------------------------------------------------------------------
 ' applyLayout

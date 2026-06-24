@@ -131,6 +131,7 @@ sub renderSeasons(seasons as object)
             itemId: SafeString(FirstNonEmpty([season.Id], ""), "")
             itemType: SafeString(FirstNonEmpty([season.Type], ""), "")
             seasonYear: getSeasonYearText(season)
+            episodeCount: FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
             raw: season
         })
     end for
@@ -206,6 +207,70 @@ sub onCastPersonSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' onSeasonWatchedStateChange
+'-------------------------------------------------------------------------------
+sub onSeasonWatchedStateChange()
+    change = m.top.seasonWatchedStateChange
+    if change = invalid then return
+
+    seasonId = SafeString(change.seasonId, "")
+    if seasonId = "" then return
+
+    updateSeasonWatchedState(m.pageState.seasons, seasonId, change)
+    updateSeasonCardWatchedState(seasonId, change)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSeasonWatchedState
+'-------------------------------------------------------------------------------
+sub updateSeasonWatchedState(seasons as dynamic, seasonId as string, change as object)
+    if seasons = invalid then return
+
+    for each season in seasons
+        if isAssocArray(season) = false then continue for
+        if SafeString(FirstNonEmpty([season.Id], ""), "") <> seasonId then continue for
+
+        applySeasonWatchedState(season, change)
+        return
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSeasonCardWatchedState
+'-------------------------------------------------------------------------------
+sub updateSeasonCardWatchedState(seasonId as string, change as object)
+    if m.seasonsGrid.content = invalid then return
+
+    for i = 0 to m.seasonsGrid.content.getChildCount() - 1
+        child = m.seasonsGrid.content.getChild(i)
+        if child = invalid then continue for
+        if SafeString(child.itemId, "") <> seasonId then continue for
+
+        raw = child.raw
+        if isAssocArray(raw) then
+            applySeasonWatchedState(raw, change)
+            child.raw = raw
+        end if
+
+        return
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' applySeasonWatchedState
+'-------------------------------------------------------------------------------
+sub applySeasonWatchedState(season as object, change as object)
+    if season.UserData = invalid then season.UserData = {}
+
+    unplayedItemCount = 0
+    if change.unplayedItemCount <> invalid then unplayedItemCount = int(change.unplayedItemCount)
+    if unplayedItemCount < 0 then unplayedItemCount = 0
+
+    season.UserData.UnplayedItemCount = unplayedItemCount
+    season.UserData.Played = unplayedItemCount = 0
+end sub
+
+'-------------------------------------------------------------------------------
 ' getItemTitle
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
@@ -236,15 +301,6 @@ function getMetaText(item as dynamic) as string
     if communityRating <> "" then parts.Push("Rating " + communityRating)
 
     return joinText(parts, MediaMetadata_BulletSeparator())
-end function
-
-'-------------------------------------------------------------------------------
-' getSeasonSubtitle
-'-------------------------------------------------------------------------------
-function getSeasonSubtitle(item as dynamic) as string
-    count = FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
-    if count = "" then return ""
-    return SafeString(count, "") + " episodes"
 end function
 
 '-------------------------------------------------------------------------------
@@ -286,12 +342,13 @@ end function
 '-------------------------------------------------------------------------------
 function getBackdropUrl(item as dynamic) as string
     if item = invalid then return ""
+    imageSize = DeviceCapabilities_GetMaxScreenImageSize()
     if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
         itemId = FirstNonEmpty([item.Id], "")
-        return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], 1920, 1080)
+        return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], imageSize.width, imageSize.height)
     end if
 
-    return getImageUrl(item, "Primary", 1920, 1080)
+    return getImageUrl(item, "Primary", imageSize.width, imageSize.height)
 end function
 
 '-------------------------------------------------------------------------------

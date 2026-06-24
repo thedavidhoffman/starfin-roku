@@ -424,18 +424,20 @@ function getEpisodePosterUrl(item as dynamic, useRequestPoster as boolean) as st
         if requestPosterUrl <> "" then return requestPosterUrl
     end if
 
+    imageSize = DeviceCapabilities_GetMaxScreenImageSize()
+
     itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
-    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, 1920, 1080)
+    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
 
     parentThumbId = FirstNonEmpty([item.ParentThumbItemId], "")
     parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
-    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, 1920, 1080)
+    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
 
     seriesId = FirstNonEmpty([item.SeriesId], "")
     seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
-    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, 1920, 1080)
+    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
 
     return ""
 end function

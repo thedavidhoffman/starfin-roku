@@ -531,12 +531,13 @@ end function
 '-------------------------------------------------------------------------------
 function getBackdropUrl(item as dynamic) as string
     if item = invalid then return ""
+    imageSize = DeviceCapabilities_GetMaxScreenImageSize()
     if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
         itemId = FirstNonEmpty([item.Id], "")
-        return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], 1920, 1080)
+        return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], imageSize.width, imageSize.height)
     end if
 
-    return getImageUrl(item, "Primary", 1920, 1080)
+    return getImageUrl(item, "Primary", imageSize.width, imageSize.height)
 end function
 
 '-------------------------------------------------------------------------------

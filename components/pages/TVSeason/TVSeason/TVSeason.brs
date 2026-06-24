@@ -161,6 +161,7 @@ sub onWatchedStateChange()
     updateEpisodeWatchedState(itemId, isWatched)
     renderEpisodes(m.pageState.episodes)
     restoreEpisodeFocus(itemId)
+    notifySeasonWatchedStateChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -233,8 +234,10 @@ sub appendEpisodeItem(parent as object, episode as object)
     child.AddFields({
         itemId: SafeString(FirstNonEmpty([episode.Id], ""), "")
         itemType: SafeString(FirstNonEmpty([episode.Type], ""), "")
-        episodeNumber: getEpisodeNumberText(episode)
-        episodeDate: getEpisodeDateText(episode)
+        episodeIndexNumber: FirstNonEmpty([episode.IndexNumber], "")
+        premiereDate: FirstNonEmpty([episode.PremiereDate], "")
+        airDate: FirstNonEmpty([episode.AirDate], "")
+        dateCreated: FirstNonEmpty([episode.DateCreated], "")
         progressPercent: getProgressPercent(episode)
         progressWidth: getProgressWidth(episode)
         raw: episode
@@ -354,8 +357,8 @@ sub appendSeasonSummaryItem(row as object)
     child.AddFields({
         itemId: SafeString(FirstNonEmpty([season.Id], ""), "")
         itemType: "SeasonSummary"
-        episodeNumber: getSeasonEpisodeCountText(season)
-        episodeDate: getSeasonYearText(season)
+        episodeCount: FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
+        seasonYear: getSeasonYearText(season)
         raw: season
     })
 end sub
@@ -423,16 +426,6 @@ function getSeasonSummaryDescription(season as dynamic) as string
     if isAssocArray(series) = false then return ""
 
     return FirstNonEmpty([series.Overview], "")
-end function
-
-'-------------------------------------------------------------------------------
-' getSeasonEpisodeCountText
-'-------------------------------------------------------------------------------
-function getSeasonEpisodeCountText(season as dynamic) as string
-    episodeCount = FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
-    if episodeCount = "" then return ""
-
-    return SafeString(episodeCount, "") + " episodes"
 end function
 
 '-------------------------------------------------------------------------------
@@ -519,39 +512,6 @@ function getEpisodeOverflowState() as object
     state.right = (windowStart + visibleItemCount) < itemCount
 
     return state
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeNumberText
-'-------------------------------------------------------------------------------
-function getEpisodeNumberText(item as dynamic) as string
-    indexText = FirstNonEmpty([item.IndexNumber], "")
-    if indexText <> "" then return "Episode " + SafeString(indexText, "")
-    return "Episode"
-end function
-
-' getAiredDateText
-'-------------------------------------------------------------------------------
-function getAiredDateText(item as dynamic) as string
-    airedDate = FirstNonEmpty([item.PremiereDate, item.AirDate, item.DateCreated], "")
-    if Len(airedDate) >= 10 then return Left(airedDate, 10)
-    return airedDate
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeDateText
-'-------------------------------------------------------------------------------
-function getEpisodeDateText(item as dynamic) as string
-    airedDate = getAiredDateText(item)
-    if Len(airedDate) < 10 then return airedDate
-
-    year = Left(airedDate, 4)
-    monthNumber = val(Mid(airedDate, 6, 2))
-    day = val(Mid(airedDate, 9, 2))
-    if monthNumber < 1 or monthNumber > 12 or day < 1 then return airedDate
-
-    monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    return day.ToStr() + " " + monthNames[monthNumber - 1] + " " + year
 end function
 
 '-------------------------------------------------------------------------------
@@ -659,6 +619,28 @@ sub updateSeasonUnplayedCount(wasWatched as boolean, isWatched as boolean)
 
     if current < 0 then current = 0
     m.pageState.season.UserData.UnplayedItemCount = current
+end sub
+
+'-------------------------------------------------------------------------------
+' notifySeasonWatchedStateChanged
+'-------------------------------------------------------------------------------
+sub notifySeasonWatchedStateChanged()
+    season = m.pageState.season
+    if isAssocArray(season) = false then return
+
+    seasonId = SafeString(FirstNonEmpty([season.Id], ""), "")
+    if seasonId = "" then return
+
+    unplayedItemCount = 0
+    if season.UserData <> invalid and season.UserData.UnplayedItemCount <> invalid then
+        unplayedItemCount = int(season.UserData.UnplayedItemCount)
+    end if
+
+    m.top.seasonWatchedStateChanged = {
+        seasonId: seasonId
+        unplayedItemCount: unplayedItemCount
+        isWatched: unplayedItemCount = 0
+    }
 end sub
 
 '-------------------------------------------------------------------------------
