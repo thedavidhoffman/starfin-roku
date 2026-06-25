@@ -51,6 +51,7 @@ sub onLoadRequestChanged()
     clearRelated()
     Status_SetLoading()
     renderPerson(request.item)
+    m.overviewLabel.text = ""
 
     m.personTask.request = request
     m.personTask.control = "run"
@@ -71,6 +72,7 @@ sub onPersonResponse()
     person = response.payload.person
     m.pageState.person = person
     renderPerson(person)
+    renderOverview(person)
     renderRelated(getItemsFromPayload(response.payload.items))
     Status_ClearMessage()
 end sub
@@ -84,7 +86,6 @@ sub renderPerson(person as dynamic)
     m.nameLabel.text = getPersonName(person)
     m.lifeLabel.text = getLifeText(person)
     renderBirthPlace(person)
-    m.overviewLabel.text = FirstNonEmpty([person.Overview], "Biographical information for this person is not currently available.")
 
     imageUrl = getPersonImageUrl(person, 400, 600)
     m.personImage.visible = imageUrl <> ""
@@ -97,6 +98,16 @@ sub renderPerson(person as dynamic)
     else
         updateFocusVisual()
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderOverview
+'-------------------------------------------------------------------------------
+sub renderOverview(person as dynamic)
+    overview = FirstNonEmpty([person.Overview], "")
+    if overview = "" then overview = "Biographical information for this person is not currently available."
+
+    m.overviewLabel.text = overview
 end sub
 
 '-------------------------------------------------------------------------------
