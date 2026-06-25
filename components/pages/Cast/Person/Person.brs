@@ -3,13 +3,19 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("Person")
+    m.bioGroup = m.top.findNode("bioGroup")
     m.personImage = m.top.findNode("personImage")
     m.nameLabel = m.top.findNode("nameLabel")
     m.lifeLabel = m.top.findNode("lifeLabel")
     m.birthPlaceLabel = m.top.findNode("birthPlaceLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
     m.filmographyButton = m.top.findNode("filmographyButton")
+    m.relatedGroup = m.top.findNode("relatedGroup")
+    m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
     m.relatedRows = m.top.findNode("relatedRows")
+    m.layoutAnimation = m.top.findNode("layoutAnimation")
+    m.bioTranslation = m.top.findNode("bioTranslation")
+    m.relatedRowsTranslation = m.top.findNode("relatedRowsTranslation")
     m.personTask = m.top.findNode("personTask")
 
     m.personTask.observeField("response", "onPersonResponse")
@@ -20,6 +26,13 @@ sub init()
         person: invalid
         filmography: invalid
         focusArea: "person"
+    }
+    m.layout = {
+        mode: "bio"
+        bioDefault: [96, 92]
+        bioRelatedFocused: [96, -58]
+        rowsDefault: [76, 750]
+        rowsRelatedFocused: [76, 560]
     }
 end sub
 
@@ -33,6 +46,8 @@ sub onLoadRequestChanged()
     m.pageState.request = request
     m.pageState.person = request.item
     m.pageState.filmography = invalid
+    m.pageState.focusArea = "person"
+    setLayoutMode("bio", false)
     clearRelated()
     Status_SetLoading()
     renderPerson(request.item)
@@ -110,7 +125,7 @@ end function
 sub renderRelated(items as object)
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
-    row.title = "More with " + getPersonName(m.pageState.person)
+    m.relatedTitleLabel.text = "More with " + getPersonName(m.pageState.person)
 
     for each item in items
         if isAssocArray(item) = false then continue for
@@ -127,7 +142,9 @@ sub renderRelated(items as object)
     end for
 
     m.relatedRows.content = content
-    m.relatedRows.visible = row.getChildCount() > 0
+    hasItems = row.getChildCount() > 0
+    m.relatedGroup.visible = hasItems
+    m.relatedRows.visible = hasItems
 end sub
 
 '-------------------------------------------------------------------------------
@@ -135,6 +152,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub clearRelated()
     m.relatedRows.content = CreateObject("roSGNode", "ContentNode")
+    m.relatedGroup.visible = false
     m.relatedRows.visible = false
 end sub
 
@@ -143,6 +161,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     if m.relatedRows.visible = true and m.pageState.focusArea = "related" then
+        setLayoutMode("related", false)
         m.relatedRows.setFocus(true)
     else if m.filmographyButton.visible = true then
         focusFilmographyButton()
@@ -158,6 +177,7 @@ sub focusFilmographyButton()
     if m.filmographyButton.visible <> true then return
 
     m.pageState.focusArea = "filmography"
+    setLayoutMode("bio", true)
     m.filmographyButton.hasFocusVisual = true
     m.filmographyButton.setFocus(true)
 end sub
@@ -169,6 +189,7 @@ sub focusRelated()
     if m.relatedRows.visible <> true then return
 
     m.pageState.focusArea = "related"
+    setLayoutMode("related", true)
     m.filmographyButton.hasFocusVisual = false
     m.relatedRows.setFocus(true)
 end sub
@@ -181,8 +202,35 @@ sub focusPerson()
         focusFilmographyButton()
     else
         m.pageState.focusArea = "person"
+        setLayoutMode("bio", true)
         m.filmographyButton.hasFocusVisual = false
         m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' setLayoutMode
+'-------------------------------------------------------------------------------
+sub setLayoutMode(mode as string, animated as boolean)
+    if mode <> "related" then mode = "bio"
+    if m.layout.mode = mode and animated = true then return
+
+    m.layout.mode = mode
+    bioTarget = m.layout.bioDefault
+    rowsTarget = m.layout.rowsDefault
+    if mode = "related" then
+        bioTarget = m.layout.bioRelatedFocused
+        rowsTarget = m.layout.rowsRelatedFocused
+    end if
+
+    if animated = true then
+        m.bioTranslation.keyValue = [m.bioGroup.translation, bioTarget]
+        m.relatedRowsTranslation.keyValue = [m.relatedGroup.translation, rowsTarget]
+        m.layoutAnimation.control = "start"
+    else
+        m.layoutAnimation.control = "stop"
+        m.bioGroup.translation = bioTarget
+        m.relatedGroup.translation = rowsTarget
     end if
 end sub
 
