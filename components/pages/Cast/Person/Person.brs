@@ -3,13 +3,12 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("Person")
-    m.backdrop = m.top.findNode("backdrop")
     m.personImage = m.top.findNode("personImage")
     m.nameLabel = m.top.findNode("nameLabel")
     m.lifeLabel = m.top.findNode("lifeLabel")
+    m.birthPlaceLabel = m.top.findNode("birthPlaceLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
     m.filmographyButton = m.top.findNode("filmographyButton")
-    m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
     m.relatedRows = m.top.findNode("relatedRows")
     m.personTask = m.top.findNode("personTask")
 
@@ -69,16 +68,12 @@ sub renderPerson(person as dynamic)
 
     m.nameLabel.text = getPersonName(person)
     m.lifeLabel.text = getLifeText(person)
+    renderBirthPlace(person)
     m.overviewLabel.text = FirstNonEmpty([person.Overview], "Biographical information for this person is not currently available.")
 
-    imageUrl = getPersonImageUrl(person, 300, 450)
+    imageUrl = getPersonImageUrl(person, 400, 600)
     m.personImage.visible = imageUrl <> ""
     m.personImage.uri = imageUrl
-
-    backdropUrl = getBackdropUrl(person)
-    m.backdrop.visible = backdropUrl <> ""
-    m.backdrop.uri = backdropUrl
-    m.relatedTitleLabel.text = "More with " + getPersonName(person)
 
     m.pageState.filmography = buildFilmographySelection(person, imageUrl)
     m.filmographyButton.visible = m.pageState.filmography <> invalid
@@ -90,11 +85,32 @@ sub renderPerson(person as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
+' renderBirthPlace
+'-------------------------------------------------------------------------------
+sub renderBirthPlace(person as dynamic)
+    birthPlace = getBirthPlace(person)
+    m.birthPlaceLabel.visible = birthPlace <> ""
+    m.birthPlaceLabel.text = "Place of birth: " + birthPlace
+end sub
+
+'-------------------------------------------------------------------------------
+' getBirthPlace
+'-------------------------------------------------------------------------------
+function getBirthPlace(person as dynamic) as string
+    if isAssocArray(person) = false then return ""
+    if person.ProductionLocations = invalid then return ""
+    if person.ProductionLocations.Count() = 0 then return ""
+
+    return SafeString(person.ProductionLocations[0], "")
+end function
+
+'-------------------------------------------------------------------------------
 ' renderRelated
 '-------------------------------------------------------------------------------
 sub renderRelated(items as object)
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
+    row.title = "More with " + getPersonName(m.pageState.person)
 
     for each item in items
         if isAssocArray(item) = false then continue for
@@ -112,7 +128,6 @@ sub renderRelated(items as object)
 
     m.relatedRows.content = content
     m.relatedRows.visible = row.getChildCount() > 0
-    m.relatedTitleLabel.visible = row.getChildCount() > 0
 end sub
 
 '-------------------------------------------------------------------------------
@@ -121,7 +136,6 @@ end sub
 sub clearRelated()
     m.relatedRows.content = CreateObject("roSGNode", "ContentNode")
     m.relatedRows.visible = false
-    m.relatedTitleLabel.visible = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -279,13 +293,62 @@ end function
 '-------------------------------------------------------------------------------
 function getLifeText(person as dynamic) as string
     parts = []
-    birthText = formatDate(FirstNonEmpty([person.PremiereDate, person.BirthDate], ""))
-    deathText = formatDate(FirstNonEmpty([person.EndDate, person.DeathDate], ""))
+    birthDate = FirstNonEmpty([person.PremiereDate, person.BirthDate], "")
+    deathDate = FirstNonEmpty([person.EndDate, person.DeathDate], "")
+    birthText = formatDate(birthDate)
+    deathText = formatDate(deathDate)
+    ageText = getAgeText(birthDate, deathDate)
 
     if birthText <> "" then parts.Push("Born " + birthText)
     if deathText <> "" then parts.Push("Died " + deathText)
+    if ageText <> "" then parts.Push(ageText)
 
     return joinText(parts, MediaMetadata_BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getAgeText
+'-------------------------------------------------------------------------------
+function getAgeText(birthDate as string, deathDate as string) as string
+    age = getAge(birthDate, deathDate)
+    if age < 0 then return ""
+
+    return "Age " + age.ToStr()
+end function
+
+'-------------------------------------------------------------------------------
+' getAge
+'-------------------------------------------------------------------------------
+function getAge(birthDate as string, deathDate as string) as integer
+    if Len(birthDate) < 10 then return -1
+
+    birthYear = val(Left(birthDate, 4))
+    birthMonth = val(Mid(birthDate, 6, 2))
+    birthDay = val(Mid(birthDate, 9, 2))
+    if birthYear <= 0 or birthMonth <= 0 or birthDay <= 0 then return -1
+
+    endYear = 0
+    endMonth = 0
+    endDay = 0
+    if Len(deathDate) >= 10 then
+        endYear = val(Left(deathDate, 4))
+        endMonth = val(Mid(deathDate, 6, 2))
+        endDay = val(Mid(deathDate, 9, 2))
+    else
+        today = CreateObject("roDateTime")
+        today.Mark()
+        endYear = today.GetYear()
+        endMonth = today.GetMonth()
+        endDay = today.GetDayOfMonth()
+    end if
+
+    if endYear <= 0 or endMonth <= 0 or endDay <= 0 then return -1
+
+    age = endYear - birthYear
+    if endMonth < birthMonth or (endMonth = birthMonth and endDay < birthDay) then age = age - 1
+    if age < 0 then return -1
+
+    return age
 end function
 
 '-------------------------------------------------------------------------------
@@ -309,19 +372,6 @@ function getItemsFromPayload(payload as dynamic) as object
     if payload.Items <> invalid then return payload.Items
 
     return []
-end function
-
-'-------------------------------------------------------------------------------
-' getBackdropUrl
-'-------------------------------------------------------------------------------
-function getBackdropUrl(item as dynamic) as string
-    if item = invalid then return ""
-    if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
-        itemId = FirstNonEmpty([item.Id], "")
-        return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], 1920, 1080)
-    end if
-
-    return ""
 end function
 
 '-------------------------------------------------------------------------------
