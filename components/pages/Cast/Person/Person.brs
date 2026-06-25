@@ -30,9 +30,9 @@ sub init()
     m.layout = {
         mode: "bio"
         bioDefault: [96, 92]
-        bioRelatedFocused: [96, -58]
+        bioRelatedFocused: [96, -166]
         rowsDefault: [76, 750]
-        rowsRelatedFocused: [76, 560]
+        rowsRelatedFocused: [76, 492]
     }
 end sub
 
@@ -407,7 +407,11 @@ function formatDate(value as string) as string
 
     date = CreateObject("roDateTime")
     date.FromISO8601String(value)
-    return date.AsDateString("short-month-no-weekday")
+    monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    month = date.GetMonth()
+    if month < 1 or month > 12 then return date.AsDateString("short-month-no-weekday")
+
+    return monthNames[month - 1] + " " + date.GetDayOfMonth().ToStr() + ", " + date.GetYear().ToStr()
 end function
 
 '-------------------------------------------------------------------------------

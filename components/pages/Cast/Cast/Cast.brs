@@ -177,7 +177,7 @@ end function
 function getPersonImageUrl(person as object) as string
     personId = FirstNonEmpty([person.Id], "")
     tag = FirstNonEmpty([person.PrimaryImageTag], "")
-    if personId = "" or tag = "" then return "pkg:/images/cast/person-placeholder-195x195.png"
+    if personId = "" or tag = "" then return "pkg:/images/cast/cast-placeholder-195x195.png"
 
     return NormalizeServerUrl(m.top.server) + "/Items/" + personId + "/Images/Primary?tag=" + tag + "&maxWidth=195&maxHeight=195&quality=90"
 end function
