@@ -249,6 +249,7 @@ sub tvShowShow(selection as object, shouldReset as boolean)
         userId: m.session.userId
         itemId: selection.itemId
         item: selection.item
+        settings: m.settings
     }
 
     if shouldReset then resetDynamicPages()
@@ -519,6 +520,7 @@ sub movieShow(selection as object, shouldReset as boolean)
         userId: m.session.userId
         itemId: selection.itemId
         item: selection.item
+        settings: m.settings
     }
 
     if shouldReset then resetDynamicPages()
@@ -579,12 +581,14 @@ sub personShow(selection as object)
     page.observeField("selectedFilmography", "filmographyHandlePersonFilmographySelected")
     page.observeField("selectedMovie", "personHandleMovieSelected")
     page.observeField("selectedSeries", "personHandleSeriesSelected")
+    page.settings = m.settings
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
         userId: m.session.userId
         itemId: selection.itemId
         item: selection.item
+        settings: m.settings
     }
 
     m.personPage = page
@@ -1053,6 +1057,7 @@ sub fanOutSettings()
     applySettingsToPage(m.collectionsPage)
     applySettingsToPage(m.libraryPage)
     applySettingsToPage(m.tvSeasonPage)
+    applySettingsToPage(m.personPage)
 end sub
 
 '-------------------------------------------------------------------------------

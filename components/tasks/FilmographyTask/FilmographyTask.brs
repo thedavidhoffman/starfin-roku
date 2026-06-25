@@ -18,7 +18,7 @@ sub executeRequest()
     end if
 
     url = "https://api.themoviedb.org/3/person/" + request.personId + "/combined_credits" + Url_BuildQueryString({
-        
+        api_key: request.apiKey
     })
 
     result = HttpClient_Request(url, "GET", invalid, invalid)
@@ -58,15 +58,16 @@ function buildFilmographyItems(payload as dynamic) as object
             character: FirstNonEmpty([credit.character], "")
             poster_path: FirstNonEmpty([credit.poster_path], "")
             overview: FirstNonEmpty([credit.overview], "")
+            vote_average: Number_ToFloat(credit.vote_average)
             raw: credit
         })
     end for
 
     items.SortBy("sort_date")
+    items.Reverse()
     return items
 end function
 
-'-------------------------------------------------------------------------------
 ' getCreditDate
 '-------------------------------------------------------------------------------
 function getCreditDate(credit as object) as string
@@ -88,6 +89,7 @@ end function
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "filmography", errorMessage: "Invalid filmography request." }
     if request.personId = invalid or request.personId = "" then return { ok: false, action: "filmography", errorMessage: "Invalid TMDB person." }
+    if request.apiKey = invalid or request.apiKey = "" then return { ok: false, action: "filmography", errorMessage: "Missing TMDB API key." }
 
     return invalid
 end function

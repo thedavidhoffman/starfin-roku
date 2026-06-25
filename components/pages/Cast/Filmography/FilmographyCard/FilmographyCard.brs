@@ -30,13 +30,40 @@ sub onItemContentChanged()
     m.dateLabel.text = SafeString(item.releaseDate, "")
     m.titleLabel.text = SafeString(item.title, "")
 
-    character = SafeString(item.character, "")
-    if character <> "" then
-        m.characterLabel.text = "as " + character
-    else
-        m.characterLabel.text = ""
-    end if
+    m.characterLabel.text = getDetailText(item)
 end sub
+
+'-------------------------------------------------------------------------------
+' getDetailText
+'-------------------------------------------------------------------------------
+function getDetailText(item as dynamic) as string
+    parts = []
+    character = SafeString(item.character, "")
+    if character <> "" then parts.Push("as " + character)
+
+    rating = MediaMetadata_FormatRating(item.voteAverage)
+    if rating <> "" then parts.Push(rating)
+
+    return joinText(parts, MediaMetadata_BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' joinText
+'-------------------------------------------------------------------------------
+function joinText(values as dynamic, separator as string) as string
+    if values = invalid then return ""
+
+    text = ""
+    for each value in values
+        part = String_Trim(SafeString(value, ""))
+        if part <> "" then
+            if text <> "" then text = text + separator
+            text = text + part
+        end if
+    end for
+
+    return text
+end function
 
 '-------------------------------------------------------------------------------
 ' onItemHasFocusChanged

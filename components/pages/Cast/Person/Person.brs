@@ -9,6 +9,7 @@ sub init()
     m.lifeLabel = m.top.findNode("lifeLabel")
     m.birthPlaceLabel = m.top.findNode("birthPlaceLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
+    m.readMoreButton = m.top.findNode("readMoreButton")
     m.filmographyButton = m.top.findNode("filmographyButton")
     m.relatedGroup = m.top.findNode("relatedGroup")
     m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
@@ -33,6 +34,8 @@ sub init()
         bioRelatedFocused: [96, -166]
         rowsDefault: [76, 750]
         rowsRelatedFocused: [76, 492]
+        overviewDefaultTranslation: [440, 174]
+        overviewNoMetadataTranslation: [440, 83]
     }
 end sub
 
@@ -48,6 +51,7 @@ sub onLoadRequestChanged()
     m.pageState.filmography = invalid
     m.pageState.focusArea = "person"
     setLayoutMode("bio", false)
+    m.readMoreButton.visible = false
     clearRelated()
     Status_SetLoading()
     renderPerson(request.item)
@@ -86,18 +90,36 @@ sub renderPerson(person as dynamic)
     m.nameLabel.text = getPersonName(person)
     m.lifeLabel.text = getLifeText(person)
     renderBirthPlace(person)
+    updateOverviewPosition()
 
     imageUrl = getPersonImageUrl(person, 400, 600)
-    m.personImage.visible = imageUrl <> ""
-    m.personImage.uri = imageUrl
+    posterUrl = imageUrl
+    if posterUrl = "" then posterUrl = "pkg:/images/cast/person-placeholder-400x600.png"
+    m.personImage.visible = true
+    m.personImage.uri = posterUrl
 
+    updateFilmographyButton(person, imageUrl)
+    updateFocusVisual()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    person = m.pageState.person
+    if isAssocArray(person) = false then return
+
+    updateFilmographyButton(person, getPersonImageUrl(person, 400, 600))
+    updateReadMoreButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateFilmographyButton
+'-------------------------------------------------------------------------------
+sub updateFilmographyButton(person as dynamic, imageUrl as string)
     m.pageState.filmography = buildFilmographySelection(person, imageUrl)
     m.filmographyButton.visible = m.pageState.filmography <> invalid
-    if m.filmographyButton.visible = true and m.pageState.focusArea <> "related" then
-        focusFilmographyButton()
-    else
-        updateFocusVisual()
-    end if
+    updateFocusVisual()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -108,7 +130,73 @@ sub renderOverview(person as dynamic)
     if overview = "" then overview = "Biographical information for this person is not currently available."
 
     m.overviewLabel.text = overview
+    updateReadMoreButton()
 end sub
+
+'-------------------------------------------------------------------------------
+' updateReadMoreButton
+'-------------------------------------------------------------------------------
+sub updateReadMoreButton()
+    m.readMoreButton.visible = isOverviewLabelTruncated()
+    if m.readMoreButton.visible = true then
+        m.filmographyButton.translation = [716, 536]
+    else
+        m.filmographyButton.translation = [440, 536]
+    end if
+
+    updateFocusVisual()
+    if m.pageState.focusArea <> "related" then focusDefaultBioAction()
+end sub
+
+'-------------------------------------------------------------------------------
+' isOverviewLabelTruncated
+'-------------------------------------------------------------------------------
+function isOverviewLabelTruncated() as boolean
+    return isOverviewTextTruncated(SafeString(m.overviewLabel.text, ""))
+end function
+
+'-------------------------------------------------------------------------------
+' isOverviewTextTruncated
+'-------------------------------------------------------------------------------
+function isOverviewTextTruncated(text as string) as boolean
+    if text = "" then return false
+
+    maxLines = 12
+    maxCharsPerLine = 44
+    lineCount = 1
+    currentLineLength = 0
+    normalizedText = String_Replace(text, Chr(13), "")
+    paragraphs = normalizedText.Split(Chr(10))
+
+    for each paragraph in paragraphs
+        words = String_Trim(paragraph).Split(" ")
+
+        for each word in words
+            wordLength = Len(SafeString(word, ""))
+            if wordLength = 0 then continue for
+
+            separatorLength = 0
+            if currentLineLength > 0 then separatorLength = 1
+
+            if currentLineLength > 0 and currentLineLength + separatorLength + wordLength > maxCharsPerLine then
+                lineCount = lineCount + 1
+                currentLineLength = wordLength
+            else
+                currentLineLength = currentLineLength + separatorLength + wordLength
+            end if
+
+            if lineCount > maxLines then return true
+        end for
+
+        if paragraph <> paragraphs[paragraphs.Count() - 1] then
+            lineCount = lineCount + 1
+            currentLineLength = 0
+            if lineCount > maxLines then return true
+        end if
+    end for
+
+    return false
+end function
 
 '-------------------------------------------------------------------------------
 ' renderBirthPlace
@@ -117,6 +205,17 @@ sub renderBirthPlace(person as dynamic)
     birthPlace = getBirthPlace(person)
     m.birthPlaceLabel.visible = birthPlace <> ""
     m.birthPlaceLabel.text = "Place of birth: " + birthPlace
+end sub
+
+'-------------------------------------------------------------------------------
+' updateOverviewPosition
+'-------------------------------------------------------------------------------
+sub updateOverviewPosition()
+    if m.lifeLabel.text = "" and m.birthPlaceLabel.visible <> true then
+        m.overviewLabel.translation = m.layout.overviewNoMetadataTranslation
+    else
+        m.overviewLabel.translation = m.layout.overviewDefaultTranslation
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -137,8 +236,9 @@ sub renderRelated(items as object)
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
     m.relatedTitleLabel.text = "More with " + getPersonName(m.pageState.person)
+    sortedItems = sortItemsByProductionYearDesc(items)
 
-    for each item in items
+    for each item in sortedItems
         if isAssocArray(item) = false then continue for
 
         itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
@@ -159,6 +259,44 @@ sub renderRelated(items as object)
 end sub
 
 '-------------------------------------------------------------------------------
+' sortItemsByProductionYearDesc
+'-------------------------------------------------------------------------------
+function sortItemsByProductionYearDesc(items as object) as object
+    if items = invalid then return []
+
+    sortedItems = []
+    for each item in items
+        sortedItems.Push(item)
+    end for
+
+    if sortedItems.Count() < 2 then return sortedItems
+
+    for i = 0 to sortedItems.Count() - 2
+        for j = i + 1 to sortedItems.Count() - 1
+            if getProductionYearValue(sortedItems[j]) > getProductionYearValue(sortedItems[i]) then
+                temp = sortedItems[i]
+                sortedItems[i] = sortedItems[j]
+                sortedItems[j] = temp
+            end if
+        end for
+    end for
+
+    return sortedItems
+end function
+
+'-------------------------------------------------------------------------------
+' getProductionYearValue
+'-------------------------------------------------------------------------------
+function getProductionYearValue(item as dynamic) as integer
+    if isAssocArray(item) = false then return -1
+
+    year = FirstNonEmpty([item.ProductionYear], "")
+    if year = "" then return -1
+
+    return val(year)
+end function
+
+'-------------------------------------------------------------------------------
 ' clearRelated
 '-------------------------------------------------------------------------------
 sub clearRelated()
@@ -174,9 +312,23 @@ sub activate()
     if m.relatedRows.visible = true and m.pageState.focusArea = "related" then
         setLayoutMode("related", false)
         m.relatedRows.setFocus(true)
+    else
+        focusDefaultBioAction()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' focusDefaultBioAction
+'-------------------------------------------------------------------------------
+sub focusDefaultBioAction()
+    if m.readMoreButton.visible = true then
+        focusReadMoreButton()
     else if m.filmographyButton.visible = true then
         focusFilmographyButton()
     else
+        m.pageState.focusArea = "person"
+        setLayoutMode("bio", true)
+        updateFocusVisual()
         m.top.setFocus(true)
     end if
 end sub
@@ -189,8 +341,20 @@ sub focusFilmographyButton()
 
     m.pageState.focusArea = "filmography"
     setLayoutMode("bio", true)
-    m.filmographyButton.hasFocusVisual = true
+    updateFocusVisual()
     m.filmographyButton.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusReadMoreButton
+'-------------------------------------------------------------------------------
+sub focusReadMoreButton()
+    if m.readMoreButton.visible <> true then return
+
+    m.pageState.focusArea = "readMore"
+    setLayoutMode("bio", true)
+    updateFocusVisual()
+    m.readMoreButton.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -201,7 +365,7 @@ sub focusRelated()
 
     m.pageState.focusArea = "related"
     setLayoutMode("related", true)
-    m.filmographyButton.hasFocusVisual = false
+    updateFocusVisual()
     m.relatedRows.setFocus(true)
 end sub
 
@@ -209,14 +373,7 @@ end sub
 ' focusPerson
 '-------------------------------------------------------------------------------
 sub focusPerson()
-    if m.filmographyButton.visible = true then
-        focusFilmographyButton()
-    else
-        m.pageState.focusArea = "person"
-        setLayoutMode("bio", true)
-        m.filmographyButton.hasFocusVisual = false
-        m.top.setFocus(true)
-    end if
+    focusDefaultBioAction()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -294,6 +451,9 @@ end function
 ' buildFilmographySelection
 '-------------------------------------------------------------------------------
 function buildFilmographySelection(person as dynamic, imageUrl as string) as dynamic
+    tmdbApiKey = getTmdbApiKey()
+    if tmdbApiKey = "" then return invalid
+
     tmdbId = getTmdbPersonId(person)
     if tmdbId = "" then return invalid
 
@@ -301,7 +461,33 @@ function buildFilmographySelection(person as dynamic, imageUrl as string) as dyn
         personId: tmdbId
         name: getPersonName(person)
         imageUrl: imageUrl
+        apiKey: tmdbApiKey
     }
+end function
+
+'-------------------------------------------------------------------------------
+' hasTmdbApiKey
+'-------------------------------------------------------------------------------
+function hasTmdbApiKey() as boolean
+    return getTmdbApiKey() <> ""
+end function
+
+'-------------------------------------------------------------------------------
+' getTmdbApiKey
+'-------------------------------------------------------------------------------
+function getTmdbApiKey() as string
+    keys = SettingsStore_Keys()
+    apiKey = SettingsStore_GetSettingValue(m.top.settings, keys.tmdbApiKey)
+    if apiKey <> "" then return apiKey
+
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    apiKey = SettingsStore_GetSettingValue(request.settings, keys.tmdbApiKey)
+    if apiKey <> "" then return apiKey
+
+    settings = SettingsStore_Load()
+    return SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
 end function
 
 '-------------------------------------------------------------------------------
@@ -450,6 +636,7 @@ function getPersonImageUrl(person as dynamic, width as integer, height as intege
     tag = FirstNonEmpty([person.PrimaryImageTag], "")
     if tag = "" and person.ImageTags <> invalid and person.ImageTags.Primary <> invalid then tag = person.ImageTags.Primary
     if itemId = "" then return ""
+    if tag = "" then return ""
 
     return buildImageUrl(itemId, "Primary", tag, width, height)
 end function
@@ -512,8 +699,8 @@ end function
 ' updateFocusVisual
 '-------------------------------------------------------------------------------
 sub updateFocusVisual()
-    hasFocusVisual = m.filmographyButton.visible = true and m.pageState.focusArea <> "related"
-    m.filmographyButton.hasFocusVisual = hasFocusVisual
+    m.readMoreButton.hasFocusVisual = m.readMoreButton.visible = true and m.pageState.focusArea = "readMore"
+    m.filmographyButton.hasFocusVisual = m.filmographyButton.visible = true and m.pageState.focusArea = "filmography"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -527,12 +714,34 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = "OK" and (m.pageState.focusArea = "filmography" or (m.pageState.focusArea = "person" and m.filmographyButton.visible = true)) then
+    if key = "OK" and m.pageState.focusArea = "filmography" then
         selectFilmography()
         return true
     end if
 
-    if key = "down" and (m.pageState.focusArea = "person" or m.pageState.focusArea = "filmography") then
+    if key = "OK" and m.pageState.focusArea = "readMore" then return true
+
+    if key = "right" and m.pageState.focusArea = "readMore" and m.filmographyButton.visible = true then
+        focusFilmographyButton()
+        return true
+    end if
+
+    if key = "left" and m.pageState.focusArea = "filmography" and m.readMoreButton.visible = true then
+        focusReadMoreButton()
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "person" and m.readMoreButton.visible = true then
+        focusReadMoreButton()
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "person" and m.filmographyButton.visible = true then
+        focusFilmographyButton()
+        return true
+    end if
+
+    if key = "down" and (m.pageState.focusArea = "readMore" or m.pageState.focusArea = "filmography") then
         focusRelated()
         return true
     end if

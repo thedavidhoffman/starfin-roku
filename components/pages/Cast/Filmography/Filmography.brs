@@ -34,6 +34,7 @@ sub onLoadRequestChanged()
 
     m.filmographyTask.request = {
         personId: SafeString(request.personId, "")
+        apiKey: SafeString(request.apiKey, "")
     }
     m.filmographyTask.control = "run"
 end sub
@@ -71,6 +72,7 @@ sub renderItems(items as object)
             character: SafeString(item.character, "")
             posterPath: SafeString(item.poster_path, "")
             overview: SafeString(item.overview, "")
+            voteAverage: item.vote_average
             raw: item.raw
         })
     end for
