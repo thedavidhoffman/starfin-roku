@@ -2,8 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.panel = m.top.findNode("panel")
-    m.titleLabel = m.top.findNode("titleLabel")
+    m.dialog = m.top.findNode("dialog")
     m.emptyLabel = m.top.findNode("emptyLabel")
     m.audioList = m.top.findNode("audioList")
     m.audioList.observeField("itemSelected", "onAudioListItemSelected")
@@ -32,7 +31,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyle()
     colors = Color()
-    m.titleLabel.color = colors.text.primary
     m.emptyLabel.color = colors.text.secondary
 end sub
 
@@ -42,6 +40,7 @@ end sub
 sub openOptions()
     m.state.pendingSelection = getSelectionForCheckedItem()
     m.top.visible = true
+    m.dialog.callFunc("openDialog")
     m.top.setFocus(true)
     if hasAudioStreams() then
         m.audioList.setFocus(true)
@@ -53,6 +52,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub closeOptions()
     publishPendingSelection()
+    m.dialog.callFunc("closeDialog")
     m.top.visible = false
     m.top.closeRequested = true
 end sub
@@ -111,10 +111,8 @@ sub updatePanelSize()
     titleY = panelY + m.layout.panelPadding
     contentY = titleY + m.layout.titleHeight + 24
 
-    m.panel.translation = [m.layout.panelX, panelY]
-    m.panel.width = m.layout.panelWidth
-    m.panel.height = panelHeight
-    m.titleLabel.translation = [m.layout.panelX + m.layout.panelPadding, titleY]
+    m.dialog.dialogWidth = m.layout.panelWidth
+    m.dialog.dialogHeight = panelHeight
     m.emptyLabel.translation = [m.layout.panelX + m.layout.panelPadding, contentY + 8]
     m.audioList.translation = [m.layout.panelX + m.layout.panelPadding, contentY]
     m.audioList.numRows = rows

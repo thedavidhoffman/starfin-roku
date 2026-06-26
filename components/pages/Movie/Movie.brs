@@ -5,8 +5,7 @@ sub init()
     m.log = CreateLogger("Movie")
     m.mediaShell = m.top.findNode("mediaShell")
     m.mediaToolbar = m.top.findNode("mediaToolbar")
-    m.subtitleOptions = m.top.findNode("subtitleOptions")
-    m.audioOptions = m.top.findNode("audioOptions")
+    m.streamOptions = m.top.findNode("streamOptions")
     m.cast = m.top.findNode("cast")
     m.movieTask = m.top.findNode("movieTask")
     m.watchedTask = m.top.findNode("watchedTask")
@@ -20,13 +19,12 @@ sub init()
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
-    m.subtitleOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
-    m.subtitleOptions.observeField("closeRequested", "onSubtitleOptionsCloseRequested")
-    m.audioOptions.observeField("selectedAudio", "onAudioOptionSelected")
-    m.audioOptions.observeField("closeRequested", "onAudioOptionsCloseRequested")
+    m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
+    m.streamOptions.observeField("selectedAudio", "onAudioOptionSelected")
+    m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
-    m.pageState = {
+    m.state = {
         request: invalid
         item: invalid
         selectedStreams: {
@@ -45,9 +43,9 @@ sub onLoadRequestChanged()
     request = m.top.loadRequest
     if request = invalid then return
 
-    m.pageState.request = request
-    m.pageState.item = request.item
-    m.pageState.selectedStreams = {
+    m.state.request = request
+    m.state.item = request.item
+    m.state.selectedStreams = {
         audio: invalid
         subtitle: invalid
         subtitleOff: false
@@ -72,7 +70,7 @@ sub onMovieResponse()
         return
     end if
 
-    m.pageState.item = response.payload
+    m.state.item = response.payload
     renderMovie(response.payload)
     Status_ClearMessage()
 end sub
@@ -102,7 +100,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    if m.pageState.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
+    if m.state.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
         focusCast()
     else
         focusMediaToolbar()
@@ -131,7 +129,7 @@ end sub
 ' focusMediaToolbar
 '-------------------------------------------------------------------------------
 sub focusMediaToolbar()
-    m.pageState.focusArea = "toolbar"
+    m.state.focusArea = "toolbar"
     m.cast.callFunc("deactivate")
     m.top.setFocus(true)
     m.mediaToolbar.callFunc("activate")
@@ -143,7 +141,7 @@ end sub
 sub focusCast()
     if m.cast.visible <> true or m.cast.hasItems <> true then return
 
-    m.pageState.focusArea = "cast"
+    m.state.focusArea = "cast"
     m.mediaToolbar.callFunc("deactivate")
     m.cast.callFunc("activate")
 end sub
@@ -181,8 +179,8 @@ end sub
 ' buildPlaySelection
 '-------------------------------------------------------------------------------
 function buildPlaySelection(startPositionTicks as dynamic) as dynamic
-    item = m.pageState.item
-    request = m.pageState.request
+    item = m.state.item
+    request = m.state.request
     if request = invalid or item = invalid then return invalid
 
     itemId = SafeString(FirstNonEmpty([item.Id, request.itemId], ""), "")
@@ -202,20 +200,21 @@ end function
 ' onMediaToolbarSubtitlesSelected
 '-------------------------------------------------------------------------------
 sub onMediaToolbarSubtitlesSelected()
-    item = m.pageState.item
+    item = m.state.item
     if item = invalid then return
 
     m.mediaToolbar.callFunc("deactivate")
-    m.pageState.focusArea = "subtitleOptions"
-    m.subtitleOptions.subtitleStreams = getSubtitleStreams(item)
-    m.subtitleOptions.selectedSubtitleStreamIndex = getSelectedSubtitleStreamIndex()
-    m.subtitleOptions.callFunc("openOptions")
+    m.state.focusArea = "subtitleOptions"
+    m.streamOptions.callFunc("openSubtitleOptions", {
+        subtitleStreams: getSubtitleStreams(item)
+        selectedSubtitleStreamIndex: getSelectedSubtitleStreamIndex()
+    })
 end sub
 
 '-------------------------------------------------------------------------------
-' onSubtitleOptionsCloseRequested
+' onStreamOptionsCloseRequested
 '-------------------------------------------------------------------------------
-sub onSubtitleOptionsCloseRequested()
+sub onStreamOptionsCloseRequested()
     focusMediaToolbar()
 end sub
 
@@ -223,16 +222,16 @@ end sub
 ' onSubtitleOptionSelected
 '-------------------------------------------------------------------------------
 sub onSubtitleOptionSelected()
-    selection = m.subtitleOptions.selectedSubtitle
+    selection = m.streamOptions.selectedSubtitle
     if selection = invalid then return
 
     if selection.isOff = true then
-        m.pageState.selectedStreams.subtitle = invalid
-        m.pageState.selectedStreams.subtitleOff = true
+        m.state.selectedStreams.subtitle = invalid
+        m.state.selectedStreams.subtitleOff = true
         m.log.write("Subtitle option selected: Off")
     else
-        m.pageState.selectedStreams.subtitle = selection
-        m.pageState.selectedStreams.subtitleOff = false
+        m.state.selectedStreams.subtitle = selection
+        m.state.selectedStreams.subtitleOff = false
         m.log.write("Subtitle option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
     end if
 end sub
@@ -241,31 +240,25 @@ end sub
 ' onMediaToolbarAudioSelected
 '-------------------------------------------------------------------------------
 sub onMediaToolbarAudioSelected()
-    item = m.pageState.item
+    item = m.state.item
     if item = invalid then return
 
     m.mediaToolbar.callFunc("deactivate")
-    m.pageState.focusArea = "audioOptions"
-    m.audioOptions.audioStreams = getAudioStreams(item)
-    m.audioOptions.selectedAudioStreamIndex = getSelectedAudioStreamIndex()
-    m.audioOptions.callFunc("openOptions")
-end sub
-
-'-------------------------------------------------------------------------------
-' onAudioOptionsCloseRequested
-'-------------------------------------------------------------------------------
-sub onAudioOptionsCloseRequested()
-    focusMediaToolbar()
+    m.state.focusArea = "audioOptions"
+    m.streamOptions.callFunc("openAudioOptions", {
+        audioStreams: getAudioStreams(item)
+        selectedAudioStreamIndex: getSelectedAudioStreamIndex()
+    })
 end sub
 
 '-------------------------------------------------------------------------------
 ' onAudioOptionSelected
 '-------------------------------------------------------------------------------
 sub onAudioOptionSelected()
-    selection = m.audioOptions.selectedAudio
+    selection = m.streamOptions.selectedAudio
     if selection = invalid then return
 
-    m.pageState.selectedStreams.audio = selection
+    m.state.selectedStreams.audio = selection
     m.log.write("Audio option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
 end sub
 
@@ -287,8 +280,8 @@ end sub
 ' runWatchedTask
 '-------------------------------------------------------------------------------
 sub runWatchedTask(action as string)
-    item = m.pageState.item
-    request = m.pageState.request
+    item = m.state.item
+    request = m.state.request
     if item = invalid or request = invalid then return
 
     itemId = SafeString(FirstNonEmpty([item.Id, request.itemId], ""), "")
@@ -316,7 +309,7 @@ sub onWatchedTaskResponse()
         return
     end if
 
-    item = m.pageState.item
+    item = m.state.item
     if item = invalid then return
 
     itemId = SafeString(response.itemId, "")
@@ -443,7 +436,7 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
         item.UserData.PlayedPercentage = 0
     end if
 
-    m.pageState.item = item
+    m.state.item = item
 end sub
 
 '-------------------------------------------------------------------------------
@@ -499,21 +492,21 @@ end sub
 ' getSelectedAudioStreamIndex
 '-------------------------------------------------------------------------------
 function getSelectedAudioStreamIndex() as integer
-    if m.pageState = invalid or m.pageState.selectedStreams = invalid then return -1
-    if m.pageState.selectedStreams.audio = invalid then return -1
+    if m.state = invalid or m.state.selectedStreams = invalid then return -1
+    if m.state.selectedStreams.audio = invalid then return -1
 
-    return getSelectedStreamIndex(m.pageState.selectedStreams.audio, -1)
+    return getSelectedStreamIndex(m.state.selectedStreams.audio, -1)
 end function
 
 '-------------------------------------------------------------------------------
 ' getSelectedSubtitleStreamIndex
 '-------------------------------------------------------------------------------
 function getSelectedSubtitleStreamIndex() as integer
-    if m.pageState = invalid or m.pageState.selectedStreams = invalid then return -2
-    if m.pageState.selectedStreams.subtitleOff = true then return -1
-    if m.pageState.selectedStreams.subtitle = invalid then return -2
+    if m.state = invalid or m.state.selectedStreams = invalid then return -2
+    if m.state.selectedStreams.subtitleOff = true then return -1
+    if m.state.selectedStreams.subtitle = invalid then return -2
 
-    return getSelectedStreamIndex(m.pageState.selectedStreams.subtitle, -2)
+    return getSelectedStreamIndex(m.state.selectedStreams.subtitle, -2)
 end function
 
 '-------------------------------------------------------------------------------
@@ -562,7 +555,7 @@ end function
 ' buildImageUrl
 '-------------------------------------------------------------------------------
 function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
-    request = m.pageState.request
+    request = m.state.request
     if request = invalid then return ""
 
     url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
@@ -613,12 +606,12 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = "down" and m.pageState.focusArea = "toolbar" then
+    if key = "down" and m.state.focusArea = "toolbar" then
         focusCast()
         return true
     end if
 
-    if key = "play" and m.pageState.focusArea = "toolbar" then
+    if key = "play" and m.state.focusArea = "toolbar" then
         onMediaToolbarPlaySelected()
         return true
     end if

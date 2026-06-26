@@ -24,6 +24,7 @@ end sub
 sub openDialog()
     if m.dialog = invalid then return
 
+    updateTitle()
     m.dialog.visible = true
     m.top.setFocus(true)
     focusContent()
@@ -205,12 +206,12 @@ sub updateDialogSize()
     end if
 
     if m.titleLabel <> invalid then
-        m.titleLabel.translation = [panelX + contentMargin, panelY + 60]
+        m.titleLabel.translation = [panelX + contentMargin, panelY + 55]
         m.titleLabel.width = innerWidth
     end if
 
     if m.titleRule <> invalid then
-        m.titleRule.translation = [panelX + contentMargin, panelY + 126]
+        m.titleRule.translation = [panelX + contentMargin, panelY + 110]
         m.titleRule.width = innerWidth
     end if
 

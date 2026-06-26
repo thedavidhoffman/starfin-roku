@@ -14,8 +14,7 @@ sub initReferences()
     m.log = CreateLogger("TVEpisode")
     m.mediaShell = m.top.findNode("mediaShell")
     m.mediaToolbar = m.top.findNode("mediaToolbar")
-    m.subtitleOptions = m.top.findNode("subtitleOptions")
-    m.audioOptions = m.top.findNode("audioOptions")
+    m.streamOptions = m.top.findNode("streamOptions")
     m.cast = m.top.findNode("cast")
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
     m.watchedTask = m.top.findNode("watchedTask")
@@ -46,10 +45,9 @@ sub initHandlers()
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
-    m.subtitleOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
-    m.subtitleOptions.observeField("closeRequested", "onSubtitleOptionsCloseRequested")
-    m.audioOptions.observeField("selectedAudio", "onAudioOptionSelected")
-    m.audioOptions.observeField("closeRequested", "onAudioOptionsCloseRequested")
+    m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
+    m.streamOptions.observeField("selectedAudio", "onAudioOptionSelected")
+    m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
 end sub
@@ -649,15 +647,16 @@ sub onMediaToolbarSubtitlesSelected()
 
     m.mediaToolbar.callFunc("deactivate")
     m.state.focusArea = "subtitleOptions"
-    m.subtitleOptions.subtitleStreams = getSubtitleStreams(item.raw)
-    m.subtitleOptions.selectedSubtitleStreamIndex = getSelectedSubtitleStreamIndex()
-    m.subtitleOptions.callFunc("openOptions")
+    m.streamOptions.callFunc("openSubtitleOptions", {
+        subtitleStreams: getSubtitleStreams(item.raw)
+        selectedSubtitleStreamIndex: getSelectedSubtitleStreamIndex()
+    })
 end sub
 
 '-------------------------------------------------------------------------------
-' onSubtitleOptionsCloseRequested
+' onStreamOptionsCloseRequested
 '-------------------------------------------------------------------------------
-sub onSubtitleOptionsCloseRequested()
+sub onStreamOptionsCloseRequested()
     focusMediaToolbar()
 end sub
 
@@ -665,7 +664,7 @@ end sub
 ' onSubtitleOptionSelected
 '-------------------------------------------------------------------------------
 sub onSubtitleOptionSelected()
-    selection = m.subtitleOptions.selectedSubtitle
+    selection = m.streamOptions.selectedSubtitle
     if selection = invalid then return
 
     if selection.isOff = true then
@@ -690,23 +689,17 @@ sub onMediaToolbarAudioSelected()
 
     m.mediaToolbar.callFunc("deactivate")
     m.state.focusArea = "audioOptions"
-    m.audioOptions.audioStreams = getAudioStreams(item.raw)
-    m.audioOptions.selectedAudioStreamIndex = getSelectedAudioStreamIndex()
-    m.audioOptions.callFunc("openOptions")
-end sub
-
-'-------------------------------------------------------------------------------
-' onAudioOptionsCloseRequested
-'-------------------------------------------------------------------------------
-sub onAudioOptionsCloseRequested()
-    focusMediaToolbar()
+    m.streamOptions.callFunc("openAudioOptions", {
+        audioStreams: getAudioStreams(item.raw)
+        selectedAudioStreamIndex: getSelectedAudioStreamIndex()
+    })
 end sub
 
 '-------------------------------------------------------------------------------
 ' onAudioOptionSelected
 '-------------------------------------------------------------------------------
 sub onAudioOptionSelected()
-    selection = m.audioOptions.selectedAudio
+    selection = m.streamOptions.selectedAudio
     if selection = invalid then return
 
     m.state.selectedStreams.audio = selection
