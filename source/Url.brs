@@ -18,6 +18,27 @@ function Url_BuildQueryString(params as object) as string
 end function
 
 '-------------------------------------------------------------------------------
+' Url_BuildImageUrl
+'-------------------------------------------------------------------------------
+function Url_BuildImageUrl(server as string, itemId as string, imageType as string, tag as string, width as integer, height as integer, options = invalid as dynamic) as string
+    serverUrl = NormalizeServerUrl(server)
+    if serverUrl = "" then return ""
+    if itemId = "" or imageType = "" then return ""
+
+    query = "?maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+    if tag <> "" then query = "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+
+    if options <> invalid then
+        for each key in options
+            value = __Url_QueryValue(options[key])
+            if value <> "" then query = query + "&" + key.ToStr() + "=" + value
+        end for
+    end if
+
+    return serverUrl + "/Items/" + itemId + "/Images/" + imageType + query
+end function
+
+'-------------------------------------------------------------------------------
 ' __Url_QueryValue
 '-------------------------------------------------------------------------------
 function __Url_QueryValue(value as dynamic) as string

@@ -527,7 +527,9 @@ function getBackdropUrl(item as dynamic) as string
     imageSize = DeviceCapabilities_GetMaxScreenImageSize()
     if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
         itemId = FirstNonEmpty([item.Id], "")
-        return buildImageUrl(itemId, "Backdrop", item.BackdropImageTags[0], imageSize.width, imageSize.height)
+        request = m.state.request
+        if request = invalid then return ""
+        return Url_BuildImageUrl(request.server, itemId, "Backdrop", item.BackdropImageTags[0], imageSize.width, imageSize.height)
     end if
 
     return getImageUrl(item, "Primary", imageSize.width, imageSize.height)
@@ -547,21 +549,12 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
     if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
     if imageType = "Backdrop" and item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
     if tag = "" then return ""
-
-    return buildImageUrl(itemId, imageType, tag, width, height)
-end function
-
-'-------------------------------------------------------------------------------
-' buildImageUrl
-'-------------------------------------------------------------------------------
-function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
     request = m.state.request
     if request = invalid then return ""
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    url = url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
-    if imageType = "Logo" then url = url + "&format=Png"
-    return url
+    options = invalid
+    if imageType = "Logo" then options = { format: "Png" }
+    return Url_BuildImageUrl(request.server, itemId, imageType, tag, width, height, options)
 end function
 
 '-------------------------------------------------------------------------------

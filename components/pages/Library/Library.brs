@@ -153,7 +153,10 @@ function getImageUrlForType(itemId as string, item as dynamic, imageType as stri
     tag = getImageTag(item, imageType)
     if tag = "" then return ""
 
-    return buildImageUrl(itemId, imageType, tag, width, height)
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    return Url_BuildImageUrl(request.server, itemId, imageType, tag, width, height)
 end function
 
 '-------------------------------------------------------------------------------
@@ -220,17 +223,6 @@ sub applyGridLayout(imageAspect as string)
     m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
 end sub
 
-'-------------------------------------------------------------------------------
-' buildImageUrl
-'-------------------------------------------------------------------------------
-function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
-    request = m.pageState.request
-    if request = invalid then return ""
-
-    return NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
-end function
-
-'-------------------------------------------------------------------------------
 ' getItemsFromPayload
 '-------------------------------------------------------------------------------
 function getItemsFromPayload(payload as dynamic) as object

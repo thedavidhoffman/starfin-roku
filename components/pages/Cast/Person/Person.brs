@@ -660,8 +660,10 @@ function getPersonImageUrl(person as dynamic, width as integer, height as intege
     if tag = "" and person.ImageTags <> invalid and person.ImageTags.Primary <> invalid then tag = person.ImageTags.Primary
     if itemId = "" then return ""
     if tag = "" then return ""
+    request = m.pageState.request
+    if request = invalid then return ""
 
-    return buildImageUrl(itemId, "Primary", tag, width, height)
+    return Url_BuildImageUrl(request.server, itemId, "Primary", tag, width, height)
 end function
 
 '-------------------------------------------------------------------------------
@@ -673,23 +675,11 @@ function getItemImageUrl(item as dynamic) as string
     itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
-    if itemId <> "" then return buildImageUrl(itemId, "Primary", primaryTag, 250, 375)
-
-    return ""
-end function
-
-'-------------------------------------------------------------------------------
-' buildImageUrl
-'-------------------------------------------------------------------------------
-function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
     request = m.pageState.request
     if request = invalid then return ""
-    if itemId = "" then return ""
+    if itemId <> "" and primaryTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 250, 375)
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    query = "?maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
-    if tag <> "" then query = "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
-    return url + query
+    return ""
 end function
 
 '-------------------------------------------------------------------------------

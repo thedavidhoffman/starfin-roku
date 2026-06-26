@@ -588,15 +588,17 @@ end function
 function getMovieThumbnailImageUrl(item as dynamic, imageAspect as string) as string
     imageSize = getImageSize(imageAspect)
     itemId = FirstNonEmpty([item.Id], "")
+    request = m.homeState.request
+    if request = invalid then return ""
 
     thumbTag = getImageTag(item, "Thumb")
-    if itemId <> "" and thumbTag <> "" then return buildImageUrl(itemId, "Thumb", thumbTag, imageSize.width, imageSize.height)
+    if itemId <> "" and thumbTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Thumb", thumbTag, imageSize.width, imageSize.height)
 
     backdropTag = getBackdropImageTag(item)
-    if itemId <> "" and backdropTag <> "" then return buildImageUrl(itemId, "Backdrop", backdropTag, imageSize.width, imageSize.height)
+    if itemId <> "" and backdropTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Backdrop", backdropTag, imageSize.width, imageSize.height)
 
     primaryTag = getImageTag(item, "Primary")
-    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
+    if itemId <> "" and primaryTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
 
     return ""
 end function
@@ -606,21 +608,23 @@ end function
 '-------------------------------------------------------------------------------
 function getSeriesThumbnailImageUrl(item as dynamic, imageAspect as string) as string
     imageSize = getImageSize(imageAspect)
+    request = m.homeState.request
+    if request = invalid then return ""
 
     parentThumbId = FirstNonEmpty([item.ParentThumbItemId, item.ParentThumbImageItemId], "")
     parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
-    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
+    if parentThumbId <> "" and parentThumbTag <> "" then return Url_BuildImageUrl(request.server, parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
 
     seriesId = FirstNonEmpty([item.SeriesId], "")
     seriesThumbTag = FirstNonEmpty([item.SeriesThumbImageTag], "")
-    if seriesId <> "" and seriesThumbTag <> "" then return buildImageUrl(seriesId, "Thumb", seriesThumbTag, imageSize.width, imageSize.height)
+    if seriesId <> "" and seriesThumbTag <> "" then return Url_BuildImageUrl(request.server, seriesId, "Thumb", seriesThumbTag, imageSize.width, imageSize.height)
 
     parentBackdropId = FirstNonEmpty([item.ParentBackdropItemId], "")
     parentBackdropTag = getParentBackdropImageTag(item)
-    if parentBackdropId <> "" and parentBackdropTag <> "" then return buildImageUrl(parentBackdropId, "Backdrop", parentBackdropTag, imageSize.width, imageSize.height)
+    if parentBackdropId <> "" and parentBackdropTag <> "" then return Url_BuildImageUrl(request.server, parentBackdropId, "Backdrop", parentBackdropTag, imageSize.width, imageSize.height)
 
     seriesPrimaryTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
-    if seriesId <> "" and seriesPrimaryTag <> "" then return buildImageUrl(seriesId, "Primary", seriesPrimaryTag, imageSize.width, imageSize.height)
+    if seriesId <> "" and seriesPrimaryTag <> "" then return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesPrimaryTag, imageSize.width, imageSize.height)
 
     return ""
 end function
@@ -636,17 +640,20 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
 
     imageSize = getImageSize(imageAspect)
     itemId = FirstNonEmpty([item.Id], "")
+    request = m.homeState.request
+    if request = invalid then return ""
+
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
-    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
+    if itemId <> "" and primaryTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
 
     parentThumbId = FirstNonEmpty([item.ParentThumbItemId, item.ParentThumbImageItemId], "")
     parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
-    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
+    if parentThumbId <> "" and parentThumbTag <> "" then return Url_BuildImageUrl(request.server, parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
 
     seriesId = FirstNonEmpty([item.SeriesId], "")
     seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
-    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
+    if seriesId <> "" and seriesTag <> "" then return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
 
     return ""
 end function
@@ -741,19 +748,6 @@ function isCollectionsLibrary(item as dynamic) as boolean
     return item.CollectionType = "boxsets"
 end function
 
-'-------------------------------------------------------------------------------
-' buildImageUrl
-'-------------------------------------------------------------------------------
-function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
-    request = m.homeState.request
-    if request = invalid then return ""
-
-    url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    if tag <> "" then url = url + "?tag=" + tag + "&maxHeight=" + height.ToStr() + "&maxWidth=" + width.ToStr() + "&quality=90"
-    return url
-end function
-
-'-------------------------------------------------------------------------------
 ' cloneRequest
 '-------------------------------------------------------------------------------
 function cloneRequest(request as object) as object

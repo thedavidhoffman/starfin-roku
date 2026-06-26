@@ -103,19 +103,10 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
     tag = ""
     if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
     if tag = "" then return ""
-
-    return buildImageUrl(itemId, imageType, tag, width, height)
-end function
-
-'-------------------------------------------------------------------------------
-' buildImageUrl
-'-------------------------------------------------------------------------------
-function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
     request = m.state.request
     if request = invalid then return ""
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    return url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90&format=Png"
+    return Url_BuildImageUrl(request.server, itemId, imageType, tag, width, height, { format: "Png" })
 end function
 
 '-------------------------------------------------------------------------------
@@ -423,19 +414,21 @@ function getEpisodePosterUrl(item as dynamic, useRequestPoster as boolean) as st
     end if
 
     imageSize = DeviceCapabilities_GetMaxScreenImageSize()
+    request = m.state.request
+    if request = invalid then return ""
 
     itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
-    if itemId <> "" and primaryTag <> "" then return buildImageUrl(itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
+    if itemId <> "" and primaryTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height, { format: "Png" })
 
     parentThumbId = FirstNonEmpty([item.ParentThumbItemId], "")
     parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
-    if parentThumbId <> "" and parentThumbTag <> "" then return buildImageUrl(parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
+    if parentThumbId <> "" and parentThumbTag <> "" then return Url_BuildImageUrl(request.server, parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height, { format: "Png" })
 
     seriesId = FirstNonEmpty([item.SeriesId], "")
     seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
-    if seriesId <> "" and seriesTag <> "" then return buildImageUrl(seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
+    if seriesId <> "" and seriesTag <> "" then return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesTag, imageSize.width, imageSize.height, { format: "Png" })
 
     return ""
 end function

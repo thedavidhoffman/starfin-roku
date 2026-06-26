@@ -756,8 +756,12 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
     if imageType = "Thumb" and item.ImageTags <> invalid and item.ImageTags.Thumb <> invalid then tag = item.ImageTags.Thumb
     if imageType = "Backdrop" and item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
     if tag = "" then return ""
+    request = m.pageState.request
+    if request = invalid then return ""
 
-    return buildImageUrl(itemId, imageType, tag, width, height)
+    options = invalid
+    if imageType = "Logo" then options = { format: "Png" }
+    return Url_BuildImageUrl(request.server, itemId, imageType, tag, width, height, options)
 end function
 
 '-------------------------------------------------------------------------------
@@ -774,19 +778,6 @@ function getSeasonBackgroundUrl(season as dynamic) as string
     end if
 
     return ""
-end function
-
-'-------------------------------------------------------------------------------
-' buildImageUrl
-'-------------------------------------------------------------------------------
-function buildImageUrl(itemId as string, imageType as string, tag as string, width as integer, height as integer) as string
-    request = m.pageState.request
-    if request = invalid then return ""
-
-    url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/Images/" + imageType
-    imageUrl = url + "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
-    if imageType = "Logo" then imageUrl = imageUrl + "&format=Png"
-    return imageUrl
 end function
 
 '-------------------------------------------------------------------------------
