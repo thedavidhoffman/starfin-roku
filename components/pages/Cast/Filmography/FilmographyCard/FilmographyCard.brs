@@ -2,7 +2,6 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.focusBg = m.top.findNode("focusBg")
     m.dateLabel = m.top.findNode("dateLabel")
     m.titleLabel = m.top.findNode("titleLabel")
     m.characterLabel = m.top.findNode("characterLabel")
@@ -15,9 +14,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyles()
     colors = Color()
-    m.dateLabel.color = colors.text.secondary
-    m.titleLabel.color = colors.text.primary
-    m.characterLabel.color = colors.text.secondary
+    m.dateLabel.color = colors.text.light.secondary
+    m.titleLabel.color = colors.text.light.primary
+    m.characterLabel.color = colors.text.light.secondary
 end sub
 
 '-------------------------------------------------------------------------------
@@ -25,7 +24,12 @@ end sub
 '-------------------------------------------------------------------------------
 sub onItemContentChanged()
     item = m.top.itemContent
-    if item = invalid then return
+    if item = invalid then
+        m.dateLabel.text = ""
+        m.titleLabel.text = ""
+        m.characterLabel.text = ""
+        return
+    end if
 
     m.dateLabel.text = SafeString(item.releaseDate, "")
     m.titleLabel.text = SafeString(item.title, "")
@@ -37,14 +41,10 @@ end sub
 ' getDetailText
 '-------------------------------------------------------------------------------
 function getDetailText(item as dynamic) as string
-    parts = []
     character = SafeString(item.character, "")
-    if character <> "" then parts.Push("as " + character)
+    if character <> "" then return "as " + character
 
-    rating = MediaMetadata_FormatRating(item.voteAverage)
-    if rating <> "" then parts.Push(rating)
-
-    return joinText(parts, MediaMetadata_BulletSeparator())
+    return ""
 end function
 
 '-------------------------------------------------------------------------------
@@ -69,21 +69,26 @@ end function
 ' onItemHasFocusChanged
 '-------------------------------------------------------------------------------
 sub onItemHasFocusChanged()
+    updateFocusStyle(m.top.itemHasFocus = true)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateFocusStyle
+'-------------------------------------------------------------------------------
+sub updateFocusStyle(hasFocus as boolean)
     colors = Color()
-    hasFocus = m.top.itemHasFocus = true
-    m.focusBg.visible = hasFocus
 
     if hasFocus = true then
-        m.dateLabel.color = colors.text.primary
+        m.dateLabel.color = colors.text.dark.primary
         m.dateLabel.font = "font:SmallBoldSystemFont"
-        m.titleLabel.color = colors.text.primary
+        m.titleLabel.color = colors.text.dark.primary
         m.titleLabel.font = "font:SmallBoldSystemFont"
-        m.characterLabel.color = colors.text.primary
+        m.characterLabel.color = colors.text.dark.primary
     else
-        m.dateLabel.color = colors.text.secondary
+        m.dateLabel.color = colors.text.light.secondary
         m.dateLabel.font = "font:SmallSystemFont"
-        m.titleLabel.color = colors.text.primary
+        m.titleLabel.color = colors.text.light.primary
         m.titleLabel.font = "font:SmallSystemFont"
-        m.characterLabel.color = colors.text.secondary
+        m.characterLabel.color = colors.text.light.secondary
     end if
 end sub

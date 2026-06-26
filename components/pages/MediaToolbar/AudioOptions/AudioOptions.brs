@@ -31,7 +31,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyle()
     colors = Color()
-    m.emptyLabel.color = colors.text.secondary
+    m.emptyLabel.color = colors.text.light.secondary
 end sub
 
 '-------------------------------------------------------------------------------

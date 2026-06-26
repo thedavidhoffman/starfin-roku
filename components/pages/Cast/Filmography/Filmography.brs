@@ -5,6 +5,9 @@ sub init()
     m.log = CreateLogger("Filmography")
     m.titleLabel = m.top.findNode("titleLabel")
     m.filmographyList = m.top.findNode("filmographyList")
+    m.filmographyFocus = m.top.findNode("filmographyFocus")
+    m.filmographyFocusAnimation = m.top.findNode("filmographyFocusAnimation")
+    m.filmographyFocusTranslation = m.top.findNode("filmographyFocusTranslation")
     m.previewBackground = m.top.findNode("previewBackground")
     m.previewPosterMask = m.top.findNode("previewPosterMask")
     m.previewPoster = m.top.findNode("previewPoster")
@@ -13,10 +16,27 @@ sub init()
     m.filmographyTask = m.top.findNode("filmographyTask")
 
     m.filmographyTask.observeField("response", "onFilmographyResponse")
-    m.filmographyList.observeField("itemFocused", "onFilmographyItemFocused")
     m.pageState = {
         request: invalid
+        items: []
+        focusedIndex: 0
+        scrollOffset: 0
     }
+    m.listLayout = {
+        rowCount: 8
+        rowStride: 104
+        focusInsetY: 2
+    }
+    m.cards = [
+        m.top.findNode("filmographyCard0")
+        m.top.findNode("filmographyCard1")
+        m.top.findNode("filmographyCard2")
+        m.top.findNode("filmographyCard3")
+        m.top.findNode("filmographyCard4")
+        m.top.findNode("filmographyCard5")
+        m.top.findNode("filmographyCard6")
+        m.top.findNode("filmographyCard7")
+    ]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -27,6 +47,9 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    m.pageState.items = []
+    m.pageState.focusedIndex = 0
+    m.pageState.scrollOffset = 0
     m.titleLabel.text = SafeString(request.name, "Filmography")
     renderItems([])
     renderPreview(invalid)
@@ -60,12 +83,12 @@ end sub
 ' renderItems
 '-------------------------------------------------------------------------------
 sub renderItems(items as object)
-    content = CreateObject("roSGNode", "ContentNode")
+    contentItems = []
 
     for each item in items
         if isAssocArray(item) = false then continue for
 
-        child = content.createChild("ContentNode")
+        child = CreateObject("roSGNode", "ContentNode")
         child.title = SafeString(item.title, "")
         child.AddFields({
             releaseDate: SafeString(item.release_date, "")
@@ -75,24 +98,89 @@ sub renderItems(items as object)
             voteAverage: item.vote_average
             raw: item.raw
         })
+        contentItems.Push(child)
     end for
 
-    m.filmographyList.content = content
-    m.filmographyList.visible = content.getChildCount() > 0
-    if content.getChildCount() > 0 then renderPreview(content.getChild(0))
+    m.pageState.items = contentItems
+    m.pageState.focusedIndex = 0
+    m.pageState.scrollOffset = 0
+    m.filmographyList.visible = contentItems.Count() > 0
+    m.filmographyFocus.visible = contentItems.Count() > 0
+    renderVisibleCards(false)
+
+    if contentItems.Count() > 0 then
+        renderPreview(contentItems[0])
+    else
+        renderPreview(invalid)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
-' onFilmographyItemFocused
+' moveFocus
 '-------------------------------------------------------------------------------
-sub onFilmographyItemFocused()
-    if m.filmographyList.content = invalid then return
+function moveFocus(delta as integer) as boolean
+    itemCount = m.pageState.items.Count()
+    if itemCount = 0 then return false
 
-    focusedIndex = m.filmographyList.itemFocused
-    if focusedIndex = invalid then return
-    if focusedIndex < 0 or focusedIndex >= m.filmographyList.content.getChildCount() then return
+    focusedIndex = m.pageState.focusedIndex + delta
+    if focusedIndex < 0 then focusedIndex = 0
+    if focusedIndex >= itemCount then focusedIndex = itemCount - 1
+    if focusedIndex = m.pageState.focusedIndex then return true
 
-    renderPreview(m.filmographyList.content.getChild(focusedIndex))
+    m.pageState.focusedIndex = focusedIndex
+    updateScrollOffset()
+    renderVisibleCards(true)
+    renderPreview(m.pageState.items[focusedIndex])
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' updateScrollOffset
+'-------------------------------------------------------------------------------
+sub updateScrollOffset()
+    if m.pageState.focusedIndex < m.pageState.scrollOffset then
+        m.pageState.scrollOffset = m.pageState.focusedIndex
+    else if m.pageState.focusedIndex >= m.pageState.scrollOffset + m.listLayout.rowCount then
+        m.pageState.scrollOffset = m.pageState.focusedIndex - m.listLayout.rowCount + 1
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderVisibleCards
+'-------------------------------------------------------------------------------
+sub renderVisibleCards(animated as boolean)
+    for slot = 0 to m.cards.Count() - 1
+        itemIndex = m.pageState.scrollOffset + slot
+        card = m.cards[slot]
+
+        if itemIndex < m.pageState.items.Count() then
+            card.itemContent = m.pageState.items[itemIndex]
+            card.itemHasFocus = itemIndex = m.pageState.focusedIndex
+            card.visible = true
+        else
+            card.itemContent = invalid
+            card.itemHasFocus = false
+            card.visible = false
+        end if
+    end for
+
+    focusedSlot = m.pageState.focusedIndex - m.pageState.scrollOffset
+    updateFocusHighlight(focusedSlot, animated)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateFocusHighlight
+'-------------------------------------------------------------------------------
+sub updateFocusHighlight(focusedSlot as integer, animated as boolean)
+    targetTranslation = [0, (focusedSlot * m.listLayout.rowStride) + m.listLayout.focusInsetY]
+
+    if animated = true then
+        m.filmographyFocusTranslation.keyValue = [m.filmographyFocus.translation, targetTranslation]
+        m.filmographyFocusAnimation.control = "start"
+    else
+        m.filmographyFocusAnimation.control = "stop"
+        m.filmographyFocus.translation = targetTranslation
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -172,6 +260,11 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+
+    if key = "up" then return moveFocus(-1)
+    if key = "down" then return moveFocus(1)
+    if key = "left" then return moveFocus(-10)
+    if key = "right" then return moveFocus(10)
 
     if key = "back" then
         m.top.closeRequested = true

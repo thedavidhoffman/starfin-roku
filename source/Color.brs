@@ -35,8 +35,14 @@ function ThemeDefault() as object
             tertiary: &h12112BFF
         }
         text: {
-            primary: &hF3F7FBFF
-            secondary: &hB9C7D6FF
+            light: {
+                primary: &hF3F7FBFF
+                secondary: &hB9C7D6FF
+            },
+            dark: {
+                primary: &h010D28FF,
+                secondary: &h0A2D5BFF
+            }
         }
         accent: {
             primary: &hE09B42FF

@@ -2,5 +2,5 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.top.color = Color().text.secondary
+    m.top.color = Color().text.light.secondary
 end sub

@@ -26,10 +26,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyles()
     colors = Color()
-    m.episodeNumber.color = colors.text.secondary
-    m.episodeDate.color = colors.text.secondary
-    m.title.color = colors.text.primary
-    m.description.color = colors.text.secondary
+    m.episodeNumber.color = colors.text.light.secondary
+    m.episodeDate.color = colors.text.light.secondary
+    m.title.color = colors.text.light.primary
+    m.description.color = colors.text.light.secondary
 end sub
 
 '-------------------------------------------------------------------------------
@@ -125,9 +125,9 @@ sub onItemHasFocusChanged()
     colors = Color()
     if m.top.itemHasFocus = true then
         m.episodeNumber.font = "font:TinyBoldSystemFont"
-        m.episodeNumber.color = colors.text.primary
+        m.episodeNumber.color = colors.text.light.primary
     else
         m.episodeNumber.font = "font:TinySystemFont"
-        m.episodeNumber.color = colors.text.secondary
+        m.episodeNumber.color = colors.text.light.secondary
     end if
 end sub
