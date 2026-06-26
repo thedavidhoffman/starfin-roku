@@ -13,6 +13,9 @@ sub init()
         activeIndex: 0
         activeKeyboardField: invalid
     }
+    m.settingsState = {
+        values: SettingsStore_Defaults()
+    }
     m.focusNodes = [
         m.settingsControls.tvLibraryOptions
         m.settingsControls.movieLibraryOptions
@@ -22,6 +25,11 @@ sub init()
     ]
 
     m.top.observeField("focusedChild", "onFocusChanged")
+    m.settingsControls.tvLibraryOptions.observeField("itemSelected", "onTVLibraryDisplaySelected")
+    m.settingsControls.movieLibraryOptions.observeField("itemSelected", "onMovieLibraryDisplaySelected")
+    m.settingsControls.collectionDisplayOptions.observeField("itemSelected", "onCollectionDisplaySelected")
+    m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
+
     initDisplayOptions(m.settingsControls.tvLibraryOptions)
     initDisplayOptions(m.settingsControls.movieLibraryOptions)
     initDisplayOptions(m.settingsControls.collectionDisplayOptions)
@@ -68,13 +76,20 @@ sub loadSettingsValues()
     if settings = invalid then return
     keys = SettingsStore_Keys()
 
-    setDisplayOption(m.settingsControls.tvLibraryOptions, settings[keys.tvLibraryDisplay])
-    setDisplayOption(m.settingsControls.movieLibraryOptions, settings[keys.movieLibraryDisplay])
-    setDisplayOption(m.settingsControls.collectionDisplayOptions, settings[keys.collectionDisplay])
-    setTVEpisodeListDisplayOption(settings[keys.tvEpisodeListDisplay])
+    m.settingsState.values = {}
+    m.settingsState.values[keys.tvLibraryDisplay] = SettingsStore_GetSettingValue(settings, keys.tvLibraryDisplay)
+    m.settingsState.values[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(settings, keys.movieLibraryDisplay)
+    m.settingsState.values[keys.collectionDisplay] = SettingsStore_GetSettingValue(settings, keys.collectionDisplay)
+    m.settingsState.values[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
+    m.settingsState.values[keys.tmdbApiKey] = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
+
+    setDisplayOption(m.settingsControls.tvLibraryOptions, m.settingsState.values[keys.tvLibraryDisplay])
+    setDisplayOption(m.settingsControls.movieLibraryOptions, m.settingsState.values[keys.movieLibraryDisplay])
+    setDisplayOption(m.settingsControls.collectionDisplayOptions, m.settingsState.values[keys.collectionDisplay])
+    setTVEpisodeListDisplayOption(m.settingsState.values[keys.tvEpisodeListDisplay])
 
     if m.settingsControls.tmdbApiKeyInput <> invalid then
-        m.settingsControls.tmdbApiKeyInput.text = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
+        m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[keys.tmdbApiKey]
     end if
 end sub
 
@@ -140,13 +155,45 @@ end sub
 function getSettingsValues() as object
     keys = SettingsStore_Keys()
     settings = {}
-    settings[keys.tvLibraryDisplay] = getDisplayOptionValue(m.settingsControls.tvLibraryOptions)
-    settings[keys.movieLibraryDisplay] = getDisplayOptionValue(m.settingsControls.movieLibraryOptions)
-    settings[keys.collectionDisplay] = getDisplayOptionValue(m.settingsControls.collectionDisplayOptions)
-    settings[keys.tvEpisodeListDisplay] = getTVEpisodeListDisplayValue()
-    settings[keys.tmdbApiKey] = getTextInputValue(m.settingsControls.tmdbApiKeyInput)
+    settings[keys.tvLibraryDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tvLibraryDisplay)
+    settings[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.movieLibraryDisplay)
+    settings[keys.collectionDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.collectionDisplay)
+    settings[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tvEpisodeListDisplay)
+    settings[keys.tmdbApiKey] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tmdbApiKey)
     return settings
 end function
+
+'-------------------------------------------------------------------------------
+' onTVLibraryDisplaySelected
+'-------------------------------------------------------------------------------
+sub onTVLibraryDisplaySelected()
+    setSelectedDisplayOptionValue(m.settingsControls.tvLibraryOptions, SettingsStore_Keys().tvLibraryDisplay)
+end sub
+
+'-------------------------------------------------------------------------------
+' onMovieLibraryDisplaySelected
+'-------------------------------------------------------------------------------
+sub onMovieLibraryDisplaySelected()
+    setSelectedDisplayOptionValue(m.settingsControls.movieLibraryOptions, SettingsStore_Keys().movieLibraryDisplay)
+end sub
+
+'-------------------------------------------------------------------------------
+' onCollectionDisplaySelected
+'-------------------------------------------------------------------------------
+sub onCollectionDisplaySelected()
+    setSelectedDisplayOptionValue(m.settingsControls.collectionDisplayOptions, SettingsStore_Keys().collectionDisplay)
+end sub
+
+'-------------------------------------------------------------------------------
+' onTVEpisodeListDisplaySelected
+'-------------------------------------------------------------------------------
+sub onTVEpisodeListDisplaySelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.tvEpisodeListDisplayOptions)
+    if selectedIndex < 0 then return
+
+    m.settingsControls.tvEpisodeListDisplayOptions.checkedItem = selectedIndex
+    m.settingsState.values[SettingsStore_Keys().tvEpisodeListDisplay] = getTVEpisodeListDisplayValueForIndex(selectedIndex)
+end sub
 
 '-------------------------------------------------------------------------------
 ' canMoveFocusToButtons
@@ -234,7 +281,11 @@ sub onKeyboardDialogButtonSelected()
     if keyboardDialog = invalid then return
 
     if keyboardDialog.buttonSelected = 0 and m.focusState.activeKeyboardField = "tmdbApiKey" then
-        m.settingsControls.tmdbApiKeyInput.text = keyboardDialog.text
+        tmdbApiKey = keyboardDialog.text
+        if tmdbApiKey = invalid then tmdbApiKey = ""
+
+        m.settingsControls.tmdbApiKeyInput.text = tmdbApiKey
+        m.settingsState.values[SettingsStore_Keys().tmdbApiKey] = tmdbApiKey
     end if
 
     scene.dialog = invalid
@@ -267,6 +318,25 @@ function getDisplayOptionValue(options as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
+' setSelectedDisplayOptionValue
+'-------------------------------------------------------------------------------
+sub setSelectedDisplayOptionValue(options as dynamic, key as string)
+    selectedIndex = getSelectedItemIndex(options)
+    if selectedIndex < 0 then return
+
+    options.checkedItem = selectedIndex
+    m.settingsState.values[key] = getDisplayOptionValueForIndex(selectedIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' getDisplayOptionValueForIndex
+'-------------------------------------------------------------------------------
+function getDisplayOptionValueForIndex(index as integer) as string
+    if index = 1 then return "thumbnail"
+    return "poster"
+end function
+
+'-------------------------------------------------------------------------------
 ' setTVEpisodeListDisplayOption
 '-------------------------------------------------------------------------------
 sub setTVEpisodeListDisplayOption(value as dynamic)
@@ -288,6 +358,14 @@ end sub
 '-------------------------------------------------------------------------------
 function getTVEpisodeListDisplayValue() as string
     if getCheckedItemIndex(m.settingsControls.tvEpisodeListDisplayOptions) = 1 then return "vertical"
+    return "horizontal"
+end function
+
+'-------------------------------------------------------------------------------
+' getTVEpisodeListDisplayValueForIndex
+'-------------------------------------------------------------------------------
+function getTVEpisodeListDisplayValueForIndex(index as integer) as string
+    if index = 1 then return "vertical"
     return "horizontal"
 end function
 
@@ -376,6 +454,17 @@ function getCheckedItemIndex(list as dynamic) as integer
     checkedIndex = list.checkedItem
     if checkedIndex = invalid or checkedIndex < 0 then return 0
     return checkedIndex
+end function
+
+'-------------------------------------------------------------------------------
+' getSelectedItemIndex
+'-------------------------------------------------------------------------------
+function getSelectedItemIndex(list as dynamic) as integer
+    if list = invalid then return -1
+    selectedIndex = list.itemSelected
+    if selectedIndex = invalid then return -1
+    if selectedIndex > getLastItemIndex(list) then return getLastItemIndex(list)
+    return selectedIndex
 end function
 
 '-------------------------------------------------------------------------------
