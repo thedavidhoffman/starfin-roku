@@ -30,12 +30,12 @@ sub init()
     }
     m.layout = {
         mode: "bio"
-        bioDefault: [96, 92]
-        bioRelatedFocused: [96, -166]
+        bioDefault: [0, 0]
+        bioRelatedFocused: [0, -258]
         rowsDefault: [76, 750]
         rowsRelatedFocused: [76, 492]
-        overviewDefaultTranslation: [440, 174]
-        overviewNoMetadataTranslation: [440, 83]
+        overviewDefaultTranslation: [536, 266]
+        overviewNoMetadataTranslation: [536, 175]
     }
 end sub
 
@@ -139,9 +139,9 @@ end sub
 sub updateReadMoreButton()
     m.readMoreButton.visible = isOverviewLabelTruncated()
     if m.readMoreButton.visible = true then
-        m.filmographyButton.translation = [716, 536]
+        m.filmographyButton.translation = [812, 628]
     else
-        m.filmographyButton.translation = [440, 536]
+        m.filmographyButton.translation = [536, 628]
     end if
 
     updateFocusVisual()
@@ -738,6 +738,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "down" and m.pageState.focusArea = "person" and m.filmographyButton.visible = true then
         focusFilmographyButton()
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "person" then
+        focusRelated()
         return true
     end if
 
