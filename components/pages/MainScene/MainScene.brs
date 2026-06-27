@@ -594,6 +594,9 @@ sub personShow(selection as object)
         userId: m.session.userId
         itemId: selection.itemId
         item: selection.item
+        sourceItemType: SafeString(selection.sourceItemType, "")
+        sourceItemId: SafeString(selection.sourceItemId, "")
+        sourceSeriesId: SafeString(selection.sourceSeriesId, "")
         settings: m.settings
     }
 

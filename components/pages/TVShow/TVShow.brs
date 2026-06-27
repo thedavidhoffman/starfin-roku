@@ -203,6 +203,8 @@ sub onCastPersonSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    selection.sourceItemType = "series"
+    selection.sourceSeriesId = SafeString(m.pageState.request.itemId, "")
     m.top.selectedPerson = selection
 end sub
 

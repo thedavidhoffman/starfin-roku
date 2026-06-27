@@ -265,8 +265,20 @@ end function
 sub renderRelated(items as object, episodeItems as object)
     hasItems = renderRelatedItems(items)
     hasEpisodeItems = renderRelatedEpisodes(episodeItems)
+    updateRelatedEpisodesLayout(hasItems)
 
     m.relatedGroup.visible = hasItems or hasEpisodeItems
+end sub
+
+'-------------------------------------------------------------------------------
+' updateRelatedEpisodesLayout
+'-------------------------------------------------------------------------------
+sub updateRelatedEpisodesLayout(hasRelatedItems as boolean)
+    if hasRelatedItems then
+        m.relatedEpisodesGroup.translation = [0, 560]
+    else
+        m.relatedEpisodesGroup.translation = [0, 0]
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -384,7 +396,7 @@ sub activate()
         setLayoutMode("related", false)
         m.relatedRows.setFocus(true)
     else if m.relatedEpisodeRows.visible = true and m.pageState.focusArea = "relatedEpisodes" then
-        setLayoutMode("relatedEpisodes", false)
+        setLayoutMode(getRelatedEpisodesLayoutMode(), false)
         m.relatedEpisodeRows.setFocus(true)
     else
         focusDefaultBioAction()
@@ -453,10 +465,18 @@ sub focusRelatedEpisodes()
     if m.relatedEpisodeRows.visible <> true then return
 
     m.pageState.focusArea = "relatedEpisodes"
-    setLayoutMode("relatedEpisodes", true)
+    setLayoutMode(getRelatedEpisodesLayoutMode(), true)
     updateFocusVisual()
     m.relatedEpisodeRows.setFocus(true)
 end sub
+
+'-------------------------------------------------------------------------------
+' getRelatedEpisodesLayoutMode
+'-------------------------------------------------------------------------------
+function getRelatedEpisodesLayoutMode() as string
+    if m.relatedRows.visible = true then return "relatedEpisodes"
+    return "related"
+end function
 
 '-------------------------------------------------------------------------------
 ' focusPerson

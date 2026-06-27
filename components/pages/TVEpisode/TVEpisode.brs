@@ -781,9 +781,31 @@ sub onCastPersonSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    selection.sourceItemType = "series"
+    selection.sourceSeriesId = getCurrentSeriesId()
     m.state.focusArea = "cast"
     m.top.selectedPerson = selection
 end sub
+
+'-------------------------------------------------------------------------------
+' getCurrentSeriesId
+'-------------------------------------------------------------------------------
+function getCurrentSeriesId() as string
+    item = m.state.itemContent
+    if item <> invalid and item.raw <> invalid then
+        seriesId = FirstNonEmpty([item.raw.SeriesId], "")
+        if seriesId <> "" then return seriesId
+    end if
+
+    request = m.state.request
+    if request = invalid then return ""
+    if request.series <> invalid then
+        seriesId = FirstNonEmpty([request.series.Id], "")
+        if seriesId <> "" then return seriesId
+    end if
+
+    return FirstNonEmpty([request.seriesId], "")
+end function
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

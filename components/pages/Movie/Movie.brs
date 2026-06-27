@@ -122,6 +122,8 @@ sub onCastPersonSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    selection.sourceItemType = "movie"
+    selection.sourceItemId = SafeString(m.state.request.itemId, "")
     m.top.selectedPerson = selection
 end sub
 
