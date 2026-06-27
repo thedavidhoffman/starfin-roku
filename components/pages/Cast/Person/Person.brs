@@ -13,8 +13,12 @@ sub init()
     m.filmographyButton = m.top.findNode("filmographyButton")
     m.personOverview = m.top.findNode("personOverview")
     m.relatedGroup = m.top.findNode("relatedGroup")
+    m.relatedItemsGroup = m.top.findNode("relatedItemsGroup")
     m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
     m.relatedRows = m.top.findNode("relatedRows")
+    m.relatedEpisodesGroup = m.top.findNode("relatedEpisodesGroup")
+    m.relatedEpisodesTitleLabel = m.top.findNode("relatedEpisodesTitleLabel")
+    m.relatedEpisodeRows = m.top.findNode("relatedEpisodeRows")
     m.layoutAnimation = m.top.findNode("layoutAnimation")
     m.bioTranslation = m.top.findNode("bioTranslation")
     m.relatedRowsTranslation = m.top.findNode("relatedRowsTranslation")
@@ -23,6 +27,7 @@ sub init()
     m.personTask.observeField("response", "onPersonResponse")
     m.personOverview.observeField("closeRequested", "onPersonOverviewCloseRequested")
     m.relatedRows.observeField("rowItemSelected", "onRelatedItemSelected")
+    m.relatedEpisodeRows.observeField("rowItemSelected", "onRelatedEpisodeSelected")
 
     m.pageState = {
         request: invalid
@@ -34,8 +39,10 @@ sub init()
         mode: "bio"
         bioDefault: [0, 0]
         bioRelatedFocused: [0, -258]
+        bioEpisodesFocused: [0, -680]
         rowsDefault: [76, 750]
         rowsRelatedFocused: [76, 492]
+        rowsEpisodesFocused: [76, 50]
         overviewDefaultTranslation: [536, 266]
         overviewNoMetadataTranslation: [536, 175]
     }
@@ -80,7 +87,7 @@ sub onPersonResponse()
     m.pageState.person = person
     renderPerson(person)
     renderOverview(person)
-    renderRelated(getItemsFromPayload(response.payload.items))
+    renderRelated(getItemsFromPayload(response.payload.items), getItemsFromPayload(response.payload.episodeItems))
     Status_ClearMessage()
 end sub
 
@@ -255,30 +262,67 @@ end function
 '-------------------------------------------------------------------------------
 ' renderRelated
 '-------------------------------------------------------------------------------
-sub renderRelated(items as object)
+sub renderRelated(items as object, episodeItems as object)
+    hasItems = renderRelatedItems(items)
+    hasEpisodeItems = renderRelatedEpisodes(episodeItems)
+
+    m.relatedGroup.visible = hasItems or hasEpisodeItems
+end sub
+
+'-------------------------------------------------------------------------------
+' renderRelatedItems
+'-------------------------------------------------------------------------------
+function renderRelatedItems(items as object) as boolean
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
     m.relatedTitleLabel.text = "More with " + getPersonName(m.pageState.person)
     sortedItems = sortItemsByProductionYearDesc(items)
 
     for each item in sortedItems
-        if isAssocArray(item) = false then continue for
-
-        itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
-        if itemId = "" then continue for
-
-        child = row.createChild("ContentNode")
-        child.HDPosterUrl = getItemImageUrl(item)
-        child.AddFields({
-            imageAspect: "poster"
-            raw: item
-        })
+        addRelatedItemNode(row, item, "poster")
     end for
 
     m.relatedRows.content = content
     hasItems = row.getChildCount() > 0
-    m.relatedGroup.visible = hasItems
+    m.relatedItemsGroup.visible = hasItems
     m.relatedRows.visible = hasItems
+    return hasItems
+end function
+
+'-------------------------------------------------------------------------------
+' renderRelatedEpisodes
+'-------------------------------------------------------------------------------
+function renderRelatedEpisodes(items as object) as boolean
+    content = CreateObject("roSGNode", "ContentNode")
+    row = content.createChild("ContentNode")
+    m.relatedEpisodesTitleLabel.text = "TV Episodes"
+
+    for each item in items
+        addRelatedItemNode(row, item, "wide")
+    end for
+
+    m.relatedEpisodeRows.content = content
+    hasItems = row.getChildCount() > 0
+    m.relatedEpisodesGroup.visible = hasItems
+    m.relatedEpisodeRows.visible = hasItems
+    return hasItems
+end function
+
+'-------------------------------------------------------------------------------
+' addRelatedItemNode
+'-------------------------------------------------------------------------------
+sub addRelatedItemNode(row as object, item as dynamic, imageAspect as string)
+    if isAssocArray(item) = false then return
+
+    itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
+    if itemId = "" then return
+
+    child = row.createChild("ContentNode")
+    child.HDPosterUrl = getItemImageUrl(item, imageAspect)
+    child.AddFields({
+        imageAspect: imageAspect
+        raw: item
+    })
 end sub
 
 '-------------------------------------------------------------------------------
@@ -324,8 +368,12 @@ end function
 '-------------------------------------------------------------------------------
 sub clearRelated()
     m.relatedRows.content = CreateObject("roSGNode", "ContentNode")
+    m.relatedEpisodeRows.content = CreateObject("roSGNode", "ContentNode")
     m.relatedGroup.visible = false
+    m.relatedItemsGroup.visible = false
     m.relatedRows.visible = false
+    m.relatedEpisodesGroup.visible = false
+    m.relatedEpisodeRows.visible = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -335,6 +383,9 @@ sub activate()
     if m.relatedRows.visible = true and m.pageState.focusArea = "related" then
         setLayoutMode("related", false)
         m.relatedRows.setFocus(true)
+    else if m.relatedEpisodeRows.visible = true and m.pageState.focusArea = "relatedEpisodes" then
+        setLayoutMode("relatedEpisodes", false)
+        m.relatedEpisodeRows.setFocus(true)
     else
         focusDefaultBioAction()
     end if
@@ -384,12 +435,27 @@ end sub
 ' focusRelated
 '-------------------------------------------------------------------------------
 sub focusRelated()
-    if m.relatedRows.visible <> true then return
+    if m.relatedRows.visible <> true then
+        focusRelatedEpisodes()
+        return
+    end if
 
     m.pageState.focusArea = "related"
     setLayoutMode("related", true)
     updateFocusVisual()
     m.relatedRows.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusRelatedEpisodes
+'-------------------------------------------------------------------------------
+sub focusRelatedEpisodes()
+    if m.relatedEpisodeRows.visible <> true then return
+
+    m.pageState.focusArea = "relatedEpisodes"
+    setLayoutMode("relatedEpisodes", true)
+    updateFocusVisual()
+    m.relatedEpisodeRows.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -403,7 +469,7 @@ end sub
 ' setLayoutMode
 '-------------------------------------------------------------------------------
 sub setLayoutMode(mode as string, animated as boolean)
-    if mode <> "related" then mode = "bio"
+    if mode <> "related" and mode <> "relatedEpisodes" then mode = "bio"
     if m.layout.mode = mode and animated = true then return
 
     m.layout.mode = mode
@@ -412,6 +478,9 @@ sub setLayoutMode(mode as string, animated as boolean)
     if mode = "related" then
         bioTarget = m.layout.bioRelatedFocused
         rowsTarget = m.layout.rowsRelatedFocused
+    else if mode = "relatedEpisodes" then
+        bioTarget = m.layout.bioEpisodesFocused
+        rowsTarget = m.layout.rowsEpisodesFocused
     end if
 
     if animated = true then
@@ -438,10 +507,25 @@ end sub
 '-------------------------------------------------------------------------------
 sub onRelatedItemSelected()
     selected = m.relatedRows.rowItemSelected
-    if selected = invalid or selected.Count() < 2 then return
-    if m.relatedRows.content = invalid then return
+    handleRelatedSelection(m.relatedRows, selected)
+end sub
 
-    row = m.relatedRows.content.getChild(selected[0])
+'-------------------------------------------------------------------------------
+' onRelatedEpisodeSelected
+'-------------------------------------------------------------------------------
+sub onRelatedEpisodeSelected()
+    selected = m.relatedEpisodeRows.rowItemSelected
+    handleRelatedSelection(m.relatedEpisodeRows, selected)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleRelatedSelection
+'-------------------------------------------------------------------------------
+sub handleRelatedSelection(rowList as object, selected as dynamic)
+    if selected = invalid or selected.Count() < 2 then return
+    if rowList.content = invalid then return
+
+    row = rowList.content.getChild(selected[0])
     if row = invalid then return
 
     itemNode = row.getChild(selected[1])
@@ -459,6 +543,8 @@ sub onRelatedItemSelected()
         m.top.selectedMovie = selection
     else if itemType = "series" then
         m.top.selectedSeries = selection
+    else if itemType = "episode" then
+        m.top.selectedEpisode = selection
     end if
 end sub
 
@@ -669,7 +755,7 @@ end function
 '-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
-function getItemImageUrl(item as dynamic) as string
+function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if isAssocArray(item) = false then return ""
 
     itemId = FirstNonEmpty([item.Id], "")
@@ -677,7 +763,10 @@ function getItemImageUrl(item as dynamic) as string
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
     request = m.pageState.request
     if request = invalid then return ""
-    if itemId <> "" and primaryTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 250, 375)
+    if itemId = "" or primaryTag = "" then return ""
+
+    if imageAspect = "wide" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 440, 248)
+    return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 250, 375)
 
     return ""
 end function
@@ -774,6 +863,20 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "up" and m.relatedRows.isInFocusChain() then
         focusPerson()
+        return true
+    end if
+
+    if key = "down" and m.relatedRows.isInFocusChain() and m.relatedEpisodeRows.visible = true then
+        focusRelatedEpisodes()
+        return true
+    end if
+
+    if key = "up" and m.relatedEpisodeRows.isInFocusChain() then
+        if m.relatedRows.visible = true then
+            focusRelated()
+        else
+            focusPerson()
+        end if
         return true
     end if
 

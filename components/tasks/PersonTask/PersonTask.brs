@@ -31,6 +31,13 @@ sub executeRequest()
         return
     end if
 
+    episodeItemsResult = loadPersonEpisodeItems(request)
+    if episodeItemsResult.ok <> true then
+        episodeItemsResult.AddReplace("action", "person")
+        m.top.response = episodeItemsResult
+        return
+    end if
+
     m.top.response = {
         ok: true
         action: "person"
@@ -38,6 +45,7 @@ sub executeRequest()
         payload: {
             person: personResult.data
             items: itemsResult.data
+            episodeItems: episodeItemsResult.data
         }
     }
 end sub
@@ -69,6 +77,27 @@ function loadPersonItems(request as object) as object
         Fields: "PrimaryImageAspectRatio,Overview"
         ImageTypeLimit: 1
         EnableImageTypes: "Primary,Backdrop"
+        Limit: 40
+    }
+
+    url = NormalizeServerUrl(request.server) + "/Users/" + request.userId + "/Items" + Url_BuildQueryString(params)
+    return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' loadPersonEpisodeItems
+'-------------------------------------------------------------------------------
+function loadPersonEpisodeItems(request as object) as object
+    params = {
+        UserId: SafeString(request.userId, "")
+        PersonIds: SafeString(request.itemId, "")
+        IncludeItemTypes: "Episode"
+        Recursive: true
+        SortBy: "PremiereDate"
+        SortOrder: "Descending"
+        Fields: "PrimaryImageAspectRatio,Overview,SeriesName"
+        ImageTypeLimit: 1
+        EnableImageTypes: "Primary,Backdrop,Thumb"
         Limit: 40
     }
 

@@ -352,6 +352,7 @@ sub tvEpisodeShow(selection as object)
     m.tvEpisodePage = page
     m.dynamicPageHost.appendChild(page)
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
+    if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("resetFocus")
@@ -389,7 +390,11 @@ sub tvEpisodeHandleCloseRequested()
         m.tvEpisodePage = invalid
     end if
 
-    if m.tvSeasonPage <> invalid then
+    if m.personPage <> invalid then
+        m.personPage.visible = true
+        m.header.visible = false
+        m.personPage.callFunc("activate")
+    else if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.visible = true
         m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
@@ -581,6 +586,7 @@ sub personShow(selection as object)
     page.observeField("selectedFilmography", "filmographyHandlePersonFilmographySelected")
     page.observeField("selectedMovie", "personHandleMovieSelected")
     page.observeField("selectedSeries", "personHandleSeriesSelected")
+    page.observeField("selectedEpisode", "personHandleEpisodeSelected")
     page.settings = m.settings
     page.loadRequest = {
         server: m.session.server
@@ -633,6 +639,22 @@ sub personHandleSeriesSelected()
     if selection.itemId = invalid or selection.itemId = "" then return
 
     tvShowShow(selection, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' personHandleEpisodeSelected
+'-------------------------------------------------------------------------------
+sub personHandleEpisodeSelected()
+    selection = m.personPage.selectedEpisode
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    loadRequest = buildHomeEpisodeLoadRequest(selection)
+    if loadRequest = invalid then return
+
+    tvEpisodeShow({
+        loadRequest: loadRequest
+    })
 end sub
 
 '-------------------------------------------------------------------------------
