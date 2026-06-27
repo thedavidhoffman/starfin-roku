@@ -9,6 +9,7 @@ sub init()
         request: invalid
         season: invalid
         episodes: []
+        episodesLoaded: false
         episodeWindowStart: 0
         episodeListScroll: "horizontal"
         focusArea: "episodes"
@@ -90,6 +91,8 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.season = request.season
+    m.pageState.episodes = []
+    m.pageState.episodesLoaded = false
     m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
     m.pageState.focusArea = "episodes"
     clearEpisodes()
@@ -107,6 +110,7 @@ sub onSettingsChanged()
     m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
 
     if m.pageState.focusArea = "episodes" then
+        if m.pageState.episodesLoaded = true then renderEpisodes(m.pageState.episodes)
         setEpisodeListVisible(hasEpisodeItems())
         updateChevrons()
         focusEpisodesIfActive()
@@ -133,6 +137,7 @@ sub onTVSeasonResponse()
 
     m.pageState.season = payload.season
     m.pageState.episodes = getItemsFromPayload(payload.episodes)
+    m.pageState.episodesLoaded = true
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
     Status_ClearMessage()
@@ -189,25 +194,51 @@ end function
 ' renderEpisodes
 '-------------------------------------------------------------------------------
 sub renderEpisodes(episodes as object)
+    if isVerticalEpisodeList() then
+        renderEpisodesGrid(episodes)
+    else
+        renderEpisodesList(episodes)
+    end if
+
+    setEpisodeListVisible(hasEpisodeItems())
+    m.pageState.episodeWindowStart = 0
+end sub
+
+'-------------------------------------------------------------------------------
+' renderEpisodesList
+'-------------------------------------------------------------------------------
+sub renderEpisodesList(episodes as object)
     rowContent = CreateObject("roSGNode", "ContentNode")
     row = rowContent.createChild("ContentNode")
-    gridContent = CreateObject("roSGNode", "ContentNode")
 
     appendSeasonSummaryItem(row)
-    appendSeasonSummaryItem(gridContent)
 
     for each episode in episodes
         if isAssocArray(episode) = false then continue for
 
         appendEpisodeItem(row, episode)
+    end for
+
+    m.episodesList.content = rowContent
+    m.episodesGrid.content = CreateObject("roSGNode", "ContentNode")
+end sub
+
+'-------------------------------------------------------------------------------
+' renderEpisodesGrid
+'-------------------------------------------------------------------------------
+sub renderEpisodesGrid(episodes as object)
+    gridContent = CreateObject("roSGNode", "ContentNode")
+
+    appendSeasonSummaryItem(gridContent)
+
+    for each episode in episodes
+        if isAssocArray(episode) = false then continue for
+
         appendEpisodeItem(gridContent, episode)
     end for
 
-    hasEpisodes = row.getChildCount() > 0
-    m.episodesList.content = rowContent
+    m.episodesList.content = CreateObject("roSGNode", "ContentNode")
     m.episodesGrid.content = gridContent
-    setEpisodeListVisible(hasEpisodes)
-    m.pageState.episodeWindowStart = 0
 end sub
 
 '-------------------------------------------------------------------------------
