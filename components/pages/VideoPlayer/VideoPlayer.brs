@@ -7,8 +7,12 @@ sub init()
     m.playbackControls = m.top.findNode("playbackControls")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
     m.playstateTask = m.top.findNode("playstateTask")
+    m.trickplayPreloadTask = m.top.findNode("trickplayPreloadTask")
     m.controlsHideTimer = m.top.findNode("controlsHideTimer")
     m.playstateTimer = m.top.findNode("playstateTimer")
+    m.fastSeekTimer = m.top.findNode("fastSeekTimer")
+    m.leftSeekRepeatTimer = m.top.findNode("leftSeekRepeatTimer")
+    m.rightSeekRepeatTimer = m.top.findNode("rightSeekRepeatTimer")
 
     m.playback = {
         isSeeking: false
@@ -30,17 +34,35 @@ sub init()
         items: []
         index: -1
     }
+    m.seek = {
+        speeds: [-180, -60, -30, -10, 10, 30, 60, 180]
+        speedIndex: -1
+        direction: ""
+        isAccelerating: false
+    }
     m.trickplay = invalid
 
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
+    m.trickplayPreloadTask.observeField("response", "onTrickplayPreloadResponse")
     m.videoPlayer.observeField("state", "onVideoStateChanged")
     m.videoPlayer.observeField("position", "onVideoPositionChanged")
     m.videoPlayer.observeField("duration", "onVideoDurationChanged")
     m.playbackControls.observeField("previousPressed", "onPreviousPressed")
     m.playbackControls.observeField("playPausePressed", "onPlayPausePressed")
     m.playbackControls.observeField("nextPressed", "onNextPressed")
+    m.playbackControls.observeField("progressLeftPressed", "onProgressLeftPressed")
+    m.playbackControls.observeField("progressRightPressed", "onProgressRightPressed")
+    m.playbackControls.observeField("progressLeftReleased", "onProgressLeftReleased")
+    m.playbackControls.observeField("progressRightReleased", "onProgressRightReleased")
+    m.playbackControls.observeField("progressRewindPressed", "onProgressRewindPressed")
+    m.playbackControls.observeField("progressFastForwardPressed", "onProgressFastForwardPressed")
+    m.playbackControls.observeField("progressSeekCommit", "onProgressSeekCommit")
+    m.playbackControls.observeField("progressSeekCancel", "onProgressSeekCancel")
     m.controlsHideTimer.observeField("fire", "onControlsHideTimerFire")
     m.playstateTimer.observeField("fire", "onPlaystateTimerFire")
+    m.fastSeekTimer.observeField("fire", "onFastSeekTimerFire")
+    m.leftSeekRepeatTimer.observeField("fire", "onLeftSeekRepeatTimerFire")
+    m.rightSeekRepeatTimer.observeField("fire", "onRightSeekRepeatTimerFire")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -91,6 +113,7 @@ sub applyPlaybackResponse(response as object, request as object)
         index: getPlaybackQueueIndex(request.playbackQueueIndex)
     }
     m.trickplay = buildTrickplayState(item, m.session.itemId)
+    startTrickplayPreload()
 
     content = CreateObject("roSGNode", "ContentNode")
     content.url = response.streamUrl
@@ -104,6 +127,7 @@ sub applyPlaybackResponse(response as object, request as object)
     m.playback.hasEmittedFinalProgress = false
     m.playback.position = startPositionSeconds
     m.playback.previewPosition = startPositionSeconds
+    resetSeekState()
     m.playbackControls.title = content.title
     m.playbackControls.duration = m.playback.duration
     m.playbackControls.position = startPositionSeconds
@@ -248,10 +272,19 @@ sub showControls(restartTimer as boolean)
 end sub
 
 '-------------------------------------------------------------------------------
+' showControlsWithProgressFocus
+'-------------------------------------------------------------------------------
+sub showControlsWithProgressFocus()
+    showControls(false)
+    m.playbackControls.callFunc("focusProgress")
+end sub
+
+'-------------------------------------------------------------------------------
 ' hideControls
 '-------------------------------------------------------------------------------
 sub hideControls()
     m.controlsHideTimer.control = "stop"
+    stopSeekTimers()
     m.playback.isSeeking = false
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
@@ -263,25 +296,211 @@ end sub
 ' beginSeek
 '-------------------------------------------------------------------------------
 sub beginSeek(direction as integer)
-    if m.playback.duration <= 0 then return
-
-    m.playback.isSeeking = true
-    m.playback.previewPosition = m.videoPlayer.position
-    m.videoPlayer.control = "pause"
-    m.playbackControls.isSeeking = true
-    showControls(false)
-    adjustSeek(direction)
+    if direction < 0 then
+        handleProgressSeekInput("left")
+    else
+        handleProgressSeekInput("right")
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
 ' adjustSeek
 '-------------------------------------------------------------------------------
 sub adjustSeek(direction as integer)
+    if direction < 0 then
+        handleProgressSeekInput("left")
+    else
+        handleProgressSeekInput("right")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' startSeekPreview
+'-------------------------------------------------------------------------------
+sub startSeekPreview()
+    if m.playback.duration <= 0 then return
+    if m.playback.isSeeking = true then return
+
+    m.playback.isSeeking = true
+    m.playback.previewPosition = getCurrentPlaybackPosition()
+    m.videoPlayer.control = "pause"
+    m.playbackControls.isSeeking = true
+    m.playbackControls.previewPosition = m.playback.previewPosition
+    showControlsWithProgressFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' handleProgressSeekInput
+'-------------------------------------------------------------------------------
+sub handleProgressSeekInput(key as string)
     if m.playback.duration <= 0 then return
 
-    m.playback.previewPosition = clampSeconds(m.playback.previewPosition + (direction * 10), 0, m.playback.duration)
+    if m.playback.isSeeking <> true then startSeekPreview()
+    if m.playback.isSeeking <> true then return
+
+    if key = "left" then
+        startTenSecondRepeat("left")
+        applySeekDelta(-10)
+    else if key = "right" then
+        startTenSecondRepeat("right")
+        applySeekDelta(10)
+    else if key = "rewind" then
+        processAcceleratedSeek("left")
+    else if key = "fastforward" then
+        processAcceleratedSeek("right")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' startTenSecondRepeat
+'-------------------------------------------------------------------------------
+sub startTenSecondRepeat(direction as string)
+    m.fastSeekTimer.control = "stop"
+    m.leftSeekRepeatTimer.control = "stop"
+    m.rightSeekRepeatTimer.control = "stop"
+    m.leftSeekRepeatTimer.duration = 0.5
+    m.rightSeekRepeatTimer.duration = 0.5
+
+    if direction = "left" then
+        m.seek.speedIndex = 3
+        m.leftSeekRepeatTimer.control = "start"
+    else
+        m.seek.speedIndex = 4
+        m.rightSeekRepeatTimer.control = "start"
+    end if
+
+    m.seek.direction = direction
+    m.seek.isAccelerating = false
+end sub
+
+'-------------------------------------------------------------------------------
+' processAcceleratedSeek
+'-------------------------------------------------------------------------------
+sub processAcceleratedSeek(direction as string)
+    stopTenSecondRepeatTimers()
+
+    if m.seek.isAccelerating = true and m.seek.direction <> "" and m.seek.direction <> direction then
+        m.fastSeekTimer.control = "stop"
+        m.seek.direction = ""
+        m.seek.speedIndex = -1
+        m.seek.isAccelerating = false
+        return
+    end if
+
+    if direction = "left" then
+        if m.seek.direction <> "left" or m.seek.speedIndex < 0 or m.seek.speedIndex > 3 then
+            m.seek.speedIndex = 3
+        else if m.seek.speedIndex > 0 then
+            m.seek.speedIndex = m.seek.speedIndex - 1
+        end if
+    else
+        if m.seek.direction <> "right" or m.seek.speedIndex < 4 then
+            m.seek.speedIndex = 4
+        else if m.seek.speedIndex < m.seek.speeds.Count() - 1 then
+            m.seek.speedIndex = m.seek.speedIndex + 1
+        end if
+    end if
+
+    m.seek.direction = direction
+    m.seek.isAccelerating = true
+    m.fastSeekTimer.control = "start"
+    applySeekDelta(m.seek.speeds[m.seek.speedIndex])
+end sub
+
+'-------------------------------------------------------------------------------
+' applySeekDelta
+'-------------------------------------------------------------------------------
+sub applySeekDelta(deltaSeconds as integer)
+    if m.playback.duration <= 0 then return
+
+    m.playback.previewPosition = clampSeconds(m.playback.previewPosition + deltaSeconds, 0, m.playback.duration)
     m.playbackControls.previewPosition = m.playback.previewPosition
     updateTrickplayPreview(m.playback.previewPosition)
+end sub
+
+'-------------------------------------------------------------------------------
+' onFastSeekTimerFire
+'-------------------------------------------------------------------------------
+sub onFastSeekTimerFire()
+    if m.playback.isSeeking <> true then
+        stopSeekTimers()
+        return
+    end if
+    if m.seek.speedIndex < 0 then return
+
+    applySeekDelta(m.seek.speeds[m.seek.speedIndex])
+end sub
+
+'-------------------------------------------------------------------------------
+' onLeftSeekRepeatTimerFire
+'-------------------------------------------------------------------------------
+sub onLeftSeekRepeatTimerFire()
+    if m.playback.isSeeking <> true then
+        stopSeekTimers()
+        return
+    end if
+
+    m.leftSeekRepeatTimer.duration = 0.125
+    applySeekDelta(-10)
+end sub
+
+'-------------------------------------------------------------------------------
+' onRightSeekRepeatTimerFire
+'-------------------------------------------------------------------------------
+sub onRightSeekRepeatTimerFire()
+    if m.playback.isSeeking <> true then
+        stopSeekTimers()
+        return
+    end if
+
+    m.rightSeekRepeatTimer.duration = 0.125
+    applySeekDelta(10)
+end sub
+
+'-------------------------------------------------------------------------------
+' stopTenSecondRepeatTimers
+'-------------------------------------------------------------------------------
+sub stopTenSecondRepeatTimers()
+    m.leftSeekRepeatTimer.control = "stop"
+    m.rightSeekRepeatTimer.control = "stop"
+    m.leftSeekRepeatTimer.duration = 0.5
+    m.rightSeekRepeatTimer.duration = 0.5
+end sub
+
+'-------------------------------------------------------------------------------
+' stopTenSecondRepeat
+'-------------------------------------------------------------------------------
+sub stopTenSecondRepeat(direction as string)
+    if direction = "left" then
+        m.leftSeekRepeatTimer.control = "stop"
+        m.leftSeekRepeatTimer.duration = 0.5
+    else if direction = "right" then
+        m.rightSeekRepeatTimer.control = "stop"
+        m.rightSeekRepeatTimer.duration = 0.5
+    end if
+
+    if m.seek.isAccelerating <> true then
+        m.seek.direction = ""
+        m.seek.speedIndex = -1
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' stopSeekTimers
+'-------------------------------------------------------------------------------
+sub stopSeekTimers()
+    m.fastSeekTimer.control = "stop"
+    stopTenSecondRepeatTimers()
+    resetSeekState()
+end sub
+
+'-------------------------------------------------------------------------------
+' resetSeekState
+'-------------------------------------------------------------------------------
+sub resetSeekState()
+    m.seek.speedIndex = -1
+    m.seek.direction = ""
+    m.seek.isAccelerating = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -290,6 +509,7 @@ end sub
 sub commitSeek()
     if m.playback.isSeeking <> true then return
 
+    stopSeekTimers()
     m.videoPlayer.seek = m.playback.previewPosition
     m.videoPlayer.control = "resume"
     m.playback.isSeeking = false
@@ -304,6 +524,7 @@ end sub
 sub cancelSeek()
     if m.playback.isSeeking <> true then return
 
+    stopSeekTimers()
     m.videoPlayer.control = "resume"
     m.playback.isSeeking = false
     m.playbackControls.isSeeking = false
@@ -350,6 +571,62 @@ end sub
 '-------------------------------------------------------------------------------
 sub onNextPressed()
     if playQueueItem(1) <> true then skipPlayback(10)
+end sub
+
+'-------------------------------------------------------------------------------
+' onProgressLeftPressed
+'-------------------------------------------------------------------------------
+sub onProgressLeftPressed()
+    handleProgressSeekInput("left")
+end sub
+
+'-------------------------------------------------------------------------------
+' onProgressRightPressed
+'-------------------------------------------------------------------------------
+sub onProgressRightPressed()
+    handleProgressSeekInput("right")
+end sub
+
+'-------------------------------------------------------------------------------
+' onProgressLeftReleased
+'-------------------------------------------------------------------------------
+sub onProgressLeftReleased()
+    stopTenSecondRepeat("left")
+end sub
+
+'-------------------------------------------------------------------------------
+' onProgressRightReleased
+'-------------------------------------------------------------------------------
+sub onProgressRightReleased()
+    stopTenSecondRepeat("right")
+end sub
+
+'-------------------------------------------------------------------------------
+' onProgressRewindPressed
+'-------------------------------------------------------------------------------
+sub onProgressRewindPressed()
+    handleProgressSeekInput("rewind")
+end sub
+
+'-------------------------------------------------------------------------------
+' onProgressFastForwardPressed
+'-------------------------------------------------------------------------------
+sub onProgressFastForwardPressed()
+    handleProgressSeekInput("fastforward")
+end sub
+
+'-------------------------------------------------------------------------------
+' onProgressSeekCommit
+'-------------------------------------------------------------------------------
+sub onProgressSeekCommit()
+    commitSeek()
+end sub
+
+'-------------------------------------------------------------------------------
+' onProgressSeekCancel
+'-------------------------------------------------------------------------------
+sub onProgressSeekCancel()
+    cancelSeek()
 end sub
 
 ' playQueueItem
@@ -496,6 +773,7 @@ end function
 sub skipPlayback(offsetSeconds as integer)
     if m.playback.duration <= 0 then return
 
+    stopSeekTimers()
     targetPosition = clampSeconds(m.videoPlayer.position + offsetSeconds, 0, m.playback.duration)
     m.playback.isSeeking = false
     m.playback.previewPosition = targetPosition
@@ -523,6 +801,66 @@ sub updateTrickplayPreview(position as float)
         return
     end if
 
+    tileBuffer = 15
+    baseScale = getFiveImageTrickplayScale(m.trickplay.tileWidth, tileBuffer)
+    largeScale = baseScale * 1.2
+    smallScale = baseScale * 0.7
+    largeWidth = m.trickplay.tileWidth * largeScale
+    smallWidth = m.trickplay.tileWidth * smallScale
+    totalWidth = largeWidth + (smallWidth * 4) + (tileBuffer * 4)
+    nextX = 960 - (totalWidth / 2)
+    deltaSeconds = getTrickplayPreviewDelta()
+    images = []
+
+    for slot = -2 to 2
+        imageScale = smallScale
+        if slot = 0 then imageScale = largeScale
+
+        imagePosition = position + (deltaSeconds * slot)
+        if imagePosition < 0 or imagePosition > m.playback.duration then
+            images.Push({})
+        else
+            images.Push(buildTrickplayPreviewImage(imagePosition, nextX, imageScale))
+        end if
+
+        nextX = nextX + (m.trickplay.tileWidth * imageScale) + tileBuffer
+    end for
+
+    m.playbackControls.thumbnailData = {
+        images: images
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' getTrickplayPreviewDelta
+'-------------------------------------------------------------------------------
+function getTrickplayPreviewDelta() as integer
+    if m.seek <> invalid and m.seek.speedIndex >= 0 then
+        delta = m.seek.speeds[m.seek.speedIndex]
+        if delta < 0 then delta = 0 - delta
+        return delta
+    end if
+
+    return 10
+end function
+
+'-------------------------------------------------------------------------------
+' getFiveImageTrickplayScale
+'-------------------------------------------------------------------------------
+function getFiveImageTrickplayScale(tileWidth as dynamic, tileBuffer as integer) as float
+    if tileWidth = invalid or tileWidth <= 0 then return 1.0
+
+    progressBarWidth = 1714
+    availableWidth = progressBarWidth - (tileBuffer * 4)
+    if availableWidth <= 0 then return 1.0
+
+    return availableWidth / (tileWidth * 4)
+end function
+
+'-------------------------------------------------------------------------------
+' buildTrickplayPreviewImage
+'-------------------------------------------------------------------------------
+function buildTrickplayPreviewImage(position as float, x as float, scale as float) as object
     iconIndex = Fix(position / m.trickplay.interval)
     if iconIndex < 0 then iconIndex = 0
     if iconIndex >= m.trickplay.thumbnailCount then iconIndex = m.trickplay.thumbnailCount - 1
@@ -533,8 +871,10 @@ sub updateTrickplayPreview(position as float)
     row = Fix(tileIconIndex / m.trickplay.tileColumns)
     column = tileIconIndex mod m.trickplay.tileColumns
 
-    uri = NormalizeServerUrl(m.session.server) + "/Videos/" + m.session.itemId + "/Trickplay/" + m.trickplay.tileWidth.ToStr() + "/" + tileIndex.ToStr() + ".jpg?ApiKey=" + m.session.token
-    m.playbackControls.thumbnailData = {
+    uri = getLocalTrickplayUri(tileIndex)
+    if uri = "" then return {}
+
+    return {
         uri: uri
         tileWidth: m.trickplay.tileWidth
         tileHeight: m.trickplay.tileHeight
@@ -542,9 +882,54 @@ sub updateTrickplayPreview(position as float)
         sheetRows: m.trickplay.tileRows
         column: column
         row: row
-        scale: getTrickplayScale(m.trickplay.tileWidth, m.trickplay.tileHeight)
+        scale: scale
+        x: x
     }
+end function
+
+'-------------------------------------------------------------------------------
+' startTrickplayPreload
+'-------------------------------------------------------------------------------
+sub startTrickplayPreload()
+    if m.trickplay = invalid then return
+
+    m.trickplayPreloadTask.request = {
+        action: "add"
+        server: m.session.server
+        token: m.session.token
+        itemId: m.session.itemId
+        tileWidth: m.trickplay.tileWidth
+        tileCount: m.trickplay.tileCount
+    }
+    m.trickplayPreloadTask.control = "run"
 end sub
+
+'-------------------------------------------------------------------------------
+' onTrickplayPreloadResponse
+'-------------------------------------------------------------------------------
+sub onTrickplayPreloadResponse()
+    response = m.trickplayPreloadTask.response
+    if response = invalid then return
+    if response.ok <> true then return
+    if SafeString(response.itemId, "") <> m.session.itemId then return
+
+    if response.tileIndex <> invalid and m.trickplay <> invalid then
+        m.trickplay.loadedTiles[response.tileIndex.ToStr()] = true
+    end if
+
+    if m.playback.isSeeking = true then updateTrickplayPreview(m.playback.previewPosition)
+end sub
+
+'-------------------------------------------------------------------------------
+' getLocalTrickplayUri
+'-------------------------------------------------------------------------------
+function getLocalTrickplayUri(tileIndex as integer) as string
+    if m.trickplay = invalid then return ""
+    if m.trickplay.loadedTiles = invalid then return ""
+    if m.trickplay.loadedTiles[tileIndex.ToStr()] <> true then return ""
+
+    return "tmp:/starfish-trickplay-" + m.session.itemId + "-" + m.trickplay.tileWidth.ToStr() + "-" + tileIndex.ToStr() + ".jpg"
+end function
 
 '-------------------------------------------------------------------------------
 ' buildTrickplayState
@@ -567,6 +952,9 @@ function buildTrickplayState(item as dynamic, itemId as string) as dynamic
     if data.ThumbnailCount <> invalid then thumbnailCount = data.ThumbnailCount
     if thumbnailCount <= 0 then return invalid
 
+    tilesPerSheet = data.TileHeight * data.TileWidth
+    tileCount = Fix((thumbnailCount - 1) / tilesPerSheet) + 1
+
     return {
         tileWidth: data.Width
         tileHeight: data.Height
@@ -574,6 +962,8 @@ function buildTrickplayState(item as dynamic, itemId as string) as dynamic
         tileRows: data.TileHeight
         interval: data.Interval / 1000
         thumbnailCount: thumbnailCount
+        tileCount: tileCount
+        loadedTiles: {}
     }
 end function
 
@@ -605,20 +995,6 @@ function getPlaybackQueueIndex(value as dynamic) as integer
 end function
 
 '-------------------------------------------------------------------------------
-' getTrickplayScale
-'-------------------------------------------------------------------------------
-function getTrickplayScale(tileWidth as dynamic, tileHeight as dynamic) as float
-    if tileWidth = invalid or tileHeight = invalid then return 1.0
-    if tileWidth <= 0 or tileHeight <= 0 then return 1.0
-
-    widthScale = 320 / tileWidth
-    heightScale = 180 / tileHeight
-    if widthScale < heightScale then return widthScale
-
-    return heightScale
-end function
-
-'-------------------------------------------------------------------------------
 ' clampSeconds
 '-------------------------------------------------------------------------------
 function clampSeconds(value as float, minimum as float, maximum as float) as float
@@ -632,7 +1008,17 @@ end function
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
-    if press = false then return false
+    if press = false then
+        if key = "left" then
+            stopTenSecondRepeat("left")
+            return true
+        else if key = "right" then
+            stopTenSecondRepeat("right")
+            return true
+        end if
+
+        return false
+    end if
 
     if key = "back" then
         if m.playback.isSeeking = true then
@@ -649,19 +1035,17 @@ function onKeyEvent(key as string, press as boolean) as boolean
         stopPlayback()
         m.top.closeRequested = true
         return true
-    else if key = "left" or key = "rewind" then
-        if m.playback.isSeeking = true then
-            adjustSeek(-1)
-        else
-            beginSeek(-1)
-        end if
+    else if key = "left" then
+        handleProgressSeekInput("left")
         return true
-    else if key = "right" or key = "fastforward" then
-        if m.playback.isSeeking = true then
-            adjustSeek(1)
-        else
-            beginSeek(1)
-        end if
+    else if key = "right" then
+        handleProgressSeekInput("right")
+        return true
+    else if key = "rewind" then
+        handleProgressSeekInput("rewind")
+        return true
+    else if key = "fastforward" then
+        handleProgressSeekInput("fastforward")
         return true
     else if key = "OK" then
         if m.playback.isSeeking = true then

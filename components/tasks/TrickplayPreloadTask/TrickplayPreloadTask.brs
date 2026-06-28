@@ -1,0 +1,146 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = CreateLogger("TrickplayPreloadTask")
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    if request = invalid then return
+
+    action = LCase(SafeString(request.action, "add"))
+    if action = "remove" then
+        removeTrickplayFiles(request)
+    else
+        addTrickplayFiles(request)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' addTrickplayFiles
+'-------------------------------------------------------------------------------
+sub addTrickplayFiles(request as object)
+    fileSystem = CreateObject("roFileSystem")
+    tileCount = getTileCount(request)
+    if tileCount <= 0 then return
+
+    for tileIndex = 0 to tileCount - 1
+        localUri = getLocalTrickplayUri(request, tileIndex)
+        if localUri = "" then return
+
+        if fileSystem.Exists(localUri) <> true then
+            downloadTrickplayFile(request, tileIndex, localUri)
+        end if
+
+        if fileSystem.Exists(localUri) = true then
+            m.top.response = {
+                ok: true
+                action: "trickplayPreload"
+                itemId: SafeString(request.itemId, "")
+                tileIndex: tileIndex
+                uri: localUri
+            }
+        end if
+    end for
+
+    m.top.response = {
+        ok: true
+        action: "trickplayPreload"
+        itemId: SafeString(request.itemId, "")
+        complete: true
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' removeTrickplayFiles
+'-------------------------------------------------------------------------------
+sub removeTrickplayFiles(request as object)
+    fileSystem = CreateObject("roFileSystem")
+    tileCount = getTileCount(request)
+    if tileCount <= 0 then return
+
+    for tileIndex = 0 to tileCount - 1
+        localUri = getLocalTrickplayUri(request, tileIndex)
+        if localUri <> "" and fileSystem.Exists(localUri) = true then fileSystem.Delete(localUri)
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' downloadTrickplayFile
+'-------------------------------------------------------------------------------
+sub downloadTrickplayFile(request as object, tileIndex as integer, localUri as string)
+    url = getRemoteTrickplayUrl(request, tileIndex)
+    if url = "" then return
+
+    transfer = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    transfer.InitClientCertificates()
+    transfer.EnableEncodings(true)
+    transfer.SetMessagePort(port)
+    transfer.SetUrl(url)
+
+    if transfer.AsyncGetToFile(localUri) <> true then
+        m.log.error("Unable to start trickplay preload tileIndex=" + tileIndex.ToStr())
+        return
+    end if
+
+    message = wait(30000, port)
+    if message = invalid then
+        transfer.AsyncCancel()
+        m.log.error("Trickplay preload timed out tileIndex=" + tileIndex.ToStr())
+        return
+    end if
+
+    if type(message) <> "roUrlEvent" then return
+
+    status = message.GetResponseCode()
+    if status < 200 or status >= 300 then
+        m.log.error("Trickplay preload failed tileIndex=" + tileIndex.ToStr() + " status=" + status.ToStr())
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getRemoteTrickplayUrl
+'-------------------------------------------------------------------------------
+function getRemoteTrickplayUrl(request as object, tileIndex as integer) as string
+    server = NormalizeServerUrl(request.server)
+    itemId = SafeString(request.itemId, "")
+    token = SafeString(request.token, "")
+    tileWidth = getTileWidth(request)
+    if server = "" or itemId = "" or token = "" or tileWidth <= 0 then return ""
+
+    return server + "/Videos/" + itemId + "/Trickplay/" + tileWidth.ToStr() + "/" + tileIndex.ToStr() + ".jpg?ApiKey=" + Encode_Url(token)
+end function
+
+'-------------------------------------------------------------------------------
+' getLocalTrickplayUri
+'-------------------------------------------------------------------------------
+function getLocalTrickplayUri(request as object, tileIndex as integer) as string
+    itemId = SafeString(request.itemId, "")
+    tileWidth = getTileWidth(request)
+    if itemId = "" or tileWidth <= 0 then return ""
+
+    return "tmp:/starfish-trickplay-" + itemId + "-" + tileWidth.ToStr() + "-" + tileIndex.ToStr() + ".jpg"
+end function
+
+'-------------------------------------------------------------------------------
+' getTileCount
+'-------------------------------------------------------------------------------
+function getTileCount(request as object) as integer
+    if request = invalid or request.tileCount = invalid then return 0
+    return int(request.tileCount)
+end function
+
+'-------------------------------------------------------------------------------
+' getTileWidth
+'-------------------------------------------------------------------------------
+function getTileWidth(request as object) as integer
+    if request = invalid or request.tileWidth = invalid then return 0
+    return int(request.tileWidth)
+end function
