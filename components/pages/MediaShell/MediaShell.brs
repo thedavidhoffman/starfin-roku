@@ -2,11 +2,11 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    backdropA = m.top.findNode("backdropA")
-    backdropB = m.top.findNode("backdropB")
+    backdropPrimaryBuffer = m.top.findNode("backdropPrimaryBuffer")
+    backdropSecondaryBuffer = m.top.findNode("backdropSecondaryBuffer")
     m.backdropState = {
-        activePoster: backdropA
-        preloadPoster: backdropB
+        activePoster: backdropPrimaryBuffer
+        preloadPoster: backdropSecondaryBuffer
         activeUrl: ""
         pendingUrl: ""
     }
@@ -20,8 +20,8 @@ sub init()
     m.metaDetailLabel = m.top.findNode("metaDetailLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
 
-    backdropA.observeField("loadStatus", "onBackdropLoadStatusChanged")
-    backdropB.observeField("loadStatus", "onBackdropLoadStatusChanged")
+    backdropPrimaryBuffer.observeField("loadStatus", "onBackdropLoadStatusChanged")
+    backdropSecondaryBuffer.observeField("loadStatus", "onBackdropLoadStatusChanged")
     m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
 end sub
 

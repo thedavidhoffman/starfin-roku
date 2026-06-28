@@ -137,7 +137,7 @@ sub applyPlaybackResponse(response as object, request as object)
     m.playbackControls.thumbnailData = {}
 
     m.videoPlayer.content = content
-    m.videoPlayer.setFocus(true)
+    m.top.setFocus(true)
     disableScreenSaver()
     m.videoPlayer.control = "play"
     Status_ClearMessage()
@@ -291,7 +291,7 @@ sub hideControls()
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
     m.playbackControls.visible = false
-    m.videoPlayer.setFocus(true)
+    m.top.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
