@@ -11,6 +11,7 @@ sub init()
 
     m.libraryTask.observeField("response", "onLibraryResponse")
     m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
+    m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
     m.letterGrid.observeField("letterSelected", "onLetterSelected")
     m.letterGrid.observeField("closeRequested", "onLetterGridCloseRequested")
     m.itemsGrid.observeField("itemSelected", "onItemSelected")
@@ -19,6 +20,7 @@ sub init()
         items: []
         imageAspect: "poster"
         letterGridOpen: false
+        isThumbnailLayout: false
         availableLetters: {}
     }
 end sub
@@ -134,6 +136,14 @@ end sub
 '-------------------------------------------------------------------------------
 sub onLetterGutterButtonFocused()
     if m.letterGutterButton.focused <> true then return
+
+    openLetterGrid()
+end sub
+
+'-------------------------------------------------------------------------------
+' onLetterGutterButtonSelected
+'-------------------------------------------------------------------------------
+sub onLetterGutterButtonSelected()
     openLetterGrid()
 end sub
 
@@ -380,13 +390,30 @@ function isItemsGridAtFirstColumn() as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' isItemsGridAtFirstRow
+'-------------------------------------------------------------------------------
+function isItemsGridAtFirstRow() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then return false
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = 0
+
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then columns = 1
+
+    return focusedIndex < columns
+end function
+
+'-------------------------------------------------------------------------------
 ' applyGridLayout
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
     if imageAspect = "wide" then
+        m.pageState.isThumbnailLayout = true
         m.titleLabel.translation = [460, 120]
         m.itemsGrid.translation = [23, 208]
-        applyLetterGutterButtonLayout(m.itemsGrid.translation[1])
+        applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+        applyLetterGridLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
         m.itemsGrid.itemSize = [465, 348]
         m.itemsGrid.itemSpacing = [0, 11]
         m.itemsGrid.numColumns = 4
@@ -395,9 +422,11 @@ sub applyGridLayout(imageAspect as string)
         return
     end if
 
+    m.pageState.isThumbnailLayout = false
     m.titleLabel.translation = [460, 120]
     m.itemsGrid.translation = [96, 208]
-    applyLetterGutterButtonLayout(m.itemsGrid.translation[1])
+    applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+    applyLetterGridLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
     m.itemsGrid.itemSize = [295, 463]
     m.itemsGrid.itemSpacing = [-11, 26]
     m.itemsGrid.numColumns = 6
@@ -408,8 +437,29 @@ end sub
 '-------------------------------------------------------------------------------
 ' applyLetterGutterButtonLayout
 '-------------------------------------------------------------------------------
-sub applyLetterGutterButtonLayout(gridTop as integer)
+sub applyLetterGutterButtonLayout(isThumbnailLayout as boolean, gridLeft as integer, gridTop as integer)
+    if isThumbnailLayout = true then
+        thumbnailVisualOffset = 20
+        m.letterGutterButton.layoutMode = "horizontal"
+        m.letterGutterButton.translation = [gridLeft + thumbnailVisualOffset, 156]
+        return
+    end if
+
+    m.letterGutterButton.layoutMode = "vertical"
     m.letterGutterButton.translation = [24, gridTop]
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLetterGridLayout
+'-------------------------------------------------------------------------------
+sub applyLetterGridLayout(isThumbnailLayout as boolean, gridLeft as integer, gridTop as integer)
+    if isThumbnailLayout = true then
+        thumbnailVisualOffset = 20
+        m.letterGrid.translation = [gridLeft + thumbnailVisualOffset, gridTop]
+        return
+    end if
+
+    m.letterGrid.translation = [72, gridTop]
 end sub
 
 ' getItemsFromPayload
@@ -454,6 +504,7 @@ end function
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
     if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
+    if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return focusLetterGutterButton()
     if key = "back" then
         if m.pageState.letterGridOpen = true then
             closeLetterGrid(true)
