@@ -4,15 +4,22 @@
 sub init()
     m.log = CreateLogger("Library")
     m.titleLabel = m.top.findNode("titleLabel")
+    m.letterGutterButton = m.top.findNode("letterGutterButton")
+    m.letterGrid = m.top.findNode("letterGrid")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.libraryTask = m.top.findNode("libraryTask")
 
     m.libraryTask.observeField("response", "onLibraryResponse")
+    m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
+    m.letterGrid.observeField("letterSelected", "onLetterSelected")
+    m.letterGrid.observeField("closeRequested", "onLetterGridCloseRequested")
     m.itemsGrid.observeField("itemSelected", "onItemSelected")
     m.pageState = {
         request: invalid
         items: []
         imageAspect: "poster"
+        letterGridOpen: false
+        availableLetters: {}
     }
 end sub
 
@@ -37,6 +44,7 @@ sub onLoadRequestChanged()
     m.titleLabel.text = SafeString(request.title, "Library")
     applyGridLayout(m.pageState.imageAspect)
     Status_SetLoading()
+    closeLetterGrid(false)
     renderItems([])
 
     m.libraryTask.request = request
@@ -103,6 +111,74 @@ sub renderItems(items as object)
 
     m.itemsGrid.content = content
     m.itemsGrid.visible = content.getChildCount() > 0
+    updateAvailableLetters(items)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateAvailableLetters
+'-------------------------------------------------------------------------------
+sub updateAvailableLetters(items as object)
+    availableLetters = {}
+
+    for each item in items
+        letter = getItemSortLetter(item)
+        if letter <> "" then availableLetters[letter] = true
+    end for
+
+    m.pageState.availableLetters = availableLetters
+    m.letterGrid.availableLetters = availableLetters
+end sub
+
+'-------------------------------------------------------------------------------
+' onLetterGutterButtonFocused
+'-------------------------------------------------------------------------------
+sub onLetterGutterButtonFocused()
+    if m.letterGutterButton.focused <> true then return
+    openLetterGrid()
+end sub
+
+'-------------------------------------------------------------------------------
+' openLetterGrid
+'-------------------------------------------------------------------------------
+function openLetterGrid() as boolean
+    if m.letterGrid = invalid then return false
+
+    m.pageState.letterGridOpen = true
+    m.letterGrid.visible = true
+    m.letterGrid.setFocus(true)
+    m.letterGrid.callFunc("focusLetters")
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' closeLetterGrid
+'-------------------------------------------------------------------------------
+sub closeLetterGrid(focusItems as boolean)
+    if m.letterGrid <> invalid then m.letterGrid.visible = false
+    if m.pageState <> invalid then m.pageState.letterGridOpen = false
+
+    if focusItems = true then focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onLetterSelected
+'-------------------------------------------------------------------------------
+sub onLetterSelected()
+    letter = SafeString(m.letterGrid.letterSelected, "")
+    if letter = "" then return
+
+    index = findFirstItemIndexForLetter(letter)
+    if index < 0 then return
+
+    closeLetterGrid(false)
+    focusLibraryItem(index)
+end sub
+
+'-------------------------------------------------------------------------------
+' onLetterGridCloseRequested
+'-------------------------------------------------------------------------------
+sub onLetterGridCloseRequested()
+    closeLetterGrid(true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -123,6 +199,30 @@ sub focusItemsIfActive()
 
     m.itemsGrid.setFocus(true)
 end sub
+
+'-------------------------------------------------------------------------------
+' focusLibraryItem
+'-------------------------------------------------------------------------------
+sub focusLibraryItem(index as integer)
+    if m.itemsGrid = invalid then return
+    if m.itemsGrid.content = invalid then return
+    if index < 0 or index >= m.itemsGrid.content.getChildCount() then return
+
+    m.itemsGrid.jumpToItem = index
+    m.itemsGrid.itemFocused = index
+    m.itemsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusLetterGutterButton
+'-------------------------------------------------------------------------------
+function focusLetterGutterButton() as boolean
+    if m.letterGutterButton = invalid then return false
+    if m.itemsGrid.visible <> true then return false
+
+    m.letterGutterButton.setFocus(true)
+    return openLetterGrid()
+end function
 
 '-------------------------------------------------------------------------------
 ' getItemImageUrl
@@ -200,6 +300,83 @@ function getLibraryImageAspect() as string
 end function
 
 '-------------------------------------------------------------------------------
+' findFirstItemIndexForLetter
+'-------------------------------------------------------------------------------
+function findFirstItemIndexForLetter(letter as string) as integer
+    targetLetter = UCase(Left(letter, 1))
+    if targetLetter = "" then return -1
+
+    if m.itemsGrid <> invalid and m.itemsGrid.content <> invalid then
+        for i = 0 to m.itemsGrid.content.getChildCount() - 1
+            node = m.itemsGrid.content.getChild(i)
+            if node <> invalid and getItemSortLetter(node.raw) = targetLetter then return i
+        end for
+    end if
+
+    items = m.pageState.items
+    if items = invalid then return -1
+
+    for i = 0 to items.Count() - 1
+        if getItemSortLetter(items[i]) = targetLetter then return i
+    end for
+
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getItemSortLetter
+'-------------------------------------------------------------------------------
+function getItemSortLetter(item as dynamic) as string
+    if isAssocArray(item) = false then return ""
+
+    title = getItemAlphabetTitle(item)
+    if title = "" then return ""
+
+    return UCase(Left(title, 1))
+end function
+
+'-------------------------------------------------------------------------------
+' getItemAlphabetTitle
+'-------------------------------------------------------------------------------
+function getItemAlphabetTitle(item as object) as string
+    sortName = String_Trim(SafeString(item.SortName, ""))
+    if sortName <> "" then return sortName
+
+    title = String_Trim(SafeString(item.Name, ""))
+    if title = "" then return ""
+
+    return stripLeadingSortArticle(title)
+end function
+
+'-------------------------------------------------------------------------------
+' stripLeadingSortArticle
+'-------------------------------------------------------------------------------
+function stripLeadingSortArticle(title as string) as string
+    normalized = LCase(title)
+
+    if Left(normalized, 4) = "the " then return String_Trim(Mid(title, 5))
+    if Left(normalized, 3) = "an " then return String_Trim(Mid(title, 4))
+    if Left(normalized, 2) = "a " then return String_Trim(Mid(title, 3))
+
+    return title
+end function
+
+'-------------------------------------------------------------------------------
+' isItemsGridAtFirstColumn
+'-------------------------------------------------------------------------------
+function isItemsGridAtFirstColumn() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then return false
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = 0
+
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then columns = 1
+
+    return focusedIndex mod columns = 0
+end function
+
+'-------------------------------------------------------------------------------
 ' applyGridLayout
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
@@ -264,7 +441,12 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
     if key = "back" then
+        if m.pageState.letterGridOpen = true then
+            closeLetterGrid(true)
+            return true
+        end if
         m.top.closeRequested = true
         return true
     end if
