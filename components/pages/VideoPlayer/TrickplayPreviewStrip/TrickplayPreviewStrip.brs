@@ -8,6 +8,7 @@ sub init()
             imageMask: m.top.findNode("thumbnailImageMask0")
             clip: m.top.findNode("thumbnailClip0")
             poster: m.top.findNode("thumbnailPoster0")
+            posterId: "thumbnailPoster0"
             background: m.top.findNode("thumbnailBackground0")
             hasImage: false
         }
@@ -16,6 +17,7 @@ sub init()
             imageMask: m.top.findNode("thumbnailImageMask1")
             clip: m.top.findNode("thumbnailClip1")
             poster: m.top.findNode("thumbnailPoster1")
+            posterId: "thumbnailPoster1"
             background: m.top.findNode("thumbnailBackground1")
             hasImage: false
         }
@@ -24,6 +26,7 @@ sub init()
             imageMask: m.top.findNode("thumbnailImageMask2")
             clip: m.top.findNode("thumbnailClip2")
             poster: m.top.findNode("thumbnailPoster2")
+            posterId: "thumbnailPoster2"
             background: m.top.findNode("thumbnailBackground2")
             hasImage: false
         }
@@ -32,6 +35,7 @@ sub init()
             imageMask: m.top.findNode("thumbnailImageMask3")
             clip: m.top.findNode("thumbnailClip3")
             poster: m.top.findNode("thumbnailPoster3")
+            posterId: "thumbnailPoster3"
             background: m.top.findNode("thumbnailBackground3")
             hasImage: false
         }
@@ -40,6 +44,7 @@ sub init()
             imageMask: m.top.findNode("thumbnailImageMask4")
             clip: m.top.findNode("thumbnailClip4")
             poster: m.top.findNode("thumbnailPoster4")
+            posterId: "thumbnailPoster4"
             background: m.top.findNode("thumbnailBackground4")
             hasImage: false
         }
@@ -110,16 +115,38 @@ sub updateThumbnailSlot(slot as object, data as dynamic)
     slot.clip.clippingRect = [0, 0, tileWidth, tileHeight]
     slot.background.width = tileWidth
     slot.background.height = tileHeight
+
+    uriChanged = slot.poster.uri <> data.uri
+    ' Trickplay previews use sprite sheets, so changing Poster.uri can swap a large image.
+    ' Roku can render those large sheet swaps unreliably when reusing the same Poster node.
+    ' For large sheets, recreate the Poster first; this matches Jellyfin Roku's safer path.
+    if uriChanged = true and data.canUseFastReplace <> true then recreatePoster(slot)
+
     slot.poster.width = sheetWidth
     slot.poster.height = sheetHeight
     slot.poster.translation = [0 - (data.column * tileWidth), 0 - (data.row * tileHeight)]
 
-    if slot.poster.uri <> data.uri then
+    if uriChanged = true then
         slot.group.visible = false
         slot.poster.uri = data.uri
     else
         slot.group.visible = LCase(SafeString(slot.poster.loadStatus, "")) = "ready"
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' recreatePoster
+'-------------------------------------------------------------------------------
+sub recreatePoster(slot as object)
+    slot.poster.unobserveField("loadStatus")
+    slot.clip.removeChild(slot.poster)
+
+    poster = CreateObject("roSGNode", "Poster")
+    poster.id = slot.posterId
+    poster.loadDisplayMode = "noScale"
+    poster.observeField("loadStatus", "onThumbnailLoadStatusChanged")
+    slot.clip.appendChild(poster)
+    slot.poster = poster
 end sub
 
 '-------------------------------------------------------------------------------

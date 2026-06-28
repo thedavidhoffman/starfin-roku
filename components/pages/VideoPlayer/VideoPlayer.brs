@@ -882,6 +882,7 @@ function buildTrickplayPreviewImage(position as float, x as float, y as float, s
 
     return {
         uri: uri
+        tileIndex: tileIndex
         tileWidth: m.trickplay.tileWidth
         tileHeight: m.trickplay.tileHeight
         sheetColumns: m.trickplay.tileColumns
@@ -891,6 +892,7 @@ function buildTrickplayPreviewImage(position as float, x as float, y as float, s
         scale: scale
         x: x
         y: y
+        canUseFastReplace: m.trickplay.canUseFastReplace
     }
 end function
 
@@ -989,6 +991,7 @@ function buildTrickplayState(item as dynamic, itemId as string) as dynamic
         interval: data.Interval / 1000
         thumbnailCount: thumbnailCount
         tileCount: tileCount
+        canUseFastReplace: (data.TileHeight * data.Height) * (data.TileWidth * data.Width) < 2000000
         loadedTiles: {}
     }
 end function
