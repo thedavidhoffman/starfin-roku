@@ -347,6 +347,7 @@ sub tvEpisodeShow(selection as object)
     page.observeField("selectedEpisode", "tvEpisodeHandleEpisodeSelected")
     page.observeField("selectedPerson", "personHandleTVEpisodePersonSelected")
     page.observeField("watchedStateChanged", "tvEpisodeHandleWatchedStateChanged")
+    page.observeField("playbackProgressChanged", "tvEpisodeHandlePlaybackProgressChanged")
     page.loadRequest = selection.loadRequest
 
     m.tvEpisodePage = page
@@ -385,7 +386,9 @@ end function
 '-------------------------------------------------------------------------------
 sub tvEpisodeHandleCloseRequested()
     clearStatus()
+    playbackProgressChange = invalid
     if m.tvEpisodePage <> invalid then
+        playbackProgressChange = m.tvEpisodePage.playbackProgressChanged
         m.dynamicPageHost.removeChild(m.tvEpisodePage)
         m.tvEpisodePage = invalid
     end if
@@ -397,6 +400,7 @@ sub tvEpisodeHandleCloseRequested()
     else if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.visible = true
         m.header.visible = false
+        if playbackProgressChange <> invalid then m.tvSeasonPage.playbackProgressChange = playbackProgressChange
         m.tvSeasonPage.callFunc("activate")
     else if m.tvShowPage <> invalid then
         m.tvShowPage.visible = true
@@ -429,6 +433,17 @@ sub tvEpisodeHandleWatchedStateChanged()
     if change = invalid then return
 
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.watchedStateChange = change
+end sub
+
+'-------------------------------------------------------------------------------
+' tvEpisodeHandlePlaybackProgressChanged
+'-------------------------------------------------------------------------------
+sub tvEpisodeHandlePlaybackProgressChanged()
+    if m.tvEpisodePage = invalid then return
+    change = m.tvEpisodePage.playbackProgressChanged
+    if change = invalid then return
+
+    if m.tvSeasonPage <> invalid then m.tvSeasonPage.playbackProgressChange = change
 end sub
 
 '-------------------------------------------------------------------------------
@@ -797,6 +812,7 @@ sub playerShow(selection as object)
 
     player = CreateObject("roSGNode", "VideoPlayer")
     player.observeField("closeRequested", "playerHandleCloseRequested")
+    player.observeField("playbackProgressChanged", "playerHandlePlaybackProgressChanged")
     playRequest = {
         server: m.session.server
         token: m.session.token
@@ -819,6 +835,49 @@ sub playerShow(selection as object)
     m.homePage.visible = false
     m.header.visible = false
     player.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' playerHandlePlaybackProgressChanged
+'-------------------------------------------------------------------------------
+sub playerHandlePlaybackProgressChanged()
+    if m.videoPlayer = invalid then return
+
+    change = m.videoPlayer.playbackProgressChanged
+    if change = invalid then return
+
+    ' Keep sub-5% progress alive only for this navigation session; Jellyfin
+    ' remains authoritative after reload because it discards early resume points.
+    routeMoviePlaybackProgress(change)
+    routeTVEpisodePlaybackProgress(change)
+    routeTVSeasonPlaybackProgress(change)
+end sub
+
+'-------------------------------------------------------------------------------
+' routeMoviePlaybackProgress
+'-------------------------------------------------------------------------------
+sub routeMoviePlaybackProgress(change as object)
+    if m.moviePage = invalid then return
+
+    m.moviePage.playbackProgressChange = change
+end sub
+
+'-------------------------------------------------------------------------------
+' routeTVEpisodePlaybackProgress
+'-------------------------------------------------------------------------------
+sub routeTVEpisodePlaybackProgress(change as object)
+    if m.tvEpisodePage = invalid then return
+
+    m.tvEpisodePage.playbackProgressChange = change
+end sub
+
+'-------------------------------------------------------------------------------
+' routeTVSeasonPlaybackProgress
+'-------------------------------------------------------------------------------
+sub routeTVSeasonPlaybackProgress(change as object)
+    if m.tvSeasonPage = invalid then return
+
+    m.tvSeasonPage.playbackProgressChange = change
 end sub
 
 '-------------------------------------------------------------------------------

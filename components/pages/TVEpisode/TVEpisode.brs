@@ -23,6 +23,7 @@ sub initReferences()
         itemId: ""
         itemContent: invalid
         playSelection: invalid
+        playbackProgressChange: invalid
         selectedStreams: {
             audio: invalid
             subtitle: invalid
@@ -66,6 +67,7 @@ sub onLoadRequestChanged()
     m.state.itemId = ""
     m.state.itemContent = invalid
     m.state.playSelection = invalid
+    m.state.playbackProgressChange = invalid
     m.state.selectedStreams = {
         audio: invalid
         subtitle: invalid
@@ -767,6 +769,26 @@ sub onWatchedTaskResponse()
 end sub
 
 '-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    if change = invalid then return
+
+    item = m.state.itemContent
+    if item = invalid or item.raw = invalid then return
+
+    itemId = SafeString(change.itemId, "")
+    if itemId = "" or itemId <> SafeString(item.itemId, "") then return
+
+    updateItemPlaybackProgress(item, change)
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item.raw))
+    m.mediaToolbar.isWatched = isItemWatched(item)
+    m.state.playbackProgressChange = change
+    m.top.playbackProgressChanged = change
+end sub
+
+'-------------------------------------------------------------------------------
 ' onCastFocusExitUp
 '-------------------------------------------------------------------------------
 sub onCastFocusExitUp()
@@ -964,3 +986,54 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
         m.state.playSelection.item = raw
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' updateItemPlaybackProgress
+'-------------------------------------------------------------------------------
+sub updateItemPlaybackProgress(item as dynamic, change as object)
+    if item = invalid or item.raw = invalid then return
+
+    raw = item.raw
+    if raw.UserData = invalid then raw.UserData = {}
+
+    if change.isFinished = true then
+        raw.UserData.Played = true
+        raw.UserData.PlayedPercentage = 0
+        raw.UserData.PlaybackPositionTicks = 0
+    else
+        positionTicks = getPlaybackProgressTicks(change.positionTicks)
+        raw.UserData.Played = false
+        raw.UserData.PlaybackPositionTicks = positionTicks
+        raw.UserData.PlayedPercentage = getPlaybackProgressPercentage(positionTicks, raw.RunTimeTicks, change.durationTicks)
+    end if
+
+    item.raw = raw
+    m.state.itemContent = item
+    if m.state.playSelection <> invalid then
+        m.state.playSelection.item = raw
+        m.state.playSelection.startPositionTicks = raw.UserData.PlaybackPositionTicks
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackProgressTicks
+'-------------------------------------------------------------------------------
+function getPlaybackProgressTicks(value as dynamic) as longinteger
+    if value = invalid or value <= 0 then return 0
+
+    return value
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackProgressPercentage
+'-------------------------------------------------------------------------------
+function getPlaybackProgressPercentage(positionTicks as dynamic, runtimeTicks as dynamic, durationTicks as dynamic) as float
+    if positionTicks = invalid or positionTicks <= 0 then return 0
+    if runtimeTicks = invalid or runtimeTicks <= 0 then runtimeTicks = durationTicks
+    if runtimeTicks = invalid or runtimeTicks <= 0 then return 0
+
+    percentage = (positionTicks / runtimeTicks) * 100
+    if percentage > 100 then return 100
+
+    return percentage
+end function

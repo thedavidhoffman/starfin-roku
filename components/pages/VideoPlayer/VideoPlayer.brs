@@ -14,6 +14,7 @@ sub init()
         isSeeking: false
         isPlaying: false
         hasReportedStart: false
+        hasEmittedFinalProgress: false
         previewPosition: 0
         position: 0
         duration: 0
@@ -95,14 +96,18 @@ sub applyPlaybackResponse(response as object, request as object)
     content.url = response.streamUrl
     content.streamFormat = response.streamFormat
     content.title = getItemTitle(item)
-    content.PlayStart = PlaybackProgress_TicksToSeconds(response.startPositionTicks)
+    startPositionSeconds = PlaybackProgress_TicksToSeconds(response.startPositionTicks)
+    content.PlayStart = startPositionSeconds
     content.AddHeader("Authorization", JellyfinAuth_BuildPlaybackHeader(request.token, request.userId))
 
     m.playback.duration = getRuntimeSeconds(item)
+    m.playback.hasEmittedFinalProgress = false
+    m.playback.position = startPositionSeconds
+    m.playback.previewPosition = startPositionSeconds
     m.playbackControls.title = content.title
     m.playbackControls.duration = m.playback.duration
-    m.playbackControls.position = 0
-    m.playbackControls.previewPosition = 0
+    m.playbackControls.position = startPositionSeconds
+    m.playbackControls.previewPosition = startPositionSeconds
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
 
@@ -124,6 +129,7 @@ sub onVideoStateChanged()
         Status_SetMessage("Unable to play this video.")
     else if state = "finished" then
         reportPlaystateStop()
+        emitPlaybackProgress(true)
         stopPlayback()
         m.top.closeRequested = true
     else if state = "playing" then
@@ -137,6 +143,7 @@ sub onVideoStateChanged()
         m.playstateTimer.control = "stop"
         reportPlaystateUpdate()
     else if state = "stopped" then
+        emitPlaybackProgress(false)
         reportPlaystateStop()
         enableScreenSaver()
     end if
@@ -357,9 +364,53 @@ function playQueueItem(direction as integer) as boolean
     item = m.queue.items[nextIndex]
     if item = invalid or item.itemId = invalid or item.itemId = "" then return false
 
+    emitPlaybackProgress(false)
     m.top.playRequest = buildQueuePlayRequest(nextIndex, item)
 
     return true
+end function
+
+'-------------------------------------------------------------------------------
+' emitPlaybackProgress
+'-------------------------------------------------------------------------------
+sub emitPlaybackProgress(isFinished as boolean)
+    if m.session = invalid then return
+    if m.session.itemId = "" then return
+    if m.playback.hasEmittedFinalProgress = true then return
+
+    position = getCurrentPlaybackPosition()
+    duration = m.playback.duration
+    if duration = invalid or duration <= 0 then duration = m.videoPlayer.duration
+
+    m.top.playbackProgressChanged = {
+        itemId: m.session.itemId
+        positionTicks: secondsToTicks(position)
+        durationTicks: secondsToTicks(duration)
+        isFinished: isFinished
+        isPaused: LCase(SafeString(m.videoPlayer.state, "")) = "paused"
+    }
+    m.playback.hasEmittedFinalProgress = true
+end sub
+
+'-------------------------------------------------------------------------------
+' secondsToTicks
+'-------------------------------------------------------------------------------
+function secondsToTicks(seconds as dynamic) as longinteger
+    if seconds = invalid or seconds <= 0 then return 0
+
+    return int(seconds) * 10000000&
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentPlaybackPosition
+'-------------------------------------------------------------------------------
+function getCurrentPlaybackPosition() as float
+    position = m.videoPlayer.position
+    if position <> invalid and position > 0 then return position
+
+    if m.playback <> invalid and m.playback.position <> invalid then return m.playback.position
+
+    return 0
 end function
 
 '-------------------------------------------------------------------------------
@@ -415,7 +466,7 @@ sub reportPlaystate(status as string)
     if m.session = invalid then return
     if m.session.server = "" or m.session.token = "" or m.session.itemId = "" then return
 
-    position = m.videoPlayer.position
+    position = getCurrentPlaybackPosition()
     isPaused = LCase(SafeString(m.videoPlayer.state, "")) = "paused"
     m.log.write("Playstate " + status + " itemId=" + m.session.itemId + " position=" + SafeString(position, "") + " paused=" + boolToText(isPaused))
 
@@ -594,6 +645,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         end if
 
+        emitPlaybackProgress(false)
         stopPlayback()
         m.top.closeRequested = true
         return true

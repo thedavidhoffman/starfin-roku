@@ -326,6 +326,26 @@ sub onWatchedTaskResponse()
 end sub
 
 '-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    if change = invalid then return
+
+    item = m.state.item
+    if item = invalid then return
+
+    itemId = SafeString(change.itemId, "")
+    currentItemId = SafeString(FirstNonEmpty([item.Id], ""), "")
+    if currentItemId = "" and m.state.request <> invalid then currentItemId = SafeString(m.state.request.itemId, "")
+    if itemId = "" or itemId <> currentItemId then return
+
+    updateItemPlaybackProgress(item, change)
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item))
+    m.mediaToolbar.isWatched = isItemWatched(item)
+end sub
+
+'-------------------------------------------------------------------------------
 ' getItemTitle
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
@@ -440,6 +460,50 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
 
     m.state.item = item
 end sub
+
+'-------------------------------------------------------------------------------
+' updateItemPlaybackProgress
+'-------------------------------------------------------------------------------
+sub updateItemPlaybackProgress(item as dynamic, change as object)
+    if item = invalid then return
+    if item.UserData = invalid then item.UserData = {}
+
+    if change.isFinished = true then
+        item.UserData.Played = true
+        item.UserData.PlayedPercentage = 0
+        item.UserData.PlaybackPositionTicks = 0
+    else
+        positionTicks = getPlaybackProgressTicks(change.positionTicks)
+        item.UserData.Played = false
+        item.UserData.PlaybackPositionTicks = positionTicks
+        item.UserData.PlayedPercentage = getPlaybackProgressPercentage(positionTicks, item.RunTimeTicks, change.durationTicks)
+    end if
+
+    m.state.item = item
+end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackProgressTicks
+'-------------------------------------------------------------------------------
+function getPlaybackProgressTicks(value as dynamic) as longinteger
+    if value = invalid or value <= 0 then return 0
+
+    return value
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackProgressPercentage
+'-------------------------------------------------------------------------------
+function getPlaybackProgressPercentage(positionTicks as dynamic, runtimeTicks as dynamic, durationTicks as dynamic) as float
+    if positionTicks = invalid or positionTicks <= 0 then return 0
+    if runtimeTicks = invalid or runtimeTicks <= 0 then runtimeTicks = durationTicks
+    if runtimeTicks = invalid or runtimeTicks <= 0 then return 0
+
+    percentage = (positionTicks / runtimeTicks) * 100
+    if percentage > 100 then return 100
+
+    return percentage
+end function
 
 '-------------------------------------------------------------------------------
 ' getSubtitleStreams

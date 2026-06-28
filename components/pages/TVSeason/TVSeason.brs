@@ -170,6 +170,23 @@ sub onWatchedStateChange()
 end sub
 
 '-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    if change = invalid then return
+
+    itemId = SafeString(change.itemId, "")
+    if itemId = "" then return
+
+    if updateEpisodePlaybackProgress(itemId, change) <> true then return
+
+    renderEpisodes(m.pageState.episodes)
+    restoreEpisodeFocus(itemId)
+    notifySeasonWatchedStateChanged()
+end sub
+
+'-------------------------------------------------------------------------------
 ' renderSeason
 '-------------------------------------------------------------------------------
 sub renderSeason(item as dynamic)
@@ -719,6 +736,65 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
         item.UserData.PlayedPercentage = 0
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' updateEpisodePlaybackProgress
+'-------------------------------------------------------------------------------
+function updateEpisodePlaybackProgress(itemId as string, change as object) as boolean
+    for each episode in m.pageState.episodes
+        if isAssocArray(episode) = false then continue for
+        if SafeString(FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
+
+        wasWatched = isItemWatched(episode)
+        updateItemPlaybackProgress(episode, change)
+        updateSeasonUnplayedCount(wasWatched, isItemWatched(episode))
+        return true
+    end for
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' updateItemPlaybackProgress
+'-------------------------------------------------------------------------------
+sub updateItemPlaybackProgress(item as dynamic, change as object)
+    if isAssocArray(item) = false then return
+    if item.UserData = invalid then item.UserData = {}
+
+    if change.isFinished = true then
+        item.UserData.Played = true
+        item.UserData.PlayedPercentage = 0
+        item.UserData.PlaybackPositionTicks = 0
+    else
+        positionTicks = getPlaybackProgressTicks(change.positionTicks)
+        item.UserData.Played = false
+        item.UserData.PlaybackPositionTicks = positionTicks
+        item.UserData.PlayedPercentage = getPlaybackProgressPercentage(positionTicks, item.RunTimeTicks, change.durationTicks)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackProgressTicks
+'-------------------------------------------------------------------------------
+function getPlaybackProgressTicks(value as dynamic) as longinteger
+    if value = invalid or value <= 0 then return 0
+
+    return value
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackProgressPercentage
+'-------------------------------------------------------------------------------
+function getPlaybackProgressPercentage(positionTicks as dynamic, runtimeTicks as dynamic, durationTicks as dynamic) as float
+    if positionTicks = invalid or positionTicks <= 0 then return 0
+    if runtimeTicks = invalid or runtimeTicks <= 0 then runtimeTicks = durationTicks
+    if runtimeTicks = invalid or runtimeTicks <= 0 then return 0
+
+    percentage = (positionTicks / runtimeTicks) * 100
+    if percentage > 100 then return 100
+
+    return percentage
+end function
 
 '-------------------------------------------------------------------------------
 ' restoreEpisodeFocus
