@@ -154,9 +154,7 @@ function openLetterGrid() as boolean
     if m.letterGrid = invalid then return false
 
     m.pageState.letterGridOpen = true
-    m.letterGrid.visible = true
-    m.letterGrid.setFocus(true)
-    m.letterGrid.callFunc("focusLetters")
+    m.letterGrid.callFunc("openGrid")
     return true
 end function
 
@@ -164,7 +162,7 @@ end function
 ' closeLetterGrid
 '-------------------------------------------------------------------------------
 sub closeLetterGrid(focusItems as boolean)
-    if m.letterGrid <> invalid then m.letterGrid.visible = false
+    if m.letterGrid <> invalid then m.letterGrid.callFunc("closeGrid")
     if m.pageState <> invalid then m.pageState.letterGridOpen = false
 
     if focusItems = true then focusItemsIfActive()
@@ -455,11 +453,13 @@ end sub
 sub applyLetterGridLayout(isThumbnailLayout as boolean, gridLeft as integer, gridTop as integer)
     if isThumbnailLayout = true then
         thumbnailVisualOffset = 20
-        m.letterGrid.translation = [gridLeft + thumbnailVisualOffset, gridTop]
+        m.letterGrid.panelX = gridLeft + thumbnailVisualOffset
+        m.letterGrid.panelY = gridTop
         return
     end if
 
-    m.letterGrid.translation = [72, gridTop]
+    m.letterGrid.panelX = 72
+    m.letterGrid.panelY = gridTop
 end sub
 
 ' getItemsFromPayload

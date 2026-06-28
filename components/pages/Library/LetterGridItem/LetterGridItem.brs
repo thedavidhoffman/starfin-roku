@@ -53,8 +53,8 @@ sub updateFocusVisual()
     end if
 
     if isAvailable then
-        m.background.color = &h102033FF
+        m.background.opacity = 1.0
     else
-        m.background.color = &h0A1524FF
+        m.background.opacity = 0.55
     end if
 end sub

@@ -193,8 +193,8 @@ end sub
 sub updateDialogSize()
     dialogWidth = getDialogSizeValue(m.top.dialogWidth, 1680)
     dialogHeight = getDialogSizeValue(m.top.dialogHeight, 900)
-    panelX = int((1920 - dialogWidth) / 2)
-    panelY = int((1080 - dialogHeight) / 2)
+    panelX = getDialogPositionValue(m.top.panelX, int((1920 - dialogWidth) / 2))
+    panelY = getDialogPositionValue(m.top.panelY, int((1080 - dialogHeight) / 2))
     contentMargin = 60
     innerWidth = dialogWidth - (contentMargin * 2)
     if innerWidth < 0 then innerWidth = dialogWidth
@@ -239,6 +239,14 @@ end sub
 '-------------------------------------------------------------------------------
 function getDialogSizeValue(value as dynamic, defaultValue as integer) as integer
     if value = invalid or value <= 0 then return defaultValue
+    return value
+end function
+
+'-------------------------------------------------------------------------------
+' getDialogPositionValue
+'-------------------------------------------------------------------------------
+function getDialogPositionValue(value as dynamic, defaultValue as integer) as integer
+    if value = invalid then return defaultValue
     return value
 end function
 

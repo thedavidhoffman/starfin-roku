@@ -2,6 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.dialog = m.top.findNode("dialog")
     m.lettersGroup = m.top.findNode("lettersGroup")
     m.letterItems = []
     m.focusState = {
@@ -12,7 +13,55 @@ sub init()
         letterCount: 26
         showsNonAlpha: false
     }
+    m.layout = {
+        panelWidth: 540
+        panelHeight: 562
+        panelPadding: 48
+        contentTop: 146
+    }
+    updatePanelLayout()
     renderLetters()
+end sub
+
+'-------------------------------------------------------------------------------
+' openGrid
+'-------------------------------------------------------------------------------
+sub openGrid()
+    m.top.visible = true
+    updatePanelLayout()
+    m.dialog.callFunc("openDialog")
+    m.top.setFocus(true)
+    focusLetters()
+end sub
+
+'-------------------------------------------------------------------------------
+' closeGrid
+'-------------------------------------------------------------------------------
+sub closeGrid()
+    m.dialog.callFunc("closeDialog")
+    m.top.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' onPanelLayoutChanged
+'-------------------------------------------------------------------------------
+sub onPanelLayoutChanged()
+    updatePanelLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' updatePanelLayout
+'-------------------------------------------------------------------------------
+sub updatePanelLayout()
+    panelX = m.top.panelX
+    panelY = m.top.panelY
+    contentY = panelY + m.layout.contentTop
+
+    m.dialog.dialogWidth = m.layout.panelWidth
+    m.dialog.dialogHeight = m.layout.panelHeight
+    m.dialog.panelX = panelX
+    m.dialog.panelY = panelY
+    m.lettersGroup.translation = [panelX + m.layout.panelPadding, contentY]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -95,7 +144,7 @@ end function
 ' focusLetters
 '-------------------------------------------------------------------------------
 sub focusLetters()
-    m.top.setFocus(true)
+    m.lettersGroup.setFocus(true)
     ensureFocusedLetterAvailable()
     updateLetterFocus()
 end sub
@@ -199,6 +248,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
     normalizedKey = LCase(SafeString(key, ""))
 
     if normalizedKey = "back" then
+        m.dialog.callFunc("closeDialog")
+        m.top.visible = false
         m.top.closeRequested = true
         return true
     end if
