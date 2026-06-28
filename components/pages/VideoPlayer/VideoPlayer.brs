@@ -41,6 +41,7 @@ sub init()
         isAccelerating: false
     }
     m.trickplay = invalid
+    m.trickplayPreloadRequest = invalid
 
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
     m.trickplayPreloadTask.observeField("response", "onTrickplayPreloadResponse")
@@ -232,6 +233,7 @@ end sub
 sub stopPlayback()
     hideControls()
     reportPlaystateStop()
+    cleanupTrickplayPreload()
     m.videoPlayer.control = "stop"
     enableScreenSaver()
 end sub
@@ -807,8 +809,10 @@ sub updateTrickplayPreview(position as float)
     smallScale = baseScale * 0.7
     largeWidth = m.trickplay.tileWidth * largeScale
     smallWidth = m.trickplay.tileWidth * smallScale
+    largeHeight = m.trickplay.tileHeight * largeScale
     totalWidth = largeWidth + (smallWidth * 4) + (tileBuffer * 4)
     nextX = 960 - (totalWidth / 2)
+    centerY = 875 - 25 - largeHeight
     deltaSeconds = getTrickplayPreviewDelta()
     images = []
 
@@ -820,7 +824,9 @@ sub updateTrickplayPreview(position as float)
         if imagePosition < 0 or imagePosition > m.playback.duration then
             images.Push({})
         else
-            images.Push(buildTrickplayPreviewImage(imagePosition, nextX, imageScale))
+            tileHeight = m.trickplay.tileHeight * imageScale
+            y = centerY + ((largeHeight - tileHeight) / 2)
+            images.Push(buildTrickplayPreviewImage(imagePosition, nextX, y, imageScale))
         end if
 
         nextX = nextX + (m.trickplay.tileWidth * imageScale) + tileBuffer
@@ -860,7 +866,7 @@ end function
 '-------------------------------------------------------------------------------
 ' buildTrickplayPreviewImage
 '-------------------------------------------------------------------------------
-function buildTrickplayPreviewImage(position as float, x as float, scale as float) as object
+function buildTrickplayPreviewImage(position as float, x as float, y as float, scale as float) as object
     iconIndex = Fix(position / m.trickplay.interval)
     if iconIndex < 0 then iconIndex = 0
     if iconIndex >= m.trickplay.thumbnailCount then iconIndex = m.trickplay.thumbnailCount - 1
@@ -884,6 +890,7 @@ function buildTrickplayPreviewImage(position as float, x as float, scale as floa
         row: row
         scale: scale
         x: x
+        y: y
     }
 end function
 
@@ -893,7 +900,7 @@ end function
 sub startTrickplayPreload()
     if m.trickplay = invalid then return
 
-    m.trickplayPreloadTask.request = {
+    m.trickplayPreloadRequest = {
         action: "add"
         server: m.session.server
         token: m.session.token
@@ -901,6 +908,25 @@ sub startTrickplayPreload()
         tileWidth: m.trickplay.tileWidth
         tileCount: m.trickplay.tileCount
     }
+    m.trickplayPreloadTask.request = m.trickplayPreloadRequest
+    m.trickplayPreloadTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' cleanupTrickplayPreload
+'-------------------------------------------------------------------------------
+sub cleanupTrickplayPreload()
+    if m.trickplayPreloadRequest = invalid then return
+
+    cleanupRequest = {
+        action: "remove"
+        itemId: m.trickplayPreloadRequest.itemId
+        tileWidth: m.trickplayPreloadRequest.tileWidth
+        tileCount: m.trickplayPreloadRequest.tileCount
+    }
+    m.trickplayPreloadRequest = invalid
+    m.trickplayPreloadTask.control = "stop"
+    m.trickplayPreloadTask.request = cleanupRequest
     m.trickplayPreloadTask.control = "run"
 end sub
 
