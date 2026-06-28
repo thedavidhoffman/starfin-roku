@@ -10,6 +10,7 @@ sub init()
         itemSize: 64
         itemSpacing: 12
         letterCount: 26
+        showsNonAlpha: false
     }
     renderLetters()
 end sub
@@ -18,7 +19,11 @@ end sub
 ' renderLetters
 '-------------------------------------------------------------------------------
 sub renderLetters()
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    m.lettersGroup.removeChildrenIndex(m.lettersGroup.getChildCount(), 0)
+    m.letterItems = []
+
+    letters = getVisibleLetters()
+    m.focusState.letterCount = Len(letters)
 
     for i = 1 to Len(letters)
         letter = Mid(letters, i, 1)
@@ -28,12 +33,20 @@ sub renderLetters()
         itemContent.title = letter
         item.itemContent = itemContent
         item.isAvailable = true
-        item.itemHasFocus = i = 1
+        item.itemHasFocus = false
         m.letterItems.Push(item)
     end for
 
     applyAvailableLetters()
 end sub
+
+'-------------------------------------------------------------------------------
+' getVisibleLetters
+'-------------------------------------------------------------------------------
+function getVisibleLetters() as string
+    if m.focusState.showsNonAlpha = true then return "#ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+end function
 
 '-------------------------------------------------------------------------------
 ' onAvailableLettersChanged
@@ -48,6 +61,13 @@ end sub
 sub applyAvailableLetters()
     availableLetters = m.top.availableLetters
     if availableLetters = invalid then return
+    shouldShowNonAlpha = availableLetters.DoesExist("#") and availableLetters["#"] = true
+
+    if shouldShowNonAlpha <> m.focusState.showsNonAlpha then
+        m.focusState.showsNonAlpha = shouldShowNonAlpha
+        renderLetters()
+        return
+    end if
 
     for each item in m.letterItems
         if item = invalid or item.itemContent = invalid then continue for

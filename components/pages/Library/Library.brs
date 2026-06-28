@@ -332,7 +332,10 @@ function getItemSortLetter(item as dynamic) as string
     title = getItemAlphabetTitle(item)
     if title = "" then return ""
 
-    return UCase(Left(title, 1))
+    firstLetter = UCase(Left(title, 1))
+    if firstLetter >= "A" and firstLetter <= "Z" then return firstLetter
+
+    return "#"
 end function
 
 '-------------------------------------------------------------------------------
@@ -383,6 +386,7 @@ sub applyGridLayout(imageAspect as string)
     if imageAspect = "wide" then
         m.titleLabel.translation = [460, 120]
         m.itemsGrid.translation = [23, 208]
+        applyLetterGutterButtonLayout(m.itemsGrid.translation[1])
         m.itemsGrid.itemSize = [465, 348]
         m.itemsGrid.itemSpacing = [0, 11]
         m.itemsGrid.numColumns = 4
@@ -393,11 +397,19 @@ sub applyGridLayout(imageAspect as string)
 
     m.titleLabel.translation = [460, 120]
     m.itemsGrid.translation = [96, 208]
+    applyLetterGutterButtonLayout(m.itemsGrid.translation[1])
     m.itemsGrid.itemSize = [295, 463]
     m.itemsGrid.itemSpacing = [-11, 26]
     m.itemsGrid.numColumns = 6
     m.itemsGrid.numRows = 2
     m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLetterGutterButtonLayout
+'-------------------------------------------------------------------------------
+sub applyLetterGutterButtonLayout(gridTop as integer)
+    m.letterGutterButton.translation = [24, gridTop]
 end sub
 
 ' getItemsFromPayload
