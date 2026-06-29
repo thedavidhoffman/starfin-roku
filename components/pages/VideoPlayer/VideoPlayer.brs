@@ -136,9 +136,11 @@ sub applyPlaybackResponse(response as object, request as object)
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
 
+    m.log.write("Assigning video content itemId=" + m.session.itemId + " streamFormat=" + SafeString(response.streamFormat, "") + " startPosition=" + SafeString(startPositionSeconds, ""))
     m.videoPlayer.content = content
     m.top.setFocus(true)
     disableScreenSaver()
+    m.log.write("Starting video playback itemId=" + m.session.itemId)
     m.videoPlayer.control = "play"
     Status_ClearMessage()
 end sub
@@ -148,6 +150,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onVideoStateChanged()
     state = LCase(SafeString(m.videoPlayer.state, ""))
+    m.log.write("Video state changed state=" + state + " position=" + SafeString(m.videoPlayer.position, ""))
     if state = "error" then
         reportPlaystateStop()
         enableScreenSaver()

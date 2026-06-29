@@ -14,6 +14,7 @@ sub executeRequest()
     if request = invalid then return
 
     action = LCase(SafeString(request.action, "add"))
+    m.log.write("Request action=" + action + " itemId=" + SafeString(request.itemId, "") + " tileWidth=" + SafeString(getTileWidth(request), "") + " tileCount=" + SafeString(getTileCount(request), ""))
     if action = "remove" then
         removeTrickplayFiles(request)
     else
@@ -29,15 +30,20 @@ sub addTrickplayFiles(request as object)
     tileCount = getTileCount(request)
     if tileCount <= 0 then return
 
+    m.log.write("Preload started itemId=" + SafeString(request.itemId, "") + " tileCount=" + tileCount.ToStr())
     for tileIndex = 0 to tileCount - 1
         localUri = getLocalTrickplayUri(request, tileIndex)
         if localUri = "" then return
 
         if fileSystem.Exists(localUri) <> true then
+            m.log.write("Downloading trickplay tile tileIndex=" + tileIndex.ToStr() + " uri=" + localUri)
             downloadTrickplayFile(request, tileIndex, localUri)
+        else
+            m.log.write("Using cached trickplay tile tileIndex=" + tileIndex.ToStr() + " uri=" + localUri)
         end if
 
         if fileSystem.Exists(localUri) = true then
+            m.log.write("Trickplay tile ready tileIndex=" + tileIndex.ToStr() + " uri=" + localUri)
             m.top.response = {
                 ok: true
                 action: "trickplayPreload"
@@ -54,6 +60,7 @@ sub addTrickplayFiles(request as object)
         itemId: SafeString(request.itemId, "")
         complete: true
     }
+    m.log.write("Preload complete itemId=" + SafeString(request.itemId, "") + " tileCount=" + tileCount.ToStr())
 end sub
 
 '-------------------------------------------------------------------------------
@@ -64,10 +71,16 @@ sub removeTrickplayFiles(request as object)
     tileCount = getTileCount(request)
     if tileCount <= 0 then return
 
+    deletedCount = 0
+    m.log.write("Cleanup started itemId=" + SafeString(request.itemId, "") + " tileCount=" + tileCount.ToStr())
     for tileIndex = 0 to tileCount - 1
         localUri = getLocalTrickplayUri(request, tileIndex)
-        if localUri <> "" and fileSystem.Exists(localUri) = true then fileSystem.Delete(localUri)
+        if localUri <> "" and fileSystem.Exists(localUri) = true then
+            fileSystem.Delete(localUri)
+            deletedCount = deletedCount + 1
+        end if
     end for
+    m.log.write("Cleanup complete itemId=" + SafeString(request.itemId, "") + " deletedCount=" + deletedCount.ToStr())
 end sub
 
 '-------------------------------------------------------------------------------
@@ -102,6 +115,8 @@ sub downloadTrickplayFile(request as object, tileIndex as integer, localUri as s
     status = message.GetResponseCode()
     if status < 200 or status >= 300 then
         m.log.error("Trickplay preload failed tileIndex=" + tileIndex.ToStr() + " status=" + status.ToStr())
+    else
+        m.log.write("Trickplay download complete tileIndex=" + tileIndex.ToStr() + " status=" + status.ToStr())
     end if
 end sub
 
