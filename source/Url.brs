@@ -39,6 +39,47 @@ function Url_BuildImageUrl(server as string, itemId as string, imageType as stri
 end function
 
 '-------------------------------------------------------------------------------
+' Url_SetQueryParam
+'-------------------------------------------------------------------------------
+function Url_SetQueryParam(url as string, name as string, value as string) as string
+
+    ' Replaces an existing query parameter by name, or appends it when absent.
+
+    queryStart = Instr(1, url, "?")
+    if queryStart = 0 then return __Url_AddQueryParam(url, name, value)
+
+    lowerUrl = LCase(url)
+    lowerName = LCase(name)
+    searchStart = queryStart + 1
+
+    while true
+        keyStart = Instr(searchStart, lowerUrl, lowerName + "=")
+        if keyStart = 0 then return __Url_AddQueryParam(url, name, value)
+        if keyStart = queryStart + 1 or Mid(url, keyStart - 1, 1) = "&" then
+            valueStart = keyStart + Len(name) + 1
+            valueEnd = Instr(valueStart, url, "&")
+            if valueEnd = 0 then valueEnd = Len(url) + 1
+
+            return Left(url, valueStart - 1) + Encode_Url(value) + Mid(url, valueEnd)
+        end if
+
+        searchStart = keyStart + Len(name) + 1
+    end while
+
+    return __Url_AddQueryParam(url, name, value)
+end function
+
+'-------------------------------------------------------------------------------
+' __Url_AddQueryParam
+'-------------------------------------------------------------------------------
+function __Url_AddQueryParam(url as string, name as string, value as string) as string
+    separator = "?"
+    if Instr(1, url, "?") > 0 then separator = "&"
+
+    return url + separator + Encode_Url(name) + "=" + Encode_Url(value)
+end function
+
+'-------------------------------------------------------------------------------
 ' __Url_QueryValue
 '-------------------------------------------------------------------------------
 function __Url_QueryValue(value as dynamic) as string

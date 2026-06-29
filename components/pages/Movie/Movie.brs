@@ -568,11 +568,11 @@ end function
 ' getSelectedSubtitleStreamIndex
 '-------------------------------------------------------------------------------
 function getSelectedSubtitleStreamIndex() as integer
-    if m.state = invalid or m.state.selectedStreams = invalid then return -2
+    if m.state = invalid or m.state.selectedStreams = invalid then return -1
     if m.state.selectedStreams.subtitleOff = true then return -1
-    if m.state.selectedStreams.subtitle = invalid then return -2
+    if m.state.selectedStreams.subtitle = invalid then return -1
 
-    return getSelectedStreamIndex(m.state.selectedStreams.subtitle, -2)
+    return getSelectedStreamIndex(m.state.selectedStreams.subtitle, -1)
 end function
 
 '-------------------------------------------------------------------------------

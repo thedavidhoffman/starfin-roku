@@ -164,7 +164,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
     audioStreamIndex = getResolvedAudioStreamIndex(mediaSource, requestedAudioStreamIndex)
     if streamUrl <> "" then
         streamUrl = buildServerUrl(request.server, streamUrl)
-        if requestedSubtitleStreamIndex >= -1 then streamUrl = ensureQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
+        if requestedSubtitleStreamIndex >= -1 then streamUrl = Url_SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
         streamFormat = "hls"
         playbackMethod = "transcode"
     else
@@ -233,10 +233,10 @@ end function
 ' getPlaybackRequestSubtitleStreamIndex
 '-------------------------------------------------------------------------------
 function getPlaybackRequestSubtitleStreamIndex(request as dynamic) as integer
-    if request = invalid then return -2
+    if request = invalid then return -1
     if request.subtitleStreamIndex <> invalid then return int(request.subtitleStreamIndex)
 
-    return -2
+    return -1
 end function
 
 '-------------------------------------------------------------------------------
@@ -360,40 +360,6 @@ function buildServerUrl(server as string, path as string) as string
     if Left(path, 1) = "/" then return NormalizeServerUrl(server) + path
 
     return NormalizeServerUrl(server) + "/" + path
-end function
-
-'-------------------------------------------------------------------------------
-' ensureQueryParam
-'-------------------------------------------------------------------------------
-function ensureQueryParam(url as string, name as string, value as string) as string
-    if hasQueryParam(url, name) then return url
-
-    separator = "?"
-    if Instr(1, url, "?") > 0 then separator = "&"
-
-    return url + separator + Encode_Url(name) + "=" + Encode_Url(value)
-end function
-
-'-------------------------------------------------------------------------------
-' hasQueryParam
-'-------------------------------------------------------------------------------
-function hasQueryParam(url as string, name as string) as boolean
-    queryStart = Instr(1, url, "?")
-    if queryStart = 0 then return false
-
-    lowerUrl = LCase(url)
-    lowerName = LCase(name)
-    searchStart = queryStart + 1
-
-    while true
-        keyStart = Instr(searchStart, lowerUrl, lowerName + "=")
-        if keyStart = 0 then return false
-        if keyStart = queryStart + 1 or Mid(url, keyStart - 1, 1) = "&" then return true
-
-        searchStart = keyStart + Len(name) + 1
-    end while
-
-    return false
 end function
 
 '-------------------------------------------------------------------------------
