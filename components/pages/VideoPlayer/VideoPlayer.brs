@@ -4,6 +4,7 @@
 sub init()
     m.log = CreateLogger("VideoPlayer")
     m.videoPlayer = m.top.findNode("videoPlayer")
+    m.bufferingSpinner = m.top.findNode("bufferingSpinner")
     m.playbackControls = m.top.findNode("playbackControls")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
     m.playstateTask = m.top.findNode("playstateTask")
@@ -45,6 +46,8 @@ sub init()
 
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
     m.trickplayPreloadTask.observeField("response", "onTrickplayPreloadResponse")
+    m.bufferingSpinner.poster.observeField("loadStatus", "onBufferingSpinnerLoadStatusChanged")
+    onBufferingSpinnerLoadStatusChanged()
     m.videoPlayer.observeField("state", "onVideoStateChanged")
     m.videoPlayer.observeField("position", "onVideoPositionChanged")
     m.videoPlayer.observeField("duration", "onVideoDurationChanged")
@@ -64,6 +67,17 @@ sub init()
     m.fastSeekTimer.observeField("fire", "onFastSeekTimerFire")
     m.leftSeekRepeatTimer.observeField("fire", "onLeftSeekRepeatTimerFire")
     m.rightSeekRepeatTimer.observeField("fire", "onRightSeekRepeatTimerFire")
+end sub
+
+'-------------------------------------------------------------------------------
+' onBufferingSpinnerLoadStatusChanged
+'-------------------------------------------------------------------------------
+sub onBufferingSpinnerLoadStatusChanged()
+    if LCase(SafeString(m.bufferingSpinner.poster.loadStatus, "")) <> "ready" then return
+
+    centerX = int((1920 - m.bufferingSpinner.poster.bitmapWidth) / 2)
+    centerY = int((1080 - m.bufferingSpinner.poster.bitmapHeight) / 2)
+    m.bufferingSpinner.translation = [centerX, centerY]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -140,6 +154,7 @@ sub applyPlaybackResponse(response as object, request as object)
     m.videoPlayer.content = content
     m.top.setFocus(true)
     disableScreenSaver()
+    updateBufferingSpinner("buffering")
     m.log.write("Starting video playback itemId=" + m.session.itemId)
     m.videoPlayer.control = "play"
     Status_ClearMessage()
@@ -151,6 +166,7 @@ end sub
 sub onVideoStateChanged()
     state = LCase(SafeString(m.videoPlayer.state, ""))
     m.log.write("Video state changed state=" + state + " position=" + SafeString(m.videoPlayer.position, ""))
+    updateBufferingSpinner(state)
     if state = "error" then
         reportPlaystateStop()
         enableScreenSaver()
@@ -178,6 +194,19 @@ sub onVideoStateChanged()
 
     m.playback.isPlaying = state = "playing" or state = "buffering"
     m.playbackControls.isPlaying = m.playback.isPlaying
+end sub
+
+'-------------------------------------------------------------------------------
+' updateBufferingSpinner
+'-------------------------------------------------------------------------------
+sub updateBufferingSpinner(state as string)
+    if state = "buffering" then
+        m.bufferingSpinner.visible = true
+        m.bufferingSpinner.control = "start"
+    else
+        m.bufferingSpinner.control = "stop"
+        m.bufferingSpinner.visible = false
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -293,6 +322,7 @@ sub hideControls()
     m.playback.isSeeking = false
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
+    m.playbackControls.callFunc("releaseFocus")
     m.playbackControls.visible = false
     m.top.setFocus(true)
 end sub
@@ -526,7 +556,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' cancelSeek
 '-------------------------------------------------------------------------------
-sub cancelSeek()
+sub cancelSeek(hideAfterCancel = false as boolean)
     if m.playback.isSeeking <> true then return
 
     stopSeekTimers()
@@ -534,7 +564,11 @@ sub cancelSeek()
     m.playback.isSeeking = false
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
-    showControls(true)
+    if hideAfterCancel = true then
+        hideControls()
+    else
+        showControls(true)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -631,7 +665,7 @@ end sub
 ' onProgressSeekCancel
 '-------------------------------------------------------------------------------
 sub onProgressSeekCancel()
-    cancelSeek()
+    cancelSeek(true)
 end sub
 
 ' playQueueItem

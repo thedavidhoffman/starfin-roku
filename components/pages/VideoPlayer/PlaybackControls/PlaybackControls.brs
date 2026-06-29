@@ -158,6 +158,19 @@ sub focusCurrentButton()
 end sub
 
 '-------------------------------------------------------------------------------
+' releaseFocus
+'-------------------------------------------------------------------------------
+sub releaseFocus()
+    m.progressBarGroup.setFocus(false)
+    for each button in m.controlState.buttons
+        if button <> invalid then button.setFocus(false)
+    end for
+    m.top.setFocus(false)
+    updateProgressFocus()
+    updateButtonFocus()
+end sub
+
+'-------------------------------------------------------------------------------
 ' updateButtonFocus
 '-------------------------------------------------------------------------------
 sub updateButtonFocus()
@@ -292,6 +305,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     else if key = "up" then
         focusProgress()
+        return true
+    else if key = "down" then
         return true
     else if key = "play" then
         m.top.playPausePressed = true
