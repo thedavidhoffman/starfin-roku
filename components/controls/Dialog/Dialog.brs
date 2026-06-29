@@ -246,7 +246,7 @@ end function
 ' getDialogPositionValue
 '-------------------------------------------------------------------------------
 function getDialogPositionValue(value as dynamic, defaultValue as integer) as integer
-    if value = invalid then return defaultValue
+    if value = invalid or value < 0 then return defaultValue
     return value
 end function
 
