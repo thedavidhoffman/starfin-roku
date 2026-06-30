@@ -13,6 +13,8 @@ sub init()
     m.logoState = {
         url: ""
         title: ""
+        mediaType: ""
+        fittedMediaType: ""
     }
     m.titleLogo = m.top.findNode("titleLogo")
     m.titleLabel = m.top.findNode("titleLabel")
@@ -32,12 +34,61 @@ sub onMediaContentChanged()
     content = m.top.mediaContent
     if content = invalid then return
 
+    mediaType = SafeString(content.mediaType, "")
+    applyContentLayout(mediaType)
     renderBackdrop(SafeString(content.backdropUrl, ""))
-    renderTitle(SafeString(content.title, ""), SafeString(content.logoUrl, ""))
+    renderTitle(SafeString(content.title, ""), SafeString(content.logoUrl, ""), mediaType)
     m.metaLabel.text = SafeString(content.metaLine1, "")
     m.metaDetailLabel.text = SafeString(content.metaLine2, "")
     m.overviewLabel.text = SafeString(content.overview, "")
 end sub
+
+'-------------------------------------------------------------------------------
+' applyContentLayout
+'-------------------------------------------------------------------------------
+sub applyContentLayout(mediaType as string)
+    layout = getContentLayout(mediaType)
+
+    m.titleLabel.translation = layout.titleTranslation
+    m.titleLabel.height = layout.titleHeight
+    m.titleLabel.font = layout.titleFont
+    m.metaLabel.translation = layout.metaTranslation
+    m.metaDetailLabel.translation = layout.metaDetailTranslation
+    m.overviewLabel.translation = layout.overviewTranslation
+end sub
+
+'-------------------------------------------------------------------------------
+' getContentLayout
+'-------------------------------------------------------------------------------
+function getContentLayout(mediaType as string) as object
+    if mediaType = "tv-episode" then
+        return {
+            titleTranslation: [0, 170]
+            titleHeight: 52
+            titleFont: "font:MediumBoldSystemFont"
+            metaTranslation: [0, 230]
+            metaDetailTranslation: [0, 265]
+            overviewTranslation: [0, 319]
+            logoMaxWidth: 520
+            logoMaxHeight: 120
+            logoAnchorTop: 170
+            logoGap: 24
+        }
+    end if
+
+    return {
+        titleTranslation: [0, 0]
+        titleHeight: 160
+        titleFont: "font:LargeBoldSystemFont"
+        metaTranslation: [0, 230]
+        metaDetailTranslation: [0, 265]
+        overviewTranslation: [0, 319]
+        logoMaxWidth: 600
+        logoMaxHeight: 220
+        logoAnchorTop: 230
+        logoGap: 40
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' renderBackdrop
@@ -115,25 +166,38 @@ end sub
 '-------------------------------------------------------------------------------
 ' renderTitle
 '-------------------------------------------------------------------------------
-sub renderTitle(title as string, logoUrl as string)
+sub renderTitle(title as string, logoUrl as string, mediaType as string)
     hasLogo = logoUrl <> ""
+    showTextTitle = hasLogo = false or mediaType = "tv-episode"
 
-    m.titleLabel.visible = hasLogo = false
+    m.titleLabel.visible = showTextTitle
 
     if hasLogo then
-        m.titleLabel.text = ""
+        if showTextTitle then
+            m.titleLabel.text = title
+        else
+            m.titleLabel.text = ""
+        end if
         m.logoState.title = title
-        if logoUrl = m.logoState.url and SafeString(m.titleLogo.uri, "") = logoUrl then return
+        m.logoState.mediaType = mediaType
+        if logoUrl = m.logoState.url and SafeString(m.titleLogo.uri, "") = logoUrl then
+            if m.logoState.fittedMediaType <> mediaType then onTitleLogoLoadStatusChanged()
+            return
+        end if
 
+        layout = getContentLayout(mediaType)
         m.logoState.url = logoUrl
+        m.logoState.fittedMediaType = ""
         m.titleLogo.visible = false
-        m.titleLogo.width = 600
-        m.titleLogo.height = 220
+        m.titleLogo.width = layout.logoMaxWidth
+        m.titleLogo.height = layout.logoMaxHeight
         m.titleLogo.translation = [0, 0]
         m.titleLogo.uri = logoUrl
     else
         m.logoState.url = ""
         m.logoState.title = ""
+        m.logoState.mediaType = mediaType
+        m.logoState.fittedMediaType = ""
         m.titleLogo.visible = false
         m.titleLogo.uri = ""
         m.titleLogo.translation = [0, 0]
@@ -145,6 +209,8 @@ end sub
 ' onTitleLogoLoadStatusChanged
 '-------------------------------------------------------------------------------
 sub onTitleLogoLoadStatusChanged()
+    if m.logoState.url = "" then return
+
     loadStatus = LCase(SafeString(m.titleLogo.loadStatus, ""))
     if loadStatus = "failed" then
         m.titleLogo.visible = false
@@ -161,8 +227,10 @@ sub onTitleLogoLoadStatusChanged()
     if bitmapWidth = invalid or bitmapHeight = invalid then return
     if bitmapWidth <= 0 or bitmapHeight <= 0 then return
 
-    maxWidth = 600
-    maxHeight = 220
+    mediaType = SafeString(m.logoState.mediaType, "")
+    layout = getContentLayout(mediaType)
+    maxWidth = layout.logoMaxWidth
+    maxHeight = layout.logoMaxHeight
     logoRatio = bitmapWidth / bitmapHeight
     boxRatio = maxWidth / maxHeight
 
@@ -179,17 +247,16 @@ sub onTitleLogoLoadStatusChanged()
 
     m.titleLogo.width = fittedWidth
     m.titleLogo.height = fittedHeight
-    m.titleLogo.translation = [0, getLogoBottomAlignedY(fittedHeight)]
+    m.titleLogo.translation = [0, getLogoBottomAlignedY(fittedHeight, layout)]
     m.titleLogo.visible = true
+    m.logoState.fittedMediaType = mediaType
 end sub
 
 '-------------------------------------------------------------------------------
 ' getLogoBottomAlignedY
 '-------------------------------------------------------------------------------
-function getLogoBottomAlignedY(logoHeight as integer) as integer
-    metaTop = 230
-    logoGap = 40
-    y = metaTop - logoGap - logoHeight
+function getLogoBottomAlignedY(logoHeight as integer, layout as object) as integer
+    y = layout.logoAnchorTop - layout.logoGap - logoHeight
     if y < 0 then return 0
     return y
 end function

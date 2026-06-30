@@ -122,8 +122,9 @@ sub renderEpisodeContent(item as dynamic)
 
     title = getDisplayTitle(item)
     m.mediaShell.mediaContent = {
+        mediaType: getMediaShellType(item)
         backdropUrl: SafeString(item.HDPosterUrl, "")
-        logoUrl: ""
+        logoUrl: getMediaShellLogoUrl(item)
         title: title
         metaLine1: getEpisodePositionText(item)
         metaLine2: getSecondaryMetadataText(item)
@@ -142,6 +143,23 @@ sub renderEpisodeContent(item as dynamic)
     m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
     m.mediaToolbar.isWatched = isItemWatched(item)
 end sub
+
+'-------------------------------------------------------------------------------
+' getMediaShellType
+'-------------------------------------------------------------------------------
+function getMediaShellType(item as dynamic) as string
+    if isSeasonDetailsItem(item) then return "tv-season"
+    return "tv-episode"
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaShellLogoUrl
+'-------------------------------------------------------------------------------
+function getMediaShellLogoUrl(item as dynamic) as string
+    if isSeasonDetailsItem(item) then return ""
+
+    return getSeriesLogoUrl(m.state.request)
+end function
 
 '-------------------------------------------------------------------------------
 ' isSeasonNumberTitle
@@ -535,6 +553,7 @@ end function
 '-------------------------------------------------------------------------------
 sub clearContent()
     m.mediaShell.mediaContent = {
+        mediaType: "tv-episode"
         backdropUrl: ""
         logoUrl: ""
         title: ""
