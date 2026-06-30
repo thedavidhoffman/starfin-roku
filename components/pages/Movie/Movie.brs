@@ -362,7 +362,7 @@ function getPrimaryMetaText(item as dynamic) as string
     parts = []
 
     year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = getYearFromDate(FirstNonEmpty([item.PremiereDate], ""))
+    if year = "" then year = DateTime_GetYearFromData(item.PremiereDate)
     if year <> "" then parts.Push(year)
 
     runtime = MediaMetadata_FormatRuntime(item.RunTimeTicks)
@@ -391,14 +391,6 @@ function getSecondaryMetaText(item as dynamic) as string
     return joinText(parts, "     ")
 end function
 
-' getYearFromDate
-'-------------------------------------------------------------------------------
-function getYearFromDate(value as string) as string
-    if Len(value) < 4 then return ""
-    return Left(value, 4)
-end function
-
-'-------------------------------------------------------------------------------
 ' getGenreText
 '-------------------------------------------------------------------------------
 function getGenreText(item as dynamic) as string

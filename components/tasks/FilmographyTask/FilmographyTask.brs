@@ -53,7 +53,7 @@ function buildFilmographyItems(payload as dynamic) as object
 
         items.Push({
             sort_date: releaseDate
-            release_date: formatCreditYear(releaseDate)
+            release_date: DateTime_GetYearFromData(releaseDate)
             title: title
             character: FirstNonEmpty([credit.character], "")
             poster_path: FirstNonEmpty([credit.poster_path], "")
@@ -75,15 +75,6 @@ function getCreditDate(credit as object) as string
     return FirstNonEmpty([credit.first_credit_air_date, originalDate], "")
 end function
 
-'-------------------------------------------------------------------------------
-' formatCreditYear
-'-------------------------------------------------------------------------------
-function formatCreditYear(value as string) as string
-    if Len(value) < 4 then return ""
-    return Left(value, 4)
-end function
-
-'-------------------------------------------------------------------------------
 ' validateRequest
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic

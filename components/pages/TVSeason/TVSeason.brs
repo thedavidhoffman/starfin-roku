@@ -571,7 +571,7 @@ function getSeasonYearText(season as dynamic) as string
     year = FirstNonEmpty([season.ProductionYear], "")
     if year <> "" then return SafeString(year, "")
 
-    return getYearFromDate(FirstNonEmpty([season.PremiereDate], ""))
+    return DateTime_GetYearFromData(season.PremiereDate)
 end function
 
 '-------------------------------------------------------------------------------
@@ -935,14 +935,6 @@ function getEpisodeContentIndex(itemId as string) as integer
     end for
 
     return -1
-end function
-
-'-------------------------------------------------------------------------------
-' getYearFromDate
-'-------------------------------------------------------------------------------
-function getYearFromDate(value as string) as string
-    if Len(value) < 4 then return ""
-    return Left(value, 4)
 end function
 
 '-------------------------------------------------------------------------------

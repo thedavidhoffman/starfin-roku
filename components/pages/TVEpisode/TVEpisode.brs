@@ -285,18 +285,10 @@ function getSeasonMetadataText(item as dynamic) as string
     if count <> "" then parts.Push(SafeString(count, "") + " episodes")
 
     year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = getYearFromDate(FirstNonEmpty([item.PremiereDate], ""))
+    if year = "" then year = DateTime_GetYearFromData(item.PremiereDate)
     if year <> "" then parts.Push(SafeString(year, ""))
 
     return joinText(parts, MediaMetadata_BulletSeparator())
-end function
-
-'-------------------------------------------------------------------------------
-' getYearFromDate
-'-------------------------------------------------------------------------------
-function getYearFromDate(value as string) as string
-    if Len(value) < 4 then return ""
-    return Left(value, 4)
 end function
 
 '-------------------------------------------------------------------------------
