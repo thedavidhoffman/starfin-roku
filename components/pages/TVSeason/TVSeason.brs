@@ -215,7 +215,9 @@ sub onPlaybackProgressChange()
     itemId = SafeString(change.itemId, "")
     if itemId = "" then return
 
-    if updateEpisodePlaybackProgress(itemId, change) <> true then return
+    if updateEpisodePlaybackProgress(itemId, change) <> true then
+        return
+    end if
 
     renderEpisodes(m.pageState.episodes)
     restoreEpisodeFocus(itemId)
@@ -577,7 +579,17 @@ end function
 '-------------------------------------------------------------------------------
 sub activate()
     m.top.setFocus(true)
+    refreshPlaybackProgressChange()
     focusEpisodesIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub refreshPlaybackProgressChange()
+    if m.top.playbackProgressChange = invalid then return
+
+    onPlaybackProgressChange()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -665,9 +677,8 @@ function getProgressPercent(item as dynamic) as float
 
     if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
         playedPercentage = item.UserData.PlayedPercentage
-        if playedPercentage <= 0 then return 0
         if playedPercentage > 100 then return 100
-        return playedPercentage
+        if playedPercentage > 0 then return playedPercentage
     end if
 
     if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
@@ -675,7 +686,7 @@ function getProgressPercent(item as dynamic) as float
     progressTicks = PlaybackProgress_GetTicksFromItem(item)
     if progressTicks <= 0 then return 0
 
-    progressPercent = (progressTicks / item.RunTimeTicks) * 100
+    progressPercent = (progressTicks * 100.0) / item.RunTimeTicks
     if progressPercent > 100 then return 100
 
     return progressPercent
@@ -876,7 +887,7 @@ function getPlaybackProgressPercentage(positionTicks as dynamic, runtimeTicks as
     if runtimeTicks = invalid or runtimeTicks <= 0 then runtimeTicks = durationTicks
     if runtimeTicks = invalid or runtimeTicks <= 0 then return 0
 
-    percentage = (positionTicks / runtimeTicks) * 100
+    percentage = (positionTicks * 100.0) / runtimeTicks
     if percentage > 100 then return 100
 
     return percentage

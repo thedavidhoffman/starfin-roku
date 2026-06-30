@@ -779,17 +779,22 @@ sub onPlaybackProgressChange()
     change = m.top.playbackProgressChange
     if change = invalid then return
 
+    m.state.playbackProgressChange = change
+    m.top.playbackProgressChanged = change
+
     item = m.state.itemContent
-    if item = invalid or item.raw = invalid then return
+    if item = invalid or item.raw = invalid then
+        return
+    end if
 
     itemId = SafeString(change.itemId, "")
-    if itemId = "" or itemId <> SafeString(item.itemId, "") then return
+    if itemId = "" or itemId <> SafeString(item.itemId, "") then
+        return
+    end if
 
     updateItemPlaybackProgress(item, change)
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item.raw))
     m.mediaToolbar.isWatched = isItemWatched(item)
-    m.state.playbackProgressChange = change
-    m.top.playbackProgressChanged = change
 end sub
 
 '-------------------------------------------------------------------------------
