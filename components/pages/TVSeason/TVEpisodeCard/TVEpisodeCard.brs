@@ -43,7 +43,7 @@ sub onItemContentChanged()
     m.episodeNumber.text = getNumberText(item, isSeasonSummary)
     m.episodeDate.text = getDateText(item, isSeasonSummary)
     m.title.text = SafeString(item.title, "")
-    m.description.text = SafeString(item.description, "")
+    m.description.text = String_CollapseWhitespace(item.description)
     applyLayout(isSeasonSummary)
     m.episodePoster.itemContent = item
 end sub

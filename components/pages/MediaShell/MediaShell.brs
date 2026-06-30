@@ -42,7 +42,7 @@ sub onMediaContentChanged()
     renderTitle(SafeString(content.title, ""), SafeString(content.logoUrl, ""), SafeString(content.logoTitle, ""), mediaType, logoPending)
     m.metaLabel.text = SafeString(content.metaLine1, "")
     m.metaDetailLabel.text = SafeString(content.metaLine2, "")
-    m.overviewLabel.text = SafeString(content.overview, "")
+    m.overviewLabel.text = String_CollapseWhitespace(content.overview)
 end sub
 
 '-------------------------------------------------------------------------------

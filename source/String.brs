@@ -40,12 +40,13 @@ end function
 '-------------------------------------------------------------------------------
 ' String_CollapseWhitespace
 '-------------------------------------------------------------------------------
-function String_CollapseWhitespace(value as string) as string
+function String_CollapseWhitespace(value as dynamic) as string
+    text = SafeString(value, "")
     result = ""
     previousWasSpace = false
 
-    for i = 1 to Len(value)
-        char = Mid(value, i, 1)
+    for i = 1 to Len(text)
+        char = Mid(text, i, 1)
         isSpace = (char = " " or char = Chr(10) or char = Chr(13) or char = Chr(9))
 
         if isSpace then
