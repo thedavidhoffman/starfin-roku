@@ -4,6 +4,7 @@
 sub init()
     m.log = CreateLogger("VideoPlayer")
     m.videoPlayer = m.top.findNode("videoPlayer")
+    m.videoOverlay = m.top.findNode("videoOverlay")
     m.bufferingSpinner = m.top.findNode("bufferingSpinner")
     m.playbackControls = m.top.findNode("playbackControls")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
@@ -152,12 +153,12 @@ sub applyPlaybackResponse(response as object, request as object)
     m.playback.position = startPositionSeconds
     m.playback.previewPosition = startPositionSeconds
     resetSeekState()
-    m.playbackControls.title = content.title
     m.playbackControls.duration = m.playback.duration
     m.playbackControls.position = startPositionSeconds
     m.playbackControls.previewPosition = startPositionSeconds
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
+    updateVideoOverlayMetadata(request, item)
 
     m.log.write("Assigning video content itemId=" + m.session.itemId + " streamFormat=" + SafeString(response.streamFormat, "") + " startPosition=" + SafeString(startPositionSeconds, ""))
     m.videoPlayer.content = content
@@ -217,6 +218,7 @@ sub updateBufferingSpinner(state as string)
         m.bufferingSpinner.control = "stop"
         m.bufferingSpinner.visible = false
     end if
+    updateVideoOverlayVisibility()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -289,6 +291,112 @@ function getItemTitle(item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
+' updateVideoOverlayMetadata
+'-------------------------------------------------------------------------------
+sub updateVideoOverlayMetadata(request as object, item as dynamic)
+    if item = invalid then
+        m.videoOverlay.title = "Video"
+        m.videoOverlay.subtitle = ""
+        m.videoOverlay.meta = ""
+        return
+    end if
+
+    if isTVEpisodePlayback(request, item) then
+        m.videoOverlay.title = getSeriesTitle(request, item)
+        m.videoOverlay.subtitle = getItemTitle(item)
+        m.videoOverlay.meta = getEpisodeOverlayMetadata(item)
+    else
+        m.videoOverlay.title = getItemTitle(item)
+        m.videoOverlay.subtitle = FirstNonEmpty([item.ProductionYear], "")
+        m.videoOverlay.meta = ""
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' isTVEpisodePlayback
+'-------------------------------------------------------------------------------
+function isTVEpisodePlayback(request as object, item as dynamic) as boolean
+    if request <> invalid and request.series <> invalid then return true
+    if item = invalid then return false
+
+    itemType = LCase(FirstNonEmpty([item.Type], ""))
+    return itemType = "episode"
+end function
+
+'-------------------------------------------------------------------------------
+' getSeriesTitle
+'-------------------------------------------------------------------------------
+function getSeriesTitle(request as object, item as dynamic) as string
+    if request <> invalid and request.series <> invalid then
+        identity = SeriesIdentity_FromItem(SafeString(request.server, ""), request.series)
+        if identity <> invalid then
+            title = FirstNonEmpty([identity.Name], "")
+            if title <> "" then return title
+        end if
+    end if
+
+    return FirstNonEmpty([item.SeriesName, item.Series], getItemTitle(item))
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeOverlayMetadata
+'-------------------------------------------------------------------------------
+function getEpisodeOverlayMetadata(item as dynamic) as string
+    parts = []
+
+    episodeNumberText = getEpisodeOverlayNumberText(item)
+    if episodeNumberText <> "" then parts.Push(episodeNumberText)
+
+    runtimeText = MediaMetadata_FormatRuntime(item.RunTimeTicks)
+    if runtimeText <> "" then parts.Push(runtimeText)
+
+    dateText = DateTime_ToShortDate(getEpisodeAiredDateText(item))
+    if dateText <> "" then parts.Push(dateText)
+
+    return joinOverlayMetadata(parts)
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeOverlayNumberText
+'-------------------------------------------------------------------------------
+function getEpisodeOverlayNumberText(item as dynamic) as string
+    seasonNumber = FirstNonEmpty([item.ParentIndexNumber, item.SeasonNumber], "")
+    episodeNumber = FirstNonEmpty([item.IndexNumber, item.EpisodeNumber], "")
+
+    if seasonNumber <> "" and episodeNumber <> "" then return "S" + seasonNumber + "E" + episodeNumber
+    if seasonNumber <> "" then return "S" + seasonNumber
+    if episodeNumber <> "" then return "E" + episodeNumber
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeAiredDateText
+'-------------------------------------------------------------------------------
+function getEpisodeAiredDateText(item as dynamic) as string
+    airedDate = FirstNonEmpty([item.PremiereDate, item.AirDate, item.DateCreated], "")
+    if Len(airedDate) >= 10 then return Left(airedDate, 10)
+    return airedDate
+end function
+
+'-------------------------------------------------------------------------------
+' joinOverlayMetadata
+'-------------------------------------------------------------------------------
+function joinOverlayMetadata(values as dynamic) as string
+    if values = invalid then return ""
+
+    result = ""
+    for each value in values
+        text = SafeString(value, "")
+        if text = "" then continue for
+
+        if result <> "" then result = result + MediaMetadata_BulletSeparator()
+        result = result + text
+    end for
+
+    return result
+end function
+
+'-------------------------------------------------------------------------------
 ' getRuntimeSeconds
 '-------------------------------------------------------------------------------
 function getRuntimeSeconds(item as dynamic) as float
@@ -306,6 +414,7 @@ end function
 '-------------------------------------------------------------------------------
 sub showControls(restartTimer as boolean)
     m.playbackControls.visible = true
+    updateVideoOverlayVisibility()
     m.playbackControls.setFocus(true)
     if restartTimer = true then
         m.controlsHideTimer.control = "stop"
@@ -334,7 +443,15 @@ sub hideControls()
     m.playbackControls.thumbnailData = {}
     m.playbackControls.callFunc("releaseFocus")
     m.playbackControls.visible = false
+    updateVideoOverlayVisibility()
     m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateVideoOverlayVisibility
+'-------------------------------------------------------------------------------
+sub updateVideoOverlayVisibility()
+    m.videoOverlay.visible = m.bufferingSpinner.visible = true or m.playbackControls.visible = true
 end sub
 
 '-------------------------------------------------------------------------------

@@ -2,8 +2,6 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.titleLabel = m.top.findNode("titleLabel")
-    m.playbackStateLabel = m.top.findNode("playbackStateLabel")
     m.previousButton = m.top.findNode("previousButton")
     m.playPauseButton = m.top.findNode("playPauseButton")
     m.nextButton = m.top.findNode("nextButton")
@@ -30,13 +28,6 @@ sub init()
     m.last5Button.observeField("buttonSelected", "onLast5ButtonSelected")
     m.top.observeField("focusedChild", "onFocusChanged")
     updateButtonFocus()
-end sub
-
-'-------------------------------------------------------------------------------
-' onTitleChanged
-'-------------------------------------------------------------------------------
-sub onTitleChanged()
-    m.titleLabel.text = SafeString(m.top.title, "")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -73,10 +64,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlayingChanged()
     if m.top.isPlaying = true then
-        m.playbackStateLabel.text = "PLAYING"
         m.playPauseButton.text = "Pause"
     else
-        m.playbackStateLabel.text = "PAUSED"
         m.playPauseButton.text = "Play"
     end if
 end sub
