@@ -52,7 +52,7 @@ sub onLoadRequestChanged()
     }
     m.cast.server = request.server
     Status_SetLoading()
-    renderMovie(request.item)
+    renderMovie(request.item, true)
 
     m.movieTask.request = request
     m.movieTask.control = "run"
@@ -66,24 +66,26 @@ sub onMovieResponse()
     if response = invalid then return
 
     if response.ok <> true then
+        renderMovie(m.state.item, false)
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load this movie."))
         return
     end if
 
     m.state.item = response.payload
-    renderMovie(response.payload)
+    renderMovie(response.payload, false)
     Status_ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------
 ' renderMovie
 '-------------------------------------------------------------------------------
-sub renderMovie(item as dynamic)
+sub renderMovie(item as dynamic, logoPending = false as boolean)
     if isAssocArray(item) = false then return
 
     m.mediaShell.mediaContent = {
         backdropUrl: getBackdropUrl(item)
         logoUrl: getImageUrl(item, "Logo", 600, 300)
+        logoPending: logoPending
         title: getItemTitle(item)
         metaLine1: getPrimaryMetaText(item)
         metaLine2: getSecondaryMetaText(item)

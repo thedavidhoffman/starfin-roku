@@ -82,7 +82,7 @@ sub onLoadRequestChanged()
     m.cast.server = request.server
     m.cast.people = []
     Status_SetLoading()
-    renderSeries(request.item)
+    renderSeries(request.item, true)
     renderSeasons([])
 
     m.tvShowTask.request = request
@@ -97,6 +97,7 @@ sub onTVShowResponse()
     if response = invalid then return
 
     if response.ok <> true then
+        renderSeries(m.pageState.series, false)
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load this series."))
         return
     end if
@@ -106,7 +107,7 @@ sub onTVShowResponse()
 
     m.pageState.series = payload.series
     m.pageState.seasons = getItemsFromPayload(payload.seasons)
-    renderSeries(payload.series)
+    renderSeries(payload.series, false)
     renderSeasons(m.pageState.seasons)
     Status_ClearMessage()
     focusSeasonsIfActive()
@@ -115,12 +116,13 @@ end sub
 '-------------------------------------------------------------------------------
 ' renderSeries
 '-------------------------------------------------------------------------------
-sub renderSeries(item as dynamic)
+sub renderSeries(item as dynamic, logoPending = false as boolean)
     if isAssocArray(item) = false then return
 
     m.mediaShell.mediaContent = {
         backdropUrl: getBackdropUrl(item)
         logoUrl: getImageUrl(item, "Logo", 600, 300)
+        logoPending: logoPending
         title: getItemTitle(item)
         metaLine1: getMetaText(item)
         metaLine2: getGenreText(item)

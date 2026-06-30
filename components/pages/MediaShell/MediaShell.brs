@@ -17,6 +17,7 @@ sub init()
         fittedMediaType: ""
     }
     m.titleLogo = m.top.findNode("titleLogo")
+    m.seriesTitleLabel = m.top.findNode("seriesTitleLabel")
     m.titleLabel = m.top.findNode("titleLabel")
     m.metaLabel = m.top.findNode("metaLabel")
     m.metaDetailLabel = m.top.findNode("metaDetailLabel")
@@ -35,9 +36,10 @@ sub onMediaContentChanged()
     if content = invalid then return
 
     mediaType = SafeString(content.mediaType, "")
+    logoPending = content.logoPending = true
     applyContentLayout(mediaType)
     renderBackdrop(SafeString(content.backdropUrl, ""))
-    renderTitle(SafeString(content.title, ""), SafeString(content.logoUrl, ""), mediaType)
+    renderTitle(SafeString(content.title, ""), SafeString(content.logoUrl, ""), SafeString(content.logoTitle, ""), mediaType, logoPending)
     m.metaLabel.text = SafeString(content.metaLine1, "")
     m.metaDetailLabel.text = SafeString(content.metaLine2, "")
     m.overviewLabel.text = SafeString(content.overview, "")
@@ -52,6 +54,9 @@ sub applyContentLayout(mediaType as string)
     m.titleLabel.translation = layout.titleTranslation
     m.titleLabel.height = layout.titleHeight
     m.titleLabel.font = layout.titleFont
+    m.seriesTitleLabel.translation = layout.logoTextTranslation
+    m.seriesTitleLabel.height = layout.logoTextHeight
+    m.seriesTitleLabel.font = layout.logoTextFont
     m.metaLabel.translation = layout.metaTranslation
     m.metaDetailLabel.translation = layout.metaDetailTranslation
     m.overviewLabel.translation = layout.overviewTranslation
@@ -73,6 +78,9 @@ function getContentLayout(mediaType as string) as object
             logoMaxHeight: 120
             logoAnchorTop: 170
             logoGap: 24
+            logoTextTranslation: [0, 34]
+            logoTextHeight: 92
+            logoTextFont: "font:LargeBoldSystemFont"
         }
     end if
 
@@ -87,6 +95,9 @@ function getContentLayout(mediaType as string) as object
         logoMaxHeight: 220
         logoAnchorTop: 230
         logoGap: 40
+        logoTextTranslation: [0, 0]
+        logoTextHeight: 160
+        logoTextFont: "font:LargeBoldSystemFont"
     }
 end function
 
@@ -166,11 +177,15 @@ end sub
 '-------------------------------------------------------------------------------
 ' renderTitle
 '-------------------------------------------------------------------------------
-sub renderTitle(title as string, logoUrl as string, mediaType as string)
+sub renderTitle(title as string, logoUrl as string, logoTitle as string, mediaType as string, logoPending as boolean)
     hasLogo = logoUrl <> ""
-    showTextTitle = hasLogo = false or mediaType = "tv-episode"
+    isTVEpisode = mediaType = "tv-episode"
+    showTextTitle = isTVEpisode or (hasLogo = false and logoPending = false)
+    showLogoText = isTVEpisode and hasLogo = false and logoPending = false and logoTitle <> ""
 
     m.titleLabel.visible = showTextTitle
+    m.seriesTitleLabel.visible = showLogoText
+    m.seriesTitleLabel.text = ""
 
     if hasLogo then
         if showTextTitle then
@@ -178,7 +193,7 @@ sub renderTitle(title as string, logoUrl as string, mediaType as string)
         else
             m.titleLabel.text = ""
         end if
-        m.logoState.title = title
+        m.logoState.title = getLogoFallbackTitle(title, logoTitle, mediaType)
         m.logoState.mediaType = mediaType
         if logoUrl = m.logoState.url and SafeString(m.titleLogo.uri, "") = logoUrl then
             if m.logoState.fittedMediaType <> mediaType then onTitleLogoLoadStatusChanged()
@@ -202,8 +217,17 @@ sub renderTitle(title as string, logoUrl as string, mediaType as string)
         m.titleLogo.uri = ""
         m.titleLogo.translation = [0, 0]
         m.titleLabel.text = title
+        if showLogoText then m.seriesTitleLabel.text = logoTitle
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' getLogoFallbackTitle
+'-------------------------------------------------------------------------------
+function getLogoFallbackTitle(title as string, logoTitle as string, mediaType as string) as string
+    if mediaType = "tv-episode" then return logoTitle
+    return title
+end function
 
 '-------------------------------------------------------------------------------
 ' onTitleLogoLoadStatusChanged
@@ -214,8 +238,13 @@ sub onTitleLogoLoadStatusChanged()
     loadStatus = LCase(SafeString(m.titleLogo.loadStatus, ""))
     if loadStatus = "failed" then
         m.titleLogo.visible = false
-        m.titleLabel.visible = true
-        m.titleLabel.text = SafeString(m.logoState.title, "")
+        if SafeString(m.logoState.mediaType, "") = "tv-episode" then
+            m.seriesTitleLabel.visible = SafeString(m.logoState.title, "") <> ""
+            m.seriesTitleLabel.text = SafeString(m.logoState.title, "")
+        else
+            m.titleLabel.visible = true
+            m.titleLabel.text = SafeString(m.logoState.title, "")
+        end if
         return
     end if
 

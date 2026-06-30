@@ -114,7 +114,7 @@ end function
 '-------------------------------------------------------------------------------
 ' renderEpisodeContent
 '-------------------------------------------------------------------------------
-sub renderEpisodeContent(item as dynamic)
+sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
     if item = invalid then
         clearContent()
         return
@@ -125,6 +125,8 @@ sub renderEpisodeContent(item as dynamic)
         mediaType: getMediaShellType(item)
         backdropUrl: SafeString(item.HDPosterUrl, "")
         logoUrl: getMediaShellLogoUrl(item)
+        logoTitle: getMediaShellLogoTitle(item)
+        logoPending: logoPending
         title: title
         metaLine1: getEpisodePositionText(item)
         metaLine2: getSecondaryMetadataText(item)
@@ -159,6 +161,21 @@ function getMediaShellLogoUrl(item as dynamic) as string
     if isSeasonDetailsItem(item) then return ""
 
     return getSeriesLogoUrl(m.state.request)
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaShellLogoTitle
+'-------------------------------------------------------------------------------
+function getMediaShellLogoTitle(item as dynamic) as string
+    if isSeasonDetailsItem(item) then return ""
+
+    seriesName = ""
+    if item <> invalid and item.raw <> invalid then seriesName = FirstNonEmpty([item.raw.SeriesName], "")
+
+    request = m.state.request
+    if request = invalid or request.series = invalid then return seriesName
+
+    return FirstNonEmpty([request.series.Name, seriesName], "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -339,11 +356,14 @@ end sub
 sub onEpisodeDetailsResponse()
     response = m.episodeDetailsTask.response
     if response = invalid then return
-    if response.ok <> true then return
+    if response.ok <> true then
+        renderEpisodeContent(m.state.itemContent, false)
+        return
+    end if
     if SafeString(response.itemId, "") <> m.state.itemId then return
 
     applySeriesDetails(response.series)
-    applyEpisodeDetails(response.payload, false)
+    applyEpisodeDetails(response.payload, false, false)
     m.cast.people = getPeople(response.payload)
 end sub
 
@@ -354,7 +374,7 @@ sub renderInitialEpisodeContent()
     request = m.state.request
     if request = invalid or request.item = invalid then return
 
-    applyEpisodeDetails(request.item, true)
+    applyEpisodeDetails(request.item, true, true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -370,13 +390,13 @@ end sub
 '-------------------------------------------------------------------------------
 ' applyEpisodeDetails
 '-------------------------------------------------------------------------------
-sub applyEpisodeDetails(details as dynamic, useRequestPoster as boolean)
+sub applyEpisodeDetails(details as dynamic, useRequestPoster as boolean, logoPending = false as boolean)
     if details = invalid then return
 
     item = buildEpisodeContentNode(details, useRequestPoster)
     m.state.itemContent = item
     m.state.playSelection = buildPlaySelection(details)
-    renderEpisodeContent(item)
+    renderEpisodeContent(item, logoPending)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -556,6 +576,7 @@ sub clearContent()
         mediaType: "tv-episode"
         backdropUrl: ""
         logoUrl: ""
+        logoTitle: ""
         title: ""
         metaLine1: ""
         metaLine2: ""
