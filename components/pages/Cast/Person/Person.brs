@@ -669,8 +669,8 @@ function getLifeText(person as dynamic) as string
     parts = []
     birthDate = FirstNonEmpty([person.PremiereDate, person.BirthDate], "")
     deathDate = FirstNonEmpty([person.EndDate, person.DeathDate], "")
-    birthText = formatDate(birthDate)
-    deathText = formatDate(deathDate)
+    birthText = DateTime_ToLongDate(birthDate)
+    deathText = DateTime_ToLongDate(deathDate)
     ageText = getAgeText(birthDate, deathDate)
 
     if birthText <> "" then parts.Push("Born " + birthText)
@@ -725,22 +725,6 @@ function getAge(birthDate as string, deathDate as string) as integer
     return age
 end function
 
-'-------------------------------------------------------------------------------
-' formatDate
-'-------------------------------------------------------------------------------
-function formatDate(value as string) as string
-    if value = "" then return ""
-
-    date = CreateObject("roDateTime")
-    date.FromISO8601String(value)
-    monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-    month = date.GetMonth()
-    if month < 1 or month > 12 then return date.AsDateString("short-month-no-weekday")
-
-    return monthNames[month - 1] + " " + date.GetDayOfMonth().ToStr() + ", " + date.GetYear().ToStr()
-end function
-
-'-------------------------------------------------------------------------------
 ' getItemsFromPayload
 '-------------------------------------------------------------------------------
 function getItemsFromPayload(payload as dynamic) as object

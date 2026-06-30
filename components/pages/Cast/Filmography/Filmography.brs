@@ -216,7 +216,7 @@ end sub
 '-------------------------------------------------------------------------------
 function formatPreviewTitle(item as object) as string
     title = SafeString(item.title, "")
-    year = DateTime_GetYearFromData(item.releaseDate)
+    year = DateTime_ToYear(item.releaseDate)
     if year = "" then return title
 
     return title + " (" + year + ")"

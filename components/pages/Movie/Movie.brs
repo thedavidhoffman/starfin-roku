@@ -362,7 +362,7 @@ function getPrimaryMetaText(item as dynamic) as string
     parts = []
 
     year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = DateTime_GetYearFromData(item.PremiereDate)
+    if year = "" then year = DateTime_ToYear(item.PremiereDate)
     if year <> "" then parts.Push(year)
 
     runtime = MediaMetadata_FormatRuntime(item.RunTimeTicks)

@@ -285,7 +285,7 @@ function getSeasonMetadataText(item as dynamic) as string
     if count <> "" then parts.Push(SafeString(count, "") + " episodes")
 
     year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = DateTime_GetYearFromData(item.PremiereDate)
+    if year = "" then year = DateTime_ToYear(item.PremiereDate)
     if year <> "" then parts.Push(SafeString(year, ""))
 
     return joinText(parts, MediaMetadata_BulletSeparator())
@@ -403,7 +403,7 @@ function buildEpisodeContentNode(details as dynamic, useRequestPoster as boolean
         itemId: SafeString(FirstNonEmpty([details.Id], ""), "")
         itemType: SafeString(FirstNonEmpty([details.Type], ""), "")
         episodeNumber: getEpisodeNumberText(details)
-        episodeDate: getEpisodeDateText(details)
+        episodeDate: DateTime_ToShortDate(getAiredDateText(details))
         progressPercent: getProgressPercent(details)
         progressWidth: getProgressWidth(details)
         raw: details
@@ -497,23 +497,6 @@ function getEpisodeNumberText(item as dynamic) as string
     return "Episode"
 end function
 
-'-------------------------------------------------------------------------------
-' getEpisodeDateText
-'-------------------------------------------------------------------------------
-function getEpisodeDateText(item as dynamic) as string
-    airedDate = getAiredDateText(item)
-    if Len(airedDate) < 10 then return airedDate
-
-    year = Left(airedDate, 4)
-    monthNumber = val(Mid(airedDate, 6, 2))
-    day = val(Mid(airedDate, 9, 2))
-    if monthNumber < 1 or monthNumber > 12 or day < 1 then return airedDate
-
-    monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    return day.ToStr() + " " + monthNames[monthNumber - 1] + " " + year
-end function
-
-'-------------------------------------------------------------------------------
 ' getAiredDateText
 '-------------------------------------------------------------------------------
 function getAiredDateText(item as dynamic) as string

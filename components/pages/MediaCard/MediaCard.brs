@@ -79,7 +79,7 @@ function getSeriesYearRange(item as object) as string
     if status = "continuing" then return productionYear + " - Present"
 
     if status = "ended" then
-        endYear = DateTime_GetYearFromData(item.EndDate)
+        endYear = DateTime_ToYear(item.EndDate)
         if endYear <> "" then return productionYear + " - " + endYear
     end if
 

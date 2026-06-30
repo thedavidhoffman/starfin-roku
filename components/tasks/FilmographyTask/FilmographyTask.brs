@@ -53,7 +53,7 @@ function buildFilmographyItems(payload as dynamic) as object
 
         items.Push({
             sort_date: releaseDate
-            release_date: DateTime_GetYearFromData(releaseDate)
+            release_date: DateTime_ToYear(releaseDate)
             title: title
             character: FirstNonEmpty([credit.character], "")
             poster_path: FirstNonEmpty([credit.poster_path], "")

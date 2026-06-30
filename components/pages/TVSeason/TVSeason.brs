@@ -571,7 +571,7 @@ function getSeasonYearText(season as dynamic) as string
     year = FirstNonEmpty([season.ProductionYear], "")
     if year <> "" then return SafeString(year, "")
 
-    return DateTime_GetYearFromData(season.PremiereDate)
+    return DateTime_ToYear(season.PremiereDate)
 end function
 
 '-------------------------------------------------------------------------------

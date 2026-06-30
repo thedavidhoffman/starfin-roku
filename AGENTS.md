@@ -15,6 +15,7 @@
 - Assign color fields with integer hex literals, such as `m.title.color = &h0F1A2AFF`, not string values like `"0x0F1A2AFF"`.
 - Do not use `FormatJson()` for outbound API request bodies. Roku lowercases JSON object keys during serialization, which breaks case-sensitive API fields.
 - API response fields are PascalCase; access API data with PascalCase field names such as `item.CollectionType`, not mixed fallback expressions like `FirstNonEmpty([item.CollectionType, item.collectionType], "")`.
+- For date or time formatting/parsing helpers, use the existing functions in `source/DateTime.brs`; add new shared date helpers there instead of creating component-local date formatting functions.
 
 ## BrightScript naming
 

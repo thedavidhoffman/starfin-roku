@@ -303,7 +303,7 @@ function getMetaText(item as dynamic) as string
     parts = []
 
     year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = DateTime_GetYearFromData(item.PremiereDate)
+    if year = "" then year = DateTime_ToYear(item.PremiereDate)
     if year <> "" then parts.Push(year)
 
     episodeCount = FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
@@ -326,7 +326,7 @@ end function
 '-------------------------------------------------------------------------------
 function getSeasonYearText(item as dynamic) as string
     year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = DateTime_GetYearFromData(item.PremiereDate)
+    if year = "" then year = DateTime_ToYear(item.PremiereDate)
 
     return SafeString(year, "")
 end function
