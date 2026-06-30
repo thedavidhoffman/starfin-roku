@@ -52,7 +52,7 @@ end sub
 sub onFocusVisualChanged()
     hasFocus = m.top.hasFocusVisual = true
     if hasFocus then
-        m.background.uri = "pkg:/images/buttons/media-toolbar-button-focused.9.png"
+        m.background.uri = "pkg:/images/buttons/primary_focused.9.png"
         width = m.layout.expandedWidth
         if m.top.expandedWidth <> invalid and m.top.expandedWidth > 0 then width = m.top.expandedWidth
         m.background.width = width
@@ -69,7 +69,7 @@ sub onFocusVisualChanged()
     m.textLabel.width = m.background.width - m.layout.textX - 16
     m.textLabel.visible = hasFocus
     if hasFocus then
-        m.textLabel.color = &h000B25FF
+        m.textLabel.color = &h0F1A2AFF
     end if
     onIconChanged()
 end sub
