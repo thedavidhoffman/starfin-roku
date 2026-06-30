@@ -7,6 +7,7 @@ sub init()
     m.previousButton = m.top.findNode("previousButton")
     m.playPauseButton = m.top.findNode("playPauseButton")
     m.nextButton = m.top.findNode("nextButton")
+    m.last5Button = m.top.findNode("last5Button")
     m.trickplayPreview = m.top.findNode("trickplayPreview")
     m.progressBarGroup = m.top.findNode("progressBarGroup")
     m.progressFocusRect = m.top.findNode("progressFocusRect")
@@ -20,12 +21,13 @@ sub init()
     m.controlState = {
         focusedIndex: 1
         focusArea: "buttons"
-        buttons: [m.previousButton, m.playPauseButton, m.nextButton]
+        buttons: [m.previousButton, m.playPauseButton, m.nextButton, m.last5Button]
     }
 
     m.previousButton.observeField("buttonSelected", "onPreviousButtonSelected")
     m.playPauseButton.observeField("buttonSelected", "onPlayPauseButtonSelected")
     m.nextButton.observeField("buttonSelected", "onNextButtonSelected")
+    m.last5Button.observeField("buttonSelected", "onLast5ButtonSelected")
     m.top.observeField("focusedChild", "onFocusChanged")
     updateButtonFocus()
 end sub
@@ -114,6 +116,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onNextButtonSelected()
     m.top.nextPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onLast5ButtonSelected
+'-------------------------------------------------------------------------------
+sub onLast5ButtonSelected()
+    m.top.last5Pressed = true
 end sub
 
 '-------------------------------------------------------------------------------

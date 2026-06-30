@@ -41,17 +41,31 @@ sub onSeasonSelected()
     seasonId = SafeString(FirstNonEmpty([season.Id, seasonNode.itemId], ""), "")
     if seasonId = "" then return
 
-    series = m.pageState.series
+    nextSeason = getNextSeason(selected)
     request = m.pageState.request
     if request = invalid then return
 
     m.top.selectedSeason = {
         seriesId: SafeString(FirstNonEmpty([request.itemId], ""), "")
         seasonId: seasonId
-        series: series
+        series: SeriesIdentity_FromItem(request.server, m.pageState.series)
         season: season
+        nextSeason: nextSeason
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' getNextSeason
+'-------------------------------------------------------------------------------
+function getNextSeason(selectedIndex as integer) as dynamic
+    seasons = m.pageState.seasons
+    if seasons = invalid then return invalid
+
+    nextIndex = selectedIndex + 1
+    if nextIndex < 0 or nextIndex >= seasons.Count() then return invalid
+
+    return seasons[nextIndex]
+end function
 
 '-------------------------------------------------------------------------------
 ' onLoadRequestChanged

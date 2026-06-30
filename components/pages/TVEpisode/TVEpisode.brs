@@ -346,7 +346,7 @@ sub applySeriesDetails(series as dynamic)
     if series = invalid then return
     if m.state.request = invalid then return
 
-    m.state.request.series = series
+    m.state.request.series = SeriesIdentity_FromItem(SafeString(m.state.request.server, ""), series)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -398,6 +398,8 @@ function buildPlaySelection(details as dynamic) as dynamic
     selection = {
         itemId: itemId
         item: details
+        series: SeriesIdentity_FromItem(SafeString(request.server, ""), request.series)
+        season: request.season
         startPositionTicks: startPositionTicks
         playbackQueue: request.playbackQueue
         playbackQueueIndex: request.playbackQueueIndex
@@ -625,6 +627,8 @@ function buildRestartSelection(selection as dynamic) as dynamic
     restartSelection = {
         itemId: selection.itemId
         item: selection.item
+        series: selection.series
+        season: selection.season
         startPositionTicks: 0
         playbackQueue: selection.playbackQueue
         playbackQueueIndex: selection.playbackQueueIndex

@@ -8,7 +8,11 @@ sub init()
     m.pageState = {
         request: invalid
         season: invalid
+        nextSeason: invalid
         episodes: []
+        nextSeasonEpisodes: []
+        nextSeasonEpisodesLoaded: false
+        pendingEpisodeSelection: invalid
         episodesLoaded: false
         episodeWindowStart: 0
         episodeListScroll: "horizontal"
@@ -46,6 +50,12 @@ end sub
 sub onEpisodeSelected()
     selection = buildFocusedEpisodeDetailsSelection()
     if selection = invalid then return
+
+    if shouldLoadNextSeasonEpisodesForSelection() then
+        m.pageState.pendingEpisodeSelection = selection
+        requestNextSeasonEpisodes()
+        return
+    end if
 
     m.top.selectedEpisodeDetails = selection
 end sub
@@ -91,7 +101,11 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.season = request.season
+    m.pageState.nextSeason = request.nextSeason
     m.pageState.episodes = []
+    m.pageState.nextSeasonEpisodes = []
+    m.pageState.nextSeasonEpisodesLoaded = false
+    m.pageState.pendingEpisodeSelection = invalid
     m.pageState.episodesLoaded = false
     m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
     m.pageState.focusArea = "episodes"
@@ -124,6 +138,11 @@ sub onTVSeasonResponse()
     response = m.tvSeasonTask.response
     if response = invalid then return
 
+    if SafeString(response.action, "") = "nextSeasonEpisodes" then
+        onNextSeasonEpisodesResponse(response)
+        return
+    end if
+
     if response.ok <> true then
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load tv season."))
         return
@@ -136,6 +155,7 @@ sub onTVSeasonResponse()
     end if
 
     m.pageState.season = payload.season
+    if m.pageState.nextSeason = invalid then m.pageState.nextSeason = m.pageState.request.nextSeason
     m.pageState.episodes = getItemsFromPayload(payload.episodes)
     m.pageState.episodesLoaded = true
     renderSeason(payload.season)
@@ -143,6 +163,22 @@ sub onTVSeasonResponse()
     Status_ClearMessage()
     updateChevrons()
     focusEpisodesIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onNextSeasonEpisodesResponse
+'-------------------------------------------------------------------------------
+sub onNextSeasonEpisodesResponse(response as object)
+    m.pageState.nextSeasonEpisodesLoaded = true
+    m.pageState.nextSeasonEpisodes = []
+
+    if response.ok = true then
+        m.pageState.nextSeasonEpisodes = getItemsFromPayload(response.payload)
+    else
+        m.log.write("Unable to load next season episodes for playback queue: " + SafeString(response.errorMessage, "unknown error"))
+    end if
+
+    emitPendingEpisodeSelection()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -192,7 +228,11 @@ end sub
 sub renderSeason(item as dynamic)
     if isAssocArray(item) = false then return
 
-    m.logoBanner.title = FirstNonEmpty([item.SeriesName], "")
+    request = m.pageState.request
+    series = invalid
+    if request <> invalid then series = request.series
+
+    m.logoBanner.title = FirstNonEmpty([series.Name, item.SeriesName], "")
     m.logoBanner.logoUrl = getSeriesLogoUrl()
     m.seasonLabel.text = getItemTitle(item)
 end sub
@@ -204,7 +244,8 @@ function getSeriesLogoUrl() as string
     request = m.pageState.request
     if request = invalid then return ""
 
-    return getImageUrl(request.series, "Logo", 600, 300)
+    identity = SeriesIdentity_FromItem(SafeString(request.server, ""), request.series)
+    return identity.logoUrl
 end function
 
 '-------------------------------------------------------------------------------
@@ -305,6 +346,53 @@ function buildFocusedEpisodeDetailsSelection() as dynamic
 end function
 
 '-------------------------------------------------------------------------------
+' shouldLoadNextSeasonEpisodesForSelection
+'-------------------------------------------------------------------------------
+function shouldLoadNextSeasonEpisodesForSelection() as boolean
+    if m.pageState.nextSeason = invalid then return false
+    return m.pageState.nextSeasonEpisodesLoaded <> true
+end function
+
+'-------------------------------------------------------------------------------
+' requestNextSeasonEpisodes
+'-------------------------------------------------------------------------------
+sub requestNextSeasonEpisodes()
+    request = m.pageState.request
+    if request = invalid then
+        emitPendingEpisodeSelection()
+        return
+    end if
+
+    m.tvSeasonTask.request = {
+        action: "nextSeasonEpisodes"
+        server: request.server
+        token: request.token
+        userId: request.userId
+        seriesId: request.seriesId
+        seasonId: request.seasonId
+        nextSeason: m.pageState.nextSeason
+    }
+    m.tvSeasonTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' emitPendingEpisodeSelection
+'-------------------------------------------------------------------------------
+sub emitPendingEpisodeSelection()
+    selection = m.pageState.pendingEpisodeSelection
+    m.pageState.pendingEpisodeSelection = invalid
+    if selection = invalid then return
+
+    loadRequest = selection.loadRequest
+    if loadRequest <> invalid then
+        loadRequest.playbackQueue = buildPlaybackQueue(m.pageState.episodes, m.pageState.nextSeasonEpisodes)
+        loadRequest.playbackQueueIndex = getPlaybackQueueIndex(loadRequest.playbackQueue, SafeString(loadRequest.itemId, ""))
+    end if
+
+    m.top.selectedEpisodeDetails = selection
+end sub
+
+'-------------------------------------------------------------------------------
 ' buildEpisodeLoadRequest
 '-------------------------------------------------------------------------------
 function buildEpisodeLoadRequest(node as dynamic) as dynamic
@@ -335,19 +423,17 @@ end function
 ' buildSeriesIdentity
 '-------------------------------------------------------------------------------
 function buildSeriesIdentity(request as object, item as dynamic) as object
-    seriesName = ""
+    identity = SeriesIdentity_FromItem(SafeString(request.server, ""), request.series)
     seriesId = ""
-    if request.series <> invalid then seriesName = FirstNonEmpty([request.series.Name], "")
     if item <> invalid then
         seriesId = FirstNonEmpty([item.SeriesId], "")
-        seriesName = FirstNonEmpty([item.SeriesName, seriesName], "")
+        if identity.Name = "" then identity.Name = FirstNonEmpty([item.SeriesName], "")
     end if
 
-    return {
-        Id: FirstNonEmpty([request.seriesId, seriesId], "")
-        Name: seriesName
-        logoUrl: getSeriesLogoUrl()
-    }
+    identity.Id = FirstNonEmpty([identity.Id, request.seriesId, seriesId], "")
+    if identity.logoUrl = "" then identity.logoUrl = getSeriesLogoUrl()
+
+    return identity
 end function
 
 '-------------------------------------------------------------------------------
@@ -877,6 +963,12 @@ end function
 function getSeasonBackgroundUrl(season as dynamic) as string
     request = m.pageState.request
     if request <> invalid then
+        imageUrl = FirstNonEmpty([request.series.thumbUrl], "")
+        if imageUrl <> "" then return imageUrl
+
+        imageUrl = FirstNonEmpty([request.series.backdropUrl], "")
+        if imageUrl <> "" then return imageUrl
+
         imageUrl = getImageUrl(request.series, "Thumb", 530, 298)
         if imageUrl <> "" then return imageUrl
 
@@ -913,7 +1005,7 @@ function buildEpisodePlaySelection(node as dynamic) as dynamic
     item = node.raw
     if isAssocArray(item) = false then return invalid
 
-    playbackQueue = buildPlaybackQueue(m.pageState.episodes)
+    playbackQueue = buildPlaybackQueue(m.pageState.episodes, m.pageState.nextSeasonEpisodes)
     playbackQueueIndex = getPlaybackQueueIndex(playbackQueue, itemId)
 
     return {
@@ -928,8 +1020,19 @@ end function
 '-------------------------------------------------------------------------------
 ' buildPlaybackQueue
 '-------------------------------------------------------------------------------
-function buildPlaybackQueue(episodes as object) as object
+function buildPlaybackQueue(episodes as object, nextSeasonEpisodes = invalid as dynamic) as object
     queue = []
+    appendEpisodesToPlaybackQueue(queue, episodes, m.pageState.season)
+    appendEpisodesToPlaybackQueue(queue, nextSeasonEpisodes, m.pageState.nextSeason)
+
+    return queue
+end function
+
+'-------------------------------------------------------------------------------
+' appendEpisodesToPlaybackQueue
+'-------------------------------------------------------------------------------
+sub appendEpisodesToPlaybackQueue(queue as object, episodes as dynamic, season as dynamic)
+    if episodes = invalid then return
 
     for each episode in episodes
         if isAssocArray(episode) = false then continue for
@@ -940,12 +1043,11 @@ function buildPlaybackQueue(episodes as object) as object
         queue.Push({
             itemId: episodeId
             item: episode
+            season: season
             startPositionTicks: PlaybackProgress_GetTicksFromItem(episode)
         })
     end for
-
-    return queue
-end function
+end sub
 
 '-------------------------------------------------------------------------------
 ' getPlaybackQueueIndex

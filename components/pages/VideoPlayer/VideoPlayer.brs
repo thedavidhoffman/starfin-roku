@@ -35,6 +35,10 @@ sub init()
         items: []
         index: -1
     }
+    m.context = {
+        series: invalid
+        season: invalid
+    }
     m.seek = {
         speeds: [-180, -60, -30, -10, 10, 30, 60, 180]
         speedIndex: -1
@@ -54,6 +58,7 @@ sub init()
     m.playbackControls.observeField("previousPressed", "onPreviousPressed")
     m.playbackControls.observeField("playPausePressed", "onPlayPausePressed")
     m.playbackControls.observeField("nextPressed", "onNextPressed")
+    m.playbackControls.observeField("last5Pressed", "onLast5Pressed")
     m.playbackControls.observeField("progressLeftPressed", "onProgressLeftPressed")
     m.playbackControls.observeField("progressRightPressed", "onProgressRightPressed")
     m.playbackControls.observeField("progressLeftReleased", "onProgressLeftReleased")
@@ -127,6 +132,10 @@ sub applyPlaybackResponse(response as object, request as object)
         items: getPlaybackQueue(request.playbackQueue)
         index: getPlaybackQueueIndex(request.playbackQueueIndex)
     }
+    m.context = {
+        series: request.series
+        season: request.season
+    }
     m.trickplay = buildTrickplayState(item, m.session.itemId)
     startTrickplayPreload()
 
@@ -167,6 +176,8 @@ sub onVideoStateChanged()
     state = LCase(SafeString(m.videoPlayer.state, ""))
     m.log.write("Video state changed state=" + state + " position=" + SafeString(m.videoPlayer.position, ""))
     updateBufferingSpinner(state)
+    m.playback.isPlaying = state = "playing" or state = "buffering"
+    m.playbackControls.isPlaying = m.playback.isPlaying
     if state = "error" then
         reportPlaystateStop()
         enableScreenSaver()
@@ -174,6 +185,7 @@ sub onVideoStateChanged()
     else if state = "finished" then
         reportPlaystateStop()
         emitPlaybackProgress(true)
+        requestUpNextAutoPlay()
         stopPlayback()
         m.top.closeRequested = true
     else if state = "playing" then
@@ -192,8 +204,6 @@ sub onVideoStateChanged()
         enableScreenSaver()
     end if
 
-    m.playback.isPlaying = state = "playing" or state = "buffering"
-    m.playbackControls.isPlaying = m.playback.isPlaying
 end sub
 
 '-------------------------------------------------------------------------------
@@ -613,6 +623,35 @@ sub onNextPressed()
 end sub
 
 '-------------------------------------------------------------------------------
+' onLast5Pressed
+'-------------------------------------------------------------------------------
+sub onLast5Pressed()
+    seekToLast5Seconds()
+end sub
+
+'-------------------------------------------------------------------------------
+' seekToLast5Seconds
+'-------------------------------------------------------------------------------
+sub seekToLast5Seconds()
+    duration = m.playback.duration
+    if duration = invalid or duration <= 0 then duration = m.videoPlayer.duration
+    if duration = invalid or duration <= 0 then return
+
+    targetPosition = duration - 5
+    if targetPosition < 0 then targetPosition = 0
+
+    stopSeekTimers()
+    m.videoPlayer.seek = targetPosition
+    m.playback.position = targetPosition
+    m.playback.previewPosition = targetPosition
+    m.playbackControls.isSeeking = false
+    m.playbackControls.thumbnailData = {}
+    m.playbackControls.position = targetPosition
+    m.playbackControls.previewPosition = targetPosition
+    showControls(true)
+end sub
+
+'-------------------------------------------------------------------------------
 ' onProgressLeftPressed
 '-------------------------------------------------------------------------------
 sub onProgressLeftPressed()
@@ -739,10 +778,60 @@ function buildQueuePlayRequest(index as integer, item as object) as object
         userId: m.session.userId
         itemId: item.itemId
         item: item.item
+        series: m.context.series
+        season: getQueueItemSeason(item)
         startPositionTicks: PlaybackProgress_GetTicksFromSelection(item)
         playbackQueue: m.queue.items
         playbackQueueIndex: index
     }
+end function
+
+'-------------------------------------------------------------------------------
+' requestUpNextAutoPlay
+'-------------------------------------------------------------------------------
+sub requestUpNextAutoPlay()
+    if m.queue = invalid then
+        m.log.write("Skipping up-next autoplay: queue is invalid")
+        return
+    end if
+    if m.queue.items = invalid then
+        m.log.write("Skipping up-next autoplay: queue items are invalid")
+        return
+    end if
+
+    nextIndex = m.queue.index + 1
+    if nextIndex < 0 or nextIndex >= m.queue.items.Count() then
+        m.log.write("Skipping up-next autoplay: no next item queueIndex=" + SafeString(m.queue.index, "") + " queueCount=" + SafeString(m.queue.items.Count(), ""))
+        return
+    end if
+
+    currentItem = invalid
+    if m.queue.index >= 0 and m.queue.index < m.queue.items.Count() then currentItem = m.queue.items[m.queue.index]
+
+    nextItem = m.queue.items[nextIndex]
+    if nextItem = invalid or SafeString(nextItem.itemId, "") = "" then
+        m.log.write("Skipping up-next autoplay: next item is invalid nextIndex=" + SafeString(nextIndex, ""))
+        return
+    end if
+
+    m.log.write("Requesting up-next autoplay currentIndex=" + SafeString(m.queue.index, "") + " nextIndex=" + SafeString(nextIndex, "") + " nextItemId=" + SafeString(nextItem.itemId, ""))
+    m.top.upNextRequested = {
+        finishedItem: currentItem
+        nextItem: nextItem
+        series: m.context.series
+        season: getQueueItemSeason(nextItem)
+        playbackQueue: m.queue.items
+        playbackQueueIndex: nextIndex
+        server: m.session.server
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' getQueueItemSeason
+'-------------------------------------------------------------------------------
+function getQueueItemSeason(item as dynamic) as dynamic
+    if item <> invalid and item.season <> invalid then return item.season
+    return m.context.season
 end function
 
 '-------------------------------------------------------------------------------

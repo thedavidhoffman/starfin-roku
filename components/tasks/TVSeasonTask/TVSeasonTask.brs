@@ -17,6 +17,11 @@ sub executeRequest()
         return
     end if
 
+    if SafeString(request.action, "") = "nextSeasonEpisodes" then
+        executeNextSeasonEpisodesRequest(request)
+        return
+    end if
+
     seasonResult = loadSeason(request)
     if seasonResult.ok <> true then
         seasonResult.AddReplace("action", "tvSeason")
@@ -24,7 +29,7 @@ sub executeRequest()
         return
     end if
 
-    episodesResult = loadEpisodes(request)
+    episodesResult = loadEpisodes(request, SafeString(request.seasonId, ""))
     if episodesResult.ok <> true then
         episodesResult.AddReplace("action", "tvSeason")
         m.top.response = episodesResult
@@ -40,6 +45,35 @@ sub executeRequest()
             season: seasonResult.data
             episodes: episodesResult.data
         }
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' executeNextSeasonEpisodesRequest
+'-------------------------------------------------------------------------------
+sub executeNextSeasonEpisodesRequest(request as object)
+    nextSeasonId = getNextSeasonId(request)
+    if nextSeasonId = "" then
+        m.top.response = {
+            ok: true
+            action: "nextSeasonEpisodes"
+            payload: invalid
+        }
+        return
+    end if
+
+    nextEpisodesResult = loadEpisodes(request, nextSeasonId)
+    if nextEpisodesResult.ok <> true then
+        nextEpisodesResult.AddReplace("action", "nextSeasonEpisodes")
+        m.top.response = nextEpisodesResult
+        return
+    end if
+
+    m.top.response = {
+        ok: true
+        action: "nextSeasonEpisodes"
+        seasonId: nextSeasonId
+        payload: nextEpisodesResult.data
     }
 end sub
 
@@ -62,15 +96,25 @@ end function
 '-------------------------------------------------------------------------------
 ' loadEpisodes
 '-------------------------------------------------------------------------------
-function loadEpisodes(request as object) as object
+function loadEpisodes(request as object, seasonId as string) as object
     params = {
         userId: SafeString(request.userId, "")
-        seasonId: SafeString(request.seasonId, "")
+        seasonId: seasonId
         fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
     }
 
     url = NormalizeServerUrl(request.server) + "/Shows/" + request.seriesId + "/Episodes" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' getNextSeasonId
+'-------------------------------------------------------------------------------
+function getNextSeasonId(request as object) as string
+    nextSeason = request.nextSeason
+    if nextSeason = invalid then return ""
+
+    return SafeString(FirstNonEmpty([nextSeason.Id], ""), "")
 end function
 
 '-------------------------------------------------------------------------------
