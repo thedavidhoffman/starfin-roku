@@ -77,9 +77,10 @@ sub onThumbnailDataChanged()
         return
     end if
 
+    layout = getThumbnailLayout(data)
     for i = 0 to m.thumbnailSlots.Count() - 1
         if i < data.images.Count() then
-            updateThumbnailSlot(m.thumbnailSlots[i], data.images[i])
+            updateThumbnailSlot(m.thumbnailSlots[i], data.images[i], i, layout)
         else
             m.thumbnailSlots[i].hasImage = false
             m.thumbnailSlots[i].group.visible = false
@@ -90,7 +91,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' updateThumbnailSlot
 '-------------------------------------------------------------------------------
-sub updateThumbnailSlot(slot as object, data as dynamic)
+sub updateThumbnailSlot(slot as object, data as dynamic, slotIndex as integer, layout as object)
     if data = invalid or data.uri = invalid or data.uri = "" then
         slot.hasImage = false
         slot.group.visible = false
@@ -98,18 +99,14 @@ sub updateThumbnailSlot(slot as object, data as dynamic)
     end if
 
     slot.hasImage = true
-    scale = data.scale
-    if scale = invalid or scale <= 0 then scale = 1.0
+    scale = getThumbnailSlotScale(slotIndex, layout)
 
-    tileWidth = data.tileWidth * scale
-    tileHeight = data.tileHeight * scale
+    tileWidth = layout.tileWidth * scale
+    tileHeight = layout.tileHeight * scale
     sheetWidth = data.sheetColumns * tileWidth
     sheetHeight = data.sheetRows * tileHeight
 
-    y = data.y
-    if y = invalid then y = 875 - 25 - tileHeight
-
-    slot.group.translation = [data.x, y]
+    slot.group.translation = getThumbnailSlotTranslation(slotIndex, tileHeight, layout)
     slot.imageMask.translation = [0, 0]
     slot.imageMask.maskSize = [tileWidth, tileHeight]
     slot.clip.clippingRect = [0, 0, tileWidth, tileHeight]
@@ -133,6 +130,66 @@ sub updateThumbnailSlot(slot as object, data as dynamic)
         slot.group.visible = LCase(SafeString(slot.poster.loadStatus, "")) = "ready"
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' getThumbnailLayout
+'-------------------------------------------------------------------------------
+function getThumbnailLayout(data as object) as object
+    layoutWidth = data.layoutWidth
+    if layoutWidth = invalid or layoutWidth <= 0 then layoutWidth = 1714
+
+    gap = data.gap
+    if gap = invalid then gap = 15
+
+    tileWidth = data.tileWidth
+    if tileWidth = invalid or tileWidth <= 0 then tileWidth = 384
+
+    tileHeight = data.tileHeight
+    if tileHeight = invalid or tileHeight <= 0 then tileHeight = 216
+
+    largeScale = data.largeScale
+    if largeScale = invalid or largeScale <= 0 then largeScale = 1.2
+
+    smallScale = data.smallScale
+    if smallScale = invalid or smallScale <= 0 then smallScale = 0.7
+
+    return {
+        layoutWidth: layoutWidth
+        gap: gap
+        tileWidth: tileWidth
+        tileHeight: tileHeight
+        largeScale: largeScale
+        smallScale: smallScale
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getThumbnailSlotScale
+'-------------------------------------------------------------------------------
+function getThumbnailSlotScale(slotIndex as integer, layout as object) as float
+    if slotIndex = 2 then return layout.largeScale
+    return layout.smallScale
+end function
+
+'-------------------------------------------------------------------------------
+' getThumbnailSlotTranslation
+'-------------------------------------------------------------------------------
+function getThumbnailSlotTranslation(slotIndex as integer, tileHeight as float, layout as object) as object
+    largeWidth = layout.tileWidth * layout.largeScale
+    smallWidth = layout.tileWidth * layout.smallScale
+    largeHeight = layout.tileHeight * layout.largeScale
+    totalWidth = largeWidth + (smallWidth * 4) + (layout.gap * 4)
+    x = (layout.layoutWidth - totalWidth) / 2
+
+    for i = 0 to slotIndex - 1
+        x = x + (layout.tileWidth * getThumbnailSlotScale(i, layout)) + layout.gap
+    end for
+
+    y = 0
+    if slotIndex <> 2 then y = (largeHeight - tileHeight) / 2
+
+    return [x, y]
+end function
 
 '-------------------------------------------------------------------------------
 ' recreatePoster

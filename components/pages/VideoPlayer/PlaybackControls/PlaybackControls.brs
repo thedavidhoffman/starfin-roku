@@ -7,6 +7,10 @@ sub init()
     m.nextButton = m.top.findNode("nextButton")
     m.last5Button = m.top.findNode("last5Button")
     m.trickplayPreview = m.top.findNode("trickplayPreview")
+    m.metadataLabels = {
+        title: m.top.findNode("titleLabel")
+        subtitle: m.top.findNode("subtitleLabel")
+    }
     m.progressBarGroup = m.top.findNode("progressBarGroup")
     m.progressFocusRect = m.top.findNode("progressFocusRect")
     m.progressBarBackground = m.top.findNode("progressBarBackground")
@@ -22,12 +26,32 @@ sub init()
         buttons: [m.previousButton, m.playPauseButton, m.nextButton, m.last5Button]
     }
 
+    colors = Color()
+    m.metadataLabels.title.color = colors.text.light.primary
+    m.metadataLabels.subtitle.color = colors.text.light.secondary
+
     m.previousButton.observeField("buttonSelected", "onPreviousButtonSelected")
     m.playPauseButton.observeField("buttonSelected", "onPlayPauseButtonSelected")
     m.nextButton.observeField("buttonSelected", "onNextButtonSelected")
     m.last5Button.observeField("buttonSelected", "onLast5ButtonSelected")
     m.top.observeField("focusedChild", "onFocusChanged")
+    onTitleChanged()
+    onSubtitleChanged()
     updateButtonFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' onTitleChanged
+'-------------------------------------------------------------------------------
+sub onTitleChanged()
+    m.metadataLabels.title.text = SafeString(m.top.title, "")
+end sub
+
+'-------------------------------------------------------------------------------
+' onSubtitleChanged
+'-------------------------------------------------------------------------------
+sub onSubtitleChanged()
+    m.metadataLabels.subtitle.text = SafeString(m.top.subtitle, "")
 end sub
 
 '-------------------------------------------------------------------------------

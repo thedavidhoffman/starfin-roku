@@ -4,7 +4,6 @@
 sub init()
     m.log = CreateLogger("VideoPlayer")
     m.videoPlayer = m.top.findNode("videoPlayer")
-    m.videoOverlay = m.top.findNode("videoOverlay")
     m.bufferingSpinner = m.top.findNode("bufferingSpinner")
     m.playbackControls = m.top.findNode("playbackControls")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
@@ -158,7 +157,7 @@ sub applyPlaybackResponse(response as object, request as object)
     m.playbackControls.previewPosition = startPositionSeconds
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
-    updateVideoOverlayMetadata(request, item)
+    updatePlaybackControlsMetadata(request, item)
 
     m.log.write("Assigning video content itemId=" + m.session.itemId + " streamFormat=" + SafeString(response.streamFormat, "") + " startPosition=" + SafeString(startPositionSeconds, ""))
     m.videoPlayer.content = content
@@ -218,7 +217,6 @@ sub updateBufferingSpinner(state as string)
         m.bufferingSpinner.control = "stop"
         m.bufferingSpinner.visible = false
     end if
-    updateVideoOverlayVisibility()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -291,24 +289,21 @@ function getItemTitle(item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
-' updateVideoOverlayMetadata
+' updatePlaybackControlsMetadata
 '-------------------------------------------------------------------------------
-sub updateVideoOverlayMetadata(request as object, item as dynamic)
+sub updatePlaybackControlsMetadata(request as object, item as dynamic)
     if item = invalid then
-        m.videoOverlay.title = "Video"
-        m.videoOverlay.subtitle = ""
-        m.videoOverlay.meta = ""
+        m.playbackControls.title = "Video"
+        m.playbackControls.subtitle = ""
         return
     end if
 
     if isTVEpisodePlayback(request, item) then
-        m.videoOverlay.title = getSeriesTitle(request, item)
-        m.videoOverlay.subtitle = getItemTitle(item)
-        m.videoOverlay.meta = getEpisodeOverlayMetadata(item)
+        m.playbackControls.title = getSeriesTitle(request, item)
+        m.playbackControls.subtitle = getEpisodePlaybackMetadata(item)
     else
-        m.videoOverlay.title = getItemTitle(item)
-        m.videoOverlay.subtitle = FirstNonEmpty([item.ProductionYear], "")
-        m.videoOverlay.meta = ""
+        m.playbackControls.title = getItemTitle(item)
+        m.playbackControls.subtitle = getMoviePlaybackMetadata(item)
     end if
 end sub
 
@@ -339,31 +334,44 @@ function getSeriesTitle(request as object, item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getEpisodeOverlayMetadata
+' getMoviePlaybackMetadata
 '-------------------------------------------------------------------------------
-function getEpisodeOverlayMetadata(item as dynamic) as string
+function getMoviePlaybackMetadata(item as dynamic) as string
+    year = FirstNonEmpty([item.ProductionYear], "")
+    if year = "" then year = DateTime_ToYear(item.PremiereDate)
+
+    return year
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodePlaybackMetadata
+'-------------------------------------------------------------------------------
+function getEpisodePlaybackMetadata(item as dynamic) as string
     parts = []
 
-    episodeNumberText = getEpisodeOverlayNumberText(item)
+    episodeNumberText = getEpisodePlaybackNumberText(item)
     if episodeNumberText <> "" then parts.Push(episodeNumberText)
 
-    runtimeText = MediaMetadata_FormatRuntime(item.RunTimeTicks)
-    if runtimeText <> "" then parts.Push(runtimeText)
+    title = FirstNonEmpty([item.Name], "")
+    if title <> "" then parts.Push(title)
 
     dateText = DateTime_ToShortDate(getEpisodeAiredDateText(item))
     if dateText <> "" then parts.Push(dateText)
 
-    return joinOverlayMetadata(parts)
+    runtimeText = MediaMetadata_FormatRuntime(item.RunTimeTicks)
+    if runtimeText <> "" then parts.Push(runtimeText)
+
+    return joinPlaybackMetadata(parts)
 end function
 
 '-------------------------------------------------------------------------------
-' getEpisodeOverlayNumberText
+' getEpisodePlaybackNumberText
 '-------------------------------------------------------------------------------
-function getEpisodeOverlayNumberText(item as dynamic) as string
+function getEpisodePlaybackNumberText(item as dynamic) as string
     seasonNumber = FirstNonEmpty([item.ParentIndexNumber, item.SeasonNumber], "")
     episodeNumber = FirstNonEmpty([item.IndexNumber, item.EpisodeNumber], "")
 
-    if seasonNumber <> "" and episodeNumber <> "" then return "S" + seasonNumber + "E" + episodeNumber
+    if seasonNumber <> "" and episodeNumber <> "" then return "S" + seasonNumber + ":E" + episodeNumber
     if seasonNumber <> "" then return "S" + seasonNumber
     if episodeNumber <> "" then return "E" + episodeNumber
     return ""
@@ -379,9 +387,9 @@ function getEpisodeAiredDateText(item as dynamic) as string
 end function
 
 '-------------------------------------------------------------------------------
-' joinOverlayMetadata
+' joinPlaybackMetadata
 '-------------------------------------------------------------------------------
-function joinOverlayMetadata(values as dynamic) as string
+function joinPlaybackMetadata(values as dynamic) as string
     if values = invalid then return ""
 
     result = ""
@@ -414,7 +422,6 @@ end function
 '-------------------------------------------------------------------------------
 sub showControls(restartTimer as boolean)
     m.playbackControls.visible = true
-    updateVideoOverlayVisibility()
     m.playbackControls.setFocus(true)
     if restartTimer = true then
         m.controlsHideTimer.control = "stop"
@@ -443,15 +450,7 @@ sub hideControls()
     m.playbackControls.thumbnailData = {}
     m.playbackControls.callFunc("releaseFocus")
     m.playbackControls.visible = false
-    updateVideoOverlayVisibility()
     m.top.setFocus(true)
-end sub
-
-'-------------------------------------------------------------------------------
-' updateVideoOverlayVisibility
-'-------------------------------------------------------------------------------
-sub updateVideoOverlayVisibility()
-    m.videoOverlay.visible = m.bufferingSpinner.visible = true or m.playbackControls.visible = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1050,32 +1049,25 @@ sub updateTrickplayPreview(position as float)
     baseScale = getFiveImageTrickplayScale(m.trickplay.tileWidth, tileBuffer)
     largeScale = baseScale * 1.2
     smallScale = baseScale * 0.7
-    largeWidth = m.trickplay.tileWidth * largeScale
-    smallWidth = m.trickplay.tileWidth * smallScale
-    largeHeight = m.trickplay.tileHeight * largeScale
-    totalWidth = largeWidth + (smallWidth * 4) + (tileBuffer * 4)
-    nextX = 960 - (totalWidth / 2)
-    centerY = 875 - 25 - largeHeight
     deltaSeconds = getTrickplayPreviewDelta()
     images = []
 
     for slot = -2 to 2
-        imageScale = smallScale
-        if slot = 0 then imageScale = largeScale
-
         imagePosition = position + (deltaSeconds * slot)
         if imagePosition < 0 or imagePosition > m.playback.duration then
             images.Push({})
         else
-            tileHeight = m.trickplay.tileHeight * imageScale
-            y = centerY + ((largeHeight - tileHeight) / 2)
-            images.Push(buildTrickplayPreviewImage(imagePosition, nextX, y, imageScale))
+            images.Push(buildTrickplayPreviewImage(imagePosition))
         end if
-
-        nextX = nextX + (m.trickplay.tileWidth * imageScale) + tileBuffer
     end for
 
     m.playbackControls.thumbnailData = {
+        layoutWidth: 1714
+        gap: tileBuffer
+        tileWidth: m.trickplay.tileWidth
+        tileHeight: m.trickplay.tileHeight
+        largeScale: largeScale
+        smallScale: smallScale
         images: images
     }
 end sub
@@ -1109,7 +1101,7 @@ end function
 '-------------------------------------------------------------------------------
 ' buildTrickplayPreviewImage
 '-------------------------------------------------------------------------------
-function buildTrickplayPreviewImage(position as float, x as float, y as float, scale as float) as object
+function buildTrickplayPreviewImage(position as float) as object
     iconIndex = Fix(position / m.trickplay.interval)
     if iconIndex < 0 then iconIndex = 0
     if iconIndex >= m.trickplay.thumbnailCount then iconIndex = m.trickplay.thumbnailCount - 1
@@ -1126,15 +1118,10 @@ function buildTrickplayPreviewImage(position as float, x as float, y as float, s
     return {
         uri: uri
         tileIndex: tileIndex
-        tileWidth: m.trickplay.tileWidth
-        tileHeight: m.trickplay.tileHeight
         sheetColumns: m.trickplay.tileColumns
         sheetRows: m.trickplay.tileRows
         column: column
         row: row
-        scale: scale
-        x: x
-        y: y
         canUseFastReplace: m.trickplay.canUseFastReplace
     }
 end function
