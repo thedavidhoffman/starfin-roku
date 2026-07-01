@@ -8,10 +8,13 @@ sub init()
     m.seasonsLabel = m.top.findNode("seasonsLabel")
     m.seasonsGrid = m.top.findNode("seasonsGrid")
     m.cast = m.top.findNode("cast")
+    m.downChevron = m.top.findNode("downChevron")
+    m.upChevron = m.top.findNode("upChevron")
     m.tvShowTask = m.top.findNode("tvShowTask")
 
     m.tvShowTask.observeField("response", "onTVShowResponse")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
+    m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.pageState = {
@@ -79,6 +82,7 @@ sub onLoadRequestChanged()
     m.pageState.focusArea = "seasons"
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
+    updateFocusChevron()
     m.cast.server = request.server
     m.cast.people = []
     Status_SetLoading()
@@ -154,6 +158,7 @@ sub renderSeasons(seasons as object)
 
     m.seasonsGrid.content = content
     m.seasonsGrid.visible = content.getChildCount() > 0
+    updateFocusChevron()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -164,6 +169,7 @@ sub setSeasonsVisible(isVisible as boolean)
     visible = isVisible and hasSeasons
     m.seasonsLabel.visible = visible
     m.seasonsGrid.visible = visible
+    updateFocusChevron()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -188,6 +194,7 @@ sub focusSeasonsIfActive()
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
+    updateFocusChevron()
     m.top.setFocus(true)
     m.seasonsGrid.setFocus(true)
 end sub
@@ -202,6 +209,14 @@ sub focusCast()
     m.contentGroup.translation = m.layout.contentCastFocused
     setSeasonsVisible(false)
     m.cast.callFunc("activate")
+    updateFocusChevron()
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastAvailabilityChanged
+'-------------------------------------------------------------------------------
+sub onCastAvailabilityChanged()
+    updateFocusChevron()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -209,6 +224,17 @@ end sub
 '-------------------------------------------------------------------------------
 sub onCastFocusExitUp()
     focusSeasonsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateFocusChevron
+'-------------------------------------------------------------------------------
+sub updateFocusChevron()
+    hasSeasons = m.seasonsGrid.content <> invalid and m.seasonsGrid.content.getChildCount() > 0
+    hasCast = m.cast.visible = true and m.cast.hasItems = true
+
+    m.downChevron.visible = m.pageState.focusArea = "seasons" and hasSeasons and hasCast
+    m.upChevron.visible = m.pageState.focusArea = "cast" and hasCast and hasSeasons
 end sub
 
 '-------------------------------------------------------------------------------
