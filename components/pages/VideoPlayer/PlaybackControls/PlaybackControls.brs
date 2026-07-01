@@ -25,6 +25,10 @@ sub init()
         focusArea: "buttons"
         buttons: [m.previousButton, m.playPauseButton, m.nextButton, m.last5Button]
     }
+    m.trickplayPositions = {
+        default: [103, 451]
+        tall: [103, 390]
+    }
 
     colors = Color()
     m.metadataLabels.title.color = colors.text.light.primary
@@ -213,8 +217,31 @@ end sub
 ' onThumbnailDataChanged
 '-------------------------------------------------------------------------------
 sub onThumbnailDataChanged()
+    updateTrickplayPreviewPosition(m.top.thumbnailData)
     m.trickplayPreview.thumbnailData = m.top.thumbnailData
 end sub
+
+'-------------------------------------------------------------------------------
+' updateTrickplayPreviewPosition
+'-------------------------------------------------------------------------------
+sub updateTrickplayPreviewPosition(data as dynamic)
+    if isTallTrickplayThumbnail(data) then
+        m.trickplayPreview.translation = m.trickplayPositions.tall
+    else
+        m.trickplayPreview.translation = m.trickplayPositions.default
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' isTallTrickplayThumbnail
+'-------------------------------------------------------------------------------
+function isTallTrickplayThumbnail(data as dynamic) as boolean
+    if data = invalid then return false
+    if data.tileWidth = invalid or data.tileWidth <= 0 then return false
+    if data.tileHeight = invalid or data.tileHeight <= 0 then return false
+
+    return (data.tileHeight / data.tileWidth) > (9 / 16)
+end function
 
 '-------------------------------------------------------------------------------
 ' updateProgress

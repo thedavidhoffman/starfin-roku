@@ -121,6 +121,8 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
     end if
 
     title = getDisplayTitle(item)
+    episodePositionText = getEpisodePositionText(item)
+    episodeMetadataText = getSecondaryMetadataText(item)
     m.mediaShell.mediaContent = {
         mediaType: getMediaShellType(item)
         backdropUrl: SafeString(item.HDPosterUrl, "")
@@ -128,8 +130,8 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
         logoTitle: getMediaShellLogoTitle(item)
         logoPending: logoPending
         title: title
-        metaLine1: getEpisodePositionText(item)
-        metaLine2: getSecondaryMetadataText(item)
+        primaryInfoText: episodePositionText
+        secondaryInfoText: episodeMetadataText
         overview: SafeString(item.description, "")
     }
 
@@ -553,8 +555,8 @@ sub clearContent()
         logoUrl: ""
         logoTitle: ""
         title: ""
-        metaLine1: ""
-        metaLine2: ""
+        primaryInfoText: ""
+        secondaryInfoText: ""
         overview: ""
     }
     m.mediaToolbar.supportsWatchedActions = false

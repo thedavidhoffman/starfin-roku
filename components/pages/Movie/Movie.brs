@@ -82,13 +82,15 @@ end sub
 sub renderMovie(item as dynamic, logoPending = false as boolean)
     if isAssocArray(item) = false then return
 
+    metadataText = getPrimaryMetaText(item)
+    genreText = getSecondaryMetaText(item)
     m.mediaShell.mediaContent = {
         backdropUrl: getBackdropUrl(item)
         logoUrl: getImageUrl(item, "Logo", 600, 300)
         logoPending: logoPending
         title: getItemTitle(item)
-        metaLine1: getPrimaryMetaText(item)
-        metaLine2: getSecondaryMetaText(item)
+        primaryInfoText: metadataText
+        secondaryInfoText: genreText
         overview: FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)

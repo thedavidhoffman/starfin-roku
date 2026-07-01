@@ -96,7 +96,7 @@ function getEpisodeSubtitle(item as object) as string
 
     if seasonNumber = "" or episodeNumber = "" then return episodeTitle
 
-    return "S" + seasonNumber + MediaMetadata_BulletSeparator() + "E" + episodeNumber + MediaMetadata_BulletSeparator() + episodeTitle
+    return "S" + seasonNumber + MediaMetadata_BulletSeparator() + "E" + episodeNumber + " - " + episodeTitle
 end function
 
 '-------------------------------------------------------------------------------

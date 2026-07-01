@@ -123,13 +123,15 @@ end sub
 sub renderSeries(item as dynamic, logoPending = false as boolean)
     if isAssocArray(item) = false then return
 
+    seriesMetadataText = getMetaText(item)
+    genreText = getGenreText(item)
     m.mediaShell.mediaContent = {
         backdropUrl: getBackdropUrl(item)
         logoUrl: getImageUrl(item, "Logo", 600, 300)
         logoPending: logoPending
         title: getItemTitle(item)
-        metaLine1: getMetaText(item)
-        metaLine2: getGenreText(item)
+        primaryInfoText: seriesMetadataText
+        secondaryInfoText: genreText
         overview: FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)

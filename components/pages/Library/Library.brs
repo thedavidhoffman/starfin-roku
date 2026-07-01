@@ -43,7 +43,7 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.imageAspect = getLibraryImageAspect()
-    m.titleLabel.text = SafeString(request.title, "Library")
+    updateTitleLabel()
     applyGridLayout(m.pageState.imageAspect)
     Spinner_Show()
     closeLetterGrid(false)
@@ -69,6 +69,7 @@ sub onLibraryResponse()
 
     m.pageState.items = getItemsFromPayload(response.payload)
     renderItems(m.pageState.items)
+    updateTitleLabel(m.pageState.items.Count())
     Status_ClearMessage()
     focusItemsIfActive()
 end sub
@@ -116,6 +117,19 @@ sub renderItems(items as object)
     m.itemsGrid.content = content
     m.itemsGrid.visible = content.getChildCount() > 0
     updateAvailableLetters(items)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateTitleLabel
+'-------------------------------------------------------------------------------
+sub updateTitleLabel(itemCount = invalid as dynamic)
+    request = m.pageState.request
+    title = "Library"
+    if request <> invalid then title = SafeString(request.title, "Library")
+
+    if itemCount <> invalid then title = title + MediaMetadata_BulletSeparator() + Number_FormatWithThousandsSeparator(itemCount) + " items"
+
+    m.titleLabel.text = title
 end sub
 
 '-------------------------------------------------------------------------------
