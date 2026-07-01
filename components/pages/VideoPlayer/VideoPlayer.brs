@@ -4,7 +4,6 @@
 sub init()
     m.log = CreateLogger("VideoPlayer")
     m.videoPlayer = m.top.findNode("videoPlayer")
-    m.bufferingSpinner = m.top.findNode("bufferingSpinner")
     m.playbackControls = m.top.findNode("playbackControls")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
     m.playstateTask = m.top.findNode("playstateTask")
@@ -18,6 +17,7 @@ sub init()
     m.playback = {
         isSeeking: false
         isPlaying: false
+        startupPending: false
         hasReportedStart: false
         hasEmittedFinalProgress: false
         previewPosition: 0
@@ -50,8 +50,6 @@ sub init()
 
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
     m.trickplayPreloadTask.observeField("response", "onTrickplayPreloadResponse")
-    m.bufferingSpinner.poster.observeField("loadStatus", "onBufferingSpinnerLoadStatusChanged")
-    onBufferingSpinnerLoadStatusChanged()
     m.videoPlayer.observeField("state", "onVideoStateChanged")
     m.videoPlayer.observeField("position", "onVideoPositionChanged")
     m.videoPlayer.observeField("duration", "onVideoDurationChanged")
@@ -75,17 +73,6 @@ sub init()
 end sub
 
 '-------------------------------------------------------------------------------
-' onBufferingSpinnerLoadStatusChanged
-'-------------------------------------------------------------------------------
-sub onBufferingSpinnerLoadStatusChanged()
-    if LCase(SafeString(m.bufferingSpinner.poster.loadStatus, "")) <> "ready" then return
-
-    centerX = int((1920 - m.bufferingSpinner.poster.bitmapWidth) / 2)
-    centerY = int((1080 - m.bufferingSpinner.poster.bitmapHeight) / 2)
-    m.bufferingSpinner.translation = [centerX, centerY]
-end sub
-
-'-------------------------------------------------------------------------------
 ' onPlayRequestChanged
 '-------------------------------------------------------------------------------
 sub onPlayRequestChanged()
@@ -94,6 +81,8 @@ sub onPlayRequestChanged()
 
     Status_SetLoading()
     stopPlayback()
+    m.playback.startupPending = true
+    Spinner_Show()
 
     m.playbackInfoTask.request = request
     m.playbackInfoTask.control = "run"
@@ -107,6 +96,8 @@ sub onPlaybackInfoResponse()
     if response = invalid then return
 
     if response.ok <> true then
+        m.playback.startupPending = false
+        Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to play this item."))
         return
     end if
@@ -211,11 +202,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub updateBufferingSpinner(state as string)
     if state = "buffering" then
-        m.bufferingSpinner.visible = true
-        m.bufferingSpinner.control = "start"
+        m.playback.startupPending = false
+        Spinner_Show()
+    else if state = "stopped" and m.playback.startupPending = true then
+        return
     else
-        m.bufferingSpinner.control = "stop"
-        m.bufferingSpinner.visible = false
+        m.playback.startupPending = false
+        Spinner_Hide()
     end if
 end sub
 
@@ -273,6 +266,8 @@ end sub
 ' stopPlayback
 '-------------------------------------------------------------------------------
 sub stopPlayback()
+    if m.playback <> invalid then m.playback.startupPending = false
+    Spinner_Hide()
     hideControls()
     reportPlaystateStop()
     cleanupTrickplayPreload()

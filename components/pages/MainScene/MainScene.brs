@@ -149,7 +149,7 @@ sub libraryShow(selection as object, fromCollections as boolean)
     page.observeField("selectedMovie", "libraryHandleMovieSelected")
     page.observeField("selectedSeries", "libraryHandleSeriesSelected")
     page.settings = m.settings
-    page.loadRequest = {
+    loadRequest = {
         server: m.session.server
         token: m.session.token
         userId: m.session.userId
@@ -167,6 +167,7 @@ sub libraryShow(selection as object, fromCollections as boolean)
     if m.collectionsPage <> invalid then m.collectionsPage.visible = false
     m.homePage.visible = false
     m.header.visible = true
+    page.loadRequest = loadRequest
     page.callFunc("activate")
 end sub
 
@@ -1100,6 +1101,7 @@ end sub
 ' clearStatus
 '-------------------------------------------------------------------------------
 sub clearStatus()
+    Spinner_Hide()
     m.statusLabel.callFunc("clearMessage")
 end sub
 

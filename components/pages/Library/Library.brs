@@ -45,7 +45,7 @@ sub onLoadRequestChanged()
     m.pageState.imageAspect = getLibraryImageAspect()
     m.titleLabel.text = SafeString(request.title, "Library")
     applyGridLayout(m.pageState.imageAspect)
-    Status_SetLoading()
+    Spinner_Show()
     closeLetterGrid(false)
     renderItems([])
 
@@ -59,6 +59,8 @@ end sub
 sub onLibraryResponse()
     response = m.libraryTask.response
     if response = invalid then return
+
+    Spinner_Hide()
 
     if response.ok <> true then
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load library."))
