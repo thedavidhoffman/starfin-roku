@@ -18,13 +18,17 @@ sub executeRequest()
     end if
 
     userId = getUserId(request)
-    viewsResponse = getJson(request, "myList", "/userviews", { userId: userId })
-    if viewsResponse.ok <> true then
-        m.top.response = viewsResponse
-        return
+    playlistsViewId = SafeString(request.playlistsViewId, "")
+    if playlistsViewId = "" then
+        viewsResponse = getJson(request, "myList", "/userviews", { userId: userId })
+        if viewsResponse.ok <> true then
+            m.top.response = viewsResponse
+            return
+        end if
+
+        playlistsViewId = findCollectionId(viewsResponse.data, "playlists")
     end if
 
-    playlistsViewId = findCollectionId(viewsResponse.data, "playlists")
     if playlistsViewId = "" then
         m.top.response = successResponse(request, "myList", {
             playlist: invalid

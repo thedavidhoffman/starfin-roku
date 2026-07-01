@@ -32,6 +32,9 @@ end sub
 sub initValues()
     m.session = invalid
     m.settings = SettingsStore_Load()
+    m.homeRefreshState = {
+        playbackRowsDirty: false
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -51,6 +54,7 @@ sub initHandlers()
     m.homePage.observeField("selectedLibrary", "libraryHandleHomeLibrarySelected")
     m.homePage.observeField("selectedCollections", "collectionsHandleHomeCollectionsSelected")
     m.homePage.observeField("focusExitUp", "navHandleHomeFocusExitUp")
+    m.homePage.observeField("playbackRowsRefreshCompleted", "homeHandlePlaybackRowsRefreshCompleted")
     m.header.observeField("downSelected", "navHandleHeaderDownSelected")
     m.header.observeField("overlayRequested", "navHandleHeaderOverlayRequested")
     m.overlayHost.observeField("closed", "navHandleOverlayClosed")
@@ -112,9 +116,7 @@ end sub
 sub collectionsHandleCloseRequested()
     clearStatus()
     resetDynamicPages()
-    m.homePage.visible = true
-    m.header.visible = true
-    m.homePage.callFunc("activate")
+    showHome()
 end sub
 
 '===============================================================================
@@ -212,9 +214,7 @@ sub libraryHandleCloseRequested()
         m.collectionsPage.visible = true
         m.collectionsPage.callFunc("activate")
     else
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
 
@@ -409,9 +409,7 @@ sub tvEpisodeHandleCloseRequested()
         m.header.visible = false
         m.tvShowPage.callFunc("activate")
     else
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
 
@@ -434,6 +432,7 @@ sub tvEpisodeHandleWatchedStateChanged()
     change = m.tvEpisodePage.watchedStateChanged
     if change = invalid then return
 
+    markHomePlaybackRowsDirty()
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.watchedStateChange = change
 end sub
 
@@ -445,6 +444,7 @@ sub tvEpisodeHandlePlaybackProgressChanged()
     change = m.tvEpisodePage.playbackProgressChanged
     if change = invalid then return
 
+    markHomePlaybackRowsDirty()
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.playbackProgressChange = change
 end sub
 
@@ -456,6 +456,7 @@ sub tvShowHandleTVSeasonWatchedStateChanged()
     change = m.tvSeasonPage.seasonWatchedStateChanged
     if change = invalid then return
 
+    markHomePlaybackRowsDirty()
     if m.tvShowPage <> invalid then m.tvShowPage.seasonWatchedStateChange = change
 end sub
 
@@ -478,9 +479,7 @@ sub tvSeasonHandleCloseRequested()
         m.header.visible = true
         m.libraryPage.callFunc("activate")
     else
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
 
@@ -504,9 +503,7 @@ sub tvShowHandleCloseRequested()
         m.libraryPage.callFunc("activate")
     else
         resetDynamicPages()
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
 
@@ -713,9 +710,7 @@ sub personHandleCloseRequested()
         m.header.visible = false
         m.moviePage.callFunc("activate")
     else
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
 
@@ -768,9 +763,7 @@ sub filmographyHandleCloseRequested()
         m.header.visible = false
         m.personPage.callFunc("activate")
     else
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
 
@@ -795,9 +788,7 @@ sub movieHandleCloseRequested()
         m.libraryPage.callFunc("activate")
     else
         resetDynamicPages()
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
 
@@ -973,6 +964,36 @@ sub navHandleOverlayClosed()
     end if
 
     focusActiveSurface()
+end sub
+
+'-------------------------------------------------------------------------------
+' markHomePlaybackRowsDirty
+'-------------------------------------------------------------------------------
+sub markHomePlaybackRowsDirty()
+    if m.homeRefreshState = invalid then m.homeRefreshState = { playbackRowsDirty: false }
+    m.homeRefreshState.playbackRowsDirty = true
+end sub
+
+'-------------------------------------------------------------------------------
+' showHome
+'-------------------------------------------------------------------------------
+sub showHome()
+    m.homePage.visible = true
+    m.header.visible = true
+
+    if m.homeRefreshState <> invalid and m.homeRefreshState.playbackRowsDirty = true then
+        m.homePage.callFunc("activateBlocking")
+    else
+        m.homePage.callFunc("focusHome")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' homeHandlePlaybackRowsRefreshCompleted
+'-------------------------------------------------------------------------------
+sub homeHandlePlaybackRowsRefreshCompleted()
+    if m.homeRefreshState = invalid then return
+    m.homeRefreshState.playbackRowsDirty = false
 end sub
 
 '-------------------------------------------------------------------------------

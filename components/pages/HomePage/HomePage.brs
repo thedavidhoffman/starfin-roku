@@ -35,6 +35,10 @@ sub init()
         shelfPositions: []
         focusedShelfIndex: 0
         shelfOffsetY: 0
+        refresh: {
+            blocking: false
+            pendingCore: {}
+        }
     }
 end sub
 
@@ -89,7 +93,14 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    refreshHomeData()
+    refreshHomeData(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' activateBlocking
+'-------------------------------------------------------------------------------
+sub activateBlocking()
+    refreshPlaybackRows(true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -116,11 +127,27 @@ end sub
 '-------------------------------------------------------------------------------
 ' refreshHomeData
 '-------------------------------------------------------------------------------
-sub refreshHomeData()
+sub refreshHomeData(blocking = false as boolean)
     request = m.homeState.request
     if request = invalid then
         m.top.setFocus(true)
         return
+    end if
+
+    m.homeState.refresh = {
+        blocking: blocking
+        pendingCore: {
+            libraries: true
+            continueWatching: true
+            continueListening: true
+            nextUp: true
+            liveTvOnNow: true
+            favorites: true
+        }
+    }
+    if blocking = true then
+        m.top.visible = false
+        Spinner_Show()
     end if
 
     m.homeState.rows = {}
@@ -140,8 +167,33 @@ sub refreshHomeData()
     runTask(m.tasks.continueListening, request)
     runTask(m.tasks.nextUp, request)
     runTask(m.tasks.liveTvOnNow, request)
-    runTask(m.tasks.myList, request)
     runTask(m.tasks.favorites, request)
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshPlaybackRows
+'-------------------------------------------------------------------------------
+sub refreshPlaybackRows(blocking = false as boolean)
+    request = m.homeState.request
+    if request = invalid then
+        m.top.setFocus(true)
+        return
+    end if
+
+    m.homeState.refresh = {
+        blocking: blocking
+        pendingCore: {
+            continueWatching: true
+            nextUp: true
+        }
+    }
+    if blocking = true then
+        m.top.visible = false
+        Spinner_Show()
+    end if
+
+    runTask(m.tasks.continueWatching, request)
+    runTask(m.tasks.nextUp, request)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -159,13 +211,30 @@ end sub
 '-------------------------------------------------------------------------------
 sub onLibrariesResponse()
     response = m.tasks.libraries.response
-    if shouldIgnoreResponse(response) then return
+    if shouldIgnoreResponse(response) then
+        markCoreTaskComplete("libraries")
+        return
+    end if
 
     libraries = getItemsFromPayload(response.payload)
     addRow("libraries", "My Media", libraries)
     queueLatestMediaRows(libraries)
     renderRows()
+    runMyListTask(libraries)
     runLatestMediaTasks()
+    markCoreTaskComplete("libraries")
+end sub
+
+'-------------------------------------------------------------------------------
+' runMyListTask
+'-------------------------------------------------------------------------------
+sub runMyListTask(libraries as object)
+    request = cloneRequest(m.homeState.request)
+    request.playlistsViewId = findCollectionId(libraries, "playlists")
+    if request.playlistsViewId = "" then return
+
+    m.homeState.refresh.pendingCore.myList = true
+    runTask(m.tasks.myList, request)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -173,9 +242,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onSectionResponse(event as object)
     response = event.getData()
-    if shouldIgnoreResponse(response) then return
-
+    if response = invalid then return
     action = SafeString(response.action, "")
+    if shouldIgnoreResponse(response) then
+        markCoreTaskComplete(action)
+        return
+    end if
+
     if action = "continueWatching" then
         addRow(action, "Continue Watching", getItemsFromPayload(response.payload))
     else if action = "continueListening" then
@@ -191,6 +264,7 @@ sub onSectionResponse(event as object)
     end if
 
     renderRows()
+    markCoreTaskComplete(action)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -273,7 +347,7 @@ sub onDynamicLatestMediaResponse(event as object)
     library = m.homeState.latestLibraries[parentId]
     key = "latest:" + SafeString(library.id, "")
     addRow(key, "Recently Added in " + FirstNonEmpty([library.name], "Library"), getItemsFromPayload(response.payload))
-    renderRows()
+    renderRows(false)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -325,7 +399,8 @@ end function
 '-------------------------------------------------------------------------------
 ' renderRows
 '-------------------------------------------------------------------------------
-sub renderRows()
+sub renderRows(focusAfterRender = true as boolean)
+    hadFocus = m.top.isInFocusChain()
     clearShelfNodes()
 
     shelfNodes = []
@@ -369,8 +444,37 @@ sub renderRows()
 
     if hasRenderedRows() then
         Status_ClearMessage()
-        focusShelf(m.homeState.focusedShelfIndex)
+        shouldFocus = (focusAfterRender = true or hadFocus = true)
+        if shouldFocus = true and m.homeState.refresh.blocking <> true then focusShelf(m.homeState.focusedShelfIndex)
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' markCoreTaskComplete
+'-------------------------------------------------------------------------------
+sub markCoreTaskComplete(action as string)
+    if action = "" then return
+    if m.homeState.refresh = invalid then return
+    if m.homeState.refresh.pendingCore = invalid then return
+    if m.homeState.refresh.pendingCore.DoesExist(action) = false then return
+
+    m.homeState.refresh.pendingCore.Delete(action)
+    finishBlockingRefreshIfReady()
+end sub
+
+'-------------------------------------------------------------------------------
+' finishBlockingRefreshIfReady
+'-------------------------------------------------------------------------------
+sub finishBlockingRefreshIfReady()
+    if m.homeState.refresh = invalid then return
+    if m.homeState.refresh.blocking <> true then return
+    if m.homeState.refresh.pendingCore <> invalid and m.homeState.refresh.pendingCore.Count() > 0 then return
+
+    m.homeState.refresh.blocking = false
+    m.top.visible = true
+    Spinner_Hide()
+    focusHome()
+    m.top.playbackRowsRefreshCompleted = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -746,6 +850,22 @@ end function
 '-------------------------------------------------------------------------------
 function isCollectionsLibrary(item as dynamic) as boolean
     return item.CollectionType = "boxsets"
+end function
+
+'-------------------------------------------------------------------------------
+' findCollectionId
+'-------------------------------------------------------------------------------
+function findCollectionId(items as object, collectionType as string) as string
+    if items = invalid then return ""
+
+    for each item in items
+        if isAssocArray(item) = false then continue for
+        if item.CollectionType <> invalid and LCase(item.CollectionType) = LCase(collectionType) then
+            return SafeString(item.Id, "")
+        end if
+    end for
+
+    return ""
 end function
 
 ' cloneRequest

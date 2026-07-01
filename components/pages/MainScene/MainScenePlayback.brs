@@ -57,6 +57,8 @@ sub playerHandlePlaybackProgressChanged()
     change = m.videoPlayer.playbackProgressChanged
     if change = invalid then return
 
+    markHomePlaybackRowsDirty()
+
     ' Keep sub-5% progress alive only for this navigation session; Jellyfin
     ' remains authoritative after reload because it discards early resume points.
     routeMoviePlaybackProgress(change)
@@ -117,9 +119,7 @@ sub playerHandleCloseRequested()
         m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
     else
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
 
@@ -208,8 +208,6 @@ sub closeTVEpisodeUpNextAutoPlayPage(restorePreviousPage as boolean)
         m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
     else
-        m.homePage.visible = true
-        m.header.visible = true
-        m.homePage.callFunc("activate")
+        showHome()
     end if
 end sub
