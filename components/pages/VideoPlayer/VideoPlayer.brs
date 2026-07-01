@@ -53,9 +53,7 @@ sub init()
     m.videoPlayer.observeField("state", "onVideoStateChanged")
     m.videoPlayer.observeField("position", "onVideoPositionChanged")
     m.videoPlayer.observeField("duration", "onVideoDurationChanged")
-    m.playbackControls.observeField("previousPressed", "onPreviousPressed")
     m.playbackControls.observeField("playPausePressed", "onPlayPausePressed")
-    m.playbackControls.observeField("nextPressed", "onNextPressed")
     m.playbackControls.observeField("last5Pressed", "onLast5Pressed")
     m.playbackControls.observeField("progressLeftPressed", "onProgressLeftPressed")
     m.playbackControls.observeField("progressRightPressed", "onProgressRightPressed")
@@ -709,13 +707,6 @@ sub togglePlayback()
 end sub
 
 '-------------------------------------------------------------------------------
-' onPreviousPressed
-'-------------------------------------------------------------------------------
-sub onPreviousPressed()
-    if playQueueItem(-1) <> true then skipPlayback(-10)
-end sub
-
-'-------------------------------------------------------------------------------
 ' onPlayPausePressed
 '-------------------------------------------------------------------------------
 sub onPlayPausePressed()
@@ -724,13 +715,6 @@ sub onPlayPausePressed()
     else
         togglePlayback()
     end if
-end sub
-
-'-------------------------------------------------------------------------------
-' onNextPressed
-'-------------------------------------------------------------------------------
-sub onNextPressed()
-    if playQueueItem(1) <> true then skipPlayback(10)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -818,24 +802,6 @@ sub onProgressSeekCancel()
     cancelSeek(true)
 end sub
 
-' playQueueItem
-'-------------------------------------------------------------------------------
-function playQueueItem(direction as integer) as boolean
-    if m.queue = invalid then return false
-    if m.queue.items = invalid or m.queue.items.Count() = 0 then return false
-
-    nextIndex = m.queue.index + direction
-    if nextIndex < 0 or nextIndex >= m.queue.items.Count() then return false
-
-    item = m.queue.items[nextIndex]
-    if item = invalid or item.itemId = invalid or item.itemId = "" then return false
-
-    emitPlaybackProgress(false)
-    m.top.playRequest = buildQueuePlayRequest(nextIndex, item)
-
-    return true
-end function
-
 '-------------------------------------------------------------------------------
 ' emitPlaybackProgress
 '-------------------------------------------------------------------------------
@@ -877,24 +843,6 @@ function getCurrentPlaybackPosition() as float
     if m.playback <> invalid and m.playback.position <> invalid then return m.playback.position
 
     return 0
-end function
-
-'-------------------------------------------------------------------------------
-' buildQueuePlayRequest
-'-------------------------------------------------------------------------------
-function buildQueuePlayRequest(index as integer, item as object) as object
-    return {
-        server: m.session.server
-        token: m.session.token
-        userId: m.session.userId
-        itemId: item.itemId
-        item: item.item
-        series: m.context.series
-        season: getQueueItemSeason(item)
-        startPositionTicks: PlaybackProgress_GetTicksFromSelection(item)
-        playbackQueue: m.queue.items
-        playbackQueueIndex: index
-    }
 end function
 
 '-------------------------------------------------------------------------------

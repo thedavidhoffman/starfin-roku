@@ -2,9 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.previousButton = m.top.findNode("previousButton")
     m.playPauseButton = m.top.findNode("playPauseButton")
-    m.nextButton = m.top.findNode("nextButton")
     m.last5Button = m.top.findNode("last5Button")
     m.trickplayPreview = m.top.findNode("trickplayPreview")
     m.metadataLabels = {
@@ -21,9 +19,19 @@ sub init()
     m.remainingLabel = m.top.findNode("remainingLabel")
 
     m.controlState = {
-        focusedIndex: 1
+        focusedIndex: 0
         focusArea: "buttons"
-        buttons: [m.previousButton, m.playPauseButton, m.nextButton, m.last5Button]
+        buttons: [m.playPauseButton, m.last5Button]
+    }
+    m.playPauseIcons = {
+        play: {
+            icon: "pkg:/images/icons/playback-controls/play-unfocused.png"
+            focusedIcon: "pkg:/images/icons/playback-controls/play-focused.png"
+        }
+        pause: {
+            icon: "pkg:/images/icons/playback-controls/pause-unfocused.png"
+            focusedIcon: "pkg:/images/icons/playback-controls/pause-focused.png"
+        }
     }
     m.trickplayPositions = {
         default: [103, 451]
@@ -34,13 +42,12 @@ sub init()
     m.metadataLabels.title.color = colors.text.light.primary
     m.metadataLabels.subtitle.color = colors.text.light.secondary
 
-    m.previousButton.observeField("buttonSelected", "onPreviousButtonSelected")
     m.playPauseButton.observeField("buttonSelected", "onPlayPauseButtonSelected")
-    m.nextButton.observeField("buttonSelected", "onNextButtonSelected")
     m.last5Button.observeField("buttonSelected", "onLast5ButtonSelected")
     m.top.observeField("focusedChild", "onFocusChanged")
     onTitleChanged()
     onSubtitleChanged()
+    onPlayingChanged()
     updateButtonFocus()
 end sub
 
@@ -92,10 +99,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlayingChanged()
     if m.top.isPlaying = true then
-        m.playPauseButton.text = "Pause"
+        iconSet = m.playPauseIcons.pause
     else
-        m.playPauseButton.text = "Play"
+        iconSet = m.playPauseIcons.play
     end if
+
+    m.playPauseButton.icon = iconSet.icon
+    m.playPauseButton.focusedIcon = iconSet.focusedIcon
 end sub
 
 '-------------------------------------------------------------------------------
@@ -115,24 +125,10 @@ sub onFocusChanged()
 end sub
 
 '-------------------------------------------------------------------------------
-' onPreviousButtonSelected
-'-------------------------------------------------------------------------------
-sub onPreviousButtonSelected()
-    m.top.previousPressed = true
-end sub
-
-'-------------------------------------------------------------------------------
 ' onPlayPauseButtonSelected
 '-------------------------------------------------------------------------------
 sub onPlayPauseButtonSelected()
     m.top.playPausePressed = true
-end sub
-
-'-------------------------------------------------------------------------------
-' onNextButtonSelected
-'-------------------------------------------------------------------------------
-sub onNextButtonSelected()
-    m.top.nextPressed = true
 end sub
 
 '-------------------------------------------------------------------------------
