@@ -308,8 +308,9 @@ function renderRelatedEpisodes(items as object) as boolean
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
     m.relatedEpisodesTitleLabel.text = "TV Episodes"
+    sortedItems = EpisodeSort_BySeriesSeasonEpisode(items)
 
-    for each item in items
+    for each item in sortedItems
         addRelatedItemNode(row, item, "wide")
     end for
 

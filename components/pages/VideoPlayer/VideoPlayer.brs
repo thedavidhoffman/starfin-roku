@@ -366,7 +366,7 @@ function getEpisodePlaybackNumberText(item as dynamic) as string
     seasonNumber = FirstNonEmpty([item.ParentIndexNumber, item.SeasonNumber], "")
     episodeNumber = FirstNonEmpty([item.IndexNumber, item.EpisodeNumber], "")
 
-    if seasonNumber <> "" and episodeNumber <> "" then return "S" + seasonNumber + ":E" + episodeNumber
+    if seasonNumber <> "" and episodeNumber <> "" then return "S" + seasonNumber + MediaMetadata_BulletSeparator() + "E" + episodeNumber
     if seasonNumber <> "" then return "S" + seasonNumber
     if episodeNumber <> "" then return "E" + episodeNumber
     return ""
