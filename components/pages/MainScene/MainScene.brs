@@ -283,6 +283,17 @@ sub tvSeasonHandleTVShowSeasonSelected()
     if selection.seriesId = invalid or selection.seriesId = "" then return
     if selection.seasonId = invalid or selection.seasonId = "" then return
 
+    tvSeasonShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' tvSeasonShow
+'-------------------------------------------------------------------------------
+sub tvSeasonShow(selection as object)
+    if selection = invalid then return
+    if selection.seriesId = invalid or selection.seriesId = "" then return
+    if selection.seasonId = invalid or selection.seasonId = "" then return
+
     page = CreateObject("roSGNode", "TVSeason")
     page.observeField("closeRequested", "tvSeasonHandleCloseRequested")
     page.observeField("selectedEpisodeDetails", "tvEpisodeHandleTVSeasonEpisodeSelected")
@@ -301,7 +312,7 @@ sub tvSeasonHandleTVShowSeasonSelected()
 
     m.tvSeasonPage = page
     m.dynamicPageHost.appendChild(page)
-    m.tvShowPage.visible = false
+    if m.tvShowPage <> invalid then m.tvShowPage.visible = false
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
@@ -348,6 +359,8 @@ sub tvEpisodeShow(selection as object)
     page.observeField("closeRequested", "tvEpisodeHandleCloseRequested")
     page.observeField("selectedEpisode", "tvEpisodeHandleEpisodeSelected")
     page.observeField("selectedPerson", "personHandleTVEpisodePersonSelected")
+    page.observeField("selectedSeries", "tvEpisodeHandleSeriesSelected")
+    page.observeField("selectedSeason", "tvEpisodeHandleSeasonSelected")
     page.observeField("watchedStateChanged", "tvEpisodeHandleWatchedStateChanged")
     page.observeField("playbackProgressChanged", "tvEpisodeHandlePlaybackProgressChanged")
     page.loadRequest = selection.loadRequest
@@ -422,6 +435,63 @@ sub tvEpisodeHandleEpisodeSelected()
     if selection.itemId = invalid or selection.itemId = "" then return
 
     playerShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' tvEpisodeHandleSeriesSelected
+'-------------------------------------------------------------------------------
+sub tvEpisodeHandleSeriesSelected()
+    if m.tvEpisodePage = invalid then return
+    selection = m.tvEpisodePage.selectedSeries
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    clearStatus()
+    if m.tvEpisodePage <> invalid then
+        m.dynamicPageHost.removeChild(m.tvEpisodePage)
+        m.tvEpisodePage = invalid
+    end if
+
+    if m.tvSeasonPage <> invalid then
+        m.dynamicPageHost.removeChild(m.tvSeasonPage)
+        m.tvSeasonPage = invalid
+    end if
+
+    if m.tvShowPage <> invalid then
+        m.tvShowPage.visible = true
+        m.header.visible = false
+        m.tvShowPage.callFunc("activate")
+    else
+        tvShowShow(selection, false)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' tvEpisodeHandleSeasonSelected
+'-------------------------------------------------------------------------------
+sub tvEpisodeHandleSeasonSelected()
+    if m.tvEpisodePage = invalid then return
+    selection = m.tvEpisodePage.selectedSeason
+    if selection = invalid then return
+    if selection.seriesId = invalid or selection.seriesId = "" then return
+    if selection.seasonId = invalid or selection.seasonId = "" then return
+
+    clearStatus()
+    playbackProgressChange = invalid
+    if m.tvEpisodePage <> invalid then
+        playbackProgressChange = m.tvEpisodePage.playbackProgressChanged
+        m.dynamicPageHost.removeChild(m.tvEpisodePage)
+        m.tvEpisodePage = invalid
+    end if
+
+    if m.tvSeasonPage <> invalid then
+        m.tvSeasonPage.visible = true
+        m.header.visible = false
+        if playbackProgressChange <> invalid then m.tvSeasonPage.playbackProgressChange = playbackProgressChange
+        m.tvSeasonPage.callFunc("activate")
+    else
+        tvSeasonShow(selection)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

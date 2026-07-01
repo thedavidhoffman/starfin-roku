@@ -44,6 +44,8 @@ sub initHandlers()
     m.mediaToolbar.observeField("restartSelected", "onMediaToolbarRestartSelected")
     m.mediaToolbar.observeField("subtitlesSelected", "onMediaToolbarSubtitlesSelected")
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
+    m.mediaToolbar.observeField("seriesSelected", "onMediaToolbarSeriesSelected")
+    m.mediaToolbar.observeField("seasonSelected", "onMediaToolbarSeasonSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
@@ -712,6 +714,26 @@ sub onMediaToolbarAudioSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' onMediaToolbarSeriesSelected
+'-------------------------------------------------------------------------------
+sub onMediaToolbarSeriesSelected()
+    selection = getCurrentSeriesSelection()
+    if selection = invalid then return
+
+    m.top.selectedSeries = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaToolbarSeasonSelected
+'-------------------------------------------------------------------------------
+sub onMediaToolbarSeasonSelected()
+    selection = getCurrentSeasonSelection()
+    if selection = invalid then return
+
+    m.top.selectedSeason = selection
+end sub
+
+'-------------------------------------------------------------------------------
 ' onAudioOptionSelected
 '-------------------------------------------------------------------------------
 sub onAudioOptionSelected()
@@ -853,6 +875,88 @@ function getCurrentSeriesId() as string
     end if
 
     return FirstNonEmpty([request.seriesId], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentSeriesSelection
+'-------------------------------------------------------------------------------
+function getCurrentSeriesSelection() as dynamic
+    request = m.state.request
+    if request = invalid then return invalid
+
+    seriesId = getCurrentSeriesId()
+    if seriesId = "" then return invalid
+
+    series = invalid
+    if request.series <> invalid then series = request.series
+
+    return {
+        itemId: seriesId
+        item: series
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentSeasonSelection
+'-------------------------------------------------------------------------------
+function getCurrentSeasonSelection() as dynamic
+    request = m.state.request
+    if request = invalid then return invalid
+
+    seriesId = getCurrentSeriesId()
+    seasonId = getCurrentSeasonId()
+    if seriesId = "" or seasonId = "" then return invalid
+
+    return {
+        seriesId: seriesId
+        seasonId: seasonId
+        series: request.series
+        season: getCurrentSeasonIdentity(seasonId)
+        nextSeason: invalid
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentSeasonId
+'-------------------------------------------------------------------------------
+function getCurrentSeasonId() as string
+    request = m.state.request
+    if request <> invalid then
+        seasonId = FirstNonEmpty([request.seasonId], "")
+        if seasonId <> "" then return seasonId
+
+        if request.season <> invalid then
+            seasonId = FirstNonEmpty([request.season.Id], "")
+            if seasonId <> "" then return seasonId
+        end if
+    end if
+
+    item = m.state.itemContent
+    if item <> invalid and item.raw <> invalid then
+        return FirstNonEmpty([item.raw.SeasonId, item.raw.ParentId], "")
+    end if
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentSeasonIdentity
+'-------------------------------------------------------------------------------
+function getCurrentSeasonIdentity(seasonId as string) as object
+    request = m.state.request
+    if request <> invalid and request.season <> invalid then return request.season
+
+    seasonName = ""
+    item = m.state.itemContent
+    if item <> invalid and item.raw <> invalid then
+        seasonName = FirstNonEmpty([item.raw.SeasonName], "")
+        if seasonName = "" and item.raw.ParentIndexNumber <> invalid then seasonName = "Season " + SafeString(item.raw.ParentIndexNumber, "")
+    end if
+
+    return {
+        Id: seasonId
+        Name: seasonName
+    }
 end function
 
 '-------------------------------------------------------------------------------
