@@ -4,11 +4,14 @@
 sub init()
     m.log = CreateLogger("Library")
     m.titleLabel = m.top.findNode("titleLabel")
+    m.sortButton = m.top.findNode("sortButton")
     m.letterGutterButton = m.top.findNode("letterGutterButton")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.libraryTask = m.top.findNode("libraryTask")
 
     m.libraryTask.observeField("response", "onLibraryResponse")
+    m.sortButton.observeField("overlayRequested", "onSortOverlayRequested")
+    m.sortButton.observeField("focusExitDown", "onSortFocusExitDown")
     m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
     m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
     m.itemsGrid.observeField("itemSelected", "onItemSelected")
@@ -23,7 +26,12 @@ sub init()
         }
         isThumbnailLayout: false
         availableLetters: {}
+        selectedSortKey: "SortName:Ascending"
+        selectedSort: invalid
+        refocusSortButtonAfterLoad: false
     }
+    m.sortButton.selectedSort = getDefaultSortSelection()
+    m.pageState.selectedSort = getDefaultSortSelection()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -44,6 +52,12 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.imageAspect = getLibraryImageAspect()
+    if request.sortBy = invalid then request.sortBy = "SortName"
+    if request.sortOrder = invalid then request.sortOrder = "Ascending"
+    m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
+    m.pageState.selectedSortKey = m.pageState.selectedSort.optionKey
+    m.pageState.refocusSortButtonAfterLoad = false
+    m.sortButton.selectedSort = m.pageState.selectedSort
     updateTitleLabel()
     applyGridLayout(m.pageState.imageAspect)
     Spinner_Show()
@@ -72,7 +86,12 @@ sub onLibraryResponse()
     renderItems(m.pageState.items)
     updateTitleLabel(m.pageState.items.Count())
     Status_ClearMessage()
-    focusItemsIfActive()
+    if m.pageState.refocusSortButtonAfterLoad = true then
+        m.pageState.refocusSortButtonAfterLoad = false
+        focusSortButton()
+    else
+        focusItemsIfActive()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -211,6 +230,122 @@ sub selectLetter(letter as string)
 end sub
 
 '-------------------------------------------------------------------------------
+' onSortOverlayRequested
+'-------------------------------------------------------------------------------
+sub onSortOverlayRequested()
+    request = m.sortButton.overlayRequested
+    if request = invalid then return
+
+    request.selectedSortKey = m.pageState.selectedSortKey
+    m.top.overlayRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' applySortSelection
+'-------------------------------------------------------------------------------
+function applySortSelection(selection as object) as boolean
+    if selection = invalid then return false
+
+    selectedSortKey = getSelectionOptionKey(selection)
+    if selectedSortKey = "" then return false
+    if selectedSortKey = m.pageState.selectedSortKey then return false
+
+    m.pageState.selectedSortKey = selectedSortKey
+    m.pageState.selectedSort = selection
+    m.sortButton.selectedSort = selection
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' getSelectionOptionKey
+'-------------------------------------------------------------------------------
+function getSelectionOptionKey(selection as object) as string
+    optionKey = SafeString(selection.optionKey, "")
+    if optionKey <> "" then return optionKey
+
+    sortKey = SafeString(selection.sortKey, "")
+    if sortKey = "" then return ""
+
+    return sortKey + ":" + getSortOrderFromSelection(selection)
+end function
+
+'-------------------------------------------------------------------------------
+' reloadLibraryForSort
+'-------------------------------------------------------------------------------
+sub reloadLibraryForSort()
+    request = m.pageState.request
+    if request = invalid then return
+    if m.pageState.selectedSort = invalid then return
+
+    request.sortBy = SafeString(m.pageState.selectedSort.sortKey, "SortName")
+    request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
+    m.pageState.request = request
+    m.pageState.refocusSortButtonAfterLoad = true
+    Spinner_Show()
+    renderItems([])
+    m.itemsGrid.jumpToItem = 0
+    m.itemsGrid.itemFocused = 0
+
+    m.libraryTask.request = request
+    m.libraryTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' getSortOrderFromSelection
+'-------------------------------------------------------------------------------
+function getSortOrderFromSelection(selection as object) as string
+    if selection <> invalid and SafeString(selection.sortOrder, "") = "Descending" then return "Descending"
+
+    return "Ascending"
+end function
+
+'-------------------------------------------------------------------------------
+' getDefaultSortSelection
+'-------------------------------------------------------------------------------
+function getDefaultSortSelection() as object
+    return {
+        optionKey: "SortName:Ascending"
+        sortKey: "SortName"
+        sortOrder: "Ascending"
+        label: "Title (A-Z)"
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildSortSelection
+'-------------------------------------------------------------------------------
+function buildSortSelection(sortKey as string, sortOrder as string) as object
+    normalizedSortKey = SafeString(sortKey, "SortName")
+    normalizedSortOrder = "Ascending"
+    if sortOrder = "Descending" then normalizedSortOrder = "Descending"
+
+    return {
+        optionKey: normalizedSortKey + ":" + normalizedSortOrder
+        sortKey: normalizedSortKey
+        sortOrder: normalizedSortOrder
+        label: getSortSelectionLabel(normalizedSortKey, normalizedSortOrder)
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getSortSelectionLabel
+'-------------------------------------------------------------------------------
+function getSortSelectionLabel(sortKey as string, sortOrder as string) as string
+    if sortKey = "PremiereDate" then
+        if sortOrder = "Descending" then return "Release Date (newest to oldest)"
+        return "Release Date (oldest to newest)"
+    end if
+
+    if sortKey = "DateCreated" then
+        if sortOrder = "Descending" then return "Date Added (newest to oldest)"
+        return "Date Added (oldest to newest)"
+    end if
+
+    if sortOrder = "Descending" then return "Title (Z-A)"
+    return "Title (A-Z)"
+end function
+
+'-------------------------------------------------------------------------------
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
@@ -240,6 +375,24 @@ sub focusLibraryItem(index as integer)
     m.itemsGrid.jumpToItem = index
     m.itemsGrid.itemFocused = index
     m.itemsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusSortButton
+'-------------------------------------------------------------------------------
+function focusSortButton() as boolean
+    if m.sortButton = invalid then return false
+
+    m.top.setFocus(true)
+    m.sortButton.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onSortFocusExitDown
+'-------------------------------------------------------------------------------
+sub onSortFocusExitDown()
+    focusItemsIfActive()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -431,6 +584,25 @@ function isItemsGridAtFirstRow() as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' isItemsGridAtLastColumn
+'-------------------------------------------------------------------------------
+function isItemsGridAtLastColumn() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then return false
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = 0
+
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then columns = 1
+
+    itemCount = 0
+    if m.itemsGrid.content <> invalid then itemCount = m.itemsGrid.content.getChildCount()
+    if itemCount > 0 and focusedIndex = itemCount - 1 then return true
+
+    return focusedIndex mod columns = columns - 1
+end function
+
+'-------------------------------------------------------------------------------
 ' isFirstLibraryItemFocused
 '-------------------------------------------------------------------------------
 function isFirstLibraryItemFocused() as boolean
@@ -551,6 +723,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
     if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
     if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return focusLetterGutterButton()
+    if key = "up" and isItemsGridAtFirstRow() then return focusSortButton()
+    if key = "right" and isItemsGridAtLastColumn() then return focusSortButton()
     if key = "back" then
         if m.pageState.letterGridOpen = true then
             closeLetterGrid(true)

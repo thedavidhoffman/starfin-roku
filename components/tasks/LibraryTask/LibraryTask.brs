@@ -26,8 +26,8 @@ sub executeRequest()
         enableImageTypes: "Primary,Backdrop,Thumb,Logo"
         imageTypeLimit: 1
         enableTotalRecordCount: false
-        sortBy: "SortName"
-        sortOrder: "Ascending"
+        sortBy: getSortBy(request)
+        sortOrder: getSortOrder(request)
     }
 
     url = NormalizeServerUrl(request.server) + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
@@ -57,4 +57,24 @@ function validateRequest(request as dynamic) as dynamic
     if request.libraryId = invalid or request.libraryId = "" then return { ok: false, action: "library", errorMessage: "Invalid library item." }
 
     return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' getSortBy
+'-------------------------------------------------------------------------------
+function getSortBy(request as dynamic) as string
+    sortBy = SafeString(request.sortBy, "")
+    if sortBy <> "" then return sortBy
+
+    return "SortName"
+end function
+
+'-------------------------------------------------------------------------------
+' getSortOrder
+'-------------------------------------------------------------------------------
+function getSortOrder(request as dynamic) as string
+    sortOrder = SafeString(request.sortOrder, "")
+    if sortOrder = "Descending" then return "Descending"
+
+    return "Ascending"
 end function

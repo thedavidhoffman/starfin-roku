@@ -28,6 +28,7 @@ sub libraryShow(selection as object, fromCollections as boolean)
     page = CreateObject("roSGNode", "Library")
     page.observeField("closeRequested", "libraryHandleCloseRequested")
     page.observeField("letterGridRequested", "libraryHandleLetterGridRequested")
+    page.observeField("overlayRequested", "libraryHandleOverlayRequested")
     page.observeField("selectedMovie", "libraryHandleMovieSelected")
     page.observeField("selectedSeries", "libraryHandleSeriesSelected")
     page.settings = m.settings
@@ -51,6 +52,23 @@ sub libraryShow(selection as object, fromCollections as boolean)
     m.header.visible = true
     page.loadRequest = loadRequest
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' libraryHandleOverlayRequested
+'-------------------------------------------------------------------------------
+sub libraryHandleOverlayRequested()
+    if m.libraryPage = invalid then return
+
+    request = m.libraryPage.overlayRequested
+    if request = invalid then return
+
+    if SafeString(request.action, "") = "close" then
+        m.overlayHost.callFunc("closeOverlay")
+        return
+    end if
+
+    m.overlayHost.callFunc("openOverlay", request)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -85,6 +103,21 @@ sub libraryHandleLetterGridOverlayClosed(closed as object)
     else
         m.libraryPage.callFunc("closeLetterGrid", true)
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' libraryHandleSortOverlayClosed
+'-------------------------------------------------------------------------------
+sub libraryHandleSortOverlayClosed(closed as object)
+    if m.libraryPage = invalid then return
+
+    overlay = closed.overlay
+    if overlay <> invalid and overlay.sortSelected <> invalid then
+        sortChanged = m.libraryPage.callFunc("applySortSelection", overlay.sortSelected)
+        if sortChanged = true then m.libraryPage.callFunc("reloadLibraryForSort")
+    end if
+
+    m.libraryPage.callFunc("focusSortButton")
 end sub
 
 '-------------------------------------------------------------------------------

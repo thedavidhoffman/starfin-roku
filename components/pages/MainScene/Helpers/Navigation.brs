@@ -39,6 +39,11 @@ sub navHandleOverlayClosed()
         return
     end if
 
+    if request <> invalid and request.id = "sort" then
+        libraryHandleSortOverlayClosed(closed)
+        return
+    end if
+
     if request <> invalid and isStreamOptionsOverlayRequest(request) then
         navHandleStreamOptionsOverlayClosed(closed)
         return

@@ -55,6 +55,11 @@ sub applyOverlayRequestFields(overlay as object, request as object)
         return
     end if
 
+    if requestId = "sort" then
+        overlay.selectedSortKey = request.selectedSortKey
+        return
+    end if
+
     if requestId <> "letterGrid" then return
 
     overlay.availableLetters = request.availableLetters
