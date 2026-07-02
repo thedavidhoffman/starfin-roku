@@ -98,13 +98,17 @@ end sub
 '-------------------------------------------------------------------------------
 sub playerHandleCloseRequested()
     clearStatus()
+    closedPlayRequest = invalid
     if m.videoPlayer <> invalid then
+        closedPlayRequest = m.videoPlayer.playRequest
         capturePendingUpNextAutoPlayRequest()
         m.dynamicPageHost.removeChild(m.videoPlayer)
         m.videoPlayer = invalid
     end if
 
     if showTVEpisodeUpNextAutoPlayPage() then return
+
+    prepareTVEpisodePageForClosedPlayer(closedPlayRequest)
 
     if m.moviePage <> invalid then
         m.moviePage.visible = true
@@ -180,6 +184,96 @@ sub tvEpisodeUpNextHandlePlaySelected()
         playbackQueueIndex: request.playbackQueueIndex
     })
 end sub
+
+'-------------------------------------------------------------------------------
+' prepareTVEpisodePageForClosedPlayer
+'-------------------------------------------------------------------------------
+sub prepareTVEpisodePageForClosedPlayer(playRequest as dynamic)
+    loadRequest = buildClosedPlayerTVEpisodeLoadRequest(playRequest)
+    if loadRequest = invalid then return
+    if isCurrentTVEpisodePage(loadRequest.itemId) then return
+
+    if m.tvEpisodePage <> invalid then
+        m.dynamicPageHost.removeChild(m.tvEpisodePage)
+        m.tvEpisodePage = invalid
+    end if
+
+    page = CreateObject("roSGNode", "TVEpisode")
+    page.observeField("closeRequested", "tvEpisodeHandleCloseRequested")
+    page.observeField("selectedEpisode", "tvEpisodeHandleEpisodeSelected")
+    page.observeField("selectedPerson", "personHandleTVEpisodePersonSelected")
+    page.observeField("selectedSeries", "tvEpisodeHandleSeriesSelected")
+    page.observeField("selectedSeason", "tvEpisodeHandleSeasonSelected")
+    page.observeField("watchedStateChanged", "tvEpisodeHandleWatchedStateChanged")
+    page.observeField("playbackProgressChanged", "tvEpisodeHandlePlaybackProgressChanged")
+    page.loadRequest = loadRequest
+    page.visible = false
+
+    m.tvEpisodePage = page
+    m.dynamicPageHost.appendChild(page)
+    if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
+    if m.personPage <> invalid then m.personPage.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' buildClosedPlayerTVEpisodeLoadRequest
+'-------------------------------------------------------------------------------
+function buildClosedPlayerTVEpisodeLoadRequest(playRequest as dynamic) as dynamic
+    if isTVEpisodePlayRequest(playRequest) <> true then return invalid
+
+    item = playRequest.item
+    if item = invalid then return invalid
+
+    itemId = SafeString(FirstNonEmpty([playRequest.itemId, item.Id], ""), "")
+    if itemId = "" then return invalid
+
+    seriesId = FirstNonEmpty([item.SeriesId], "")
+    if seriesId = "" and playRequest.series <> invalid then seriesId = FirstNonEmpty([playRequest.series.Id], "")
+
+    seasonId = FirstNonEmpty([item.SeasonId, item.ParentId], "")
+    if seasonId = "" and playRequest.season <> invalid then seasonId = FirstNonEmpty([playRequest.season.Id], "")
+
+    return {
+        server: playRequest.server
+        token: playRequest.token
+        userId: playRequest.userId
+        seriesId: seriesId
+        seasonId: seasonId
+        itemId: itemId
+        item: item
+        series: playRequest.series
+        season: playRequest.season
+        startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
+        playbackQueue: playRequest.playbackQueue
+        playbackQueueIndex: playRequest.playbackQueueIndex
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' isTVEpisodePlayRequest
+'-------------------------------------------------------------------------------
+function isTVEpisodePlayRequest(playRequest as dynamic) as boolean
+    if playRequest = invalid then return false
+    if playRequest.series <> invalid then return true
+
+    item = playRequest.item
+    if item = invalid then return false
+
+    return LCase(FirstNonEmpty([item.Type], "")) = "episode"
+end function
+
+'-------------------------------------------------------------------------------
+' isCurrentTVEpisodePage
+'-------------------------------------------------------------------------------
+function isCurrentTVEpisodePage(itemId as string) as boolean
+    if itemId = "" then return false
+    if m.tvEpisodePage = invalid then return false
+
+    request = m.tvEpisodePage.loadRequest
+    if request = invalid then return false
+
+    return SafeString(request.itemId, "") = itemId
+end function
 
 '-------------------------------------------------------------------------------
 ' tvEpisodeUpNextHandleCancelSelected
