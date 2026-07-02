@@ -3,7 +3,6 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.posterMask = m.top.findNode("posterMask")
-    m.placeholder = m.top.findNode("placeholder")
     m.poster = m.top.findNode("poster")
     m.progressBar = m.top.findNode("progressBar")
     m.watchedIndicator = m.top.findNode("watchedIndicator")
@@ -38,8 +37,6 @@ sub applyPosterLayout()
     progressY = height - m.layout.progressBottom - m.layout.progressHeight
 
     m.posterMask.maskSize = [width, height]
-    m.placeholder.width = width
-    m.placeholder.height = height
     m.poster.width = width
     m.poster.height = height
 
@@ -118,10 +115,18 @@ end sub
 ' renderImage
 '-------------------------------------------------------------------------------
 sub renderImage(imageUrl as string)
-    m.poster.visible = imageUrl <> ""
-    m.placeholder.visible = imageUrl = ""
-    m.poster.uri = imageUrl
+    m.poster.visible = true
+    m.poster.uri = getPosterImageUrl(imageUrl)
 end sub
+
+'-------------------------------------------------------------------------------
+' getPosterImageUrl
+'-------------------------------------------------------------------------------
+function getPosterImageUrl(imageUrl as string) as string
+    if imageUrl <> "" then return imageUrl
+
+    return "pkg:/images/media-card/thumbnail-placeholder-440x248.png"
+end function
 
 '-------------------------------------------------------------------------------
 ' updateProgress
