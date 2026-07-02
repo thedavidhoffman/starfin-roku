@@ -8,6 +8,8 @@ sub init()
     m.pageState = {
         request: invalid
         season: invalid
+        seasons: []
+        previousSeason: invalid
         nextSeason: invalid
         episodes: []
         nextSeasonEpisodes: []
@@ -26,6 +28,7 @@ end sub
 sub initReferences()
     m.logoBanner = m.top.findNode("logoBanner")
     m.seasonLabel = m.top.findNode("seasonLabel")
+    m.seasonNav = m.top.findNode("seasonNav")
     m.episodesList = m.top.findNode("episodesList")
     m.episodesGrid = m.top.findNode("episodesGrid")
     m.leftChevron = m.top.findNode("leftChevron")
@@ -38,6 +41,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
+    m.seasonNav.observeField("previousSeasonSelected", "onPreviousSeasonSelected")
+    m.seasonNav.observeField("nextSeasonSelected", "onNextSeasonSelected")
     m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
     m.episodesList.observeField("rowItemSelected", "onEpisodeSelected")
     m.episodesGrid.observeField("itemFocused", "onEpisodeFocused")
@@ -101,6 +106,8 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.season = request.season
+    m.pageState.seasons = getSeasonsFromRequest(request)
+    m.pageState.previousSeason = invalid
     m.pageState.nextSeason = request.nextSeason
     m.pageState.episodes = []
     m.pageState.nextSeasonEpisodes = []
@@ -109,9 +116,12 @@ sub onLoadRequestChanged()
     m.pageState.episodesLoaded = false
     m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
     m.pageState.focusArea = "episodes"
+    if request.keepSeasonNavFocus = true then m.pageState.focusArea = "seasonNav"
     clearEpisodes()
     Status_SetLoading()
+    updateAdjacentSeasons()
     renderSeason(request.season)
+    if m.pageState.focusArea = "seasonNav" then focusSeasonNav()
 
     m.tvSeasonTask.request = request
     m.tvSeasonTask.control = "run"
@@ -155,14 +165,18 @@ sub onTVSeasonResponse()
     end if
 
     m.pageState.season = payload.season
-    if m.pageState.nextSeason = invalid then m.pageState.nextSeason = m.pageState.request.nextSeason
+    updateAdjacentSeasons()
     m.pageState.episodes = getItemsFromPayload(payload.episodes)
     m.pageState.episodesLoaded = true
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
     Status_ClearMessage()
     updateChevrons()
-    focusEpisodesIfActive()
+    if m.pageState.focusArea = "seasonNav" then
+        focusSeasonNav()
+    else
+        focusEpisodesIfActive()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -237,7 +251,119 @@ sub renderSeason(item as dynamic)
     m.logoBanner.title = FirstNonEmpty([series.Name, item.SeriesName], "")
     m.logoBanner.logoUrl = getSeriesLogoUrl()
     m.seasonLabel.text = getItemTitle(item)
+    m.seasonNav.hasPreviousSeason = m.pageState.previousSeason <> invalid
+    m.seasonNav.hasNextSeason = m.pageState.nextSeason <> invalid
 end sub
+
+'-------------------------------------------------------------------------------
+' onPreviousSeasonSelected
+'-------------------------------------------------------------------------------
+sub onPreviousSeasonSelected()
+    navigateToSeason(m.pageState.previousSeason)
+end sub
+
+'-------------------------------------------------------------------------------
+' onNextSeasonSelected
+'-------------------------------------------------------------------------------
+sub onNextSeasonSelected()
+    navigateToSeason(m.pageState.nextSeason)
+end sub
+
+'-------------------------------------------------------------------------------
+' navigateToSeason
+'-------------------------------------------------------------------------------
+sub navigateToSeason(season as dynamic)
+    request = buildSeasonLoadRequest(season)
+    if request = invalid then return
+
+    m.top.loadRequest = request
+end sub
+
+'-------------------------------------------------------------------------------
+' buildSeasonLoadRequest
+'-------------------------------------------------------------------------------
+function buildSeasonLoadRequest(season as dynamic) as dynamic
+    request = m.pageState.request
+    if request = invalid then return invalid
+
+    seasonId = getSeasonId(season)
+    if seasonId = "" then return invalid
+
+    return {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        seriesId: request.seriesId
+        seasonId: seasonId
+        series: request.series
+        season: season
+        seasons: m.pageState.seasons
+        nextSeason: getRelativeSeason(season, 1)
+        keepSeasonNavFocus: true
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonsFromRequest
+'-------------------------------------------------------------------------------
+function getSeasonsFromRequest(request as dynamic) as object
+    if request = invalid then return []
+    if request.seasons = invalid then return []
+
+    return request.seasons
+end function
+
+'-------------------------------------------------------------------------------
+' updateAdjacentSeasons
+'-------------------------------------------------------------------------------
+sub updateAdjacentSeasons()
+    m.pageState.previousSeason = getRelativeSeason(m.pageState.season, -1)
+    m.pageState.nextSeason = getRelativeSeason(m.pageState.season, 1)
+
+    if m.pageState.nextSeason = invalid and m.pageState.request <> invalid then
+        m.pageState.nextSeason = m.pageState.request.nextSeason
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getRelativeSeason
+'-------------------------------------------------------------------------------
+function getRelativeSeason(season as dynamic, offset as integer) as dynamic
+    currentIndex = getSeasonIndex(season)
+    if currentIndex < 0 then return invalid
+
+    seasons = m.pageState.seasons
+    relativeIndex = currentIndex + offset
+    if relativeIndex < 0 or relativeIndex >= seasons.Count() then return invalid
+
+    return seasons[relativeIndex]
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonIndex
+'-------------------------------------------------------------------------------
+function getSeasonIndex(season as dynamic) as integer
+    seasonId = getSeasonId(season)
+    if seasonId = "" then return -1
+
+    seasons = m.pageState.seasons
+    if seasons = invalid then return -1
+
+    for i = 0 to seasons.Count() - 1
+        if getSeasonId(seasons[i]) = seasonId then return i
+    end for
+
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonId
+'-------------------------------------------------------------------------------
+function getSeasonId(season as dynamic) as string
+    if isAssocArray(season) = false then return ""
+
+    return SafeString(FirstNonEmpty([season.Id], ""), "")
+end function
 
 '-------------------------------------------------------------------------------
 ' getSeriesLogoUrl
@@ -412,6 +538,7 @@ function buildEpisodeLoadRequest(node as dynamic) as dynamic
         seasonId: request.seasonId
         series: buildSeriesIdentity(request, playSelection.item)
         season: buildSeasonIdentity(request)
+        seasons: m.pageState.seasons
         itemId: playSelection.itemId
         item: playSelection.item
         posterUrl: SafeString(node.HDPosterUrl, "")
@@ -600,8 +727,19 @@ sub focusEpisodesIfActive()
 
     m.pageState.focusArea = "episodes"
     setEpisodeListVisible(true)
+    m.seasonNav.callFunc("deactivate")
     m.top.setFocus(true)
     getActiveEpisodeList().setFocus(true)
+    updateChevrons()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusSeasonNav
+'-------------------------------------------------------------------------------
+sub focusSeasonNav()
+    m.pageState.focusArea = "seasonNav"
+    m.top.setFocus(true)
+    m.seasonNav.callFunc("activate")
     updateChevrons()
 end sub
 
@@ -609,6 +747,12 @@ end sub
 ' updateChevrons
 '-------------------------------------------------------------------------------
 sub updateChevrons()
+    if m.pageState.focusArea <> "episodes" then
+        m.leftChevron.visible = false
+        m.rightChevron.visible = false
+        return
+    end if
+
     if isVerticalEpisodeList() then
         m.leftChevron.visible = false
         m.rightChevron.visible = false
@@ -1101,6 +1245,16 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "back" then
         Status_ClearMessage()
         m.top.closeRequested = true
+        return true
+    end if
+
+    if key = "up" and m.pageState.focusArea = "episodes" then
+        focusSeasonNav()
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "seasonNav" then
+        focusEpisodesIfActive()
         return true
     end if
 

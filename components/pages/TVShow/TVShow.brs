@@ -53,6 +53,7 @@ sub onSeasonSelected()
         seasonId: seasonId
         series: SeriesIdentity_FromItem(request.server, m.pageState.series)
         season: season
+        seasons: m.pageState.seasons
         nextSeason: nextSeason
     }
 end sub

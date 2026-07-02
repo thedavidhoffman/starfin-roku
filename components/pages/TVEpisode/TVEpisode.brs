@@ -927,6 +927,7 @@ function getCurrentSeasonSelection() as dynamic
         seasonId: seasonId
         series: request.series
         season: getCurrentSeasonIdentity(seasonId)
+        seasons: request.seasons
         nextSeason: invalid
     }
 end function

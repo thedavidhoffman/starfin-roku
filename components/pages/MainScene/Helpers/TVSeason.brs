@@ -31,6 +31,7 @@ sub tvSeasonShow(selection as object)
         seasonId: selection.seasonId
         series: selection.series
         season: selection.season
+        seasons: selection.seasons
         nextSeason: selection.nextSeason
     }
 
