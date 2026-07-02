@@ -5,21 +5,22 @@ sub init()
     m.log = CreateLogger("Library")
     m.titleLabel = m.top.findNode("titleLabel")
     m.letterGutterButton = m.top.findNode("letterGutterButton")
-    m.letterGrid = m.top.findNode("letterGrid")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.libraryTask = m.top.findNode("libraryTask")
 
     m.libraryTask.observeField("response", "onLibraryResponse")
     m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
     m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
-    m.letterGrid.observeField("letterSelected", "onLetterSelected")
-    m.letterGrid.observeField("closeRequested", "onLetterGridCloseRequested")
     m.itemsGrid.observeField("itemSelected", "onItemSelected")
     m.pageState = {
         request: invalid
         items: []
         imageAspect: "poster"
         letterGridOpen: false
+        letterGridPanel: {
+            x: 72
+            y: 208
+        }
         isThumbnailLayout: false
         availableLetters: {}
     }
@@ -144,7 +145,6 @@ sub updateAvailableLetters(items as object)
     end for
 
     m.pageState.availableLetters = availableLetters
-    m.letterGrid.availableLetters = availableLetters
 end sub
 
 '-------------------------------------------------------------------------------
@@ -167,10 +167,16 @@ end sub
 ' openLetterGrid
 '-------------------------------------------------------------------------------
 function openLetterGrid() as boolean
-    if m.letterGrid = invalid then return false
-
     m.pageState.letterGridOpen = true
-    m.letterGrid.callFunc("openGrid")
+    m.top.letterGridRequested = {
+        id: "letterGrid"
+        componentName: "LetterGridDialog"
+        openFunction: "openGrid"
+        closeFields: ["closeRequested", "letterSelected"]
+        availableLetters: m.pageState.availableLetters
+        panelX: m.pageState.letterGridPanel.x
+        panelY: m.pageState.letterGridPanel.y
+    }
     return true
 end function
 
@@ -178,17 +184,23 @@ end function
 ' closeLetterGrid
 '-------------------------------------------------------------------------------
 sub closeLetterGrid(focusItems as boolean)
-    if m.letterGrid <> invalid then m.letterGrid.callFunc("closeGrid")
+    wasOpen = m.pageState <> invalid and m.pageState.letterGridOpen = true
     if m.pageState <> invalid then m.pageState.letterGridOpen = false
+
+    if wasOpen then
+        m.top.letterGridRequested = {
+            id: "letterGrid"
+            action: "close"
+        }
+    end if
 
     if focusItems = true then focusItemsIfActive()
 end sub
 
 '-------------------------------------------------------------------------------
-' onLetterSelected
+' selectLetter
 '-------------------------------------------------------------------------------
-sub onLetterSelected()
-    letter = SafeString(m.letterGrid.letterSelected, "")
+sub selectLetter(letter as string)
     if letter = "" then return
 
     index = findFirstItemIndexForLetter(letter)
@@ -196,13 +208,6 @@ sub onLetterSelected()
 
     closeLetterGrid(false)
     focusLibraryItem(index)
-end sub
-
-'-------------------------------------------------------------------------------
-' onLetterGridCloseRequested
-'-------------------------------------------------------------------------------
-sub onLetterGridCloseRequested()
-    closeLetterGrid(true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -469,13 +474,17 @@ end sub
 sub applyLetterGridLayout(isThumbnailLayout as boolean, gridLeft as integer, gridTop as integer)
     if isThumbnailLayout = true then
         thumbnailVisualOffset = 20
-        m.letterGrid.panelX = gridLeft + thumbnailVisualOffset
-        m.letterGrid.panelY = gridTop
+        m.pageState.letterGridPanel = {
+            x: gridLeft + thumbnailVisualOffset
+            y: gridTop
+        }
         return
     end if
 
-    m.letterGrid.panelX = 72
-    m.letterGrid.panelY = gridTop
+    m.pageState.letterGridPanel = {
+        x: 72
+        y: gridTop
+    }
 end sub
 
 ' getItemsFromPayload

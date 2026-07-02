@@ -1,27 +1,19 @@
 '-------------------------------------------------------------------------------
-' init
-'-------------------------------------------------------------------------------
-sub init()
-    m.originalSettings = invalid
-    m.dialog = m.top.findNode("settingsDialog")
-
-    if m.dialog <> invalid then
-        m.dialog.observeField("closeRequested", "onDialogCloseRequested")
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
 ' openSettings
 '-------------------------------------------------------------------------------
 sub openSettings()
-    if m.dialog = invalid then return
+    m.originalSettings = invalid
+    m.top.title = "Settings"
+    m.top.dialogWidth = 1560
+    m.top.dialogHeight = 820
+    m.top.contentComponentName = "SettingsContent"
 
     content = getSettingsContent()
     if content <> invalid then
         content.callFunc("loadSettingsValues")
         m.originalSettings = content.callFunc("getSettingsValues")
     end if
-    m.dialog.callFunc("openDialog")
+    m.top.callFunc("openDialog")
     if content <> invalid then content.callFunc("focusFirstField")
 end sub
 
@@ -29,8 +21,7 @@ end sub
 ' getSettingsContent
 '-------------------------------------------------------------------------------
 function getSettingsContent() as object
-    if m.dialog = invalid then return invalid
-    return m.dialog.callFunc("getContentComponent")
+    return m.top.callFunc("getContentComponent")
 end function
 
 '-------------------------------------------------------------------------------
@@ -51,9 +42,8 @@ sub saveSettings()
 end sub
 
 '-------------------------------------------------------------------------------
-' onDialogCloseRequested
+' onCloseRequested
 '-------------------------------------------------------------------------------
-sub onDialogCloseRequested()
+sub onCloseRequested()
     saveSettings()
-    m.top.closeRequested = true
 end sub

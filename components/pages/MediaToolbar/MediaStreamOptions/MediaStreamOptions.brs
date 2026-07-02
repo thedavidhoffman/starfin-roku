@@ -2,13 +2,6 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.subtitleOptions = m.top.findNode("subtitleOptions")
-    m.audioOptions = m.top.findNode("audioOptions")
-
-    m.subtitleOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
-    m.subtitleOptions.observeField("closeRequested", "onOptionsCloseRequested")
-    m.audioOptions.observeField("selectedAudio", "onAudioOptionSelected")
-    m.audioOptions.observeField("closeRequested", "onOptionsCloseRequested")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -17,11 +10,15 @@ end sub
 sub openSubtitleOptions(request as dynamic)
     if request = invalid then return
 
-    closeActiveOptions(false)
     m.top.visible = true
-    m.subtitleOptions.subtitleStreams = getRequestArray(request.subtitleStreams)
-    m.subtitleOptions.selectedSubtitleStreamIndex = getRequestInteger(request.selectedSubtitleStreamIndex, -2)
-    m.subtitleOptions.callFunc("openOptions")
+    m.top.overlayRequested = {
+        id: "subtitleOptions"
+        componentName: "SubtitleOptionsDialog"
+        openFunction: "openOptions"
+        closeField: "closeRequested"
+        subtitleStreams: getRequestArray(request.subtitleStreams)
+        selectedSubtitleStreamIndex: getRequestInteger(request.selectedSubtitleStreamIndex, -2)
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -30,56 +27,41 @@ end sub
 sub openAudioOptions(request as dynamic)
     if request = invalid then return
 
-    closeActiveOptions(false)
     m.top.visible = true
-    m.audioOptions.audioStreams = getRequestArray(request.audioStreams)
-    m.audioOptions.selectedAudioStreamIndex = getRequestInteger(request.selectedAudioStreamIndex, -1)
-    m.audioOptions.callFunc("openOptions")
+    m.top.overlayRequested = {
+        id: "audioOptions"
+        componentName: "AudioOptionsDialog"
+        openFunction: "openOptions"
+        closeField: "closeRequested"
+        audioStreams: getRequestArray(request.audioStreams)
+        selectedAudioStreamIndex: getRequestInteger(request.selectedAudioStreamIndex, -1)
+    }
 end sub
 
 '-------------------------------------------------------------------------------
 ' closeOptions
 '-------------------------------------------------------------------------------
 sub closeOptions()
-    closeActiveOptions(true)
-end sub
-
-'-------------------------------------------------------------------------------
-' closeActiveOptions
-'-------------------------------------------------------------------------------
-sub closeActiveOptions(notify as boolean)
-    if m.subtitleOptions.visible = true then m.subtitleOptions.visible = false
-    if m.audioOptions.visible = true then m.audioOptions.visible = false
-
     m.top.visible = false
-    if notify = true then m.top.closeRequested = true
+    m.top.closeRequested = true
 end sub
 
 '-------------------------------------------------------------------------------
-' onSubtitleOptionSelected
+' applySubtitleSelection
 '-------------------------------------------------------------------------------
-sub onSubtitleOptionSelected()
-    selection = m.subtitleOptions.selectedSubtitle
+sub applySubtitleSelection(selection as dynamic)
     if selection = invalid then return
 
     m.top.selectedSubtitle = selection
 end sub
 
 '-------------------------------------------------------------------------------
-' onAudioOptionSelected
+' applyAudioSelection
 '-------------------------------------------------------------------------------
-sub onAudioOptionSelected()
-    selection = m.audioOptions.selectedAudio
+sub applyAudioSelection(selection as dynamic)
     if selection = invalid then return
 
     m.top.selectedAudio = selection
-end sub
-
-'-------------------------------------------------------------------------------
-' onOptionsCloseRequested
-'-------------------------------------------------------------------------------
-sub onOptionsCloseRequested()
-    closeActiveOptions(true)
 end sub
 
 '-------------------------------------------------------------------------------

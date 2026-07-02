@@ -2,7 +2,6 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.dialog = m.top.findNode("dialog")
     m.emptyLabel = m.top.findNode("emptyLabel")
     m.subtitleList = m.top.findNode("subtitleList")
     m.subtitleList.observeField("itemSelected", "onSubtitleListItemSelected")
@@ -10,17 +9,6 @@ sub init()
     m.state = {
         isUpdatingCheckedItem: false
         pendingSelection: invalid
-    }
-    m.layout = {
-        panelX: 600
-        panelY: 330
-        panelWidth: 720
-        titleY: 390
-        contentY: 462
-        panelPadding: 60
-        titleHeight: 48
-        listRowHeight: 52
-        maxRows: 8
     }
     initStyle()
     renderOptions()
@@ -35,29 +23,6 @@ sub initStyle()
 end sub
 
 '-------------------------------------------------------------------------------
-' openOptions
-'-------------------------------------------------------------------------------
-sub openOptions()
-    m.state.pendingSelection = getSelectionForCheckedItem()
-    m.top.visible = true
-    m.dialog.callFunc("openDialog")
-    m.top.setFocus(true)
-    if hasSubtitleStreams() then
-        m.subtitleList.setFocus(true)
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' closeOptions
-'-------------------------------------------------------------------------------
-sub closeOptions()
-    publishPendingSelection()
-    m.dialog.callFunc("closeDialog")
-    m.top.visible = false
-    m.top.closeRequested = true
-end sub
-
-'-------------------------------------------------------------------------------
 ' onSubtitleStreamsChanged
 '-------------------------------------------------------------------------------
 sub onSubtitleStreamsChanged()
@@ -69,6 +34,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub onSelectedSubtitleStreamIndexChanged()
     updateCheckedItem()
+end sub
+
+'-------------------------------------------------------------------------------
+' onVisibleRowCountChanged
+'-------------------------------------------------------------------------------
+sub onVisibleRowCountChanged()
+    rows = m.top.visibleRowCount
+    if rows = invalid or rows <= 0 then rows = 1
+    m.subtitleList.numRows = rows
 end sub
 
 '-------------------------------------------------------------------------------
@@ -87,7 +61,8 @@ sub renderOptions()
     updateCheckedItem()
     m.subtitleList.visible = hasSubtitleStreams()
     m.emptyLabel.visible = hasSubtitleStreams() <> true
-    updatePanelSize()
+    onVisibleRowCountChanged()
+    m.state.pendingSelection = getSelectionForCheckedItem()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -96,27 +71,6 @@ end sub
 sub addOption(content as object, title as string)
     option = content.createChild("ContentNode")
     option.title = title
-end sub
-
-'-------------------------------------------------------------------------------
-' updatePanelSize
-'-------------------------------------------------------------------------------
-sub updatePanelSize()
-    rows = 1
-    if hasSubtitleStreams() then rows = m.top.subtitleStreams.Count() + 1
-    if rows > m.layout.maxRows then rows = m.layout.maxRows
-
-    contentHeight = rows * m.layout.listRowHeight
-    panelHeight = 208 + contentHeight
-    panelY = int((1080 - panelHeight) / 2)
-    titleY = panelY + m.layout.panelPadding
-    contentY = titleY + m.layout.titleHeight + 24
-
-    m.dialog.dialogWidth = m.layout.panelWidth
-    m.dialog.dialogHeight = panelHeight
-    m.emptyLabel.translation = [m.layout.panelX + m.layout.panelPadding, contentY + 8]
-    m.subtitleList.translation = [m.layout.panelX + m.layout.panelPadding, contentY]
-    m.subtitleList.numRows = rows
 end sub
 
 '-------------------------------------------------------------------------------
@@ -146,6 +100,7 @@ sub updateCheckedItem()
     m.state.isUpdatingCheckedItem = true
     m.subtitleList.checkedItem = getCheckedItemIndex()
     m.state.isUpdatingCheckedItem = false
+    m.state.pendingSelection = getSelectionForCheckedItem()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -175,7 +130,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub onSubtitleListCheckedItemChanged()
     if m.state.isUpdatingCheckedItem = true then return
-    if m.top.visible <> true then return
 
     selectSubtitleListIndex(m.subtitleList.checkedItem)
 end sub
@@ -208,14 +162,12 @@ sub selectSubtitleListIndex(selectedIndex as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' publishPendingSelection
+' getSelectedSubtitle
 '-------------------------------------------------------------------------------
-sub publishPendingSelection()
+function getSelectedSubtitle() as dynamic
     if m.state.pendingSelection = invalid then m.state.pendingSelection = getSelectionForCheckedItem()
-    if m.state.pendingSelection = invalid then return
-
-    m.top.selectedSubtitle = m.state.pendingSelection
-end sub
+    return m.state.pendingSelection
+end function
 
 '-------------------------------------------------------------------------------
 ' getSelectionForCheckedItem
@@ -252,15 +204,9 @@ function getStreamIndex(stream as dynamic, fallback as integer) as integer
 end function
 
 '-------------------------------------------------------------------------------
-' onKeyEvent
+' focusOptions
 '-------------------------------------------------------------------------------
-function onKeyEvent(key as string, press as boolean) as boolean
-    if press = false then return false
-
-    if key = "back" then
-        closeOptions()
-        return true
-    end if
-
-    return false
-end function
+sub focusOptions()
+    m.top.setFocus(true)
+    if hasSubtitleStreams() then m.subtitleList.setFocus(true)
+end sub

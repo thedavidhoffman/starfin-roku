@@ -58,11 +58,24 @@ function createTVEpisodePage(loadRequest as object, isVisible as boolean) as obj
     page.observeField("selectedSeason", "tvEpisodeHandleSeasonSelected")
     page.observeField("watchedStateChanged", "tvEpisodeHandleWatchedStateChanged")
     page.observeField("playbackProgressChanged", "tvEpisodeHandlePlaybackProgressChanged")
+    page.observeField("streamOptionsRequested", "tvEpisodeHandleStreamOptionsRequested")
     page.loadRequest = loadRequest
     page.visible = isVisible
 
     return page
 end function
+
+'-------------------------------------------------------------------------------
+' tvEpisodeHandleStreamOptionsRequested
+'-------------------------------------------------------------------------------
+sub tvEpisodeHandleStreamOptionsRequested()
+    if m.tvEpisodePage = invalid then return
+
+    request = m.tvEpisodePage.streamOptionsRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
+end sub
 
 '-------------------------------------------------------------------------------
 ' buildHomeEpisodeLoadRequest

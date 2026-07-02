@@ -2,7 +2,6 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.dialog = m.top.findNode("dialog")
     m.emptyLabel = m.top.findNode("emptyLabel")
     m.audioList = m.top.findNode("audioList")
     m.audioList.observeField("itemSelected", "onAudioListItemSelected")
@@ -10,17 +9,6 @@ sub init()
     m.state = {
         isUpdatingCheckedItem: false
         pendingSelection: invalid
-    }
-    m.layout = {
-        panelX: 600
-        panelY: 330
-        panelWidth: 720
-        titleY: 390
-        contentY: 462
-        panelPadding: 60
-        titleHeight: 48
-        listRowHeight: 52
-        maxRows: 8
     }
     initStyle()
     renderOptions()
@@ -32,29 +20,6 @@ end sub
 sub initStyle()
     colors = Color()
     m.emptyLabel.color = colors.text.light.secondary
-end sub
-
-'-------------------------------------------------------------------------------
-' openOptions
-'-------------------------------------------------------------------------------
-sub openOptions()
-    m.state.pendingSelection = getSelectionForCheckedItem()
-    m.top.visible = true
-    m.dialog.callFunc("openDialog")
-    m.top.setFocus(true)
-    if hasAudioStreams() then
-        m.audioList.setFocus(true)
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' closeOptions
-'-------------------------------------------------------------------------------
-sub closeOptions()
-    publishPendingSelection()
-    m.dialog.callFunc("closeDialog")
-    m.top.visible = false
-    m.top.closeRequested = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -72,6 +37,15 @@ sub onSelectedAudioStreamIndexChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onVisibleRowCountChanged
+'-------------------------------------------------------------------------------
+sub onVisibleRowCountChanged()
+    rows = m.top.visibleRowCount
+    if rows = invalid or rows <= 0 then rows = 1
+    m.audioList.numRows = rows
+end sub
+
+'-------------------------------------------------------------------------------
 ' renderOptions
 '-------------------------------------------------------------------------------
 sub renderOptions()
@@ -86,7 +60,8 @@ sub renderOptions()
     updateCheckedItem()
     m.audioList.visible = hasAudioStreams()
     m.emptyLabel.visible = hasAudioStreams() <> true
-    updatePanelSize()
+    onVisibleRowCountChanged()
+    m.state.pendingSelection = getSelectionForCheckedItem()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -95,27 +70,6 @@ end sub
 sub addOption(content as object, title as string)
     option = content.createChild("ContentNode")
     option.title = title
-end sub
-
-'-------------------------------------------------------------------------------
-' updatePanelSize
-'-------------------------------------------------------------------------------
-sub updatePanelSize()
-    rows = 1
-    if hasAudioStreams() then rows = m.top.audioStreams.Count()
-    if rows > m.layout.maxRows then rows = m.layout.maxRows
-
-    contentHeight = rows * m.layout.listRowHeight
-    panelHeight = 208 + contentHeight
-    panelY = int((1080 - panelHeight) / 2)
-    titleY = panelY + m.layout.panelPadding
-    contentY = titleY + m.layout.titleHeight + 24
-
-    m.dialog.dialogWidth = m.layout.panelWidth
-    m.dialog.dialogHeight = panelHeight
-    m.emptyLabel.translation = [m.layout.panelX + m.layout.panelPadding, contentY + 8]
-    m.audioList.translation = [m.layout.panelX + m.layout.panelPadding, contentY]
-    m.audioList.numRows = rows
 end sub
 
 '-------------------------------------------------------------------------------
@@ -145,6 +99,7 @@ sub updateCheckedItem()
     m.state.isUpdatingCheckedItem = true
     m.audioList.checkedItem = getCheckedItemIndex()
     m.state.isUpdatingCheckedItem = false
+    m.state.pendingSelection = getSelectionForCheckedItem()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -174,7 +129,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub onAudioListCheckedItemChanged()
     if m.state.isUpdatingCheckedItem = true then return
-    if m.top.visible <> true then return
 
     selectAudioListIndex(m.audioList.checkedItem)
 end sub
@@ -196,14 +150,12 @@ sub selectAudioListIndex(selectedIndex as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' publishPendingSelection
+' getSelectedAudio
 '-------------------------------------------------------------------------------
-sub publishPendingSelection()
+function getSelectedAudio() as dynamic
     if m.state.pendingSelection = invalid then m.state.pendingSelection = getSelectionForCheckedItem()
-    if m.state.pendingSelection = invalid then return
-
-    m.top.selectedAudio = m.state.pendingSelection
-end sub
+    return m.state.pendingSelection
+end function
 
 '-------------------------------------------------------------------------------
 ' getSelectionForCheckedItem
@@ -230,15 +182,9 @@ function getStreamIndex(stream as dynamic, fallback as integer) as integer
 end function
 
 '-------------------------------------------------------------------------------
-' onKeyEvent
+' focusOptions
 '-------------------------------------------------------------------------------
-function onKeyEvent(key as string, press as boolean) as boolean
-    if press = false then return false
-
-    if key = "back" then
-        closeOptions()
-        return true
-    end if
-
-    return false
-end function
+sub focusOptions()
+    m.top.setFocus(true)
+    if hasAudioStreams() then m.audioList.setFocus(true)
+end sub

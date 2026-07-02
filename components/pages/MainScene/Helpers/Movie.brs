@@ -20,6 +20,7 @@ sub movieShow(selection as object, shouldReset as boolean)
     page.observeField("closeRequested", "movieHandleCloseRequested")
     page.observeField("playSelected", "movieHandlePlaySelected")
     page.observeField("selectedPerson", "personHandleMoviePersonSelected")
+    page.observeField("streamOptionsRequested", "movieHandleStreamOptionsRequested")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -37,6 +38,18 @@ sub movieShow(selection as object, shouldReset as boolean)
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' movieHandleStreamOptionsRequested
+'-------------------------------------------------------------------------------
+sub movieHandleStreamOptionsRequested()
+    if m.moviePage = invalid then return
+
+    request = m.moviePage.streamOptionsRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
 end sub
 
 '-------------------------------------------------------------------------------

@@ -19,6 +19,7 @@ sub init()
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
+    m.streamOptions.observeField("overlayRequested", "onStreamOptionsOverlayRequested")
     m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
     m.streamOptions.observeField("selectedAudio", "onAudioOptionSelected")
     m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
@@ -215,6 +216,41 @@ sub onMediaToolbarSubtitlesSelected()
         subtitleStreams: getSubtitleStreams(item)
         selectedSubtitleStreamIndex: getSelectedSubtitleStreamIndex()
     })
+end sub
+
+'-------------------------------------------------------------------------------
+' onStreamOptionsOverlayRequested
+'-------------------------------------------------------------------------------
+sub onStreamOptionsOverlayRequested()
+    request = m.streamOptions.overlayRequested
+    if request = invalid then return
+
+    request.sourcePage = "movie"
+    m.top.streamOptionsRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' handleStreamOptionsOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleStreamOptionsOverlayClosed(closed as object)
+    applyClosedStreamOptionsSelection(closed)
+    m.streamOptions.callFunc("closeOptions")
+end sub
+
+'-------------------------------------------------------------------------------
+' applyClosedStreamOptionsSelection
+'-------------------------------------------------------------------------------
+sub applyClosedStreamOptionsSelection(closed as object)
+    if closed = invalid then return
+    request = closed.request
+    overlay = closed.overlay
+    if request = invalid or overlay = invalid then return
+
+    if SafeString(request.id, "") = "subtitleOptions" then
+        m.streamOptions.callFunc("applySubtitleSelection", overlay.selectedSubtitle)
+    else if SafeString(request.id, "") = "audioOptions" then
+        m.streamOptions.callFunc("applyAudioSelection", overlay.selectedAudio)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

@@ -34,6 +34,16 @@ sub navHandleOverlayClosed()
     if closed = invalid then return
 
     request = closed.request
+    if request <> invalid and request.id = "letterGrid" then
+        libraryHandleLetterGridOverlayClosed(closed)
+        return
+    end if
+
+    if request <> invalid and isStreamOptionsOverlayRequest(request) then
+        navHandleStreamOptionsOverlayClosed(closed)
+        return
+    end if
+
     if request <> invalid and request.id = "settings" and m.header <> invalid and m.header.visible = true then
         applySettingsFromOverlay(closed.overlay)
         m.header.callFunc("focusHeader")
@@ -41,6 +51,29 @@ sub navHandleOverlayClosed()
     end if
 
     focusActiveSurface()
+end sub
+
+'-------------------------------------------------------------------------------
+' isStreamOptionsOverlayRequest
+'-------------------------------------------------------------------------------
+function isStreamOptionsOverlayRequest(request as object) as boolean
+    id = SafeString(request.id, "")
+    return id = "subtitleOptions" or id = "audioOptions"
+end function
+
+'-------------------------------------------------------------------------------
+' navHandleStreamOptionsOverlayClosed
+'-------------------------------------------------------------------------------
+sub navHandleStreamOptionsOverlayClosed(closed as object)
+    request = closed.request
+    if request = invalid then return
+
+    sourcePage = SafeString(request.sourcePage, "")
+    if sourcePage = "movie" and m.moviePage <> invalid then
+        m.moviePage.callFunc("handleStreamOptionsOverlayClosed", closed)
+    else if sourcePage = "tvEpisode" and m.tvEpisodePage <> invalid then
+        m.tvEpisodePage.callFunc("handleStreamOptionsOverlayClosed", closed)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

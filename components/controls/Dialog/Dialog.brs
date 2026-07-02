@@ -36,8 +36,8 @@ end sub
 sub closeDialog()
     if m.dialog <> invalid then m.dialog.visible = false
 
-    m.top.closeRequested = true
     onCloseRequested()
+    m.top.closeRequested = true
 end sub
 
 '-------------------------------------------------------------------------------

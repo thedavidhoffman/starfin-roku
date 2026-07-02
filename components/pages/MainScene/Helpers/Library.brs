@@ -27,6 +27,7 @@ sub libraryShow(selection as object, fromCollections as boolean)
 
     page = CreateObject("roSGNode", "Library")
     page.observeField("closeRequested", "libraryHandleCloseRequested")
+    page.observeField("letterGridRequested", "libraryHandleLetterGridRequested")
     page.observeField("selectedMovie", "libraryHandleMovieSelected")
     page.observeField("selectedSeries", "libraryHandleSeriesSelected")
     page.settings = m.settings
@@ -50,6 +51,40 @@ sub libraryShow(selection as object, fromCollections as boolean)
     m.header.visible = true
     page.loadRequest = loadRequest
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' libraryHandleLetterGridRequested
+'-------------------------------------------------------------------------------
+sub libraryHandleLetterGridRequested()
+    if m.libraryPage = invalid then return
+
+    request = m.libraryPage.letterGridRequested
+    if request = invalid then return
+
+    if SafeString(request.action, "") = "close" then
+        m.overlayHost.callFunc("closeOverlay")
+        return
+    end if
+
+    m.overlayHost.callFunc("openOverlay", request)
+end sub
+
+'-------------------------------------------------------------------------------
+' libraryHandleLetterGridOverlayClosed
+'-------------------------------------------------------------------------------
+sub libraryHandleLetterGridOverlayClosed(closed as object)
+    if m.libraryPage = invalid then return
+
+    overlay = closed.overlay
+    letter = ""
+    if overlay <> invalid then letter = SafeString(overlay.letterSelected, "")
+
+    if letter <> "" then
+        m.libraryPage.callFunc("selectLetter", letter)
+    else
+        m.libraryPage.callFunc("closeLetterGrid", true)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

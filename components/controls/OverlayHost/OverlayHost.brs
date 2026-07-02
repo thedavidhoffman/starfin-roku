@@ -20,6 +20,8 @@ function openOverlay(request as dynamic) as dynamic
     overlay = CreateObject("roSGNode", componentName)
     if overlay = invalid then return invalid
 
+    applyOverlayRequestFields(overlay, request)
+
     closeFields = getCloseFields(request)
     for each closeField in closeFields
         if closeField <> invalid and closeField <> "" then overlay.observeField(closeField, "onOverlayClosed")
@@ -34,6 +36,31 @@ function openOverlay(request as dynamic) as dynamic
 
     return overlay
 end function
+
+'-------------------------------------------------------------------------------
+' applyOverlayRequestFields
+'-------------------------------------------------------------------------------
+sub applyOverlayRequestFields(overlay as object, request as object)
+    requestId = SafeString(request.id, "")
+
+    if requestId = "subtitleOptions" then
+        overlay.subtitleStreams = request.subtitleStreams
+        overlay.selectedSubtitleStreamIndex = request.selectedSubtitleStreamIndex
+        return
+    end if
+
+    if requestId = "audioOptions" then
+        overlay.audioStreams = request.audioStreams
+        overlay.selectedAudioStreamIndex = request.selectedAudioStreamIndex
+        return
+    end if
+
+    if requestId <> "letterGrid" then return
+
+    overlay.availableLetters = request.availableLetters
+    overlay.panelX = request.panelX
+    overlay.panelY = request.panelY
+end sub
 
 '-------------------------------------------------------------------------------
 ' getCloseFields
