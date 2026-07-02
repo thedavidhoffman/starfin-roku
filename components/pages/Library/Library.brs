@@ -243,6 +243,13 @@ sub focusLibraryItem(index as integer)
 end sub
 
 '-------------------------------------------------------------------------------
+' focusFirstLibraryItem
+'-------------------------------------------------------------------------------
+sub focusFirstLibraryItem()
+    focusLibraryItem(0)
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusLetterGutterButton
 '-------------------------------------------------------------------------------
 function focusLetterGutterButton() as boolean
@@ -424,6 +431,20 @@ function isItemsGridAtFirstRow() as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' isFirstLibraryItemFocused
+'-------------------------------------------------------------------------------
+function isFirstLibraryItemFocused() as boolean
+    if m.itemsGrid = invalid then return true
+    if m.itemsGrid.content = invalid then return true
+    if m.itemsGrid.content.getChildCount() = 0 then return true
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = 0
+
+    return focusedIndex = 0
+end function
+
+'-------------------------------------------------------------------------------
 ' applyGridLayout
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
@@ -533,6 +554,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "back" then
         if m.pageState.letterGridOpen = true then
             closeLetterGrid(true)
+            return true
+        end if
+        if isFirstLibraryItemFocused() <> true then
+            focusFirstLibraryItem()
             return true
         end if
         m.top.closeRequested = true
