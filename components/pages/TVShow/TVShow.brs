@@ -149,7 +149,7 @@ sub renderSeasons(seasons as object)
 
         child = content.createChild("ContentNode")
         child.title = getItemTitle(season)
-        child.HDPosterUrl = getImageUrl(season, "Primary", 208, 312)
+        child.HDPosterUrl = getSeasonPosterUrl(season)
         child.AddFields({
             itemId: SafeString(FirstNonEmpty([season.Id], ""), "")
             itemType: SafeString(FirstNonEmpty([season.Type], ""), "")
@@ -163,6 +163,16 @@ sub renderSeasons(seasons as object)
     m.seasonsGrid.visible = content.getChildCount() > 0
     updateFocusChevron()
 end sub
+
+'-------------------------------------------------------------------------------
+' getSeasonPosterUrl
+'-------------------------------------------------------------------------------
+function getSeasonPosterUrl(season as dynamic) as string
+    posterUrl = getImageUrl(season, "Primary", 208, 312)
+    if posterUrl <> "" then return posterUrl
+
+    return getImageUrl(m.pageState.series, "Primary", 208, 312)
+end function
 
 '-------------------------------------------------------------------------------
 ' setSeasonsVisible
