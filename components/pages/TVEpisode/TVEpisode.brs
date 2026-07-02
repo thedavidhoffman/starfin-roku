@@ -342,6 +342,7 @@ sub loadItemDetails()
         token: request.token
         userId: request.userId
         itemId: itemId
+        loadPlaybackQueue: request.playbackQueue = invalid
     }
     m.episodeDetailsTask.control = "run"
 end sub
@@ -359,8 +360,22 @@ sub onEpisodeDetailsResponse()
     if SafeString(response.itemId, "") <> m.state.itemId then return
 
     applySeriesDetails(response.series)
+    applyPlaybackQueueDetails(response)
     applyEpisodeDetails(response.payload, false, false)
     m.cast.people = getPeople(response.payload)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackQueueDetails
+'-------------------------------------------------------------------------------
+sub applyPlaybackQueueDetails(response as object)
+    if response = invalid then return
+    if m.state.request = invalid then return
+    if response.playbackQueue = invalid then return
+
+    m.state.request.playbackQueue = response.playbackQueue
+    m.state.request.playbackQueueIndex = response.playbackQueueIndex
+    if m.state.request.season = invalid and response.season <> invalid then m.state.request.season = response.season
 end sub
 
 '-------------------------------------------------------------------------------
