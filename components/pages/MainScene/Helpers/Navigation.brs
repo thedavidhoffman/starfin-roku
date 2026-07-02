@@ -1,0 +1,205 @@
+'-------------------------------------------------------------------------------
+' navHandleHomeFocusExitUp
+'-------------------------------------------------------------------------------
+sub navHandleHomeFocusExitUp()
+    if m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusHeader")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleHeaderDownSelected
+'-------------------------------------------------------------------------------
+sub navHandleHeaderDownSelected()
+    if m.homePage <> invalid and m.homePage.visible = true then
+        m.homePage.callFunc("focusHome")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleHeaderOverlayRequested
+'-------------------------------------------------------------------------------
+sub navHandleHeaderOverlayRequested()
+    request = m.header.overlayRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleOverlayClosed
+'-------------------------------------------------------------------------------
+sub navHandleOverlayClosed()
+    closed = m.overlayHost.closed
+    if closed = invalid then return
+
+    request = closed.request
+    if request <> invalid and request.id = "settings" and m.header <> invalid and m.header.visible = true then
+        applySettingsFromOverlay(closed.overlay)
+        m.header.callFunc("focusHeader")
+        return
+    end if
+
+    focusActiveSurface()
+end sub
+
+'-------------------------------------------------------------------------------
+' markHomePlaybackRowsDirty
+'-------------------------------------------------------------------------------
+sub markHomePlaybackRowsDirty()
+    if m.homeRefreshState = invalid then m.homeRefreshState = { playbackRowsDirty: false }
+    m.homeRefreshState.playbackRowsDirty = true
+end sub
+
+'-------------------------------------------------------------------------------
+' showHome
+'-------------------------------------------------------------------------------
+sub showHome()
+    m.homePage.visible = true
+    m.header.visible = true
+
+    if m.homeRefreshState <> invalid and m.homeRefreshState.playbackRowsDirty = true then
+        m.homePage.callFunc("activateBlocking")
+    else
+        m.homePage.callFunc("focusHome")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' homeHandlePlaybackRowsRefreshCompleted
+'-------------------------------------------------------------------------------
+sub homeHandlePlaybackRowsRefreshCompleted()
+    if m.homeRefreshState = invalid then return
+    m.homeRefreshState.playbackRowsDirty = false
+end sub
+
+'-------------------------------------------------------------------------------
+' focusActiveSurface
+'-------------------------------------------------------------------------------
+sub focusActiveSurface()
+    if m.videoPlayer <> invalid then
+        m.videoPlayer.setFocus(true)
+    else if m.filmographyPage <> invalid then
+        m.filmographyPage.callFunc("activate")
+    else if m.personPage <> invalid then
+        m.personPage.callFunc("activate")
+    else if m.moviePage <> invalid then
+        m.moviePage.callFunc("activate")
+    else if m.tvEpisodePage <> invalid then
+        m.tvEpisodePage.callFunc("activate")
+    else if m.tvSeasonPage <> invalid then
+        m.tvSeasonPage.callFunc("activate")
+    else if m.tvShowPage <> invalid then
+        m.tvShowPage.callFunc("activate")
+    else if m.libraryPage <> invalid then
+        m.libraryPage.callFunc("activate")
+    else if m.collectionsPage <> invalid then
+        m.collectionsPage.callFunc("activate")
+    else if m.homePage <> invalid and m.homePage.visible = true then
+        m.homePage.callFunc("focusHome")
+    else if m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusHeader")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' navShowApp
+'-------------------------------------------------------------------------------
+sub navShowApp()
+    m.settings = SettingsStore_Load()
+    loadRequest = buildSessionLoadRequest()
+    m.homePage.loadRequest = loadRequest
+    navShowAppRoute()
+end sub
+
+'-------------------------------------------------------------------------------
+' applySettingsFromOverlay
+'-------------------------------------------------------------------------------
+sub applySettingsFromOverlay(overlay as dynamic)
+    if overlay = invalid then return
+    if overlay.settingsSaved <> true then return
+    if overlay.savedSettings = invalid then return
+
+    m.settings = overlay.savedSettings
+    fanOutSettings()
+end sub
+
+'-------------------------------------------------------------------------------
+' fanOutSettings
+'-------------------------------------------------------------------------------
+sub fanOutSettings()
+    applySettingsToPage(m.collectionsPage)
+    applySettingsToPage(m.libraryPage)
+    applySettingsToPage(m.tvSeasonPage)
+    applySettingsToPage(m.personPage)
+end sub
+
+'-------------------------------------------------------------------------------
+' applySettingsToPage
+'-------------------------------------------------------------------------------
+sub applySettingsToPage(page as dynamic)
+    if page = invalid then return
+    if m.settings = invalid then return
+
+    page.settings = m.settings
+end sub
+
+'-------------------------------------------------------------------------------
+' navShowLoginRoute
+'-------------------------------------------------------------------------------
+sub navShowLoginRoute()
+    clearStatus()
+    m.login.visible = true
+    m.authenticatedContent.visible = false
+    m.homePage.visible = false
+    resetDynamicPages()
+    m.login.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' navShowAppRoute
+'-------------------------------------------------------------------------------
+sub navShowAppRoute()
+    clearStatus()
+    m.login.visible = false
+    m.authenticatedContent.visible = true
+    m.homePage.visible = true
+    resetDynamicPages()
+
+    m.header.visible = true
+    m.homePage.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' resetDynamicPages
+'-------------------------------------------------------------------------------
+sub resetDynamicPages()
+    clearStatus()
+    m.yourStatsPage = invalid
+    m.collectionsPage = invalid
+    m.libraryPage = invalid
+    m.moviePage = invalid
+    m.tvShowPage = invalid
+    m.tvSeasonPage = invalid
+    m.tvEpisodePage = invalid
+    m.tvEpisodeUpNextAutoPlayPage = invalid
+    m.personPage = invalid
+    m.personSourceMoviePage = invalid
+    m.personSourceTvEpisodePage = invalid
+    m.personSourceTvSeasonPage = invalid
+    m.personSourceTvShowPage = invalid
+    m.filmographyPage = invalid
+    m.videoPlayer = invalid
+    m.pendingUpNextAutoPlayRequest = invalid
+    m.tvEpisodeUpNextRestorePlayRequest = invalid
+    childCount = m.dynamicPageHost.getChildCount()
+    if childCount > 0 then m.dynamicPageHost.removeChildrenIndex(childCount, 0)
+end sub
+
+'-------------------------------------------------------------------------------
+' clearStatus
+'-------------------------------------------------------------------------------
+sub clearStatus()
+    Spinner_Hide()
+    m.statusLabel.callFunc("clearMessage")
+end sub

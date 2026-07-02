@@ -106,7 +106,7 @@ sub playerHandleCloseRequested()
         m.videoPlayer = invalid
     end if
 
-    if showTVEpisodeUpNextAutoPlayPage() then return
+    if showTVEpisodeUpNextAutoPlayPage(closedPlayRequest) then return
 
     prepareTVEpisodePageForClosedPlayer(closedPlayRequest)
 
@@ -143,7 +143,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' showTVEpisodeUpNextAutoPlayPage
 '-------------------------------------------------------------------------------
-function showTVEpisodeUpNextAutoPlayPage() as boolean
+function showTVEpisodeUpNextAutoPlayPage(restorePlayRequest as dynamic) as boolean
     request = m.pendingUpNextAutoPlayRequest
     m.pendingUpNextAutoPlayRequest = invalid
     if request = invalid then return false
@@ -154,6 +154,7 @@ function showTVEpisodeUpNextAutoPlayPage() as boolean
     page.autoPlayRequest = request
 
     m.tvEpisodeUpNextAutoPlayPage = page
+    m.tvEpisodeUpNextRestorePlayRequest = restorePlayRequest
     m.dynamicPageHost.appendChild(page)
     m.homePage.visible = false
     m.header.visible = false
@@ -169,6 +170,7 @@ sub tvEpisodeUpNextHandlePlaySelected()
     if m.tvEpisodeUpNextAutoPlayPage = invalid then return
 
     request = m.tvEpisodeUpNextAutoPlayPage.autoPlayRequest
+    m.tvEpisodeUpNextRestorePlayRequest = invalid
     closeTVEpisodeUpNextAutoPlayPage(false)
     if request = invalid then return
 
@@ -198,17 +200,7 @@ sub prepareTVEpisodePageForClosedPlayer(playRequest as dynamic)
         m.tvEpisodePage = invalid
     end if
 
-    page = CreateObject("roSGNode", "TVEpisode")
-    page.observeField("closeRequested", "tvEpisodeHandleCloseRequested")
-    page.observeField("selectedEpisode", "tvEpisodeHandleEpisodeSelected")
-    page.observeField("selectedPerson", "personHandleTVEpisodePersonSelected")
-    page.observeField("selectedSeries", "tvEpisodeHandleSeriesSelected")
-    page.observeField("selectedSeason", "tvEpisodeHandleSeasonSelected")
-    page.observeField("watchedStateChanged", "tvEpisodeHandleWatchedStateChanged")
-    page.observeField("playbackProgressChanged", "tvEpisodeHandlePlaybackProgressChanged")
-    page.loadRequest = loadRequest
-    page.visible = false
-
+    page = createTVEpisodePage(loadRequest, false)
     m.tvEpisodePage = page
     m.dynamicPageHost.appendChild(page)
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
@@ -279,6 +271,8 @@ end function
 ' tvEpisodeUpNextHandleCancelSelected
 '-------------------------------------------------------------------------------
 sub tvEpisodeUpNextHandleCancelSelected()
+    prepareTVEpisodePageForClosedPlayer(m.tvEpisodeUpNextRestorePlayRequest)
+    m.tvEpisodeUpNextRestorePlayRequest = invalid
     closeTVEpisodeUpNextAutoPlayPage(true)
 end sub
 
