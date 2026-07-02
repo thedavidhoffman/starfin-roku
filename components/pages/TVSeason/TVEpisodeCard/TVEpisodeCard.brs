@@ -54,6 +54,9 @@ end sub
 function getNumberText(item as dynamic, isSeasonSummary as boolean) as string
     if isSeasonSummary then return getEpisodeCountText(item.episodeCount)
 
+    overrideText = SafeString(item.episodeNumberText, "")
+    if overrideText <> "" then return overrideText
+
     indexText = SafeString(item.episodeIndexNumber, "")
     if indexText <> "" then return "Episode " + indexText
     return "Episode"

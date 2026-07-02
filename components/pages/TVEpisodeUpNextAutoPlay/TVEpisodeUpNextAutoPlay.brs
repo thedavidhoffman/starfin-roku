@@ -152,6 +152,7 @@ function buildEpisodeContentNode(queueItem as dynamic) as object
         itemId: SafeString(FirstNonEmpty([item.Id, queueItem.itemId], ""), "")
         itemType: SafeString(FirstNonEmpty([item.Type], ""), "")
         episodeIndexNumber: FirstNonEmpty([item.IndexNumber], "")
+        episodeNumberText: getEpisodeNumberText(item)
         premiereDate: FirstNonEmpty([item.PremiereDate], "")
         airDate: FirstNonEmpty([item.AirDate], "")
         dateCreated: FirstNonEmpty([item.DateCreated], "")
@@ -161,6 +162,18 @@ function buildEpisodeContentNode(queueItem as dynamic) as object
     })
 
     return content
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeNumberText
+'-------------------------------------------------------------------------------
+function getEpisodeNumberText(item as dynamic) as string
+    seasonNumber = SafeString(FirstNonEmpty([item.ParentIndexNumber, item.SeasonNumber], ""), "")
+    episodeNumber = SafeString(FirstNonEmpty([item.IndexNumber, item.EpisodeNumber], ""), "")
+
+    if seasonNumber <> "" and episodeNumber <> "" then return "Season " + seasonNumber + MediaMetadata_BulletSeparator() + "Episode " + episodeNumber
+    if episodeNumber <> "" then return "Episode " + episodeNumber
+    return ""
 end function
 
 '-------------------------------------------------------------------------------
