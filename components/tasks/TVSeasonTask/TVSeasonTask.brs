@@ -36,6 +36,12 @@ sub executeRequest()
         return
     end if
 
+    seasons = invalid
+    if hasRequestSeasons(request) <> true then
+        seasonsResult = loadSeasons(request)
+        if seasonsResult <> invalid and seasonsResult.ok = true then seasons = seasonsResult.data
+    end if
+
     m.top.response = {
         ok: true
         action: "tvSeason"
@@ -44,6 +50,7 @@ sub executeRequest()
         payload: {
             season: seasonResult.data
             episodes: episodesResult.data
+            seasons: seasons
         }
     }
 end sub
@@ -107,6 +114,31 @@ function loadEpisodes(request as object, seasonId as string) as object
 
     url = NormalizeServerUrl(request.server) + "/Shows/" + request.seriesId + "/Episodes" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' loadSeasons
+'-------------------------------------------------------------------------------
+function loadSeasons(request as object) as object
+    params = {
+        userId: SafeString(request.userId, "")
+        enableImageTypes: "Primary,Backdrop,Thumb"
+        imageTypeLimit: 1
+        enableTotalRecordCount: false
+    }
+
+    url = NormalizeServerUrl(request.server) + "/Shows/" + request.seriesId + "/Seasons" + Url_BuildQueryString(params)
+    return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' hasRequestSeasons
+'-------------------------------------------------------------------------------
+function hasRequestSeasons(request as object) as boolean
+    if request.seasons = invalid then return false
+    if Type(request.seasons) <> "roArray" then return false
+
+    return request.seasons.Count() > 0
 end function
 
 '-------------------------------------------------------------------------------

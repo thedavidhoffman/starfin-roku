@@ -165,6 +165,7 @@ sub onTVSeasonResponse()
     end if
 
     m.pageState.season = payload.season
+    if payload.seasons <> invalid then m.pageState.seasons = getItemsFromPayload(payload.seasons)
     updateAdjacentSeasons()
     m.pageState.episodes = getItemsFromPayload(payload.episodes)
     m.pageState.episodesLoaded = true
