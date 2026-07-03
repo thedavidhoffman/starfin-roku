@@ -101,6 +101,8 @@ function loadEpisodes(request as object, seasonId as string) as object
         userId: SafeString(request.userId, "")
         seasonId: seasonId
         fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
+        enableImageTypes: "Primary,Backdrop,Thumb"
+        imageTypeLimit: 1
     }
 
     url = NormalizeServerUrl(request.server) + "/Shows/" + request.seriesId + "/Episodes" + Url_BuildQueryString(params)

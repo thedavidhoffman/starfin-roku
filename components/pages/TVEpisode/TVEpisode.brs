@@ -76,7 +76,7 @@ sub onLoadRequestChanged()
         subtitle: invalid
         subtitleOff: false
     }
-    clearContent()
+    clearPageState()
     if m.state.request <> invalid then
         m.cast.server = m.state.request.server
         renderInitialEpisodeContent()
@@ -362,7 +362,7 @@ sub onEpisodeDetailsResponse()
 
     applySeriesDetails(response.series)
     applyPlaybackQueueDetails(response)
-    applyEpisodeDetails(response.payload, false, false)
+    applyEpisodeDetails(response.payload, false)
     m.cast.people = getPeople(response.payload)
 end sub
 
@@ -386,7 +386,7 @@ sub renderInitialEpisodeContent()
     request = m.state.request
     if request = invalid or request.item = invalid then return
 
-    applyEpisodeDetails(request.item, true, true)
+    applyEpisodeDetails(request.item, true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -402,10 +402,10 @@ end sub
 '-------------------------------------------------------------------------------
 ' applyEpisodeDetails
 '-------------------------------------------------------------------------------
-sub applyEpisodeDetails(details as dynamic, useRequestPoster as boolean, logoPending = false as boolean)
+sub applyEpisodeDetails(details as dynamic, logoPending = false as boolean)
     if details = invalid then return
 
-    item = buildEpisodeContentNode(details, useRequestPoster)
+    item = buildEpisodeContentNode(details)
     m.state.itemContent = item
     m.state.playSelection = buildPlaySelection(details)
     renderEpisodeContent(item, logoPending)
@@ -414,11 +414,11 @@ end sub
 '-------------------------------------------------------------------------------
 ' buildEpisodeContentNode
 '-------------------------------------------------------------------------------
-function buildEpisodeContentNode(details as dynamic, useRequestPoster as boolean) as object
+function buildEpisodeContentNode(details as dynamic) as object
     content = CreateObject("roSGNode", "ContentNode")
     content.title = FirstNonEmpty([details.Name], "")
     content.description = FirstNonEmpty([details.Overview], "")
-    content.HDPosterUrl = getEpisodePosterUrl(details, useRequestPoster)
+    content.HDPosterUrl = getEpisodePosterUrl(details)
     content.AddFields({
         itemId: SafeString(FirstNonEmpty([details.Id], ""), "")
         itemType: SafeString(FirstNonEmpty([details.Type], ""), "")
@@ -461,12 +461,7 @@ end function
 '-------------------------------------------------------------------------------
 ' getEpisodePosterUrl
 '-------------------------------------------------------------------------------
-function getEpisodePosterUrl(item as dynamic, useRequestPoster as boolean) as string
-    if useRequestPoster then
-        requestPosterUrl = getRequestPosterUrl(item)
-        if requestPosterUrl <> "" then return requestPosterUrl
-    end if
-
+function getEpisodePosterUrl(item as dynamic) as string
     imageSize = DeviceCapabilities_GetMaxScreenImageSize()
     request = m.state.request
     if request = invalid then return ""
@@ -485,27 +480,6 @@ function getEpisodePosterUrl(item as dynamic, useRequestPoster as boolean) as st
     if seriesId <> "" and seriesTag <> "" then return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
 
     return ""
-end function
-
-'-------------------------------------------------------------------------------
-' getRequestPosterUrl
-'-------------------------------------------------------------------------------
-function getRequestPosterUrl(item as dynamic) as string
-    request = m.state.request
-    if request = invalid then return ""
-
-    requestItemId = FirstNonEmpty([request.itemId], "")
-    itemId = FirstNonEmpty([item.Id], "")
-    if requestItemId = "" or itemId = "" or requestItemId <> itemId then return ""
-
-    return FirstNonEmpty([request.posterUrl], "")
-end function
-
-'-------------------------------------------------------------------------------
-' shouldKeepRequestPoster
-'-------------------------------------------------------------------------------
-function shouldKeepRequestPoster(item as dynamic) as boolean
-    return getRequestPosterUrl(item) <> ""
 end function
 
 '-------------------------------------------------------------------------------
@@ -577,6 +551,21 @@ sub clearContent()
         secondaryInfoText: ""
         overview: ""
     }
+    m.mediaToolbar.supportsWatchedActions = false
+    m.mediaToolbar.isWatched = false
+    m.mediaToolbar.mediaType = "tv-episode"
+    m.mediaToolbar.subtitleStreamCount = 0
+    m.mediaToolbar.audioStreamCount = 0
+    m.mediaToolbar.resumePositionSeconds = 0
+    m.state.itemContent = invalid
+    m.state.playSelection = invalid
+    m.cast.people = []
+end sub
+
+'-------------------------------------------------------------------------------
+' clearPageState
+'-------------------------------------------------------------------------------
+sub clearPageState()
     m.mediaToolbar.supportsWatchedActions = false
     m.mediaToolbar.isWatched = false
     m.mediaToolbar.mediaType = "tv-episode"
