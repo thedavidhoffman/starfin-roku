@@ -474,15 +474,15 @@ function getEpisodePosterUrl(item as dynamic, useRequestPoster as boolean) as st
     itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
-    if itemId <> "" and primaryTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height, { format: "Png" })
+    if itemId <> "" and primaryTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
 
     parentThumbId = FirstNonEmpty([item.ParentThumbItemId], "")
     parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
-    if parentThumbId <> "" and parentThumbTag <> "" then return Url_BuildImageUrl(request.server, parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height, { format: "Png" })
+    if parentThumbId <> "" and parentThumbTag <> "" then return Url_BuildImageUrl(request.server, parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
 
     seriesId = FirstNonEmpty([item.SeriesId], "")
     seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
-    if seriesId <> "" and seriesTag <> "" then return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesTag, imageSize.width, imageSize.height, { format: "Png" })
+    if seriesId <> "" and seriesTag <> "" then return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
 
     return ""
 end function
