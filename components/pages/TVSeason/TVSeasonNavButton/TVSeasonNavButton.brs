@@ -50,6 +50,7 @@ end sub
 ' updateStyles
 '-------------------------------------------------------------------------------
 sub updateStyles()
+    m.top.visible = m.top.hasPreviousSeason = true or m.top.hasNextSeason = true
     m.bg.visible = true
     if m.state.isFocused = true then
         m.bg.uri = m.assets.focusBg

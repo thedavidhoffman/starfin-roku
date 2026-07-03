@@ -737,11 +737,23 @@ end sub
 ' focusSeasonNav
 '-------------------------------------------------------------------------------
 sub focusSeasonNav()
+    if hasSeasonNavigation() = false then
+        focusEpisodesIfActive()
+        return
+    end if
+
     m.pageState.focusArea = "seasonNav"
     m.top.setFocus(true)
     m.seasonNav.callFunc("activate")
     updateChevrons()
 end sub
+
+'-------------------------------------------------------------------------------
+' hasSeasonNavigation
+'-------------------------------------------------------------------------------
+function hasSeasonNavigation() as boolean
+    return m.pageState.previousSeason <> invalid or m.pageState.nextSeason <> invalid
+end function
 
 '-------------------------------------------------------------------------------
 ' updateChevrons
@@ -1248,7 +1260,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = "up" and m.pageState.focusArea = "episodes" then
+    if key = "up" and m.pageState.focusArea = "episodes" and hasSeasonNavigation() then
         focusSeasonNav()
         return true
     end if
