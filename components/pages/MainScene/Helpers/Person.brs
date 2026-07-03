@@ -32,6 +32,7 @@ sub personShow(selection as object)
     page.observeField("selectedMovie", "personHandleMovieSelected")
     page.observeField("selectedSeries", "personHandleSeriesSelected")
     page.observeField("selectedEpisode", "personHandleEpisodeSelected")
+    page.observeField("overlayRequested", "personHandleOverlayRequested")
     page.settings = m.settings
     page.loadRequest = {
         server: m.session.server
@@ -54,6 +55,27 @@ sub personShow(selection as object)
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' personHandleOverlayRequested
+'-------------------------------------------------------------------------------
+sub personHandleOverlayRequested()
+    if m.personPage = invalid then return
+
+    request = m.personPage.overlayRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
+end sub
+
+'-------------------------------------------------------------------------------
+' personHandlePersonOverviewOverlayClosed
+'-------------------------------------------------------------------------------
+sub personHandlePersonOverviewOverlayClosed(closed as object)
+    if m.personPage = invalid then return
+
+    m.personPage.callFunc("handlePersonOverviewOverlayClosed")
 end sub
 
 '-------------------------------------------------------------------------------

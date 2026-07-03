@@ -11,7 +11,6 @@ sub init()
     m.overviewLabel = m.top.findNode("overviewLabel")
     m.readMoreButton = m.top.findNode("readMoreButton")
     m.filmographyButton = m.top.findNode("filmographyButton")
-    m.personOverview = m.top.findNode("personOverview")
     m.relatedGroup = m.top.findNode("relatedGroup")
     m.relatedItemsGroup = m.top.findNode("relatedItemsGroup")
     m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
@@ -25,7 +24,6 @@ sub init()
     m.personTask = m.top.findNode("personTask")
 
     m.personTask.observeField("response", "onPersonResponse")
-    m.personOverview.observeField("closeRequested", "onPersonOverviewCloseRequested")
     m.relatedRows.observeField("rowItemSelected", "onRelatedItemSelected")
     m.relatedEpisodeRows.observeField("rowItemSelected", "onRelatedEpisodeSelected")
 
@@ -61,7 +59,6 @@ sub onLoadRequestChanged()
     m.pageState.focusArea = "person"
     setLayoutMode("bio", false)
     m.readMoreButton.visible = false
-    m.personOverview.visible = false
     clearRelated()
     Status_SetLoading()
     renderPerson(request.item)
@@ -215,16 +212,20 @@ sub openPersonOverview()
     overview = SafeString(m.overviewLabel.text, "")
     if overview = "" then return
 
-    m.personOverview.personName = getPersonName(m.pageState.person)
-    m.personOverview.overviewText = overview
-    m.personOverview.callFunc("openOverview")
+    m.top.overlayRequested = {
+        id: "personOverview"
+        componentName: "PersonOverviewDialog"
+        openFunction: "openOverview"
+        closeField: "closeRequested"
+        personName: getPersonName(m.pageState.person)
+        overviewText: overview
+    }
 end sub
 
 '-------------------------------------------------------------------------------
-' onPersonOverviewCloseRequested
+' handlePersonOverviewOverlayClosed
 '-------------------------------------------------------------------------------
-sub onPersonOverviewCloseRequested()
-    m.personOverview.visible = false
+sub handlePersonOverviewOverlayClosed()
     focusReadMoreButton()
 end sub
 
@@ -815,11 +816,6 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
-
-    if m.personOverview.visible = true then
-        if key = "back" then m.personOverview.callFunc("closeOverview")
-        return true
-    end if
 
     if key = "back" then
         m.top.closeRequested = true
