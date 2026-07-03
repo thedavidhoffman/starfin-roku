@@ -646,12 +646,21 @@ sub handleDescriptionOverlayClosed()
 end sub
 
 '-------------------------------------------------------------------------------
-' onMediaToolbarFocusExitDown
+' focusCast
 '-------------------------------------------------------------------------------
-sub onMediaToolbarFocusExitDown()
+sub focusCast()
+    if m.cast.visible <> true or m.cast.hasItems <> true then return
+
     m.mediaToolbar.callFunc("deactivate")
     m.state.focusArea = "cast"
     m.cast.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaToolbarFocusExitDown
+'-------------------------------------------------------------------------------
+sub onMediaToolbarFocusExitDown()
+    focusCast()
 end sub
 
 '-------------------------------------------------------------------------------
