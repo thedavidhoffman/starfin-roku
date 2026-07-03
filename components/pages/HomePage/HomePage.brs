@@ -31,6 +31,10 @@ sub init()
         rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList", "favorites"]
         latestLibraries: {}
         latestTasks: []
+        playbackRows: {
+            continueWatchingItems: []
+            nextUpItems: []
+        }
         shelfNodes: []
         shelfPositions: []
         focusedShelfIndex: 0
@@ -154,6 +158,10 @@ sub refreshHomeData(blocking = false as boolean)
     m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList", "favorites"]
     m.homeState.latestLibraries = {}
     m.homeState.latestTasks = []
+    m.homeState.playbackRows = {
+        continueWatchingItems: []
+        nextUpItems: []
+    }
     m.homeState.shelfNodes = []
     m.homeState.shelfPositions = []
     m.homeState.focusedShelfIndex = 0
@@ -250,11 +258,14 @@ sub onSectionResponse(event as object)
     end if
 
     if action = "continueWatching" then
-        addRow(action, "Continue Watching", getItemsFromPayload(response.payload))
+        m.homeState.playbackRows.continueWatchingItems = getItemsFromPayload(response.payload)
+        addRow(action, "Continue Watching", m.homeState.playbackRows.continueWatchingItems)
+        refreshNextUpRow()
     else if action = "continueListening" then
         addRow(action, "Continue Listening", getItemsFromPayload(response.payload))
     else if action = "nextUp" then
-        addRow(action, "Next Up", getItemsFromPayload(response.payload))
+        m.homeState.playbackRows.nextUpItems = getItemsFromPayload(response.payload)
+        refreshNextUpRow()
     else if action = "liveTvOnNow" then
         addRow(action, "On Now", getItemsFromPayload(response.payload))
     else if action = "myList" then
@@ -266,6 +277,77 @@ sub onSectionResponse(event as object)
     renderRows()
     markCoreTaskComplete(action)
 end sub
+
+'-------------------------------------------------------------------------------
+' refreshNextUpRow
+'-------------------------------------------------------------------------------
+sub refreshNextUpRow()
+    addRow("nextUp", "Next Up", getFilteredNextUpItems())
+end sub
+
+'-------------------------------------------------------------------------------
+' getFilteredNextUpItems
+'-------------------------------------------------------------------------------
+function getFilteredNextUpItems() as object
+    nextUpItems = m.homeState.playbackRows.nextUpItems
+    if nextUpItems = invalid then return []
+
+    continueWatchingKeys = buildContinueWatchingKeys()
+    if continueWatchingKeys.Count() = 0 then return nextUpItems
+
+    filteredItems = []
+    for each item in nextUpItems
+        if isAssocArray(item) = false then continue for
+        if hasAnyItemKey(item, continueWatchingKeys) then continue for
+
+        filteredItems.Push(item)
+    end for
+
+    return filteredItems
+end function
+
+'-------------------------------------------------------------------------------
+' buildContinueWatchingKeys
+'-------------------------------------------------------------------------------
+function buildContinueWatchingKeys() as object
+    keys = {}
+    continueWatchingItems = m.homeState.playbackRows.continueWatchingItems
+    if continueWatchingItems = invalid then return keys
+
+    for each item in continueWatchingItems
+        addItemKeys(keys, item)
+    end for
+
+    return keys
+end function
+
+'-------------------------------------------------------------------------------
+' addItemKeys
+'-------------------------------------------------------------------------------
+sub addItemKeys(keys as object, item as dynamic)
+    if isAssocArray(item) = false then return
+
+    itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
+    if itemId <> "" then keys["item:" + itemId] = true
+
+    seriesId = SafeString(FirstNonEmpty([item.SeriesId], ""), "")
+    if seriesId <> "" then keys["series:" + seriesId] = true
+end sub
+
+'-------------------------------------------------------------------------------
+' hasAnyItemKey
+'-------------------------------------------------------------------------------
+function hasAnyItemKey(item as dynamic, keys as object) as boolean
+    if isAssocArray(item) = false then return false
+
+    itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
+    if itemId <> "" and keys.DoesExist("item:" + itemId) then return true
+
+    seriesId = SafeString(FirstNonEmpty([item.SeriesId], ""), "")
+    if seriesId <> "" and keys.DoesExist("series:" + seriesId) then return true
+
+    return false
+end function
 
 '-------------------------------------------------------------------------------
 ' shouldIgnoreResponse
