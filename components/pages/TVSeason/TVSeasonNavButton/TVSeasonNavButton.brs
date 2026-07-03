@@ -6,6 +6,10 @@ sub init()
     m.state = {
         isFocused: false
     }
+    m.assets = {
+        restBg: "pkg:/images/buttons/tv-season-nav-button-unfocused.9.png"
+        focusBg: "pkg:/images/buttons/tv-season-nav-button-focused.9.png"
+    }
     updateStyles()
 end sub
 
@@ -13,6 +17,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
+    m.bg = m.top.findNode("bg")
     m.previousChevron = m.top.findNode("previousChevron")
     m.nextChevron = m.top.findNode("nextChevron")
 end sub
@@ -45,6 +50,13 @@ end sub
 ' updateStyles
 '-------------------------------------------------------------------------------
 sub updateStyles()
+    m.bg.visible = true
+    if m.state.isFocused = true then
+        m.bg.uri = m.assets.focusBg
+    else
+        m.bg.uri = m.assets.restBg
+    end if
+
     m.previousChevron.visible = true
     m.nextChevron.visible = true
 
