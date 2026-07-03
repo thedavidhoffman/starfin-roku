@@ -382,6 +382,7 @@ end sub
 '-------------------------------------------------------------------------------
 function focusSortButton() as boolean
     if m.sortButton = invalid then return false
+    if m.sortButton.visible <> true then return false
 
     m.top.setFocus(true)
     m.sortButton.setFocus(true)
@@ -724,7 +725,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
     if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return focusLetterGutterButton()
     if key = "up" and isItemsGridAtFirstRow() then return focusSortButton()
-    if key = "right" and isItemsGridAtLastColumn() then return focusSortButton()
+    if key = "right" and isItemsGridAtLastColumn() then return true
     if key = "back" then
         if m.pageState.letterGridOpen = true then
             closeLetterGrid(true)
