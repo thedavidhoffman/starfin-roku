@@ -16,8 +16,9 @@ sub init()
     m.infoGroup = m.top.findNode("infoGroup")
     m.primaryInfoLabel = m.top.findNode("primaryInfoLabel")
     m.secondaryInfoLabel = m.top.findNode("secondaryInfoLabel")
-    m.overviewLabel = m.top.findNode("overviewLabel")
+    m.overviewDescription = m.top.findNode("overviewDescription")
 
+    m.overviewDescription.observeField("overlayRequested", "onDescriptionOverlayRequested")
     m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
 end sub
 
@@ -35,7 +36,8 @@ sub onMediaContentChanged()
     renderTitle(SafeString(content.title, ""), SafeString(content.logoUrl, ""), SafeString(content.logoTitle, ""), mediaType, logoPending)
     m.primaryInfoLabel.text = SafeString(content.primaryInfoText, "")
     m.secondaryInfoLabel.text = SafeString(content.secondaryInfoText, "")
-    m.overviewLabel.text = String_CollapseWhitespace(content.overview)
+    m.overviewDescription.title = SafeString(content.title, "Description")
+    m.overviewDescription.text = String_CollapseWhitespace(content.overview)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -113,6 +115,33 @@ sub clearBackdrop()
     m.mediaBackground.uri = ""
     m.mediaBackground.opacity = 0.50
     m.mediaBackgroundUrl = ""
+end sub
+
+'-------------------------------------------------------------------------------
+' canFocusDescription
+'-------------------------------------------------------------------------------
+function canFocusDescription() as boolean
+    return m.overviewDescription <> invalid and m.overviewDescription.canAcceptFocus = true
+end function
+
+'-------------------------------------------------------------------------------
+' focusDescription
+'-------------------------------------------------------------------------------
+function focusDescription() as boolean
+    if canFocusDescription() <> true then return false
+
+    m.overviewDescription.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onDescriptionOverlayRequested
+'-------------------------------------------------------------------------------
+sub onDescriptionOverlayRequested()
+    request = m.overviewDescription.overlayRequested
+    if request = invalid then return
+
+    m.top.overlayRequested = request
 end sub
 
 '-------------------------------------------------------------------------------

@@ -13,6 +13,7 @@ sub init()
     m.tvShowTask = m.top.findNode("tvShowTask")
 
     m.tvShowTask.observeField("response", "onTVShowResponse")
+    m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
@@ -27,6 +28,17 @@ sub init()
         contentDefault: [96, 0]
         contentCastFocused: [96, -397]
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaShellOverlayRequested
+'-------------------------------------------------------------------------------
+sub onMediaShellOverlayRequested()
+    request = m.mediaShell.overlayRequested
+    if request = invalid then return
+
+    request.sourcePage = "tvShow"
+    m.top.overlayRequested = request
 end sub
 
 '-------------------------------------------------------------------------------
@@ -210,6 +222,28 @@ sub focusSeasonsIfActive()
     updateFocusChevron()
     m.top.setFocus(true)
     m.seasonsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusMediaDescription
+'-------------------------------------------------------------------------------
+function focusMediaDescription() as boolean
+    if m.mediaShell.callFunc("canFocusDescription") <> true then return false
+
+    m.pageState.focusArea = "description"
+    m.contentGroup.translation = m.layout.contentDefault
+    setSeasonsVisible(true)
+    m.cast.callFunc("deactivate")
+    updateFocusChevron()
+    m.top.setFocus(true)
+    return m.mediaShell.callFunc("focusDescription")
+end function
+
+'-------------------------------------------------------------------------------
+' handleDescriptionOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleDescriptionOverlayClosed()
+    focusMediaDescription()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -474,6 +508,15 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "back" then
         m.top.closeRequested = true
+        return true
+    end if
+
+    if key = "up" and m.pageState.focusArea = "seasons" then
+        return focusMediaDescription()
+    end if
+
+    if key = "down" and m.pageState.focusArea = "description" then
+        focusSeasonsIfActive()
         return true
     end if
 

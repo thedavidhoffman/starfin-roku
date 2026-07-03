@@ -1,0 +1,199 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.descriptionFocusRing = m.top.findNode("descriptionFocusRing")
+    m.descriptionLabel = m.top.findNode("descriptionLabel")
+    m.top.observeField("focusedChild", "onFocusChanged")
+
+    ' padding value for focus ring
+    m.focusRingPadding = 20
+
+    ' for computing the height of the focus ring per line of text
+    m.focusRingLineHeightTranslation = 52
+
+    ' default width and numLines if not set
+    if m.top.width = invalid or m.top.width <= 0 then m.top.width = 1040
+    if m.top.numLines = invalid or m.top.numLines <= 0 then m.top.numLines = 5
+
+    onTextChanged()
+    onWidthChanged()
+    onNumLinesChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' onTextChanged
+'-------------------------------------------------------------------------------
+sub onTextChanged()
+    if m.descriptionLabel <> invalid then m.descriptionLabel.text = m.top.text
+    updateTruncationState()
+end sub
+
+'-------------------------------------------------------------------------------
+' onWidthChanged
+'-------------------------------------------------------------------------------
+sub onWidthChanged()
+    if m.descriptionLabel <> invalid then m.descriptionLabel.width = m.top.width
+
+    if m.descriptionFocusRing <> invalid then
+
+        ' add padding to the width of the focus ring
+        m.descriptionFocusRing.width = m.top.width + (m.focusRingPadding * 2)
+
+        ' postition the focus ring left by half its padding
+        translation = m.descriptionFocusRing.translation
+        y = 0
+        if translation <> invalid and translation.Count() > 1 then y = translation[1]
+        m.descriptionFocusRing.translation = [-m.focusRingPadding, y]
+
+    end if
+
+    updateTruncationState()
+end sub
+
+'-------------------------------------------------------------------------------
+' onNumLinesChanged
+'-------------------------------------------------------------------------------
+sub onNumLinesChanged()
+
+    if m.descriptionLabel <> invalid then m.descriptionLabel.numLines = m.top.numLines
+
+    if m.descriptionFocusRing <> invalid then
+
+        ' add padding to the height of the focus ring
+        m.descriptionFocusRing.height = m.top.numLines * m.focusRingLineHeightTranslation
+
+        ' postition the focus ring up by half its padding
+        translation = m.descriptionFocusRing.translation
+        x = 0
+        if translation <> invalid and translation.Count() > 0 then x = translation[0]
+        m.descriptionFocusRing.translation = [x, -m.focusRingPadding + 4]
+
+    end if
+
+    updateTruncationState()
+
+end sub
+
+'-------------------------------------------------------------------------------
+' updateTruncationState
+'-------------------------------------------------------------------------------
+sub updateTruncationState()
+    isTruncated = descriptionNeedsFocus()
+    m.top.isTruncated = isTruncated
+    m.top.canAcceptFocus = isTruncated
+    updateFocusRingVisibility()
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusChanged
+'-------------------------------------------------------------------------------
+sub onFocusChanged()
+    updateFocusRingVisibility()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateFocusRingVisibility
+'-------------------------------------------------------------------------------
+sub updateFocusRingVisibility()
+    if m.descriptionFocusRing = invalid then return
+    m.descriptionFocusRing.visible = (m.top.isInFocusChain() and m.top.isTruncated)
+end sub
+
+'-------------------------------------------------------------------------------
+' descriptionNeedsFocus
+'-------------------------------------------------------------------------------
+function descriptionNeedsFocus() as boolean
+
+    text = SafeString(m.top.text)
+    if text = "" then return false
+
+    lineLimit = m.top.numLines
+    if lineLimit = invalid or lineLimit <= 0 then lineLimit = 5
+
+    width = m.top.width
+    if width = invalid or width <= 0 then width = 1040
+
+    charsPerLine = int(width / 14)
+    if charsPerLine < 1 then charsPerLine = 1
+
+    estimatedLines = 1
+    currentLineLength = 0
+    normalizedText = String_Replace(text, Chr(13), "")
+    paragraphs = normalizedText.Split(Chr(10))
+
+    for paragraphIndex = 0 to paragraphs.Count() - 1
+        paragraph = String_Trim(paragraphs[paragraphIndex])
+
+        if paragraph = "" then
+            estimatedLines = estimatedLines + 1
+            currentLineLength = 0
+            if estimatedLines > lineLimit then return true
+            continue for
+        end if
+
+        words = paragraph.Split(" ")
+
+        for each word in words
+            wordLength = Len(SafeString(word, ""))
+            if wordLength = 0 then continue for
+
+            separatorLength = 0
+            if currentLineLength > 0 then separatorLength = 1
+
+            if currentLineLength > 0 and currentLineLength + separatorLength + wordLength > charsPerLine then
+                estimatedLines = estimatedLines + 1
+                currentLineLength = wordLength
+            else
+                currentLineLength = currentLineLength + separatorLength + wordLength
+            end if
+
+            if estimatedLines > lineLimit then return true
+        end for
+
+        if paragraphIndex < paragraphs.Count() - 1 then
+            estimatedLines = estimatedLines + 1
+            currentLineLength = 0
+        end if
+
+        if estimatedLines > lineLimit then return true
+    end for
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+    if key <> "OK" and key <> "select" then return false
+    if m.top.canAcceptFocus <> true then return false
+
+    openDescriptionDialog()
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' openDescriptionDialog
+'-------------------------------------------------------------------------------
+sub openDescriptionDialog()
+    m.top.overlayRequested = {
+        id: "description"
+        componentName: "DescriptionDialog"
+        openFunction: "openDescription"
+        closeField: "closeRequested"
+        title: SafeString(m.top.title, "Description")
+        text: SafeString(m.top.text)
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' dismissDialog
+'-------------------------------------------------------------------------------
+sub dismissDialog()
+    m.top.overlayRequested = {
+        id: "description"
+        action: "close"
+    }
+end sub

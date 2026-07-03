@@ -49,6 +49,11 @@ sub navHandleOverlayClosed()
         return
     end if
 
+    if request <> invalid and request.id = "description" then
+        navHandleDescriptionOverlayClosed(closed)
+        return
+    end if
+
     if request <> invalid and isStreamOptionsOverlayRequest(request) then
         navHandleStreamOptionsOverlayClosed(closed)
         return
@@ -70,6 +75,23 @@ function isStreamOptionsOverlayRequest(request as object) as boolean
     id = SafeString(request.id, "")
     return id = "subtitleOptions" or id = "audioOptions"
 end function
+
+'-------------------------------------------------------------------------------
+' navHandleDescriptionOverlayClosed
+'-------------------------------------------------------------------------------
+sub navHandleDescriptionOverlayClosed(closed as object)
+    request = closed.request
+    if request = invalid then return
+
+    sourcePage = SafeString(request.sourcePage, "")
+    if sourcePage = "movie" and m.moviePage <> invalid then
+        m.moviePage.callFunc("handleDescriptionOverlayClosed")
+    else if sourcePage = "tvEpisode" and m.tvEpisodePage <> invalid then
+        m.tvEpisodePage.callFunc("handleDescriptionOverlayClosed")
+    else if sourcePage = "tvShow" and m.tvShowPage <> invalid then
+        m.tvShowPage.callFunc("handleDescriptionOverlayClosed")
+    end if
+end sub
 
 '-------------------------------------------------------------------------------
 ' navHandleStreamOptionsOverlayClosed

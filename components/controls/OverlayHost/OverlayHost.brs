@@ -66,6 +66,12 @@ sub applyOverlayRequestFields(overlay as object, request as object)
         return
     end if
 
+    if requestId = "description" then
+        overlay.title = request.title
+        overlay.text = request.text
+        return
+    end if
+
     if requestId <> "letterGrid" then return
 
     overlay.availableLetters = request.availableLetters

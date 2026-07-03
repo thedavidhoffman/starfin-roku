@@ -39,6 +39,7 @@ end sub
 sub initHandlers()
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
+    m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
     m.mediaToolbar.observeField("playSelected", "onMediaToolbarPlaySelected")
     m.mediaToolbar.observeField("restartSelected", "onMediaToolbarRestartSelected")
@@ -54,6 +55,17 @@ sub initHandlers()
     m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaShellOverlayRequested
+'-------------------------------------------------------------------------------
+sub onMediaShellOverlayRequested()
+    request = m.mediaShell.overlayRequested
+    if request = invalid then return
+
+    request.sourcePage = "tvEpisode"
+    m.top.overlayRequested = request
 end sub
 
 '-------------------------------------------------------------------------------
@@ -614,6 +626,26 @@ sub focusMediaToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
+' focusMediaDescription
+'-------------------------------------------------------------------------------
+function focusMediaDescription() as boolean
+    if m.mediaShell.callFunc("canFocusDescription") <> true then return false
+
+    m.state.focusArea = "description"
+    m.mediaToolbar.callFunc("deactivate")
+    m.cast.callFunc("deactivate")
+    m.top.setFocus(true)
+    return m.mediaShell.callFunc("focusDescription")
+end function
+
+'-------------------------------------------------------------------------------
+' handleDescriptionOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleDescriptionOverlayClosed()
+    focusMediaDescription()
+end sub
+
+'-------------------------------------------------------------------------------
 ' onMediaToolbarFocusExitDown
 '-------------------------------------------------------------------------------
 sub onMediaToolbarFocusExitDown()
@@ -1006,7 +1038,17 @@ end function
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
-    if key = "up" or key = "back" then
+    if key = "up" and m.state.focusArea = "toolbar" then
+        if focusMediaDescription() then return true
+        return true
+    end if
+
+    if key = "down" and m.state.focusArea = "description" then
+        focusMediaToolbar()
+        return true
+    end if
+
+    if key = "back" then
         m.top.closeRequested = true
         return true
     end if

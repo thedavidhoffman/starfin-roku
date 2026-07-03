@@ -12,6 +12,7 @@ sub init()
 
     m.movieTask.observeField("response", "onMovieResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
+    m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
     m.mediaToolbar.observeField("playSelected", "onMediaToolbarPlaySelected")
     m.mediaToolbar.observeField("restartSelected", "onMediaToolbarRestartSelected")
@@ -113,6 +114,24 @@ sub activate()
 end sub
 
 '-------------------------------------------------------------------------------
+' onMediaShellOverlayRequested
+'-------------------------------------------------------------------------------
+sub onMediaShellOverlayRequested()
+    request = m.mediaShell.overlayRequested
+    if request = invalid then return
+
+    request.sourcePage = "movie"
+    m.top.overlayRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' handleDescriptionOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleDescriptionOverlayClosed()
+    focusMediaDescription()
+end sub
+
+'-------------------------------------------------------------------------------
 ' onCastFocusExitUp
 '-------------------------------------------------------------------------------
 sub onCastFocusExitUp()
@@ -141,6 +160,19 @@ sub focusMediaToolbar()
     m.top.setFocus(true)
     m.mediaToolbar.callFunc("activate")
 end sub
+
+'-------------------------------------------------------------------------------
+' focusMediaDescription
+'-------------------------------------------------------------------------------
+function focusMediaDescription() as boolean
+    if m.mediaShell.callFunc("canFocusDescription") <> true then return false
+
+    m.state.focusArea = "description"
+    m.mediaToolbar.callFunc("deactivate")
+    m.cast.callFunc("deactivate")
+    m.top.setFocus(true)
+    return m.mediaShell.callFunc("focusDescription")
+end function
 
 '-------------------------------------------------------------------------------
 ' focusCast
@@ -693,6 +725,15 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "up" and m.cast.isInFocusChain() then
+        focusMediaToolbar()
+        return true
+    end if
+
+    if key = "up" and m.state.focusArea = "toolbar" then
+        return focusMediaDescription()
+    end if
+
+    if key = "down" and m.state.focusArea = "description" then
         focusMediaToolbar()
         return true
     end if

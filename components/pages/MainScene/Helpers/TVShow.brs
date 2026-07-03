@@ -20,6 +20,7 @@ sub tvShowShow(selection as object, shouldReset as boolean)
     page.observeField("closeRequested", "tvShowHandleCloseRequested")
     page.observeField("selectedSeason", "tvSeasonHandleTVShowSeasonSelected")
     page.observeField("selectedPerson", "personHandleTVShowPersonSelected")
+    page.observeField("overlayRequested", "tvShowHandleOverlayRequested")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -37,6 +38,23 @@ sub tvShowShow(selection as object, shouldReset as boolean)
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' tvShowHandleOverlayRequested
+'-------------------------------------------------------------------------------
+sub tvShowHandleOverlayRequested()
+    if m.tvShowPage = invalid then return
+
+    request = m.tvShowPage.overlayRequested
+    if request = invalid then return
+
+    if SafeString(request.action, "") = "close" then
+        m.overlayHost.callFunc("closeOverlay")
+        return
+    end if
+
+    m.overlayHost.callFunc("openOverlay", request)
 end sub
 
 '-------------------------------------------------------------------------------
