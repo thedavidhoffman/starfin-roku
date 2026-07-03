@@ -2,14 +2,8 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    backdropPrimaryBuffer = m.top.findNode("backdropPrimaryBuffer")
-    backdropSecondaryBuffer = m.top.findNode("backdropSecondaryBuffer")
-    m.backdropState = {
-        activePoster: backdropPrimaryBuffer
-        preloadPoster: backdropSecondaryBuffer
-        activeUrl: ""
-        pendingUrl: ""
-    }
+    m.mediaBackground = m.top.findNode("mediaBackground")
+    m.mediaBackgroundUrl = ""
     m.logoState = {
         url: ""
         title: ""
@@ -24,8 +18,6 @@ sub init()
     m.secondaryInfoLabel = m.top.findNode("secondaryInfoLabel")
     m.overviewLabel = m.top.findNode("overviewLabel")
 
-    backdropPrimaryBuffer.observeField("loadStatus", "onBackdropLoadStatusChanged")
-    backdropSecondaryBuffer.observeField("loadStatus", "onBackdropLoadStatusChanged")
     m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
 end sub
 
@@ -101,72 +93,26 @@ end function
 '-------------------------------------------------------------------------------
 sub renderBackdrop(backdropUrl as string)
     if backdropUrl = "" then
-        clearBackdrops()
+        clearBackdrop()
         return
     end if
 
-    if backdropUrl = m.backdropState.activeUrl then return
-    if backdropUrl = m.backdropState.pendingUrl then return
+    if backdropUrl = m.mediaBackgroundUrl then return
 
-    if m.backdropState.activeUrl = "" then
-        m.backdropState.activePoster.opacity = 0.50
-        m.backdropState.activePoster.visible = true
-        m.backdropState.activePoster.uri = backdropUrl
-        m.backdropState.activeUrl = backdropUrl
-        return
-    end if
-
-    m.backdropState.preloadPoster.opacity = 0.0
-    m.backdropState.preloadPoster.visible = true
-    m.backdropState.pendingUrl = backdropUrl
-    m.backdropState.preloadPoster.uri = backdropUrl
+    m.mediaBackground.opacity = 0.50
+    m.mediaBackground.visible = true
+    m.mediaBackground.uri = backdropUrl
+    m.mediaBackgroundUrl = backdropUrl
 end sub
 
 '-------------------------------------------------------------------------------
-' clearBackdrops
+' clearBackdrop
 '-------------------------------------------------------------------------------
-sub clearBackdrops()
-    m.backdropState.activePoster.visible = false
-    m.backdropState.activePoster.uri = ""
-    m.backdropState.activePoster.opacity = 0.50
-
-    m.backdropState.preloadPoster.visible = false
-    m.backdropState.preloadPoster.uri = ""
-    m.backdropState.preloadPoster.opacity = 0.50
-
-    m.backdropState.activeUrl = ""
-    m.backdropState.pendingUrl = ""
-end sub
-
-'-------------------------------------------------------------------------------
-' onBackdropLoadStatusChanged
-'-------------------------------------------------------------------------------
-sub onBackdropLoadStatusChanged()
-    if m.backdropState.pendingUrl = "" then return
-    if LCase(SafeString(m.backdropState.preloadPoster.loadStatus, "")) <> "ready" then return
-    if SafeString(m.backdropState.preloadPoster.uri, "") <> m.backdropState.pendingUrl then return
-
-    swapBackdrops()
-end sub
-
-'-------------------------------------------------------------------------------
-' swapBackdrops
-'-------------------------------------------------------------------------------
-sub swapBackdrops()
-    oldActivePoster = m.backdropState.activePoster
-    newActivePoster = m.backdropState.preloadPoster
-
-    newActivePoster.opacity = 0.50
-    newActivePoster.visible = true
-
-    oldActivePoster.visible = false
-    oldActivePoster.uri = ""
-    oldActivePoster.opacity = 0.50
-
-    m.backdropState.activePoster = newActivePoster
-    m.backdropState.preloadPoster = oldActivePoster
-    m.backdropState.activeUrl = m.backdropState.pendingUrl
-    m.backdropState.pendingUrl = ""
+sub clearBackdrop()
+    m.mediaBackground.visible = false
+    m.mediaBackground.uri = ""
+    m.mediaBackground.opacity = 0.50
+    m.mediaBackgroundUrl = ""
 end sub
 
 '-------------------------------------------------------------------------------
