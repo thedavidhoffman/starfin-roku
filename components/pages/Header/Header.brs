@@ -82,6 +82,15 @@ function focusUserMenuButton() as boolean
     return true
 end function
 
+'-------------------------------------------------------------------------------
+' activateHomeButton
+'-------------------------------------------------------------------------------
+function activateHomeButton() as boolean
+    setActiveHeaderButton("home")
+    return true
+end function
+
+'-------------------------------------------------------------------------------
 ' activateSearchButton
 '-------------------------------------------------------------------------------
 function activateSearchButton() as boolean

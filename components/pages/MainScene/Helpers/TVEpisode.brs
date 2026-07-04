@@ -141,6 +141,8 @@ sub tvEpisodeHandleCloseRequested()
         m.tvShowPage.visible = true
         m.header.visible = false
         m.tvShowPage.callFunc("activate")
+    else if searchReturnToPage() then
+        return
     else
         showHome()
     end if

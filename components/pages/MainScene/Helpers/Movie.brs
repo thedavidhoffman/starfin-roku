@@ -100,6 +100,8 @@ sub movieHandleCloseRequested()
         m.libraryPage.visible = true
         m.header.visible = true
         m.libraryPage.callFunc("activate")
+    else if searchReturnToPage() then
+        return
     else
         resetDynamicPages()
         showHome()

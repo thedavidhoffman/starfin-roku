@@ -11,9 +11,20 @@ end sub
 ' navHandleHeaderDownSelected
 '-------------------------------------------------------------------------------
 sub navHandleHeaderDownSelected()
-    if m.homePage <> invalid and m.homePage.visible = true then
+    if m.searchPage <> invalid then
+        m.searchPage.callFunc("activate")
+    else if m.homePage <> invalid and m.homePage.visible = true then
         m.homePage.callFunc("focusHome")
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleHeaderHomeSelected
+'-------------------------------------------------------------------------------
+sub navHandleHeaderHomeSelected()
+    clearStatus()
+    resetDynamicPages()
+    showHome()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -122,6 +133,7 @@ end sub
 sub showHome()
     m.homePage.visible = true
     m.header.visible = true
+    m.header.callFunc("activateHomeButton")
 
     if m.homeRefreshState <> invalid and m.homeRefreshState.playbackRowsDirty = true then
         m.homePage.callFunc("activateBlocking")
@@ -160,6 +172,8 @@ sub focusActiveSurface()
         m.libraryPage.callFunc("activate")
     else if m.collectionsPage <> invalid then
         m.collectionsPage.callFunc("activate")
+    else if m.searchPage <> invalid then
+        m.searchPage.callFunc("activate")
     else if m.homePage <> invalid and m.homePage.visible = true then
         m.homePage.callFunc("focusHome")
     else if m.header <> invalid and m.header.visible = true then
@@ -241,6 +255,7 @@ end sub
 sub resetDynamicPages()
     clearStatus()
     m.yourStatsPage = invalid
+    m.searchPage = invalid
     m.collectionsPage = invalid
     m.libraryPage = invalid
     m.moviePage = invalid

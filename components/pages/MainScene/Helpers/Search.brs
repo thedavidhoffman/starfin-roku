@@ -1,0 +1,125 @@
+'===============================================================================
+' Search
+'===============================================================================
+
+'-------------------------------------------------------------------------------
+' searchHandleHeaderSelected
+'-------------------------------------------------------------------------------
+sub searchHandleHeaderSelected()
+    searchShow()
+end sub
+
+'-------------------------------------------------------------------------------
+' searchShow
+'-------------------------------------------------------------------------------
+sub searchShow()
+    clearStatus()
+    resetDynamicPages()
+
+    page = CreateObject("roSGNode", "Search")
+    page.observeField("closeRequested", "searchHandleCloseRequested")
+    page.observeField("focusExitUp", "searchHandleFocusExitUp")
+    page.observeField("selectedMovie", "searchHandleMovieSelected")
+    page.observeField("selectedSeries", "searchHandleSeriesSelected")
+    page.observeField("selectedEpisode", "searchHandleEpisodeSelected")
+    page.observeField("selectedPerson", "searchHandlePersonSelected")
+    page.loadRequest = buildSessionLoadRequest()
+
+    m.searchPage = page
+    m.dynamicPageHost.appendChild(page)
+    m.homePage.visible = false
+    m.header.visible = true
+    m.header.callFunc("activateSearchButton")
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' searchReturnToPage
+'-------------------------------------------------------------------------------
+function searchReturnToPage() as boolean
+    if m.searchPage = invalid then return false
+
+    m.searchPage.visible = true
+    m.header.visible = true
+    m.header.callFunc("activateSearchButton")
+    m.searchPage.callFunc("activate")
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' searchHidePage
+'-------------------------------------------------------------------------------
+sub searchHidePage()
+    if m.searchPage <> invalid then m.searchPage.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' searchHandleMovieSelected
+'-------------------------------------------------------------------------------
+sub searchHandleMovieSelected()
+    selection = m.searchPage.selectedMovie
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    searchHidePage()
+    movieShow(selection, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' searchHandleSeriesSelected
+'-------------------------------------------------------------------------------
+sub searchHandleSeriesSelected()
+    selection = m.searchPage.selectedSeries
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    searchHidePage()
+    tvShowShow(selection, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' searchHandleEpisodeSelected
+'-------------------------------------------------------------------------------
+sub searchHandleEpisodeSelected()
+    selection = m.searchPage.selectedEpisode
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    loadRequest = buildHomeEpisodeLoadRequest(selection)
+    if loadRequest = invalid then return
+
+    searchHidePage()
+    tvEpisodeShow({
+        loadRequest: loadRequest
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' searchHandlePersonSelected
+'-------------------------------------------------------------------------------
+sub searchHandlePersonSelected()
+    selection = m.searchPage.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    searchHidePage()
+    personShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' searchHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub searchHandleCloseRequested()
+    clearStatus()
+    resetDynamicPages()
+    showHome()
+end sub
+
+'-------------------------------------------------------------------------------
+' searchHandleFocusExitUp
+'-------------------------------------------------------------------------------
+sub searchHandleFocusExitUp()
+    if m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusHeader")
+    end if
+end sub

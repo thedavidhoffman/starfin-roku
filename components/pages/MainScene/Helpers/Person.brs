@@ -162,6 +162,8 @@ sub personHandleCloseRequested()
         m.moviePage.visible = true
         m.header.visible = false
         m.moviePage.callFunc("activate")
+    else if searchReturnToPage() then
+        return
     else
         showHome()
     end if
