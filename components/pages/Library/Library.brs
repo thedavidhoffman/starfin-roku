@@ -8,13 +8,18 @@ sub init()
     m.letterGutterButton = m.top.findNode("letterGutterButton")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.libraryTask = m.top.findNode("libraryTask")
+    m.libraryProgressIndicator = m.top.findNode("libraryProgressIndicator")
+    m.libraryProgressHoldTimer = m.top.findNode("libraryProgressHoldTimer")
 
     m.libraryTask.observeField("response", "onLibraryResponse")
+    m.libraryProgressHoldTimer.observeField("fire", "onLibraryProgressHoldTimerFire")
     m.sortButton.observeField("overlayRequested", "onSortOverlayRequested")
     m.sortButton.observeField("focusExitDown", "onSortFocusExitDown")
     m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
     m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
     m.itemsGrid.observeField("itemSelected", "onItemSelected")
+    m.itemsGrid.observeField("itemFocused", "onItemFocused")
+    m.itemsGrid.observeField("navigationKeyPressed", "onItemsGridNavigationKeyPressed")
     m.pageState = {
         request: invalid
         items: []
@@ -28,6 +33,8 @@ sub init()
         availableLetters: {}
         selectedSortKey: "SortName:Ascending"
         selectedSort: invalid
+        progressFocusedIndex: 0
+        progressHoldKey: ""
         refocusSortButtonAfterLoad: false
     }
     m.sortButton.selectedSort = getDefaultSortSelection()
@@ -137,6 +144,94 @@ sub renderItems(items as object)
     m.itemsGrid.content = content
     m.itemsGrid.visible = content.getChildCount() > 0
     updateAvailableLetters(items)
+    updateLibraryProgressItemCount(content.getChildCount())
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemFocused
+'-------------------------------------------------------------------------------
+sub onItemFocused()
+    updateLibraryProgressFocusedIndex()
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemsGridNavigationKeyPressed
+'-------------------------------------------------------------------------------
+sub onItemsGridNavigationKeyPressed()
+    event = m.itemsGrid.navigationKeyPressed
+    if event = invalid then return
+    if m.pageState.imageAspect <> "poster" then return
+
+    key = SafeString(event.key, "")
+    if key <> "down" and key <> "up" then return
+
+    if event.press = false then
+        stopLibraryProgressHold(key)
+        return
+    end if
+
+    startLibraryProgressHold(key)
+    advanceLibraryProgressForKey(key)
+end sub
+
+'-------------------------------------------------------------------------------
+' onLibraryProgressHoldTimerFire
+'-------------------------------------------------------------------------------
+sub onLibraryProgressHoldTimerFire()
+    advanceLibraryProgressForKey(m.pageState.progressHoldKey)
+end sub
+
+'-------------------------------------------------------------------------------
+' startLibraryProgressHold
+'-------------------------------------------------------------------------------
+sub startLibraryProgressHold(key as string)
+    m.pageState.progressHoldKey = key
+    m.libraryProgressHoldTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' stopLibraryProgressHold
+'-------------------------------------------------------------------------------
+sub stopLibraryProgressHold(key = invalid as dynamic)
+    if key <> invalid and key <> "" and key <> m.pageState.progressHoldKey then return
+
+    m.pageState.progressHoldKey = ""
+    m.libraryProgressHoldTimer.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' advanceLibraryProgressForKey
+'-------------------------------------------------------------------------------
+sub advanceLibraryProgressForKey(key as string)
+    if key <> "down" and key <> "up" then return
+    if m.pageState.imageAspect <> "poster" then
+        stopLibraryProgressHold()
+        return
+    end if
+
+    itemCount = getLibraryItemCount()
+    if itemCount <= 0 then
+        stopLibraryProgressHold()
+        return
+    end if
+
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then columns = 1
+
+    focusedIndex = m.pageState.progressFocusedIndex
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = getCurrentLibraryFocusedIndex()
+
+    if key = "down" then
+        focusedIndex = focusedIndex + columns
+    else if key = "up" then
+        focusedIndex = focusedIndex - columns
+    end if
+
+    if focusedIndex < 0 then focusedIndex = 0
+    if focusedIndex >= itemCount then focusedIndex = itemCount - 1
+
+    m.pageState.progressFocusedIndex = focusedIndex
+    m.libraryProgressIndicator.focusedIndex = focusedIndex
 end sub
 
 '-------------------------------------------------------------------------------
@@ -632,6 +727,7 @@ sub applyGridLayout(imageAspect as string)
         m.itemsGrid.numColumns = 4
         m.itemsGrid.numRows = 3
         m.itemsGrid.focusBitmapUri = "pkg:/images/library/thumbnail-focus-465x348.png"
+        updateLibraryProgressLayout(imageAspect)
         return
     end if
 
@@ -645,7 +741,68 @@ sub applyGridLayout(imageAspect as string)
     m.itemsGrid.numColumns = 6
     m.itemsGrid.numRows = 2
     m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
+    updateLibraryProgressLayout(imageAspect)
 end sub
+
+'-------------------------------------------------------------------------------
+' updateLibraryProgressLayout
+'-------------------------------------------------------------------------------
+sub updateLibraryProgressLayout(imageAspect as string)
+    if imageAspect <> "poster" then stopLibraryProgressHold()
+
+    m.libraryProgressIndicator.layoutMode = imageAspect
+    m.libraryProgressIndicator.gridLeft = int(m.itemsGrid.translation[0])
+    m.libraryProgressIndicator.gridTop = int(m.itemsGrid.translation[1])
+    m.libraryProgressIndicator.itemWidth = int(m.itemsGrid.itemSize[0])
+    m.libraryProgressIndicator.itemSpacingX = int(m.itemsGrid.itemSpacing[0])
+    m.libraryProgressIndicator.numColumns = int(m.itemsGrid.numColumns)
+    m.libraryProgressIndicator.numRows = int(m.itemsGrid.numRows)
+    updateLibraryProgressItemCount()
+    updateLibraryProgressFocusedIndex()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateLibraryProgressItemCount
+'-------------------------------------------------------------------------------
+sub updateLibraryProgressItemCount(itemCount = invalid as dynamic)
+    resolvedItemCount = 0
+    if itemCount <> invalid then
+        resolvedItemCount = int(itemCount)
+    else if m.itemsGrid.content <> invalid then
+        resolvedItemCount = m.itemsGrid.content.getChildCount()
+    end if
+
+    m.libraryProgressIndicator.itemCount = resolvedItemCount
+end sub
+
+'-------------------------------------------------------------------------------
+' updateLibraryProgressFocusedIndex
+'-------------------------------------------------------------------------------
+sub updateLibraryProgressFocusedIndex()
+    focusedIndex = getCurrentLibraryFocusedIndex()
+
+    m.pageState.progressFocusedIndex = focusedIndex
+    m.libraryProgressIndicator.focusedIndex = focusedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' getCurrentLibraryFocusedIndex
+'-------------------------------------------------------------------------------
+function getCurrentLibraryFocusedIndex() as integer
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then return 0
+
+    return focusedIndex
+end function
+
+'-------------------------------------------------------------------------------
+' getLibraryItemCount
+'-------------------------------------------------------------------------------
+function getLibraryItemCount() as integer
+    if m.itemsGrid.content = invalid then return 0
+
+    return m.itemsGrid.content.getChildCount()
+end function
 
 '-------------------------------------------------------------------------------
 ' applyLetterGutterButtonLayout
@@ -724,7 +881,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
     if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
     if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return focusLetterGutterButton()
-    if key = "up" and isItemsGridAtFirstRow() then return focusSortButton()
+    if key = "up" and isItemsGridAtFirstRow() then
+        stopLibraryProgressHold("up")
+        return focusSortButton()
+    end if
     if key = "right" and isItemsGridAtLastColumn() then return true
     if key = "back" then
         if m.pageState.letterGridOpen = true then
