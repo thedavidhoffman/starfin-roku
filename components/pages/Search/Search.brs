@@ -370,6 +370,12 @@ end function
 '-------------------------------------------------------------------------------
 sub updateResultsScroll(index as integer)
     top = getRowTop(index)
+    bottom = top + getRowHeight(index)
+    visibleTop = 0 - m.searchState.resultsOffsetY
+    visibleBottom = visibleTop + getResultsViewportHeight()
+
+    if top >= visibleTop and bottom <= visibleBottom then return
+
     targetOffsetY = 0 - top
 
     if targetOffsetY = m.searchState.resultsOffsetY then return
@@ -391,6 +397,21 @@ function getRowTop(index as integer) as integer
     end for
 
     return top
+end function
+
+'-------------------------------------------------------------------------------
+' getRowHeight
+'-------------------------------------------------------------------------------
+function getRowHeight(index as integer) as integer
+    if index < 0 or index >= m.searchState.rowHeights.Count() then return 0
+    return m.searchState.rowHeights[index]
+end function
+
+'-------------------------------------------------------------------------------
+' getResultsViewportHeight
+'-------------------------------------------------------------------------------
+function getResultsViewportHeight() as integer
+    return 894
 end function
 
 '-------------------------------------------------------------------------------
