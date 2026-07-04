@@ -24,7 +24,7 @@ sub executeRequest()
         return
     end if
 
-    episodesResult = searchItems(request, "Episode", "PrimaryImageAspectRatio,Overview,SeriesName,UserData")
+    episodesResult = searchItems(request, "Episode", "PrimaryImageAspectRatio,Overview,SeriesName,ParentIndexNumber,IndexNumber,UserData")
     if episodesResult.ok <> true then
         m.top.response = withAction(episodesResult, request)
         return

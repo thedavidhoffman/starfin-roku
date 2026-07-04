@@ -149,7 +149,7 @@ sub renderRows(payload as dynamic)
     rowIndex = 0
     rowIndex = addSearchRow(rowIndex, y, "Movies & TV Shows", payload.moviesAndSeries, getPosterLayout())
     y = getRowsHeight()
-    rowIndex = addSearchRow(rowIndex, y, "Episodes", payload.episodes, getWideLayout())
+    rowIndex = addSearchRow(rowIndex, y, "Episodes", EpisodeSort_BySeriesSeasonEpisode(payload.episodes), getWideLayout())
     y = getRowsHeight()
     rowIndex = addPeopleRow(rowIndex, y, payload.people)
 
