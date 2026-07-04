@@ -41,7 +41,11 @@ sub onCastChanged()
 
             personNode = row.createChild("ContentNode")
             personNode.title = personName
-            personNode.description = getPersonSubtitle(person)
+            if m.top.showSubtitles = true then
+                personNode.description = getPersonSubtitle(person)
+            else
+                personNode.description = ""
+            end if
             personNode.HDPosterUrl = getPersonImageUrl(person)
             personNode.AddFields({
                 itemId: FirstNonEmpty([person.Id], "")
@@ -177,6 +181,7 @@ end function
 function getPersonImageUrl(person as object) as string
     personId = FirstNonEmpty([person.Id], "")
     tag = FirstNonEmpty([person.PrimaryImageTag], "")
+    if tag = "" and person.ImageTags <> invalid then tag = FirstNonEmpty([person.ImageTags.Primary], "")
     if personId = "" or tag = "" then return "pkg:/images/cast/cast-placeholder-195x195.png"
 
     return Url_BuildImageUrl(m.top.server, personId, "Primary", tag, 195, 195)

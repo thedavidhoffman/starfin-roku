@@ -19,6 +19,7 @@ sub init()
         submittedQuery: ""
         minimumQueryLength: 3
         rowNodes: []
+        rowHeights: []
         focusedRowIndex: 0
         resultsOffsetY: 0
     }
@@ -150,7 +151,7 @@ sub renderRows(payload as dynamic)
     y = getRowsHeight()
     rowIndex = addSearchRow(rowIndex, y, "Episodes", payload.episodes, getWideLayout())
     y = getRowsHeight()
-    rowIndex = addSearchRow(rowIndex, y, "People", payload.people, getPosterLayout())
+    rowIndex = addPeopleRow(rowIndex, y, payload.people)
 
     m.helpLabel.visible = hasRows() <> true
     if hasRows() then
@@ -180,6 +181,32 @@ function addSearchRow(rowIndex as integer, y as integer, title as string, items 
 
     m.resultsGroup.appendChild(shelf)
     m.searchState.rowNodes.Push(shelf)
+    m.searchState.rowHeights.Push(getShelfHeight(layout))
+    syncRowFocusExit()
+    return rowIndex + 1
+end function
+
+'-------------------------------------------------------------------------------
+' addPeopleRow
+'-------------------------------------------------------------------------------
+function addPeopleRow(rowIndex as integer, y as integer, people as dynamic) as integer
+    if people = invalid or people.Count() = 0 then return rowIndex
+
+    cast = CreateObject("roSGNode", "Cast")
+    cast.translation = [getCastOffsetX(), y]
+    cast.server = SafeString(m.searchState.request.server, "")
+    cast.title = "People"
+    cast.showSubtitles = false
+    cast.people = people
+    if cast.hasItems <> true then return rowIndex
+
+    cast.observeField("selectedPerson", "onSearchCastPersonSelected")
+    cast.observeField("focusExitUp", "onShelfFocusExitUp")
+    cast.observeField("focusExitDown", "onShelfFocusExitDown")
+
+    m.resultsGroup.appendChild(cast)
+    m.searchState.rowNodes.Push(cast)
+    m.searchState.rowHeights.Push(getCastHeight())
     syncRowFocusExit()
     return rowIndex + 1
 end function
@@ -234,6 +261,22 @@ sub onSearchShelfSelected(event as object)
 end sub
 
 '-------------------------------------------------------------------------------
+' onSearchCastPersonSelected
+'-------------------------------------------------------------------------------
+sub onSearchCastPersonSelected(event as object)
+    selection = event.getData()
+    if selection = invalid then return
+
+    itemId = SafeString(FirstNonEmpty([selection.itemId], ""), "")
+    if itemId = "" then return
+
+    m.top.selectedPerson = {
+        itemId: itemId
+        item: selection.item
+    }
+end sub
+
+'-------------------------------------------------------------------------------
 ' onShelfFocusExitUp
 '-------------------------------------------------------------------------------
 sub onShelfFocusExitUp()
@@ -284,6 +327,7 @@ sub clearRows()
     if childCount > 0 then m.resultsGroup.removeChildrenIndex(childCount, 0)
 
     m.searchState.rowNodes = []
+    m.searchState.rowHeights = []
     m.searchState.focusedRowIndex = -1
     m.searchState.resultsOffsetY = 0
     m.resultsGroup.translation = [0, 0]
@@ -295,7 +339,7 @@ end sub
 sub syncRowFocusExit()
     for i = 0 to m.searchState.rowNodes.Count() - 1
         row = m.searchState.rowNodes[i]
-        if row <> invalid then
+        if row <> invalid and row.hasField("canFocusExitUp") then
             row.canFocusExitUp = i > 0
             row.canFocusExitDown = i < m.searchState.rowNodes.Count() - 1
         end if
@@ -314,10 +358,8 @@ end function
 '-------------------------------------------------------------------------------
 function getRowsHeight() as integer
     height = 0
-    for each row in m.searchState.rowNodes
-        if row = invalid then continue for
-        layout = row.layout
-        if layout <> invalid then height = height + 50 + layout.height + layout.spacingAfter
+    for each rowHeight in m.searchState.rowHeights
+        if rowHeight <> invalid then height = height + rowHeight
     end for
 
     return height
@@ -345,13 +387,31 @@ function getRowTop(index as integer) as integer
 
     lastIndex = index - 1
     for i = 0 to lastIndex
-        row = m.searchState.rowNodes[i]
-        if row = invalid then continue for
-        layout = row.layout
-        if layout <> invalid then top = top + 50 + layout.height + layout.spacingAfter
+        if i < m.searchState.rowHeights.Count() then top = top + m.searchState.rowHeights[i]
     end for
 
     return top
+end function
+
+'-------------------------------------------------------------------------------
+' getShelfHeight
+'-------------------------------------------------------------------------------
+function getShelfHeight(layout as object) as integer
+    return 50 + layout.height + layout.spacingAfter
+end function
+
+'-------------------------------------------------------------------------------
+' getCastHeight
+'-------------------------------------------------------------------------------
+function getCastHeight() as integer
+    return 313
+end function
+
+'-------------------------------------------------------------------------------
+' getCastOffsetX
+'-------------------------------------------------------------------------------
+function getCastOffsetX() as integer
+    return 20
 end function
 
 '-------------------------------------------------------------------------------
