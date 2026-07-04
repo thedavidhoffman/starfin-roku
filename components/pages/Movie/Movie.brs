@@ -53,7 +53,7 @@ sub onLoadRequestChanged()
         subtitleOff: false
     }
     m.cast.server = request.server
-    Status_SetLoading()
+    Spinner_Show()
     renderMovie(request.item, true)
 
     m.movieTask.request = request
@@ -69,12 +69,14 @@ sub onMovieResponse()
 
     if response.ok <> true then
         renderMovie(m.state.item, false)
+        Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load this movie."))
         return
     end if
 
     m.state.item = response.payload
     renderMovie(response.payload, false)
+    Spinner_Hide()
     Status_ClearMessage()
 end sub
 

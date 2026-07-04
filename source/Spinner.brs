@@ -1,11 +1,14 @@
 '-------------------------------------------------------------------------------
 ' Spinner_Show
 '-------------------------------------------------------------------------------
-sub Spinner_Show()
+sub Spinner_Show(showDelay = invalid as dynamic)
     spinner = __Spinner_GetNode()
     if spinner = invalid then return
 
-    spinner.visible = true
+    resolvedShowDelay = 2.0
+    if showDelay <> invalid then resolvedShowDelay = showDelay
+
+    spinner.showDelay = resolvedShowDelay
     spinner.control = "start"
 end sub
 

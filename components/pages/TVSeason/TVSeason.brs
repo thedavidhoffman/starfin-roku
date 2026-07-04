@@ -118,7 +118,7 @@ sub onLoadRequestChanged()
     m.pageState.focusArea = "episodes"
     if request.keepSeasonNavFocus = true then m.pageState.focusArea = "seasonNav"
     clearEpisodes()
-    Status_SetLoading()
+    Spinner_Show()
     updateAdjacentSeasons()
     renderSeason(request.season)
     if m.pageState.focusArea = "seasonNav" then focusSeasonNav()
@@ -154,12 +154,14 @@ sub onTVSeasonResponse()
     end if
 
     if response.ok <> true then
+        Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load tv season."))
         return
     end if
 
     payload = response.payload
     if payload = invalid then
+        Spinner_Hide()
         Status_SetMessage("Unable to load tv season.")
         return
     end if
@@ -171,6 +173,7 @@ sub onTVSeasonResponse()
     m.pageState.episodesLoaded = true
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
+    Spinner_Hide()
     Status_ClearMessage()
     updateChevrons()
     if m.pageState.focusArea = "seasonNav" then

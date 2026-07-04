@@ -36,7 +36,7 @@ sub onLoadRequestChanged()
     m.pageState.imageAspect = getCollectionImageAspect()
     m.titleLabel.text = SafeString(request.title, "Collections")
     applyGridLayout(m.pageState.imageAspect)
-    Status_SetLoading()
+    Spinner_Show()
     renderCollections([])
 
     m.collectionsTask.request = request
@@ -51,12 +51,14 @@ sub onCollectionsResponse()
     if response = invalid then return
 
     if response.ok <> true then
+        Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load collections."))
         return
     end if
 
     m.pageState.collections = getItemsFromPayload(response.payload)
     renderCollections(m.pageState.collections)
+    Spinner_Hide()
     Status_ClearMessage()
     focusCollectionsIfActive()
 end sub

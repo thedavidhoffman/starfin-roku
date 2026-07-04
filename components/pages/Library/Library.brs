@@ -67,7 +67,7 @@ sub onLoadRequestChanged()
     m.sortButton.selectedSort = m.pageState.selectedSort
     updateTitleLabel()
     applyGridLayout(m.pageState.imageAspect)
-    Spinner_Show()
+    Spinner_Show(0)
     closeLetterGrid(false)
     renderItems([])
 
@@ -376,7 +376,7 @@ sub reloadLibraryForSort()
     request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
     m.pageState.request = request
     m.pageState.refocusSortButtonAfterLoad = true
-    Spinner_Show()
+    Spinner_Show(0)
     renderItems([])
     m.itemsGrid.jumpToItem = 0
     m.itemsGrid.itemFocused = 0

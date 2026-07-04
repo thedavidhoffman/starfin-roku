@@ -77,7 +77,6 @@ sub onPlayRequestChanged()
     request = m.top.playRequest
     if request = invalid then return
 
-    Status_SetLoading()
     stopPlayback()
     m.playback.startupPending = true
     Spinner_Show()

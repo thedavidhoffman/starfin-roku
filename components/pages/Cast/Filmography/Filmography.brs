@@ -53,7 +53,7 @@ sub onLoadRequestChanged()
     m.titleLabel.text = SafeString(request.name, "Filmography")
     renderItems([])
     renderPreview(invalid)
-    Status_SetLoading()
+    Spinner_Show()
 
     m.filmographyTask.request = {
         personId: SafeString(request.personId, "")
@@ -70,11 +70,13 @@ sub onFilmographyResponse()
     if response = invalid then return
 
     if response.ok <> true then
+        Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load filmography."))
         return
     end if
 
     renderItems(response.payload)
+    Spinner_Hide()
     Status_ClearMessage()
     focusListIfActive()
 end sub

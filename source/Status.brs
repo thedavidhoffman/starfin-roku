@@ -4,15 +4,6 @@
 ' This helper is intended for component scripts that have access to the implicit
 ' SceneGraph `m` object. It is not a generic source helper for tasks or pure
 ' functions because it resolves the shared StatusLabel through `m.top.getScene()`.
-'
-'-------------------------------------------------------------------------------
-' Status_SetLoading
-'-------------------------------------------------------------------------------
-sub Status_SetLoading()
-    statusLabel = __Status_GetLabel()
-    if statusLabel <> invalid then statusLabel.callFunc("setLoading")
-end sub
-
 '-------------------------------------------------------------------------------
 ' Status_SetMessage
 '-------------------------------------------------------------------------------

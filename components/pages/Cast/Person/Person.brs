@@ -60,7 +60,7 @@ sub onLoadRequestChanged()
     setLayoutMode("bio", false)
     m.readMoreButton.visible = false
     clearRelated()
-    Status_SetLoading()
+    Spinner_Show()
     renderPerson(request.item)
     m.overviewLabel.text = ""
 
@@ -76,6 +76,7 @@ sub onPersonResponse()
     if response = invalid then return
 
     if response.ok <> true then
+        Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load this person."))
         return
     end if
@@ -85,6 +86,7 @@ sub onPersonResponse()
     renderPerson(person)
     renderOverview(person)
     renderRelated(getItemsFromPayload(response.payload.items), getItemsFromPayload(response.payload.episodeItems))
+    Spinner_Hide()
     Status_ClearMessage()
 end sub
 

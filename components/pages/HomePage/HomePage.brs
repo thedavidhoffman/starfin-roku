@@ -168,7 +168,7 @@ sub refreshHomeData(blocking = false as boolean)
     m.homeState.shelfOffsetY = 0
 
     clearRows()
-    Status_SetLoading()
+    Spinner_Show()
 
     runTask(m.tasks.libraries, request)
     runTask(m.tasks.continueWatching, request)
@@ -356,6 +356,7 @@ function shouldIgnoreResponse(response as dynamic) as boolean
     if response = invalid then return true
 
     if response.ok <> true then
+        Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load a home section."))
         return true
     end if
@@ -525,6 +526,7 @@ sub renderRows(focusAfterRender = true as boolean)
     updateShelfScroll(false)
 
     if hasRenderedRows() then
+        Spinner_Hide()
         Status_ClearMessage()
         shouldFocus = (focusAfterRender = true or hadFocus = true)
         if shouldFocus = true and m.homeState.refresh.blocking <> true then focusShelf(m.homeState.focusedShelfIndex)
@@ -549,8 +551,12 @@ end sub
 '-------------------------------------------------------------------------------
 sub finishBlockingRefreshIfReady()
     if m.homeState.refresh = invalid then return
-    if m.homeState.refresh.blocking <> true then return
     if m.homeState.refresh.pendingCore <> invalid and m.homeState.refresh.pendingCore.Count() > 0 then return
+
+    if m.homeState.refresh.blocking <> true then
+        Spinner_Hide()
+        return
+    end if
 
     m.homeState.refresh.blocking = false
     m.top.visible = true

@@ -98,7 +98,7 @@ sub onLoadRequestChanged()
     updateFocusChevron()
     m.cast.server = request.server
     m.cast.people = []
-    Status_SetLoading()
+    Spinner_Show()
     renderSeries(request.item, true)
     renderSeasons([])
 
@@ -114,18 +114,23 @@ sub onTVShowResponse()
     if response = invalid then return
 
     if response.ok <> true then
+        Spinner_Hide()
         renderSeries(m.pageState.series, false)
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load this series."))
         return
     end if
 
     payload = response.payload
-    if payload = invalid then return
+    if payload = invalid then
+        Spinner_Hide()
+        return
+    end if
 
     m.pageState.series = payload.series
     m.pageState.seasons = getItemsFromPayload(payload.seasons)
     renderSeries(payload.series, false)
     renderSeasons(m.pageState.seasons)
+    Spinner_Hide()
     Status_ClearMessage()
     focusSeasonsIfActive()
 end sub

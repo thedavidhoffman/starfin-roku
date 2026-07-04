@@ -2,6 +2,77 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.top.uri = "pkg:/images/icons/busy-spinner.png"
+    m.scrim = m.top.findNode("scrim")
+    m.spinner = m.top.findNode("spinner")
+    m.showDelayTimer = m.top.findNode("showDelayTimer")
+
+    m.spinner.uri = "pkg:/images/icons/busy-spinner.png"
+    m.showDelayTimer.observeField("fire", "onShowDelayTimerFire")
     m.top.visible = false
+    setVisualsVisible(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' onControlChanged
+'-------------------------------------------------------------------------------
+sub onControlChanged()
+    control = LCase(m.top.control)
+    if control = "start" then
+        startSpinner()
+    else if control = "stop" then
+        stopSpinner()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onShowDelayTimerFire
+'-------------------------------------------------------------------------------
+sub onShowDelayTimerFire()
+    showSpinner()
+end sub
+
+'-------------------------------------------------------------------------------
+' startSpinner
+'-------------------------------------------------------------------------------
+sub startSpinner()
+    m.showDelayTimer.control = "stop"
+    delay = m.top.showDelay
+
+    m.top.visible = true
+    if delay <= 0 then
+        showSpinner()
+        return
+    end if
+
+    setVisualsVisible(false)
+    m.spinner.control = "stop"
+    m.showDelayTimer.duration = delay
+    m.showDelayTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' stopSpinner
+'-------------------------------------------------------------------------------
+sub stopSpinner()
+    m.showDelayTimer.control = "stop"
+    m.spinner.control = "stop"
+    setVisualsVisible(false)
+    m.top.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' showSpinner
+'-------------------------------------------------------------------------------
+sub showSpinner()
+    m.top.visible = true
+    setVisualsVisible(true)
+    m.spinner.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' setVisualsVisible
+'-------------------------------------------------------------------------------
+sub setVisualsVisible(isVisible as boolean)
+    m.scrim.visible = isVisible
+    m.spinner.visible = isVisible
 end sub
