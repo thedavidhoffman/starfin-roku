@@ -4,16 +4,19 @@
 sub init()
     m.keyboard = m.top.findNode("keyboard")
     m.keyboard.keyGrid.keyDefinitionUri = "pkg:/components/pages/Search/search-keyboard-kdf.json"
+    m.searchButton = m.top.findNode("searchButton")
     m.helpLabel = m.top.findNode("helpLabel")
     m.resultsGroup = m.top.findNode("resultsGroup")
     m.searchTask = m.top.findNode("searchTask")
 
     m.keyboard.observeField("text", "onKeyboardTextChanged")
+    m.searchButton.observeField("buttonSelected", "onSearchButtonSelected")
     m.searchTask.observeField("response", "onSearchResponse")
 
     m.searchState = {
         request: invalid
         query: ""
+        submittedQuery: ""
         minimumQueryLength: 3
         rowNodes: []
         focusedRowIndex: 0
@@ -45,7 +48,17 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusKeyboard()
     m.searchState.focusedRowIndex = -1
+    m.searchButton.hasFocusVisual = false
     m.keyboard.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusSearchButton
+'-------------------------------------------------------------------------------
+sub focusSearchButton()
+    m.searchState.focusedRowIndex = -1
+    m.searchButton.hasFocusVisual = true
+    m.searchButton.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -56,14 +69,40 @@ sub onKeyboardTextChanged()
     if query = m.searchState.query then return
 
     m.searchState.query = query
+    m.searchState.submittedQuery = ""
     m.searchTask.control = "stop"
+    Spinner_Hide()
 
     if Len(query) < m.searchState.minimumQueryLength then
-        Spinner_Hide()
         Status_ClearMessage()
         clearRows()
         m.helpLabel.visible = true
-        focusKeyboard()
+    else
+        Status_ClearMessage()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onSearchButtonSelected
+'-------------------------------------------------------------------------------
+sub onSearchButtonSelected()
+    runSearch()
+end sub
+
+'-------------------------------------------------------------------------------
+' runSearch
+'-------------------------------------------------------------------------------
+sub runSearch()
+    query = String_Trim(SafeString(m.keyboard.text, ""))
+    m.searchState.query = query
+    m.searchTask.control = "stop"
+
+    if Len(query) < m.searchState.minimumQueryLength then
+        m.searchState.submittedQuery = ""
+        Spinner_Hide()
+        clearRows()
+        Status_SetMessage("Enter at least 3 characters.")
+        focusSearchButton()
         return
     end if
 
@@ -71,6 +110,7 @@ sub onKeyboardTextChanged()
     if request = invalid then return
 
     request.query = query
+    m.searchState.submittedQuery = query
     Spinner_Show(0)
     Status_ClearMessage()
     m.searchTask.request = request
@@ -83,7 +123,7 @@ end sub
 sub onSearchResponse()
     response = m.searchTask.response
     if response = invalid then return
-    if SafeString(response.query, "") <> m.searchState.query then return
+    if SafeString(response.query, "") <> m.searchState.submittedQuery then return
 
     Spinner_Hide()
 
@@ -114,7 +154,7 @@ sub renderRows(payload as dynamic)
 
     m.helpLabel.visible = hasRows() <> true
     if hasRows() then
-        m.searchState.focusedRowIndex = 0
+        focusRow(0)
     else
         focusKeyboard()
     end if
@@ -227,6 +267,7 @@ function focusRow(index as integer) as boolean
     if index >= m.searchState.rowNodes.Count() then index = m.searchState.rowNodes.Count() - 1
 
     m.searchState.focusedRowIndex = index
+    m.searchButton.hasFocusVisual = false
     updateResultsScroll(index)
     row = m.searchState.rowNodes[index]
     if row = invalid then return false
@@ -245,7 +286,7 @@ sub clearRows()
     m.searchState.rowNodes = []
     m.searchState.focusedRowIndex = -1
     m.searchState.resultsOffsetY = 0
-    m.resultsGroup.translation = [0, 56]
+    m.resultsGroup.translation = [0, 0]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -287,7 +328,7 @@ end function
 '-------------------------------------------------------------------------------
 sub updateResultsScroll(index as integer)
     top = getRowTop(index)
-    targetOffsetY = 56 - top
+    targetOffsetY = 0 - top
 
     if targetOffsetY = m.searchState.resultsOffsetY then return
 
@@ -317,14 +358,14 @@ end function
 ' getPosterLayout
 '-------------------------------------------------------------------------------
 function getPosterLayout() as object
-    return { width: 295, height: 463, itemSizeWidth: 1360, itemSpacing: -11, spacingAfter: 37, imageAspect: "poster", focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-295x463.png" }
+    return { width: 295, height: 463, itemSizeWidth: 1450, itemSpacing: -11, spacingAfter: 37, imageAspect: "poster", focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-295x463.png" }
 end function
 
 '-------------------------------------------------------------------------------
 ' getWideLayout
 '-------------------------------------------------------------------------------
 function getWideLayout() as object
-    return { width: 485, height: 348, itemSizeWidth: 1360, itemSpacing: -27, spacingAfter: 37, imageAspect: "wide", focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-485x348.png" }
+    return { width: 485, height: 348, itemSizeWidth: 1450, itemSpacing: -27, spacingAfter: 37, imageAspect: "wide", focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-485x348.png" }
 end function
 
 '-------------------------------------------------------------------------------
@@ -409,22 +450,40 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
     if key = "up" then
-        if hasRows() and m.keyboard.isInFocusChain() <> true then return moveRowFocus(-1)
+        if m.searchButton.isInFocusChain() then
+            focusKeyboard()
+            return true
+        end if
+        if hasRows() and m.searchState.focusedRowIndex >= 0 then return moveRowFocus(-1)
         m.top.focusExitUp = true
         return true
     end if
 
-    if key = "down" and hasRows() and m.keyboard.isInFocusChain() <> true then
+    if key = "down" and m.keyboard.isInFocusChain() then
+        focusSearchButton()
+        return true
+    end if
+
+    if key = "down" and hasRows() and m.searchState.focusedRowIndex >= 0 then
         return moveRowFocus(1)
     end if
 
-    if key = "left" and hasRows() and m.keyboard.isInFocusChain() <> true then
+    if key = "left" and hasRows() and m.searchState.focusedRowIndex >= 0 then
         focusKeyboard()
         return true
     end if
 
     if key = "right" and hasRows() and m.keyboard.isInFocusChain() then
         return focusRow(0)
+    end if
+
+    if key = "right" and hasRows() and m.searchButton.isInFocusChain() then
+        return focusRow(0)
+    end if
+
+    if (key = "OK" or key = "select") and m.searchButton.isInFocusChain() then
+        runSearch()
+        return true
     end if
 
     if key = "back" then

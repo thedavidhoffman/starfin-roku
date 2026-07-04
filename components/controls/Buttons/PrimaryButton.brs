@@ -123,3 +123,17 @@ function getTextWidth() as integer
     if textWidth <= 0 then textWidth = 1
     return textWidth
 end function
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+
+    if key = "OK" or key = "select" then
+        m.top.buttonSelected = true
+        return true
+    end if
+
+    return false
+end function
