@@ -8,8 +8,7 @@ sub init()
     m.seasonsLabel = m.top.findNode("seasonsLabel")
     m.seasonsGrid = m.top.findNode("seasonsGrid")
     m.cast = m.top.findNode("cast")
-    m.downChevron = m.top.findNode("downChevron")
-    m.upChevron = m.top.findNode("upChevron")
+    m.chevronFooter = m.top.findNode("chevronFooter")
     m.tvShowTask = m.top.findNode("tvShowTask")
     m.themeSongsTask = m.top.findNode("themeSongsTask")
 
@@ -366,8 +365,13 @@ sub updateFocusChevron()
     hasSeasons = m.seasonsGrid.content <> invalid and m.seasonsGrid.content.getChildCount() > 0
     hasCast = m.cast.visible = true and m.cast.hasItems = true
 
-    m.downChevron.visible = m.pageState.focusArea = "seasons" and hasSeasons and hasCast
-    m.upChevron.visible = m.pageState.focusArea = "cast" and hasCast and hasSeasons
+    if m.pageState.focusArea = "seasons" and hasSeasons and hasCast then
+        m.chevronFooter.direction = "down"
+    else if m.pageState.focusArea = "cast" and hasCast and hasSeasons then
+        m.chevronFooter.direction = "up"
+    else
+        m.chevronFooter.direction = ""
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
