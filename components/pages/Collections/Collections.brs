@@ -65,7 +65,7 @@ sub onCollectionsResponse()
         return
     end if
 
-    m.pageState.collections = getCollectionsFromPayload(response.payload)
+    m.pageState.collections = filterRootCollections(getCollectionsFromPayload(response.payload))
     renderCollections(m.pageState.collections)
     Spinner_Hide()
     Status_ClearMessage()
@@ -353,6 +353,34 @@ function filterCollectionItems(items as object) as object
     end for
 
     return collections
+end function
+
+'-------------------------------------------------------------------------------
+' filterRootCollections
+'-------------------------------------------------------------------------------
+function filterRootCollections(collections as object) as object
+    topCollections = []
+    for each item in collections
+        if hasTopTag(item) then topCollections.Push(item)
+    end for
+
+    if topCollections.Count() > 0 then return topCollections
+    return collections
+end function
+
+'-------------------------------------------------------------------------------
+' hasTopTag
+'-------------------------------------------------------------------------------
+function hasTopTag(item as dynamic) as boolean
+    if isAssocArray(item) = false then return false
+    if item.Tags = invalid then return false
+    if Type(item.Tags) <> "roArray" then return false
+
+    for each tag in item.Tags
+        if LCase(SafeString(tag, "")) = "top" then return true
+    end for
+
+    return false
 end function
 
 '-------------------------------------------------------------------------------
