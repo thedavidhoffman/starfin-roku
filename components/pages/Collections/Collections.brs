@@ -12,6 +12,8 @@ sub init()
     m.pageState = {
         request: invalid
         collections: []
+        navigationStack: []
+        pendingDrilldown: invalid
         imageAspect: "poster"
     }
 end sub
@@ -33,6 +35,8 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    m.pageState.navigationStack = []
+    m.pageState.pendingDrilldown = invalid
     m.pageState.imageAspect = getCollectionImageAspect()
     m.titleLabel.text = SafeString(request.title, "Collections")
     applyGridLayout(m.pageState.imageAspect)
@@ -50,13 +54,18 @@ sub onCollectionsResponse()
     response = m.collectionsTask.response
     if response = invalid then return
 
+    if SafeString(response.mode, "load") = "drilldown" then
+        handleDrilldownResponse(response)
+        return
+    end if
+
     if response.ok <> true then
         Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load collections."))
         return
     end if
 
-    m.pageState.collections = getItemsFromPayload(response.payload)
+    m.pageState.collections = getCollectionsFromPayload(response.payload)
     renderCollections(m.pageState.collections)
     Spinner_Hide()
     Status_ClearMessage()
@@ -78,6 +87,109 @@ sub onCollectionSelected()
     itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId = "" then return
 
+    loadChildCollections(itemId, item)
+end sub
+
+'-------------------------------------------------------------------------------
+' loadChildCollections
+'-------------------------------------------------------------------------------
+sub loadChildCollections(itemId as string, item as object)
+    request = m.pageState.request
+    if request = invalid then return
+
+    title = FirstNonEmpty([item.Name], "Collection")
+    childRequest = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        libraryId: itemId
+        title: title
+        item: item
+        mode: "drilldown"
+        recursive: false
+        includeItemTypes: ""
+    }
+
+    m.pageState.pendingDrilldown = {
+        itemId: itemId
+        item: item
+        request: childRequest
+    }
+    Spinner_Show(0)
+    Status_ClearMessage()
+    m.collectionsTask.control = "stop"
+    m.collectionsTask.request = childRequest
+    m.collectionsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' handleDrilldownResponse
+'-------------------------------------------------------------------------------
+sub handleDrilldownResponse(response as object)
+    Spinner_Hide()
+
+    pending = m.pageState.pendingDrilldown
+    m.pageState.pendingDrilldown = invalid
+    if pending = invalid then return
+
+    if response.ok <> true then
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load collection."))
+        return
+    end if
+
+    collections = getCollectionsFromPayload(response.payload)
+    if collections.Count() = 0 then
+        Status_ClearMessage()
+        openSelectedCollection(pending.itemId, pending.item)
+        return
+    end if
+
+    pushCollectionNavigationState()
+    m.pageState.request = pending.request
+    m.pageState.collections = collections
+    m.titleLabel.text = SafeString(pending.request.title, "Collections")
+    renderCollections(collections)
+    Status_ClearMessage()
+    focusCollectionsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' pushCollectionNavigationState
+'-------------------------------------------------------------------------------
+sub pushCollectionNavigationState()
+    m.pageState.navigationStack.Push({
+        request: m.pageState.request
+        collections: m.pageState.collections
+        title: SafeString(m.titleLabel.text, "Collections")
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' navigateBackToParentCollection
+'-------------------------------------------------------------------------------
+function navigateBackToParentCollection() as boolean
+    if m.pageState.navigationStack = invalid then return false
+    if m.pageState.navigationStack.Count() = 0 then return false
+
+    lastIndex = m.pageState.navigationStack.Count() - 1
+    previous = m.pageState.navigationStack[lastIndex]
+    m.pageState.navigationStack.Delete(lastIndex)
+
+    m.pageState.pendingDrilldown = invalid
+    m.collectionsTask.control = "stop"
+    m.pageState.request = previous.request
+    m.pageState.collections = previous.collections
+    m.titleLabel.text = SafeString(previous.title, "Collections")
+    renderCollections(m.pageState.collections)
+    Status_ClearMessage()
+    focusCollectionsIfActive()
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' openSelectedCollection
+'-------------------------------------------------------------------------------
+sub openSelectedCollection(itemId as string, item as object)
     m.top.selectedCollection = {
         itemId: itemId
         item: item
@@ -98,6 +210,7 @@ sub renderCollections(collections as object)
         child.HDPosterUrl = getItemImageUrl(item, imageAspect)
         child.AddFields({
             imageAspect: imageAspect
+            showSubtitle: false
             raw: item
         })
     end for
@@ -213,6 +326,13 @@ sub applyGridLayout(imageAspect as string)
     m.collectionsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
 end sub
 
+' getCollectionsFromPayload
+'-------------------------------------------------------------------------------
+function getCollectionsFromPayload(payload as dynamic) as object
+    return filterCollectionItems(getItemsFromPayload(payload))
+end function
+
+'-------------------------------------------------------------------------------
 ' getItemsFromPayload
 '-------------------------------------------------------------------------------
 function getItemsFromPayload(payload as dynamic) as object
@@ -220,8 +340,28 @@ function getItemsFromPayload(payload as dynamic) as object
     if Type(payload) = "roArray" then return payload
     if isAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
-    if payload.items <> invalid then return payload.items
     return []
+end function
+
+'-------------------------------------------------------------------------------
+' filterCollectionItems
+'-------------------------------------------------------------------------------
+function filterCollectionItems(items as object) as object
+    collections = []
+    for each item in items
+        if isCollectionItem(item) then collections.Push(item)
+    end for
+
+    return collections
+end function
+
+'-------------------------------------------------------------------------------
+' isCollectionItem
+'-------------------------------------------------------------------------------
+function isCollectionItem(item as dynamic) as boolean
+    if isAssocArray(item) = false then return false
+
+    return LCase(SafeString(item.Type, "")) = "boxset"
 end function
 
 '-------------------------------------------------------------------------------
@@ -238,6 +378,8 @@ end function
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
     if key = "back" then
+        if navigateBackToParentCollection() then return true
+
         m.top.closeRequested = true
         return true
     end if

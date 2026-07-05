@@ -20,8 +20,8 @@ sub executeRequest()
     params = {
         userId: SafeString(request.userId, "")
         parentId: SafeString(request.libraryId, "")
-        recursive: true
-        includeItemTypes: "BoxSet"
+        recursive: getRecursiveValue(request)
+        includeItemTypes: SafeString(request.includeItemTypes, "BoxSet")
         fields: "Genres,Overview"
         enableImageTypes: "Primary,Backdrop,Thumb"
         imageTypeLimit: 1
@@ -42,9 +42,19 @@ sub executeRequest()
         ok: true
         action: "collections"
         libraryId: SafeString(request.libraryId, "")
+        mode: SafeString(request.mode, "load")
         payload: response.data
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' getRecursiveValue
+'-------------------------------------------------------------------------------
+function getRecursiveValue(request as dynamic) as boolean
+    if request.recursive <> invalid then return request.recursive
+
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' validateRequest

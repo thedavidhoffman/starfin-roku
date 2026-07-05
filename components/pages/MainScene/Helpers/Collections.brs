@@ -14,6 +14,12 @@ sub collectionsHandleHomeCollectionsSelected()
     page.observeField("closeRequested", "collectionsHandleCloseRequested")
     page.observeField("selectedCollection", "collectionsHandleCollectionSelected")
     page.settings = m.settings
+
+    resetDynamicPages()
+    m.collectionsPage = page
+    m.dynamicPageHost.appendChild(page)
+    m.homePage.visible = false
+    m.header.visible = true
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -22,12 +28,6 @@ sub collectionsHandleHomeCollectionsSelected()
         title: FirstNonEmpty([selection.item.Name], "Collections")
         item: selection.item
     }
-
-    resetDynamicPages()
-    m.collectionsPage = page
-    m.dynamicPageHost.appendChild(page)
-    m.homePage.visible = false
-    m.header.visible = true
     page.callFunc("activate")
 end sub
 
