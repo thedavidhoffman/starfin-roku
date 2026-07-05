@@ -21,6 +21,7 @@ sub tvShowShow(selection as object, shouldReset as boolean)
     page.observeField("selectedSeason", "tvSeasonHandleTVShowSeasonSelected")
     page.observeField("selectedPerson", "personHandleTVShowPersonSelected")
     page.observeField("overlayRequested", "tvShowHandleOverlayRequested")
+    page.observeField("themeRequested", "themeAudioHandleTVShowRequested")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -73,7 +74,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub tvShowHandleCloseRequested()
     clearStatus()
+    themeAudioStop()
     if m.tvShowPage <> invalid then
+        m.tvShowPage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvShowPage)
         m.tvShowPage = invalid
     end if

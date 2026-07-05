@@ -8,6 +8,7 @@ sub init()
         collectionDisplayOptions: m.top.findNode("collectionDisplayOptions")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
+        themeMusicOptions: m.top.findNode("themeMusicOptions")
     }
     m.focusState = {
         activeIndex: 0
@@ -22,6 +23,7 @@ sub init()
         m.settingsControls.collectionDisplayOptions
         m.settingsControls.tvEpisodeListDisplayOptions
         m.settingsControls.tmdbApiKeyInput
+        m.settingsControls.themeMusicOptions
     ]
 
     m.top.observeField("focusedChild", "onFocusChanged")
@@ -29,11 +31,13 @@ sub init()
     m.settingsControls.movieLibraryOptions.observeField("itemSelected", "onMovieLibraryDisplaySelected")
     m.settingsControls.collectionDisplayOptions.observeField("itemSelected", "onCollectionDisplaySelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
+    m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
 
     initDisplayOptions(m.settingsControls.tvLibraryOptions)
     initDisplayOptions(m.settingsControls.movieLibraryOptions)
     initDisplayOptions(m.settingsControls.collectionDisplayOptions)
     initTVEpisodeListDisplayOptions()
+    initThemeMusicOptions()
     loadSettingsValues()
 end sub
 
@@ -69,6 +73,22 @@ sub initTVEpisodeListDisplayOptions()
 end sub
 
 '-------------------------------------------------------------------------------
+' initThemeMusicOptions
+'-------------------------------------------------------------------------------
+sub initThemeMusicOptions()
+    options = m.settingsControls.themeMusicOptions
+    if options = invalid then return
+
+    content = CreateObject("roSGNode", "ContentNode")
+    offOption = content.createChild("ContentNode")
+    offOption.title = "Off"
+    onOption = content.createChild("ContentNode")
+    onOption.title = "On"
+
+    options.content = content
+end sub
+
+'-------------------------------------------------------------------------------
 ' loadSettingsValues
 '-------------------------------------------------------------------------------
 sub loadSettingsValues()
@@ -81,12 +101,14 @@ sub loadSettingsValues()
     m.settingsState.values[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(settings, keys.movieLibraryDisplay)
     m.settingsState.values[keys.collectionDisplay] = SettingsStore_GetSettingValue(settings, keys.collectionDisplay)
     m.settingsState.values[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
+    m.settingsState.values[keys.themeMusic] = SettingsStore_GetSettingValue(settings, keys.themeMusic)
     m.settingsState.values[keys.tmdbApiKey] = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
 
     setDisplayOption(m.settingsControls.tvLibraryOptions, m.settingsState.values[keys.tvLibraryDisplay])
     setDisplayOption(m.settingsControls.movieLibraryOptions, m.settingsState.values[keys.movieLibraryDisplay])
     setDisplayOption(m.settingsControls.collectionDisplayOptions, m.settingsState.values[keys.collectionDisplay])
     setTVEpisodeListDisplayOption(m.settingsState.values[keys.tvEpisodeListDisplay])
+    setThemeMusicOption(m.settingsState.values[keys.themeMusic])
 
     if m.settingsControls.tmdbApiKeyInput <> invalid then
         m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[keys.tmdbApiKey]
@@ -122,6 +144,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if isTextInputFocused() then
         if key = "up" then return focusField(m.focusState.activeIndex - 1, invalid)
+        if key = "down" then return focusField(m.focusState.activeIndex + 1, 0)
         if key = "left" then return focusField(1, invalid)
         if key = "OK" or key = "select" then
             openKeyboardDialog()
@@ -159,6 +182,7 @@ function getSettingsValues() as object
     settings[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.movieLibraryDisplay)
     settings[keys.collectionDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.collectionDisplay)
     settings[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tvEpisodeListDisplay)
+    settings[keys.themeMusic] = SettingsStore_GetSettingValue(m.settingsState.values, keys.themeMusic)
     settings[keys.tmdbApiKey] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tmdbApiKey)
     return settings
 end function
@@ -196,6 +220,17 @@ sub onTVEpisodeListDisplaySelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' onThemeMusicSelected
+'-------------------------------------------------------------------------------
+sub onThemeMusicSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.themeMusicOptions)
+    if selectedIndex < 0 then return
+
+    m.settingsControls.themeMusicOptions.checkedItem = selectedIndex
+    m.settingsState.values[SettingsStore_Keys().themeMusic] = getThemeMusicValueForIndex(selectedIndex)
+end sub
+
+'-------------------------------------------------------------------------------
 ' canMoveFocusToButtons
 '-------------------------------------------------------------------------------
 function canMoveFocusToButtons() as boolean
@@ -226,6 +261,7 @@ end function
 function focusLeftColumn() as boolean
     if m.focusState.activeIndex = 3 then return focusField(0, getFocusedItemIndex(m.settingsControls.tvEpisodeListDisplayOptions))
     if m.focusState.activeIndex = 4 then return focusField(1, invalid)
+    if m.focusState.activeIndex = 5 then return focusField(2, getFocusedItemIndex(m.settingsControls.collectionDisplayOptions))
 
     return false
 end function
@@ -367,6 +403,31 @@ end function
 function getTVEpisodeListDisplayValueForIndex(index as integer) as string
     if index = 1 then return "vertical"
     return "horizontal"
+end function
+
+'-------------------------------------------------------------------------------
+' setThemeMusicOption
+'-------------------------------------------------------------------------------
+sub setThemeMusicOption(value as dynamic)
+    options = m.settingsControls.themeMusicOptions
+    if options = invalid then return
+
+    displayValue = "off"
+    if value <> invalid and value <> "" then displayValue = value.ToStr()
+
+    if LCase(displayValue) = "on" then
+        options.checkedItem = 1
+    else
+        options.checkedItem = 0
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getThemeMusicValueForIndex
+'-------------------------------------------------------------------------------
+function getThemeMusicValueForIndex(index as integer) as string
+    if index = 1 then return "on"
+    return "off"
 end function
 
 '-------------------------------------------------------------------------------

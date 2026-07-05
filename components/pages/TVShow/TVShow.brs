@@ -11,8 +11,10 @@ sub init()
     m.downChevron = m.top.findNode("downChevron")
     m.upChevron = m.top.findNode("upChevron")
     m.tvShowTask = m.top.findNode("tvShowTask")
+    m.themeSongsTask = m.top.findNode("themeSongsTask")
 
     m.tvShowTask.observeField("response", "onTVShowResponse")
+    m.themeSongsTask.observeField("response", "onThemeSongsResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
@@ -23,6 +25,7 @@ sub init()
         series: invalid
         seasons: []
         focusArea: "seasons"
+        themeLookupActive: false
     }
     m.layout = {
         contentDefault: [96, 0]
@@ -92,6 +95,7 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.series = request.item
+    m.pageState.themeLookupActive = false
     m.pageState.focusArea = "seasons"
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
@@ -133,6 +137,75 @@ sub onTVShowResponse()
     Spinner_Hide()
     Status_ClearMessage()
     focusSeasonsIfActive()
+    loadThemeSong(payload.series)
+end sub
+
+'-------------------------------------------------------------------------------
+' loadThemeSong
+'-------------------------------------------------------------------------------
+sub loadThemeSong(item as dynamic)
+    request = m.pageState.request
+    if request = invalid then return
+    if isThemeMusicEnabled(request.settings) <> true then
+        m.log.write("Theme music playback is disabled")
+        return
+    end if
+
+    m.log.write("Theme music playback is enabled")
+
+    itemId = SafeString(FirstNonEmpty([item.Id, request.itemId], ""), "")
+    if itemId = "" then return
+
+    m.pageState.themeLookupActive = true
+    m.themeSongsTask.control = "stop"
+    m.themeSongsTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+    }
+    m.themeSongsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onThemeSongsResponse
+'-------------------------------------------------------------------------------
+sub onThemeSongsResponse()
+    response = m.themeSongsTask.response
+    if response = invalid then return
+    if m.pageState.themeLookupActive <> true then return
+    if response.ok <> true then
+        m.log.write("Theme song lookup failed: " + SafeString(response.errorMessage, "Unknown error."))
+        return
+    end if
+
+    themeSong = response.payload
+    if isAssocArray(themeSong) = false then
+        m.pageState.themeLookupActive = false
+        m.log.write("Theme music enabled, but no theme song was found")
+        return
+    end if
+
+    request = m.pageState.request
+    if request = invalid then return
+    if SafeString(response.itemId, "") <> SafeString(request.itemId, "") then return
+
+    m.pageState.themeLookupActive = false
+    themeSongId = SafeString(themeSong.Id, "")
+    if themeSongId = "" then
+        m.pageState.themeLookupActive = false
+        return
+    end if
+
+    m.log.write("Theme song found itemId=" + themeSongId)
+    m.top.themeRequested = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: themeSongId
+        title: FirstNonEmpty([themeSong.Name, m.pageState.series.Name], "Theme Music")
+        sourceItemId: SafeString(request.itemId, "")
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -211,6 +284,14 @@ sub activate()
     else
         focusSeasonsIfActive()
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    m.pageState.themeLookupActive = false
+    m.themeSongsTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -503,6 +584,16 @@ end function
 function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
+end function
+
+'-------------------------------------------------------------------------------
+' isThemeMusicEnabled
+'-------------------------------------------------------------------------------
+function isThemeMusicEnabled(settings as dynamic) as boolean
+    if settings = invalid then return false
+
+    keys = SettingsStore_Keys()
+    return LCase(SettingsStore_GetSettingValue(settings, keys.themeMusic)) = "on"
 end function
 
 '-------------------------------------------------------------------------------

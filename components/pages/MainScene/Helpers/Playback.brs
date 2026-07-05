@@ -5,6 +5,8 @@ sub playerShow(selection as object)
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    themeAudioStop()
+    if m.moviePage <> invalid and m.moviePage.visible = true then m.moviePage.callFunc("deactivate")
     player = CreateObject("roSGNode", "VideoPlayer")
     player.observeField("closeRequested", "playerHandleCloseRequested")
     player.observeField("playbackProgressChanged", "playerHandlePlaybackProgressChanged")

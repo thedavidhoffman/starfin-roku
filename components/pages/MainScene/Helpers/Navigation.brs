@@ -202,6 +202,7 @@ sub applySettingsFromOverlay(overlay as dynamic)
     if overlay.savedSettings = invalid then return
 
     m.settings = overlay.savedSettings
+    if themeAudioIsEnabled() <> true then themeAudioStop()
     fanOutSettings()
 end sub
 
@@ -256,7 +257,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub resetDynamicPages()
     clearStatus()
+    themeAudioStop()
     if m.liveTvPage <> invalid then m.liveTvPage.callFunc("deactivate")
+    if m.moviePage <> invalid then m.moviePage.callFunc("deactivate")
+    if m.tvShowPage <> invalid then m.tvShowPage.callFunc("deactivate")
     m.yourStatsPage = invalid
     m.searchPage = invalid
     m.collectionsPage = invalid

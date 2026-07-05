@@ -8,9 +8,11 @@ sub init()
     m.streamOptions = m.top.findNode("streamOptions")
     m.cast = m.top.findNode("cast")
     m.movieTask = m.top.findNode("movieTask")
+    m.themeSongsTask = m.top.findNode("themeSongsTask")
     m.watchedTask = m.top.findNode("watchedTask")
 
     m.movieTask.observeField("response", "onMovieResponse")
+    m.themeSongsTask.observeField("response", "onThemeSongsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.mediaToolbar.observeField("focusExitDown", "onMediaToolbarFocusExitDown")
@@ -35,6 +37,7 @@ sub init()
             subtitleOff: false
         }
         focusArea: "toolbar"
+        themeLookupActive: false
     }
 end sub
 
@@ -47,6 +50,7 @@ sub onLoadRequestChanged()
 
     m.state.request = request
     m.state.item = request.item
+    m.state.themeLookupActive = false
     m.state.selectedStreams = {
         audio: invalid
         subtitle: invalid
@@ -78,6 +82,75 @@ sub onMovieResponse()
     renderMovie(response.payload, false)
     Spinner_Hide()
     Status_ClearMessage()
+    loadThemeSong(response.payload)
+end sub
+
+'-------------------------------------------------------------------------------
+' loadThemeSong
+'-------------------------------------------------------------------------------
+sub loadThemeSong(item as dynamic)
+    request = m.state.request
+    if request = invalid then return
+    if isThemeMusicEnabled(request.settings) <> true then
+        m.log.write("Theme music playback is disabled")
+        return
+    end if
+
+    m.log.write("Theme music playback is enabled")
+
+    itemId = SafeString(FirstNonEmpty([item.Id, request.itemId], ""), "")
+    if itemId = "" then return
+
+    m.state.themeLookupActive = true
+    m.themeSongsTask.control = "stop"
+    m.themeSongsTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+    }
+    m.themeSongsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onThemeSongsResponse
+'-------------------------------------------------------------------------------
+sub onThemeSongsResponse()
+    response = m.themeSongsTask.response
+    if response = invalid then return
+    if m.state.themeLookupActive <> true then return
+    if response.ok <> true then
+        m.log.write("Theme song lookup failed: " + SafeString(response.errorMessage, "Unknown error."))
+        return
+    end if
+
+    themeSong = response.payload
+    if isAssocArray(themeSong) = false then
+        m.state.themeLookupActive = false
+        m.log.write("Theme music enabled, but no theme song was found")
+        return
+    end if
+
+    request = m.state.request
+    if request = invalid then return
+    if SafeString(response.itemId, "") <> SafeString(request.itemId, "") then return
+
+    m.state.themeLookupActive = false
+    themeSongId = SafeString(themeSong.Id, "")
+    if themeSongId = "" then
+        m.state.themeLookupActive = false
+        return
+    end if
+
+    m.log.write("Theme song found itemId=" + themeSongId)
+    m.top.themeRequested = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: themeSongId
+        title: FirstNonEmpty([themeSong.Name, m.state.item.Name], "Theme Music")
+        sourceItemId: SafeString(request.itemId, "")
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -113,6 +186,14 @@ sub activate()
     else
         focusMediaToolbar()
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    m.state.themeLookupActive = false
+    m.themeSongsTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -713,6 +794,16 @@ end function
 function isAssocArray(value as dynamic) as boolean
     valueType = Type(value)
     return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
+end function
+
+'-------------------------------------------------------------------------------
+' isThemeMusicEnabled
+'-------------------------------------------------------------------------------
+function isThemeMusicEnabled(settings as dynamic) as boolean
+    if settings = invalid then return false
+
+    keys = SettingsStore_Keys()
+    return LCase(SettingsStore_GetSettingValue(settings, keys.themeMusic)) = "on"
 end function
 
 '-------------------------------------------------------------------------------

@@ -22,6 +22,7 @@ sub movieShow(selection as object, shouldReset as boolean)
     page.observeField("selectedPerson", "personHandleMoviePersonSelected")
     page.observeField("streamOptionsRequested", "movieHandleStreamOptionsRequested")
     page.observeField("overlayRequested", "movieHandleOverlayRequested")
+    page.observeField("themeRequested", "themeAudioHandleMovieRequested")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -78,6 +79,8 @@ sub movieHandlePlaySelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    themeAudioStop()
+    m.moviePage.callFunc("deactivate")
     playerShow(selection)
 end sub
 
@@ -86,7 +89,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub movieHandleCloseRequested()
     clearStatus()
+    themeAudioStop()
     if m.moviePage <> invalid then
+        m.moviePage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.moviePage)
         m.moviePage = invalid
     end if

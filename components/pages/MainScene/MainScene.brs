@@ -23,6 +23,7 @@ sub initReferences()
     m.login = m.top.findNode("login")
     m.overlayHost = m.top.findNode("overlayHost")
     m.dynamicPageHost = m.top.findNode("dynamicPageHost")
+    m.themeAudio = m.top.findNode("themeAudio")
     m.statusLabel = m.top.findNode("statusLabel")
 end sub
 

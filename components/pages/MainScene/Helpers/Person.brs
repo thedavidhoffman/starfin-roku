@@ -16,6 +16,9 @@ sub personShow(selection as object)
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    themeAudioStop()
+    if m.moviePage <> invalid and m.moviePage.visible = true then m.moviePage.callFunc("deactivate")
+    if m.tvShowPage <> invalid and m.tvShowPage.visible = true then m.tvShowPage.callFunc("deactivate")
     if m.tvEpisodePage <> invalid and m.tvEpisodePage.visible = true then
         m.personSourceTvEpisodePage = m.tvEpisodePage
     else if m.tvSeasonPage <> invalid and m.tvSeasonPage.visible = true then
