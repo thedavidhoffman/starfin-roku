@@ -16,6 +16,7 @@ sub init()
     ]
    
     m.activeKeyboardField = invalid
+    m.loginButton.observeField("buttonSelected", "onLoginPressed")
 
     '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ' remove this...

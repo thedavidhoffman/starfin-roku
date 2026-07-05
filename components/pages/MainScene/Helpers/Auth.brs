@@ -57,6 +57,9 @@ end function
 ' authHandleLogoutPressed
 '-------------------------------------------------------------------------------
 sub authHandleLogoutPressed()
+    themeAudioStop()
+    resetDynamicPages()
+
     request = {
         server: ""
         token: ""

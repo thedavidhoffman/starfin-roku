@@ -21,8 +21,8 @@ sub executeRequest()
         m.top.response = login(request)
     else if action = "authorize" then
         m.top.response = authorize(request)
-    ' else if action = "logout" then
-    '     m.top.response = Authentication_Logout(request)
+    else if action = "logout" then
+        m.top.response = logout(request)
     else
         m.top.response = { ok: false, errorMessage: "Unknown request action." }
     end if
@@ -61,6 +61,19 @@ function login(request as object) as object
         payload: payload
     }
 
+end function
+
+'-------------------------------------------------------------------------------
+' logout
+'-------------------------------------------------------------------------------
+function logout(request as object) as object
+    if request.server = invalid or request.server = "" then return { ok: true, action: "logout" }
+    if request.token = invalid or request.token = "" then return { ok: true, action: "logout" }
+
+    url = NormalizeServerUrl(request.server) + "/Sessions/Logout"
+    result = HttpClient_Request(url, "POST", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+    result.AddReplace("action", "logout")
+    return result
 end function
 
 '-------------------------------------------------------------------------------
