@@ -20,15 +20,14 @@ sub executeRequest()
     params = {
         userId: SafeString(request.userId, "")
         parentId: SafeString(request.libraryId, "")
-        recursive: getRecursiveValue(request)
-        includeItemTypes: SafeString(request.includeItemTypes, "BoxSet")
-        fields: "Genres,Overview"
+        fields: getFields(request)
         enableImageTypes: "Primary,Backdrop,Thumb"
         imageTypeLimit: 1
         enableTotalRecordCount: false
-        sortBy: "SortName"
-        sortOrder: "Ascending"
+        sortBy: getSortBy(request)
+        sortOrder: getSortOrder(request)
     }
+    addOptionalQueryParams(params, request)
 
     url = NormalizeServerUrl(request.server) + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
@@ -48,12 +47,43 @@ sub executeRequest()
 end sub
 
 '-------------------------------------------------------------------------------
-' getRecursiveValue
+' addOptionalQueryParams
 '-------------------------------------------------------------------------------
-function getRecursiveValue(request as dynamic) as boolean
-    if request.recursive <> invalid then return request.recursive
+sub addOptionalQueryParams(params as object, request as object)
+    if request.recursive <> invalid then params.AddReplace("recursive", request.recursive)
 
-    return true
+    includeItemTypes = SafeString(request.includeItemTypes, "")
+    if includeItemTypes <> "" then params.AddReplace("includeItemTypes", includeItemTypes)
+end sub
+
+'-------------------------------------------------------------------------------
+' getFields
+'-------------------------------------------------------------------------------
+function getFields(request as dynamic) as string
+    fields = SafeString(request.fields, "")
+    if fields <> "" then return fields
+
+    return "PrimaryImageAspectRatio,SortName,Path,ChildCount,MediaSourceCount,Genres,Overview,Tags"
+end function
+
+'-------------------------------------------------------------------------------
+' getSortBy
+'-------------------------------------------------------------------------------
+function getSortBy(request as dynamic) as string
+    sortBy = SafeString(request.sortBy, "")
+    if sortBy <> "" then return sortBy
+
+    return "IsFolder,SortName"
+end function
+
+'-------------------------------------------------------------------------------
+' getSortOrder
+'-------------------------------------------------------------------------------
+function getSortOrder(request as dynamic) as string
+    sortOrder = SafeString(request.sortOrder, "")
+    if sortOrder <> "" then return sortOrder
+
+    return "Ascending"
 end function
 
 '-------------------------------------------------------------------------------
