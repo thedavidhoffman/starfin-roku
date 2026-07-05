@@ -22,7 +22,7 @@ sub executeRequest()
         parentId: SafeString(request.libraryId, "")
         recursive: true
         includeItemTypes: SafeString(request.includeItemTypes, "")
-        fields: "Genres,Overview,MediaSources,MediaStreams"
+        fields: "SortName"
         enableImageTypes: "Primary,Backdrop,Thumb,Logo"
         imageTypeLimit: 1
         enableTotalRecordCount: false
