@@ -783,7 +783,10 @@ end function
 sub onProgramSelected()
     focused = m.guideGrid.programFocusedDetails
     program = getProgramFromFocus(focused)
-    if program = invalid then return
+    if program = invalid then
+        playFocusedChannel(focused)
+        return
+    end if
 
     channelId = SafeString(program.channelId, "")
     if channelId = "" and program.raw <> invalid then channelId = SafeString(program.raw.ChannelId, "")
@@ -792,6 +795,23 @@ sub onProgramSelected()
     m.top.playSelected = {
         itemId: channelId
         item: buildPlaybackItem(program, channelId)
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' playFocusedChannel
+'-------------------------------------------------------------------------------
+sub playFocusedChannel(focused as dynamic)
+    channel = getChannelFromFocus(focused)
+    if channel = invalid then return
+
+    channelId = SafeString(channel.channelId, "")
+    if channelId = "" then channelId = SafeString(channel.Id, "")
+    if channelId = "" then return
+
+    m.top.playSelected = {
+        itemId: channelId
+        item: buildChannelPlaybackItem(channel, channelId)
     }
 end sub
 
@@ -827,6 +847,22 @@ function buildPlaybackItem(program as object, channelId as string) as object
         Name: FirstNonEmpty([program.channelName, program.Title], "Live TV")
         Type: "TvChannel"
         CurrentProgram: raw
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildChannelPlaybackItem
+'-------------------------------------------------------------------------------
+function buildChannelPlaybackItem(channel as object, channelId as string) as object
+    raw = channel.raw
+    if raw = invalid then raw = {}
+
+    return {
+        Id: channelId
+        Name: FirstNonEmpty([channel.Title], "Live TV")
+        Type: "TvChannel"
+        CurrentProgram: invalid
+        raw: raw
     }
 end function
 
