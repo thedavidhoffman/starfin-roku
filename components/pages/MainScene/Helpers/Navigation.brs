@@ -168,6 +168,8 @@ sub focusActiveSurface()
         m.tvSeasonPage.callFunc("activate")
     else if m.tvShowPage <> invalid then
         m.tvShowPage.callFunc("activate")
+    else if m.liveTvPage <> invalid then
+        m.liveTvPage.callFunc("activate")
     else if m.libraryPage <> invalid then
         m.libraryPage.callFunc("activate")
     else if m.collectionsPage <> invalid then
@@ -254,9 +256,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub resetDynamicPages()
     clearStatus()
+    if m.liveTvPage <> invalid then m.liveTvPage.callFunc("deactivate")
     m.yourStatsPage = invalid
     m.searchPage = invalid
     m.collectionsPage = invalid
+    m.liveTvPage = invalid
     m.libraryPage = invalid
     m.moviePage = invalid
     m.tvShowPage = invalid

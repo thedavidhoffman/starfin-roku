@@ -123,6 +123,7 @@ sub logPlaybackResponse(playbackInfo as dynamic)
     end if
 
     m.log.write("PlaybackInfo media source Id=" + SafeString(mediaSource.Id, "") + " Protocol=" + SafeString(mediaSource.Protocol, "") + " Container=" + SafeString(mediaSource.Container, ""))
+    m.log.write("PlaybackInfo media source Path=" + maskUrl(SafeString(mediaSource.Path, "")))
     m.log.write("PlaybackInfo SupportsDirectPlay=" + boolToText(mediaSource.SupportsDirectPlay) + " SupportsDirectStream=" + boolToText(mediaSource.SupportsDirectStream) + " SupportsTranscoding=" + boolToText(mediaSource.SupportsTranscoding))
     m.log.write("PlaybackInfo TranscodingUrl=" + maskUrl(SafeString(mediaSource.TranscodingUrl, "")))
 
@@ -169,16 +170,20 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         playbackMethod = "transcode"
     else
         streamFormat = getStreamFormat(container)
-        streamParams = {
-            Static: true
-            MediaSourceId: mediaSourceId
-            AudioStreamIndex: audioStreamIndex
-            Container: container
-            PlaySessionId: playSessionId
-            api_key: request.token
-        }
-        if requestedSubtitleStreamIndex >= -1 then streamParams.SubtitleStreamIndex = requestedSubtitleStreamIndex
-        streamUrl = NormalizeServerUrl(request.server) + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
+        if isLiveTvPlaybackRequest(request) = true and isHttpDirectMediaSource(mediaSource) then
+            streamUrl = buildHttpDirectStreamUrl(request.server, mediaSource.Path)
+        else
+            streamParams = {
+                Static: true
+                Container: container
+                PlaySessionId: playSessionId
+                api_key: request.token
+            }
+            if isLiveTvPlaybackRequest(request) <> true and mediaSourceId <> "" then streamParams.MediaSourceId = mediaSourceId
+            if audioStreamIndex >= 0 then streamParams.AudioStreamIndex = audioStreamIndex
+            if requestedSubtitleStreamIndex >= -1 then streamParams.SubtitleStreamIndex = requestedSubtitleStreamIndex
+            streamUrl = NormalizeServerUrl(request.server) + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
+        end if
         playbackMethod = "direct"
     end if
 
@@ -366,7 +371,7 @@ end function
 ' getDefaultAudioStreamIndex
 '-------------------------------------------------------------------------------
 function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
-    if mediaSource = invalid or mediaSource.MediaStreams = invalid then return 1
+    if mediaSource = invalid or mediaSource.MediaStreams = invalid then return -1
 
     firstAudioIndex = -1
     for i = 0 to mediaSource.MediaStreams.Count() - 1
@@ -379,8 +384,56 @@ function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
         end if
     end for
 
-    if firstAudioIndex <> -1 then return firstAudioIndex
-    return 1
+    return firstAudioIndex
+end function
+
+'-------------------------------------------------------------------------------
+' isLiveTvPlaybackRequest
+'-------------------------------------------------------------------------------
+function isLiveTvPlaybackRequest(request as dynamic) as boolean
+    if request = invalid or request.item = invalid then return false
+
+    itemType = LCase(SafeString(request.item.Type, ""))
+    return itemType = "tvchannel" or itemType = "livetvchannel"
+end function
+
+'-------------------------------------------------------------------------------
+' isHttpDirectMediaSource
+'-------------------------------------------------------------------------------
+function isHttpDirectMediaSource(mediaSource as dynamic) as boolean
+    if mediaSource = invalid then return false
+    if LCase(SafeString(mediaSource.Protocol, "")) <> "http" then return false
+
+    return SafeString(mediaSource.Path, "") <> ""
+end function
+
+'-------------------------------------------------------------------------------
+' buildHttpDirectStreamUrl
+'-------------------------------------------------------------------------------
+function buildHttpDirectStreamUrl(server as string, path as dynamic) as string
+    url = SafeString(path, "")
+    if url = "" then return ""
+
+    lowerUrl = LCase(url)
+    if Instr(1, lowerUrl, "http://localhost") = 1 or Instr(1, lowerUrl, "https://localhost") = 1 or Instr(1, lowerUrl, "http://127.0.0.1") = 1 or Instr(1, lowerUrl, "https://127.0.0.1") = 1 then
+        routePath = getAbsoluteUrlRoutePath(url)
+        if routePath <> "" then return buildServerUrl(server, routePath)
+    end if
+
+    return buildServerUrl(server, url)
+end function
+
+'-------------------------------------------------------------------------------
+' getAbsoluteUrlRoutePath
+'-------------------------------------------------------------------------------
+function getAbsoluteUrlRoutePath(url as string) as string
+    schemeEnd = Instr(1, url, "://")
+    if schemeEnd = 0 then return url
+
+    pathStart = Instr(schemeEnd + 3, url, "/")
+    if pathStart = 0 then return ""
+
+    return Mid(url, pathStart)
 end function
 
 '-------------------------------------------------------------------------------

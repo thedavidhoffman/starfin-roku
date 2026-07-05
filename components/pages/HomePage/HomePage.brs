@@ -69,6 +69,11 @@ sub selectHomeItem(item as dynamic)
             libraryId: itemId
             item: item
         }
+    else if isLiveTvLibrary(item) then
+        m.top.selectedLiveTV = {
+            libraryId: itemId
+            item: item
+        }
     else if isMediaLibrary(item) then
         m.top.selectedLibrary = {
             libraryId: itemId
@@ -938,6 +943,16 @@ end function
 '-------------------------------------------------------------------------------
 function isCollectionsLibrary(item as dynamic) as boolean
     return item.CollectionType = "boxsets"
+end function
+
+'-------------------------------------------------------------------------------
+' isLiveTvLibrary
+'-------------------------------------------------------------------------------
+function isLiveTvLibrary(item as dynamic) as boolean
+    collectionType = LCase(SafeString(item.CollectionType, ""))
+    if collectionType = "livetv" then return true
+
+    return LCase(SafeString(item.Name, "")) = "live tv"
 end function
 
 '-------------------------------------------------------------------------------

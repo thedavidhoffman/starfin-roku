@@ -29,6 +29,7 @@ sub playerShow(selection as object)
     if m.tvEpisodePage <> invalid then m.tvEpisodePage.visible = false
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     if m.tvEpisodeUpNextAutoPlayPage <> invalid then m.tvEpisodeUpNextAutoPlayPage.visible = false
+    if m.liveTvPage <> invalid then m.liveTvPage.visible = false
     m.videoPlayer = player
     m.dynamicPageHost.appendChild(player)
     m.homePage.visible = false
@@ -122,6 +123,10 @@ sub playerHandleCloseRequested()
         m.tvSeasonPage.visible = true
         m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
+    else if m.liveTvPage <> invalid then
+        m.liveTvPage.visible = true
+        m.header.visible = true
+        m.liveTvPage.callFunc("activate")
     else
         showHome()
     end if
