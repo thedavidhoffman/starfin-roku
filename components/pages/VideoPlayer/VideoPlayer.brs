@@ -5,6 +5,9 @@ sub init()
     m.log = CreateLogger("VideoPlayer")
     m.videoPlayer = m.top.findNode("videoPlayer")
     m.playbackControls = m.top.findNode("playbackControls")
+    m.castGradient = m.top.findNode("castGradient")
+    m.cast = m.top.findNode("cast")
+    m.chevronFooter = m.top.findNode("chevronFooter")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
     m.playstateTask = m.top.findNode("playstateTask")
     m.trickplayPreloadTask = m.top.findNode("trickplayPreloadTask")
@@ -39,6 +42,11 @@ sub init()
         series: invalid
         season: invalid
     }
+    m.overlay = {
+        area: "none"
+        hasCast: false
+        resumeAfterPersonNavigation: false
+    }
     m.seek = {
         speeds: [-180, -60, -30, -10, 10, 30, 60, 180]
         speedIndex: -1
@@ -63,6 +71,11 @@ sub init()
     m.playbackControls.observeField("progressFastForwardPressed", "onProgressFastForwardPressed")
     m.playbackControls.observeField("progressSeekCommit", "onProgressSeekCommit")
     m.playbackControls.observeField("progressSeekCancel", "onProgressSeekCancel")
+    m.playbackControls.observeField("focusExitDown", "onPlaybackControlsFocusExitDown")
+    m.cast.observeField("hasItems", "onCastAvailabilityChanged")
+    m.cast.observeField("focusExitUp", "onCastFocusExitUp")
+    m.cast.observeField("focusExitDown", "onCastFocusExitDown")
+    m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.controlsHideTimer.observeField("fire", "onControlsHideTimerFire")
     m.playstateTimer.observeField("fire", "onPlaystateTimerFire")
     m.fastSeekTimer.observeField("fire", "onFastSeekTimerFire")
@@ -146,6 +159,8 @@ sub applyPlaybackResponse(response as object, request as object)
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
     updatePlaybackControlsMetadata(request, item)
+    updateCast(request, item)
+    hideCast()
 
     m.log.write("Assigning video content itemId=" + m.session.itemId + " streamFormat=" + SafeString(response.streamFormat, "") + " startPosition=" + SafeString(startPositionSeconds, ""))
     m.videoPlayer.content = content
@@ -235,6 +250,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub onControlsHideTimerFire()
     if m.playback.isSeeking = true then return
+    if m.overlay.area = "cast" then
+        hideCast(true)
+        return
+    end if
     hideControls()
 end sub
 
@@ -266,6 +285,7 @@ sub stopPlayback()
     if m.playback <> invalid then m.playback.startupPending = false
     Spinner_Hide()
     hideControls()
+    hideCast()
     reportPlaystateStop()
     cleanupTrickplayPreload()
     m.videoPlayer.control = "stop"
@@ -413,6 +433,8 @@ end function
 ' showControls
 '-------------------------------------------------------------------------------
 sub showControls(restartTimer as boolean)
+    hideCast()
+    m.overlay.area = "controls"
     m.playbackControls.visible = true
     m.playbackControls.setFocus(true)
     if restartTimer = true then
@@ -421,6 +443,7 @@ sub showControls(restartTimer as boolean)
     else
         m.controlsHideTimer.control = "stop"
     end if
+    updateChevron()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -442,6 +465,176 @@ sub hideControls()
     m.playbackControls.thumbnailData = {}
     m.playbackControls.callFunc("releaseFocus")
     m.playbackControls.visible = false
+    if m.overlay.area = "controls" then m.overlay.area = "none"
+    updateChevron()
+    m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateCast
+'-------------------------------------------------------------------------------
+sub updateCast(request as object, item as dynamic)
+    people = getPeople(item)
+    m.cast.server = SafeString(request.server, "")
+    m.cast.people = people
+    m.overlay.hasCast = m.cast.hasItems
+    updateChevron()
+end sub
+
+'-------------------------------------------------------------------------------
+' getPeople
+'-------------------------------------------------------------------------------
+function getPeople(item as dynamic) as object
+    if item = invalid or item.People = invalid then return []
+    return item.People
+end function
+
+'-------------------------------------------------------------------------------
+' showCast
+'-------------------------------------------------------------------------------
+sub showCast()
+    if m.cast.hasItems <> true then
+        m.overlay.hasCast = false
+        updateChevron()
+        m.top.setFocus(true)
+        return
+    end if
+
+    m.controlsHideTimer.control = "stop"
+    m.playbackControls.callFunc("releaseFocus")
+    m.playbackControls.visible = false
+    m.overlay.area = "cast"
+    m.overlay.hasCast = true
+    m.castGradient.visible = true
+    m.cast.visible = true
+    m.cast.callFunc("activate")
+    m.controlsHideTimer.control = "start"
+    updateChevron()
+end sub
+
+'-------------------------------------------------------------------------------
+' hideCast
+'-------------------------------------------------------------------------------
+sub hideCast(restorePlayerFocus = false as boolean)
+    m.controlsHideTimer.control = "stop"
+    m.cast.callFunc("deactivate")
+    m.castGradient.visible = false
+    m.cast.visible = false
+    if m.overlay.area = "cast" then m.overlay.area = "none"
+    updateChevron()
+    if restorePlayerFocus = true then m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateChevron
+'-------------------------------------------------------------------------------
+sub updateChevron()
+    if m.overlay.hasCast = true and m.overlay.area = "controls" then
+        m.chevronFooter.direction = "down"
+    else if m.overlay.hasCast = true and m.overlay.area = "cast" then
+        m.chevronFooter.direction = "up"
+    else
+        m.chevronFooter.direction = ""
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastAvailabilityChanged
+'-------------------------------------------------------------------------------
+sub onCastAvailabilityChanged()
+    m.overlay.hasCast = m.cast.hasItems
+    if m.overlay.hasCast <> true and m.overlay.area = "cast" then hideCast(true)
+    updateChevron()
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaybackControlsFocusExitDown
+'-------------------------------------------------------------------------------
+sub onPlaybackControlsFocusExitDown()
+    if m.cast.hasItems = true then
+        dismissSeekPreviewForCast()
+        showCast()
+    else
+        showControls(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastFocusExitUp
+'-------------------------------------------------------------------------------
+sub onCastFocusExitUp()
+    showControls(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastFocusExitDown
+'-------------------------------------------------------------------------------
+sub onCastFocusExitDown()
+    if m.overlay.area <> "cast" then return
+
+    m.controlsHideTimer.control = "stop"
+    m.cast.callFunc("activate")
+    m.controlsHideTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' dismissSeekPreviewForCast
+'-------------------------------------------------------------------------------
+sub dismissSeekPreviewForCast()
+    if m.playback.isSeeking <> true then return
+
+    stopSeekTimers()
+    resetSeekState()
+    m.videoPlayer.control = "resume"
+    m.playback.isSeeking = false
+    m.playbackControls.isSeeking = false
+    m.playbackControls.thumbnailData = {}
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastPersonSelected
+'-------------------------------------------------------------------------------
+sub onCastPersonSelected()
+    selection = m.cast.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    request = m.top.playRequest
+    item = invalid
+    if request <> invalid then item = request.item
+
+    itemType = ""
+    if item <> invalid then itemType = LCase(FirstNonEmpty([item.Type], ""))
+    if itemType = "episode" then
+        selection.sourceItemType = "series"
+        selection.sourceSeriesId = SafeString(FirstNonEmpty([item.SeriesId], ""), "")
+    else
+        selection.sourceItemType = "movie"
+        selection.sourceItemId = SafeString(m.session.itemId, "")
+    end if
+
+    m.top.selectedPerson = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' pauseForPersonNavigation
+'-------------------------------------------------------------------------------
+sub pauseForPersonNavigation()
+    state = LCase(SafeString(m.videoPlayer.state, ""))
+    m.overlay.resumeAfterPersonNavigation = state = "playing" or state = "buffering"
+    hideControls()
+    hideCast()
+    m.videoPlayer.control = "pause"
+end sub
+
+'-------------------------------------------------------------------------------
+' resumeAfterPersonNavigation
+'-------------------------------------------------------------------------------
+sub resumeAfterPersonNavigation()
+    if m.overlay.resumeAfterPersonNavigation = true then
+        m.videoPlayer.control = "resume"
+    end if
+    m.overlay.resumeAfterPersonNavigation = false
     m.top.setFocus(true)
 end sub
 
@@ -1136,24 +1329,50 @@ end function
 '-------------------------------------------------------------------------------
 function buildTrickplayState(item as dynamic, itemId as string) as dynamic
     trickplay = getItemTrickplay(item)
-    if trickplay = invalid or itemId = "" then return invalid
+    if itemId = "" then
+        m.log.write("Trickplay unavailable: missing itemId.")
+        return invalid
+    end if
+    if trickplay = invalid then
+        m.log.write("Trickplay unavailable itemId=" + itemId + ": item has no Trickplay metadata.")
+        return invalid
+    end if
 
     itemTrickplay = trickplay.LookupCI(itemId)
-    if itemTrickplay = invalid or itemTrickplay.Keys().Count() = 0 then return invalid
+    if itemTrickplay = invalid or itemTrickplay.Keys().Count() = 0 then
+        m.log.write("Trickplay unavailable itemId=" + itemId + ": no trickplay entry matched the item id.")
+        return invalid
+    end if
 
     widthKeys = itemTrickplay.Keys()
     data = itemTrickplay[widthKeys[0]]
-    if data = invalid then return invalid
-    if data.Width = invalid or data.Height = invalid then return invalid
-    if data.TileWidth = invalid or data.TileHeight = invalid then return invalid
-    if data.Interval = invalid or data.Interval <= 0 then return invalid
+    if data = invalid then
+        m.log.write("Trickplay unavailable itemId=" + itemId + ": selected trickplay width has no data.")
+        return invalid
+    end if
+    if data.Width = invalid or data.Height = invalid then
+        m.log.write("Trickplay unavailable itemId=" + itemId + ": missing thumbnail dimensions.")
+        return invalid
+    end if
+    if data.TileWidth = invalid or data.TileHeight = invalid then
+        m.log.write("Trickplay unavailable itemId=" + itemId + ": missing tile grid dimensions.")
+        return invalid
+    end if
+    if data.Interval = invalid or data.Interval <= 0 then
+        m.log.write("Trickplay unavailable itemId=" + itemId + ": invalid thumbnail interval.")
+        return invalid
+    end if
 
     thumbnailCount = 0
     if data.ThumbnailCount <> invalid then thumbnailCount = data.ThumbnailCount
-    if thumbnailCount <= 0 then return invalid
+    if thumbnailCount <= 0 then
+        m.log.write("Trickplay unavailable itemId=" + itemId + ": thumbnail count is zero.")
+        return invalid
+    end if
 
     tilesPerSheet = data.TileHeight * data.TileWidth
     tileCount = Fix((thumbnailCount - 1) / tilesPerSheet) + 1
+    m.log.write("Trickplay available itemId=" + itemId + " widthKey=" + SafeString(widthKeys[0], "") + " thumbnailCount=" + SafeString(thumbnailCount, "") + " tileCount=" + SafeString(tileCount, ""))
 
     return {
         tileWidth: data.Width
@@ -1221,9 +1440,32 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return false
     end if
 
+    if m.overlay.area = "cast" then
+        if key = "back" then
+            hideCast(true)
+            return true
+        else if key = "up" then
+            showControls(true)
+            return true
+        else if key = "play" then
+            togglePlayback()
+            return true
+        else if key = "down" then
+            onCastFocusExitDown()
+            return true
+        else if key = "left" or key = "right" or key = "OK" then
+            return true
+        end if
+    end if
+
     if key = "back" then
         if m.playback.isSeeking = true then
             cancelSeek()
+            return true
+        end if
+
+        if m.overlay.area = "cast" then
+            hideCast(true)
             return true
         end if
 
@@ -1264,8 +1506,20 @@ function onKeyEvent(key as string, press as boolean) as boolean
             togglePlayback()
         end if
         return true
-    else if key = "up" or key = "down" then
-        showControls(true)
+    else if key = "up" then
+        if m.overlay.area = "cast" then
+            showControls(true)
+        else
+            showControls(true)
+        end if
+        return true
+    else if key = "down" then
+        if m.overlay.area = "controls" and m.overlay.hasCast = true then
+            dismissSeekPreviewForCast()
+            showCast()
+        else if m.overlay.area <> "cast" then
+            showControls(true)
+        end if
         return true
     end if
 

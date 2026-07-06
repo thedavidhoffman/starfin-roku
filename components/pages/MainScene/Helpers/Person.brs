@@ -19,7 +19,9 @@ sub personShow(selection as object)
     themeAudioStop()
     if m.moviePage <> invalid and m.moviePage.visible = true then m.moviePage.callFunc("deactivate")
     if m.tvShowPage <> invalid and m.tvShowPage.visible = true then m.tvShowPage.callFunc("deactivate")
-    if m.tvEpisodePage <> invalid and m.tvEpisodePage.visible = true then
+    if m.videoPlayer <> invalid and m.videoPlayer.visible = true then
+        m.personSourceVideoPlayer = m.videoPlayer
+    else if m.tvEpisodePage <> invalid and m.tvEpisodePage.visible = true then
         m.personSourceTvEpisodePage = m.tvEpisodePage
     else if m.tvSeasonPage <> invalid and m.tvSeasonPage.visible = true then
         m.personSourceTvSeasonPage = m.tvSeasonPage
@@ -55,6 +57,7 @@ sub personShow(selection as object)
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     if m.moviePage <> invalid then m.moviePage.visible = false
     if m.tvShowPage <> invalid then m.tvShowPage.visible = false
+    if m.videoPlayer <> invalid then m.videoPlayer.visible = false
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
@@ -144,12 +147,18 @@ sub personHandleCloseRequested()
     if m.tvShowPage = invalid and m.personSourceTvShowPage <> invalid then m.tvShowPage = m.personSourceTvShowPage
     if m.tvSeasonPage = invalid and m.personSourceTvSeasonPage <> invalid then m.tvSeasonPage = m.personSourceTvSeasonPage
     if m.tvEpisodePage = invalid and m.personSourceTvEpisodePage <> invalid then m.tvEpisodePage = m.personSourceTvEpisodePage
+    if m.videoPlayer = invalid and m.personSourceVideoPlayer <> invalid then m.videoPlayer = m.personSourceVideoPlayer
     m.personSourceMoviePage = invalid
     m.personSourceTvShowPage = invalid
     m.personSourceTvSeasonPage = invalid
     m.personSourceTvEpisodePage = invalid
+    m.personSourceVideoPlayer = invalid
 
-    if m.tvEpisodePage <> invalid then
+    if m.videoPlayer <> invalid and m.videoPlayer.visible = false then
+        m.videoPlayer.visible = true
+        m.header.visible = false
+        m.videoPlayer.callFunc("resumeAfterPersonNavigation")
+    else if m.tvEpisodePage <> invalid then
         m.tvEpisodePage.visible = true
         m.header.visible = false
         m.tvEpisodePage.callFunc("activate")

@@ -11,6 +11,7 @@ sub playerShow(selection as object)
     player.observeField("closeRequested", "playerHandleCloseRequested")
     player.observeField("playbackProgressChanged", "playerHandlePlaybackProgressChanged")
     player.observeField("upNextRequested", "playerHandleUpNextRequested")
+    player.observeField("selectedPerson", "playerHandlePersonSelected")
     playRequest = {
         server: m.session.server
         token: m.session.token
@@ -37,6 +38,20 @@ sub playerShow(selection as object)
     m.homePage.visible = false
     m.header.visible = false
     player.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' playerHandlePersonSelected
+'-------------------------------------------------------------------------------
+sub playerHandlePersonSelected()
+    if m.videoPlayer = invalid then return
+
+    selection = m.videoPlayer.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    m.videoPlayer.callFunc("pauseForPersonNavigation")
+    personShow(selection)
 end sub
 
 '-------------------------------------------------------------------------------

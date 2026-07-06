@@ -352,6 +352,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         focusProgress()
         return true
     else if key = "down" then
+        m.top.focusExitDown = true
         return true
     else if key = "play" then
         m.top.playPausePressed = true

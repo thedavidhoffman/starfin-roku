@@ -154,27 +154,27 @@ end sub
 ' focusActiveSurface
 '-------------------------------------------------------------------------------
 sub focusActiveSurface()
-    if m.videoPlayer <> invalid then
+    if m.videoPlayer <> invalid and m.videoPlayer.visible = true then
         m.videoPlayer.setFocus(true)
-    else if m.filmographyPage <> invalid then
+    else if m.filmographyPage <> invalid and m.filmographyPage.visible = true then
         m.filmographyPage.callFunc("activate")
-    else if m.personPage <> invalid then
+    else if m.personPage <> invalid and m.personPage.visible = true then
         m.personPage.callFunc("activate")
-    else if m.moviePage <> invalid then
+    else if m.moviePage <> invalid and m.moviePage.visible = true then
         m.moviePage.callFunc("activate")
-    else if m.tvEpisodePage <> invalid then
+    else if m.tvEpisodePage <> invalid and m.tvEpisodePage.visible = true then
         m.tvEpisodePage.callFunc("activate")
-    else if m.tvSeasonPage <> invalid then
+    else if m.tvSeasonPage <> invalid and m.tvSeasonPage.visible = true then
         m.tvSeasonPage.callFunc("activate")
-    else if m.tvShowPage <> invalid then
+    else if m.tvShowPage <> invalid and m.tvShowPage.visible = true then
         m.tvShowPage.callFunc("activate")
-    else if m.liveTvPage <> invalid then
+    else if m.liveTvPage <> invalid and m.liveTvPage.visible = true then
         m.liveTvPage.callFunc("activate")
-    else if m.libraryPage <> invalid then
+    else if m.libraryPage <> invalid and m.libraryPage.visible = true then
         m.libraryPage.callFunc("activate")
-    else if m.collectionsPage <> invalid then
+    else if m.collectionsPage <> invalid and m.collectionsPage.visible = true then
         m.collectionsPage.callFunc("activate")
-    else if m.searchPage <> invalid then
+    else if m.searchPage <> invalid and m.searchPage.visible = true then
         m.searchPage.callFunc("activate")
     else if m.homePage <> invalid and m.homePage.visible = true then
         m.homePage.callFunc("focusHome")
@@ -276,6 +276,7 @@ sub resetDynamicPages()
     m.personSourceTvEpisodePage = invalid
     m.personSourceTvSeasonPage = invalid
     m.personSourceTvShowPage = invalid
+    m.personSourceVideoPlayer = invalid
     m.filmographyPage = invalid
     m.videoPlayer = invalid
     m.pendingUpNextAutoPlayRequest = invalid
