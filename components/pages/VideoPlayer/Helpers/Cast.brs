@@ -138,6 +138,7 @@ end sub
 sub pauseForPersonNavigation()
     state = LCase(SafeString(m.videoPlayer.state, ""))
     m.overlay.resumeAfterPersonNavigation = state = "playing" or state = "buffering"
+    m.overlay.restoreCastAfterPersonNavigation = m.overlay.area = "cast"
     hideControls()
     hideCast()
     m.videoPlayer.control = "pause"
@@ -150,6 +151,13 @@ sub resumeAfterPersonNavigation()
     if m.overlay.resumeAfterPersonNavigation = true then
         m.videoPlayer.control = "resume"
     end if
+    restoreCast = m.overlay.restoreCastAfterPersonNavigation = true
     m.overlay.resumeAfterPersonNavigation = false
-    m.top.setFocus(true)
+    m.overlay.restoreCastAfterPersonNavigation = false
+
+    if restoreCast = true and m.cast.hasItems = true then
+        showCast()
+    else
+        m.top.setFocus(true)
+    end if
 end sub

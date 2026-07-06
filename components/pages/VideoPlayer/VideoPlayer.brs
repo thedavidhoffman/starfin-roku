@@ -57,6 +57,7 @@ sub initReferences()
         area: "none"
         hasCast: false
         resumeAfterPersonNavigation: false
+        restoreCastAfterPersonNavigation: false
     }
 
     m.streamOptions = {
