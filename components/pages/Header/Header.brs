@@ -110,7 +110,7 @@ end function
 ' isSearchButtonActive
 '-------------------------------------------------------------------------------
 function isSearchButtonActive() as boolean
-    return m.searchButton <> invalid and m.searchButton.isActive = true
+    return false
 end function
 
 '-------------------------------------------------------------------------------
@@ -309,10 +309,6 @@ end sub
 ' setActiveHeaderButton
 '-------------------------------------------------------------------------------
 sub setActiveHeaderButton(activeButtonName as string)
-    m.homeButton.isActive = (activeButtonName = "home")
-    m.searchButton.isActive = (activeButtonName = "search")
-    m.settingsButton.isActive = false
-    m.userMenuButton.isActive = (activeButtonName = "userMenu")
 end sub
 
 '-------------------------------------------------------------------------------

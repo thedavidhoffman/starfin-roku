@@ -3,7 +3,6 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.bg = m.top.findNode("bg")
-    m.activeBg = m.top.findNode("activeBg")
     m.textLabel = m.top.findNode("textLabel")
     if m.top.buttonWidth = invalid or m.top.buttonWidth <= 0 then m.top.buttonWidth = 300
     if m.top.buttonHeight = invalid or m.top.buttonHeight <= 0 then m.top.buttonHeight = 56
@@ -34,11 +33,6 @@ sub onDimensionsChanged()
     if m.bg <> invalid then
         m.bg.width = width
         m.bg.height = height
-    end if
-
-    if m.activeBg <> invalid then
-        m.activeBg.width = width
-        m.activeBg.height = height
     end if
 
     if m.textLabel <> invalid then
@@ -103,9 +97,6 @@ sub onFocusVisualChanged()
         end if
     end if
 
-    if m.activeBg <> invalid then
-        m.activeBg.visible = (m.top.isActive = true and m.top.hasFocusVisual <> true)
-    end if
 end sub
 
 '-------------------------------------------------------------------------------
