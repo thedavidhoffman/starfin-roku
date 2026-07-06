@@ -11,11 +11,7 @@ end sub
 ' navHandleHeaderDownSelected
 '-------------------------------------------------------------------------------
 sub navHandleHeaderDownSelected()
-    if m.searchPage <> invalid then
-        m.searchPage.callFunc("activate")
-    else if m.homePage <> invalid and m.homePage.visible = true then
-        m.homePage.callFunc("focusHome")
-    end if
+    focusActiveSurface()
 end sub
 
 '-------------------------------------------------------------------------------
