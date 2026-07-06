@@ -112,3 +112,19 @@ function DateTime_FormatDurationSeconds(seconds as dynamic) as string
 
     return minutes.ToStr() + "m"
 end function
+
+'-------------------------------------------------------------------------------
+' DateTime_FormatPositionSeconds
+'-------------------------------------------------------------------------------
+function DateTime_FormatPositionSeconds(seconds as dynamic) as string
+    if seconds = invalid then return ""
+
+    totalSeconds = int(val(seconds.ToStr()))
+    if totalSeconds < 0 then totalSeconds = 0
+
+    hours = int(totalSeconds / 3600)
+    minutes = int((totalSeconds mod 3600) / 60)
+    if hours > 0 then return hours.ToStr() + "h " + minutes.ToStr() + "m"
+
+    return minutes.ToStr() + "m"
+end function

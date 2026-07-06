@@ -4,12 +4,16 @@
 sub updatePlaybackControlsOptions(item as dynamic)
     subtitleStreams = getSubtitleStreams(item)
     audioStreams = getAudioStreams(item)
+    chapters = getChapters(item)
     m.streamOptions.subtitleStreams = subtitleStreams
     m.streamOptions.audioStreams = audioStreams
+    m.streamOptions.chapters = chapters
+    m.streamOptions.selectedChapterKey = ""
     m.streamOptions.selectedSubtitleStreamIndex = getSelectedSubtitleStreamIndex(m.top.playRequest)
     m.streamOptions.selectedAudioStreamIndex = getSelectedAudioStreamIndex(m.top.playRequest, audioStreams)
     m.playbackControls.hasSubtitleOptions = subtitleStreams.Count() > 0
     m.playbackControls.hasAudioOptions = audioStreams.Count() > 1
+    m.playbackControls.hasChapterOptions = chapters.Count() > 0
 end sub
 
 '-------------------------------------------------------------------------------
@@ -38,6 +42,13 @@ function getAudioStreams(item as dynamic) as object
     end for
 
     return audioStreams
+end function
+
+'-------------------------------------------------------------------------------
+' getChapters
+'-------------------------------------------------------------------------------
+function getChapters(item as dynamic) as object
+    return MediaOptions_GetChapters(item)
 end function
 
 '-------------------------------------------------------------------------------
@@ -85,11 +96,13 @@ sub onSubtitleOptionsPressed()
     m.top.streamOptionsRequested = {
         id: "subtitleOptions"
         sourcePage: "videoPlayer"
-        componentName: "SubtitleOptionsDialog"
+        componentName: "OptionPickerDialog"
         openFunction: "openOptions"
         closeField: "closeRequested"
-        subtitleStreams: m.streamOptions.subtitleStreams
-        selectedSubtitleStreamIndex: m.streamOptions.selectedSubtitleStreamIndex
+        dialogTitle: "Subtitles"
+        options: MediaOptions_BuildSubtitleOptions(m.streamOptions.subtitleStreams)
+        selectedKey: m.streamOptions.selectedSubtitleStreamIndex.ToStr()
+        emptyText: "No subtitles available."
     }
 end sub
 
@@ -103,11 +116,34 @@ sub onAudioOptionsPressed()
     m.top.streamOptionsRequested = {
         id: "audioOptions"
         sourcePage: "videoPlayer"
-        componentName: "AudioOptionsDialog"
+        componentName: "OptionPickerDialog"
         openFunction: "openOptions"
         closeField: "closeRequested"
-        audioStreams: m.streamOptions.audioStreams
-        selectedAudioStreamIndex: m.streamOptions.selectedAudioStreamIndex
+        dialogTitle: "Audio"
+        options: MediaOptions_BuildAudioOptions(m.streamOptions.audioStreams)
+        selectedKey: m.streamOptions.selectedAudioStreamIndex.ToStr()
+        emptyText: "No audio tracks available."
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onChapterOptionsPressed
+'-------------------------------------------------------------------------------
+sub onChapterOptionsPressed()
+    if m.streamOptions.chapters.Count() = 0 then return
+
+    m.controlsHideTimer.control = "stop"
+    m.top.streamOptionsRequested = {
+        id: "chapterOptions"
+        sourcePage: "videoPlayer"
+        componentName: "OptionPickerDialog"
+        openFunction: "openOptions"
+        closeField: "closeRequested"
+        dialogTitle: "Chapters"
+        options: MediaOptions_BuildChapterOptions(m.streamOptions.chapters)
+        selectedKey: m.streamOptions.selectedChapterKey
+        allowDefaultSelection: false
+        emptyText: "No chapters available."
     }
 end sub
 
@@ -121,10 +157,20 @@ sub handleStreamOptionsOverlayClosed(closed as object)
     if request = invalid or overlay = invalid then return
 
     requestId = SafeString(request.id, "")
+    selection = getClosedOptionValue(overlay)
+    chapterSelected = false
     if requestId = "subtitleOptions" then
-        applySubtitleSelection(overlay.selectedSubtitle)
+        applySubtitleSelection(selection)
     else if requestId = "audioOptions" then
-        applyAudioSelection(overlay.selectedAudio)
+        applyAudioSelection(selection)
+    else if requestId = "chapterOptions" and overlay.selectedOptionChanged = true then
+        applyChapterSelection(selection)
+        chapterSelected = true
+    end if
+
+    if chapterSelected = true then
+        hideControls()
+        return
     end if
 
     if m.overlay.area = "controls" then
@@ -135,6 +181,15 @@ sub handleStreamOptionsOverlayClosed(closed as object)
         m.top.setFocus(true)
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' getClosedOptionValue
+'-------------------------------------------------------------------------------
+function getClosedOptionValue(overlay as dynamic) as dynamic
+    if overlay = invalid then return invalid
+    if overlay.selectedOption = invalid then return invalid
+    return overlay.selectedOption.value
+end function
 
 '-------------------------------------------------------------------------------
 ' applySubtitleSelection
@@ -161,6 +216,35 @@ sub applyAudioSelection(selection as dynamic)
 
     m.streamOptions.selectedAudioStreamIndex = streamIndex
     restartPlaybackWithStreamOptions()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyChapterSelection
+'-------------------------------------------------------------------------------
+sub applyChapterSelection(selection as dynamic)
+    if selection = invalid or selection.startPositionSeconds = invalid then return
+
+    m.streamOptions.selectedChapterKey = SafeString(selection.startPositionTicks, "")
+    targetPosition = selection.startPositionSeconds
+    if m.playback.duration <> invalid and m.playback.duration > 0 then
+        targetPosition = clampSeconds(targetPosition, 0, m.playback.duration)
+    end if
+
+    stopSeekTimers()
+    m.playback.isSeeking = false
+    m.playback.previewPosition = targetPosition
+    m.playback.position = targetPosition
+    m.videoPlayer.seek = targetPosition
+    if m.playback.isPlaying = true then
+        m.videoPlayer.control = "resume"
+    else
+        m.videoPlayer.control = "pause"
+    end if
+
+    m.playbackControls.isSeeking = false
+    m.playbackControls.thumbnailData = {}
+    m.playbackControls.position = targetPosition
+    m.playbackControls.previewPosition = targetPosition
 end sub
 
 '-------------------------------------------------------------------------------

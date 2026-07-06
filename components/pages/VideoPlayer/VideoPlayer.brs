@@ -63,8 +63,10 @@ sub initReferences()
     m.streamOptions = {
         subtitleStreams: []
         audioStreams: []
+        chapters: []
         selectedSubtitleStreamIndex: -1
         selectedAudioStreamIndex: -1
+        selectedChapterKey: ""
     }
 
     m.seek = {
@@ -98,6 +100,7 @@ sub initHandlers()
     m.playbackControls.observeField("progressSeekCommit", "onProgressSeekCommit")
     m.playbackControls.observeField("progressSeekCancel", "onProgressSeekCancel")
     m.playbackControls.observeField("castOptionsPressed", "onCastOptionsPressed")
+    m.playbackControls.observeField("chapterOptionsPressed", "onChapterOptionsPressed")
     m.playbackControls.observeField("subtitleOptionsPressed", "onSubtitleOptionsPressed")
     m.playbackControls.observeField("audioOptionsPressed", "onAudioOptionsPressed")
     m.playbackControls.observeField("focusExitDown", "onPlaybackControlsFocusExitDown")
@@ -242,6 +245,7 @@ sub updatePlaybackControlsMetadata(request as object, item as dynamic)
         m.playbackControls.subtitle = ""
         m.playbackControls.hasSubtitleOptions = false
         m.playbackControls.hasAudioOptions = false
+        m.playbackControls.hasChapterOptions = false
         return
     end if
 

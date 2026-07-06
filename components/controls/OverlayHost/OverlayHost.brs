@@ -43,15 +43,12 @@ end function
 sub applyOverlayRequestFields(overlay as object, request as object)
     requestId = SafeString(request.id, "")
 
-    if requestId = "subtitleOptions" then
-        overlay.subtitleStreams = request.subtitleStreams
-        overlay.selectedSubtitleStreamIndex = request.selectedSubtitleStreamIndex
-        return
-    end if
-
-    if requestId = "audioOptions" then
-        overlay.audioStreams = request.audioStreams
-        overlay.selectedAudioStreamIndex = request.selectedAudioStreamIndex
+    if requestId = "subtitleOptions" or requestId = "audioOptions" or requestId = "chapterOptions" then
+        overlay.dialogTitle = request.dialogTitle
+        overlay.options = request.options
+        overlay.selectedKey = request.selectedKey
+        if request.allowDefaultSelection <> invalid then overlay.allowDefaultSelection = request.allowDefaultSelection
+        overlay.emptyText = request.emptyText
         return
     end if
 

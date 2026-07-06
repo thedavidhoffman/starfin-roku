@@ -5,6 +5,7 @@ sub init()
     m.castButton = m.top.findNode("castButton")
     m.subtitleButton = m.top.findNode("subtitleButton")
     m.audioButton = m.top.findNode("audioButton")
+    m.chapterButton = m.top.findNode("chapterButton")
     m.skipBackButton = m.top.findNode("skipBackButton")
     m.playPauseButton = m.top.findNode("playPauseButton")
     m.skipForwardButton = m.top.findNode("skipForwardButton")
@@ -27,6 +28,11 @@ sub init()
         focusedIndex: 1
         focusArea: "buttons"
         buttons: []
+    }
+    m.optionButtonLayout = {
+        startX: 103
+        y: 962
+        spacing: 95
     }
     m.playPauseIcons = {
         play: {
@@ -53,6 +59,8 @@ sub init()
     m.subtitleButton.focusedIcon = "pkg:/images/icons/playback-controls/subtitles-focused.png"
     m.audioButton.icon = "pkg:/images/icons/playback-controls/audio-unfocused.png"
     m.audioButton.focusedIcon = "pkg:/images/icons/playback-controls/audio-focused.png"
+    m.chapterButton.icon = "pkg:/images/icons/playback-controls/chapters-unfocused.png"
+    m.chapterButton.focusedIcon = "pkg:/images/icons/playback-controls/chapters-focused.png"
     m.skipBackButton.icon = "pkg:/images/icons/playback-controls/skip-back-unfocused.png"
     m.skipBackButton.focusedIcon = "pkg:/images/icons/playback-controls/skip-back-focused.png"
     m.skipForwardButton.icon = "pkg:/images/icons/playback-controls/skip-forward-unfocused.png"
@@ -61,6 +69,7 @@ sub init()
     m.castButton.observeField("buttonSelected", "onCastButtonSelected")
     m.subtitleButton.observeField("buttonSelected", "onSubtitleButtonSelected")
     m.audioButton.observeField("buttonSelected", "onAudioButtonSelected")
+    m.chapterButton.observeField("buttonSelected", "onChapterButtonSelected")
     m.skipBackButton.observeField("buttonSelected", "onSkipBackButtonSelected")
     m.playPauseButton.observeField("buttonSelected", "onPlayPauseButtonSelected")
     m.skipForwardButton.observeField("buttonSelected", "onSkipForwardButtonSelected")
@@ -135,9 +144,25 @@ end sub
 '-------------------------------------------------------------------------------
 sub onOptionsChanged()
     m.castButton.visible = m.top.hasCastOptions = true
+    m.chapterButton.visible = m.top.hasChapterOptions = true
     m.subtitleButton.visible = m.top.hasSubtitleOptions = true
     m.audioButton.visible = m.top.hasAudioOptions = true
+    layoutOptionButtons()
     rebuildButtonList()
+end sub
+
+'-------------------------------------------------------------------------------
+' layoutOptionButtons
+'-------------------------------------------------------------------------------
+sub layoutOptionButtons()
+    x = m.optionButtonLayout.startX
+    optionButtons = [m.chapterButton, m.castButton, m.subtitleButton, m.audioButton]
+    for each button in optionButtons
+        if button <> invalid and button.visible <> false then
+            button.translation = [x, m.optionButtonLayout.y]
+            x = x + m.optionButtonLayout.spacing
+        end if
+    end for
 end sub
 
 '-------------------------------------------------------------------------------
@@ -182,6 +207,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onAudioButtonSelected()
     m.top.audioOptionsPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onChapterButtonSelected
+'-------------------------------------------------------------------------------
+sub onChapterButtonSelected()
+    m.top.chapterOptionsPressed = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -266,7 +298,7 @@ end sub
 ' getAllButtons
 '-------------------------------------------------------------------------------
 function getAllButtons() as object
-    return [m.castButton, m.subtitleButton, m.audioButton, m.skipBackButton, m.playPauseButton, m.skipForwardButton, m.last5Button]
+    return [m.chapterButton, m.castButton, m.subtitleButton, m.audioButton, m.skipBackButton, m.playPauseButton, m.skipForwardButton, m.last5Button]
 end function
 
 '-------------------------------------------------------------------------------

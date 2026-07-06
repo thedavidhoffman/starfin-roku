@@ -11,6 +11,7 @@ sub init()
     m.seriesButton = m.top.findNode("seriesButton")
     m.subtitlesButton = m.top.findNode("subtitlesButton")
     m.audioButton = m.top.findNode("audioButton")
+    m.chaptersButton = m.top.findNode("chaptersButton")
     m.videoButton = m.top.findNode("videoButton")
     m.seasonButton = m.top.findNode("seasonButton")
     m.resumeButton.observeField("buttonSelected", "onResumeButtonSelected")
@@ -21,6 +22,7 @@ sub init()
     m.seriesButton.observeField("buttonSelected", "onSeriesButtonSelected")
     m.subtitlesButton.observeField("buttonSelected", "onSubtitlesButtonSelected")
     m.audioButton.observeField("buttonSelected", "onAudioButtonSelected")
+    m.chaptersButton.observeField("buttonSelected", "onChaptersButtonSelected")
     m.videoButton.observeField("buttonSelected", "onVideoButtonSelected")
     m.seasonButton.observeField("buttonSelected", "onSeasonButtonSelected")
     m.toolbarLayout = {
@@ -170,6 +172,7 @@ sub updateToolbarButtons()
     isSeason = mediaType = "tv-season"
     hasSubtitleOptions = m.top.subtitleStreamCount > 0
     hasAudioOptions = m.top.audioStreamCount > 1
+    hasChapterOptions = m.top.chapterCount > 0
     hasResumeProgress = m.top.resumePositionSeconds > 0
     m.resumeButton.visible = hasResumeProgress
     m.restartButton.visible = hasResumeProgress
@@ -179,6 +182,7 @@ sub updateToolbarButtons()
     m.markUnwatchedButton.visible = supportsWatchedActions and (isWatched = true)
     m.subtitlesButton.visible = isSeason <> true and hasSubtitleOptions
     m.audioButton.visible = isSeason <> true and hasAudioOptions
+    m.chaptersButton.visible = isSeason <> true and hasChapterOptions
     m.videoButton.visible = isSeason <> true and isMovie <> true
     m.seriesButton.visible = isMovie <> true
     m.seasonButton.visible = isMovie <> true
@@ -187,6 +191,7 @@ sub updateToolbarButtons()
     if isSeason <> true then
         if hasSubtitleOptions then streamButtons.Push(m.subtitlesButton)
         if hasAudioOptions then streamButtons.Push(m.audioButton)
+        if hasChapterOptions then streamButtons.Push(m.chaptersButton)
         if isMovie <> true then streamButtons.Push(m.videoButton)
     end if
 
@@ -272,6 +277,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onAudioButtonSelected()
     m.top.audioSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onChaptersButtonSelected
+'-------------------------------------------------------------------------------
+sub onChaptersButtonSelected()
+    m.top.chaptersSelected = true
 end sub
 
 '-------------------------------------------------------------------------------

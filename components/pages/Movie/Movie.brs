@@ -20,11 +20,13 @@ sub init()
     m.mediaToolbar.observeField("restartSelected", "onMediaToolbarRestartSelected")
     m.mediaToolbar.observeField("subtitlesSelected", "onMediaToolbarSubtitlesSelected")
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
+    m.mediaToolbar.observeField("chaptersSelected", "onMediaToolbarChaptersSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.streamOptions.observeField("overlayRequested", "onStreamOptionsOverlayRequested")
     m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
     m.streamOptions.observeField("selectedAudio", "onAudioOptionSelected")
+    m.streamOptions.observeField("selectedChapter", "onChapterOptionSelected")
     m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
@@ -36,6 +38,7 @@ sub init()
             subtitle: invalid
             subtitleOff: false
         }
+        selectedChapterKey: ""
         focusArea: "toolbar"
         themeLookupActive: false
     }
@@ -56,6 +59,7 @@ sub onLoadRequestChanged()
         subtitle: invalid
         subtitleOff: false
     }
+    m.state.selectedChapterKey = ""
     m.cast.server = request.server
     Spinner_Show()
     renderMovie(request.item, true)
@@ -173,6 +177,7 @@ sub renderMovie(item as dynamic, logoPending = false as boolean)
     m.cast.people = getPeople(item)
     m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(item).Count()
     m.mediaToolbar.audioStreamCount = getAudioStreams(item).Count()
+    m.mediaToolbar.chapterCount = getChapters(item).Count()
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isItemWatched(item)
 end sub
@@ -361,12 +366,24 @@ sub applyClosedStreamOptionsSelection(closed as object)
     overlay = closed.overlay
     if request = invalid or overlay = invalid then return
 
+    selection = getClosedOptionValue(overlay)
     if SafeString(request.id, "") = "subtitleOptions" then
-        m.streamOptions.callFunc("applySubtitleSelection", overlay.selectedSubtitle)
+        m.streamOptions.callFunc("applySubtitleSelection", selection)
     else if SafeString(request.id, "") = "audioOptions" then
-        m.streamOptions.callFunc("applyAudioSelection", overlay.selectedAudio)
+        m.streamOptions.callFunc("applyAudioSelection", selection)
+    else if SafeString(request.id, "") = "chapterOptions" and overlay.selectedOptionChanged = true then
+        m.streamOptions.callFunc("applyChapterSelection", selection)
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' getClosedOptionValue
+'-------------------------------------------------------------------------------
+function getClosedOptionValue(overlay as dynamic) as dynamic
+    if overlay = invalid then return invalid
+    if overlay.selectedOption = invalid then return invalid
+    return overlay.selectedOption.value
+end function
 
 '-------------------------------------------------------------------------------
 ' onStreamOptionsCloseRequested
@@ -478,6 +495,39 @@ sub onWatchedTaskResponse()
     m.mediaToolbar.isWatched = isWatched
     m.mediaToolbar.callFunc("focusWatchedAction")
     Status_ClearMessage()
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaToolbarChaptersSelected
+'-------------------------------------------------------------------------------
+sub onMediaToolbarChaptersSelected()
+    item = m.state.item
+    if item = invalid then return
+
+    chapters = getChapters(item)
+    if chapters.Count() = 0 then return
+
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "chapterOptions"
+    m.streamOptions.callFunc("openChapterOptions", {
+        chapters: chapters
+        selectedChapterKey: m.state.selectedChapterKey
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' onChapterOptionSelected
+'-------------------------------------------------------------------------------
+sub onChapterOptionSelected()
+    selection = m.streamOptions.selectedChapter
+    if selection = invalid or selection.startPositionTicks = invalid then return
+
+    playSelection = buildPlaySelection(selection.startPositionTicks)
+    if playSelection = invalid then return
+
+    m.state.selectedChapterKey = SafeString(selection.startPositionTicks, "")
+    m.log.write("Chapter option selected startPositionTicks=" + SafeString(selection.startPositionTicks, "") + " label=" + SafeString(selection.label, ""))
+    m.top.playSelected = playSelection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -686,6 +736,13 @@ function getAudioStreams(item as dynamic) as object
     end for
 
     return audioStreams
+end function
+
+'-------------------------------------------------------------------------------
+' getChapters
+'-------------------------------------------------------------------------------
+function getChapters(item as dynamic) as object
+    return MediaOptions_GetChapters(item)
 end function
 
 '-------------------------------------------------------------------------------

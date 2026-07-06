@@ -84,7 +84,7 @@ end sub
 '-------------------------------------------------------------------------------
 function isStreamOptionsOverlayRequest(request as object) as boolean
     id = SafeString(request.id, "")
-    return id = "subtitleOptions" or id = "audioOptions"
+    return id = "subtitleOptions" or id = "audioOptions" or id = "chapterOptions"
 end function
 
 '-------------------------------------------------------------------------------

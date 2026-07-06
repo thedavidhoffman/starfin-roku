@@ -2,6 +2,7 @@
 ' openOptions
 '-------------------------------------------------------------------------------
 sub openOptions()
+    m.top.selectedOptionChanged = false
     configureDialog()
     syncContent()
     m.top.visible = true
@@ -17,30 +18,39 @@ sub configureDialog()
     panelHeight = 208 + (rows * 52)
     panelY = int((1080 - panelHeight) / 2)
 
-    m.top.title = "Subtitles"
+    m.top.title = getDialogTitle()
     m.top.dialogWidth = 720
     m.top.dialogHeight = panelHeight
     m.top.panelX = 600
     m.top.panelY = panelY
-    m.top.contentComponentName = "SubtitleOptionsContent"
+    m.top.contentComponentName = "OptionPickerContent"
 end sub
+
+'-------------------------------------------------------------------------------
+' getDialogTitle
+'-------------------------------------------------------------------------------
+function getDialogTitle() as string
+    title = SafeString(m.top.dialogTitle, "")
+    if title <> "" then return title
+    return "Options"
+end function
 
 '-------------------------------------------------------------------------------
 ' getVisibleRowCount
 '-------------------------------------------------------------------------------
 function getVisibleRowCount() as integer
     rows = 1
-    if hasSubtitleStreams() then rows = m.top.subtitleStreams.Count() + 1
+    if hasOptions() then rows = m.top.options.Count()
     if rows > 8 then rows = 8
 
     return rows
 end function
 
 '-------------------------------------------------------------------------------
-' hasSubtitleStreams
+' hasOptions
 '-------------------------------------------------------------------------------
-function hasSubtitleStreams() as boolean
-    return m.top.subtitleStreams <> invalid and m.top.subtitleStreams.Count() > 0
+function hasOptions() as boolean
+    return m.top.options <> invalid and m.top.options.Count() > 0
 end function
 
 '-------------------------------------------------------------------------------
@@ -50,10 +60,22 @@ sub syncContent()
     content = getOptionsContent()
     if content = invalid then return
 
-    content.subtitleStreams = m.top.subtitleStreams
-    content.selectedSubtitleStreamIndex = m.top.selectedSubtitleStreamIndex
-    content.visibleRowCount = getVisibleRowCount()
+    content.callFunc("configureOptions", {
+        options: getOptions()
+        selectedKey: SafeString(m.top.selectedKey, "")
+        allowDefaultSelection: m.top.allowDefaultSelection
+        emptyText: SafeString(m.top.emptyText, "")
+        visibleRowCount: getVisibleRowCount()
+    })
 end sub
+
+'-------------------------------------------------------------------------------
+' getOptions
+'-------------------------------------------------------------------------------
+function getOptions() as object
+    if m.top.options = invalid then return []
+    return m.top.options
+end function
 
 '-------------------------------------------------------------------------------
 ' getOptionsContent
@@ -71,17 +93,17 @@ sub focusContent()
 end sub
 
 '-------------------------------------------------------------------------------
-' onSubtitleStreamsChanged
+' onPickerConfigChanged
 '-------------------------------------------------------------------------------
-sub onSubtitleStreamsChanged()
+sub onPickerConfigChanged()
     configureDialog()
     syncContent()
 end sub
 
 '-------------------------------------------------------------------------------
-' onSelectedSubtitleStreamIndexChanged
+' onSelectedKeyChanged
 '-------------------------------------------------------------------------------
-sub onSelectedSubtitleStreamIndexChanged()
+sub onSelectedKeyChanged()
     syncContent()
 end sub
 
@@ -92,6 +114,17 @@ sub onCloseRequested()
     content = getOptionsContent()
     if content = invalid then return
 
-    selection = content.callFunc("getSelectedSubtitle")
-    if selection <> invalid then m.top.selectedSubtitle = selection
+    selection = content.callFunc("getSelectedOption")
+    if selection <> invalid then
+        m.top.selectedOption = selection
+        m.top.selectedOptionChanged = getOptionKey(selection) <> SafeString(m.top.selectedKey, "")
+    end if
 end sub
+
+'-------------------------------------------------------------------------------
+' getOptionKey
+'-------------------------------------------------------------------------------
+function getOptionKey(option as dynamic) as string
+    if option = invalid then return ""
+    return SafeString(option.key, "")
+end function
