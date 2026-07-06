@@ -18,7 +18,6 @@ sub tvSeasonShow(selection as object)
     if selection.seriesId = invalid or selection.seriesId = "" then return
     if selection.seasonId = invalid or selection.seasonId = "" then return
 
-    themeAudioStop()
     if m.tvShowPage <> invalid then m.tvShowPage.callFunc("deactivate")
     page = CreateObject("roSGNode", "TVSeason")
     page.observeField("closeRequested", "tvSeasonHandleCloseRequested")
