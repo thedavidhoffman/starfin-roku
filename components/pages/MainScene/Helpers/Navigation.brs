@@ -112,7 +112,9 @@ sub navHandleStreamOptionsOverlayClosed(closed as object)
     if request = invalid then return
 
     sourcePage = SafeString(request.sourcePage, "")
-    if sourcePage = "movie" and m.moviePage <> invalid then
+    if sourcePage = "videoPlayer" and m.videoPlayer <> invalid then
+        m.videoPlayer.callFunc("handleStreamOptionsOverlayClosed", closed)
+    else if sourcePage = "movie" and m.moviePage <> invalid then
         m.moviePage.callFunc("handleStreamOptionsOverlayClosed", closed)
     else if sourcePage = "tvEpisode" and m.tvEpisodePage <> invalid then
         m.tvEpisodePage.callFunc("handleStreamOptionsOverlayClosed", closed)

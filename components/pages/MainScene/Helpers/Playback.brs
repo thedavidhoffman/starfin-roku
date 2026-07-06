@@ -11,6 +11,7 @@ sub playerShow(selection as object)
     player.observeField("closeRequested", "playerHandleCloseRequested")
     player.observeField("playbackProgressChanged", "playerHandlePlaybackProgressChanged")
     player.observeField("upNextRequested", "playerHandleUpNextRequested")
+    player.observeField("streamOptionsRequested", "playerHandleStreamOptionsRequested")
     player.observeField("selectedPerson", "playerHandlePersonSelected")
     playRequest = {
         server: m.session.server
@@ -38,6 +39,18 @@ sub playerShow(selection as object)
     m.homePage.visible = false
     m.header.visible = false
     player.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' playerHandleStreamOptionsRequested
+'-------------------------------------------------------------------------------
+sub playerHandleStreamOptionsRequested()
+    if m.videoPlayer = invalid then return
+
+    request = m.videoPlayer.streamOptionsRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
 end sub
 
 '-------------------------------------------------------------------------------

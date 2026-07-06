@@ -2,7 +2,12 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.castButton = m.top.findNode("castButton")
+    m.subtitleButton = m.top.findNode("subtitleButton")
+    m.audioButton = m.top.findNode("audioButton")
+    m.skipBackButton = m.top.findNode("skipBackButton")
     m.playPauseButton = m.top.findNode("playPauseButton")
+    m.skipForwardButton = m.top.findNode("skipForwardButton")
     m.last5Button = m.top.findNode("last5Button")
     m.trickplayPreview = m.top.findNode("trickplayPreview")
     m.metadataLabels = {
@@ -19,9 +24,9 @@ sub init()
     m.remainingLabel = m.top.findNode("remainingLabel")
 
     m.controlState = {
-        focusedIndex: 0
+        focusedIndex: 1
         focusArea: "buttons"
-        buttons: [m.playPauseButton, m.last5Button]
+        buttons: []
     }
     m.playPauseIcons = {
         play: {
@@ -34,20 +39,37 @@ sub init()
         }
     }
     m.trickplayPositions = {
-        default: [103, 451]
-        tall: [103, 390]
+        default: [103, 421]
+        tall: [103, 360]
     }
 
     colors = Color()
     m.metadataLabels.title.color = colors.text.light.primary
     m.metadataLabels.subtitle.color = colors.text.light.secondary
 
+    m.castButton.icon = "pkg:/images/icons/playback-controls/person-unfocused.png"
+    m.castButton.focusedIcon = "pkg:/images/icons/playback-controls/person-focused.png"
+    m.subtitleButton.icon = "pkg:/images/icons/playback-controls/subtitles-unfocused.png"
+    m.subtitleButton.focusedIcon = "pkg:/images/icons/playback-controls/subtitles-focused.png"
+    m.audioButton.icon = "pkg:/images/icons/playback-controls/audio-unfocused.png"
+    m.audioButton.focusedIcon = "pkg:/images/icons/playback-controls/audio-focused.png"
+    m.skipBackButton.icon = "pkg:/images/icons/playback-controls/skip-back-unfocused.png"
+    m.skipBackButton.focusedIcon = "pkg:/images/icons/playback-controls/skip-back-focused.png"
+    m.skipForwardButton.icon = "pkg:/images/icons/playback-controls/skip-forward-unfocused.png"
+    m.skipForwardButton.focusedIcon = "pkg:/images/icons/playback-controls/skip-forward-focused.png"
+
+    m.castButton.observeField("buttonSelected", "onCastButtonSelected")
+    m.subtitleButton.observeField("buttonSelected", "onSubtitleButtonSelected")
+    m.audioButton.observeField("buttonSelected", "onAudioButtonSelected")
+    m.skipBackButton.observeField("buttonSelected", "onSkipBackButtonSelected")
     m.playPauseButton.observeField("buttonSelected", "onPlayPauseButtonSelected")
+    m.skipForwardButton.observeField("buttonSelected", "onSkipForwardButtonSelected")
     m.last5Button.observeField("buttonSelected", "onLast5ButtonSelected")
     m.top.observeField("focusedChild", "onFocusChanged")
     onTitleChanged()
     onSubtitleChanged()
     onPlayingChanged()
+    onOptionsChanged()
     updateButtonFocus()
 end sub
 
@@ -109,6 +131,16 @@ sub onPlayingChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onOptionsChanged
+'-------------------------------------------------------------------------------
+sub onOptionsChanged()
+    m.castButton.visible = m.top.hasCastOptions = true
+    m.subtitleButton.visible = m.top.hasSubtitleOptions = true
+    m.audioButton.visible = m.top.hasAudioOptions = true
+    rebuildButtonList()
+end sub
+
+'-------------------------------------------------------------------------------
 ' onFocusChanged
 '-------------------------------------------------------------------------------
 sub onFocusChanged()
@@ -132,6 +164,41 @@ sub onPlayPauseButtonSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' onCastButtonSelected
+'-------------------------------------------------------------------------------
+sub onCastButtonSelected()
+    m.top.castOptionsPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onSubtitleButtonSelected
+'-------------------------------------------------------------------------------
+sub onSubtitleButtonSelected()
+    m.top.subtitleOptionsPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onAudioButtonSelected
+'-------------------------------------------------------------------------------
+sub onAudioButtonSelected()
+    m.top.audioOptionsPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onSkipBackButtonSelected
+'-------------------------------------------------------------------------------
+sub onSkipBackButtonSelected()
+    m.top.progressRewindPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onSkipForwardButtonSelected
+'-------------------------------------------------------------------------------
+sub onSkipForwardButtonSelected()
+    m.top.progressFastForwardPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
 ' onLast5ButtonSelected
 '-------------------------------------------------------------------------------
 sub onLast5ButtonSelected()
@@ -142,6 +209,7 @@ end sub
 ' moveButtonFocus
 '-------------------------------------------------------------------------------
 sub moveButtonFocus(direction as integer)
+    rebuildButtonList()
     nextIndex = m.controlState.focusedIndex + direction
     if nextIndex < 0 then nextIndex = 0
     if nextIndex > m.controlState.buttons.Count() - 1 then nextIndex = m.controlState.buttons.Count() - 1
@@ -173,6 +241,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusCurrentButton()
     m.controlState.focusArea = "buttons"
+    rebuildButtonList()
     button = m.controlState.buttons[m.controlState.focusedIndex]
     if button <> invalid then button.setFocus(true)
     updateProgressFocus()
@@ -184,7 +253,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub releaseFocus()
     m.progressBarGroup.setFocus(false)
-    for each button in m.controlState.buttons
+    allButtons = getAllButtons()
+    for each button in allButtons
         if button <> invalid then button.setFocus(false)
     end for
     m.top.setFocus(false)
@@ -193,9 +263,67 @@ sub releaseFocus()
 end sub
 
 '-------------------------------------------------------------------------------
+' getAllButtons
+'-------------------------------------------------------------------------------
+function getAllButtons() as object
+    return [m.castButton, m.subtitleButton, m.audioButton, m.skipBackButton, m.playPauseButton, m.skipForwardButton, m.last5Button]
+end function
+
+'-------------------------------------------------------------------------------
+' rebuildButtonList
+'-------------------------------------------------------------------------------
+sub rebuildButtonList()
+    previousButtonId = ""
+    if m.controlState.buttons.Count() > 0 and m.controlState.focusedIndex >= 0 and m.controlState.focusedIndex < m.controlState.buttons.Count() then
+        previousButtonId = SafeString(m.controlState.buttons[m.controlState.focusedIndex].id, "")
+    end if
+
+    buttons = []
+    allButtons = getAllButtons()
+    for each button in allButtons
+        if button <> invalid and button.visible <> false then buttons.Push(button)
+    end for
+
+    m.controlState.buttons = buttons
+    if buttons.Count() = 0 then
+        m.controlState.focusedIndex = 0
+        return
+    end if
+
+    focusedIndex = -1
+    if previousButtonId <> "" then
+        for i = 0 to buttons.Count() - 1
+            if SafeString(buttons[i].id, "") = previousButtonId then
+                focusedIndex = i
+                exit for
+            end if
+        end for
+    end if
+
+    if focusedIndex < 0 then focusedIndex = getDefaultButtonIndex(buttons)
+    m.controlState.focusedIndex = focusedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' getDefaultButtonIndex
+'-------------------------------------------------------------------------------
+function getDefaultButtonIndex(buttons as object) as integer
+    for i = 0 to buttons.Count() - 1
+        if SafeString(buttons[i].id, "") = "playPauseButton" then return i
+    end for
+
+    return 0
+end function
+
+'-------------------------------------------------------------------------------
 ' updateButtonFocus
 '-------------------------------------------------------------------------------
 sub updateButtonFocus()
+    allButtons = getAllButtons()
+    for each button in allButtons
+        if button <> invalid then button.hasFocusVisual = false
+    end for
+
     for i = 0 to m.controlState.buttons.Count() - 1
         button = m.controlState.buttons[i]
         if button <> invalid then button.hasFocusVisual = i = m.controlState.focusedIndex and m.controlState.focusArea = "buttons" and m.top.isInFocusChain()

@@ -7,7 +7,6 @@ sub init()
     m.playbackControls = m.top.findNode("playbackControls")
     m.castGradient = m.top.findNode("castGradient")
     m.cast = m.top.findNode("cast")
-    m.chevronFooter = m.top.findNode("chevronFooter")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
     m.playstateTask = m.top.findNode("playstateTask")
     m.trickplayPreloadTask = m.top.findNode("trickplayPreloadTask")
@@ -47,6 +46,12 @@ sub init()
         hasCast: false
         resumeAfterPersonNavigation: false
     }
+    m.streamOptions = {
+        subtitleStreams: []
+        audioStreams: []
+        selectedSubtitleStreamIndex: -1
+        selectedAudioStreamIndex: -1
+    }
     m.seek = {
         speeds: [-180, -60, -30, -10, 10, 30, 60, 180]
         speedIndex: -1
@@ -71,6 +76,9 @@ sub init()
     m.playbackControls.observeField("progressFastForwardPressed", "onProgressFastForwardPressed")
     m.playbackControls.observeField("progressSeekCommit", "onProgressSeekCommit")
     m.playbackControls.observeField("progressSeekCancel", "onProgressSeekCancel")
+    m.playbackControls.observeField("castOptionsPressed", "onCastOptionsPressed")
+    m.playbackControls.observeField("subtitleOptionsPressed", "onSubtitleOptionsPressed")
+    m.playbackControls.observeField("audioOptionsPressed", "onAudioOptionsPressed")
     m.playbackControls.observeField("focusExitDown", "onPlaybackControlsFocusExitDown")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
@@ -92,7 +100,7 @@ sub onPlayRequestChanged()
 
     stopPlayback()
     m.playback.startupPending = true
-    Spinner_Show()
+    Spinner_Show(0)
 
     m.playbackInfoTask.request = request
     m.playbackInfoTask.control = "run"
@@ -122,6 +130,19 @@ sub applyPlaybackResponse(response as object, request as object)
     if response = invalid or request = invalid then return
 
     item = response.item
+    startPositionSeconds = PlaybackProgress_TicksToSeconds(response.startPositionTicks)
+
+    applyPlaybackSessionState(response, request, item)
+    content = buildVideoContent(response, request, item, startPositionSeconds)
+    resetPlaybackForStart(item, startPositionSeconds)
+    updatePlaybackOverlayData(request, item)
+    startVideoContent(content, response, startPositionSeconds)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackSessionState
+'-------------------------------------------------------------------------------
+sub applyPlaybackSessionState(response as object, request as object, item as dynamic)
     m.session = {
         server: SafeString(request.server, "")
         token: SafeString(request.token, "")
@@ -139,15 +160,26 @@ sub applyPlaybackResponse(response as object, request as object)
     }
     m.trickplay = buildTrickplayState(item, m.session.itemId)
     startTrickplayPreload()
+end sub
 
+'-------------------------------------------------------------------------------
+' buildVideoContent
+'-------------------------------------------------------------------------------
+function buildVideoContent(response as object, request as object, item as dynamic, startPositionSeconds as integer) as object
     content = CreateObject("roSGNode", "ContentNode")
     content.url = response.streamUrl
     content.streamFormat = response.streamFormat
     content.title = getItemTitle(item)
-    startPositionSeconds = PlaybackProgress_TicksToSeconds(response.startPositionTicks)
     content.PlayStart = startPositionSeconds
     content.AddHeader("Authorization", JellyfinAuth_BuildPlaybackHeader(request.token, request.userId))
 
+    return content
+end function
+
+'-------------------------------------------------------------------------------
+' resetPlaybackForStart
+'-------------------------------------------------------------------------------
+sub resetPlaybackForStart(item as dynamic, startPositionSeconds as integer)
     m.playback.duration = getRuntimeSeconds(item)
     m.playback.hasEmittedFinalProgress = false
     m.playback.position = startPositionSeconds
@@ -158,10 +190,22 @@ sub applyPlaybackResponse(response as object, request as object)
     m.playbackControls.previewPosition = startPositionSeconds
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
+end sub
+
+'-------------------------------------------------------------------------------
+' updatePlaybackOverlayData
+'-------------------------------------------------------------------------------
+sub updatePlaybackOverlayData(request as object, item as dynamic)
     updatePlaybackControlsMetadata(request, item)
     updateCast(request, item)
+    updatePlaybackControlsOptions(item)
     hideCast()
+end sub
 
+'-------------------------------------------------------------------------------
+' startVideoContent
+'-------------------------------------------------------------------------------
+sub startVideoContent(content as object, response as object, startPositionSeconds as integer)
     m.log.write("Assigning video content itemId=" + m.session.itemId + " streamFormat=" + SafeString(response.streamFormat, "") + " startPosition=" + SafeString(startPositionSeconds, ""))
     m.videoPlayer.content = content
     m.top.setFocus(true)
@@ -215,7 +259,7 @@ end sub
 sub updateBufferingSpinner(state as string)
     if state = "buffering" then
         m.playback.startupPending = false
-        Spinner_Show()
+        Spinner_Show(0)
     else if state = "stopped" and m.playback.startupPending = true then
         return
     else
@@ -307,6 +351,8 @@ sub updatePlaybackControlsMetadata(request as object, item as dynamic)
     if item = invalid then
         m.playbackControls.title = "Video"
         m.playbackControls.subtitle = ""
+        m.playbackControls.hasSubtitleOptions = false
+        m.playbackControls.hasAudioOptions = false
         return
     end if
 
@@ -443,7 +489,6 @@ sub showControls(restartTimer as boolean)
     else
         m.controlsHideTimer.control = "stop"
     end if
-    updateChevron()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -452,6 +497,17 @@ end sub
 sub showControlsWithProgressFocus()
     showControls(false)
     m.playbackControls.callFunc("focusProgress")
+end sub
+
+'-------------------------------------------------------------------------------
+' restartControlsHideTimerIfVisible
+'-------------------------------------------------------------------------------
+sub restartControlsHideTimerIfVisible()
+    if m.playbackControls.visible <> true then return
+    if m.playback.isSeeking = true then return
+
+    m.controlsHideTimer.control = "stop"
+    m.controlsHideTimer.control = "start"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -466,175 +522,6 @@ sub hideControls()
     m.playbackControls.callFunc("releaseFocus")
     m.playbackControls.visible = false
     if m.overlay.area = "controls" then m.overlay.area = "none"
-    updateChevron()
-    m.top.setFocus(true)
-end sub
-
-'-------------------------------------------------------------------------------
-' updateCast
-'-------------------------------------------------------------------------------
-sub updateCast(request as object, item as dynamic)
-    people = getPeople(item)
-    m.cast.server = SafeString(request.server, "")
-    m.cast.people = people
-    m.overlay.hasCast = m.cast.hasItems
-    updateChevron()
-end sub
-
-'-------------------------------------------------------------------------------
-' getPeople
-'-------------------------------------------------------------------------------
-function getPeople(item as dynamic) as object
-    if item = invalid or item.People = invalid then return []
-    return item.People
-end function
-
-'-------------------------------------------------------------------------------
-' showCast
-'-------------------------------------------------------------------------------
-sub showCast()
-    if m.cast.hasItems <> true then
-        m.overlay.hasCast = false
-        updateChevron()
-        m.top.setFocus(true)
-        return
-    end if
-
-    m.controlsHideTimer.control = "stop"
-    m.playbackControls.callFunc("releaseFocus")
-    m.playbackControls.visible = false
-    m.overlay.area = "cast"
-    m.overlay.hasCast = true
-    m.castGradient.visible = true
-    m.cast.visible = true
-    m.cast.callFunc("activate")
-    m.controlsHideTimer.control = "start"
-    updateChevron()
-end sub
-
-'-------------------------------------------------------------------------------
-' hideCast
-'-------------------------------------------------------------------------------
-sub hideCast(restorePlayerFocus = false as boolean)
-    m.controlsHideTimer.control = "stop"
-    m.cast.callFunc("deactivate")
-    m.castGradient.visible = false
-    m.cast.visible = false
-    if m.overlay.area = "cast" then m.overlay.area = "none"
-    updateChevron()
-    if restorePlayerFocus = true then m.top.setFocus(true)
-end sub
-
-'-------------------------------------------------------------------------------
-' updateChevron
-'-------------------------------------------------------------------------------
-sub updateChevron()
-    if m.overlay.hasCast = true and m.overlay.area = "controls" then
-        m.chevronFooter.direction = "down"
-    else if m.overlay.hasCast = true and m.overlay.area = "cast" then
-        m.chevronFooter.direction = "up"
-    else
-        m.chevronFooter.direction = ""
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' onCastAvailabilityChanged
-'-------------------------------------------------------------------------------
-sub onCastAvailabilityChanged()
-    m.overlay.hasCast = m.cast.hasItems
-    if m.overlay.hasCast <> true and m.overlay.area = "cast" then hideCast(true)
-    updateChevron()
-end sub
-
-'-------------------------------------------------------------------------------
-' onPlaybackControlsFocusExitDown
-'-------------------------------------------------------------------------------
-sub onPlaybackControlsFocusExitDown()
-    if m.cast.hasItems = true then
-        dismissSeekPreviewForCast()
-        showCast()
-    else
-        showControls(true)
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' onCastFocusExitUp
-'-------------------------------------------------------------------------------
-sub onCastFocusExitUp()
-    showControls(true)
-end sub
-
-'-------------------------------------------------------------------------------
-' onCastFocusExitDown
-'-------------------------------------------------------------------------------
-sub onCastFocusExitDown()
-    if m.overlay.area <> "cast" then return
-
-    m.controlsHideTimer.control = "stop"
-    m.cast.callFunc("activate")
-    m.controlsHideTimer.control = "start"
-end sub
-
-'-------------------------------------------------------------------------------
-' dismissSeekPreviewForCast
-'-------------------------------------------------------------------------------
-sub dismissSeekPreviewForCast()
-    if m.playback.isSeeking <> true then return
-
-    stopSeekTimers()
-    resetSeekState()
-    m.videoPlayer.control = "resume"
-    m.playback.isSeeking = false
-    m.playbackControls.isSeeking = false
-    m.playbackControls.thumbnailData = {}
-end sub
-
-'-------------------------------------------------------------------------------
-' onCastPersonSelected
-'-------------------------------------------------------------------------------
-sub onCastPersonSelected()
-    selection = m.cast.selectedPerson
-    if selection = invalid then return
-    if selection.itemId = invalid or selection.itemId = "" then return
-
-    request = m.top.playRequest
-    item = invalid
-    if request <> invalid then item = request.item
-
-    itemType = ""
-    if item <> invalid then itemType = LCase(FirstNonEmpty([item.Type], ""))
-    if itemType = "episode" then
-        selection.sourceItemType = "series"
-        selection.sourceSeriesId = SafeString(FirstNonEmpty([item.SeriesId], ""), "")
-    else
-        selection.sourceItemType = "movie"
-        selection.sourceItemId = SafeString(m.session.itemId, "")
-    end if
-
-    m.top.selectedPerson = selection
-end sub
-
-'-------------------------------------------------------------------------------
-' pauseForPersonNavigation
-'-------------------------------------------------------------------------------
-sub pauseForPersonNavigation()
-    state = LCase(SafeString(m.videoPlayer.state, ""))
-    m.overlay.resumeAfterPersonNavigation = state = "playing" or state = "buffering"
-    hideControls()
-    hideCast()
-    m.videoPlayer.control = "pause"
-end sub
-
-'-------------------------------------------------------------------------------
-' resumeAfterPersonNavigation
-'-------------------------------------------------------------------------------
-sub resumeAfterPersonNavigation()
-    if m.overlay.resumeAfterPersonNavigation = true then
-        m.videoPlayer.control = "resume"
-    end if
-    m.overlay.resumeAfterPersonNavigation = false
     m.top.setFocus(true)
 end sub
 
@@ -1428,6 +1315,8 @@ end function
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
+    restartControlsHideTimerIfVisible()
+
     if press = false then
         if key = "left" then
             stopTenSecondRepeat("left")
@@ -1442,7 +1331,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if m.overlay.area = "cast" then
         if key = "back" then
-            hideCast(true)
+            hideCast()
+            showControls(true)
             return true
         else if key = "up" then
             showControls(true)
@@ -1514,10 +1404,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
         return true
     else if key = "down" then
-        if m.overlay.area = "controls" and m.overlay.hasCast = true then
-            dismissSeekPreviewForCast()
-            showCast()
-        else if m.overlay.area <> "cast" then
+        if m.overlay.area <> "cast" then
             showControls(true)
         end if
         return true
