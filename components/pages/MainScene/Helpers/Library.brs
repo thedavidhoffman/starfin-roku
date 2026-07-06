@@ -31,6 +31,7 @@ sub libraryShow(selection as object, fromCollections as boolean)
     page.observeField("overlayRequested", "libraryHandleOverlayRequested")
     page.observeField("selectedMovie", "libraryHandleMovieSelected")
     page.observeField("selectedSeries", "libraryHandleSeriesSelected")
+    page.observeField("focusExitUp", "libraryHandleFocusExitUp")
     page.settings = m.settings
     loadRequest = {
         server: m.session.server
@@ -52,6 +53,15 @@ sub libraryShow(selection as object, fromCollections as boolean)
     m.header.visible = true
     page.loadRequest = loadRequest
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' libraryHandleFocusExitUp
+'-------------------------------------------------------------------------------
+sub libraryHandleFocusExitUp()
+    if m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusHeader")
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

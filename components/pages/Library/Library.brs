@@ -476,11 +476,25 @@ end sub
 ' focusSortButton
 '-------------------------------------------------------------------------------
 function focusSortButton() as boolean
-    if m.sortButton = invalid then return false
-    if m.sortButton.visible <> true then return false
+    if canFocusSortButton() <> true then return false
 
     m.top.setFocus(true)
     m.sortButton.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' canFocusSortButton
+'-------------------------------------------------------------------------------
+function canFocusSortButton() as boolean
+    return m.sortButton <> invalid and m.sortButton.visible = true
+end function
+
+'-------------------------------------------------------------------------------
+' requestHeaderFocus
+'-------------------------------------------------------------------------------
+function requestHeaderFocus() as boolean
+    m.top.focusExitUp = true
     return true
 end function
 
@@ -879,10 +893,13 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if key = "up" and m.sortButton.isInFocusChain() then return requestHeaderFocus()
+    if key = "up" and m.letterGutterButton.isInFocusChain() then return requestHeaderFocus()
     if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
     if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return focusLetterGutterButton()
     if key = "up" and isItemsGridAtFirstRow() then
         stopLibraryProgressHold("up")
+        if canFocusSortButton() <> true then return requestHeaderFocus()
         return focusSortButton()
     end if
     if key = "right" and isItemsGridAtLastColumn() then return true
