@@ -28,16 +28,6 @@ sub onItemContentChanged()
 end sub
 
 '-------------------------------------------------------------------------------
-' onItemHasFocusChanged
-'-------------------------------------------------------------------------------
-sub onItemHasFocusChanged()
-    item = m.top.itemContent
-    if item = invalid then return
-
-    renderPoster(item, SafeString(item.imageAspect, "poster"))
-end sub
-
-'-------------------------------------------------------------------------------
 ' renderPoster
 '-------------------------------------------------------------------------------
 sub renderPoster(item as object, imageAspect as string)
@@ -128,23 +118,11 @@ end function
 ' getImageUrl
 '-------------------------------------------------------------------------------
 function getImageUrl(item as object, imageAspect as string) as string
-    if m.top.itemHasFocus = true then
-        focusedImageUrl = getFocusedImageUrl(item)
-        if focusedImageUrl <> "" then return focusedImageUrl
-    end if
-
     imageUrl = SafeString(item.HDPosterUrl, "")
     if imageUrl <> "" then return imageUrl
 
     if imageAspect = "wide" then return "pkg:/images/media-card/thumbnail-placeholder-440x248.png"
     return "pkg:/images/media-card/poster-placeholder-250x375.png"
-end function
-
-'-------------------------------------------------------------------------------
-' getFocusedImageUrl
-'-------------------------------------------------------------------------------
-function getFocusedImageUrl(item as object) as string
-    return SafeString(item.focusedHDPosterUrl, "")
 end function
 
 '-------------------------------------------------------------------------------

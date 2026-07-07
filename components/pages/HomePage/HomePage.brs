@@ -467,7 +467,6 @@ function buildRowContent(key as string, title as string, items as object) as obj
         imageUrl = getHomeItemImageUrl(key, item, imageAspect)
         child.HDPosterUrl = imageUrl
         child.AddFields({
-            focusedHDPosterUrl: getHomeItemFocusedImageUrl(key, item, imageAspect)
             imageAspect: imageAspect
             showSubtitle: shouldShowHomeItemSubtitle(key)
             raw: item
@@ -768,22 +767,6 @@ function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as stri
 end function
 
 '-------------------------------------------------------------------------------
-' getHomeItemFocusedImageUrl
-'-------------------------------------------------------------------------------
-function getHomeItemFocusedImageUrl(key as string, item as dynamic, imageAspect as string) as string
-    if key <> "continueWatching" and key <> "nextUp" then return ""
-    if isTVEpisode(item) = false then return ""
-
-    focusedImageUrl = getEpisodeThumbnailImageUrl(item, imageAspect)
-    if focusedImageUrl = "" then return ""
-
-    defaultImageUrl = getHomeItemImageUrl(key, item, imageAspect)
-    if focusedImageUrl = defaultImageUrl then return ""
-
-    return focusedImageUrl
-end function
-
-'-------------------------------------------------------------------------------
 ' getResumeRowImageUrl
 '-------------------------------------------------------------------------------
 function getResumeRowImageUrl(item as dynamic, imageAspect as string) as string
@@ -792,30 +775,6 @@ function getResumeRowImageUrl(item as dynamic, imageAspect as string) as string
     itemType = LCase(FirstNonEmpty([item.Type], ""))
     if itemType = "episode" then return getSeriesThumbnailImageUrl(item, imageAspect)
     if itemType = "movie" or itemType = "video" then return getMovieThumbnailImageUrl(item, imageAspect)
-
-    return ""
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeThumbnailImageUrl
-'-------------------------------------------------------------------------------
-function getEpisodeThumbnailImageUrl(item as dynamic, imageAspect as string) as string
-    imageSize = getImageSize(imageAspect)
-    itemId = FirstNonEmpty([item.Id], "")
-    request = m.homeState.request
-    if request = invalid then return ""
-
-    thumbTag = getImageTag(item, "Thumb")
-    if itemId <> "" and thumbTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Thumb", thumbTag, imageSize.width, imageSize.height)
-
-    backdropTag = getBackdropImageTag(item)
-    if itemId <> "" and backdropTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Backdrop", backdropTag, imageSize.width, imageSize.height)
-
-    primaryTag = getImageTag(item, "Primary")
-    if itemId <> "" and primaryTag <> "" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
-
-    directUrl = FirstNonEmpty([item.ImageURL, item.ImageUrl, item.PrimaryImageUrl], "")
-    if directUrl <> "" then return directUrl
 
     return ""
 end function
