@@ -4,7 +4,6 @@
 sub init()
     m.log = CreateLogger("ThemeAudio")
     m.audio = m.top.findNode("audio")
-    m.audio.volume = 50
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
     m.audio.observeField("state", "onAudioStateChanged")
