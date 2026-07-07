@@ -41,6 +41,7 @@ sub liveTvHandlePlaySelected()
     selection = m.liveTvPage.playSelected
     if selection = invalid then return
 
+    m.liveTvPage.callFunc("deactivate")
     playerShow(selection)
 end sub
 
@@ -50,6 +51,7 @@ end sub
 sub liveTvHandleCloseRequested()
     clearStatus()
     if m.liveTvPage <> invalid then
+        m.liveTvPage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.liveTvPage)
         m.liveTvPage = invalid
     end if

@@ -22,6 +22,7 @@ sub init()
         rowHeights: []
         focusedRowIndex: 0
         resultsOffsetY: 0
+        lifecycle: AsyncLifecycle_Create()
     }
 end sub
 
@@ -30,6 +31,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onLoadRequestChanged()
     m.searchState.request = m.top.loadRequest
+    AsyncLifecycle_Begin(m.searchState.lifecycle, "")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -42,6 +44,14 @@ sub activate()
     else
         focusKeyboard()
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle_Deactivate(m.searchState.lifecycle)
+    m.searchTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -71,6 +81,7 @@ sub onKeyboardTextChanged()
 
     m.searchState.query = query
     m.searchState.submittedQuery = ""
+    AsyncLifecycle_Begin(m.searchState.lifecycle, "")
     m.searchTask.control = "stop"
     Spinner_Hide()
 
@@ -112,6 +123,7 @@ sub runSearch()
 
     request.query = query
     m.searchState.submittedQuery = query
+    AsyncLifecycle_Begin(m.searchState.lifecycle, query)
     Spinner_Show(0)
     Status_ClearMessage()
     m.searchTask.request = request
@@ -124,6 +136,7 @@ end sub
 sub onSearchResponse()
     response = m.searchTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.searchState.lifecycle, response, "query", "search") <> true then return
     if SafeString(response.query, "") <> m.searchState.submittedQuery then return
 
     Spinner_Hide()

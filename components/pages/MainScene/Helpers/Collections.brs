@@ -39,6 +39,7 @@ sub collectionsHandleCollectionSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    if m.collectionsPage <> invalid then m.collectionsPage.callFunc("deactivate")
     libraryShow({
         libraryId: selection.itemId
         collectionType: "collection"
@@ -52,6 +53,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub collectionsHandleCloseRequested()
     clearStatus()
+    if m.collectionsPage <> invalid then m.collectionsPage.callFunc("deactivate")
     resetDynamicPages()
     showHome()
 end sub

@@ -20,6 +20,7 @@ sub filmographyShow(selection as object)
     page.observeField("closeRequested", "filmographyHandleCloseRequested")
     page.loadRequest = selection
 
+    if m.personPage <> invalid then m.personPage.callFunc("deactivate")
     m.filmographyPage = page
     m.dynamicPageHost.appendChild(page)
     if m.personPage <> invalid then m.personPage.visible = false
@@ -34,6 +35,7 @@ end sub
 sub filmographyHandleCloseRequested()
     clearStatus()
     if m.filmographyPage <> invalid then
+        m.filmographyPage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.filmographyPage)
         m.filmographyPage = invalid
     end if

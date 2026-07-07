@@ -62,6 +62,7 @@ end sub
 sub tvSeasonHandleCloseRequested()
     clearStatus()
     if m.tvSeasonPage <> invalid then
+        m.tvSeasonPage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvSeasonPage)
         m.tvSeasonPage = invalid
     end if

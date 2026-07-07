@@ -35,6 +35,8 @@ sub init()
         guideEndTime: ""
         genres: {}
         isLoading: false
+        lifecycle: AsyncLifecycle_Create()
+        scheduleLifecycle: AsyncLifecycle_Create()
         hasLoaded: false
         schedule: {
             batchSize: 50
@@ -53,6 +55,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.liveTvState.lifecycle, m.liveTvState.request, "userId")
     if m.liveTvState.isLoading = true then
         m.top.setFocus(true)
     else if m.liveTvState.hasLoaded = true then
@@ -66,6 +69,8 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    AsyncLifecycle_Deactivate(m.liveTvState.lifecycle)
+    AsyncLifecycle_Deactivate(m.liveTvState.scheduleLifecycle)
     m.channelsTask.control = "stop"
     stopScheduleTask()
     m.scheduleBatchTimer.control = "stop"
@@ -94,6 +99,7 @@ sub loadChannels()
 
     Spinner_Show(0)
     Status_ClearMessage()
+    AsyncLifecycle_Begin(m.liveTvState.lifecycle, request.userId)
     m.liveTvState.isLoading = true
     m.liveTvState.hasLoaded = false
     m.liveTvState.genres = {}
@@ -113,6 +119,7 @@ end sub
 sub onChannelsResponse()
     response = m.channelsTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.liveTvState.lifecycle, response, "userId", "liveTvChannels") <> true then return
     if response.ok <> true then
         m.liveTvState.isLoading = false
         Spinner_Hide()
@@ -168,6 +175,7 @@ sub loadNextScheduleBatch()
     request.channelIds = channelIds
     request.startTime = m.liveTvState.guideStartTime
     request.endTime = m.liveTvState.guideEndTime
+    AsyncLifecycle_Begin(m.liveTvState.scheduleLifecycle, AsyncLifecycle_BuildKey([request.channelIds, request.startTime, request.endTime]))
 
     logScheduleBatch()
     stopScheduleTask()
@@ -188,8 +196,14 @@ end sub
 ' onScheduleResponse
 '-------------------------------------------------------------------------------
 sub onScheduleResponse()
+    if m.scheduleTask = invalid then return
     response = m.scheduleTask.response
     if response = invalid then return
+    scheduleResponse = {
+        action: SafeString(response.action, "")
+        requestKey: AsyncLifecycle_BuildKey([response.channelIds, response.startTime, response.endTime])
+    }
+    if AsyncLifecycle_IsCurrentResponse(m.liveTvState.scheduleLifecycle, scheduleResponse, "requestKey", "liveTvSchedule") <> true then return
     if response.ok <> true then
         handleScheduleLoadError(response)
         return

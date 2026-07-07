@@ -25,6 +25,7 @@ sub init()
         seasons: []
         focusArea: "seasons"
         themeLookupActive: false
+        lifecycle: AsyncLifecycle_Create()
     }
     m.layout = {
         contentDefault: [96, 0]
@@ -95,6 +96,7 @@ sub onLoadRequestChanged()
     m.pageState.request = request
     m.pageState.series = request.item
     m.pageState.themeLookupActive = false
+    AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.focusArea = "seasons"
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
@@ -115,6 +117,7 @@ end sub
 sub onTVShowResponse()
     response = m.tvShowTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "tvShow") <> true then return
 
     if response.ok <> true then
         Spinner_Hide()
@@ -172,6 +175,7 @@ end sub
 sub onThemeSongsResponse()
     response = m.themeSongsTask.response
     if response = invalid then return
+    if m.pageState.lifecycle.isActive <> true then return
     if m.pageState.themeLookupActive <> true then return
     if response.ok <> true then
         m.log.write("Theme song lookup failed: " + SafeString(response.errorMessage, "Unknown error."))
@@ -278,6 +282,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
     if m.pageState.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
         focusCast()
     else
@@ -289,7 +294,9 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
     m.pageState.themeLookupActive = false
+    m.tvShowTask.control = "stop"
     m.themeSongsTask.control = "stop"
 end sub
 

@@ -13,6 +13,7 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
+        if request <> invalid then validationError.AddReplace("userId", SafeString(request.userId, ""))
         m.top.response = validationError
         return
     end if
@@ -34,6 +35,7 @@ sub executeRequest()
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         response.AddReplace("action", "liveTvChannels")
+        response.AddReplace("userId", SafeString(request.userId, ""))
         m.top.response = response
         return
     end if
@@ -41,6 +43,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "liveTvChannels"
+        userId: SafeString(request.userId, "")
         payload: response.data
     }
 end sub

@@ -5,6 +5,7 @@ sub tvEpisodeHandleTVSeasonEpisodeSelected()
     selection = m.tvSeasonPage.selectedEpisodeDetails
     if selection = invalid then return
 
+    if m.tvSeasonPage <> invalid then m.tvSeasonPage.callFunc("deactivate")
     tvEpisodeShow(selection)
 end sub
 
@@ -124,6 +125,7 @@ sub tvEpisodeHandleCloseRequested()
     playbackProgressChange = invalid
     if m.tvEpisodePage <> invalid then
         playbackProgressChange = m.tvEpisodePage.playbackProgressChanged
+        m.tvEpisodePage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvEpisodePage)
         m.tvEpisodePage = invalid
     end if
@@ -156,6 +158,7 @@ sub tvEpisodeHandleEpisodeSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    if m.tvEpisodePage <> invalid then m.tvEpisodePage.callFunc("deactivate")
     playerShow(selection)
 end sub
 
@@ -170,11 +173,13 @@ sub tvEpisodeHandleSeriesSelected()
 
     clearStatus()
     if m.tvEpisodePage <> invalid then
+        m.tvEpisodePage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvEpisodePage)
         m.tvEpisodePage = invalid
     end if
 
     if m.tvSeasonPage <> invalid then
+        m.tvSeasonPage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvSeasonPage)
         m.tvSeasonPage = invalid
     end if
@@ -202,6 +207,7 @@ sub tvEpisodeHandleSeasonSelected()
     playbackProgressChange = invalid
     if m.tvEpisodePage <> invalid then
         playbackProgressChange = m.tvEpisodePage.playbackProgressChanged
+        m.tvEpisodePage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvEpisodePage)
         m.tvEpisodePage = invalid
     end if

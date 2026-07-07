@@ -13,6 +13,10 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
+        if request <> invalid then
+            validationError.AddReplace("seriesId", SafeString(request.seriesId, ""))
+            validationError.AddReplace("seasonId", SafeString(request.seasonId, ""))
+        end if
         m.top.response = validationError
         return
     end if
@@ -25,6 +29,8 @@ sub executeRequest()
     seasonResult = loadSeason(request)
     if seasonResult.ok <> true then
         seasonResult.AddReplace("action", "tvSeason")
+        seasonResult.AddReplace("seriesId", SafeString(request.seriesId, ""))
+        seasonResult.AddReplace("seasonId", SafeString(request.seasonId, ""))
         m.top.response = seasonResult
         return
     end if
@@ -32,6 +38,8 @@ sub executeRequest()
     episodesResult = loadEpisodes(request, SafeString(request.seasonId, ""))
     if episodesResult.ok <> true then
         episodesResult.AddReplace("action", "tvSeason")
+        episodesResult.AddReplace("seriesId", SafeString(request.seriesId, ""))
+        episodesResult.AddReplace("seasonId", SafeString(request.seasonId, ""))
         m.top.response = episodesResult
         return
     end if
@@ -72,6 +80,7 @@ sub executeNextSeasonEpisodesRequest(request as object)
     nextEpisodesResult = loadEpisodes(request, nextSeasonId)
     if nextEpisodesResult.ok <> true then
         nextEpisodesResult.AddReplace("action", "nextSeasonEpisodes")
+        nextEpisodesResult.AddReplace("seasonId", nextSeasonId)
         m.top.response = nextEpisodesResult
         return
     end if

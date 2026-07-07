@@ -15,6 +15,7 @@ sub init()
         navigationStack: []
         pendingDrilldown: invalid
         imageAspect: "poster"
+        lifecycle: AsyncLifecycle_Create()
     }
 end sub
 
@@ -35,6 +36,7 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
     m.pageState.navigationStack = []
     m.pageState.pendingDrilldown = invalid
     m.pageState.imageAspect = getCollectionImageAspect()
@@ -53,6 +55,7 @@ end sub
 sub onCollectionsResponse()
     response = m.collectionsTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "collections") <> true then return
 
     if SafeString(response.mode, "load") = "drilldown" then
         handleDrilldownResponse(response)
@@ -115,6 +118,7 @@ sub loadChildCollections(itemId as string, item as object)
         item: item
         request: childRequest
     }
+    AsyncLifecycle_Begin(m.pageState.lifecycle, itemId)
     Spinner_Show(0)
     Status_ClearMessage()
     m.collectionsTask.control = "stop"
@@ -178,6 +182,7 @@ function navigateBackToParentCollection() as boolean
     m.pageState.pendingDrilldown = invalid
     m.collectionsTask.control = "stop"
     m.pageState.request = previous.request
+    AsyncLifecycle_Begin(m.pageState.lifecycle, previous.request.libraryId)
     m.pageState.collections = previous.collections
     m.titleLabel.text = SafeString(previous.title, "Collections")
     renderCollections(m.pageState.collections)
@@ -223,8 +228,18 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
     m.top.setFocus(true)
     focusCollectionsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    m.pageState.pendingDrilldown = invalid
+    m.collectionsTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------

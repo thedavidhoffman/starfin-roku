@@ -13,6 +13,7 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
+        if request <> invalid then validationError.AddReplace("personId", SafeString(request.personId, ""))
         m.top.response = validationError
         return
     end if
@@ -24,6 +25,7 @@ sub executeRequest()
     result = HttpClient_Request(url, "GET", invalid, invalid)
     if result.ok <> true then
         result.AddReplace("action", "filmography")
+        result.AddReplace("personId", SafeString(request.personId, ""))
         m.top.response = result
         return
     end if

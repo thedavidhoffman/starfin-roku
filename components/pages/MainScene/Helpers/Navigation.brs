@@ -257,8 +257,15 @@ sub resetDynamicPages()
     clearStatus()
     themeAudioStop()
     if m.liveTvPage <> invalid then m.liveTvPage.callFunc("deactivate")
+    if m.libraryPage <> invalid then m.libraryPage.callFunc("deactivate")
+    if m.collectionsPage <> invalid then m.collectionsPage.callFunc("deactivate")
+    if m.searchPage <> invalid then m.searchPage.callFunc("deactivate")
     if m.moviePage <> invalid then m.moviePage.callFunc("deactivate")
     if m.tvShowPage <> invalid then m.tvShowPage.callFunc("deactivate")
+    if m.tvSeasonPage <> invalid then m.tvSeasonPage.callFunc("deactivate")
+    if m.tvEpisodePage <> invalid then m.tvEpisodePage.callFunc("deactivate")
+    if m.personPage <> invalid then m.personPage.callFunc("deactivate")
+    if m.filmographyPage <> invalid then m.filmographyPage.callFunc("deactivate")
     m.yourStatsPage = invalid
     m.searchPage = invalid
     m.collectionsPage = invalid

@@ -103,6 +103,7 @@ sub personHandleMovieSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    if m.personPage <> invalid then m.personPage.callFunc("deactivate")
     movieShow(selection, false)
 end sub
 
@@ -114,6 +115,7 @@ sub personHandleSeriesSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
+    if m.personPage <> invalid then m.personPage.callFunc("deactivate")
     tvShowShow(selection, false)
 end sub
 
@@ -128,6 +130,7 @@ sub personHandleEpisodeSelected()
     loadRequest = buildHomeEpisodeLoadRequest(selection)
     if loadRequest = invalid then return
 
+    if m.personPage <> invalid then m.personPage.callFunc("deactivate")
     tvEpisodeShow({
         loadRequest: loadRequest
     })
@@ -139,6 +142,7 @@ end sub
 sub personHandleCloseRequested()
     clearStatus()
     if m.personPage <> invalid then
+        m.personPage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.personPage)
         m.personPage = invalid
     end if

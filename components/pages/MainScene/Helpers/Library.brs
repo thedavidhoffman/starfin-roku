@@ -145,6 +145,7 @@ end function
 sub libraryHandleMovieSelected()
     selection = m.libraryPage.selectedMovie
     if selection = invalid then return
+    if m.libraryPage <> invalid then m.libraryPage.callFunc("deactivate")
     movieShow(selection, false)
 end sub
 
@@ -154,6 +155,7 @@ end sub
 sub libraryHandleSeriesSelected()
     selection = m.libraryPage.selectedSeries
     if selection = invalid then return
+    if m.libraryPage <> invalid then m.libraryPage.callFunc("deactivate")
     tvShowShow(selection, false)
 end sub
 
@@ -163,6 +165,7 @@ end sub
 sub libraryHandleCloseRequested()
     clearStatus()
     if m.libraryPage <> invalid then
+        m.libraryPage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.libraryPage)
         m.libraryPage = invalid
     end if

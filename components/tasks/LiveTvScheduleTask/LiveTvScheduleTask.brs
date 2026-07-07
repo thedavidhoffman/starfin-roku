@@ -13,6 +13,11 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
+        if request <> invalid then
+            validationError.AddReplace("channelIds", SafeString(request.channelIds, ""))
+            validationError.AddReplace("startTime", SafeString(request.startTime, ""))
+            validationError.AddReplace("endTime", SafeString(request.endTime, ""))
+        end if
         m.top.response = validationError
         return
     end if
@@ -35,6 +40,9 @@ sub executeRequest()
     response = HttpClient_Request(url, "POST", invalid, body, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         response.AddReplace("action", "liveTvSchedule")
+        response.AddReplace("channelIds", SafeString(request.channelIds, ""))
+        response.AddReplace("startTime", SafeString(request.startTime, ""))
+        response.AddReplace("endTime", SafeString(request.endTime, ""))
         m.top.response = response
         return
     end if
@@ -42,6 +50,9 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "liveTvSchedule"
+        channelIds: SafeString(request.channelIds, "")
+        startTime: SafeString(request.startTime, "")
+        endTime: SafeString(request.endTime, "")
         payload: response.data
     }
 end sub

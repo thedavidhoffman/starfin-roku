@@ -13,6 +13,7 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
+        if request <> invalid then validationError.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = validationError
         return
     end if
@@ -20,6 +21,7 @@ sub executeRequest()
     personResult = loadPerson(request)
     if personResult.ok <> true then
         personResult.AddReplace("action", "person")
+        personResult.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = personResult
         return
     end if
@@ -27,6 +29,7 @@ sub executeRequest()
     itemsResult = loadPersonItems(request)
     if itemsResult.ok <> true then
         itemsResult.AddReplace("action", "person")
+        itemsResult.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = itemsResult
         return
     end if
@@ -34,6 +37,7 @@ sub executeRequest()
     episodeItemsResult = loadPersonEpisodeItems(request)
     if episodeItemsResult.ok <> true then
         episodeItemsResult.AddReplace("action", "person")
+        episodeItemsResult.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = episodeItemsResult
         return
     end if

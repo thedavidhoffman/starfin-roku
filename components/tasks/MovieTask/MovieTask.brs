@@ -13,6 +13,7 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
+        if request <> invalid then validationError.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = validationError
         return
     end if
@@ -26,6 +27,7 @@ sub executeRequest()
     result = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "movie")
+        result.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = result
         return
     end if

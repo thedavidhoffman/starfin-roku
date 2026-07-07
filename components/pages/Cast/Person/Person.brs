@@ -32,6 +32,7 @@ sub init()
         person: invalid
         filmography: invalid
         focusArea: "person"
+        lifecycle: AsyncLifecycle_Create()
     }
     m.layout = {
         mode: "bio"
@@ -54,6 +55,7 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.person = request.item
     m.pageState.filmography = invalid
     m.pageState.focusArea = "person"
@@ -74,6 +76,7 @@ end sub
 sub onPersonResponse()
     response = m.personTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "person") <> true then return
 
     if response.ok <> true then
         Spinner_Hide()
@@ -88,6 +91,14 @@ sub onPersonResponse()
     renderRelated(getItemsFromPayload(response.payload.items), getItemsFromPayload(response.payload.episodeItems))
     Spinner_Hide()
     Status_ClearMessage()
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    m.personTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -396,6 +407,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
     if m.relatedRows.visible = true and m.pageState.focusArea = "related" then
         setLayoutMode("related", false)
         m.relatedRows.setFocus(true)

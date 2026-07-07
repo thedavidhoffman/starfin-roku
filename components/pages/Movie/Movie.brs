@@ -41,6 +41,7 @@ sub init()
         selectedChapterKey: ""
         focusArea: "toolbar"
         themeLookupActive: false
+        lifecycle: AsyncLifecycle_Create()
     }
 end sub
 
@@ -54,6 +55,7 @@ sub onLoadRequestChanged()
     m.state.request = request
     m.state.item = request.item
     m.state.themeLookupActive = false
+    AsyncLifecycle_Begin(m.state.lifecycle, request.itemId)
     m.state.selectedStreams = {
         audio: invalid
         subtitle: invalid
@@ -74,6 +76,7 @@ end sub
 sub onMovieResponse()
     response = m.movieTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "itemId", "movie") <> true then return
 
     if response.ok <> true then
         renderMovie(m.state.item, false)
@@ -122,6 +125,7 @@ end sub
 sub onThemeSongsResponse()
     response = m.themeSongsTask.response
     if response = invalid then return
+    if m.state.lifecycle.isActive <> true then return
     if m.state.themeLookupActive <> true then return
     if response.ok <> true then
         m.log.write("Theme song lookup failed: " + SafeString(response.errorMessage, "Unknown error."))
@@ -186,6 +190,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.state.lifecycle, m.state.request, "itemId")
     if m.state.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
         focusCast()
     else
@@ -197,8 +202,11 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    AsyncLifecycle_Deactivate(m.state.lifecycle)
     m.state.themeLookupActive = false
+    m.movieTask.control = "stop"
     m.themeSongsTask.control = "stop"
+    m.watchedTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -477,6 +485,7 @@ end sub
 sub onWatchedTaskResponse()
     response = m.watchedTask.response
     if response = invalid then return
+    if m.state.lifecycle.isActive <> true then return
 
     if response.ok <> true then
         Status_SetMessage(SafeString(response.errorMessage, "Unable to update watched state."))

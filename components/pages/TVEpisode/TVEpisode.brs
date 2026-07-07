@@ -31,6 +31,7 @@ sub initReferences()
         }
         selectedChapterKey: ""
         focusArea: "toolbar"
+        lifecycle: AsyncLifecycle_Create()
     }
 end sub
 
@@ -82,6 +83,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub onLoadRequestChanged()
     m.state.request = m.top.loadRequest
+    if m.state.request <> invalid then
+        AsyncLifecycle_Begin(m.state.lifecycle, m.state.request.itemId)
+    else
+        AsyncLifecycle_Begin(m.state.lifecycle, invalid)
+    end if
     m.state.itemId = ""
     m.state.itemContent = invalid
     m.state.playSelection = invalid
@@ -371,6 +377,7 @@ end sub
 sub onEpisodeDetailsResponse()
     response = m.episodeDetailsTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "itemId", "tvEpisodeDetails") <> true then return
     if response.ok <> true then
         renderEpisodeContent(m.state.itemContent, false)
         return
@@ -600,6 +607,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.state.lifecycle, m.state.request, "itemId")
     m.top.setFocus(true)
     if m.state.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
         m.cast.callFunc("activate")
@@ -612,6 +620,9 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    AsyncLifecycle_Deactivate(m.state.lifecycle)
+    m.episodeDetailsTask.control = "stop"
+    m.watchedTask.control = "stop"
     m.cast.callFunc("deactivate")
     m.top.setFocus(false)
 end sub
@@ -921,6 +932,7 @@ end sub
 sub onWatchedTaskResponse()
     response = m.watchedTask.response
     if response = invalid then return
+    if m.state.lifecycle.isActive <> true then return
 
     if response.ok <> true then
         Status_SetMessage(SafeString(response.errorMessage, "Unable to update watched state."))

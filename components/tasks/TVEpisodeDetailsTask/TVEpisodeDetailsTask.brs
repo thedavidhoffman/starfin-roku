@@ -13,6 +13,7 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
+        if request <> invalid then validationError.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = validationError
         return
     end if

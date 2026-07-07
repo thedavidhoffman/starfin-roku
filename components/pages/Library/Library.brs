@@ -36,6 +36,7 @@ sub init()
         progressFocusedIndex: 0
         progressHoldKey: ""
         refocusSortButtonAfterLoad: false
+        lifecycle: AsyncLifecycle_Create()
     }
     m.sortButton.selectedSort = getDefaultSortSelection()
     m.pageState.selectedSort = getDefaultSortSelection()
@@ -58,6 +59,7 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
     m.pageState.imageAspect = getLibraryImageAspect()
     if request.sortBy = invalid then request.sortBy = "SortName"
     if request.sortOrder = invalid then request.sortOrder = "Ascending"
@@ -81,6 +83,7 @@ end sub
 sub onLibraryResponse()
     response = m.libraryTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "library") <> true then return
 
     Spinner_Hide()
 
@@ -375,6 +378,7 @@ sub reloadLibraryForSort()
     request.sortBy = SafeString(m.pageState.selectedSort.sortKey, "SortName")
     request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
     m.pageState.request = request
+    AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
     m.pageState.refocusSortButtonAfterLoad = true
     Spinner_Show(0)
     renderItems([])
@@ -444,8 +448,19 @@ end function
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
     m.top.setFocus(true)
     focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    stopLibraryProgressHold()
+    closeLetterGrid(false)
+    m.libraryTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------

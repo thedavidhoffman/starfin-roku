@@ -21,6 +21,7 @@ sub init()
         items: []
         focusedIndex: 0
         scrollOffset: 0
+        lifecycle: AsyncLifecycle_Create()
     }
     m.listLayout = {
         rowCount: 8
@@ -47,6 +48,7 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    AsyncLifecycle_Begin(m.pageState.lifecycle, request.personId)
     m.pageState.items = []
     m.pageState.focusedIndex = 0
     m.pageState.scrollOffset = 0
@@ -68,6 +70,7 @@ end sub
 sub onFilmographyResponse()
     response = m.filmographyTask.response
     if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "personId", "filmography") <> true then return
 
     if response.ok <> true then
         Spinner_Hide()
@@ -79,6 +82,14 @@ sub onFilmographyResponse()
     Spinner_Hide()
     Status_ClearMessage()
     focusListIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    m.filmographyTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -228,6 +239,7 @@ end function
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "personId")
     m.top.setFocus(true)
     focusListIfActive()
 end sub

@@ -13,6 +13,7 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
+        if request <> invalid then validationError.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = validationError
         return
     end if
@@ -20,6 +21,7 @@ sub executeRequest()
     seriesResult = loadSeries(request)
     if seriesResult.ok <> true then
         seriesResult.AddReplace("action", "tvShow")
+        seriesResult.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = seriesResult
         return
     end if
@@ -27,6 +29,7 @@ sub executeRequest()
     seasonsResult = loadSeasons(request)
     if seasonsResult.ok <> true then
         seasonsResult.AddReplace("action", "tvShow")
+        seasonsResult.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = seasonsResult
         return
     end if

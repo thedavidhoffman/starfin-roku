@@ -50,7 +50,10 @@ end function
 ' searchHidePage
 '-------------------------------------------------------------------------------
 sub searchHidePage()
-    if m.searchPage <> invalid then m.searchPage.visible = false
+    if m.searchPage <> invalid then
+        m.searchPage.callFunc("deactivate")
+        m.searchPage.visible = false
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -111,6 +114,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub searchHandleCloseRequested()
     clearStatus()
+    if m.searchPage <> invalid then m.searchPage.callFunc("deactivate")
     resetDynamicPages()
     showHome()
 end sub

@@ -19,6 +19,7 @@ sub init()
         episodeWindowStart: 0
         episodeListScroll: "horizontal"
         focusArea: "episodes"
+        lifecycle: AsyncLifecycle_Create()
     }
 end sub
 
@@ -105,6 +106,7 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    AsyncLifecycle_Begin(m.pageState.lifecycle, request.seasonId)
     m.pageState.season = request.season
     m.pageState.seasons = getSeasonsFromRequest(request)
     m.pageState.previousSeason = invalid
@@ -149,9 +151,11 @@ sub onTVSeasonResponse()
     if response = invalid then return
 
     if SafeString(response.action, "") = "nextSeasonEpisodes" then
+        if isCurrentNextSeasonResponse(response) <> true then return
         onNextSeasonEpisodesResponse(response)
         return
     end if
+    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeason") <> true then return
 
     if response.ok <> true then
         Spinner_Hide()
@@ -198,6 +202,28 @@ sub onNextSeasonEpisodesResponse(response as object)
 
     emitPendingEpisodeSelection()
 end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    m.pageState.pendingEpisodeSelection = invalid
+    m.tvSeasonTask.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' isCurrentNextSeasonResponse
+'-------------------------------------------------------------------------------
+function isCurrentNextSeasonResponse(response as dynamic) as boolean
+    if m.pageState.lifecycle.isActive <> true then return false
+    if SafeString(response.action, "") <> "nextSeasonEpisodes" then return false
+
+    expectedSeasonId = ""
+    if m.pageState.nextSeason <> invalid then expectedSeasonId = getSeasonId(m.pageState.nextSeason)
+    responseKey = SafeString(response.seasonId, "")
+    return expectedSeasonId <> "" and responseKey = expectedSeasonId
+end function
 
 '-------------------------------------------------------------------------------
 ' onEpisodeFocused
@@ -495,6 +521,15 @@ sub requestNextSeasonEpisodes()
         return
     end if
 
+    nextSeasonId = ""
+    if m.pageState.nextSeason <> invalid then nextSeasonId = getSeasonId(m.pageState.nextSeason)
+    if nextSeasonId = "" then
+        m.pageState.nextSeasonEpisodesLoaded = true
+        m.pageState.nextSeasonEpisodes = []
+        emitPendingEpisodeSelection()
+        return
+    end if
+
     m.tvSeasonTask.request = {
         action: "nextSeasonEpisodes"
         server: request.server
@@ -709,6 +744,7 @@ end function
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "seasonId")
     m.top.setFocus(true)
     refreshPlaybackProgressChange()
     focusEpisodesIfActive()
