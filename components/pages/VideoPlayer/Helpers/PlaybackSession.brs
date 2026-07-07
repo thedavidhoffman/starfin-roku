@@ -62,12 +62,147 @@ sub applyPlaybackSessionState(response as object, request as object, item as dyn
         index: getPlaybackQueueIndex(request.playbackQueueIndex)
     }
     m.context = {
+        item: item
         series: request.series
         season: request.season
     }
+    updatePlaybackSkipAvailability(request, item)
     m.trickplay = buildTrickplayState(item, m.session.itemId)
     startTrickplayPreload()
 end sub
+
+'-------------------------------------------------------------------------------
+' updatePlaybackSkipAvailability
+'-------------------------------------------------------------------------------
+sub updatePlaybackSkipAvailability(request as object, item as dynamic)
+    isEpisode = isTVEpisodePlayback(request, item)
+    isMovie = isMoviePlayback(request, item)
+    m.playbackControls.skipBackEnabled = isEpisode or isMovie
+    m.playbackControls.skipForwardEnabled = isEpisode and hasQueueItemAtOffset(1)
+end sub
+
+'-------------------------------------------------------------------------------
+' isMoviePlayback
+'-------------------------------------------------------------------------------
+function isMoviePlayback(request as dynamic, item as dynamic) as boolean
+    if isTVEpisodePlayback(request, item) = true then return false
+    if item = invalid then return false
+
+    return LCase(FirstNonEmpty([item.Type], "")) = "movie"
+end function
+
+'-------------------------------------------------------------------------------
+' hasQueueItemAtOffset
+'-------------------------------------------------------------------------------
+function hasQueueItemAtOffset(offset as integer) as boolean
+    if m.queue = invalid then return false
+    if m.queue.items = invalid then return false
+
+    targetIndex = m.queue.index + offset
+    return targetIndex >= 0 and targetIndex < m.queue.items.Count()
+end function
+
+'-------------------------------------------------------------------------------
+' getQueueItemAtOffset
+'-------------------------------------------------------------------------------
+function getQueueItemAtOffset(offset as integer) as dynamic
+    if hasQueueItemAtOffset(offset) <> true then return invalid
+
+    return m.queue.items[m.queue.index + offset]
+end function
+
+'-------------------------------------------------------------------------------
+' onSkipBackPressed
+'-------------------------------------------------------------------------------
+sub onSkipBackPressed()
+    request = m.top.playRequest
+    item = getCurrentPlaybackItem(request)
+    if isTVEpisodePlayback(request, item) <> true and isMoviePlayback(request, item) <> true then return
+
+    if isTVEpisodePlayback(request, item) = true and getCurrentPlaybackPosition() < 15 then
+        if startQueueItemAtOffset(-1) = true then return
+    end if
+
+    restartCurrentPlayback()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSkipForwardPressed
+'-------------------------------------------------------------------------------
+sub onSkipForwardPressed()
+    request = m.top.playRequest
+    item = getCurrentPlaybackItem(request)
+
+    if isTVEpisodePlayback(request, item) <> true then return
+    startQueueItemAtOffset(1)
+end sub
+
+'-------------------------------------------------------------------------------
+' getCurrentPlaybackItem
+'-------------------------------------------------------------------------------
+function getCurrentPlaybackItem(request as dynamic) as dynamic
+    if m.context <> invalid and m.context.item <> invalid then return m.context.item
+    if request <> invalid then return request.item
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' restartCurrentPlayback
+'-------------------------------------------------------------------------------
+sub restartCurrentPlayback()
+    stopSeekTimers()
+    targetPosition = 0
+    m.playback.isSeeking = false
+    m.playback.previewPosition = targetPosition
+    m.playback.position = targetPosition
+    m.videoPlayer.seek = targetPosition
+    if m.playback.isPlaying = true then
+        m.videoPlayer.control = "resume"
+    else
+        m.videoPlayer.control = "pause"
+    end if
+
+    m.playbackControls.isSeeking = false
+    m.playbackControls.thumbnailData = {}
+    m.playbackControls.position = targetPosition
+    m.playbackControls.previewPosition = targetPosition
+    showControls(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' startQueueItemAtOffset
+'-------------------------------------------------------------------------------
+function startQueueItemAtOffset(offset as integer) as boolean
+    queueItem = getQueueItemAtOffset(offset)
+    if queueItem = invalid then return false
+    if SafeString(queueItem.itemId, "") = "" then return false
+
+    emitPlaybackProgress(false)
+    m.top.playRequest = buildQueuePlaybackRequest(queueItem, m.queue.index + offset)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' buildQueuePlaybackRequest
+'-------------------------------------------------------------------------------
+function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) as object
+    season = m.context.season
+    if queueItem.season <> invalid then season = queueItem.season
+
+    return {
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        itemId: SafeString(queueItem.itemId, "")
+        item: queueItem.item
+        series: m.context.series
+        season: season
+        startPositionTicks: 0
+        playbackQueue: m.queue.items
+        playbackQueueIndex: queueIndex
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' buildVideoContent

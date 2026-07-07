@@ -49,6 +49,7 @@ sub initReferences()
     }
 
     m.context = {
+        item: invalid
         series: invalid
         season: invalid
     }
@@ -90,6 +91,8 @@ sub initHandlers()
     m.videoPlayer.observeField("position", "onVideoPositionChanged")
     m.videoPlayer.observeField("duration", "onVideoDurationChanged")
     m.playbackControls.observeField("playPausePressed", "onPlayPausePressed")
+    m.playbackControls.observeField("skipBackPressed", "onSkipBackPressed")
+    m.playbackControls.observeField("skipForwardPressed", "onSkipForwardPressed")
     m.playbackControls.observeField("last5Pressed", "onLast5Pressed")
     m.playbackControls.observeField("progressLeftPressed", "onProgressLeftPressed")
     m.playbackControls.observeField("progressRightPressed", "onProgressRightPressed")

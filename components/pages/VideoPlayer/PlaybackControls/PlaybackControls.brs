@@ -79,6 +79,7 @@ sub init()
     onSubtitleChanged()
     onPlayingChanged()
     onOptionsChanged()
+    onSkipButtonAvailabilityChanged()
     updateButtonFocus()
 end sub
 
@@ -152,6 +153,21 @@ sub onOptionsChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onSkipButtonAvailabilityChanged
+'-------------------------------------------------------------------------------
+sub onSkipButtonAvailabilityChanged()
+    m.skipBackButton.enabled = m.top.skipBackEnabled <> false
+    m.skipForwardButton.enabled = m.top.skipForwardEnabled <> false
+    rebuildButtonList()
+    if m.controlState.focusArea = "buttons" and m.top.isInFocusChain() = true then
+        focusCurrentButton()
+        return
+    end if
+
+    updateButtonFocus()
+end sub
+
+'-------------------------------------------------------------------------------
 ' layoutOptionButtons
 '-------------------------------------------------------------------------------
 sub layoutOptionButtons()
@@ -220,14 +236,14 @@ end sub
 ' onSkipBackButtonSelected
 '-------------------------------------------------------------------------------
 sub onSkipBackButtonSelected()
-    m.top.progressRewindPressed = true
+    if m.top.skipBackEnabled <> false then m.top.skipBackPressed = true
 end sub
 
 '-------------------------------------------------------------------------------
 ' onSkipForwardButtonSelected
 '-------------------------------------------------------------------------------
 sub onSkipForwardButtonSelected()
-    m.top.progressFastForwardPressed = true
+    if m.top.skipForwardEnabled <> false then m.top.skipForwardPressed = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -313,7 +329,7 @@ sub rebuildButtonList()
     buttons = []
     allButtons = getAllButtons()
     for each button in allButtons
-        if button <> invalid and button.visible <> false then buttons.Push(button)
+        if button <> invalid and button.visible <> false and button.enabled <> false then buttons.Push(button)
     end for
 
     m.controlState.buttons = buttons
