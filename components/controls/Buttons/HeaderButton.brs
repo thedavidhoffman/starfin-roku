@@ -64,7 +64,7 @@ sub updateTextLayout(width as integer, height as integer)
 
     m.textLabel.horizAlign = getTextAlign()
     m.textLabel.width = width - (inset * 2)
-    m.textLabel.translation = [inset, int((height - 32) / 2)]
+    m.textLabel.translation = [inset, int((height - 28) / 2)]
 end sub
 
 '-------------------------------------------------------------------------------

@@ -911,7 +911,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "up" and m.sortButton.isInFocusChain() then return requestHeaderFocus()
     if key = "up" and m.letterGutterButton.isInFocusChain() then return requestHeaderFocus()
     if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
-    if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return focusLetterGutterButton()
+    if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return requestHeaderFocus()
     if key = "up" and isItemsGridAtFirstRow() then
         stopLibraryProgressHold("up")
         if canFocusSortButton() <> true then return requestHeaderFocus()
