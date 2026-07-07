@@ -288,9 +288,16 @@ sub seekToLast5Seconds()
     if targetPosition < 0 then targetPosition = 0
 
     stopSeekTimers()
+    m.playback.isSeeking = false
     m.videoPlayer.seek = targetPosition
     m.playback.position = targetPosition
     m.playback.previewPosition = targetPosition
+    if m.playback.isPlaying = true then
+        m.videoPlayer.control = "resume"
+    else
+        m.videoPlayer.control = "pause"
+    end if
+
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
     m.playbackControls.position = targetPosition

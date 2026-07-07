@@ -3,7 +3,6 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.logoBanner = m.top.findNode("logoBanner")
-    m.finishedLabel = m.top.findNode("finishedLabel")
     m.nextCountdownLabel = m.top.findNode("nextCountdownLabel")
     m.finishedCard = m.top.findNode("finishedCard")
     m.nextCard = m.top.findNode("nextCard")
@@ -14,7 +13,6 @@ sub init()
         playTriggered: false
     }
     m.countdownTimer.observeField("fire", "onCountdownTimerFire")
-    m.finishedLabel.text = "Just watched"
     updateCountdownLabel()
     m.top.visible = false
 end sub
