@@ -61,6 +61,11 @@ sub navHandleOverlayClosed()
         return
     end if
 
+    if request <> invalid and request.id = "mediaInfo" then
+        navHandleMediaInfoOverlayClosed(closed)
+        return
+    end if
+
     if request <> invalid and isStreamOptionsOverlayRequest(request) then
         navHandleStreamOptionsOverlayClosed(closed)
         return
@@ -97,6 +102,21 @@ sub navHandleDescriptionOverlayClosed(closed as object)
         m.tvEpisodePage.callFunc("handleDescriptionOverlayClosed")
     else if sourcePage = "tvShow" and m.tvShowPage <> invalid then
         m.tvShowPage.callFunc("handleDescriptionOverlayClosed")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleMediaInfoOverlayClosed
+'-------------------------------------------------------------------------------
+sub navHandleMediaInfoOverlayClosed(closed as object)
+    request = closed.request
+    if request = invalid then return
+
+    sourcePage = SafeString(request.sourcePage, "")
+    if sourcePage = "movie" and m.moviePage <> invalid then
+        m.moviePage.callFunc("handleMediaInfoOverlayClosed")
+    else if sourcePage = "tvEpisode" and m.tvEpisodePage <> invalid then
+        m.tvEpisodePage.callFunc("handleMediaInfoOverlayClosed")
     end if
 end sub
 

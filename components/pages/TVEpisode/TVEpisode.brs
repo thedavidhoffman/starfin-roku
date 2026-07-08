@@ -48,6 +48,7 @@ sub initHandlers()
     m.mediaToolbar.observeField("subtitlesSelected", "onMediaToolbarSubtitlesSelected")
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
     m.mediaToolbar.observeField("chaptersSelected", "onMediaToolbarChaptersSelected")
+    m.mediaToolbar.observeField("mediaInfoSelected", "onMediaToolbarMediaInfoSelected")
     m.mediaToolbar.observeField("seriesSelected", "onMediaToolbarSeriesSelected")
     m.mediaToolbar.observeField("seasonSelected", "onMediaToolbarSeasonSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
@@ -664,6 +665,13 @@ sub handleDescriptionOverlayClosed()
 end sub
 
 '-------------------------------------------------------------------------------
+' handleMediaInfoOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleMediaInfoOverlayClosed()
+    focusMediaToolbar()
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusCast
 '-------------------------------------------------------------------------------
 sub focusCast()
@@ -840,6 +848,25 @@ sub onMediaToolbarChaptersSelected()
         chapters: chapters
         selectedChapterKey: m.state.selectedChapterKey
     })
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaToolbarMediaInfoSelected
+'-------------------------------------------------------------------------------
+sub onMediaToolbarMediaInfoSelected()
+    item = m.state.itemContent
+    if item = invalid or item.raw = invalid then return
+
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "mediaInfo"
+    m.top.overlayRequested = {
+        id: "mediaInfo"
+        sourcePage: "tvEpisode"
+        componentName: "MediaInfo"
+        openFunction: "openMediaInfo"
+        closeField: "closeRequested"
+        item: item.raw
+    }
 end sub
 
 '-------------------------------------------------------------------------------

@@ -21,6 +21,7 @@ sub init()
     m.mediaToolbar.observeField("subtitlesSelected", "onMediaToolbarSubtitlesSelected")
     m.mediaToolbar.observeField("audioSelected", "onMediaToolbarAudioSelected")
     m.mediaToolbar.observeField("chaptersSelected", "onMediaToolbarChaptersSelected")
+    m.mediaToolbar.observeField("mediaInfoSelected", "onMediaToolbarMediaInfoSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.streamOptions.observeField("overlayRequested", "onStreamOptionsOverlayRequested")
@@ -225,6 +226,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub handleDescriptionOverlayClosed()
     focusMediaDescription()
+end sub
+
+'-------------------------------------------------------------------------------
+' handleMediaInfoOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleMediaInfoOverlayClosed()
+    focusMediaToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -522,6 +530,25 @@ sub onMediaToolbarChaptersSelected()
         chapters: chapters
         selectedChapterKey: m.state.selectedChapterKey
     })
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaToolbarMediaInfoSelected
+'-------------------------------------------------------------------------------
+sub onMediaToolbarMediaInfoSelected()
+    item = m.state.item
+    if item = invalid then return
+
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "mediaInfo"
+    m.top.overlayRequested = {
+        id: "mediaInfo"
+        sourcePage: "movie"
+        componentName: "MediaInfo"
+        openFunction: "openMediaInfo"
+        closeField: "closeRequested"
+        item: item
+    }
 end sub
 
 '-------------------------------------------------------------------------------

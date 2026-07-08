@@ -13,6 +13,7 @@ sub init()
     m.audioButton = m.top.findNode("audioButton")
     m.chaptersButton = m.top.findNode("chaptersButton")
     m.videoButton = m.top.findNode("videoButton")
+    m.mediaInfoButton = m.top.findNode("mediaInfoButton")
     m.seasonButton = m.top.findNode("seasonButton")
     m.resumeButton.observeField("buttonSelected", "onResumeButtonSelected")
     m.restartButton.observeField("buttonSelected", "onRestartButtonSelected")
@@ -24,6 +25,7 @@ sub init()
     m.audioButton.observeField("buttonSelected", "onAudioButtonSelected")
     m.chaptersButton.observeField("buttonSelected", "onChaptersButtonSelected")
     m.videoButton.observeField("buttonSelected", "onVideoButtonSelected")
+    m.mediaInfoButton.observeField("buttonSelected", "onMediaInfoButtonSelected")
     m.seasonButton.observeField("buttonSelected", "onSeasonButtonSelected")
     m.toolbarLayout = {
         collapsedWidth: 64
@@ -169,6 +171,7 @@ sub updateToolbarButtons()
     supportsWatchedActions = m.top.supportsWatchedActions <> false
     mediaType = m.top.mediaType
     isMovie = mediaType = "movie"
+    isEpisode = mediaType = "tv-episode"
     isSeason = mediaType = "tv-season"
     hasSubtitleOptions = m.top.subtitleStreamCount > 0
     hasAudioOptions = m.top.audioStreamCount > 1
@@ -184,6 +187,7 @@ sub updateToolbarButtons()
     m.audioButton.visible = isSeason <> true and hasAudioOptions
     m.chaptersButton.visible = isSeason <> true and hasChapterOptions
     m.videoButton.visible = isSeason <> true and isMovie <> true
+    m.mediaInfoButton.visible = isMovie or isEpisode
     m.seriesButton.visible = isMovie <> true
     m.seasonButton.visible = isMovie <> true
 
@@ -193,6 +197,7 @@ sub updateToolbarButtons()
         if hasAudioOptions then streamButtons.Push(m.audioButton)
         if hasChapterOptions then streamButtons.Push(m.chaptersButton)
         if isMovie <> true then streamButtons.Push(m.videoButton)
+        if isMovie or isEpisode then streamButtons.Push(m.mediaInfoButton)
     end if
 
     if supportsWatchedActions <> true then
@@ -291,6 +296,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onVideoButtonSelected()
     m.top.videoSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaInfoButtonSelected
+'-------------------------------------------------------------------------------
+sub onMediaInfoButtonSelected()
+    m.top.mediaInfoSelected = true
 end sub
 
 '-------------------------------------------------------------------------------
