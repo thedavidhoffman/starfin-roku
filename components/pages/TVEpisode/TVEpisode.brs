@@ -210,8 +210,6 @@ end function
 ' getMediaShellLogoUrl
 '-------------------------------------------------------------------------------
 function getMediaShellLogoUrl(item as dynamic) as string
-    if isSeasonDetailsItem(item) then return ""
-
     return getSeriesLogoUrl(m.state.request)
 end function
 
@@ -219,8 +217,6 @@ end function
 ' getMediaShellLogoTitle
 '-------------------------------------------------------------------------------
 function getMediaShellLogoTitle(item as dynamic) as string
-    if isSeasonDetailsItem(item) then return ""
-
     seriesName = ""
     if item <> invalid and item.raw <> invalid then seriesName = FirstNonEmpty([item.raw.SeriesName], "")
 
@@ -513,6 +509,11 @@ function getEpisodePosterUrl(item as dynamic) as string
     imageSize = DeviceCapabilities_GetMaxScreenImageSize()
     request = m.state.request
     if request = invalid then return ""
+
+    if SafeString(item.Type, "") = "Season" then
+        posterUrl = SafeString(request.posterUrl, "")
+        if posterUrl <> "" then return posterUrl
+    end if
 
     itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""

@@ -220,7 +220,7 @@ end sub
 ' getLogoFallbackTitle
 '-------------------------------------------------------------------------------
 function getLogoFallbackTitle(title as string, logoTitle as string, mediaType as string) as string
-    if mediaType = "tv-episode" then return logoTitle
+    if mediaType = "tv-episode" or mediaType = "tv-season" then return logoTitle
     return title
 end function
 

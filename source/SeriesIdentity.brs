@@ -16,6 +16,7 @@ function SeriesIdentity_FromItem(server as string, item as dynamic) as object
             logoUrl: ""
             thumbUrl: ""
             backdropUrl: ""
+            detailBackdropUrl: ""
         }
     end if
 
@@ -25,6 +26,7 @@ function SeriesIdentity_FromItem(server as string, item as dynamic) as object
         logoUrl: SeriesIdentity_GetLogoUrl(server, item)
         thumbUrl: SeriesIdentity_GetImageUrl(server, item, "Thumb", 530, 298)
         backdropUrl: SeriesIdentity_GetImageUrl(server, item, "Backdrop", 530, 298)
+        detailBackdropUrl: SeriesIdentity_GetDetailBackdropUrl(server, item)
     }
 end function
 
@@ -67,4 +69,23 @@ function SeriesIdentity_GetImageUrl(server as string, item as dynamic, imageType
     if tag = "" then return ""
 
     return Url_BuildImageUrl(server, itemId, imageType, tag, width, height, invalid)
+end function
+
+'-------------------------------------------------------------------------------
+' SeriesIdentity_GetDetailBackdropUrl
+'-------------------------------------------------------------------------------
+function SeriesIdentity_GetDetailBackdropUrl(server as string, item as dynamic) as string
+    if item = invalid then return ""
+
+    detailBackdropUrl = FirstNonEmpty([item.detailBackdropUrl], "")
+    if detailBackdropUrl <> "" then return detailBackdropUrl
+
+    itemId = FirstNonEmpty([item.Id, item.SeriesId], "")
+    if itemId = "" then return ""
+
+    tag = ""
+    if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
+    if tag = "" then return ""
+
+    return Url_BuildImageUrl(server, itemId, "Backdrop", tag, 1920, 1080, invalid)
 end function

@@ -580,11 +580,23 @@ function buildEpisodeLoadRequest(node as dynamic) as dynamic
         seasons: m.pageState.seasons
         itemId: playSelection.itemId
         item: playSelection.item
-        posterUrl: SafeString(node.HDPosterUrl, "")
+        posterUrl: getEpisodeDetailBackdropUrl(node)
         startPositionTicks: playSelection.startPositionTicks
         playbackQueue: playSelection.playbackQueue
         playbackQueueIndex: playSelection.playbackQueueIndex
     }
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeDetailBackdropUrl
+'-------------------------------------------------------------------------------
+function getEpisodeDetailBackdropUrl(node as dynamic) as string
+    if SafeString(node.itemType, "") = "SeasonSummary" then
+        detailBackdropUrl = SafeString(node.detailBackdropUrl, "")
+        if detailBackdropUrl <> "" then return detailBackdropUrl
+    end if
+
+    return SafeString(node.HDPosterUrl, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -661,6 +673,7 @@ sub appendSeasonSummaryItem(row as object)
         itemType: "SeasonSummary"
         episodeCount: FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
         seasonYear: getSeasonYearText(season)
+        detailBackdropUrl: getSeasonDetailBackdropUrl()
         raw: season
     })
 end sub
@@ -1165,10 +1178,10 @@ function getSeasonBackgroundUrl(season as dynamic) as string
         imageUrl = FirstNonEmpty([request.series.thumbUrl], "")
         if imageUrl <> "" then return imageUrl
 
-        imageUrl = FirstNonEmpty([request.series.backdropUrl], "")
+        imageUrl = getImageUrl(request.series, "Thumb", 530, 298)
         if imageUrl <> "" then return imageUrl
 
-        imageUrl = getImageUrl(request.series, "Thumb", 530, 298)
+        imageUrl = FirstNonEmpty([request.series.backdropUrl], "")
         if imageUrl <> "" then return imageUrl
 
         imageUrl = getImageUrl(request.series, "Backdrop", 530, 298)
@@ -1176,6 +1189,22 @@ function getSeasonBackgroundUrl(season as dynamic) as string
     end if
 
     return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonDetailBackdropUrl
+'-------------------------------------------------------------------------------
+function getSeasonDetailBackdropUrl() as string
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    imageUrl = FirstNonEmpty([request.series.detailBackdropUrl], "")
+    if imageUrl <> "" then return imageUrl
+
+    imageUrl = FirstNonEmpty([request.series.backdropUrl], "")
+    if imageUrl <> "" then return imageUrl
+
+    return getImageUrl(request.series, "Backdrop", 1920, 1080)
 end function
 
 '-------------------------------------------------------------------------------
