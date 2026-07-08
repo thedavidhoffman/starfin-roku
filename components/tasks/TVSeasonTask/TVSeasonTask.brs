@@ -105,7 +105,7 @@ function loadSeason(request as object) as object
         enableTotalRecordCount: false
     }
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + request.seasonId + Url_BuildQueryString(params)
+    url = request.server + "/Items/" + request.seasonId + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -121,7 +121,7 @@ function loadEpisodes(request as object, seasonId as string) as object
         imageTypeLimit: 1
     }
 
-    url = NormalizeServerUrl(request.server) + "/Shows/" + request.seriesId + "/Episodes" + Url_BuildQueryString(params)
+    url = request.server + "/Shows/" + request.seriesId + "/Episodes" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -136,7 +136,7 @@ function loadSeasons(request as object) as object
         enableTotalRecordCount: false
     }
 
-    url = NormalizeServerUrl(request.server) + "/Shows/" + request.seriesId + "/Seasons" + Url_BuildQueryString(params)
+    url = request.server + "/Shows/" + request.seriesId + "/Seasons" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -165,7 +165,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "tvSeason", errorMessage: "Invalid season request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "tvSeason", errorMessage: "Invalid season server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "tvSeason", errorMessage: "Invalid season server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "tvSeason", errorMessage: "Invalid season token." }
     if request.seriesId = invalid or request.seriesId = "" then return { ok: false, action: "tvSeason", errorMessage: "Invalid series item." }
     if request.seasonId = invalid or request.seasonId = "" then return { ok: false, action: "tvSeason", errorMessage: "Invalid season item." }

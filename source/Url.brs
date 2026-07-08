@@ -1,4 +1,27 @@
 '-------------------------------------------------------------------------------
+' Url_NormalizeServer
+'-------------------------------------------------------------------------------
+function Url_NormalizeServer(server as string) as string
+
+    if server = invalid then return ""
+
+    normalized = String_Trim(server)
+
+    if normalized = "" then return ""
+
+    if Instr(1, LCase(normalized), "http://") <> 1 and Instr(1, LCase(normalized), "https://") <> 1 then
+        normalized = "http://" + normalized
+    end if
+
+    while Right(normalized, 1) = "/"
+        normalized = Left(normalized, Len(normalized) - 1)
+    end while
+
+    return normalized
+
+end function
+
+'-------------------------------------------------------------------------------
 ' Url_BuildQueryString
 '-------------------------------------------------------------------------------
 function Url_BuildQueryString(params as object) as string
@@ -21,7 +44,7 @@ end function
 ' Url_BuildImageUrl
 '-------------------------------------------------------------------------------
 function Url_BuildImageUrl(server as string, itemId as string, imageType as string, tag as string, width as integer, height as integer, options = invalid as dynamic) as string
-    serverUrl = NormalizeServerUrl(server)
+    serverUrl = Url_NormalizeServer(server)
     if serverUrl = "" then return ""
     if itemId = "" or imageType = "" then return ""
 

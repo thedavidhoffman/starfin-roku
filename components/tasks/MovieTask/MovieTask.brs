@@ -23,7 +23,7 @@ sub executeRequest()
         fields: "Chapters,Trickplay,Genres,People,MediaSources,MediaStreams,Overview,UserData"
     }
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)
+    url = request.server + "/Items/" + request.itemId + Url_BuildQueryString(params)
     result = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "movie")
@@ -45,7 +45,7 @@ end sub
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "movie", errorMessage: "Invalid movie request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "movie", errorMessage: "Invalid movie server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "movie", errorMessage: "Invalid movie server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "movie", errorMessage: "Invalid movie token." }
     if request.itemId = invalid or request.itemId = "" then return { ok: false, action: "movie", errorMessage: "Invalid movie item." }
 

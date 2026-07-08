@@ -21,7 +21,7 @@ sub executeRequest()
         UserId: SafeString(request.userId, "")
         EnableTotalRecordCount: false
     }
-    url = NormalizeServerUrl(request.server) + "/Items/" + SafeString(request.itemId, "") + "/ThemeSongs" + Url_BuildQueryString(params)
+    url = request.server + "/Items/" + SafeString(request.itemId, "") + "/ThemeSongs" + Url_BuildQueryString(params)
     result = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "themeSongs")
@@ -87,7 +87,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "themeSongs", errorMessage: "Invalid theme song request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "themeSongs", errorMessage: "Invalid theme song server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "themeSongs", errorMessage: "Invalid theme song server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "themeSongs", errorMessage: "Invalid theme song token." }
     if SafeString(request.itemId, "") = "" then return { ok: false, action: "themeSongs", errorMessage: "Invalid theme song item." }
 

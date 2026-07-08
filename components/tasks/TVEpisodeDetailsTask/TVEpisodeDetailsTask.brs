@@ -62,7 +62,7 @@ function loadEpisode(request as object) as object
         fields: "People,Overview,MediaStreams,MediaSources,UserData"
     }
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)
+    url = request.server + "/Items/" + request.itemId + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -76,7 +76,7 @@ function loadSeries(request as object, seriesId as string) as object
         imageTypeLimit: 1
     }
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + seriesId + Url_BuildQueryString(params)
+    url = request.server + "/Items/" + seriesId + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -118,7 +118,7 @@ function loadEpisodes(request as object, seriesId as string, seasonId as string)
         fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
     }
 
-    url = NormalizeServerUrl(request.server) + "/Shows/" + seriesId + "/Episodes" + Url_BuildQueryString(params)
+    url = request.server + "/Shows/" + seriesId + "/Episodes" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -184,7 +184,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "tvEpisodeDetails", errorMessage: "Invalid episode details request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "tvEpisodeDetails", errorMessage: "Invalid episode details server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "tvEpisodeDetails", errorMessage: "Invalid episode details server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "tvEpisodeDetails", errorMessage: "Invalid episode details token." }
     if request.itemId = invalid or request.itemId = "" then return { ok: false, action: "tvEpisodeDetails", errorMessage: "Invalid episode details item." }
 

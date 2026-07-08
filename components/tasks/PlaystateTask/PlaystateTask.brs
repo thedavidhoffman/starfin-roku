@@ -23,7 +23,7 @@ sub executeRequest()
         return
     end if
 
-    url = NormalizeServerUrl(request.server) + endpoint
+    url = request.server + endpoint
     body = buildPlaystateBody(request)
     m.log.write("Posting " + SafeString(request.status, "") + " itemId=" + SafeString(request.itemId, "") + " positionTicks=" + SafeString(getPositionTicks(request.position), "") + " endpoint=" + endpoint)
     result = HttpClient_Request(url, "POST", invalid, body, JellyfinAuth_BuildTokenHeaders(request.token))
@@ -44,7 +44,7 @@ end sub
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "playstate", errorMessage: "Invalid playstate request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "playstate", errorMessage: "Invalid playstate server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "playstate", errorMessage: "Invalid playstate server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "playstate", errorMessage: "Invalid playstate token." }
     if request.itemId = invalid or request.itemId = "" then return { ok: false, action: "playstate", errorMessage: "Invalid playstate item." }
 

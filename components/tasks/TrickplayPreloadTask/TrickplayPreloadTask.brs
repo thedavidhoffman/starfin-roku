@@ -124,7 +124,7 @@ end sub
 ' getRemoteTrickplayUrl
 '-------------------------------------------------------------------------------
 function getRemoteTrickplayUrl(request as object, tileIndex as integer) as string
-    server = NormalizeServerUrl(request.server)
+    server = request.server
     itemId = SafeString(request.itemId, "")
     token = SafeString(request.token, "")
     tileWidth = getTileWidth(request)

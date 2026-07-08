@@ -64,7 +64,7 @@ function searchItems(request as object, includeItemTypes as string, fields as st
         EnableTotalRecordCount: false
     }
 
-    url = NormalizeServerUrl(request.server) + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
+    url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -80,7 +80,7 @@ function searchPeople(request as object) as object
         EnableTotalRecordCount: false
     }
 
-    url = NormalizeServerUrl(request.server) + "/Persons" + Url_BuildQueryString(params)
+    url = request.server + "/Persons" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -89,7 +89,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "search", errorMessage: "Invalid search request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "search", errorMessage: "Invalid search server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "search", errorMessage: "Invalid search server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "search", errorMessage: "Invalid search token." }
     if request.userId = invalid or request.userId = "" then return { ok: false, action: "search", errorMessage: "Invalid search user." }
     if String_Trim(SafeString(request.query, "")) = "" then return { ok: false, action: "search", errorMessage: "Enter a search term." }

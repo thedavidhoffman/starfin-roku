@@ -18,7 +18,7 @@ sub executeRequest()
     end if
 
     itemId = SafeString(request.itemId, "")
-    url = NormalizeServerUrl(request.server) + "/Items/" + itemId + "/PlaybackInfo" + Url_BuildQueryString({
+    url = request.server + "/Items/" + itemId + "/PlaybackInfo" + Url_BuildQueryString({
         UserId: SafeString(request.userId, "")
         IsPlayback: true
         EnableDirectPlay: true
@@ -74,7 +74,7 @@ function buildThemeAudioStreamInfo(request as object, playbackInfo as dynamic) a
     }
     return {
         ok: true
-        streamUrl: NormalizeServerUrl(request.server) + "/Audio/" + SafeString(request.itemId, "") + "/stream" + Url_BuildQueryString(streamParams)
+        streamUrl: request.server + "/Audio/" + SafeString(request.itemId, "") + "/stream" + Url_BuildQueryString(streamParams)
         streamFormat: getStreamFormat(container)
     }
 end function
@@ -117,9 +117,9 @@ end function
 '-------------------------------------------------------------------------------
 function buildServerUrl(server as string, path as string) as string
     if Instr(1, LCase(path), "http://") = 1 or Instr(1, LCase(path), "https://") = 1 then return path
-    if Left(path, 1) = "/" then return NormalizeServerUrl(server) + path
+    if Left(path, 1) = "/" then return server + path
 
-    return NormalizeServerUrl(server) + "/" + path
+    return server + "/" + path
 end function
 
 '-------------------------------------------------------------------------------
@@ -138,7 +138,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "themeAudioPlaybackInfo", errorMessage: "Invalid theme audio request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "themeAudioPlaybackInfo", errorMessage: "Invalid theme audio server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "themeAudioPlaybackInfo", errorMessage: "Invalid theme audio server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "themeAudioPlaybackInfo", errorMessage: "Invalid theme audio token." }
     if SafeString(request.itemId, "") = "" then return { ok: false, action: "themeAudioPlaybackInfo", errorMessage: "Invalid theme audio item." }
 

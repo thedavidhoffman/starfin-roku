@@ -44,7 +44,7 @@ sub executeRequest()
     if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex
     if requestedSubtitleStreamIndex >= -1 then params.SubtitleStreamIndex = requestedSubtitleStreamIndex
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + "/PlaybackInfo" + Url_BuildQueryString(params)
+    url = request.server + "/Items/" + request.itemId + "/PlaybackInfo" + Url_BuildQueryString(params)
     body = buildPlaybackInfoBody()
     logPlaybackRequest(request, url, body)
 
@@ -142,7 +142,7 @@ end sub
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback token." }
     if request.itemId = invalid or request.itemId = "" then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback item." }
 
@@ -182,7 +182,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
             if isLiveTvPlaybackRequest(request) <> true and mediaSourceId <> "" then streamParams.MediaSourceId = mediaSourceId
             if audioStreamIndex >= 0 then streamParams.AudioStreamIndex = audioStreamIndex
             if requestedSubtitleStreamIndex >= -1 then streamParams.SubtitleStreamIndex = requestedSubtitleStreamIndex
-            streamUrl = NormalizeServerUrl(request.server) + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
+            streamUrl = request.server + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
         end if
         playbackMethod = "direct"
     end if
@@ -362,9 +362,9 @@ end function
 '-------------------------------------------------------------------------------
 function buildServerUrl(server as string, path as string) as string
     if Instr(1, LCase(path), "http://") = 1 or Instr(1, LCase(path), "https://") = 1 then return path
-    if Left(path, 1) = "/" then return NormalizeServerUrl(server) + path
+    if Left(path, 1) = "/" then return server + path
 
-    return NormalizeServerUrl(server) + "/" + path
+    return server + "/" + path
 end function
 
 '-------------------------------------------------------------------------------

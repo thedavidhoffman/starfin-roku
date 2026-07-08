@@ -40,7 +40,7 @@ function markAsWatched(request as object) as object
         PlaybackPositionTicks: 0
     }
 
-    url = NormalizeServerUrl(request.server) + "/UserPlayedItems/" + request.itemId + Url_BuildQueryString(params)
+    url = request.server + "/UserPlayedItems/" + request.itemId + Url_BuildQueryString(params)
     result = HttpClient_Request(url, "POST", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "MarkAsWatched")
@@ -67,7 +67,7 @@ function markAsUnwatched(request as object) as object
         userId: SafeString(request.userId, "")
     }
 
-    url = NormalizeServerUrl(request.server) + "/UserPlayedItems/" + request.itemId + Url_BuildQueryString(params)
+    url = request.server + "/UserPlayedItems/" + request.itemId + Url_BuildQueryString(params)
     result = HttpClient_Request(url, "DELETE", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "MarkAsUnwatched")
@@ -88,7 +88,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     action = SafeString(request.action, "")
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: action, errorMessage: "Invalid watched request server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: action, errorMessage: "Invalid watched request server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: action, errorMessage: "Invalid watched request token." }
     if request.userId = invalid or request.userId = "" then return { ok: false, action: action, errorMessage: "Invalid watched request user." }
     if request.itemId = invalid or request.itemId = "" then return { ok: false, action: action, errorMessage: "Invalid watched request item." }

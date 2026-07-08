@@ -36,7 +36,7 @@ sub executeRequest()
         Json_BooleanPair("EnableUserData", false)
     ])
 
-    url = NormalizeServerUrl(request.server) + "/LiveTv/Programs"
+    url = request.server + "/LiveTv/Programs"
     response = HttpClient_Request(url, "POST", invalid, body, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         response.AddReplace("action", "liveTvSchedule")
@@ -62,7 +62,7 @@ end sub
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV schedule request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV token." }
     if SafeString(request.channelIds, "") = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "No Live TV channels were found." }
     if SafeString(request.startTime, "") = "" or SafeString(request.endTime, "") = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV guide window." }

@@ -70,7 +70,7 @@ function logout(request as object) as object
     if request.server = invalid or request.server = "" then return { ok: true, action: "logout" }
     if request.token = invalid or request.token = "" then return { ok: true, action: "logout" }
 
-    url = NormalizeServerUrl(request.server) + "/Sessions/Logout"
+    url = request.server + "/Sessions/Logout"
     result = HttpClient_Request(url, "POST", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     result.AddReplace("action", "logout")
     return result
@@ -95,7 +95,7 @@ function authorize(request as object) as object
     ' The official Jellyfin Roku app loads the saved token into session and uses
     ' AboutMe(), with a fallback AuthenticateByName call using an empty password.
     ' We validate the token directly against the current user endpoint instead.
-    userUrl = NormalizeServerUrl(request.server) + "/Users/" + SafeString(request.userId, "")
+    userUrl = request.server + "/Users/" + SafeString(request.userId, "")
     result = HttpClient_Request(userUrl, "GET", request.token, invalid, {
         Authorization: JellyfinAuth_BuildPlaybackHeader(request.token, request.userId)
     })

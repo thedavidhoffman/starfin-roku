@@ -57,7 +57,7 @@ function loadSeries(request as object) as object
         enableTotalRecordCount: false
     }
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)
+    url = request.server + "/Items/" + request.itemId + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -72,7 +72,7 @@ function loadSeasons(request as object) as object
         enableTotalRecordCount: false
     }
 
-    url = NormalizeServerUrl(request.server) + "/Shows/" + request.itemId + "/Seasons" + Url_BuildQueryString(params)
+    url = request.server + "/Shows/" + request.itemId + "/Seasons" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -81,7 +81,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "tvShow", errorMessage: "Invalid series details request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "tvShow", errorMessage: "Invalid series details server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "tvShow", errorMessage: "Invalid series details server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "tvShow", errorMessage: "Invalid series details token." }
     if request.itemId = invalid or request.itemId = "" then return { ok: false, action: "tvShow", errorMessage: "Invalid series details item." }
 

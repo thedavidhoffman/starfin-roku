@@ -27,7 +27,7 @@ sub executeRequest()
         fields: "Genres"
     }
 
-    url = NormalizeServerUrl(request.server) + "/items/latest" + Url_BuildQueryString(params)
+    url = request.server + "/items/latest" + Url_BuildQueryString(params)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         m.top.response = withAction(response, "latestMedia")
@@ -42,7 +42,7 @@ end sub
 '-------------------------------------------------------------------------------
 function validateRequest(request as object, action as string) as dynamic
     if request = invalid then return { ok: false, action: action, errorMessage: "Invalid request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: action, errorMessage: "Invalid request server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: action, errorMessage: "Invalid request server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: action, errorMessage: "Invalid request token." }
 
     return invalid
@@ -55,7 +55,7 @@ function successResponse(request as object, action as string, payload as dynamic
     return {
         ok: true
         action: action
-        server: NormalizeServerUrl(request.server)
+        server: request.server
         parentId: SafeString(request.parentId, "")
         payload: payload
     }

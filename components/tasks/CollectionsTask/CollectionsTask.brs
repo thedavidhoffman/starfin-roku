@@ -33,7 +33,7 @@ sub executeRequest()
     }
     addOptionalQueryParams(params, request)
 
-    url = NormalizeServerUrl(request.server) + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
+    url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         response.AddReplace("action", "collections")
@@ -97,7 +97,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "collections", errorMessage: "Invalid collections request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "collections", errorMessage: "Invalid collections server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "collections", errorMessage: "Invalid collections server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "collections", errorMessage: "Invalid collections token." }
     if request.userId = invalid or request.userId = "" then return { ok: false, action: "collections", errorMessage: "Invalid collections user." }
     if request.libraryId = invalid or request.libraryId = "" then return { ok: false, action: "collections", errorMessage: "Invalid collections item." }

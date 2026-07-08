@@ -184,18 +184,13 @@ function buildAuthenticatedSession(response as object) as object
 
     if payload <> invalid and payload.AccessToken <> invalid then
         sessionToken = payload.AccessToken
-    else if payload <> invalid and payload.user <> invalid and payload.user.token <> invalid then
-        sessionToken = payload.user.token
     end if
     
-    server = NormalizeServerUrl(response.server)
+    server = response.server
 
     if payload <> invalid and payload.User <> invalid then
         username = SafeString(payload.User.Name, "")
         userId = payload.User.Id
-    else if payload <> invalid and payload.user <> invalid then
-        username = SafeString(payload.user.username, "")
-        userId = payload.user.id
     end if
 
     return {

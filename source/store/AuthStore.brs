@@ -20,7 +20,7 @@ end function
 '-------------------------------------------------------------------------------
 sub AuthStore_Save(server as string, username as string, token as string, userId as dynamic)
     authStore = GetAuthStore()
-    authStore.Write("server", NormalizeServerUrl(server))
+    authStore.Write("server", Url_NormalizeServer(server))
     authStore.Write("username", username)
     authStore.Write("token", token)
     if userId <> invalid then authStore.Write("userId", userId)

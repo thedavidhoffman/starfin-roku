@@ -66,7 +66,7 @@ function loadPerson(request as object) as object
         fields: "Overview,ExternalUrls"
     }
 
-    url = NormalizeServerUrl(request.server) + "/Items/" + request.itemId + Url_BuildQueryString(params)
+    url = request.server + "/Items/" + request.itemId + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -87,7 +87,7 @@ function loadPersonItems(request as object) as object
         Limit: 40
     }
 
-    url = NormalizeServerUrl(request.server) + "/Users/" + request.userId + "/Items" + Url_BuildQueryString(params)
+    url = request.server + "/Users/" + request.userId + "/Items" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -108,7 +108,7 @@ function loadPersonEpisodeItems(request as object) as object
         Limit: 40
     }
 
-    url = NormalizeServerUrl(request.server) + "/Users/" + request.userId + "/Items" + Url_BuildQueryString(params)
+    url = request.server + "/Users/" + request.userId + "/Items" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
 end function
 
@@ -258,7 +258,7 @@ end function
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return { ok: false, action: "person", errorMessage: "Invalid person request." }
-    if NormalizeServerUrl(request.server) = "" then return { ok: false, action: "person", errorMessage: "Invalid person server." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "person", errorMessage: "Invalid person server." }
     if request.token = invalid or request.token = "" then return { ok: false, action: "person", errorMessage: "Invalid person token." }
     if request.userId = invalid or request.userId = "" then return { ok: false, action: "person", errorMessage: "Invalid person user." }
     if request.itemId = invalid or request.itemId = "" then return { ok: false, action: "person", errorMessage: "Invalid person item." }
