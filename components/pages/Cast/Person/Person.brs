@@ -24,6 +24,8 @@ sub init()
     m.personTask = m.top.findNode("personTask")
 
     m.personTask.observeField("response", "onPersonResponse")
+    m.readMoreButton.observeField("buttonSelected", "onReadMoreButtonSelected")
+    m.filmographyButton.observeField("buttonSelected", "onFilmographyButtonSelected")
     m.relatedRows.observeField("rowItemSelected", "onRelatedItemSelected")
     m.relatedEpisodeRows.observeField("rowItemSelected", "onRelatedEpisodeSelected")
 
@@ -233,6 +235,13 @@ sub openPersonOverview()
         personName: getPersonName(m.pageState.person)
         overviewText: overview
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onReadMoreButtonSelected
+'-------------------------------------------------------------------------------
+sub onReadMoreButtonSelected()
+    openPersonOverview()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -536,6 +545,13 @@ end sub
 sub selectFilmography()
     if m.pageState.filmography = invalid then return
     m.top.selectedFilmography = m.pageState.filmography
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilmographyButtonSelected
+'-------------------------------------------------------------------------------
+sub onFilmographyButtonSelected()
+    selectFilmography()
 end sub
 
 '-------------------------------------------------------------------------------
