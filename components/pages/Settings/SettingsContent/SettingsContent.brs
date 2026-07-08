@@ -8,7 +8,7 @@ sub init()
         collectionDisplayOptions: m.top.findNode("collectionDisplayOptions")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
-        themeMusicOptions: m.top.findNode("themeMusicOptions")
+        mediaShellBackgroundOptions: m.top.findNode("mediaShellBackgroundOptions")
     }
     m.focusState = {
         activeIndex: 0
@@ -23,7 +23,7 @@ sub init()
         m.settingsControls.collectionDisplayOptions
         m.settingsControls.tvEpisodeListDisplayOptions
         m.settingsControls.tmdbApiKeyInput
-        m.settingsControls.themeMusicOptions
+        m.settingsControls.mediaShellBackgroundOptions
     ]
 
     m.top.observeField("focusedChild", "onFocusChanged")
@@ -31,13 +31,13 @@ sub init()
     m.settingsControls.movieLibraryOptions.observeField("itemSelected", "onMovieLibraryDisplaySelected")
     m.settingsControls.collectionDisplayOptions.observeField("itemSelected", "onCollectionDisplaySelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
-    m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
+    m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
 
     initDisplayOptions(m.settingsControls.tvLibraryOptions)
     initDisplayOptions(m.settingsControls.movieLibraryOptions)
     initDisplayOptions(m.settingsControls.collectionDisplayOptions)
     initTVEpisodeListDisplayOptions()
-    initThemeMusicOptions()
+    initMediaShellBackgroundOptions()
     loadSettingsValues()
 end sub
 
@@ -73,17 +73,17 @@ sub initTVEpisodeListDisplayOptions()
 end sub
 
 '-------------------------------------------------------------------------------
-' initThemeMusicOptions
+' initMediaShellBackgroundOptions
 '-------------------------------------------------------------------------------
-sub initThemeMusicOptions()
-    options = m.settingsControls.themeMusicOptions
+sub initMediaShellBackgroundOptions()
+    options = m.settingsControls.mediaShellBackgroundOptions
     if options = invalid then return
 
     content = CreateObject("roSGNode", "ContentNode")
-    offOption = content.createChild("ContentNode")
-    offOption.title = "Off"
-    onOption = content.createChild("ContentNode")
-    onOption.title = "On"
+    fullScreenOption = content.createChild("ContentNode")
+    fullScreenOption.title = "Full Screen"
+    partialScreenOption = content.createChild("ContentNode")
+    partialScreenOption.title = "Partial Screen"
 
     options.content = content
 end sub
@@ -101,14 +101,14 @@ sub loadSettingsValues()
     m.settingsState.values[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(settings, keys.movieLibraryDisplay)
     m.settingsState.values[keys.collectionDisplay] = SettingsStore_GetSettingValue(settings, keys.collectionDisplay)
     m.settingsState.values[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
-    m.settingsState.values[keys.themeMusic] = SettingsStore_GetSettingValue(settings, keys.themeMusic)
+    m.settingsState.values[keys.mediaShellBackground] = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
     m.settingsState.values[keys.tmdbApiKey] = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
 
     setDisplayOption(m.settingsControls.tvLibraryOptions, m.settingsState.values[keys.tvLibraryDisplay])
     setDisplayOption(m.settingsControls.movieLibraryOptions, m.settingsState.values[keys.movieLibraryDisplay])
     setDisplayOption(m.settingsControls.collectionDisplayOptions, m.settingsState.values[keys.collectionDisplay])
     setTVEpisodeListDisplayOption(m.settingsState.values[keys.tvEpisodeListDisplay])
-    setThemeMusicOption(m.settingsState.values[keys.themeMusic])
+    setMediaShellBackgroundOption(m.settingsState.values[keys.mediaShellBackground])
 
     if m.settingsControls.tmdbApiKeyInput <> invalid then
         m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[keys.tmdbApiKey]
@@ -182,7 +182,7 @@ function getSettingsValues() as object
     settings[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.movieLibraryDisplay)
     settings[keys.collectionDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.collectionDisplay)
     settings[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tvEpisodeListDisplay)
-    settings[keys.themeMusic] = SettingsStore_GetSettingValue(m.settingsState.values, keys.themeMusic)
+    settings[keys.mediaShellBackground] = SettingsStore_GetSettingValue(m.settingsState.values, keys.mediaShellBackground)
     settings[keys.tmdbApiKey] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tmdbApiKey)
     return settings
 end function
@@ -220,14 +220,14 @@ sub onTVEpisodeListDisplaySelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onThemeMusicSelected
+' onMediaShellBackgroundSelected
 '-------------------------------------------------------------------------------
-sub onThemeMusicSelected()
-    selectedIndex = getSelectedItemIndex(m.settingsControls.themeMusicOptions)
+sub onMediaShellBackgroundSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.mediaShellBackgroundOptions)
     if selectedIndex < 0 then return
 
-    m.settingsControls.themeMusicOptions.checkedItem = selectedIndex
-    m.settingsState.values[SettingsStore_Keys().themeMusic] = getThemeMusicValueForIndex(selectedIndex)
+    m.settingsControls.mediaShellBackgroundOptions.checkedItem = selectedIndex
+    m.settingsState.values[SettingsStore_Keys().mediaShellBackground] = getMediaShellBackgroundValueForIndex(selectedIndex)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -406,16 +406,16 @@ function getTVEpisodeListDisplayValueForIndex(index as integer) as string
 end function
 
 '-------------------------------------------------------------------------------
-' setThemeMusicOption
+' setMediaShellBackgroundOption
 '-------------------------------------------------------------------------------
-sub setThemeMusicOption(value as dynamic)
-    options = m.settingsControls.themeMusicOptions
+sub setMediaShellBackgroundOption(value as dynamic)
+    options = m.settingsControls.mediaShellBackgroundOptions
     if options = invalid then return
 
-    displayValue = "off"
+    displayValue = "full-screen"
     if value <> invalid and value <> "" then displayValue = value.ToStr()
 
-    if LCase(displayValue) = "on" then
+    if LCase(displayValue) = "partial-screen" then
         options.checkedItem = 1
     else
         options.checkedItem = 0
@@ -423,11 +423,11 @@ sub setThemeMusicOption(value as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' getThemeMusicValueForIndex
+' getMediaShellBackgroundValueForIndex
 '-------------------------------------------------------------------------------
-function getThemeMusicValueForIndex(index as integer) as string
-    if index = 1 then return "on"
-    return "off"
+function getMediaShellBackgroundValueForIndex(index as integer) as string
+    if index = 1 then return "partial-screen"
+    return "full-screen"
 end function
 
 '-------------------------------------------------------------------------------

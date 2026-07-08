@@ -19,7 +19,7 @@ function SettingsStore_Keys() as object
         movieLibraryDisplay: "movie-library-display"
         collectionDisplay: "collection-display"
         tvEpisodeListDisplay: "tv-ep-list-scroll"
-        themeMusic: "theme-music"
+        mediaShellBackground: "media-shell-background"
         tmdbApiKey: "tmdb-api-key"
     }
 end function
@@ -34,7 +34,7 @@ function SettingsStore_Defaults() as object
     defaults[keys.movieLibraryDisplay] = "poster"
     defaults[keys.collectionDisplay] = "poster"
     defaults[keys.tvEpisodeListDisplay] = "vertical"
-    defaults[keys.themeMusic] = "off"
+    defaults[keys.mediaShellBackground] = "full-screen"
     defaults[keys.tmdbApiKey] = ""
     return defaults
 end function
@@ -42,14 +42,14 @@ end function
 '-------------------------------------------------------------------------------
 ' SettingsStore_Save
 '-------------------------------------------------------------------------------
-sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionDisplay as string, tvEpisodeListDisplay as string, themeMusic as string, tmdbApiKey as string)
+sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionDisplay as string, tvEpisodeListDisplay as string, mediaShellBackground as string, tmdbApiKey as string)
     settingsStore = GetSettingsStore()
     keys = SettingsStore_Keys()
     settingsStore.Write(keys.tvLibraryDisplay, tvLibraryDisplay)
     settingsStore.Write(keys.movieLibraryDisplay, movieLibraryDisplay)
     settingsStore.Write(keys.collectionDisplay, collectionDisplay)
     settingsStore.Write(keys.tvEpisodeListDisplay, tvEpisodeListDisplay)
-    settingsStore.Write(keys.themeMusic, themeMusic)
+    settingsStore.Write(keys.mediaShellBackground, mediaShellBackground)
     settingsStore.Write(keys.tmdbApiKey, tmdbApiKey)
     settingsStore.Flush()
 end sub
@@ -66,7 +66,7 @@ function SettingsStore_Load() as object
         keys.movieLibraryDisplay
         keys.collectionDisplay
         keys.tvEpisodeListDisplay
-        keys.themeMusic
+        keys.mediaShellBackground
         keys.tmdbApiKey
     ])
     if values = invalid then values = {}
@@ -76,7 +76,7 @@ function SettingsStore_Load() as object
     settings[keys.movieLibraryDisplay] = SettingsStore_GetValue(values, keys.movieLibraryDisplay, defaults[keys.movieLibraryDisplay])
     settings[keys.collectionDisplay] = SettingsStore_GetValue(values, keys.collectionDisplay, defaults[keys.collectionDisplay])
     settings[keys.tvEpisodeListDisplay] = SettingsStore_GetValue(values, keys.tvEpisodeListDisplay, defaults[keys.tvEpisodeListDisplay])
-    settings[keys.themeMusic] = SettingsStore_GetValue(values, keys.themeMusic, defaults[keys.themeMusic])
+    settings[keys.mediaShellBackground] = SettingsStore_GetValue(values, keys.mediaShellBackground, defaults[keys.mediaShellBackground])
     settings[keys.tmdbApiKey] = SettingsStore_GetValue(values, keys.tmdbApiKey, defaults[keys.tmdbApiKey])
     return settings
 end function
@@ -91,7 +91,7 @@ sub SettingsStore_Clear()
     settingsStore.Delete(keys.movieLibraryDisplay)
     settingsStore.Delete(keys.collectionDisplay)
     settingsStore.Delete(keys.tvEpisodeListDisplay)
-    settingsStore.Delete(keys.themeMusic)
+    settingsStore.Delete(keys.mediaShellBackground)
     settingsStore.Delete(keys.tmdbApiKey)
     settingsStore.Flush()
 end sub
@@ -130,7 +130,7 @@ function SettingsStore_AreEqual(left as dynamic, right as dynamic) as boolean
     if SettingsStore_GetSettingValue(left, keys.movieLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.movieLibraryDisplay) then return false
     if SettingsStore_GetSettingValue(left, keys.collectionDisplay) <> SettingsStore_GetSettingValue(right, keys.collectionDisplay) then return false
     if SettingsStore_GetSettingValue(left, keys.tvEpisodeListDisplay) <> SettingsStore_GetSettingValue(right, keys.tvEpisodeListDisplay) then return false
-    if SettingsStore_GetSettingValue(left, keys.themeMusic) <> SettingsStore_GetSettingValue(right, keys.themeMusic) then return false
+    if SettingsStore_GetSettingValue(left, keys.mediaShellBackground) <> SettingsStore_GetSettingValue(right, keys.mediaShellBackground) then return false
     if SettingsStore_GetSettingValue(left, keys.tmdbApiKey) <> SettingsStore_GetSettingValue(right, keys.tmdbApiKey) then return false
 
     return true

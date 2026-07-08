@@ -230,7 +230,10 @@ end sub
 sub fanOutSettings()
     applySettingsToPage(m.collectionsPage)
     applySettingsToPage(m.libraryPage)
+    applySettingsToPage(m.moviePage)
+    applySettingsToPage(m.tvShowPage)
     applySettingsToPage(m.tvSeasonPage)
+    applySettingsToPage(m.tvEpisodePage)
     applySettingsToPage(m.personPage)
 end sub
 

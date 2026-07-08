@@ -40,8 +40,5 @@ end sub
 ' themeAudioIsEnabled
 '-------------------------------------------------------------------------------
 function themeAudioIsEnabled() as boolean
-    if m.settings = invalid then return false
-
-    keys = SettingsStore_Keys()
-    return LCase(SettingsStore_GetSettingValue(m.settings, keys.themeMusic)) = "on"
+    return false
 end function

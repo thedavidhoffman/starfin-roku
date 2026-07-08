@@ -54,6 +54,8 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.state.request = request
+    m.top.settings = request.settings
+    applyMediaShellBackgroundSetting(request.settings)
     m.state.item = request.item
     m.state.themeLookupActive = false
     AsyncLifecycle_Begin(m.state.lifecycle, request.itemId)
@@ -226,6 +228,23 @@ end sub
 '-------------------------------------------------------------------------------
 sub handleDescriptionOverlayClosed()
     focusMediaDescription()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    settings = m.top.settings
+    if m.state <> invalid and m.state.request <> invalid then m.state.request.settings = settings
+    applyMediaShellBackgroundSetting(settings)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyMediaShellBackgroundSetting
+'-------------------------------------------------------------------------------
+sub applyMediaShellBackgroundSetting(settings as dynamic)
+    keys = SettingsStore_Keys()
+    m.mediaShell.backgroundDisplay = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -893,10 +912,7 @@ end function
 ' isThemeMusicEnabled
 '-------------------------------------------------------------------------------
 function isThemeMusicEnabled(settings as dynamic) as boolean
-    if settings = invalid then return false
-
-    keys = SettingsStore_Keys()
-    return LCase(SettingsStore_GetSettingValue(settings, keys.themeMusic)) = "on"
+    return false
 end function
 
 '-------------------------------------------------------------------------------

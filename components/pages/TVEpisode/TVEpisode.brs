@@ -85,6 +85,12 @@ end sub
 sub onLoadRequestChanged()
     m.state.request = m.top.loadRequest
     if m.state.request <> invalid then
+        m.top.settings = m.state.request.settings
+        applyMediaShellBackgroundSetting(m.state.request.settings)
+    else
+        applyMediaShellBackgroundSetting(invalid)
+    end if
+    if m.state.request <> invalid then
         AsyncLifecycle_Begin(m.state.lifecycle, m.state.request.itemId)
     else
         AsyncLifecycle_Begin(m.state.lifecycle, invalid)
@@ -105,6 +111,23 @@ sub onLoadRequestChanged()
         renderInitialEpisodeContent()
     end if
     loadItemDetails()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    settings = m.top.settings
+    if m.state <> invalid and m.state.request <> invalid then m.state.request.settings = settings
+    applyMediaShellBackgroundSetting(settings)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyMediaShellBackgroundSetting
+'-------------------------------------------------------------------------------
+sub applyMediaShellBackgroundSetting(settings as dynamic)
+    keys = SettingsStore_Keys()
+    m.mediaShell.backgroundDisplay = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
 end sub
 
 '-------------------------------------------------------------------------------

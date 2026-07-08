@@ -2,7 +2,9 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.mediaBackground = m.top.findNode("mediaBackground")
+    m.mediaBackgroundFull = m.top.findNode("mediaBackgroundFull")
+    m.mediaBackgroundPartialGroup = m.top.findNode("mediaBackgroundPartialGroup")
+    m.mediaBackgroundPartial = m.top.findNode("mediaBackgroundPartial")
     m.mediaBackgroundUrl = ""
     m.logoState = {
         url: ""
@@ -20,6 +22,25 @@ sub init()
 
     m.overviewDescription.observeField("overlayRequested", "onDescriptionOverlayRequested")
     m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
+    applyBackgroundDisplay()
+end sub
+
+'-------------------------------------------------------------------------------
+' onBackgroundDisplayChanged
+'-------------------------------------------------------------------------------
+sub onBackgroundDisplayChanged()
+    applyBackgroundDisplay()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyBackgroundDisplay
+'-------------------------------------------------------------------------------
+sub applyBackgroundDisplay()
+    isPartial = LCase(SafeString(m.top.backgroundDisplay, "full-screen")) = "partial-screen"
+    hasBackdrop = m.mediaBackgroundUrl <> ""
+
+    m.mediaBackgroundFull.visible = hasBackdrop and isPartial <> true
+    m.mediaBackgroundPartialGroup.visible = hasBackdrop and isPartial
 end sub
 
 '-------------------------------------------------------------------------------
@@ -101,19 +122,24 @@ sub renderBackdrop(backdropUrl as string)
 
     if backdropUrl = m.mediaBackgroundUrl then return
 
-    m.mediaBackground.opacity = 0.50
-    m.mediaBackground.visible = true
-    m.mediaBackground.uri = backdropUrl
+    m.mediaBackgroundFull.opacity = 0.50
+    m.mediaBackgroundPartial.opacity = 0.50
+    m.mediaBackgroundFull.uri = backdropUrl
+    m.mediaBackgroundPartial.uri = backdropUrl
     m.mediaBackgroundUrl = backdropUrl
+    applyBackgroundDisplay()
 end sub
 
 '-------------------------------------------------------------------------------
 ' clearBackdrop
 '-------------------------------------------------------------------------------
 sub clearBackdrop()
-    m.mediaBackground.visible = false
-    m.mediaBackground.uri = ""
-    m.mediaBackground.opacity = 0.50
+    m.mediaBackgroundFull.visible = false
+    m.mediaBackgroundPartialGroup.visible = false
+    m.mediaBackgroundFull.uri = ""
+    m.mediaBackgroundPartial.uri = ""
+    m.mediaBackgroundFull.opacity = 0.50
+    m.mediaBackgroundPartial.opacity = 0.50
     m.mediaBackgroundUrl = ""
 end sub
 

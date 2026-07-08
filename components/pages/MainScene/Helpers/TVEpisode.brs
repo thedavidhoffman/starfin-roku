@@ -51,6 +51,8 @@ end sub
 ' createTVEpisodePage
 '-------------------------------------------------------------------------------
 function createTVEpisodePage(loadRequest as object, isVisible as boolean) as object
+    if loadRequest.settings = invalid then loadRequest.settings = m.settings
+
     page = CreateObject("roSGNode", "TVEpisode")
     page.observeField("closeRequested", "tvEpisodeHandleCloseRequested")
     page.observeField("selectedEpisode", "tvEpisodeHandleEpisodeSelected")
@@ -109,6 +111,7 @@ function buildHomeEpisodeLoadRequest(selection as object) as object
         userId: m.session.userId
         itemId: selection.itemId
         item: item
+        settings: m.settings
         series: {
             Id: FirstNonEmpty([item.SeriesId], "")
             Name: FirstNonEmpty([item.SeriesName], "")

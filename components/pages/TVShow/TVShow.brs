@@ -94,6 +94,8 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    m.top.settings = request.settings
+    applyMediaShellBackgroundSetting(request.settings)
     m.pageState.series = request.item
     m.pageState.themeLookupActive = false
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
@@ -109,6 +111,23 @@ sub onLoadRequestChanged()
 
     m.tvShowTask.request = request
     m.tvShowTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    settings = m.top.settings
+    if m.pageState <> invalid and m.pageState.request <> invalid then m.pageState.request.settings = settings
+    applyMediaShellBackgroundSetting(settings)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyMediaShellBackgroundSetting
+'-------------------------------------------------------------------------------
+sub applyMediaShellBackgroundSetting(settings as dynamic)
+    keys = SettingsStore_Keys()
+    m.mediaShell.backgroundDisplay = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -601,10 +620,7 @@ end function
 ' isThemeMusicEnabled
 '-------------------------------------------------------------------------------
 function isThemeMusicEnabled(settings as dynamic) as boolean
-    if settings = invalid then return false
-
-    keys = SettingsStore_Keys()
-    return LCase(SettingsStore_GetSettingValue(settings, keys.themeMusic)) = "on"
+    return false
 end function
 
 '-------------------------------------------------------------------------------
