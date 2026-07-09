@@ -46,6 +46,24 @@ sub updateSortDisplay()
     selection = getSelectedSort()
     m.sortLabel.text = getSortDisplayText(selection)
     m.sortOrderIcon.uri = getSortOrderIconUri(selection)
+    m.sortOrderIcon.visible = shouldShowSortOrderIcon(selection)
+    updateSortLabelLayout(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSortLabelLayout
+'-------------------------------------------------------------------------------
+sub updateSortLabelLayout(selection as object)
+    if shouldShowSortOrderIcon(selection) then
+        m.sortLabel.translation = [22, 11]
+        m.sortLabel.width = 102
+        m.sortLabel.horizAlign = "left"
+        return
+    end if
+
+    m.sortLabel.translation = [0, 11]
+    m.sortLabel.width = 178
+    m.sortLabel.horizAlign = "center"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -67,10 +85,18 @@ end function
 '-------------------------------------------------------------------------------
 function getSortDisplayText(selection as object) as string
     sortKey = SafeString(selection.sortKey, "SortName")
+    if sortKey = "Random" then return "Random"
     if sortKey = "PremiereDate" then return "Release"
     if sortKey = "DateCreated" then return "Added"
 
     return "Title"
+end function
+
+'-------------------------------------------------------------------------------
+' shouldShowSortOrderIcon
+'-------------------------------------------------------------------------------
+function shouldShowSortOrderIcon(selection as object) as boolean
+    return SafeString(selection.sortKey, "SortName") <> "Random"
 end function
 
 '-------------------------------------------------------------------------------

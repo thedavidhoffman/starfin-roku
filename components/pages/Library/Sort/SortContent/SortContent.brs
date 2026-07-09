@@ -51,6 +51,7 @@ function getSortOptions() as object
         { optionKey: "PremiereDate:Descending", sortKey: "PremiereDate", sortOrder: "Descending", label: "Release Date (newest to oldest)" }
         { optionKey: "DateCreated:Ascending", sortKey: "DateCreated", sortOrder: "Ascending", label: "Date Added (oldest to newest)" }
         { optionKey: "DateCreated:Descending", sortKey: "DateCreated", sortOrder: "Descending", label: "Date Added (newest to oldest)" }
+        { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
     ]
 end function
 

@@ -14,7 +14,7 @@ end sub
 sub configureDialog()
     m.top.title = "Sort By"
     m.top.dialogWidth = 720
-    m.top.dialogHeight = 495
+    m.top.dialogHeight = 545
     m.top.contentComponentName = "SortContent"
 end sub
 

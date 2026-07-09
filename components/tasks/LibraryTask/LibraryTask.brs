@@ -75,6 +75,8 @@ end function
 ' getSortOrder
 '-------------------------------------------------------------------------------
 function getSortOrder(request as dynamic) as string
+    if SafeString(request.sortBy, "") = "Random" then return ""
+
     sortOrder = SafeString(request.sortOrder, "")
     if sortOrder = "Descending" then return "Descending"
 

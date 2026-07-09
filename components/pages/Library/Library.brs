@@ -363,6 +363,7 @@ function getSelectionOptionKey(selection as object) as string
 
     sortKey = SafeString(selection.sortKey, "")
     if sortKey = "" then return ""
+    if sortKey = "Random" then return "Random"
 
     return sortKey + ":" + getSortOrderFromSelection(selection)
 end function
@@ -393,6 +394,7 @@ end sub
 ' getSortOrderFromSelection
 '-------------------------------------------------------------------------------
 function getSortOrderFromSelection(selection as object) as string
+    if selection <> invalid and SafeString(selection.sortKey, "") = "Random" then return ""
     if selection <> invalid and SafeString(selection.sortOrder, "") = "Descending" then return "Descending"
 
     return "Ascending"
@@ -415,6 +417,15 @@ end function
 '-------------------------------------------------------------------------------
 function buildSortSelection(sortKey as string, sortOrder as string) as object
     normalizedSortKey = SafeString(sortKey, "SortName")
+    if normalizedSortKey = "Random" then
+        return {
+            optionKey: "Random"
+            sortKey: "Random"
+            sortOrder: ""
+            label: "Random"
+        }
+    end if
+
     normalizedSortOrder = "Ascending"
     if sortOrder = "Descending" then normalizedSortOrder = "Descending"
 
@@ -430,6 +441,8 @@ end function
 ' getSortSelectionLabel
 '-------------------------------------------------------------------------------
 function getSortSelectionLabel(sortKey as string, sortOrder as string) as string
+    if sortKey = "Random" then return "Random"
+
     if sortKey = "PremiereDate" then
         if sortOrder = "Descending" then return "Release Date (newest to oldest)"
         return "Release Date (oldest to newest)"
