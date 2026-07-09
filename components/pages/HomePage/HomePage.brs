@@ -230,7 +230,7 @@ sub onLibrariesResponse()
     end if
 
     libraries = getItemsFromPayload(response.payload)
-    addRow("libraries", "My Media", libraries)
+    addRow("libraries", "My Media", sortLibrariesByName(libraries))
     queueLatestMediaRows(libraries)
     renderRows()
     runMyListTask(libraries)
@@ -373,7 +373,7 @@ end function
 ' queueLatestMediaRows
 '-------------------------------------------------------------------------------
 sub queueLatestMediaRows(libraries as object)
-    latestKeys = []
+    latestLibraries = []
     m.homeState.latestLibraries = {}
 
     for each item in libraries
@@ -389,14 +389,14 @@ sub queueLatestMediaRows(libraries as object)
 
             if library.id <> "" then
                 m.homeState.latestLibraries[library.id] = library
-                latestKeys.Push("latest:" + library.id)
+                latestLibraries.Push(library)
             end if
         end if
     end for
 
     m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp"]
-    for each key in latestKeys
-        m.homeState.rowOrder.Push(key)
+    for each library in sortLibrariesByName(latestLibraries)
+        m.homeState.rowOrder.Push("latest:" + library.id)
     end for
     m.homeState.rowOrder.Push("liveTvOnNow")
     m.homeState.rowOrder.Push("myList")
@@ -717,6 +717,47 @@ function getItemsFromPayload(payload as dynamic) as object
     if payload.Items <> invalid then return payload.Items
 
     return []
+end function
+
+'-------------------------------------------------------------------------------
+' sortLibrariesByName
+'-------------------------------------------------------------------------------
+function sortLibrariesByName(libraries as object) as object
+    sortedLibraries = []
+    if libraries = invalid then return sortedLibraries
+
+    for each library in libraries
+        sortedLibraries.Push(library)
+    end for
+
+    if sortedLibraries.Count() < 2 then return sortedLibraries
+
+    for i = 0 to sortedLibraries.Count() - 2
+        for j = i + 1 to sortedLibraries.Count() - 1
+            if shouldLibrarySortBeforeByName(sortedLibraries[j], sortedLibraries[i]) then
+                temp = sortedLibraries[i]
+                sortedLibraries[i] = sortedLibraries[j]
+                sortedLibraries[j] = temp
+            end if
+        end for
+    end for
+
+    return sortedLibraries
+end function
+
+'-------------------------------------------------------------------------------
+' shouldLibrarySortBeforeByName
+'-------------------------------------------------------------------------------
+function shouldLibrarySortBeforeByName(left as dynamic, right as dynamic) as boolean
+    return String_NaturalCompare(getLibraryName(left), getLibraryName(right)) < 0
+end function
+
+'-------------------------------------------------------------------------------
+' getLibraryName
+'-------------------------------------------------------------------------------
+function getLibraryName(library as dynamic) as string
+    if isAssocArray(library) = false then return ""
+    return FirstNonEmpty([library.name, library.Name], "")
 end function
 
 '-------------------------------------------------------------------------------

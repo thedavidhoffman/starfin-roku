@@ -2,14 +2,9 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.sortButton = m.top.findNode("sortButton")
+    m.background = m.top.findNode("background")
     m.sortLabel = m.top.findNode("sortLabel")
     m.sortOrderIcon = m.top.findNode("sortOrderIcon")
-    m.layout = {
-        buttonWidth: 260
-        iconSize: 32
-        iconGap: 8
-    }
     m.top.observeField("focusedChild", "onFocusChanged")
     updateSortDisplay()
     updateFocusVisual()
@@ -26,7 +21,15 @@ end sub
 ' updateFocusVisual
 '-------------------------------------------------------------------------------
 sub updateFocusVisual()
-    m.sortButton.hasFocusVisual = m.top.isInFocusChain()
+    hasFocus = m.top.isInFocusChain()
+
+    if hasFocus then
+        m.background.uri = "pkg:/images/buttons/primary_focused.9.png"
+    else
+        m.background.uri = "pkg:/images/buttons/primary_unfocused.9.png"
+    end if
+
+    m.sortLabel.color = &h0F1A2AFF
 end sub
 
 '-------------------------------------------------------------------------------
@@ -41,10 +44,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub updateSortDisplay()
     selection = getSelectedSort()
-    displayText = getSortDisplayText(selection)
-    m.sortLabel.text = displayText
+    m.sortLabel.text = getSortDisplayText(selection)
     m.sortOrderIcon.uri = getSortOrderIconUri(selection)
-    applyContentLayout(displayText)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -66,8 +67,8 @@ end function
 '-------------------------------------------------------------------------------
 function getSortDisplayText(selection as object) as string
     sortKey = SafeString(selection.sortKey, "SortName")
-    if sortKey = "PremiereDate" then return "Release Date"
-    if sortKey = "DateCreated" then return "Date Added"
+    if sortKey = "PremiereDate" then return "Release"
+    if sortKey = "DateCreated" then return "Added"
 
     return "Title"
 end function
@@ -81,30 +82,6 @@ function getSortOrderIconUri(selection as object) as string
     end if
 
     return "pkg:/images/icons/sort/sort-arrow-down.png"
-end function
-
-'-------------------------------------------------------------------------------
-' applyContentLayout
-'-------------------------------------------------------------------------------
-sub applyContentLayout(displayText as string)
-    textWidth = getDisplayTextWidth(displayText)
-    contentWidth = textWidth + m.layout.iconGap + m.layout.iconSize
-    contentX = int((m.layout.buttonWidth - contentWidth) / 2)
-    if contentX < 0 then contentX = 0
-
-    m.sortLabel.translation = [contentX, 14]
-    m.sortLabel.width = textWidth
-    m.sortOrderIcon.translation = [contentX + textWidth + m.layout.iconGap, 12]
-end sub
-
-'-------------------------------------------------------------------------------
-' getDisplayTextWidth
-'-------------------------------------------------------------------------------
-function getDisplayTextWidth(displayText as string) as integer
-    if displayText = "Release Date" then return 138
-    if displayText = "Date Added" then return 120
-
-    return 48
 end function
 
 '-------------------------------------------------------------------------------
