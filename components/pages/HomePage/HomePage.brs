@@ -873,6 +873,11 @@ end function
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if isAssocArray(item) = false then return ""
 
+    if imageAspect = "poster" and isTVEpisode(item) then
+        imageUrl = getEpisodePosterImageUrl(item, imageAspect)
+        if imageUrl <> "" then return imageUrl
+    end if
+
     directUrl = FirstNonEmpty([item.ImageURL, item.ImageUrl, item.PrimaryImageUrl], "")
     if directUrl <> "" then return directUrl
 
@@ -888,6 +893,21 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     parentThumbId = FirstNonEmpty([item.ParentThumbItemId, item.ParentThumbImageItemId], "")
     parentThumbTag = FirstNonEmpty([item.ParentThumbImageTag], "")
     if parentThumbId <> "" and parentThumbTag <> "" then return Url_BuildImageUrl(request.server, parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
+
+    seriesId = FirstNonEmpty([item.SeriesId], "")
+    seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
+    if seriesId <> "" and seriesTag <> "" then return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodePosterImageUrl
+'-------------------------------------------------------------------------------
+function getEpisodePosterImageUrl(item as dynamic, imageAspect as string) as string
+    imageSize = getImageSize(imageAspect)
+    request = m.homeState.request
+    if request = invalid then return ""
 
     seriesId = FirstNonEmpty([item.SeriesId], "")
     seriesTag = FirstNonEmpty([item.SeriesPrimaryImageTag], "")
