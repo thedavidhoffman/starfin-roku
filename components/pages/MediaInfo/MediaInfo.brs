@@ -6,21 +6,11 @@ sub init()
         headerLabel: m.top.findNode("headerLabel")
         sourceTitleLabel: m.top.findNode("sourceTitleLabel")
         sourceTextLabel: m.top.findNode("sourceTextLabel")
-        videoTitleLabel: m.top.findNode("videoTitleLabel")
-        videoSummaryLabel: m.top.findNode("videoSummaryLabel")
-        videoDetailsLabel: m.top.findNode("videoDetailsLabel")
-        videoCard: m.top.findNode("videoCard")
-        videoAccent: m.top.findNode("videoAccent")
-        audioTitleLabel: m.top.findNode("audioTitleLabel")
-        audioSummaryLabel: m.top.findNode("audioSummaryLabel")
-        audioDetailsLabel: m.top.findNode("audioDetailsLabel")
-        audioCard: m.top.findNode("audioCard")
-        audioAccent: m.top.findNode("audioAccent")
-        subtitleTitleLabel: m.top.findNode("subtitleTitleLabel")
-        subtitleSummaryLabel: m.top.findNode("subtitleSummaryLabel")
-        subtitleDetailsLabel: m.top.findNode("subtitleDetailsLabel")
-        subtitleCard: m.top.findNode("subtitleCard")
-        subtitleAccent: m.top.findNode("subtitleAccent")
+        cardSlots: [
+            m.top.findNode("slot0Card")
+            m.top.findNode("slot1Card")
+            m.top.findNode("slot2Card")
+        ]
         leftChevron: m.top.findNode("leftChevron")
         rightChevron: m.top.findNode("rightChevron")
     }
@@ -289,91 +279,34 @@ end function
 ' renderCardSlot
 '-------------------------------------------------------------------------------
 sub renderCardSlot(slotIndex as integer, card as object)
-    setCardSlotVisible(slotIndex, true)
-    setCardSlotText(slotIndex, card.title, card.summary, card.details)
-    setCardSlotColors(slotIndex, card.accentColor, card.summaryColor)
+    slot = m.nodes.cardSlots[slotIndex]
+    slot.visible = true
+    slot.title = card.title
+    slot.summary = card.summary
+    slot.details = card.details
+    slot.accentColor = card.accentColor
+    slot.summaryColor = card.summaryColor
 end sub
 
 '-------------------------------------------------------------------------------
 ' renderEmptyCard
 '-------------------------------------------------------------------------------
 sub renderEmptyCard(slotIndex as integer)
-    setCardSlotVisible(slotIndex, true)
-    setCardSlotText(slotIndex, "Media Info", "No stream information available", "Nothing to show for this media source.")
-    setCardSlotColors(slotIndex, &h6EC6FFFF, &h9EE6FFFF)
+    slot = m.nodes.cardSlots[slotIndex]
+    slot.visible = true
+    slot.title = "Media Info"
+    slot.summary = "No stream information available"
+    slot.details = "Nothing to show for this media source."
+    slot.accentColor = &h6EC6FFFF
+    slot.summaryColor = &h9EE6FFFF
 end sub
 
 '-------------------------------------------------------------------------------
 ' hideCardSlot
 '-------------------------------------------------------------------------------
 sub hideCardSlot(slotIndex as integer)
-    setCardSlotVisible(slotIndex, false)
-    setCardSlotText(slotIndex, "", "", "")
+    m.nodes.cardSlots[slotIndex].visible = false
 end sub
-
-'-------------------------------------------------------------------------------
-' setCardSlotVisible
-'-------------------------------------------------------------------------------
-sub setCardSlotVisible(slotIndex as integer, visible as boolean)
-    slot = getCardSlot(slotIndex)
-    slot.card.visible = visible
-    slot.accent.visible = visible
-    slot.title.visible = visible
-    slot.summary.visible = visible
-    slot.details.visible = visible
-end sub
-
-'-------------------------------------------------------------------------------
-' setCardSlotText
-'-------------------------------------------------------------------------------
-sub setCardSlotText(slotIndex as integer, title as string, summary as string, details as string)
-    slot = getCardSlot(slotIndex)
-    slot.title.text = title
-    slot.summary.text = summary
-    slot.details.text = details
-end sub
-
-'-------------------------------------------------------------------------------
-' setCardSlotColors
-'-------------------------------------------------------------------------------
-sub setCardSlotColors(slotIndex as integer, accentColor as integer, summaryColor as integer)
-    slot = getCardSlot(slotIndex)
-    slot.accent.color = accentColor
-    slot.summary.color = summaryColor
-end sub
-
-'-------------------------------------------------------------------------------
-' getCardSlot
-'-------------------------------------------------------------------------------
-function getCardSlot(slotIndex as integer) as object
-    if slotIndex = 0 then
-        return {
-            card: m.nodes.videoCard
-            accent: m.nodes.videoAccent
-            title: m.nodes.videoTitleLabel
-            summary: m.nodes.videoSummaryLabel
-            details: m.nodes.videoDetailsLabel
-        }
-    end if
-
-    if slotIndex = 1 then
-        return {
-            card: m.nodes.audioCard
-            accent: m.nodes.audioAccent
-            title: m.nodes.audioTitleLabel
-            summary: m.nodes.audioSummaryLabel
-            details: m.nodes.audioDetailsLabel
-        }
-    end if
-
-    return {
-        card: m.nodes.subtitleCard
-        accent: m.nodes.subtitleAccent
-        title: m.nodes.subtitleTitleLabel
-        summary: m.nodes.subtitleSummaryLabel
-        details: m.nodes.subtitleDetailsLabel
-    }
-end function
 
 '-------------------------------------------------------------------------------
 ' getFirstMediaSource
