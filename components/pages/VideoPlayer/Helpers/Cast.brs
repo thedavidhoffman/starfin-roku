@@ -94,6 +94,13 @@ sub onCastFocusExitDown()
 end sub
 
 '-------------------------------------------------------------------------------
+' onCastUserInteraction
+'-------------------------------------------------------------------------------
+sub onCastUserInteraction()
+    restartCastHideTimerIfVisible()
+end sub
+
+'-------------------------------------------------------------------------------
 ' dismissSeekPreviewForCast
 '-------------------------------------------------------------------------------
 sub dismissSeekPreviewForCast()

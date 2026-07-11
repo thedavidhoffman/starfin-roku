@@ -174,7 +174,7 @@ sub handleStreamOptionsOverlayClosed(closed as object)
     end if
 
     if m.overlay.area = "controls" then
-        m.playbackControls.setFocus(true)
+        m.playbackControls.callFunc("activate")
         m.playbackControls.callFunc("focusButtons")
         m.controlsHideTimer.control = "start"
     else

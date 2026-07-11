@@ -6,6 +6,7 @@ sub init()
     m.castRows = m.top.findNode("castRows")
     m.castRows.observeField("focusExitUp", "onCastRowsFocusExitUp")
     m.castRows.observeField("focusExitDown", "onCastRowsFocusExitDown")
+    m.castRows.observeField("userInteraction", "onCastRowsUserInteraction")
     m.castRows.observeField("rowItemFocused", "onCastRowItemFocused")
     m.castRows.observeField("rowItemSelected", "onCastRowItemSelected")
     m.focusState = {
@@ -95,9 +96,17 @@ sub onCastRowsFocusExitDown()
 end sub
 
 '-------------------------------------------------------------------------------
+' onCastRowsUserInteraction
+'-------------------------------------------------------------------------------
+sub onCastRowsUserInteraction()
+    m.top.userInteraction = true
+end sub
+
+'-------------------------------------------------------------------------------
 ' onCastRowItemFocused
 '-------------------------------------------------------------------------------
 sub onCastRowItemFocused()
+    m.top.userInteraction = true
     saveFocusedCastItem(m.castRows.rowItemFocused)
 end sub
 
@@ -106,6 +115,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onCastRowItemSelected()
     selected = m.castRows.rowItemSelected
+    m.top.userInteraction = true
     saveFocusedCastItem(selected)
     if selected = invalid or selected.Count() < 2 then return
     if m.castRows.content = invalid then return

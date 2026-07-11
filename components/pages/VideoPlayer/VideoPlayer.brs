@@ -110,6 +110,7 @@ sub initHandlers()
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("focusExitDown", "onCastFocusExitDown")
+    m.cast.observeField("userInteraction", "onCastUserInteraction")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.controlsHideTimer.observeField("fire", "onControlsHideTimerFire")
     m.playstateTimer.observeField("fire", "onPlaystateTimerFire")
@@ -378,7 +379,8 @@ sub showControls(restartTimer as boolean)
     hideCast()
     m.overlay.area = "controls"
     m.playbackControls.visible = true
-    m.playbackControls.setFocus(true)
+    m.playbackControls.callFunc("resetFocus")
+    m.playbackControls.callFunc("activate")
     if restartTimer = true then
         m.controlsHideTimer.control = "stop"
         m.controlsHideTimer.control = "start"
@@ -407,6 +409,16 @@ sub restartControlsHideTimerIfVisible()
 end sub
 
 '-------------------------------------------------------------------------------
+' restartCastHideTimerIfVisible
+'-------------------------------------------------------------------------------
+sub restartCastHideTimerIfVisible()
+    if m.overlay.area <> "cast" then return
+
+    m.controlsHideTimer.control = "stop"
+    m.controlsHideTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
 ' hideControls
 '-------------------------------------------------------------------------------
 sub hideControls()
@@ -415,7 +427,7 @@ sub hideControls()
     m.playback.isSeeking = false
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
-    m.playbackControls.callFunc("releaseFocus")
+    m.playbackControls.callFunc("deactivate")
     m.playbackControls.visible = false
     if m.overlay.area = "controls" then m.overlay.area = "none"
     m.top.setFocus(true)
@@ -436,6 +448,7 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     restartControlsHideTimerIfVisible()
+    if press = true then restartCastHideTimerIfVisible()
 
     if press = false then
         if key = "left" then

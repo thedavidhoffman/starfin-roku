@@ -3,6 +3,7 @@
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    m.top.userInteraction = true
 
     if key = "up" then
         m.top.focusExitUp = true

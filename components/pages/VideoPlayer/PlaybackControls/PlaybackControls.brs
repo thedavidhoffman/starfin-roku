@@ -267,6 +267,34 @@ sub moveButtonFocus(direction as integer)
 end sub
 
 '-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    m.top.setFocus(true)
+    if m.controlState.focusArea = "progress" then
+        focusProgress()
+    else
+        focusCurrentButton()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    releaseFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' resetFocus
+'-------------------------------------------------------------------------------
+sub resetFocus()
+    rebuildButtonList(false)
+    m.controlState.focusedIndex = getDefaultButtonIndex(m.controlState.buttons)
+    m.controlState.focusArea = "buttons"
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusProgress
 '-------------------------------------------------------------------------------
 sub focusProgress()
@@ -320,9 +348,9 @@ end function
 '-------------------------------------------------------------------------------
 ' rebuildButtonList
 '-------------------------------------------------------------------------------
-sub rebuildButtonList()
+sub rebuildButtonList(preserveFocusedButton = true as boolean)
     previousButtonId = ""
-    if m.controlState.buttons.Count() > 0 and m.controlState.focusedIndex >= 0 and m.controlState.focusedIndex < m.controlState.buttons.Count() then
+    if preserveFocusedButton = true and m.controlState.buttons.Count() > 0 and m.controlState.focusedIndex >= 0 and m.controlState.focusedIndex < m.controlState.buttons.Count() then
         previousButtonId = SafeString(m.controlState.buttons[m.controlState.focusedIndex].id, "")
     end if
 
