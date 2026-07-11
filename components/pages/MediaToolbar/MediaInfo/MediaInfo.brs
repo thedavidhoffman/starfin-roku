@@ -9,22 +9,23 @@ sub init()
         videoTitleLabel: m.top.findNode("videoTitleLabel")
         videoSummaryLabel: m.top.findNode("videoSummaryLabel")
         videoDetailsLabel: m.top.findNode("videoDetailsLabel")
+        videoCard: m.top.findNode("videoCard")
+        videoAccent: m.top.findNode("videoAccent")
         audioTitleLabel: m.top.findNode("audioTitleLabel")
         audioSummaryLabel: m.top.findNode("audioSummaryLabel")
         audioDetailsLabel: m.top.findNode("audioDetailsLabel")
+        audioCard: m.top.findNode("audioCard")
+        audioAccent: m.top.findNode("audioAccent")
         subtitleTitleLabel: m.top.findNode("subtitleTitleLabel")
         subtitleSummaryLabel: m.top.findNode("subtitleSummaryLabel")
         subtitleDetailsLabel: m.top.findNode("subtitleDetailsLabel")
-        pageLabel: m.top.findNode("pageLabel")
+        subtitleCard: m.top.findNode("subtitleCard")
+        subtitleAccent: m.top.findNode("subtitleAccent")
         leftChevron: m.top.findNode("leftChevron")
         rightChevron: m.top.findNode("rightChevron")
     }
     m.state = {
-        cards: {
-            video: []
-            audio: []
-            subtitle: []
-        }
+        cards: []
         pageIndex: 0
     }
 end sub
@@ -63,26 +64,31 @@ end sub
 ' renderPage
 '-------------------------------------------------------------------------------
 sub renderPage()
-    pageCount = getPageCount(m.state.cards)
-    if pageCount = 0 then
-        renderEmptyCard("video", "Video")
-        renderEmptyCard("audio", "Audio")
-        renderEmptyCard("subtitle", "Subtitles")
-        m.nodes.pageLabel.text = "No stream information available."
+    cardCount = m.state.cards.Count()
+    maxPageIndex = getMaxPageIndex(cardCount)
+    if cardCount = 0 then
+        renderEmptyCard(0)
+        hideCardSlot(1)
+        hideCardSlot(2)
         m.nodes.leftChevron.visible = false
         m.nodes.rightChevron.visible = false
         return
     end if
 
     if m.state.pageIndex < 0 then m.state.pageIndex = 0
-    if m.state.pageIndex >= pageCount then m.state.pageIndex = pageCount - 1
+    if m.state.pageIndex > maxPageIndex then m.state.pageIndex = maxPageIndex
 
-    renderCard("video", "Video", m.state.cards.video, m.state.pageIndex)
-    renderCard("audio", "Audio", m.state.cards.audio, m.state.pageIndex)
-    renderCard("subtitle", "Subtitles", m.state.cards.subtitle, m.state.pageIndex)
-    m.nodes.pageLabel.text = getPageText(pageCount)
+    for slotIndex = 0 to 2
+        cardIndex = m.state.pageIndex + slotIndex
+        if cardIndex < cardCount then
+            renderCardSlot(slotIndex, m.state.cards[cardIndex])
+        else
+            hideCardSlot(slotIndex)
+        end if
+    end for
+
     m.nodes.leftChevron.visible = m.state.pageIndex > 0
-    m.nodes.rightChevron.visible = m.state.pageIndex < pageCount - 1
+    m.nodes.rightChevron.visible = m.state.pageIndex < maxPageIndex
 end sub
 
 '-------------------------------------------------------------------------------
@@ -130,14 +136,12 @@ end function
 '-------------------------------------------------------------------------------
 function buildStreamCards(item as dynamic) as object
     streams = getMediaStreams(item)
-    cards = {
-        video: []
-        audio: []
-        subtitle: []
-    }
+    cards = []
     appendStreamCards(cards, streams, "video")
     appendStreamCards(cards, streams, "audio")
+    cardCountBeforeSubtitles = cards.Count()
     appendStreamCards(cards, streams, "subtitle")
+    if cards.Count() = cardCountBeforeSubtitles then cards.Push(buildNoSubtitleCard())
     return cards
 end function
 
@@ -149,7 +153,7 @@ sub appendStreamCards(cards as object, streams as object, streamType as string)
         if stream = invalid then continue for
         if LCase(SafeString(stream.Type, "")) <> streamType then continue for
 
-        cards[streamType].Push(buildStreamCard(stream, streamType))
+        cards.Push(buildStreamCard(stream, streamType))
     end for
 end sub
 
@@ -161,6 +165,21 @@ function buildStreamCard(stream as dynamic, streamType as string) as object
         title: getStreamTitle(stream, streamType)
         summary: buildStreamSummary(stream, streamType)
         details: buildStreamDetails(stream, streamType)
+        accentColor: getStreamAccentColor(streamType)
+        summaryColor: getStreamSummaryColor(streamType)
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildNoSubtitleCard
+'-------------------------------------------------------------------------------
+function buildNoSubtitleCard() as object
+    return {
+        title: "Subtitles"
+        summary: "No subtitle stream"
+        details: "No embedded or external subtitle streams were reported for this media source."
+        accentColor: getStreamAccentColor("subtitle")
+        summaryColor: getStreamSummaryColor("subtitle")
     }
 end function
 
@@ -241,63 +260,119 @@ function getStreamTitle(stream as dynamic, streamType as string) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getPageCount
+' getStreamAccentColor
 '-------------------------------------------------------------------------------
-function getPageCount(cards as object) as integer
-    pageCount = cards.video.Count()
-    if cards.audio.Count() > pageCount then pageCount = cards.audio.Count()
-    if cards.subtitle.Count() > pageCount then pageCount = cards.subtitle.Count()
-    return pageCount
+function getStreamAccentColor(streamType as string) as integer
+    if streamType = "video" then return &h6EC6FFFF
+    if streamType = "audio" then return &h8EEA9DFF
+    return &hF0B76EFF
 end function
 
 '-------------------------------------------------------------------------------
-' renderCard
+' getStreamSummaryColor
 '-------------------------------------------------------------------------------
-sub renderCard(streamType as string, fallbackTitle as string, cards as object, pageIndex as integer)
-    if cards.Count() = 0 then
-        renderEmptyCard(streamType, fallbackTitle)
-        return
-    end if
+function getStreamSummaryColor(streamType as string) as integer
+    if streamType = "video" then return &h9EE6FFFF
+    if streamType = "audio" then return &hB9F6C6FF
+    return &hFFD9A6FF
+end function
 
-    cardIndex = pageIndex
-    if cardIndex >= cards.Count() then cardIndex = cards.Count() - 1
+'-------------------------------------------------------------------------------
+' getMaxPageIndex
+'-------------------------------------------------------------------------------
+function getMaxPageIndex(cardCount as integer) as integer
+    if cardCount <= 3 then return 0
+    return cardCount - 3
+end function
 
-    card = cards[cardIndex]
-    setCardText(streamType, card.title, card.summary, card.details)
+'-------------------------------------------------------------------------------
+' renderCardSlot
+'-------------------------------------------------------------------------------
+sub renderCardSlot(slotIndex as integer, card as object)
+    setCardSlotVisible(slotIndex, true)
+    setCardSlotText(slotIndex, card.title, card.summary, card.details)
+    setCardSlotColors(slotIndex, card.accentColor, card.summaryColor)
 end sub
 
 '-------------------------------------------------------------------------------
 ' renderEmptyCard
 '-------------------------------------------------------------------------------
-sub renderEmptyCard(streamType as string, title as string)
-    setCardText(streamType, title, "No " + LCase(title) + " stream", "Nothing to show for this media source.")
+sub renderEmptyCard(slotIndex as integer)
+    setCardSlotVisible(slotIndex, true)
+    setCardSlotText(slotIndex, "Media Info", "No stream information available", "Nothing to show for this media source.")
+    setCardSlotColors(slotIndex, &h6EC6FFFF, &h9EE6FFFF)
 end sub
 
 '-------------------------------------------------------------------------------
-' setCardText
+' hideCardSlot
 '-------------------------------------------------------------------------------
-sub setCardText(streamType as string, title as string, summary as string, details as string)
-    if streamType = "video" then
-        m.nodes.videoTitleLabel.text = title
-        m.nodes.videoSummaryLabel.text = summary
-        m.nodes.videoDetailsLabel.text = details
-    else if streamType = "audio" then
-        m.nodes.audioTitleLabel.text = title
-        m.nodes.audioSummaryLabel.text = summary
-        m.nodes.audioDetailsLabel.text = details
-    else
-        m.nodes.subtitleTitleLabel.text = title
-        m.nodes.subtitleSummaryLabel.text = summary
-        m.nodes.subtitleDetailsLabel.text = details
+sub hideCardSlot(slotIndex as integer)
+    setCardSlotVisible(slotIndex, false)
+    setCardSlotText(slotIndex, "", "", "")
+end sub
+
+'-------------------------------------------------------------------------------
+' setCardSlotVisible
+'-------------------------------------------------------------------------------
+sub setCardSlotVisible(slotIndex as integer, visible as boolean)
+    slot = getCardSlot(slotIndex)
+    slot.card.visible = visible
+    slot.accent.visible = visible
+    slot.title.visible = visible
+    slot.summary.visible = visible
+    slot.details.visible = visible
+end sub
+
+'-------------------------------------------------------------------------------
+' setCardSlotText
+'-------------------------------------------------------------------------------
+sub setCardSlotText(slotIndex as integer, title as string, summary as string, details as string)
+    slot = getCardSlot(slotIndex)
+    slot.title.text = title
+    slot.summary.text = summary
+    slot.details.text = details
+end sub
+
+'-------------------------------------------------------------------------------
+' setCardSlotColors
+'-------------------------------------------------------------------------------
+sub setCardSlotColors(slotIndex as integer, accentColor as integer, summaryColor as integer)
+    slot = getCardSlot(slotIndex)
+    slot.accent.color = accentColor
+    slot.summary.color = summaryColor
+end sub
+
+'-------------------------------------------------------------------------------
+' getCardSlot
+'-------------------------------------------------------------------------------
+function getCardSlot(slotIndex as integer) as object
+    if slotIndex = 0 then
+        return {
+            card: m.nodes.videoCard
+            accent: m.nodes.videoAccent
+            title: m.nodes.videoTitleLabel
+            summary: m.nodes.videoSummaryLabel
+            details: m.nodes.videoDetailsLabel
+        }
     end if
-end sub
 
-'-------------------------------------------------------------------------------
-' getPageText
-'-------------------------------------------------------------------------------
-function getPageText(pageCount as integer) as string
-    if pageCount <= 1 then return "Stream set 1 / 1"
-    return "Stream set " + (m.state.pageIndex + 1).ToStr() + " / " + pageCount.ToStr()
+    if slotIndex = 1 then
+        return {
+            card: m.nodes.audioCard
+            accent: m.nodes.audioAccent
+            title: m.nodes.audioTitleLabel
+            summary: m.nodes.audioSummaryLabel
+            details: m.nodes.audioDetailsLabel
+        }
+    end if
+
+    return {
+        card: m.nodes.subtitleCard
+        accent: m.nodes.subtitleAccent
+        title: m.nodes.subtitleTitleLabel
+        summary: m.nodes.subtitleSummaryLabel
+        details: m.nodes.subtitleDetailsLabel
+    }
 end function
 
 '-------------------------------------------------------------------------------
@@ -449,7 +524,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    pageCount = getPageCount(m.state.cards)
+    maxPageIndex = getMaxPageIndex(m.state.cards.Count())
 
     if key = "left" and m.state.pageIndex > 0 then
         m.state.pageIndex = m.state.pageIndex - 1
@@ -457,7 +532,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = "right" and m.state.pageIndex < pageCount - 1 then
+    if key = "right" and m.state.pageIndex < maxPageIndex then
         m.state.pageIndex = m.state.pageIndex + 1
         renderPage()
         return true
