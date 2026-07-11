@@ -34,6 +34,7 @@ sub init()
     }
     m.focusState = {
         focusedIndex: 0
+        focusedButtonId: ""
         buttons: []
         hasFocus: false
     }
@@ -76,6 +77,7 @@ sub focusButton(index as integer)
     if index >= m.focusState.buttons.Count() then index = m.focusState.buttons.Count() - 1
 
     m.focusState.focusedIndex = index
+    m.focusState.focusedButtonId = getButtonId(m.focusState.buttons[index])
     m.focusState.hasFocus = true
     layoutButtons()
     m.focusState.buttons[index].setFocus(true)
@@ -89,6 +91,7 @@ sub onFocusChanged()
     if m.focusState.hasFocus = hasFocus then return
 
     m.focusState.hasFocus = hasFocus
+    if hasFocus then syncFocusedButtonFromFocusChain()
     layoutButtons()
 end sub
 
@@ -100,6 +103,7 @@ sub layoutButtons()
     for i = 0 to m.focusState.buttons.Count() - 1
         button = m.focusState.buttons[i]
         button.translation = [x, 0]
+        button.hasFocusVisual = m.focusState.hasFocus = true and i = m.focusState.focusedIndex
 
         if m.focusState.hasFocus = true and i = m.focusState.focusedIndex then
             x = x + getButtonExpandedWidth(button)
@@ -121,6 +125,24 @@ function getButtonExpandedWidth(button as object) as integer
 
     return m.toolbarLayout.defaultExpandedWidth
 end function
+
+'-------------------------------------------------------------------------------
+' syncFocusedButtonFromFocusChain
+'-------------------------------------------------------------------------------
+sub syncFocusedButtonFromFocusChain()
+    for i = 0 to m.focusState.buttons.Count() - 1
+        button = m.focusState.buttons[i]
+        if button.isInFocusChain() then
+            m.focusState.focusedIndex = i
+            m.focusState.focusedButtonId = getButtonId(button)
+            return
+        end if
+    end for
+
+    if m.focusState.focusedIndex >= 0 and m.focusState.focusedIndex < m.focusState.buttons.Count() then
+        m.focusState.focusedButtonId = getButtonId(m.focusState.buttons[m.focusState.focusedIndex])
+    end if
+end sub
 
 '-------------------------------------------------------------------------------
 ' onWatchedStateChanged
@@ -167,6 +189,7 @@ end sub
 ' updateToolbarButtons
 '-------------------------------------------------------------------------------
 sub updateToolbarButtons()
+    previousFocusedButtonId = getCurrentFocusedButtonId()
     isWatched = m.top.isWatched = true
     supportsWatchedActions = m.top.supportsWatchedActions <> false
     mediaType = m.top.mediaType
@@ -220,13 +243,62 @@ sub updateToolbarButtons()
     m.focusState.buttons.Append(streamButtons)
     if isMovie <> true then m.focusState.buttons.Append([m.seriesButton, m.seasonButton])
 
-    if m.focusState.focusedIndex >= m.focusState.buttons.Count() then
-        m.focusState.focusedIndex = m.focusState.buttons.Count() - 1
+    m.focusState.focusedIndex = findFocusedButtonIndex(previousFocusedButtonId)
+    if m.focusState.focusedIndex < 0 and previousFocusedButtonId = "playButton" and hasResumeProgress then
+        m.focusState.focusedIndex = findFocusedButtonIndex("resumeButton")
     end if
-
+    if m.focusState.focusedIndex < 0 and previousFocusedButtonId = "resumeButton" and hasResumeProgress <> true then
+        m.focusState.focusedIndex = findFocusedButtonIndex("playButton")
+    end if
     if m.focusState.focusedIndex < 0 then m.focusState.focusedIndex = 0
+    if m.focusState.focusedIndex >= m.focusState.buttons.Count() then m.focusState.focusedIndex = m.focusState.buttons.Count() - 1
+
+    if m.focusState.focusedIndex >= 0 and m.focusState.focusedIndex < m.focusState.buttons.Count() then
+        m.focusState.focusedButtonId = getButtonId(m.focusState.buttons[m.focusState.focusedIndex])
+    else
+        m.focusState.focusedButtonId = ""
+    end if
     layoutButtons()
 end sub
+
+'-------------------------------------------------------------------------------
+' getCurrentFocusedButtonId
+'-------------------------------------------------------------------------------
+function getCurrentFocusedButtonId() as string
+    for i = 0 to m.focusState.buttons.Count() - 1
+        button = m.focusState.buttons[i]
+        if button.isInFocusChain() then return getButtonId(button)
+    end for
+
+    if m.focusState.focusedIndex >= 0 and m.focusState.focusedIndex < m.focusState.buttons.Count() then
+        return getButtonId(m.focusState.buttons[m.focusState.focusedIndex])
+    end if
+
+    return m.focusState.focusedButtonId
+end function
+
+'-------------------------------------------------------------------------------
+' findFocusedButtonIndex
+'-------------------------------------------------------------------------------
+function findFocusedButtonIndex(buttonId as string) as integer
+    if buttonId = "" then return -1
+
+    for i = 0 to m.focusState.buttons.Count() - 1
+        if getButtonId(m.focusState.buttons[i]) = buttonId then return i
+    end for
+
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getButtonId
+'-------------------------------------------------------------------------------
+function getButtonId(button as dynamic) as string
+    if button = invalid then return ""
+    if button.id = invalid then return ""
+
+    return button.id
+end function
 
 '-------------------------------------------------------------------------------
 ' onResumeButtonSelected
