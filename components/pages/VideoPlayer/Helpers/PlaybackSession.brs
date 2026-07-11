@@ -277,14 +277,63 @@ sub emitPlaybackProgress(isFinished as boolean)
     duration = m.playback.duration
     if duration = invalid or duration <= 0 then duration = m.videoPlayer.duration
 
-    m.top.playbackProgressChanged = {
+    change = {
         itemId: m.session.itemId
         positionTicks: secondsToTicks(position)
         durationTicks: secondsToTicks(duration)
         isFinished: isFinished
         isPaused: LCase(SafeString(m.videoPlayer.state, "")) = "paused"
     }
+    applyPlaybackProgressChange(change)
+    m.top.playbackProgressChanged = change
     m.playback.hasEmittedFinalProgress = true
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub applyPlaybackProgressChange(change as object)
+    applyPlaybackProgressChangeToCurrentItem(change)
+    applyPlaybackProgressChangeToCurrentQueueItem(change)
+    applyPlaybackProgressChangeToPlayRequest(change)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackProgressChangeToCurrentItem
+'-------------------------------------------------------------------------------
+sub applyPlaybackProgressChangeToCurrentItem(change as object)
+    if m.context = invalid then return
+    item = m.context.item
+    if item = invalid then return
+    if SafeString(FirstNonEmpty([item.Id], ""), "") <> SafeString(change.itemId, "") then return
+
+    PlaybackProgress_ApplyChangeToItem(item, change)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackProgressChangeToCurrentQueueItem
+'-------------------------------------------------------------------------------
+sub applyPlaybackProgressChangeToCurrentQueueItem(change as object)
+    if m.queue = invalid then return
+    if m.queue.items = invalid then return
+    if m.queue.index < 0 or m.queue.index >= m.queue.items.Count() then return
+
+    queueItem = m.queue.items[m.queue.index]
+    if queueItem = invalid then return
+    if SafeString(queueItem.itemId, "") <> SafeString(change.itemId, "") then return
+
+    PlaybackProgress_ApplyChangeToItem(queueItem.item, change)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackProgressChangeToPlayRequest
+'-------------------------------------------------------------------------------
+sub applyPlaybackProgressChangeToPlayRequest(change as object)
+    request = m.top.playRequest
+    if request = invalid then return
+    if SafeString(request.itemId, "") <> SafeString(change.itemId, "") then return
+
+    PlaybackProgress_ApplyChangeToItem(request.item, change)
 end sub
 
 '-------------------------------------------------------------------------------
