@@ -4,7 +4,6 @@
 sub init()
     m.background = m.top.findNode("background")
     m.sortLabel = m.top.findNode("sortLabel")
-    m.sortOrderIcon = m.top.findNode("sortOrderIcon")
     m.top.observeField("focusedChild", "onFocusChanged")
     updateSortDisplay()
     updateFocusVisual()
@@ -45,25 +44,6 @@ end sub
 sub updateSortDisplay()
     selection = getSelectedSort()
     m.sortLabel.text = getSortDisplayText(selection)
-    m.sortOrderIcon.uri = getSortOrderIconUri(selection)
-    m.sortOrderIcon.visible = shouldShowSortOrderIcon(selection)
-    updateSortLabelLayout(selection)
-end sub
-
-'-------------------------------------------------------------------------------
-' updateSortLabelLayout
-'-------------------------------------------------------------------------------
-sub updateSortLabelLayout(selection as object)
-    if shouldShowSortOrderIcon(selection) then
-        m.sortLabel.translation = [22, 11]
-        m.sortLabel.width = 102
-        m.sortLabel.horizAlign = "left"
-        return
-    end if
-
-    m.sortLabel.translation = [0, 11]
-    m.sortLabel.width = 178
-    m.sortLabel.horizAlign = "center"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -73,10 +53,10 @@ function getSelectedSort() as object
     if m.top.selectedSort <> invalid then return m.top.selectedSort
 
     return {
-        optionKey: "SortName:Ascending"
+        optionKey: "SortName"
         sortKey: "SortName"
         sortOrder: "Ascending"
-        label: "Title (A-Z)"
+        label: "Title"
     }
 end function
 
@@ -84,41 +64,21 @@ end function
 ' getSortDisplayText
 '-------------------------------------------------------------------------------
 function getSortDisplayText(selection as object) as string
-    sortKey = SafeString(selection.sortKey, "SortName")
-    if sortKey = "Random" then return "Random"
-    if sortKey = "PremiereDate" then return "Release"
-    if sortKey = "DateCreated" then return "Added"
+    label = SafeString(selection.label, "")
+    if label <> "" then return label
 
     return "Title"
 end function
 
 '-------------------------------------------------------------------------------
-' shouldShowSortOrderIcon
+' openBrowseDialog
 '-------------------------------------------------------------------------------
-function shouldShowSortOrderIcon(selection as object) as boolean
-    return SafeString(selection.sortKey, "SortName") <> "Random"
-end function
-
-'-------------------------------------------------------------------------------
-' getSortOrderIconUri
-'-------------------------------------------------------------------------------
-function getSortOrderIconUri(selection as object) as string
-    if LCase(SafeString(selection.sortOrder, "Ascending")) = "descending" then
-        return "pkg:/images/icons/sort/sort-arrow-up.png"
-    end if
-
-    return "pkg:/images/icons/sort/sort-arrow-down.png"
-end function
-
-'-------------------------------------------------------------------------------
-' openSortDialog
-'-------------------------------------------------------------------------------
-sub openSortDialog()
+sub openBrowseDialog()
     m.top.overlayRequested = {
         id: "sort"
-        componentName: "SortDialog"
-        openFunction: "openSort"
-        closeField: "closeRequested"
+        componentName: "BrowseDialog"
+        openFunction: "openBrowse"
+        closeFields: ["closeRequested", "sortSelected"]
     }
 end sub
 
@@ -130,7 +90,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     normalizedKey = LCase(key)
     if normalizedKey = "ok" or normalizedKey = "select" then
-        openSortDialog()
+        openBrowseDialog()
         return true
     end if
 

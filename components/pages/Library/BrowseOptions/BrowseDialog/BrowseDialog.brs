@@ -1,7 +1,7 @@
 '-------------------------------------------------------------------------------
-' openSort
+' openBrowse
 '-------------------------------------------------------------------------------
-sub openSort()
+sub openBrowse()
     configureDialog()
     syncContent()
     m.top.callFunc("openDialog")
@@ -12,31 +12,31 @@ end sub
 ' configureDialog
 '-------------------------------------------------------------------------------
 sub configureDialog()
-    m.top.title = "Sort By"
-    m.top.dialogWidth = 720
-    m.top.dialogHeight = 545
-    m.top.contentComponentName = "SortContent"
+    m.top.title = "Browse By"
+    m.top.dialogWidth = 520
+    m.top.dialogHeight = 490
+    m.top.contentComponentName = "BrowseByContent"
 end sub
 
 '-------------------------------------------------------------------------------
 ' syncContent
 '-------------------------------------------------------------------------------
 sub syncContent()
-    content = getSortContent()
+    content = getBrowseByContent()
     if content = invalid then return
 
     content.selectedSortKey = m.top.selectedSortKey
-    if m.sortContent <> content then
-        if m.sortContent <> invalid then m.sortContent.unobserveField("sortSelected")
-        m.sortContent = content
-        m.sortContent.observeField("sortSelected", "onContentSortSelected")
+    if m.browseByContent <> content then
+        if m.browseByContent <> invalid then m.browseByContent.unobserveField("sortSelected")
+        m.browseByContent = content
+        m.browseByContent.observeField("sortSelected", "onContentSortSelected")
     end if
 end sub
 
 '-------------------------------------------------------------------------------
-' getSortContent
+' getBrowseByContent
 '-------------------------------------------------------------------------------
-function getSortContent() as dynamic
+function getBrowseByContent() as dynamic
     return m.top.callFunc("getContentComponent")
 end function
 
@@ -44,7 +44,7 @@ end function
 ' focusOptions
 '-------------------------------------------------------------------------------
 sub focusOptions()
-    content = getSortContent()
+    content = getBrowseByContent()
     if content <> invalid then content.callFunc("focusOptions")
 end sub
 
@@ -52,7 +52,7 @@ end sub
 ' onSelectedSortKeyChanged
 '-------------------------------------------------------------------------------
 sub onSelectedSortKeyChanged()
-    content = getSortContent()
+    content = getBrowseByContent()
     if content <> invalid then content.selectedSortKey = m.top.selectedSortKey
 end sub
 
@@ -60,9 +60,9 @@ end sub
 ' onContentSortSelected
 '-------------------------------------------------------------------------------
 sub onContentSortSelected()
-    if m.sortContent = invalid then return
+    if m.browseByContent = invalid then return
 
-    selection = m.sortContent.sortSelected
+    selection = m.browseByContent.sortSelected
     if selection = invalid then return
 
     m.top.selectedSortKey = SafeString(selection.optionKey, m.top.selectedSortKey)

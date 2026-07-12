@@ -4,6 +4,7 @@
 sub init()
     m.log = CreateLogger("Library")
     m.titleLabel = m.top.findNode("titleLabel")
+    m.browseByButton = m.top.findNode("browseByButton")
     m.sortButton = m.top.findNode("sortButton")
     m.letterGutterButton = m.top.findNode("letterGutterButton")
     m.itemsGrid = m.top.findNode("itemsGrid")
@@ -13,8 +14,10 @@ sub init()
 
     m.libraryTask.observeField("response", "onLibraryResponse")
     m.libraryProgressHoldTimer.observeField("fire", "onLibraryProgressHoldTimerFire")
-    m.sortButton.observeField("overlayRequested", "onSortOverlayRequested")
-    m.sortButton.observeField("focusExitDown", "onSortFocusExitDown")
+    m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
+    m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
+    m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
+    m.sortButton.observeField("focusExitDown", "onSortButtonFocusExitDown")
     m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
     m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
     m.itemsGrid.observeField("itemSelected", "onItemSelected")
@@ -31,14 +34,17 @@ sub init()
         }
         isThumbnailLayout: false
         availableLetters: {}
-        selectedSortKey: "SortName:Ascending"
+        selectedSortKey: "SortName"
         selectedSort: invalid
         progressFocusedIndex: 0
         progressHoldKey: ""
+        refocusBrowseByButtonAfterLoad: false
         refocusSortButtonAfterLoad: false
         lifecycle: AsyncLifecycle_Create()
     }
+    m.browseByButton.selectedSort = getDefaultSortSelection()
     m.sortButton.selectedSort = getDefaultSortSelection()
+    m.sortButton.sortEnabled = canUseSortOrder(getDefaultSortSelection())
     m.pageState.selectedSort = getDefaultSortSelection()
 end sub
 
@@ -65,8 +71,13 @@ sub onLoadRequestChanged()
     if request.sortOrder = invalid then request.sortOrder = "Ascending"
     m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
     m.pageState.selectedSortKey = m.pageState.selectedSort.optionKey
+    request.sortBy = SafeString(m.pageState.selectedSort.sortKey, "SortName")
+    request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
+    m.pageState.refocusBrowseByButtonAfterLoad = false
     m.pageState.refocusSortButtonAfterLoad = false
+    m.browseByButton.selectedSort = m.pageState.selectedSort
     m.sortButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
     updateTitleLabel()
     applyGridLayout(m.pageState.imageAspect)
     Spinner_Show(0)
@@ -96,7 +107,10 @@ sub onLibraryResponse()
     renderItems(m.pageState.items)
     updateTitleLabel(m.pageState.items.Count())
     Status_ClearMessage()
-    if m.pageState.refocusSortButtonAfterLoad = true then
+    if m.pageState.refocusBrowseByButtonAfterLoad = true then
+        m.pageState.refocusBrowseByButtonAfterLoad = false
+        focusBrowseByButton()
+    else if m.pageState.refocusSortButtonAfterLoad = true then
         m.pageState.refocusSortButtonAfterLoad = false
         focusSortButton()
     else
@@ -331,11 +345,18 @@ end sub
 ' onSortOverlayRequested
 '-------------------------------------------------------------------------------
 sub onSortOverlayRequested()
-    request = m.sortButton.overlayRequested
+    request = m.browseByButton.overlayRequested
     if request = invalid then return
 
     request.selectedSortKey = m.pageState.selectedSortKey
     m.top.overlayRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' onSortOrderChanged
+'-------------------------------------------------------------------------------
+sub onSortOrderChanged()
+    if applySortOrderSelection(m.sortButton.sortOrderChanged) then reloadLibraryForSort("sort")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -344,14 +365,67 @@ end sub
 function applySortSelection(selection as object) as boolean
     if selection = invalid then return false
 
+    selection = resetSortOrder(selection)
     selectedSortKey = getSelectionOptionKey(selection)
     if selectedSortKey = "" then return false
-    if selectedSortKey = m.pageState.selectedSortKey then return false
+    if selectedSortKey = m.pageState.selectedSortKey then
+        if canUseSortOrder(selection) <> true then return false
+        if m.pageState.selectedSort = invalid then return false
+        if SafeString(m.pageState.selectedSort.sortOrder, "Ascending") <> "Descending" then return false
+
+        m.pageState.selectedSort.sortOrder = "Ascending"
+        m.browseByButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+        return true
+    end if
 
     m.pageState.selectedSortKey = selectedSortKey
     m.pageState.selectedSort = selection
+    m.browseByButton.selectedSort = selection
     m.sortButton.selectedSort = selection
+    m.sortButton.sortEnabled = canUseSortOrder(selection)
     return true
+end function
+
+'-------------------------------------------------------------------------------
+' applySortOrderSelection
+'-------------------------------------------------------------------------------
+function applySortOrderSelection(selection as object) as boolean
+    if selection = invalid then return false
+    if m.pageState.selectedSort = invalid then return false
+
+    sortOrder = SafeString(selection.sortOrder, "Ascending")
+    if sortOrder <> "Descending" then sortOrder = "Ascending"
+    if SafeString(m.pageState.selectedSort.sortOrder, "Ascending") = sortOrder then return false
+
+    m.pageState.selectedSort.sortOrder = sortOrder
+    m.browseByButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' canUseSortOrder
+'-------------------------------------------------------------------------------
+function canUseSortOrder(selection as object) as boolean
+    if selection = invalid then return false
+
+    sortKey = SafeString(selection.sortKey, "")
+    return sortKey <> "" and sortKey <> "Random"
+end function
+
+'-------------------------------------------------------------------------------
+' resetSortOrder
+'-------------------------------------------------------------------------------
+function resetSortOrder(selection as object) as object
+    if selection = invalid then return selection
+    if SafeString(selection.sortKey, "") = "Random" then return selection
+    if SafeString(selection.sortKey, "") = "" then return selection
+
+    selection.sortOrder = "Ascending"
+    return selection
 end function
 
 '-------------------------------------------------------------------------------
@@ -371,16 +445,18 @@ end function
 '-------------------------------------------------------------------------------
 ' reloadLibraryForSort
 '-------------------------------------------------------------------------------
-sub reloadLibraryForSort()
+sub reloadLibraryForSort(refocusTarget = invalid as dynamic)
     request = m.pageState.request
     if request = invalid then return
     if m.pageState.selectedSort = invalid then return
+    if SafeString(m.pageState.selectedSort.sortKey, "") = "" then return
 
     request.sortBy = SafeString(m.pageState.selectedSort.sortKey, "SortName")
     request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
     m.pageState.request = request
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
-    m.pageState.refocusSortButtonAfterLoad = true
+    m.pageState.refocusBrowseByButtonAfterLoad = refocusTarget <> "sort"
+    m.pageState.refocusSortButtonAfterLoad = refocusTarget = "sort"
     Spinner_Show(0)
     renderItems([])
     m.itemsGrid.jumpToItem = 0
@@ -405,10 +481,10 @@ end function
 '-------------------------------------------------------------------------------
 function getDefaultSortSelection() as object
     return {
-        optionKey: "SortName:Ascending"
+        optionKey: "SortName"
         sortKey: "SortName"
         sortOrder: "Ascending"
-        label: "Title (A-Z)"
+        label: "Title"
     }
 end function
 
@@ -426,35 +502,30 @@ function buildSortSelection(sortKey as string, sortOrder as string) as object
         }
     end if
 
-    normalizedSortOrder = "Ascending"
-    if sortOrder = "Descending" then normalizedSortOrder = "Descending"
-
     return {
-        optionKey: normalizedSortKey + ":" + normalizedSortOrder
+        optionKey: normalizedSortKey
         sortKey: normalizedSortKey
-        sortOrder: normalizedSortOrder
-        label: getSortSelectionLabel(normalizedSortKey, normalizedSortOrder)
+        sortOrder: getNormalizedSortOrder(sortOrder)
+        label: getSortSelectionLabel(normalizedSortKey)
     }
+end function
+
+'-------------------------------------------------------------------------------
+' getNormalizedSortOrder
+'-------------------------------------------------------------------------------
+function getNormalizedSortOrder(sortOrder as string) as string
+    if sortOrder = "Descending" then return "Descending"
+    return "Ascending"
 end function
 
 '-------------------------------------------------------------------------------
 ' getSortSelectionLabel
 '-------------------------------------------------------------------------------
-function getSortSelectionLabel(sortKey as string, sortOrder as string) as string
+function getSortSelectionLabel(sortKey as string) as string
     if sortKey = "Random" then return "Random"
-
-    if sortKey = "PremiereDate" then
-        if sortOrder = "Descending" then return "Release Date (newest to oldest)"
-        return "Release Date (oldest to newest)"
-    end if
-
-    if sortKey = "DateCreated" then
-        if sortOrder = "Descending" then return "Date Added (newest to oldest)"
-        return "Date Added (oldest to newest)"
-    end if
-
-    if sortOrder = "Descending" then return "Title (Z-A)"
-    return "Title (A-Z)"
+    if sortKey = "PremiereDate" then return "Release Date"
+    if sortKey = "DateCreated" then return "Date Added"
+    return "Title"
 end function
 
 '-------------------------------------------------------------------------------
@@ -501,6 +572,17 @@ sub focusLibraryItem(index as integer)
 end sub
 
 '-------------------------------------------------------------------------------
+' focusBrowseByButton
+'-------------------------------------------------------------------------------
+function focusBrowseByButton() as boolean
+    if canFocusBrowseByButton() <> true then return false
+
+    m.top.setFocus(true)
+    m.browseByButton.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
 ' focusSortButton
 '-------------------------------------------------------------------------------
 function focusSortButton() as boolean
@@ -512,10 +594,17 @@ function focusSortButton() as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' canFocusBrowseByButton
+'-------------------------------------------------------------------------------
+function canFocusBrowseByButton() as boolean
+    return m.browseByButton <> invalid and m.browseByButton.visible = true
+end function
+
+'-------------------------------------------------------------------------------
 ' canFocusSortButton
 '-------------------------------------------------------------------------------
 function canFocusSortButton() as boolean
-    return m.sortButton <> invalid and m.sortButton.visible = true
+    return m.sortButton <> invalid and m.sortButton.visible = true and m.sortButton.sortEnabled = true
 end function
 
 '-------------------------------------------------------------------------------
@@ -527,9 +616,16 @@ function requestHeaderFocus() as boolean
 end function
 
 '-------------------------------------------------------------------------------
-' onSortFocusExitDown
+' onBrowseByButtonFocusExitDown
 '-------------------------------------------------------------------------------
-sub onSortFocusExitDown()
+sub onBrowseByButtonFocusExitDown()
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSortButtonFocusExitDown
+'-------------------------------------------------------------------------------
+sub onSortButtonFocusExitDown()
     focusItemsIfActive()
 end sub
 
@@ -921,14 +1017,20 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if key = "up" and m.browseByButton.isInFocusChain() then return requestHeaderFocus()
     if key = "up" and m.sortButton.isInFocusChain() then return requestHeaderFocus()
+    if key = "right" and m.browseByButton.isInFocusChain() then
+        if canFocusSortButton() then return focusSortButton()
+        return true
+    end if
+    if key = "left" and m.sortButton.isInFocusChain() then return focusBrowseByButton()
     if key = "up" and m.letterGutterButton.isInFocusChain() then return requestHeaderFocus()
     if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
     if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return requestHeaderFocus()
     if key = "up" and isItemsGridAtFirstRow() then
         stopLibraryProgressHold("up")
-        if canFocusSortButton() <> true then return requestHeaderFocus()
-        return focusSortButton()
+        if canFocusBrowseByButton() <> true then return requestHeaderFocus()
+        return focusBrowseByButton()
     end if
     if key = "right" and isItemsGridAtLastColumn() then return true
     if key = "back" then

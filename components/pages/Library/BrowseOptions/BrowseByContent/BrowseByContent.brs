@@ -33,6 +33,7 @@ sub renderOptions()
             optionKey: option.optionKey
             sortKey: option.sortKey
             sortOrder: option.sortOrder
+            label: option.label
         })
     end for
 
@@ -45,12 +46,11 @@ end sub
 '-------------------------------------------------------------------------------
 function getSortOptions() as object
     return [
-        { optionKey: "SortName:Ascending", sortKey: "SortName", sortOrder: "Ascending", label: "Title (A-Z)" }
-        { optionKey: "SortName:Descending", sortKey: "SortName", sortOrder: "Descending", label: "Title (Z-A)" }
-        { optionKey: "PremiereDate:Ascending", sortKey: "PremiereDate", sortOrder: "Ascending", label: "Release Date (oldest to newest)" }
-        { optionKey: "PremiereDate:Descending", sortKey: "PremiereDate", sortOrder: "Descending", label: "Release Date (newest to oldest)" }
-        { optionKey: "DateCreated:Ascending", sortKey: "DateCreated", sortOrder: "Ascending", label: "Date Added (oldest to newest)" }
-        { optionKey: "DateCreated:Descending", sortKey: "DateCreated", sortOrder: "Descending", label: "Date Added (newest to oldest)" }
+        { optionKey: "SortName", sortKey: "SortName", sortOrder: "", label: "Title" }
+        { optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "", label: "Release Date" }
+        { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "", label: "Date Added" }
+        { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
+        { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
         { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
     ]
 end function
@@ -68,7 +68,7 @@ end sub
 ' getCheckedItemIndex
 '-------------------------------------------------------------------------------
 function getCheckedItemIndex() as integer
-    selectedSortKey = SafeString(m.top.selectedSortKey, "SortName:Ascending")
+    selectedSortKey = SafeString(m.top.selectedSortKey, "SortName")
 
     for i = 0 to m.state.options.Count() - 1
         if SafeString(m.state.options[i].optionKey, "") = selectedSortKey then return i

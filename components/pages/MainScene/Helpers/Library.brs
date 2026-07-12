@@ -127,7 +127,7 @@ sub libraryHandleSortOverlayClosed(closed as object)
         if sortChanged = true then m.libraryPage.callFunc("reloadLibraryForSort")
     end if
 
-    m.libraryPage.callFunc("focusSortButton")
+    m.libraryPage.callFunc("focusBrowseByButton")
 end sub
 
 '-------------------------------------------------------------------------------
