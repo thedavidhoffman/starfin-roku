@@ -360,7 +360,7 @@ end function
 ' getVisibleLibraryItems
 '-------------------------------------------------------------------------------
 function getVisibleLibraryItems() as object
-    if isDecadeFilterActive() then return getSortedLibraryItems(getItemsForDecade(m.pageState.selectedDecade))
+    if isDecadeFilterActive() then return getItemsSortedByLibraryYear(getItemsForDecade(m.pageState.selectedDecade))
 
     return getSortedLibraryItems(m.pageState.allItems)
 end function
@@ -562,6 +562,41 @@ function shuffleLibraryItems(items as object) as object
     end for
 
     return items
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsSortedByLibraryYear
+'-------------------------------------------------------------------------------
+function getItemsSortedByLibraryYear(items as object) as object
+    sortedItems = copyLibraryItems(items)
+    if sortedItems.Count() < 2 then return sortedItems
+
+    for i = 1 to sortedItems.Count() - 1
+        currentItem = sortedItems[i]
+        currentYear = getItemLibraryYear(currentItem)
+        currentTitle = getItemAlphabetTitle(currentItem)
+        insertIndex = i - 1
+
+        while insertIndex >= 0 and shouldYearSortedItemMoveRight(sortedItems[insertIndex], currentYear, currentTitle)
+            sortedItems[insertIndex + 1] = sortedItems[insertIndex]
+            insertIndex = insertIndex - 1
+        end while
+
+        sortedItems[insertIndex + 1] = currentItem
+    end for
+
+    return sortedItems
+end function
+
+'-------------------------------------------------------------------------------
+' shouldYearSortedItemMoveRight
+'-------------------------------------------------------------------------------
+function shouldYearSortedItemMoveRight(item as dynamic, targetYear as integer, targetTitle as string) as boolean
+    itemYear = getItemLibraryYear(item)
+    if itemYear > targetYear then return true
+    if itemYear < targetYear then return false
+
+    return LCase(getItemAlphabetTitle(item)) > LCase(targetTitle)
 end function
 
 '-------------------------------------------------------------------------------
