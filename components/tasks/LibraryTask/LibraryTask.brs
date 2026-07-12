@@ -23,7 +23,7 @@ sub executeRequest()
         parentId: SafeString(request.libraryId, "")
         recursive: true
         includeItemTypes: SafeString(request.includeItemTypes, "")
-        fields: "SortName"
+        fields: "SortName,ProductionYear,PremiereDate,DateCreated"
         enableImageTypes: "Primary,Backdrop,Thumb,Logo"
         imageTypeLimit: 1
         enableTotalRecordCount: false

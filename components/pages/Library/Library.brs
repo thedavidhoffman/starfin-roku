@@ -2,29 +2,11 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("Library")
-    m.titleLabel = m.top.findNode("titleLabel")
-    m.browseByButton = m.top.findNode("browseByButton")
-    m.sortButton = m.top.findNode("sortButton")
-    m.letterGutterButton = m.top.findNode("letterGutterButton")
-    m.itemsGrid = m.top.findNode("itemsGrid")
-    m.libraryTask = m.top.findNode("libraryTask")
-    m.libraryProgressIndicator = m.top.findNode("libraryProgressIndicator")
-    m.libraryProgressHoldTimer = m.top.findNode("libraryProgressHoldTimer")
-
-    m.libraryTask.observeField("response", "onLibraryResponse")
-    m.libraryProgressHoldTimer.observeField("fire", "onLibraryProgressHoldTimerFire")
-    m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
-    m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
-    m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
-    m.sortButton.observeField("focusExitDown", "onSortButtonFocusExitDown")
-    m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
-    m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
-    m.itemsGrid.observeField("itemSelected", "onItemSelected")
-    m.itemsGrid.observeField("itemFocused", "onItemFocused")
-    m.itemsGrid.observeField("navigationKeyPressed", "onItemsGridNavigationKeyPressed")
+    initReferences()
+    initHandlers()
     m.pageState = {
         request: invalid
+        allItems: []
         items: []
         imageAspect: "poster"
         letterGridOpen: false
@@ -36,8 +18,15 @@ sub init()
         availableLetters: {}
         selectedSortKey: "SortName"
         selectedSort: invalid
+        activeFilterType: ""
+        selectedDecade: -1
+        renderDecadeFilterOnApply: false
+        decadeFilterOptions: []
+        itemNodeCache: {}
+        itemNodeCacheAspect: ""
         progressFocusedIndex: 0
         progressHoldKey: ""
+        pendingFocusTarget: ""
         refocusBrowseByButtonAfterLoad: false
         refocusSortButtonAfterLoad: false
         lifecycle: AsyncLifecycle_Create()
@@ -49,12 +38,52 @@ sub init()
 end sub
 
 '-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.log = CreateLogger("Library")
+    m.titleLabel = m.top.findNode("titleLabel")
+    m.browseByButton = m.top.findNode("browseByButton")
+    m.sortButton = m.top.findNode("sortButton")
+    m.letterGutterButton = m.top.findNode("letterGutterButton")
+    m.filterButtonRow = m.top.findNode("filterButtonRow")
+    m.itemsGrid = m.top.findNode("itemsGrid")
+    m.libraryTask = m.top.findNode("libraryTask")
+    m.libraryProgressIndicator = m.top.findNode("libraryProgressIndicator")
+    m.libraryProgressHoldTimer = m.top.findNode("libraryProgressHoldTimer")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.libraryTask.observeField("response", "onLibraryResponse")
+    m.libraryProgressHoldTimer.observeField("fire", "onLibraryProgressHoldTimerFire")
+    m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
+    m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
+    m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
+    m.sortButton.observeField("focusExitDown", "onSortButtonFocusExitDown")
+    m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
+    m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
+    m.filterButtonRow.observeField("filterSelected", "onFilterButtonRowSelected")
+    m.filterButtonRow.observeField("focusExitUp", "onFilterButtonRowFocusExitUp")
+    m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
+    m.itemsGrid.observeField("itemSelected", "onItemSelected")
+    m.itemsGrid.observeField("itemFocused", "onItemFocused")
+    m.itemsGrid.observeField("navigationKeyPressed", "onItemsGridNavigationKeyPressed")
+end sub
+
+'-------------------------------------------------------------------------------
 ' onSettingsChanged
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
-    m.pageState.imageAspect = getLibraryImageAspect()
+    imageAspect = getLibraryImageAspect()
+    if imageAspect <> m.pageState.imageAspect then
+        m.pageState.imageAspect = imageAspect
+        rebuildLibraryItemNodeCache()
+    end if
     applyGridLayout(m.pageState.imageAspect)
-    renderItems(m.pageState.items)
+    renderItems(getVisibleLibraryItems())
 end sub
 
 '-------------------------------------------------------------------------------
@@ -64,26 +93,89 @@ sub onLoadRequestChanged()
     request = m.top.loadRequest
     if request = invalid then return
 
+    prepareLoadRequest(request)
+    resetLibraryForLoad()
+    runLibraryTask(request)
+end sub
+
+'-------------------------------------------------------------------------------
+' prepareLoadRequest
+'-------------------------------------------------------------------------------
+sub prepareLoadRequest(request as object)
     m.pageState.request = request
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
     m.pageState.imageAspect = getLibraryImageAspect()
-    if request.sortBy = invalid then request.sortBy = "SortName"
-    if request.sortOrder = invalid then request.sortOrder = "Ascending"
+    normalizeLoadRequestSort(request)
     m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
     m.pageState.selectedSortKey = m.pageState.selectedSort.optionKey
     request.sortBy = SafeString(m.pageState.selectedSort.sortKey, "SortName")
     request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
-    m.pageState.refocusBrowseByButtonAfterLoad = false
-    m.pageState.refocusSortButtonAfterLoad = false
-    m.browseByButton.selectedSort = m.pageState.selectedSort
-    m.sortButton.selectedSort = m.pageState.selectedSort
-    m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+end sub
+
+'-------------------------------------------------------------------------------
+' normalizeLoadRequestSort
+'-------------------------------------------------------------------------------
+sub normalizeLoadRequestSort(request as object)
+    if request.sortBy = invalid then request.sortBy = "SortName"
+    if request.sortOrder = invalid then request.sortOrder = "Ascending"
+end sub
+
+'-------------------------------------------------------------------------------
+' resetLibraryForLoad
+'-------------------------------------------------------------------------------
+sub resetLibraryForLoad()
+    resetFilterState()
+    resetLibraryItemsState()
+    resetLoadFocusState()
+    syncSortControls()
     updateTitleLabel()
-    applyGridLayout(m.pageState.imageAspect)
+    hideFilterButtonRow()
     Spinner_Show(0)
     closeLetterGrid(false)
     renderItems([])
+end sub
 
+'-------------------------------------------------------------------------------
+' resetFilterState
+'-------------------------------------------------------------------------------
+sub resetFilterState()
+    m.pageState.activeFilterType = ""
+    m.pageState.selectedDecade = -1
+    m.pageState.renderDecadeFilterOnApply = false
+    m.pageState.decadeFilterOptions = []
+end sub
+
+'-------------------------------------------------------------------------------
+' resetLibraryItemsState
+'-------------------------------------------------------------------------------
+sub resetLibraryItemsState()
+    m.pageState.allItems = []
+    m.pageState.items = []
+    clearLibraryItemNodeCache()
+end sub
+
+'-------------------------------------------------------------------------------
+' resetLoadFocusState
+'-------------------------------------------------------------------------------
+sub resetLoadFocusState()
+    m.pageState.pendingFocusTarget = ""
+    m.pageState.refocusBrowseByButtonAfterLoad = false
+    m.pageState.refocusSortButtonAfterLoad = false
+end sub
+
+'-------------------------------------------------------------------------------
+' syncSortControls
+'-------------------------------------------------------------------------------
+sub syncSortControls()
+    m.browseByButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+end sub
+
+'-------------------------------------------------------------------------------
+' runLibraryTask
+'-------------------------------------------------------------------------------
+sub runLibraryTask(request as object)
     m.libraryTask.request = request
     m.libraryTask.control = "run"
 end sub
@@ -103,8 +195,14 @@ sub onLibraryResponse()
         return
     end if
 
-    m.pageState.items = getItemsFromPayload(response.payload)
-    renderItems(m.pageState.items)
+    m.pageState.allItems = getItemsFromPayload(response.payload)
+    m.pageState.decadeFilterOptions = buildDecadeFilterOptions(m.pageState.allItems)
+    rebuildLibraryItemNodeCache()
+    if isDecadeFilterActive() then
+        showDecadeFilterRow()
+    else
+        renderItems(m.pageState.allItems)
+    end if
     updateTitleLabel(m.pageState.items.Count())
     Status_ClearMessage()
     if m.pageState.refocusBrowseByButtonAfterLoad = true then
@@ -144,25 +242,346 @@ end sub
 ' renderItems
 '-------------------------------------------------------------------------------
 sub renderItems(items as object)
-    content = CreateObject("roSGNode", "ContentNode")
-    imageAspect = m.pageState.imageAspect
-
-    for each item in items
-        if isAssocArray(item) = false then continue for
-
-        child = content.createChild("ContentNode")
-        child.HDPosterUrl = getItemImageUrl(item, imageAspect)
-        child.AddFields({
-            imageAspect: imageAspect
-            raw: item
-        })
-    end for
-
+    if items = invalid then items = []
+    m.pageState.items = items
+    detachLibraryGridContent()
+    content = buildLibraryContent(items)
     m.itemsGrid.content = content
     m.itemsGrid.visible = content.getChildCount() > 0
     updateAvailableLetters(items)
     updateLibraryProgressItemCount(content.getChildCount())
 end sub
+
+'-------------------------------------------------------------------------------
+' detachLibraryGridContent
+'-------------------------------------------------------------------------------
+sub detachLibraryGridContent()
+    if m.itemsGrid = invalid then return
+    if m.itemsGrid.content = invalid then return
+
+    childCount = m.itemsGrid.content.getChildCount()
+    if childCount > 0 then m.itemsGrid.content.removeChildrenIndex(childCount, 0)
+end sub
+
+'-------------------------------------------------------------------------------
+' buildLibraryContent
+'-------------------------------------------------------------------------------
+function buildLibraryContent(items as object) as object
+    content = CreateObject("roSGNode", "ContentNode")
+    if items = invalid then return content
+
+    ensureLibraryItemNodeCache()
+    for each item in items
+        node = getCachedLibraryItemNode(item)
+        if node <> invalid then content.appendChild(node)
+    end for
+
+    return content
+end function
+
+'-------------------------------------------------------------------------------
+' clearLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub clearLibraryItemNodeCache()
+    m.pageState.itemNodeCache = {}
+    m.pageState.itemNodeCacheAspect = ""
+end sub
+
+'-------------------------------------------------------------------------------
+' rebuildLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub rebuildLibraryItemNodeCache()
+    clearLibraryItemNodeCache()
+    ensureLibraryItemNodeCache()
+end sub
+
+'-------------------------------------------------------------------------------
+' ensureLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub ensureLibraryItemNodeCache()
+    if m.pageState.itemNodeCacheAspect = m.pageState.imageAspect then return
+
+    m.pageState.itemNodeCache = {}
+    m.pageState.itemNodeCacheAspect = m.pageState.imageAspect
+    items = m.pageState.allItems
+    if items = invalid then return
+
+    for each item in items
+        itemId = getLibraryItemCacheKey(item)
+        if itemId <> "" and m.pageState.itemNodeCache[itemId] = invalid then
+            m.pageState.itemNodeCache[itemId] = createLibraryItemNode(item)
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' getCachedLibraryItemNode
+'-------------------------------------------------------------------------------
+function getCachedLibraryItemNode(item as dynamic) as dynamic
+    itemId = getLibraryItemCacheKey(item)
+    if itemId = "" then return createLibraryItemNode(item)
+
+    ensureLibraryItemNodeCache()
+    node = m.pageState.itemNodeCache[itemId]
+    if node = invalid then
+        node = createLibraryItemNode(item)
+        m.pageState.itemNodeCache[itemId] = node
+    end if
+
+    return node
+end function
+
+'-------------------------------------------------------------------------------
+' createLibraryItemNode
+'-------------------------------------------------------------------------------
+function createLibraryItemNode(item as dynamic) as dynamic
+    if isAssocArray(item) = false then return invalid
+
+    imageAspect = m.pageState.imageAspect
+    node = CreateObject("roSGNode", "ContentNode")
+    node.HDPosterUrl = getItemImageUrl(item, imageAspect)
+    node.AddFields({
+        imageAspect: imageAspect
+        raw: item
+    })
+    return node
+end function
+
+'-------------------------------------------------------------------------------
+' getLibraryItemCacheKey
+'-------------------------------------------------------------------------------
+function getLibraryItemCacheKey(item as dynamic) as string
+    if isAssocArray(item) = false then return ""
+
+    return SafeString(FirstNonEmpty([item.Id], ""), "")
+end function
+
+'-------------------------------------------------------------------------------
+' getVisibleLibraryItems
+'-------------------------------------------------------------------------------
+function getVisibleLibraryItems() as object
+    if isDecadeFilterActive() then return getSortedLibraryItems(getItemsForDecade(m.pageState.selectedDecade))
+
+    return getSortedLibraryItems(m.pageState.allItems)
+end function
+
+'-------------------------------------------------------------------------------
+' renderCurrentLibraryItems
+'-------------------------------------------------------------------------------
+sub renderCurrentLibraryItems()
+    renderItems(getVisibleLibraryItems())
+    updateTitleLabel(m.pageState.items.Count())
+    m.itemsGrid.jumpToItem = 0
+    m.itemsGrid.itemFocused = 0
+end sub
+
+'-------------------------------------------------------------------------------
+' isDecadeFilterActive
+'-------------------------------------------------------------------------------
+function isDecadeFilterActive() as boolean
+    return SafeString(m.pageState.activeFilterType, "") = "Decade"
+end function
+
+'-------------------------------------------------------------------------------
+' showDecadeFilterRow
+'-------------------------------------------------------------------------------
+sub showDecadeFilterRow()
+    options = m.pageState.decadeFilterOptions
+    if options = invalid then options = []
+    if m.pageState.selectedDecade < 0 then m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
+    m.filterButtonRow.items = options
+    m.filterButtonRow.selectedValue = m.pageState.selectedDecade
+    m.filterButtonRow.visible = options.Count() > 0
+    applyGridLayout(m.pageState.imageAspect)
+    if m.pageState.selectedDecade >= 0 or m.pageState.renderDecadeFilterOnApply = true then renderItems(getVisibleLibraryItems())
+    m.pageState.renderDecadeFilterOnApply = false
+end sub
+
+'-------------------------------------------------------------------------------
+' getFirstDecadeFilterValue
+'-------------------------------------------------------------------------------
+function getFirstDecadeFilterValue(options as object) as integer
+    if options = invalid or options.Count() = 0 then return -1
+
+    return int(options[0].value)
+end function
+
+'-------------------------------------------------------------------------------
+' hideFilterButtonRow
+'-------------------------------------------------------------------------------
+sub hideFilterButtonRow()
+    m.filterButtonRow.visible = false
+    m.filterButtonRow.items = []
+    m.filterButtonRow.selectedValue = -1
+    applyGridLayout(m.pageState.imageAspect)
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilterButtonRowSelected
+'-------------------------------------------------------------------------------
+sub onFilterButtonRowSelected()
+    selected = m.filterButtonRow.filterSelected
+    if selected = invalid then return
+    if SafeString(selected.type, "") <> "Decade" then return
+
+    m.pageState.selectedDecade = int(selected.value)
+    m.filterButtonRow.selectedValue = m.pageState.selectedDecade
+    renderItems(getVisibleLibraryItems())
+    updateTitleLabel(m.pageState.items.Count())
+    m.filterButtonRow.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilterButtonRowFocusExitUp
+'-------------------------------------------------------------------------------
+sub onFilterButtonRowFocusExitUp()
+    focusBrowseByButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilterButtonRowFocusExitDown
+'-------------------------------------------------------------------------------
+sub onFilterButtonRowFocusExitDown()
+    m.pageState.pendingFocusTarget = ""
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' buildDecadeFilterOptions
+'-------------------------------------------------------------------------------
+function buildDecadeFilterOptions(items as object) as object
+    decadeMap = {}
+    decades = []
+    if items = invalid then return decades
+
+    for each item in items
+        year = getItemLibraryYear(item)
+        if year <= 0 then continue for
+
+        decade = int(Fix(year / 10) * 10)
+        decadeKey = decade.ToStr()
+        if decadeMap[decadeKey] = invalid then
+            decadeMap[decadeKey] = true
+            decades.Push(decade)
+        end if
+    end for
+
+    decades.Sort()
+    options = []
+    for each decade in decades
+        options.Push({
+            label: decade.ToStr()
+            value: decade
+        })
+    end for
+
+    return options
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsForDecade
+'-------------------------------------------------------------------------------
+function getItemsForDecade(decade as integer) as object
+    if decade < 0 then return m.pageState.allItems
+
+    filteredItems = []
+    for each item in m.pageState.allItems
+        year = getItemLibraryYear(item)
+        if year >= decade and year < decade + 10 then filteredItems.Push(item)
+    end for
+
+    return filteredItems
+end function
+
+'-------------------------------------------------------------------------------
+' getSortedLibraryItems
+'-------------------------------------------------------------------------------
+function getSortedLibraryItems(items as object) as object
+    sortedItems = copyLibraryItems(items)
+    if sortedItems.Count() < 2 then return sortedItems
+
+    selection = m.pageState.selectedSort
+    if selection = invalid then selection = getDefaultSortSelection()
+    sortKey = SafeString(selection.sortKey, "SortName")
+    if sortKey = "" then return sortedItems
+
+    if sortKey = "Random" then return shuffleLibraryItems(sortedItems)
+
+    sortedItems.SortBy(sortKey)
+
+    if getSortOrderFromSelection(selection) = "Descending" then reverseLibraryItems(sortedItems)
+
+    return sortedItems
+end function
+
+'-------------------------------------------------------------------------------
+' copyLibraryItems
+'-------------------------------------------------------------------------------
+function copyLibraryItems(items as object) as object
+    copiedItems = []
+    if items = invalid then return copiedItems
+
+    for each item in items
+        copiedItems.Push(item)
+    end for
+
+    return copiedItems
+end function
+
+'-------------------------------------------------------------------------------
+' reverseLibraryItems
+'-------------------------------------------------------------------------------
+sub reverseLibraryItems(items as object)
+    if items = invalid or items.Count() < 2 then return
+
+    leftIndex = 0
+    rightIndex = items.Count() - 1
+    while leftIndex < rightIndex
+        temp = items[leftIndex]
+        items[leftIndex] = items[rightIndex]
+        items[rightIndex] = temp
+        leftIndex = leftIndex + 1
+        rightIndex = rightIndex - 1
+    end while
+end sub
+
+'-------------------------------------------------------------------------------
+' shuffleLibraryItems
+'-------------------------------------------------------------------------------
+function shuffleLibraryItems(items as object) as object
+    if items = invalid or items.Count() < 2 then return items
+
+    for i = items.Count() - 1 to 1 step -1
+        swapIndex = int(Rnd(0) * (i + 1))
+        if swapIndex < 0 then swapIndex = 0
+        if swapIndex > i then swapIndex = i
+
+        temp = items[i]
+        items[i] = items[swapIndex]
+        items[swapIndex] = temp
+    end for
+
+    return items
+end function
+
+'-------------------------------------------------------------------------------
+' getItemLibraryYear
+'-------------------------------------------------------------------------------
+function getItemLibraryYear(item as dynamic) as integer
+    if isAssocArray(item) = false then return 0
+
+    productionYear = int(Val(SafeString(item.ProductionYear, "")))
+    if productionYear > 0 then return productionYear
+
+    premiereDate = SafeString(item.PremiereDate, "")
+    if Len(premiereDate) < 4 then return 0
+
+    yearText = Left(premiereDate, 4)
+    year = Val(yearText)
+    if year <= 0 then return 0
+
+    return int(year)
+end function
 
 '-------------------------------------------------------------------------------
 ' onItemFocused
@@ -356,7 +775,7 @@ end sub
 ' onSortOrderChanged
 '-------------------------------------------------------------------------------
 sub onSortOrderChanged()
-    if applySortOrderSelection(m.sortButton.sortOrderChanged) then reloadLibraryForSort("sort")
+    applySortOrderSelection(m.sortButton.sortOrderChanged)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -368,6 +787,40 @@ function applySortSelection(selection as object) as boolean
     selection = resetSortOrder(selection)
     selectedSortKey = getSelectionOptionKey(selection)
     if selectedSortKey = "" then return false
+    if selectedSortKey = "Decade" then
+        if SafeString(m.pageState.selectedSortKey, "") = "Decade" then
+            m.pageState.pendingFocusTarget = "filterButtonRow"
+            return false
+        end if
+
+        shouldRenderLibrary = isShowingUnfilteredTitleAscendingMasterList() <> true
+        m.pageState.selectedSortKey = selectedSortKey
+        m.pageState.selectedSort = {
+            optionKey: "Decade"
+            sortKey: "SortName"
+            sortOrder: "Ascending"
+            label: SafeString(selection.label, "Decade")
+        }
+        m.pageState.activeFilterType = "Decade"
+        m.pageState.selectedDecade = getFirstDecadeFilterValue(m.pageState.decadeFilterOptions)
+        m.pageState.renderDecadeFilterOnApply = shouldRenderLibrary
+        m.pageState.pendingFocusTarget = "filterButtonRow"
+        m.browseByButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.sortEnabled = false
+        closeLetterGrid(false)
+        showDecadeFilterRow()
+        return false
+    end if
+
+    if isDecadeFilterActive() then
+        m.pageState.activeFilterType = ""
+        m.pageState.selectedDecade = -1
+        m.pageState.renderDecadeFilterOnApply = false
+        m.pageState.pendingFocusTarget = ""
+        hideFilterButtonRow()
+    end if
+
     if selectedSortKey = m.pageState.selectedSortKey then
         if canUseSortOrder(selection) <> true then return false
         if m.pageState.selectedSort = invalid then return false
@@ -377,7 +830,8 @@ function applySortSelection(selection as object) as boolean
         m.browseByButton.selectedSort = m.pageState.selectedSort
         m.sortButton.selectedSort = m.pageState.selectedSort
         m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
-        return true
+        renderCurrentLibraryItems()
+        return false
     end if
 
     m.pageState.selectedSortKey = selectedSortKey
@@ -385,7 +839,8 @@ function applySortSelection(selection as object) as boolean
     m.browseByButton.selectedSort = selection
     m.sortButton.selectedSort = selection
     m.sortButton.sortEnabled = canUseSortOrder(selection)
-    return true
+    renderCurrentLibraryItems()
+    return false
 end function
 
 '-------------------------------------------------------------------------------
@@ -403,6 +858,23 @@ function applySortOrderSelection(selection as object) as boolean
     m.browseByButton.selectedSort = m.pageState.selectedSort
     m.sortButton.selectedSort = m.pageState.selectedSort
     m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+    renderCurrentLibraryItems()
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' isShowingUnfilteredTitleAscendingMasterList
+'-------------------------------------------------------------------------------
+function isShowingUnfilteredTitleAscendingMasterList() as boolean
+    if isDecadeFilterActive() then return false
+    if SafeString(m.pageState.selectedSortKey, "SortName") <> "SortName" then return false
+    if m.pageState.selectedSort <> invalid and SafeString(m.pageState.selectedSort.sortOrder, "Ascending") = "Descending" then return false
+
+    items = m.pageState.items
+    allItems = m.pageState.allItems
+    if items = invalid or allItems = invalid then return false
+    if items.Count() <> allItems.Count() then return false
+
     return true
 end function
 
@@ -534,8 +1006,23 @@ end function
 sub activate()
     AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
     m.top.setFocus(true)
+    if focusPendingTarget() then return
+
     focusItemsIfActive()
 end sub
+
+'-------------------------------------------------------------------------------
+' focusPendingTarget
+'-------------------------------------------------------------------------------
+function focusPendingTarget() as boolean
+    target = SafeString(m.pageState.pendingFocusTarget, "")
+    if target = "" then return false
+
+    m.pageState.pendingFocusTarget = ""
+    if target = "filterButtonRow" then return focusFilterButtonRow()
+
+    return false
+end function
 
 '-------------------------------------------------------------------------------
 ' deactivate
@@ -619,6 +1106,11 @@ end function
 ' onBrowseByButtonFocusExitDown
 '-------------------------------------------------------------------------------
 sub onBrowseByButtonFocusExitDown()
+    if canFocusFilterButtonRow() then
+        focusFilterButtonRow()
+        return
+    end if
+
     focusItemsIfActive()
 end sub
 
@@ -626,8 +1118,36 @@ end sub
 ' onSortButtonFocusExitDown
 '-------------------------------------------------------------------------------
 sub onSortButtonFocusExitDown()
+    if canFocusFilterButtonRow() then
+        focusFilterButtonRow()
+        return
+    end if
+
     focusItemsIfActive()
 end sub
+
+'-------------------------------------------------------------------------------
+' focusFilterButtonRow
+'-------------------------------------------------------------------------------
+function focusFilterButtonRow() as boolean
+    if canFocusFilterButtonRow() <> true then return false
+
+    m.top.setFocus(true)
+    m.filterButtonRow.callFunc("focusFirstButton")
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' canFocusFilterButtonRow
+'-------------------------------------------------------------------------------
+function canFocusFilterButtonRow() as boolean
+    if m.filterButtonRow = invalid then return false
+    if m.filterButtonRow.visible <> true then return false
+    items = m.filterButtonRow.items
+    if items = invalid then return false
+
+    return items.Count() > 0
+end function
 
 '-------------------------------------------------------------------------------
 ' focusFirstLibraryItem
@@ -854,10 +1374,13 @@ end function
 ' applyGridLayout
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
+    filterRowOffset = getFilterButtonRowOffset()
+
     if imageAspect = "wide" then
         m.pageState.isThumbnailLayout = true
         m.titleLabel.translation = [460, 120]
-        m.itemsGrid.translation = [23, 208]
+        m.filterButtonRow.translation = [264, 208]
+        m.itemsGrid.translation = [23, 208 + filterRowOffset]
         applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
         applyLetterGridLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
         m.itemsGrid.itemSize = [465, 348]
@@ -871,7 +1394,8 @@ sub applyGridLayout(imageAspect as string)
 
     m.pageState.isThumbnailLayout = false
     m.titleLabel.translation = [460, 120]
-    m.itemsGrid.translation = [96, 208]
+    m.filterButtonRow.translation = [264, 208]
+    m.itemsGrid.translation = [96, 208 + filterRowOffset]
     applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
     applyLetterGridLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
     m.itemsGrid.itemSize = [295, 463]
@@ -881,6 +1405,22 @@ sub applyGridLayout(imageAspect as string)
     m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
     updateLibraryProgressLayout(imageAspect)
 end sub
+
+'-------------------------------------------------------------------------------
+' getFilterButtonRowOffset
+'-------------------------------------------------------------------------------
+function getFilterButtonRowOffset() as integer
+    if canShowFilterButtonRowLayout() <> true then return 0
+
+    return 84
+end function
+
+'-------------------------------------------------------------------------------
+' canShowFilterButtonRowLayout
+'-------------------------------------------------------------------------------
+function canShowFilterButtonRowLayout() as boolean
+    return m.filterButtonRow <> invalid and m.filterButtonRow.visible = true
+end function
 
 '-------------------------------------------------------------------------------
 ' updateLibraryProgressLayout
@@ -1026,6 +1566,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "left" and m.sortButton.isInFocusChain() then return focusBrowseByButton()
     if key = "up" and m.letterGutterButton.isInFocusChain() then return requestHeaderFocus()
     if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
+    if key = "up" and isItemsGridAtFirstRow() and canFocusFilterButtonRow() then
+        stopLibraryProgressHold("up")
+        return focusFilterButtonRow()
+    end if
     if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return requestHeaderFocus()
     if key = "up" and isItemsGridAtFirstRow() then
         stopLibraryProgressHold("up")
