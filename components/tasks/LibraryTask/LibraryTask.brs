@@ -45,8 +45,115 @@ sub executeRequest()
         action: "library"
         libraryId: SafeString(request.libraryId, "")
         payload: response.data
+        filterOptions: buildFilterOptions(getItemsFromPayload(response.data))
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' buildFilterOptions
+'-------------------------------------------------------------------------------
+function buildFilterOptions(items as object) as object
+    filterOptions = {
+        decadeOptions: []
+        genreOptions: []
+    }
+    if items = invalid then return filterOptions
+
+    decadeValues = []
+    decadeValueByKey = {}
+    genreLabels = []
+    genreLabelByKey = {}
+
+    for each item in items
+        year = getItemLibraryYear(item)
+        if year > 0 then
+            decade = Number_ToInteger(Fix(year / 10) * 10, 0)
+            decadeKey = decade.ToStr()
+            if decadeValueByKey[decadeKey] = invalid then
+                decadeValueByKey[decadeKey] = decade
+                decadeValues.Push(decade)
+            end if
+        end if
+
+        for each genre in getItemGenres(item)
+            genreLabel = String_Trim(SafeString(genre, ""))
+            if genreLabel = "" then continue for
+
+            genreKey = LCase(genreLabel)
+            if genreLabelByKey[genreKey] = invalid then
+                genreLabelByKey[genreKey] = genreLabel
+                genreLabels.Push(genreLabel)
+            end if
+        end for
+    end for
+
+    decadeValues.Sort()
+    for each decade in decadeValues
+        decadeKey = decade.ToStr()
+        filterOptions.decadeOptions.Push({
+            label: decadeKey
+            value: decade
+        })
+    end for
+
+    genreLabels.Sort()
+    for each genreLabel in genreLabels
+        filterOptions.genreOptions.Push({
+            label: genreLabel
+            value: genreLabel
+        })
+    end for
+
+    return filterOptions
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsFromPayload
+'-------------------------------------------------------------------------------
+function getItemsFromPayload(payload as dynamic) as object
+    if payload = invalid then return []
+    if Type(payload) = "roArray" then return payload
+    if isAssocArray(payload) = false then return []
+    if payload.Items <> invalid then return payload.Items
+    return []
+end function
+
+'-------------------------------------------------------------------------------
+' getItemGenres
+'-------------------------------------------------------------------------------
+function getItemGenres(item as dynamic) as object
+    if isAssocArray(item) = false then return []
+    if item.Genres = invalid then return []
+
+    return item.Genres
+end function
+
+'-------------------------------------------------------------------------------
+' getItemLibraryYear
+'-------------------------------------------------------------------------------
+function getItemLibraryYear(item as dynamic) as integer
+    if isAssocArray(item) = false then return 0
+
+    productionYear = Number_ToInteger(item.ProductionYear, 0)
+    if productionYear > 0 then return productionYear
+
+    premiereDate = SafeString(item.PremiereDate, "")
+    if Len(premiereDate) < 4 then return 0
+
+    yearText = Left(premiereDate, 4)
+    year = Number_ToInteger(yearText, 0)
+    if year <= 0 then return 0
+
+    return year
+end function
+
+'-------------------------------------------------------------------------------
+' isAssocArray
+'-------------------------------------------------------------------------------
+function isAssocArray(value as dynamic) as boolean
+    valueType = Type(value)
+    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
+end function
 
 '-------------------------------------------------------------------------------
 ' validateRequest

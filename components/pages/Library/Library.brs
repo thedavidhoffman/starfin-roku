@@ -190,15 +190,14 @@ sub onLibraryResponse()
     if response = invalid then return
     if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "library") <> true then return
 
-    Spinner_Hide()
-
     if response.ok <> true then
+        Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load library."))
         return
     end if
 
     m.pageState.allItems = getItemsFromPayload(response.payload)
-    m.pageState.filterCache = buildFilterCache(m.pageState.allItems)
+    m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
     rebuildLibraryItemNodeCache()
     if isDecadeFilterActive() then
         showDecadeFilterRow()
@@ -218,6 +217,7 @@ sub onLibraryResponse()
     else
         focusItemsIfActive()
     end if
+    Spinner_Hide()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -307,15 +307,6 @@ sub ensureLibraryItemNodeCache()
 
     m.pageState.itemNodeCache = {}
     m.pageState.itemNodeCacheAspect = m.pageState.imageAspect
-    items = m.pageState.allItems
-    if items = invalid then return
-
-    for each item in items
-        itemId = getLibraryItemCacheKey(item)
-        if itemId <> "" and m.pageState.itemNodeCache[itemId] = invalid then
-            m.pageState.itemNodeCache[itemId] = createLibraryItemNode(item)
-        end if
-    end for
 end sub
 
 '-------------------------------------------------------------------------------
@@ -510,66 +501,20 @@ function createEmptyFilterCache() as object
         genreOptions: []
         decadeItemsByValue: {}
         genreItemsByValue: {}
+        sortedDecadeValues: {}
+        sortedGenreValues: {}
     }
 end function
 
 '-------------------------------------------------------------------------------
-' buildFilterCache
+' createFilterCacheFromOptions
 '-------------------------------------------------------------------------------
-function buildFilterCache(items as object) as object
+function createFilterCacheFromOptions(filterOptions as dynamic) as object
     cache = createEmptyFilterCache()
-    if items = invalid then return cache
+    if isAssocArray(filterOptions) = false then return cache
 
-    decadeValues = []
-    genreLabels = []
-    genreLabelByKey = {}
-
-    for each item in items
-        year = getItemLibraryYear(item)
-        if year > 0 then
-            decade = Number_ToInteger(Fix(year / 10) * 10)
-            decadeKey = decade.ToStr()
-            if cache.decadeItemsByValue[decadeKey] = invalid then
-                cache.decadeItemsByValue[decadeKey] = []
-                decadeValues.Push(decade)
-            end if
-            cache.decadeItemsByValue[decadeKey].Push(item)
-        end if
-
-        for each genre in getItemGenres(item)
-            genreLabel = String_Trim(SafeString(genre, ""))
-            if genreLabel = "" then continue for
-
-            genreKey = LCase(genreLabel)
-            if genreLabelByKey[genreKey] = invalid then
-                genreLabelByKey[genreKey] = genreLabel
-                cache.genreItemsByValue[genreLabel] = []
-                genreLabels.Push(genreLabel)
-            end if
-
-            bucketLabel = genreLabelByKey[genreKey]
-            cache.genreItemsByValue[bucketLabel].Push(item)
-        end for
-    end for
-
-    decadeValues.Sort()
-    for each decade in decadeValues
-        decadeKey = decade.ToStr()
-        cache.decadeOptions.Push({
-            label: decadeKey
-            value: decade
-        })
-        cache.decadeItemsByValue[decadeKey] = getItemsSortedByLibraryYear(cache.decadeItemsByValue[decadeKey])
-    end for
-
-    genreLabels.Sort()
-    for each genreLabel in genreLabels
-        cache.genreOptions.Push({
-            label: genreLabel
-            value: genreLabel
-        })
-        cache.genreItemsByValue[genreLabel] = getItemsSortedBySortName(cache.genreItemsByValue[genreLabel])
-    end for
+    if filterOptions.decadeOptions <> invalid then cache.decadeOptions = filterOptions.decadeOptions
+    if filterOptions.genreOptions <> invalid then cache.genreOptions = filterOptions.genreOptions
 
     return cache
 end function
@@ -582,13 +527,33 @@ function getCachedFilterItems(filterType as string, filterValue as string) as ob
     if cache = invalid then return []
 
     if filterType = "Decade" then
-        items = cache.decadeItemsByValue[SafeString(filterValue, "")]
+        filterKey = SafeString(filterValue, "")
+        items = cache.decadeItemsByValue[filterKey]
+        if items = invalid then
+            items = getItemsForDecade(filterKey)
+            cache.decadeItemsByValue[filterKey] = items
+        end if
+        if cache.sortedDecadeValues[filterKey] <> true then
+            items = getItemsSortedByLibraryYear(items)
+            cache.decadeItemsByValue[filterKey] = items
+            cache.sortedDecadeValues[filterKey] = true
+        end if
         if items <> invalid then return items
         return []
     end if
 
     if filterType = "Genre" then
-        items = cache.genreItemsByValue[SafeString(filterValue, "")]
+        filterKey = SafeString(filterValue, "")
+        items = cache.genreItemsByValue[filterKey]
+        if items = invalid then
+            items = getItemsForGenre(filterKey)
+            cache.genreItemsByValue[filterKey] = items
+        end if
+        if cache.sortedGenreValues[filterKey] <> true then
+            items = getItemsSortedBySortName(items)
+            cache.genreItemsByValue[filterKey] = items
+            cache.sortedGenreValues[filterKey] = true
+        end if
         if items <> invalid then return items
         return []
     end if
@@ -597,13 +562,48 @@ function getCachedFilterItems(filterType as string, filterValue as string) as ob
 end function
 
 '-------------------------------------------------------------------------------
-' getItemGenres
+' getItemsForDecade
 '-------------------------------------------------------------------------------
-function getItemGenres(item as dynamic) as object
-    if isAssocArray(item) = false then return []
-    if item.Genres = invalid then return []
+function getItemsForDecade(decadeKey as string) as object
+    items = []
+    targetDecade = Number_ToInteger(decadeKey, -1)
+    if targetDecade < 0 then return items
 
-    return item.Genres
+    for each item in m.pageState.allItems
+        year = getItemLibraryYear(item)
+        if year > 0 and Number_ToInteger(Fix(year / 10) * 10, 0) = targetDecade then items.Push(item)
+    end for
+
+    return items
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsForGenre
+'-------------------------------------------------------------------------------
+function getItemsForGenre(genreLabel as string) as object
+    items = []
+    targetGenre = LCase(String_Trim(genreLabel))
+    if targetGenre = "" then return items
+
+    for each item in m.pageState.allItems
+        if itemHasGenre(item, targetGenre) then items.Push(item)
+    end for
+
+    return items
+end function
+
+'-------------------------------------------------------------------------------
+' itemHasGenre
+'-------------------------------------------------------------------------------
+function itemHasGenre(item as dynamic, targetGenre as string) as boolean
+    if isAssocArray(item) = false then return false
+    if item.Genres = invalid then return false
+
+    for each genre in item.Genres
+        if LCase(String_Trim(SafeString(genre, ""))) = targetGenre then return true
+    end for
+
+    return false
 end function
 
 '-------------------------------------------------------------------------------
@@ -729,17 +729,17 @@ end function
 function getItemLibraryYear(item as dynamic) as integer
     if isAssocArray(item) = false then return 0
 
-    productionYear = Number_ToInteger(item.ProductionYear)
+    productionYear = Number_ToInteger(item.ProductionYear, 0)
     if productionYear > 0 then return productionYear
 
     premiereDate = SafeString(item.PremiereDate, "")
     if Len(premiereDate) < 4 then return 0
 
     yearText = Left(premiereDate, 4)
-    year = Number_ToInteger(yearText)
+    year = Number_ToInteger(yearText, 0)
     if year <= 0 then return 0
 
-    return Number_ToInteger(year)
+    return Number_ToInteger(year, 0)
 end function
 
 '-------------------------------------------------------------------------------
