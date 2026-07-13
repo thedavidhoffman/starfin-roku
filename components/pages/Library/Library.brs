@@ -22,10 +22,7 @@ sub init()
         selectedDecade: -1
         selectedGenre: ""
         renderDecadeFilterOnApply: false
-        decadeFilterOptions: []
-        genreFilterOptions: []
-        filterRequestId: 0
-        itemById: {}
+        filterCache: createEmptyFilterCache()
         itemNodeCache: {}
         itemNodeCacheAspect: ""
         progressFocusedIndex: 0
@@ -53,7 +50,6 @@ sub initReferences()
     m.filterButtonRow = m.top.findNode("filterButtonRow")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.libraryTask = m.top.findNode("libraryTask")
-    m.libraryFilterTask = m.top.findNode("libraryFilterTask")
     m.libraryProgressIndicator = m.top.findNode("libraryProgressIndicator")
     m.libraryProgressHoldTimer = m.top.findNode("libraryProgressHoldTimer")
 end sub
@@ -63,7 +59,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.libraryTask.observeField("response", "onLibraryResponse")
-    m.libraryFilterTask.observeField("response", "onLibraryFilterResponse")
     m.libraryProgressHoldTimer.observeField("fire", "onLibraryProgressHoldTimerFire")
     m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
@@ -148,11 +143,8 @@ sub resetFilterState()
     m.pageState.activeFilterType = ""
     m.pageState.selectedDecade = -1
     m.pageState.selectedGenre = ""
-    m.pageState.filterRequestId = m.pageState.filterRequestId + 1
     m.pageState.renderDecadeFilterOnApply = false
-    m.pageState.decadeFilterOptions = []
-    m.pageState.genreFilterOptions = []
-    if m.libraryFilterTask <> invalid then m.libraryFilterTask.control = "stop"
+    m.pageState.filterCache = createEmptyFilterCache()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -161,8 +153,6 @@ end sub
 sub resetLibraryItemsState()
     m.pageState.allItems = []
     m.pageState.items = []
-    m.pageState.itemById = {}
-    if m.libraryFilterTask <> invalid then m.libraryFilterTask.libraryItems = []
     clearLibraryItemNodeCache()
 end sub
 
@@ -208,10 +198,7 @@ sub onLibraryResponse()
     end if
 
     m.pageState.allItems = getItemsFromPayload(response.payload)
-    m.pageState.itemById = buildLibraryItemMap(m.pageState.allItems)
-    m.libraryFilterTask.libraryItems = m.pageState.allItems
-    m.pageState.decadeFilterOptions = buildDecadeFilterOptions(m.pageState.allItems)
-    m.pageState.genreFilterOptions = buildGenreFilterOptions(m.pageState.allItems)
+    m.pageState.filterCache = buildFilterCache(m.pageState.allItems)
     rebuildLibraryItemNodeCache()
     if isDecadeFilterActive() then
         showDecadeFilterRow()
@@ -232,21 +219,6 @@ sub onLibraryResponse()
         focusItemsIfActive()
     end if
 end sub
-
-'-------------------------------------------------------------------------------
-' buildLibraryItemMap
-'-------------------------------------------------------------------------------
-function buildLibraryItemMap(items as object) as object
-    itemMap = {}
-    if items = invalid then return itemMap
-
-    for each item in items
-        itemId = getLibraryItemCacheKey(item)
-        if itemId <> "" then itemMap[itemId] = item
-    end for
-
-    return itemMap
-end function
 
 '-------------------------------------------------------------------------------
 ' onItemSelected
@@ -392,8 +364,8 @@ end function
 ' getVisibleLibraryItems
 '-------------------------------------------------------------------------------
 function getVisibleLibraryItems() as object
-    if isDecadeFilterActive() then return getItemsSortedByLibraryYear(getItemsForDecade(m.pageState.selectedDecade))
-    if isGenreFilterActive() then return getSortedLibraryItems(getItemsForGenre(m.pageState.selectedGenre))
+    if isDecadeFilterActive() then return getCachedFilterItems("Decade", m.pageState.selectedDecade.ToStr())
+    if isGenreFilterActive() then return getCachedFilterItems("Genre", m.pageState.selectedGenre)
 
     return getSortedLibraryItems(m.pageState.allItems)
 end function
@@ -426,7 +398,7 @@ end function
 ' showDecadeFilterRow
 '-------------------------------------------------------------------------------
 sub showDecadeFilterRow()
-    options = m.pageState.decadeFilterOptions
+    options = m.pageState.filterCache.decadeOptions
     if options = invalid then options = []
     if m.pageState.selectedDecade < 0 then m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
     m.filterButtonRow.filterType = "Decade"
@@ -442,7 +414,7 @@ end sub
 ' showGenreFilterRow
 '-------------------------------------------------------------------------------
 sub showGenreFilterRow()
-    options = m.pageState.genreFilterOptions
+    options = m.pageState.filterCache.genreOptions
     if options = invalid then options = []
     if m.pageState.selectedGenre = "" then m.pageState.selectedGenre = getFirstGenreFilterValue(options)
     m.filterButtonRow.filterType = "Genre"
@@ -511,55 +483,8 @@ sub onFilterButtonRowSelected()
     end if
 
     m.filterButtonRow.setFocus(true)
-    runLibraryFilterTask(filterType, selected.value)
+    renderCurrentLibraryItems()
 end sub
-
-'-------------------------------------------------------------------------------
-' runLibraryFilterTask
-'-------------------------------------------------------------------------------
-sub runLibraryFilterTask(filterType as string, filterValue as dynamic)
-    m.pageState.filterRequestId = m.pageState.filterRequestId + 1
-    selection = m.pageState.selectedSort
-    if selection = invalid then selection = getDefaultSortSelection()
-
-    m.libraryFilterTask.control = "stop"
-    m.libraryFilterTask.request = {
-        requestId: m.pageState.filterRequestId
-        filterType: filterType
-        filterValue: filterValue
-        sortKey: SafeString(selection.sortKey, "SortName")
-        sortOrder: getSortOrderFromSelection(selection)
-    }
-    m.libraryFilterTask.control = "run"
-end sub
-
-'-------------------------------------------------------------------------------
-' onLibraryFilterResponse
-'-------------------------------------------------------------------------------
-sub onLibraryFilterResponse()
-    response = m.libraryFilterTask.response
-    if response = invalid then return
-    if Number_ToInteger(response.requestId) <> m.pageState.filterRequestId then return
-
-    renderItems(getLibraryItemsByIds(response.itemIds))
-    updateTitleLabel(m.pageState.items.Count())
-    m.filterButtonRow.setFocus(true)
-end sub
-
-'-------------------------------------------------------------------------------
-' getLibraryItemsByIds
-'-------------------------------------------------------------------------------
-function getLibraryItemsByIds(itemIds as dynamic) as object
-    items = []
-    if itemIds = invalid then return items
-
-    for each itemId in itemIds
-        item = m.pageState.itemById[SafeString(itemId, "")]
-        if item <> invalid then items.Push(item)
-    end for
-
-    return items
-end function
 
 '-------------------------------------------------------------------------------
 ' onFilterButtonRowFocusExitUp
@@ -577,112 +502,98 @@ sub onFilterButtonRowFocusExitDown()
 end sub
 
 '-------------------------------------------------------------------------------
-' buildDecadeFilterOptions
+' createEmptyFilterCache
 '-------------------------------------------------------------------------------
-function buildDecadeFilterOptions(items as object) as object
-    decadeMap = {}
-    decades = []
-    if items = invalid then return decades
-
-    for each item in items
-        year = getItemLibraryYear(item)
-        if year <= 0 then continue for
-
-        decade = Number_ToInteger(Fix(year / 10) * 10)
-        decadeKey = decade.ToStr()
-        if decadeMap[decadeKey] = invalid then
-            decadeMap[decadeKey] = true
-            decades.Push(decade)
-        end if
-    end for
-
-    decades.Sort()
-    options = []
-    for each decade in decades
-        options.Push({
-            label: decade.ToStr()
-            value: decade
-        })
-    end for
-
-    return options
+function createEmptyFilterCache() as object
+    return {
+        decadeOptions: []
+        genreOptions: []
+        decadeItemsByValue: {}
+        genreItemsByValue: {}
+    }
 end function
 
 '-------------------------------------------------------------------------------
-' buildGenreFilterOptions
+' buildFilterCache
 '-------------------------------------------------------------------------------
-function buildGenreFilterOptions(items as object) as object
-    genreMap = {}
-    genres = []
-    if items = invalid then return genres
+function buildFilterCache(items as object) as object
+    cache = createEmptyFilterCache()
+    if items = invalid then return cache
+
+    decadeValues = []
+    genreLabels = []
+    genreLabelByKey = {}
 
     for each item in items
-        itemGenres = getItemGenres(item)
-        for each genre in itemGenres
+        year = getItemLibraryYear(item)
+        if year > 0 then
+            decade = Number_ToInteger(Fix(year / 10) * 10)
+            decadeKey = decade.ToStr()
+            if cache.decadeItemsByValue[decadeKey] = invalid then
+                cache.decadeItemsByValue[decadeKey] = []
+                decadeValues.Push(decade)
+            end if
+            cache.decadeItemsByValue[decadeKey].Push(item)
+        end if
+
+        for each genre in getItemGenres(item)
             genreLabel = String_Trim(SafeString(genre, ""))
             if genreLabel = "" then continue for
 
             genreKey = LCase(genreLabel)
-            if genreMap[genreKey] = invalid then
-                genreMap[genreKey] = true
-                genres.Push(genreLabel)
+            if genreLabelByKey[genreKey] = invalid then
+                genreLabelByKey[genreKey] = genreLabel
+                cache.genreItemsByValue[genreLabel] = []
+                genreLabels.Push(genreLabel)
             end if
+
+            bucketLabel = genreLabelByKey[genreKey]
+            cache.genreItemsByValue[bucketLabel].Push(item)
         end for
     end for
 
-    genres.Sort()
-    options = []
-    for each genre in genres
-        options.Push({
-            label: genre
-            value: genre
+    decadeValues.Sort()
+    for each decade in decadeValues
+        decadeKey = decade.ToStr()
+        cache.decadeOptions.Push({
+            label: decadeKey
+            value: decade
         })
+        cache.decadeItemsByValue[decadeKey] = getItemsSortedByLibraryYear(cache.decadeItemsByValue[decadeKey])
     end for
 
-    return options
+    genreLabels.Sort()
+    for each genreLabel in genreLabels
+        cache.genreOptions.Push({
+            label: genreLabel
+            value: genreLabel
+        })
+        cache.genreItemsByValue[genreLabel] = getItemsSortedBySortName(cache.genreItemsByValue[genreLabel])
+    end for
+
+    return cache
 end function
 
 '-------------------------------------------------------------------------------
-' getItemsForDecade
+' getCachedFilterItems
 '-------------------------------------------------------------------------------
-function getItemsForDecade(decade as integer) as object
-    if decade < 0 then return m.pageState.allItems
+function getCachedFilterItems(filterType as string, filterValue as string) as object
+    cache = m.pageState.filterCache
+    if cache = invalid then return []
 
-    filteredItems = []
-    for each item in m.pageState.allItems
-        year = getItemLibraryYear(item)
-        if year >= decade and year < decade + 10 then filteredItems.Push(item)
-    end for
+    if filterType = "Decade" then
+        items = cache.decadeItemsByValue[SafeString(filterValue, "")]
+        if items <> invalid then return items
+        return []
+    end if
 
-    return filteredItems
-end function
+    if filterType = "Genre" then
+        items = cache.genreItemsByValue[SafeString(filterValue, "")]
+        if items <> invalid then return items
+        return []
+    end if
 
-'-------------------------------------------------------------------------------
-' getItemsForGenre
-'-------------------------------------------------------------------------------
-function getItemsForGenre(genre as string) as object
-    if genre = "" then return []
-
-    filteredItems = []
-    for each item in m.pageState.allItems
-        if itemHasGenre(item, genre) then filteredItems.Push(item)
-    end for
-
-    return filteredItems
-end function
-
-'-------------------------------------------------------------------------------
-' itemHasGenre
-'-------------------------------------------------------------------------------
-function itemHasGenre(item as dynamic, genre as string) as boolean
-    genreKey = LCase(String_Trim(genre))
-    if genreKey = "" then return false
-
-    for each itemGenre in getItemGenres(item)
-        if LCase(String_Trim(SafeString(itemGenre, ""))) = genreKey then return true
-    end for
-
-    return false
+    return []
 end function
 
 '-------------------------------------------------------------------------------
@@ -713,6 +624,17 @@ function getSortedLibraryItems(items as object) as object
 
     if getSortOrderFromSelection(selection) = "Descending" then reverseLibraryItems(sortedItems)
 
+    return sortedItems
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsSortedBySortName
+'-------------------------------------------------------------------------------
+function getItemsSortedBySortName(items as object) as object
+    sortedItems = copyLibraryItems(items)
+    if sortedItems.Count() < 2 then return sortedItems
+
+    sortedItems.SortBy("SortName")
     return sortedItems
 end function
 
@@ -1039,7 +961,7 @@ function applySortSelection(selection as object) as boolean
             label: SafeString(selection.label, "Decade")
         }
         m.pageState.activeFilterType = "Decade"
-        m.pageState.selectedDecade = getFirstDecadeFilterValue(m.pageState.decadeFilterOptions)
+        m.pageState.selectedDecade = getFirstDecadeFilterValue(m.pageState.filterCache.decadeOptions)
         m.pageState.renderDecadeFilterOnApply = shouldRenderLibrary
         m.pageState.pendingFocusTarget = "filterButtonRow"
         m.browseByButton.selectedSort = m.pageState.selectedSort
@@ -1064,7 +986,7 @@ function applySortSelection(selection as object) as boolean
             label: SafeString(selection.label, "Genre")
         }
         m.pageState.activeFilterType = "Genre"
-        m.pageState.selectedGenre = getFirstGenreFilterValue(m.pageState.genreFilterOptions)
+        m.pageState.selectedGenre = getFirstGenreFilterValue(m.pageState.filterCache.genreOptions)
         m.pageState.pendingFocusTarget = "filterButtonRow"
         m.browseByButton.selectedSort = m.pageState.selectedSort
         m.sortButton.selectedSort = m.pageState.selectedSort

@@ -36,6 +36,7 @@ end sub
 ' onSelectedValueChanged
 '-------------------------------------------------------------------------------
 sub onSelectedValueChanged()
+    syncFocusedIndexToSelectedValue()
     updateFocusVisuals()
 end sub
 
@@ -70,7 +71,6 @@ sub renderItems()
         button.focusable = false
         button.hasFocusVisual = false
         button.translation = [x, 0]
-        button.observeField("buttonSelected", "onButtonSelected")
         m.buttonTrack.appendChild(button)
 
         m.rowState.contentItems.Push(itemData)
@@ -86,6 +86,7 @@ sub renderItems()
     if index > 0 then x = x - m.rowState.buttonSpacing
     if x < 0 then x = 0
     m.rowState.contentWidth = x
+    syncFocusedIndexToSelectedValue()
     m.rowState.focusedIndex = clampIndex(m.rowState.focusedIndex)
     ensureFocusedButtonVisible()
     updateFocusVisuals()
@@ -96,10 +97,6 @@ end sub
 ' clearButtons
 '-------------------------------------------------------------------------------
 sub clearButtons()
-    for each button in m.rowState.buttons
-        if button <> invalid then button.unobserveField("buttonSelected")
-    end for
-
     m.rowState.buttons = []
     if m.buttonTrack <> invalid then
         childCount = m.buttonTrack.getChildCount()
@@ -126,14 +123,31 @@ sub onFocusChanged()
 end sub
 
 '-------------------------------------------------------------------------------
-' onButtonSelected
+' syncFocusedIndexToSelectedValue
 '-------------------------------------------------------------------------------
-sub onButtonSelected()
-    focused = getFocusedButton()
-    if focused = invalid then return
+sub syncFocusedIndexToSelectedValue()
+    selectedValue = SafeString(m.top.selectedValue, "")
+    if selectedValue = "" then return
 
-    emitFilterSelected(m.rowState.focusedIndex)
+    selectedIndex = findIndexForValue(selectedValue)
+    if selectedIndex < 0 then return
+
+    m.rowState.focusedIndex = selectedIndex
+    ensureFocusedButtonVisible()
+    updateChevrons()
 end sub
+
+'-------------------------------------------------------------------------------
+' findIndexForValue
+'-------------------------------------------------------------------------------
+function findIndexForValue(value as string) as integer
+    for i = 0 to m.rowState.contentItems.Count() - 1
+        item = m.rowState.contentItems[i]
+        if item <> invalid and SafeString(item.filterValue, "") = value then return i
+    end for
+
+    return -1
+end function
 
 '-------------------------------------------------------------------------------
 ' emitFilterSelected
@@ -239,14 +253,17 @@ end sub
 '-------------------------------------------------------------------------------
 ' focusButtonAtIndex
 '-------------------------------------------------------------------------------
-sub focusButtonAtIndex(index as integer)
+sub focusButtonAtIndex(index as integer, shouldEmit = true as boolean)
     if getItemCount() = 0 then return
 
+    previousIndex = m.rowState.focusedIndex
     m.rowState.focusedIndex = clampIndex(index)
     ensureFocusedButtonVisible()
     updateFocusVisuals()
     updateChevrons()
     m.top.setFocus(true)
+
+    if shouldEmit = true and m.rowState.focusedIndex <> previousIndex then emitFilterSelected(m.rowState.focusedIndex)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -302,7 +319,8 @@ sub focusFirstButton()
     if getItemCount() = 0 then renderItems()
     if getItemCount() = 0 then return
 
-    focusButtonAtIndex(0)
+    syncFocusedIndexToSelectedValue()
+    focusButtonAtIndex(m.rowState.focusedIndex, false)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -332,10 +350,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if normalizedKey = "ok" or normalizedKey = "select" then
-        emitFilterSelected(m.rowState.focusedIndex)
-        return true
-    end if
+    if normalizedKey = "ok" or normalizedKey = "select" then return true
 
     return false
 end function
