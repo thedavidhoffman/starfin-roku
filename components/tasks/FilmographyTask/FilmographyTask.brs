@@ -46,7 +46,7 @@ function buildFilmographyItems(payload as dynamic) as object
     if payload = invalid or payload.cast = invalid then return items
 
     for each credit in payload.cast
-        if isAssocArray(credit) = false then continue for
+        if Array_IsAssocArray(credit) = false then continue for
 
         title = FirstNonEmpty([credit.title, credit.name], "")
         if title = "" then continue for
@@ -87,10 +87,3 @@ function validateRequest(request as dynamic) as dynamic
     return invalid
 end function
 
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
-end function

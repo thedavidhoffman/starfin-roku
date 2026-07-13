@@ -234,7 +234,7 @@ function buildRowContent(title as string, items as dynamic, imageAspect as strin
     if items = invalid then return content
 
     for each item in items
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
 
         child = content.createChild("ContentNode")
         child.HDPosterUrl = getItemImageUrl(item, imageAspect)
@@ -466,7 +466,7 @@ end function
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId = "" then return ""
@@ -527,14 +527,6 @@ function cloneRequest(request as dynamic) as dynamic
     end for
 
     return clone
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

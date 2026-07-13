@@ -370,7 +370,7 @@ function buildGuideChannels(channels as object) as object
     m.liveTvState.channelIndex = {}
 
     for each channel in channels
-        if isAssocArray(channel) = false then continue for
+        if Array_IsAssocArray(channel) = false then continue for
 
         channelId = SafeString(channel.Id, "")
         if channelId = "" then continue for
@@ -398,7 +398,7 @@ sub addSchedulePrograms(programs as object)
     if m.guideGrid.content = invalid then return
 
     for each program in programs
-        if isAssocArray(program) = false then continue for
+        if Array_IsAssocArray(program) = false then continue for
         logFirstProgramData(program)
         collectProgramGenres(program)
 
@@ -463,7 +463,7 @@ sub addGenreItemValues(values as dynamic)
     if Type(values) <> "roArray" then return
 
     for each item in values
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
         addGenreName(item.Name)
     end for
 end sub
@@ -929,18 +929,10 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
 
     return []
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

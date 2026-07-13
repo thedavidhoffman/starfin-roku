@@ -107,7 +107,7 @@ end sub
 ' renderPerson
 '-------------------------------------------------------------------------------
 sub renderPerson(person as dynamic)
-    if isAssocArray(person) = false then return
+    if Array_IsAssocArray(person) = false then return
 
     m.nameLabel.text = getPersonName(person)
     m.lifeLabel.text = getLifeText(person)
@@ -129,7 +129,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
     person = m.pageState.person
-    if isAssocArray(person) = false then return
+    if Array_IsAssocArray(person) = false then return
 
     updateFilmographyButton(person, getPersonImageUrl(person, 400, 600))
     updateReadMoreButton()
@@ -275,7 +275,7 @@ end sub
 ' getBirthPlace
 '-------------------------------------------------------------------------------
 function getBirthPlace(person as dynamic) as string
-    if isAssocArray(person) = false then return ""
+    if Array_IsAssocArray(person) = false then return ""
     if person.ProductionLocations = invalid then return ""
     if person.ProductionLocations.Count() = 0 then return ""
 
@@ -348,7 +348,7 @@ end function
 ' addRelatedItemNode
 '-------------------------------------------------------------------------------
 sub addRelatedItemNode(row as object, item as dynamic, imageAspect as string)
-    if isAssocArray(item) = false then return
+    if Array_IsAssocArray(item) = false then return
 
     itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId = "" then return
@@ -391,7 +391,7 @@ end function
 ' getProductionYearValue
 '-------------------------------------------------------------------------------
 function getProductionYearValue(item as dynamic) as integer
-    if isAssocArray(item) = false then return -1
+    if Array_IsAssocArray(item) = false then return -1
 
     year = FirstNonEmpty([item.ProductionYear], "")
     if year = "" then return -1
@@ -604,7 +604,7 @@ end sub
 ' getPersonName
 '-------------------------------------------------------------------------------
 function getPersonName(person as dynamic) as string
-    if isAssocArray(person) = false then return "Person"
+    if Array_IsAssocArray(person) = false then return "Person"
     return FirstNonEmpty([person.Name], "Person")
 end function
 
@@ -655,12 +655,12 @@ end function
 ' getTmdbPersonId
 '-------------------------------------------------------------------------------
 function getTmdbPersonId(person as dynamic) as string
-    if isAssocArray(person) = false then return ""
+    if Array_IsAssocArray(person) = false then return ""
     externalUrls = person.ExternalUrls
     if externalUrls = invalid then return ""
 
     for each externalUrl in externalUrls
-        if isAssocArray(externalUrl) = false then continue for
+        if Array_IsAssocArray(externalUrl) = false then continue for
 
         name = LCase(FirstNonEmpty([externalUrl.Name], ""))
         if name = "tmdb" then
@@ -762,7 +762,7 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
 
     return []
@@ -772,7 +772,7 @@ end function
 ' getPersonImageUrl
 '-------------------------------------------------------------------------------
 function getPersonImageUrl(person as dynamic, width as integer, height as integer) as string
-    if isAssocArray(person) = false then return ""
+    if Array_IsAssocArray(person) = false then return ""
 
     directUrl = FirstNonEmpty([person.ImageURL, person.ImageUrl, person.PrimaryImageUrl], "")
     if directUrl <> "" then return directUrl
@@ -792,7 +792,7 @@ end function
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     itemId = FirstNonEmpty([item.Id], "")
     primaryTag = ""
@@ -823,14 +823,6 @@ function joinText(values as dynamic, separator as string) as string
     end for
 
     return text
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

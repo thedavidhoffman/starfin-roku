@@ -47,7 +47,7 @@ function getFirstThemeSongFromItems(items as object) as dynamic
     if items.Count() = 0 then return invalid
 
     for each item in items
-        if isAssocArray(item) then return item
+        if Array_IsAssocArray(item) then return item
     end for
 
     return invalid
@@ -57,7 +57,7 @@ end function
 ' getThemeSongId
 '-------------------------------------------------------------------------------
 function getThemeSongId(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     return SafeString(item.Id, "")
 end function
@@ -68,18 +68,10 @@ end function
 function getPayloadItems(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
 
     return []
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

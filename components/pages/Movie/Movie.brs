@@ -136,7 +136,7 @@ sub onThemeSongsResponse()
     end if
 
     themeSong = response.payload
-    if isAssocArray(themeSong) = false then
+    if Array_IsAssocArray(themeSong) = false then
         m.state.themeLookupActive = false
         m.log.write("Theme music enabled, but no theme song was found")
         return
@@ -168,7 +168,7 @@ end sub
 ' renderMovie
 '-------------------------------------------------------------------------------
 sub renderMovie(item as dynamic, logoPending = false as boolean)
-    if isAssocArray(item) = false then return
+    if Array_IsAssocArray(item) = false then return
 
     metadataText = getPrimaryMetaText(item)
     genreText = getSecondaryMetaText(item)
@@ -609,7 +609,7 @@ end sub
 ' getItemTitle
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
-    if isAssocArray(item) = false then return "Movie"
+    if Array_IsAssocArray(item) = false then return "Movie"
     return FirstNonEmpty([item.Name], "Movie")
 end function
 
@@ -898,14 +898,6 @@ function joinText(values as dynamic, separator as string) as string
     end for
 
     return text
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

@@ -114,16 +114,9 @@ end function
 function getPayloadItems(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
 
     return []
 end function
 
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
-end function

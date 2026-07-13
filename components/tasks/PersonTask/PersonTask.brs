@@ -158,7 +158,7 @@ function getRelatedSeriesIds(payload as dynamic) as object
     if items = invalid then return seriesIds
 
     for each item in items
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
         if LCase(SafeString(FirstNonEmpty([item.Type], ""), "")) <> "series" then continue for
 
         seriesId = SafeString(FirstNonEmpty([item.Id], ""), "")
@@ -178,7 +178,7 @@ function filterPayloadItemsBySeriesIds(payload as dynamic, excludedSeriesIds as 
     filteredItems = []
     for each item in items
         seriesId = ""
-        if isAssocArray(item) then seriesId = SafeString(FirstNonEmpty([item.SeriesId], ""), "")
+        if Array_IsAssocArray(item) then seriesId = SafeString(FirstNonEmpty([item.SeriesId], ""), "")
         if seriesId <> "" and arrayContainsString(excludedSeriesIds, seriesId) then continue for
 
         filteredItems.Push(item)
@@ -220,7 +220,7 @@ end function
 function getPayloadItems(payload as dynamic) as dynamic
     if payload = invalid then return invalid
     if Type(payload) = "roArray" then return payload
-    if isAssocArray(payload) = false then return invalid
+    if Array_IsAssocArray(payload) = false then return invalid
 
     return payload.Items
 end function
@@ -229,7 +229,7 @@ end function
 ' shouldExcludeItem
 '-------------------------------------------------------------------------------
 function shouldExcludeItem(item as dynamic, excludedItemId as string, excludedSeriesId as string) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
 
     if excludedItemId <> "" and SafeString(FirstNonEmpty([item.Id], ""), "") = excludedItemId then return true
     if excludedSeriesId <> "" then
@@ -266,10 +266,3 @@ function validateRequest(request as dynamic) as dynamic
     return invalid
 end function
 
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
-end function

@@ -99,7 +99,7 @@ sub renderItems(items as object)
     contentItems = []
 
     for each item in items
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
 
         child = CreateObject("roSGNode", "ContentNode")
         child.title = SafeString(item.title, "")
@@ -251,14 +251,6 @@ sub focusListIfActive()
     if m.filmographyList.visible <> true then return
     m.filmographyList.setFocus(true)
 end sub
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
-end function
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

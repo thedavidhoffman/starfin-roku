@@ -330,7 +330,7 @@ end function
 ' createLibraryItemNode
 '-------------------------------------------------------------------------------
 function createLibraryItemNode(item as dynamic) as dynamic
-    if isAssocArray(item) = false then return invalid
+    if Array_IsAssocArray(item) = false then return invalid
 
     imageAspect = m.pageState.imageAspect
     node = CreateObject("roSGNode", "ContentNode")
@@ -346,7 +346,7 @@ end function
 ' getLibraryItemCacheKey
 '-------------------------------------------------------------------------------
 function getLibraryItemCacheKey(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     return SafeString(FirstNonEmpty([item.Id], ""), "")
 end function
@@ -511,7 +511,7 @@ end function
 '-------------------------------------------------------------------------------
 function createFilterCacheFromOptions(filterOptions as dynamic) as object
     cache = createEmptyFilterCache()
-    if isAssocArray(filterOptions) = false then return cache
+    if Array_IsAssocArray(filterOptions) = false then return cache
 
     if filterOptions.decadeOptions <> invalid then cache.decadeOptions = filterOptions.decadeOptions
     if filterOptions.genreOptions <> invalid then cache.genreOptions = filterOptions.genreOptions
@@ -596,7 +596,7 @@ end function
 ' itemHasGenre
 '-------------------------------------------------------------------------------
 function itemHasGenre(item as dynamic, targetGenre as string) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
     if item.Genres = invalid then return false
 
     for each genre in item.Genres
@@ -727,7 +727,7 @@ end function
 ' getItemLibraryYear
 '-------------------------------------------------------------------------------
 function getItemLibraryYear(item as dynamic) as integer
-    if isAssocArray(item) = false then return 0
+    if Array_IsAssocArray(item) = false then return 0
 
     productionYear = Number_ToInteger(item.ProductionYear, 0)
     if productionYear > 0 then return productionYear
@@ -1355,7 +1355,7 @@ end function
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     itemId = FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
@@ -1454,7 +1454,7 @@ end function
 ' getItemSortLetter
 '-------------------------------------------------------------------------------
 function getItemSortLetter(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     title = getItemAlphabetTitle(item)
     if title = "" then return ""
@@ -1705,7 +1705,7 @@ end sub
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
     if payload.items <> invalid then return payload.items
     return []
@@ -1715,7 +1715,7 @@ end function
 ' isPlayableMovie
 '-------------------------------------------------------------------------------
 function isPlayableMovie(item as dynamic) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
     itemType = LCase(FirstNonEmpty([item.Type], ""))
     return itemType = "movie" or itemType = "video"
 end function
@@ -1724,16 +1724,8 @@ end function
 ' isTVSeries
 '-------------------------------------------------------------------------------
 function isTVSeries(item as dynamic) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
     return LCase(FirstNonEmpty([item.Type], "")) = "series"
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

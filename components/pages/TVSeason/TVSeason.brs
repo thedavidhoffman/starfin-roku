@@ -272,7 +272,7 @@ end sub
 ' renderSeason
 '-------------------------------------------------------------------------------
 sub renderSeason(item as dynamic)
-    if isAssocArray(item) = false then return
+    if Array_IsAssocArray(item) = false then return
 
     request = m.pageState.request
     series = invalid
@@ -390,7 +390,7 @@ end function
 ' getSeasonId
 '-------------------------------------------------------------------------------
 function getSeasonId(season as dynamic) as string
-    if isAssocArray(season) = false then return ""
+    if Array_IsAssocArray(season) = false then return ""
 
     return SafeString(FirstNonEmpty([season.Id], ""), "")
 end function
@@ -430,7 +430,7 @@ sub renderEpisodesList(episodes as object)
     appendSeasonSummaryItem(row)
 
     for each episode in episodes
-        if isAssocArray(episode) = false then continue for
+        if Array_IsAssocArray(episode) = false then continue for
 
         appendEpisodeItem(row, episode)
     end for
@@ -448,7 +448,7 @@ sub renderEpisodesGrid(episodes as object)
     appendSeasonSummaryItem(gridContent)
 
     for each episode in episodes
-        if isAssocArray(episode) = false then continue for
+        if Array_IsAssocArray(episode) = false then continue for
 
         appendEpisodeItem(gridContent, episode)
     end for
@@ -662,7 +662,7 @@ end function
 '-------------------------------------------------------------------------------
 sub appendSeasonSummaryItem(row as object)
     season = m.pageState.season
-    if row = invalid or isAssocArray(season) = false then return
+    if row = invalid or Array_IsAssocArray(season) = false then return
 
     child = row.createChild("ContentNode")
     child.title = getItemTitle(season)
@@ -738,7 +738,7 @@ function getSeasonSummaryDescription(season as dynamic) as string
     if request = invalid then return ""
 
     series = request.series
-    if isAssocArray(series) = false then return ""
+    if Array_IsAssocArray(series) = false then return ""
 
     return FirstNonEmpty([series.Overview], "")
 end function
@@ -873,7 +873,7 @@ end function
 ' getItemTitle
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
     return FirstNonEmpty([item.Name], "")
 end function
 
@@ -881,7 +881,7 @@ end function
 ' getProgressPercent
 '-------------------------------------------------------------------------------
 function getProgressPercent(item as dynamic) as float
-    if isAssocArray(item) = false then return 0
+    if Array_IsAssocArray(item) = false then return 0
     if item.UserData <> invalid and item.UserData.Played = true then return 0
 
     if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
@@ -919,14 +919,14 @@ end function
 ' updateEpisodeWatchedState
 '-------------------------------------------------------------------------------
 sub updateEpisodeWatchedState(itemId as string, isWatched as boolean)
-    if isAssocArray(m.pageState.season) and SafeString(FirstNonEmpty([m.pageState.season.Id], ""), "") = itemId then
+    if Array_IsAssocArray(m.pageState.season) and SafeString(FirstNonEmpty([m.pageState.season.Id], ""), "") = itemId then
         updateItemWatchedState(m.pageState.season, isWatched)
         updateSeasonEpisodesWatchedState(isWatched)
         return
     end if
 
     for each episode in m.pageState.episodes
-        if isAssocArray(episode) = false then continue for
+        if Array_IsAssocArray(episode) = false then continue for
         if SafeString(FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
 
         wasWatched = isItemWatched(episode)
@@ -944,7 +944,7 @@ sub updateSeasonEpisodesWatchedState(isWatched as boolean)
         updateItemWatchedState(episode, isWatched)
     end for
 
-    if isAssocArray(m.pageState.season) = false then return
+    if Array_IsAssocArray(m.pageState.season) = false then return
     if m.pageState.season.UserData = invalid then m.pageState.season.UserData = {}
 
     if isWatched then
@@ -958,7 +958,7 @@ end sub
 ' updateSeasonUnplayedCount
 '-------------------------------------------------------------------------------
 sub updateSeasonUnplayedCount(wasWatched as boolean, isWatched as boolean)
-    if isAssocArray(m.pageState.season) = false then return
+    if Array_IsAssocArray(m.pageState.season) = false then return
     if m.pageState.season.UserData = invalid then m.pageState.season.UserData = {}
 
     current = m.pageState.season.UserData.UnplayedItemCount
@@ -980,7 +980,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub notifySeasonWatchedStateChanged()
     season = m.pageState.season
-    if isAssocArray(season) = false then return
+    if Array_IsAssocArray(season) = false then return
 
     seasonId = SafeString(FirstNonEmpty([season.Id], ""), "")
     if seasonId = "" then return
@@ -1003,7 +1003,7 @@ end sub
 function countUnplayedEpisodes() as integer
     count = 0
     for each episode in m.pageState.episodes
-        if isAssocArray(episode) and isItemWatched(episode) <> true then count = count + 1
+        if Array_IsAssocArray(episode) and isItemWatched(episode) <> true then count = count + 1
     end for
 
     return count
@@ -1021,7 +1021,7 @@ end function
 ' isItemWatched
 '-------------------------------------------------------------------------------
 function isItemWatched(item as dynamic) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
     if item.UserData = invalid then return false
 
     return item.UserData.Played = true
@@ -1031,7 +1031,7 @@ end function
 ' updateItemWatchedState
 '-------------------------------------------------------------------------------
 sub updateItemWatchedState(item as dynamic, isWatched as boolean)
-    if isAssocArray(item) = false then return
+    if Array_IsAssocArray(item) = false then return
     if item.UserData = invalid then item.UserData = {}
 
     item.UserData.Played = isWatched
@@ -1048,7 +1048,7 @@ end sub
 '-------------------------------------------------------------------------------
 function updateEpisodePlaybackProgress(itemId as string, change as object) as boolean
     for each episode in m.pageState.episodes
-        if isAssocArray(episode) = false then continue for
+        if Array_IsAssocArray(episode) = false then continue for
         if SafeString(FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
 
         wasWatched = isItemWatched(episode)
@@ -1064,7 +1064,7 @@ end function
 ' updateItemPlaybackProgress
 '-------------------------------------------------------------------------------
 sub updateItemPlaybackProgress(item as dynamic, change as object)
-    if isAssocArray(item) = false then return
+    if Array_IsAssocArray(item) = false then return
     if item.UserData = invalid then item.UserData = {}
 
     if change.isFinished = true then
@@ -1215,7 +1215,7 @@ function getItemsFromPayload(payload as dynamic) as object
 
     payloadType = Type(payload)
     if payloadType = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
 
     if payload.Items <> invalid then return payload.Items
     return []
@@ -1231,7 +1231,7 @@ function buildEpisodePlaySelection(node as dynamic) as dynamic
     if itemId = "" then return invalid
 
     item = node.raw
-    if isAssocArray(item) = false then return invalid
+    if Array_IsAssocArray(item) = false then return invalid
 
     playbackQueue = buildPlaybackQueue(m.pageState.episodes, m.pageState.nextSeasonEpisodes)
     playbackQueueIndex = getPlaybackQueueIndex(playbackQueue, itemId)
@@ -1263,7 +1263,7 @@ sub appendEpisodesToPlaybackQueue(queue as object, episodes as dynamic, season a
     if episodes = invalid then return
 
     for each episode in episodes
-        if isAssocArray(episode) = false then continue for
+        if Array_IsAssocArray(episode) = false then continue for
 
         episodeId = SafeString(FirstNonEmpty([episode.Id], ""), "")
         if episodeId = "" then continue for
@@ -1307,14 +1307,6 @@ function joinText(values as dynamic, separator as string) as string
     end for
 
     return text
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

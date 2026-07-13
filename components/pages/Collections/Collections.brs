@@ -209,7 +209,7 @@ sub renderCollections(collections as object)
     imageAspect = m.pageState.imageAspect
 
     for each item in collections
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
 
         child = content.createChild("ContentNode")
         child.HDPosterUrl = getItemImageUrl(item, imageAspect)
@@ -257,7 +257,7 @@ end sub
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     itemId = FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
@@ -353,7 +353,7 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
     return []
 end function
@@ -387,7 +387,7 @@ end function
 ' hasTopTag
 '-------------------------------------------------------------------------------
 function hasTopTag(item as dynamic) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
     if item.Tags = invalid then return false
     if Type(item.Tags) <> "roArray" then return false
 
@@ -402,17 +402,9 @@ end function
 ' isCollectionItem
 '-------------------------------------------------------------------------------
 function isCollectionItem(item as dynamic) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
 
     return LCase(SafeString(item.Type, "")) = "boxset"
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

@@ -113,7 +113,7 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
     return []
 end function
@@ -122,7 +122,7 @@ end function
 ' getItemGenres
 '-------------------------------------------------------------------------------
 function getItemGenres(item as dynamic) as object
-    if isAssocArray(item) = false then return []
+    if Array_IsAssocArray(item) = false then return []
     if item.Genres = invalid then return []
 
     return item.Genres
@@ -132,7 +132,7 @@ end function
 ' getItemLibraryYear
 '-------------------------------------------------------------------------------
 function getItemLibraryYear(item as dynamic) as integer
-    if isAssocArray(item) = false then return 0
+    if Array_IsAssocArray(item) = false then return 0
 
     productionYear = Number_ToInteger(item.ProductionYear, 0)
     if productionYear > 0 then return productionYear
@@ -145,14 +145,6 @@ function getItemLibraryYear(item as dynamic) as integer
     if year <= 0 then return 0
 
     return year
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

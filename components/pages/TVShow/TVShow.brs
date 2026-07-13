@@ -202,7 +202,7 @@ sub onThemeSongsResponse()
     end if
 
     themeSong = response.payload
-    if isAssocArray(themeSong) = false then
+    if Array_IsAssocArray(themeSong) = false then
         m.pageState.themeLookupActive = false
         m.log.write("Theme music enabled, but no theme song was found")
         return
@@ -234,7 +234,7 @@ end sub
 ' renderSeries
 '-------------------------------------------------------------------------------
 sub renderSeries(item as dynamic, logoPending = false as boolean)
-    if isAssocArray(item) = false then return
+    if Array_IsAssocArray(item) = false then return
 
     seriesMetadataText = getMetaText(item)
     genreText = getGenreText(item)
@@ -257,7 +257,7 @@ sub renderSeasons(seasons as object)
     content = CreateObject("roSGNode", "ContentNode")
 
     for each season in seasons
-        if isAssocArray(season) = false then continue for
+        if Array_IsAssocArray(season) = false then continue for
 
         child = content.createChild("ContentNode")
         child.title = getItemTitle(season)
@@ -434,7 +434,7 @@ sub updateSeasonWatchedState(seasons as dynamic, seasonId as string, change as o
     if seasons = invalid then return
 
     for each season in seasons
-        if isAssocArray(season) = false then continue for
+        if Array_IsAssocArray(season) = false then continue for
         if SafeString(FirstNonEmpty([season.Id], ""), "") <> seasonId then continue for
 
         applySeasonWatchedState(season, change)
@@ -454,7 +454,7 @@ sub updateSeasonCardWatchedState(seasonId as string, change as object)
         if SafeString(child.itemId, "") <> seasonId then continue for
 
         raw = child.raw
-        if isAssocArray(raw) then
+        if Array_IsAssocArray(raw) then
             applySeasonWatchedState(raw, change)
             child.raw = raw
         end if
@@ -481,7 +481,7 @@ end sub
 ' getItemTitle
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
-    if isAssocArray(item) = false then return "Series"
+    if Array_IsAssocArray(item) = false then return "Series"
     return FirstNonEmpty([item.Name], "Series")
 end function
 
@@ -582,7 +582,7 @@ function getItemsFromPayload(payload as dynamic) as object
 
     payloadType = Type(payload)
     if payloadType = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
 
     if payload.Items <> invalid then return payload.Items
     if payload.items <> invalid then return payload.items
@@ -606,14 +606,6 @@ function joinText(values as dynamic, separator as string) as string
     end for
 
     return text
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------

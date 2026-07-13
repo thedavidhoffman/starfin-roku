@@ -13,6 +13,14 @@ function Array_GetCount(values as dynamic) as integer
 end function
 
 '-------------------------------------------------------------------------------
+' Array_IsAssocArray
+'-------------------------------------------------------------------------------
+function Array_IsAssocArray(value as dynamic) as boolean
+    valueType = Type(value)
+    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
+end function
+
+'-------------------------------------------------------------------------------
 ' StringArray_ToCommaSeparatedList
 '-------------------------------------------------------------------------------
 function Array_JoinStringValues(values as dynamic) as string

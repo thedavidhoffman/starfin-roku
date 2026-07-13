@@ -35,7 +35,7 @@ sub onCastChanged()
 
     if people <> invalid then
         for each person in people
-            if isAssocArray(person) = false then continue for
+            if Array_IsAssocArray(person) = false then continue for
 
             personName = FirstNonEmpty([person.Name], "")
             if personName = "" then continue for
@@ -197,10 +197,3 @@ function getPersonImageUrl(person as object) as string
     return Url_BuildImageUrl(m.top.server, personId, "Primary", tag, 195, 195)
 end function
 
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
-end function

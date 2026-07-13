@@ -302,7 +302,7 @@ function getFilteredNextUpItems() as object
 
     filteredItems = []
     for each item in nextUpItems
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
         if hasAnyItemKey(item, continueWatchingKeys) then continue for
 
         filteredItems.Push(item)
@@ -330,7 +330,7 @@ end function
 ' addItemKeys
 '-------------------------------------------------------------------------------
 sub addItemKeys(keys as object, item as dynamic)
-    if isAssocArray(item) = false then return
+    if Array_IsAssocArray(item) = false then return
 
     itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId <> "" then keys["item:" + itemId] = true
@@ -343,7 +343,7 @@ end sub
 ' hasAnyItemKey
 '-------------------------------------------------------------------------------
 function hasAnyItemKey(item as dynamic, keys as object) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
 
     itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId <> "" and keys.DoesExist("item:" + itemId) then return true
@@ -377,7 +377,7 @@ sub queueLatestMediaRows(libraries as object)
     m.homeState.latestLibraries = {}
 
     for each item in libraries
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
 
         collectionType = LCase(FirstNonEmpty([item.CollectionType], ""))
         if collectionType <> "boxsets" and collectionType <> "livetv" and collectionType <> "program" then
@@ -461,7 +461,7 @@ function buildRowContent(key as string, title as string, items as object) as obj
     imageAspect = getRowImageAspect(key)
 
     for each item in items
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
 
         child = content.createChild("ContentNode")
         imageUrl = getHomeItemImageUrl(key, item, imageAspect)
@@ -712,7 +712,7 @@ function getItemsFromPayload(payload as dynamic) as object
 
     payloadType = Type(payload)
     if payloadType = "roArray" then return payload
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
 
     if payload.Items <> invalid then return payload.Items
 
@@ -756,7 +756,7 @@ end function
 ' getLibraryName
 '-------------------------------------------------------------------------------
 function getLibraryName(library as dynamic) as string
-    if isAssocArray(library) = false then return ""
+    if Array_IsAssocArray(library) = false then return ""
     return FirstNonEmpty([library.name, library.Name], "")
 end function
 
@@ -764,7 +764,7 @@ end function
 ' getMyListItems
 '-------------------------------------------------------------------------------
 function getMyListItems(payload as dynamic) as object
-    if isAssocArray(payload) = false then return []
+    if Array_IsAssocArray(payload) = false then return []
     if payload.items = invalid then return []
 
     return getItemsFromPayload(payload.items)
@@ -775,7 +775,7 @@ end function
 '-------------------------------------------------------------------------------
 function getFavoriteItems(payload as dynamic) as object
     items = []
-    if isAssocArray(payload) = false then return items
+    if Array_IsAssocArray(payload) = false then return items
 
     if payload.items <> invalid then
         for each item in getItemsFromPayload(payload.items)
@@ -811,7 +811,7 @@ end function
 ' getResumeRowImageUrl
 '-------------------------------------------------------------------------------
 function getResumeRowImageUrl(item as dynamic, imageAspect as string) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     itemType = LCase(FirstNonEmpty([item.Type], ""))
     if itemType = "episode" then return getSeriesThumbnailImageUrl(item, imageAspect)
@@ -871,7 +871,7 @@ end function
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
-    if isAssocArray(item) = false then return ""
+    if Array_IsAssocArray(item) = false then return ""
 
     if imageAspect = "poster" and isTVEpisode(item) then
         imageUrl = getEpisodePosterImageUrl(item, imageAspect)
@@ -958,7 +958,7 @@ end function
 ' isPlayableMovie
 '-------------------------------------------------------------------------------
 function isPlayableMovie(item as dynamic) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
 
     itemType = LCase(FirstNonEmpty([item.Type], ""))
     return itemType = "movie" or itemType = "video"
@@ -968,7 +968,7 @@ end function
 ' isTVEpisode
 '-------------------------------------------------------------------------------
 function isTVEpisode(item as dynamic) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
 
     itemType = LCase(FirstNonEmpty([item.Type], ""))
     return itemType = "episode"
@@ -978,18 +978,10 @@ end function
 ' isTVSeries
 '-------------------------------------------------------------------------------
 function isTVSeries(item as dynamic) as boolean
-    if isAssocArray(item) = false then return false
+    if Array_IsAssocArray(item) = false then return false
 
     itemType = LCase(FirstNonEmpty([item.Type], ""))
     return itemType = "series"
-end function
-
-'-------------------------------------------------------------------------------
-' isAssocArray
-'-------------------------------------------------------------------------------
-function isAssocArray(value as dynamic) as boolean
-    valueType = Type(value)
-    return valueType = "roAssociativeArray" or valueType = "roSGNodeEvent"
 end function
 
 '-------------------------------------------------------------------------------
@@ -1023,7 +1015,7 @@ function findCollectionId(items as object, collectionType as string) as string
     if items = invalid then return ""
 
     for each item in items
-        if isAssocArray(item) = false then continue for
+        if Array_IsAssocArray(item) = false then continue for
         if item.CollectionType <> invalid and LCase(item.CollectionType) = LCase(collectionType) then
             return SafeString(item.Id, "")
         end if
