@@ -2,20 +2,26 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.viewport = m.top.findNode("viewport")
+    m.buttonTrack = m.top.findNode("buttonTrack")
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
-    m.top.itemComponentName = "FilterButtonRowItem"
-    m.top.numRows = 1
-    m.top.itemSize = [1392, 64]
-    m.top.rowItemSize = [[160, 56]]
-    m.top.rowItemSpacing = [[16, 0]]
-    m.top.itemSpacing = [0, 0]
-    m.top.showRowLabel = false
-    m.top.vertFocusAnimationStyle = "fixedFocus"
-    m.top.focusBitmapUri = ""
-    m.top.focusFootprintBitmapUri = ""
-    m.top.observeField("rowItemFocused", "onRowItemFocused")
-    m.top.observeField("rowItemSelected", "onRowItemSelected")
+    m.rowState = {
+        buttons: []
+        buttonLayouts: []
+        contentItems: []
+        focusedIndex: 0
+        scrollX: 0
+        contentWidth: 0
+        viewportWidth: 1392
+        buttonHeight: 56
+        buttonSpacing: 16
+        minButtonWidth: 160
+        maxButtonWidth: 520
+        textPadding: 56
+        textCharWidth: 17
+    }
+    m.top.observeField("focusedChild", "onFocusChanged")
     renderItems()
 end sub
 
@@ -30,82 +36,151 @@ end sub
 ' onSelectedValueChanged
 '-------------------------------------------------------------------------------
 sub onSelectedValueChanged()
-    renderItems()
+    updateFocusVisuals()
 end sub
 
 '-------------------------------------------------------------------------------
 ' renderItems
 '-------------------------------------------------------------------------------
 sub renderItems()
-    content = CreateObject("roSGNode", "ContentNode")
-    row = content.createChild("ContentNode")
+    clearButtons()
+
     items = m.top.items
     if items = invalid then items = []
 
+    m.rowState.contentItems = []
+    m.rowState.buttonLayouts = []
+    x = 0
+    index = 0
     for each item in items
-        child = row.createChild("ContentNode")
-        value = int(item.value)
-        child.title = SafeString(item.label, value.ToStr())
-        child.AddFields({
-            filterType: "Decade"
+        value = SafeString(item.value, "")
+        label = SafeString(item.label, value)
+        itemData = {
+            filterType: SafeString(m.top.filterType, "Decade")
             filterValue: value
-            selected: value = m.top.selectedValue
+            title: label
+        }
+        buttonWidth = getButtonWidth(label)
+        button = CreateObject("roSGNode", "HeaderButton")
+        button.id = "filterButton" + index.ToStr()
+        button.text = label
+        button.buttonWidth = buttonWidth
+        button.buttonHeight = m.rowState.buttonHeight
+        button.textInset = 20
+        button.focusable = false
+        button.hasFocusVisual = false
+        button.translation = [x, 0]
+        button.observeField("buttonSelected", "onButtonSelected")
+        m.buttonTrack.appendChild(button)
+
+        m.rowState.contentItems.Push(itemData)
+        m.rowState.buttons.Push(button)
+        m.rowState.buttonLayouts.Push({
+            x: x
+            width: buttonWidth
         })
+        x = x + buttonWidth + m.rowState.buttonSpacing
+        index = index + 1
     end for
 
-    m.top.content = content
+    if index > 0 then x = x - m.rowState.buttonSpacing
+    if x < 0 then x = 0
+    m.rowState.contentWidth = x
+    m.rowState.focusedIndex = clampIndex(m.rowState.focusedIndex)
+    ensureFocusedButtonVisible()
+    updateFocusVisuals()
     updateChevrons()
 end sub
 
 '-------------------------------------------------------------------------------
-' onRowItemFocused
+' clearButtons
 '-------------------------------------------------------------------------------
-sub onRowItemFocused()
-    updateChevrons()
+sub clearButtons()
+    for each button in m.rowState.buttons
+        if button <> invalid then button.unobserveField("buttonSelected")
+    end for
+
+    m.rowState.buttons = []
+    if m.buttonTrack <> invalid then
+        childCount = m.buttonTrack.getChildCount()
+        if childCount > 0 then m.buttonTrack.removeChildrenIndex(childCount, 0)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
-' onRowItemSelected
+' getButtonWidth
 '-------------------------------------------------------------------------------
-sub onRowItemSelected()
-    selected = m.top.rowItemSelected
-    if selected = invalid or selected.Count() < 2 then return
-    if m.top.content = invalid then return
+function getButtonWidth(label as string) as integer
+    width = (Len(label) * m.rowState.textCharWidth) + m.rowState.textPadding
+    if width < m.rowState.minButtonWidth then width = m.rowState.minButtonWidth
+    if width > m.rowState.maxButtonWidth then width = m.rowState.maxButtonWidth
 
-    row = m.top.content.getChild(selected[0])
-    if row = invalid then return
+    return Number_ToInteger(width, m.rowState.minButtonWidth)
+end function
 
-    item = row.getChild(selected[1])
+'-------------------------------------------------------------------------------
+' onFocusChanged
+'-------------------------------------------------------------------------------
+sub onFocusChanged()
+    updateFocusVisuals()
+end sub
+
+'-------------------------------------------------------------------------------
+' onButtonSelected
+'-------------------------------------------------------------------------------
+sub onButtonSelected()
+    focused = getFocusedButton()
+    if focused = invalid then return
+
+    emitFilterSelected(m.rowState.focusedIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' emitFilterSelected
+'-------------------------------------------------------------------------------
+sub emitFilterSelected(position as dynamic)
+    itemIndex = Number_ToInteger(position, -1)
+    item = getItemAtIndex(itemIndex)
     if item = invalid then return
 
-    value = int(item.filterValue)
+    value = item.filterValue
+    filterType = SafeString(item.filterType, "Decade")
+
     m.top.selectedValue = value
     m.top.filterSelected = {
-        type: SafeString(item.filterType, "Decade")
-        label: SafeString(item.title, value.ToStr())
+        type: filterType
+        label: SafeString(item.title, SafeString(value, ""))
         value: value
     }
-    m.top.jumpToRowItem = selected
+    m.rowState.focusedIndex = itemIndex
+    updateFocusVisuals()
     m.top.setFocus(true)
 end sub
+
+'-------------------------------------------------------------------------------
+' getItemAtIndex
+'-------------------------------------------------------------------------------
+function getItemAtIndex(index as integer) as dynamic
+    if index < 0 or index >= m.rowState.contentItems.Count() then return invalid
+
+    return m.rowState.contentItems[index]
+end function
 
 '-------------------------------------------------------------------------------
 ' updateChevrons
 '-------------------------------------------------------------------------------
 sub updateChevrons()
-    itemCount = getItemCount()
-    if itemCount <= 8 then
+    if m.rowState.contentWidth <= m.rowState.viewportWidth then
         setChevronOpacity(m.leftChevron, 0)
         setChevronOpacity(m.rightChevron, 0)
         return
     end if
 
-    focusedIndex = getFocusedItemIndex()
     leftOpacity = 0.25
-    if focusedIndex > 0 then leftOpacity = 1
+    if m.rowState.scrollX > 0 then leftOpacity = 1
 
     rightOpacity = 0.25
-    if focusedIndex < itemCount - 1 then rightOpacity = 1
+    if m.rowState.scrollX < getMaxScrollX() then rightOpacity = 1
 
     setChevronOpacity(m.leftChevron, leftOpacity)
     setChevronOpacity(m.rightChevron, rightOpacity)
@@ -115,23 +190,101 @@ end sub
 ' getItemCount
 '-------------------------------------------------------------------------------
 function getItemCount() as integer
-    if m.top.content = invalid then return 0
-    row = m.top.content.getChild(0)
-    if row = invalid then return 0
-
-    return row.getChildCount()
+    return m.rowState.contentItems.Count()
 end function
 
 '-------------------------------------------------------------------------------
-' getFocusedItemIndex
+' getMaxScrollX
 '-------------------------------------------------------------------------------
-function getFocusedItemIndex() as integer
-    focused = m.top.rowItemFocused
-    if focused = invalid or focused.Count() < 2 then return 0
-    if focused[1] < 0 then return 0
+function getMaxScrollX() as integer
+    maxScrollX = m.rowState.contentWidth - m.rowState.viewportWidth
+    if maxScrollX < 0 then return 0
 
-    return int(focused[1])
+    return maxScrollX
 end function
+
+'-------------------------------------------------------------------------------
+' clampIndex
+'-------------------------------------------------------------------------------
+function clampIndex(index as integer) as integer
+    itemCount = getItemCount()
+    if itemCount <= 0 then return 0
+    if index < 0 then return 0
+    if index >= itemCount then return itemCount - 1
+
+    return index
+end function
+
+'-------------------------------------------------------------------------------
+' getFocusedButton
+'-------------------------------------------------------------------------------
+function getFocusedButton() as dynamic
+    index = clampIndex(m.rowState.focusedIndex)
+    if index < 0 or index >= m.rowState.buttons.Count() then return invalid
+
+    return m.rowState.buttons[index]
+end function
+
+'-------------------------------------------------------------------------------
+' updateFocusVisuals
+'-------------------------------------------------------------------------------
+sub updateFocusVisuals()
+    hasRowFocus = m.top.isInFocusChain()
+    for i = 0 to m.rowState.buttons.Count() - 1
+        button = m.rowState.buttons[i]
+        if button <> invalid then button.hasFocusVisual = hasRowFocus and i = m.rowState.focusedIndex
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' focusButtonAtIndex
+'-------------------------------------------------------------------------------
+sub focusButtonAtIndex(index as integer)
+    if getItemCount() = 0 then return
+
+    m.rowState.focusedIndex = clampIndex(index)
+    ensureFocusedButtonVisible()
+    updateFocusVisuals()
+    updateChevrons()
+    m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' ensureFocusedButtonVisible
+'-------------------------------------------------------------------------------
+sub ensureFocusedButtonVisible()
+    if m.rowState.buttonLayouts.Count() = 0 then
+        m.rowState.scrollX = 0
+        updateTrackTranslation()
+        return
+    end if
+
+    focusedIndex = clampIndex(m.rowState.focusedIndex)
+    layout = m.rowState.buttonLayouts[focusedIndex]
+    left = Number_ToInteger(layout.x, 0)
+    right = left + Number_ToInteger(layout.width, 0)
+    viewportRight = m.rowState.scrollX + m.rowState.viewportWidth
+
+    if left < m.rowState.scrollX then
+        m.rowState.scrollX = left
+    else if right > viewportRight then
+        m.rowState.scrollX = right - m.rowState.viewportWidth
+    end if
+
+    maxScrollX = getMaxScrollX()
+    if m.rowState.scrollX < 0 then m.rowState.scrollX = 0
+    if m.rowState.scrollX > maxScrollX then m.rowState.scrollX = maxScrollX
+    updateTrackTranslation()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateTrackTranslation
+'-------------------------------------------------------------------------------
+sub updateTrackTranslation()
+    if m.buttonTrack = invalid then return
+
+    m.buttonTrack.translation = [-m.rowState.scrollX, 0]
+end sub
 
 '-------------------------------------------------------------------------------
 ' setChevronOpacity
@@ -149,8 +302,7 @@ sub focusFirstButton()
     if getItemCount() = 0 then renderItems()
     if getItemCount() = 0 then return
 
-    m.top.jumpToRowItem = [0, 0]
-    m.top.setFocus(true)
+    focusButtonAtIndex(0)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -158,14 +310,30 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    normalizedKey = LCase(key)
 
-    if key = "up" then
+    if normalizedKey = "up" then
         m.top.focusExitUp = true
         return true
     end if
 
-    if key = "down" then
+    if normalizedKey = "down" then
         m.top.focusExitDown = true
+        return true
+    end if
+
+    if normalizedKey = "left" then
+        focusButtonAtIndex(m.rowState.focusedIndex - 1)
+        return true
+    end if
+
+    if normalizedKey = "right" then
+        focusButtonAtIndex(m.rowState.focusedIndex + 1)
+        return true
+    end if
+
+    if normalizedKey = "ok" or normalizedKey = "select" then
+        emitFilterSelected(m.rowState.focusedIndex)
         return true
     end if
 

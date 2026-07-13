@@ -13,6 +13,7 @@ sub initReferences()
     m.log = CreateLogger("VideoPlayer")
     m.videoPlayer = m.top.findNode("videoPlayer")
     m.playbackControls = m.top.findNode("playbackControls")
+    m.clock = m.top.findNode("clock")
     m.castGradient = m.top.findNode("castGradient")
     m.cast = m.top.findNode("cast")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
@@ -90,6 +91,7 @@ sub initHandlers()
     m.videoPlayer.observeField("state", "onVideoStateChanged")
     m.videoPlayer.observeField("position", "onVideoPositionChanged")
     m.videoPlayer.observeField("duration", "onVideoDurationChanged")
+    m.playbackControls.observeField("visible", "onPlaybackControlsVisibilityChanged")
     m.playbackControls.observeField("playPausePressed", "onPlayPausePressed")
     m.playbackControls.observeField("skipBackPressed", "onSkipBackPressed")
     m.playbackControls.observeField("skipForwardPressed", "onSkipForwardPressed")
@@ -117,6 +119,14 @@ sub initHandlers()
     m.fastSeekTimer.observeField("fire", "onFastSeekTimerFire")
     m.leftSeekRepeatTimer.observeField("fire", "onLeftSeekRepeatTimerFire")
     m.rightSeekRepeatTimer.observeField("fire", "onRightSeekRepeatTimerFire")
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaybackControlsVisibilityChanged
+'-------------------------------------------------------------------------------
+sub onPlaybackControlsVisibilityChanged()
+    controlsVisible = m.playbackControls.visible = true
+    m.clock.visible = controlsVisible
 end sub
 
 '-------------------------------------------------------------------------------

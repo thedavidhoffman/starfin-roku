@@ -22,14 +22,6 @@ end sub
 ' onFocusStateChanged
 '-------------------------------------------------------------------------------
 sub onFocusStateChanged()
-    item = m.top.itemContent
-    selected = item <> invalid and item.selected = true
-    focused = m.top.itemHasFocus = true or m.top.focusPercent > 0.5
-
-    m.bg.visible = selected or focused
-    if selected or focused then
-        m.textLabel.color = &h12112BFF
-    else
-        m.textLabel.color = &hFFFFFFFF
-    end if
+    m.bg.visible = false
+    m.textLabel.color = &hFFFFFFFF
 end sub

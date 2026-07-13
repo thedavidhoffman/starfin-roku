@@ -124,7 +124,8 @@ sub libraryHandleSortOverlayClosed(closed as object)
     overlay = closed.overlay
     if overlay <> invalid and overlay.sortSelected <> invalid then
         m.libraryPage.callFunc("applySortSelection", overlay.sortSelected)
-        if SafeString(overlay.sortSelected.optionKey, "") = "Decade" then
+        optionKey = SafeString(overlay.sortSelected.optionKey, "")
+        if optionKey = "Decade" or optionKey = "Genre" then
             if m.libraryPage.callFunc("focusFilterButtonRow") = true then return
         end if
     end if

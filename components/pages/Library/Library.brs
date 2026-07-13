@@ -20,8 +20,12 @@ sub init()
         selectedSort: invalid
         activeFilterType: ""
         selectedDecade: -1
+        selectedGenre: ""
         renderDecadeFilterOnApply: false
         decadeFilterOptions: []
+        genreFilterOptions: []
+        filterRequestId: 0
+        itemById: {}
         itemNodeCache: {}
         itemNodeCacheAspect: ""
         progressFocusedIndex: 0
@@ -49,6 +53,7 @@ sub initReferences()
     m.filterButtonRow = m.top.findNode("filterButtonRow")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.libraryTask = m.top.findNode("libraryTask")
+    m.libraryFilterTask = m.top.findNode("libraryFilterTask")
     m.libraryProgressIndicator = m.top.findNode("libraryProgressIndicator")
     m.libraryProgressHoldTimer = m.top.findNode("libraryProgressHoldTimer")
 end sub
@@ -58,6 +63,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.libraryTask.observeField("response", "onLibraryResponse")
+    m.libraryFilterTask.observeField("response", "onLibraryFilterResponse")
     m.libraryProgressHoldTimer.observeField("fire", "onLibraryProgressHoldTimerFire")
     m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
@@ -65,9 +71,9 @@ sub initHandlers()
     m.sortButton.observeField("focusExitDown", "onSortButtonFocusExitDown")
     m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
     m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
-    m.filterButtonRow.observeField("filterSelected", "onFilterButtonRowSelected")
     m.filterButtonRow.observeField("focusExitUp", "onFilterButtonRowFocusExitUp")
     m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
+    m.filterButtonRow.observeField("filterSelected", "onFilterButtonRowSelected")
     m.itemsGrid.observeField("itemSelected", "onItemSelected")
     m.itemsGrid.observeField("itemFocused", "onItemFocused")
     m.itemsGrid.observeField("navigationKeyPressed", "onItemsGridNavigationKeyPressed")
@@ -141,8 +147,12 @@ end sub
 sub resetFilterState()
     m.pageState.activeFilterType = ""
     m.pageState.selectedDecade = -1
+    m.pageState.selectedGenre = ""
+    m.pageState.filterRequestId = m.pageState.filterRequestId + 1
     m.pageState.renderDecadeFilterOnApply = false
     m.pageState.decadeFilterOptions = []
+    m.pageState.genreFilterOptions = []
+    if m.libraryFilterTask <> invalid then m.libraryFilterTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -151,6 +161,8 @@ end sub
 sub resetLibraryItemsState()
     m.pageState.allItems = []
     m.pageState.items = []
+    m.pageState.itemById = {}
+    if m.libraryFilterTask <> invalid then m.libraryFilterTask.libraryItems = []
     clearLibraryItemNodeCache()
 end sub
 
@@ -196,10 +208,15 @@ sub onLibraryResponse()
     end if
 
     m.pageState.allItems = getItemsFromPayload(response.payload)
+    m.pageState.itemById = buildLibraryItemMap(m.pageState.allItems)
+    m.libraryFilterTask.libraryItems = m.pageState.allItems
     m.pageState.decadeFilterOptions = buildDecadeFilterOptions(m.pageState.allItems)
+    m.pageState.genreFilterOptions = buildGenreFilterOptions(m.pageState.allItems)
     rebuildLibraryItemNodeCache()
     if isDecadeFilterActive() then
         showDecadeFilterRow()
+    else if isGenreFilterActive() then
+        showGenreFilterRow()
     else
         renderItems(m.pageState.allItems)
     end if
@@ -215,6 +232,21 @@ sub onLibraryResponse()
         focusItemsIfActive()
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' buildLibraryItemMap
+'-------------------------------------------------------------------------------
+function buildLibraryItemMap(items as object) as object
+    itemMap = {}
+    if items = invalid then return itemMap
+
+    for each item in items
+        itemId = getLibraryItemCacheKey(item)
+        if itemId <> "" then itemMap[itemId] = item
+    end for
+
+    return itemMap
+end function
 
 '-------------------------------------------------------------------------------
 ' onItemSelected
@@ -361,6 +393,7 @@ end function
 '-------------------------------------------------------------------------------
 function getVisibleLibraryItems() as object
     if isDecadeFilterActive() then return getItemsSortedByLibraryYear(getItemsForDecade(m.pageState.selectedDecade))
+    if isGenreFilterActive() then return getSortedLibraryItems(getItemsForGenre(m.pageState.selectedGenre))
 
     return getSortedLibraryItems(m.pageState.allItems)
 end function
@@ -383,14 +416,22 @@ function isDecadeFilterActive() as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' isGenreFilterActive
+'-------------------------------------------------------------------------------
+function isGenreFilterActive() as boolean
+    return SafeString(m.pageState.activeFilterType, "") = "Genre"
+end function
+
+'-------------------------------------------------------------------------------
 ' showDecadeFilterRow
 '-------------------------------------------------------------------------------
 sub showDecadeFilterRow()
     options = m.pageState.decadeFilterOptions
     if options = invalid then options = []
     if m.pageState.selectedDecade < 0 then m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
+    m.filterButtonRow.filterType = "Decade"
     m.filterButtonRow.items = options
-    m.filterButtonRow.selectedValue = m.pageState.selectedDecade
+    m.filterButtonRow.selectedValue = m.pageState.selectedDecade.ToStr()
     m.filterButtonRow.visible = options.Count() > 0
     applyGridLayout(m.pageState.imageAspect)
     if m.pageState.selectedDecade >= 0 or m.pageState.renderDecadeFilterOnApply = true then renderItems(getVisibleLibraryItems())
@@ -398,12 +439,36 @@ sub showDecadeFilterRow()
 end sub
 
 '-------------------------------------------------------------------------------
+' showGenreFilterRow
+'-------------------------------------------------------------------------------
+sub showGenreFilterRow()
+    options = m.pageState.genreFilterOptions
+    if options = invalid then options = []
+    if m.pageState.selectedGenre = "" then m.pageState.selectedGenre = getFirstGenreFilterValue(options)
+    m.filterButtonRow.filterType = "Genre"
+    m.filterButtonRow.items = options
+    m.filterButtonRow.selectedValue = m.pageState.selectedGenre
+    m.filterButtonRow.visible = options.Count() > 0
+    applyGridLayout(m.pageState.imageAspect)
+    if m.pageState.selectedGenre <> "" then renderItems(getVisibleLibraryItems())
+end sub
+
+'-------------------------------------------------------------------------------
+' getFirstGenreFilterValue
+'-------------------------------------------------------------------------------
+function getFirstGenreFilterValue(options as object) as string
+    if options = invalid or options.Count() = 0 then return ""
+
+    return SafeString(options[0].value, "")
+end function
+
+'-------------------------------------------------------------------------------
 ' getFirstDecadeFilterValue
 '-------------------------------------------------------------------------------
 function getFirstDecadeFilterValue(options as object) as integer
     if options = invalid or options.Count() = 0 then return -1
 
-    return int(options[0].value)
+    return Number_ToInteger(options[0].value, -1)
 end function
 
 '-------------------------------------------------------------------------------
@@ -412,7 +477,7 @@ end function
 sub hideFilterButtonRow()
     m.filterButtonRow.visible = false
     m.filterButtonRow.items = []
-    m.filterButtonRow.selectedValue = -1
+    m.filterButtonRow.selectedValue = ""
     applyGridLayout(m.pageState.imageAspect)
 end sub
 
@@ -422,14 +487,79 @@ end sub
 sub onFilterButtonRowSelected()
     selected = m.filterButtonRow.filterSelected
     if selected = invalid then return
-    if SafeString(selected.type, "") <> "Decade" then return
+    filterType = SafeString(selected.type, "")
+    if filterType = "Decade" then
+        selectedDecade = Number_ToInteger(selected.value, -1)
+        if selectedDecade = m.pageState.selectedDecade then
+            m.filterButtonRow.setFocus(true)
+            return
+        end if
 
-    m.pageState.selectedDecade = int(selected.value)
-    m.filterButtonRow.selectedValue = m.pageState.selectedDecade
-    renderItems(getVisibleLibraryItems())
+        m.pageState.selectedDecade = selectedDecade
+        m.filterButtonRow.selectedValue = m.pageState.selectedDecade.ToStr()
+    else if filterType = "Genre" then
+        selectedGenre = SafeString(selected.value, "")
+        if selectedGenre = m.pageState.selectedGenre then
+            m.filterButtonRow.setFocus(true)
+            return
+        end if
+
+        m.pageState.selectedGenre = selectedGenre
+        m.filterButtonRow.selectedValue = m.pageState.selectedGenre
+    else
+        return
+    end if
+
+    m.filterButtonRow.setFocus(true)
+    runLibraryFilterTask(filterType, selected.value)
+end sub
+
+'-------------------------------------------------------------------------------
+' runLibraryFilterTask
+'-------------------------------------------------------------------------------
+sub runLibraryFilterTask(filterType as string, filterValue as dynamic)
+    m.pageState.filterRequestId = m.pageState.filterRequestId + 1
+    selection = m.pageState.selectedSort
+    if selection = invalid then selection = getDefaultSortSelection()
+
+    m.libraryFilterTask.control = "stop"
+    m.libraryFilterTask.request = {
+        requestId: m.pageState.filterRequestId
+        filterType: filterType
+        filterValue: filterValue
+        sortKey: SafeString(selection.sortKey, "SortName")
+        sortOrder: getSortOrderFromSelection(selection)
+    }
+    m.libraryFilterTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onLibraryFilterResponse
+'-------------------------------------------------------------------------------
+sub onLibraryFilterResponse()
+    response = m.libraryFilterTask.response
+    if response = invalid then return
+    if Number_ToInteger(response.requestId) <> m.pageState.filterRequestId then return
+
+    renderItems(getLibraryItemsByIds(response.itemIds))
     updateTitleLabel(m.pageState.items.Count())
     m.filterButtonRow.setFocus(true)
 end sub
+
+'-------------------------------------------------------------------------------
+' getLibraryItemsByIds
+'-------------------------------------------------------------------------------
+function getLibraryItemsByIds(itemIds as dynamic) as object
+    items = []
+    if itemIds = invalid then return items
+
+    for each itemId in itemIds
+        item = m.pageState.itemById[SafeString(itemId, "")]
+        if item <> invalid then items.Push(item)
+    end for
+
+    return items
+end function
 
 '-------------------------------------------------------------------------------
 ' onFilterButtonRowFocusExitUp
@@ -458,7 +588,7 @@ function buildDecadeFilterOptions(items as object) as object
         year = getItemLibraryYear(item)
         if year <= 0 then continue for
 
-        decade = int(Fix(year / 10) * 10)
+        decade = Number_ToInteger(Fix(year / 10) * 10)
         decadeKey = decade.ToStr()
         if decadeMap[decadeKey] = invalid then
             decadeMap[decadeKey] = true
@@ -479,6 +609,40 @@ function buildDecadeFilterOptions(items as object) as object
 end function
 
 '-------------------------------------------------------------------------------
+' buildGenreFilterOptions
+'-------------------------------------------------------------------------------
+function buildGenreFilterOptions(items as object) as object
+    genreMap = {}
+    genres = []
+    if items = invalid then return genres
+
+    for each item in items
+        itemGenres = getItemGenres(item)
+        for each genre in itemGenres
+            genreLabel = String_Trim(SafeString(genre, ""))
+            if genreLabel = "" then continue for
+
+            genreKey = LCase(genreLabel)
+            if genreMap[genreKey] = invalid then
+                genreMap[genreKey] = true
+                genres.Push(genreLabel)
+            end if
+        end for
+    end for
+
+    genres.Sort()
+    options = []
+    for each genre in genres
+        options.Push({
+            label: genre
+            value: genre
+        })
+    end for
+
+    return options
+end function
+
+'-------------------------------------------------------------------------------
 ' getItemsForDecade
 '-------------------------------------------------------------------------------
 function getItemsForDecade(decade as integer) as object
@@ -491,6 +655,44 @@ function getItemsForDecade(decade as integer) as object
     end for
 
     return filteredItems
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsForGenre
+'-------------------------------------------------------------------------------
+function getItemsForGenre(genre as string) as object
+    if genre = "" then return []
+
+    filteredItems = []
+    for each item in m.pageState.allItems
+        if itemHasGenre(item, genre) then filteredItems.Push(item)
+    end for
+
+    return filteredItems
+end function
+
+'-------------------------------------------------------------------------------
+' itemHasGenre
+'-------------------------------------------------------------------------------
+function itemHasGenre(item as dynamic, genre as string) as boolean
+    genreKey = LCase(String_Trim(genre))
+    if genreKey = "" then return false
+
+    for each itemGenre in getItemGenres(item)
+        if LCase(String_Trim(SafeString(itemGenre, ""))) = genreKey then return true
+    end for
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' getItemGenres
+'-------------------------------------------------------------------------------
+function getItemGenres(item as dynamic) as object
+    if isAssocArray(item) = false then return []
+    if item.Genres = invalid then return []
+
+    return item.Genres
 end function
 
 '-------------------------------------------------------------------------------
@@ -552,7 +754,7 @@ function shuffleLibraryItems(items as object) as object
     if items = invalid or items.Count() < 2 then return items
 
     for i = items.Count() - 1 to 1 step -1
-        swapIndex = int(Rnd(0) * (i + 1))
+        swapIndex = Number_ToInteger(Rnd(0) * (i + 1))
         if swapIndex < 0 then swapIndex = 0
         if swapIndex > i then swapIndex = i
 
@@ -605,17 +807,17 @@ end function
 function getItemLibraryYear(item as dynamic) as integer
     if isAssocArray(item) = false then return 0
 
-    productionYear = int(Val(SafeString(item.ProductionYear, "")))
+    productionYear = Number_ToInteger(item.ProductionYear)
     if productionYear > 0 then return productionYear
 
     premiereDate = SafeString(item.PremiereDate, "")
     if Len(premiereDate) < 4 then return 0
 
     yearText = Left(premiereDate, 4)
-    year = Val(yearText)
+    year = Number_ToInteger(yearText)
     if year <= 0 then return 0
 
-    return int(year)
+    return Number_ToInteger(year)
 end function
 
 '-------------------------------------------------------------------------------
@@ -848,9 +1050,34 @@ function applySortSelection(selection as object) as boolean
         return false
     end if
 
-    if isDecadeFilterActive() then
+    if selectedSortKey = "Genre" then
+        if SafeString(m.pageState.selectedSortKey, "") = "Genre" then
+            m.pageState.pendingFocusTarget = "filterButtonRow"
+            return false
+        end if
+
+        m.pageState.selectedSortKey = selectedSortKey
+        m.pageState.selectedSort = {
+            optionKey: "Genre"
+            sortKey: "SortName"
+            sortOrder: "Ascending"
+            label: SafeString(selection.label, "Genre")
+        }
+        m.pageState.activeFilterType = "Genre"
+        m.pageState.selectedGenre = getFirstGenreFilterValue(m.pageState.genreFilterOptions)
+        m.pageState.pendingFocusTarget = "filterButtonRow"
+        m.browseByButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.sortEnabled = false
+        closeLetterGrid(false)
+        showGenreFilterRow()
+        return false
+    end if
+
+    if isDecadeFilterActive() or isGenreFilterActive() then
         m.pageState.activeFilterType = ""
         m.pageState.selectedDecade = -1
+        m.pageState.selectedGenre = ""
         m.pageState.renderDecadeFilterOnApply = false
         m.pageState.pendingFocusTarget = ""
         hideFilterButtonRow()
@@ -1464,12 +1691,12 @@ sub updateLibraryProgressLayout(imageAspect as string)
     if imageAspect <> "poster" then stopLibraryProgressHold()
 
     m.libraryProgressIndicator.layoutMode = imageAspect
-    m.libraryProgressIndicator.gridLeft = int(m.itemsGrid.translation[0])
-    m.libraryProgressIndicator.gridTop = int(m.itemsGrid.translation[1])
-    m.libraryProgressIndicator.itemWidth = int(m.itemsGrid.itemSize[0])
-    m.libraryProgressIndicator.itemSpacingX = int(m.itemsGrid.itemSpacing[0])
-    m.libraryProgressIndicator.numColumns = int(m.itemsGrid.numColumns)
-    m.libraryProgressIndicator.numRows = int(m.itemsGrid.numRows)
+    m.libraryProgressIndicator.gridLeft = Number_ToInteger(m.itemsGrid.translation[0])
+    m.libraryProgressIndicator.gridTop = Number_ToInteger(m.itemsGrid.translation[1])
+    m.libraryProgressIndicator.itemWidth = Number_ToInteger(m.itemsGrid.itemSize[0])
+    m.libraryProgressIndicator.itemSpacingX = Number_ToInteger(m.itemsGrid.itemSpacing[0])
+    m.libraryProgressIndicator.numColumns = Number_ToInteger(m.itemsGrid.numColumns)
+    m.libraryProgressIndicator.numRows = Number_ToInteger(m.itemsGrid.numRows)
     updateLibraryProgressItemCount()
     updateLibraryProgressFocusedIndex()
 end sub
@@ -1480,7 +1707,7 @@ end sub
 sub updateLibraryProgressItemCount(itemCount = invalid as dynamic)
     resolvedItemCount = 0
     if itemCount <> invalid then
-        resolvedItemCount = int(itemCount)
+        resolvedItemCount = Number_ToInteger(itemCount)
     else if m.itemsGrid.content <> invalid then
         resolvedItemCount = m.itemsGrid.content.getChildCount()
     end if
