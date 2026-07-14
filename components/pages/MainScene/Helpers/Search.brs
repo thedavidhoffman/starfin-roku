@@ -29,7 +29,6 @@ sub searchShow()
     m.dynamicPageHost.appendChild(page)
     m.homePage.visible = false
     m.header.visible = true
-    m.header.callFunc("activateSearchButton")
     page.callFunc("activate")
 end sub
 
@@ -41,7 +40,6 @@ function searchReturnToPage() as boolean
 
     m.searchPage.visible = true
     m.header.visible = true
-    m.header.callFunc("activateSearchButton")
     m.searchPage.callFunc("activate")
     return true
 end function

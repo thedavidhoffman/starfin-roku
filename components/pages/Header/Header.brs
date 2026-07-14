@@ -10,7 +10,6 @@ sub init()
 
     initStyle()
     updateUserMenuButton()
-    setActiveHeaderButton("home")
     closeAccountMenu()
     syncMenuOpen()
 end sub
@@ -82,38 +81,6 @@ function focusUserMenuButton() as boolean
     return true
 end function
 
-'-------------------------------------------------------------------------------
-' activateHomeButton
-'-------------------------------------------------------------------------------
-function activateHomeButton() as boolean
-    setActiveHeaderButton("home")
-    return true
-end function
-
-'-------------------------------------------------------------------------------
-' activateSearchButton
-'-------------------------------------------------------------------------------
-function activateSearchButton() as boolean
-    setActiveHeaderButton("search")
-    return true
-end function
-
-'-------------------------------------------------------------------------------
-' activateUserMenuButton
-'-------------------------------------------------------------------------------
-function activateUserMenuButton() as boolean
-    setActiveHeaderButton("userMenu")
-    return true
-end function
-
-'-------------------------------------------------------------------------------
-' isSearchButtonActive
-'-------------------------------------------------------------------------------
-function isSearchButtonActive() as boolean
-    return false
-end function
-
-'-------------------------------------------------------------------------------
 ' isHomeButtonFocused
 '-------------------------------------------------------------------------------
 function isHomeButtonFocused() as boolean
@@ -286,7 +253,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub onHomePressed()
     closeMenu()
-    setActiveHeaderButton("home")
     m.top.homeSelected = true
 end sub
 
@@ -303,12 +269,6 @@ end sub
 sub onSettingsPressed()
     closeMenu()
     requestSettingsOverlay()
-end sub
-
-'-------------------------------------------------------------------------------
-' setActiveHeaderButton
-'-------------------------------------------------------------------------------
-sub setActiveHeaderButton(activeButtonName as string)
 end sub
 
 '-------------------------------------------------------------------------------

@@ -151,7 +151,6 @@ end sub
 sub showHome()
     m.homePage.visible = true
     m.header.visible = true
-    m.header.callFunc("activateHomeButton")
 
     if m.homeRefreshState <> invalid and m.homeRefreshState.playbackRowsDirty = true then
         m.homePage.callFunc("activateBlocking")
