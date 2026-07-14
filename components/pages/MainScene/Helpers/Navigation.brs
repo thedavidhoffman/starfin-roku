@@ -42,12 +42,12 @@ sub navHandleOverlayClosed()
 
     request = closed.request
     if request <> invalid and request.id = "letterGrid" then
-        libraryHandleLetterGridOverlayClosed(closed)
+        videoLibraryHandleLetterGridOverlayClosed(closed)
         return
     end if
 
     if request <> invalid and request.id = "sort" then
-        libraryHandleSortOverlayClosed(closed)
+        videoLibraryHandleSortOverlayClosed(closed)
         return
     end if
 
@@ -62,7 +62,7 @@ sub navHandleOverlayClosed()
     end if
 
     if request <> invalid and request.id = "mediaInfo" then
-        navHandleMediaInfoOverlayClosed(closed)
+        navHandleVideoMediaInfoOverlayClosed(closed)
         return
     end if
 
@@ -106,17 +106,17 @@ sub navHandleDescriptionOverlayClosed(closed as object)
 end sub
 
 '-------------------------------------------------------------------------------
-' navHandleMediaInfoOverlayClosed
+' navHandleVideoMediaInfoOverlayClosed
 '-------------------------------------------------------------------------------
-sub navHandleMediaInfoOverlayClosed(closed as object)
+sub navHandleVideoMediaInfoOverlayClosed(closed as object)
     request = closed.request
     if request = invalid then return
 
     sourcePage = SafeString(request.sourcePage, "")
     if sourcePage = "movie" and m.moviePage <> invalid then
-        m.moviePage.callFunc("handleMediaInfoOverlayClosed")
+        m.moviePage.callFunc("handleVideoMediaInfoOverlayClosed")
     else if sourcePage = "tvEpisode" and m.tvEpisodePage <> invalid then
-        m.tvEpisodePage.callFunc("handleMediaInfoOverlayClosed")
+        m.tvEpisodePage.callFunc("handleVideoMediaInfoOverlayClosed")
     end if
 end sub
 
@@ -188,8 +188,8 @@ sub focusActiveSurface()
         m.tvShowPage.callFunc("activate")
     else if m.liveTvPage <> invalid and m.liveTvPage.visible = true then
         m.liveTvPage.callFunc("activate")
-    else if m.libraryPage <> invalid and m.libraryPage.visible = true then
-        m.libraryPage.callFunc("activate")
+    else if m.videoLibraryPage <> invalid and m.videoLibraryPage.visible = true then
+        m.videoLibraryPage.callFunc("activate")
     else if m.collectionsPage <> invalid and m.collectionsPage.visible = true then
         m.collectionsPage.callFunc("activate")
     else if m.searchPage <> invalid and m.searchPage.visible = true then
@@ -229,7 +229,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub fanOutSettings()
     applySettingsToPage(m.collectionsPage)
-    applySettingsToPage(m.libraryPage)
+    applySettingsToPage(m.videoLibraryPage)
     applySettingsToPage(m.moviePage)
     applySettingsToPage(m.tvShowPage)
     applySettingsToPage(m.tvSeasonPage)
@@ -280,7 +280,7 @@ sub resetDynamicPages()
     clearStatus()
     themeAudioStop()
     if m.liveTvPage <> invalid then m.liveTvPage.callFunc("deactivate")
-    if m.libraryPage <> invalid then m.libraryPage.callFunc("deactivate")
+    if m.videoLibraryPage <> invalid then m.videoLibraryPage.callFunc("deactivate")
     if m.collectionsPage <> invalid then m.collectionsPage.callFunc("deactivate")
     if m.searchPage <> invalid then m.searchPage.callFunc("deactivate")
     if m.moviePage <> invalid then m.moviePage.callFunc("deactivate")
@@ -293,7 +293,7 @@ sub resetDynamicPages()
     m.searchPage = invalid
     m.collectionsPage = invalid
     m.liveTvPage = invalid
-    m.libraryPage = invalid
+    m.videoLibraryPage = invalid
     m.moviePage = invalid
     m.tvShowPage = invalid
     m.tvSeasonPage = invalid

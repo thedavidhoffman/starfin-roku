@@ -71,10 +71,10 @@ sub tvSeasonHandleCloseRequested()
         m.tvShowPage.visible = true
         m.header.visible = false
         m.tvShowPage.callFunc("activate")
-    else if m.libraryPage <> invalid then
-        m.libraryPage.visible = true
+    else if m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.visible = true
         m.header.visible = true
-        m.libraryPage.callFunc("activate")
+        m.videoLibraryPage.callFunc("activate")
     else
         showHome()
     end if

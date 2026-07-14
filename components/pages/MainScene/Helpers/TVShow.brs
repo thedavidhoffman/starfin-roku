@@ -34,7 +34,7 @@ sub tvShowShow(selection as object, shouldReset as boolean)
     if shouldReset then resetDynamicPages()
     m.tvShowPage = page
     m.dynamicPageHost.appendChild(page)
-    if m.libraryPage <> invalid then m.libraryPage.visible = false
+    if m.videoLibraryPage <> invalid then m.videoLibraryPage.visible = false
     if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false
     m.header.visible = false
@@ -85,10 +85,10 @@ sub tvShowHandleCloseRequested()
         m.personPage.visible = true
         m.header.visible = true
         m.personPage.callFunc("activate")
-    else if m.libraryPage <> invalid then
-        m.libraryPage.visible = true
+    else if m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.visible = true
         m.header.visible = true
-        m.libraryPage.callFunc("activate")
+        m.videoLibraryPage.callFunc("activate")
     else if searchReturnToPage() then
         return
     else

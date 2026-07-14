@@ -40,7 +40,7 @@ sub collectionsHandleCollectionSelected()
     if selection.itemId = invalid or selection.itemId = "" then return
 
     if m.collectionsPage <> invalid then m.collectionsPage.callFunc("deactivate")
-    libraryShow({
+    videoLibraryShow({
         libraryId: selection.itemId
         collectionType: "collection"
         title: FirstNonEmpty([selection.item.Name], "Collection")
