@@ -74,6 +74,12 @@ sub selectHomeItem(item as dynamic)
             libraryId: itemId
             item: item
         }
+    else if isMusicLibrary(item) then
+        m.top.selectedMusicLibrary = {
+            libraryId: itemId
+            collectionType: item.CollectionType
+            item: item
+        }
     else if isMediaLibrary(item) then
         m.top.selectedLibrary = {
             libraryId: itemId
@@ -989,6 +995,13 @@ end function
 '-------------------------------------------------------------------------------
 function isMediaLibrary(item as dynamic) as boolean
     return item.CollectionType = "movies" or item.CollectionType = "tvshows"
+end function
+
+'-------------------------------------------------------------------------------
+' isMusicLibrary
+'-------------------------------------------------------------------------------
+function isMusicLibrary(item as dynamic) as boolean
+    return LCase(SafeString(item.CollectionType, "")) = "music"
 end function
 
 '-------------------------------------------------------------------------------

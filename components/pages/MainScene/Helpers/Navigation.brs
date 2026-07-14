@@ -187,6 +187,8 @@ sub focusActiveSurface()
         m.tvShowPage.callFunc("activate")
     else if m.liveTvPage <> invalid and m.liveTvPage.visible = true then
         m.liveTvPage.callFunc("activate")
+    else if m.musicLibraryPage <> invalid and m.musicLibraryPage.visible = true then
+        m.musicLibraryPage.callFunc("activate")
     else if m.videoLibraryPage <> invalid and m.videoLibraryPage.visible = true then
         m.videoLibraryPage.callFunc("activate")
     else if m.collectionsPage <> invalid and m.collectionsPage.visible = true then
@@ -279,6 +281,7 @@ sub resetDynamicPages()
     clearStatus()
     themeAudioStop()
     if m.liveTvPage <> invalid then m.liveTvPage.callFunc("deactivate")
+    if m.musicLibraryPage <> invalid then m.musicLibraryPage.callFunc("deactivate")
     if m.videoLibraryPage <> invalid then m.videoLibraryPage.callFunc("deactivate")
     if m.collectionsPage <> invalid then m.collectionsPage.callFunc("deactivate")
     if m.searchPage <> invalid then m.searchPage.callFunc("deactivate")
@@ -292,6 +295,7 @@ sub resetDynamicPages()
     m.searchPage = invalid
     m.collectionsPage = invalid
     m.liveTvPage = invalid
+    m.musicLibraryPage = invalid
     m.videoLibraryPage = invalid
     m.moviePage = invalid
     m.tvShowPage = invalid
