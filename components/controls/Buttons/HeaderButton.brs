@@ -80,17 +80,24 @@ end function
 ' onFocusVisualChanged
 '-------------------------------------------------------------------------------
 sub onFocusVisualChanged()
-    
+    hasFocusVisual = m.top.hasFocusVisual = true
+    hasActiveVisual = m.top.hasActiveVisual = true
+
     if m.bg <> invalid then
-        if m.top.hasFocusVisual = true then
+        if hasFocusVisual then
             m.bg.visible = true
+            m.bg.opacity = 1
+        else if hasActiveVisual then
+            m.bg.visible = true
+            m.bg.opacity = 0.58
         else
             m.bg.visible = false
+            m.bg.opacity = 1
         end if
     end if
 
     if m.textLabel <> invalid then
-        if m.top.hasFocusVisual = true then
+        if hasFocusVisual or hasActiveVisual then
             m.textLabel.color = m.top.headerBgColor
         else
             m.textLabel.color = &hFFFFFFFF

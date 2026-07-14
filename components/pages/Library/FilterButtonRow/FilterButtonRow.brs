@@ -244,11 +244,26 @@ end function
 '-------------------------------------------------------------------------------
 sub updateFocusVisuals()
     hasRowFocus = m.top.isInFocusChain()
+    activeIndex = getActiveButtonIndex()
     for i = 0 to m.rowState.buttons.Count() - 1
         button = m.rowState.buttons[i]
-        if button <> invalid then button.hasFocusVisual = hasRowFocus and i = m.rowState.focusedIndex
+        if button <> invalid then
+            button.hasActiveVisual = i = activeIndex
+            button.hasFocusVisual = hasRowFocus and i = activeIndex
+        end if
     end for
 end sub
+
+'-------------------------------------------------------------------------------
+' getActiveButtonIndex
+'-------------------------------------------------------------------------------
+function getActiveButtonIndex() as integer
+    selectedValue = SafeString(m.top.selectedValue, "")
+    selectedIndex = findIndexForValue(selectedValue)
+    if selectedIndex >= 0 then return selectedIndex
+
+    return clampIndex(m.rowState.focusedIndex)
+end function
 
 '-------------------------------------------------------------------------------
 ' focusButtonAtIndex
