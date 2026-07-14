@@ -24,9 +24,6 @@ end function
 '-------------------------------------------------------------------------------
 function ThemeDefault() as object
 
-    BACKGROUND_PRIMARY = &h292836FF
-    BACKGROUND_SECONDARY = &h313040FF
-
     return {
         background: {
             header: &h12112BFF

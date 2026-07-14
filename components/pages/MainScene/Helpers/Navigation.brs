@@ -52,7 +52,7 @@ sub navHandleOverlayClosed()
     end if
 
     if request <> invalid and request.id = "personOverview" then
-        personHandlePersonOverviewOverlayClosed(closed)
+        personHandlePersonOverviewOverlayClosed()
         return
     end if
 

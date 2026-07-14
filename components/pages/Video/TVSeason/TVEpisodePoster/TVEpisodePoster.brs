@@ -87,14 +87,14 @@ sub onItemContentChanged()
     if item = invalid then
         renderImage("")
         updateProgress(invalid, false)
-        updateWatchedIndicator(invalid, false)
+        updateWatchedIndicator(invalid)
         return
     end if
 
     isSeasonSummary = SafeString(item.itemType, "") = "SeasonSummary"
     renderImage(SafeString(item.HDPosterUrl, ""))
     updateProgress(item, isSeasonSummary)
-    updateWatchedIndicator(item, isSeasonSummary)
+    updateWatchedIndicator(item)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -163,7 +163,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' updateWatchedIndicator
 '-------------------------------------------------------------------------------
-sub updateWatchedIndicator(item as dynamic, isSeasonSummary as boolean)
+sub updateWatchedIndicator(item as dynamic)
     if item = invalid then
         m.watchedIndicator.visible = false
         return

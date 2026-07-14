@@ -667,7 +667,7 @@ sub appendSeasonSummaryItem(row as object)
     child = row.createChild("ContentNode")
     child.title = getItemTitle(season)
     child.description = getSeasonSummaryDescription(season)
-    child.HDPosterUrl = getSeasonBackgroundUrl(season)
+    child.HDPosterUrl = getSeasonBackgroundUrl()
     child.AddFields({
         itemId: SafeString(FirstNonEmpty([season.Id], ""), "")
         itemType: "SeasonSummary"
@@ -1172,7 +1172,7 @@ end function
 '-------------------------------------------------------------------------------
 ' getSeasonBackgroundUrl
 '-------------------------------------------------------------------------------
-function getSeasonBackgroundUrl(season as dynamic) as string
+function getSeasonBackgroundUrl() as string
     request = m.pageState.request
     if request <> invalid then
         imageUrl = FirstNonEmpty([request.series.thumbUrl], "")

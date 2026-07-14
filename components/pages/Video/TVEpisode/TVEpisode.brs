@@ -175,7 +175,7 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
     m.mediaShell.mediaContent = {
         mediaType: getVideoMediaShellType(item)
         backdropUrl: SafeString(item.HDPosterUrl, "")
-        logoUrl: getVideoMediaShellLogoUrl(item)
+        logoUrl: getVideoMediaShellLogoUrl()
         logoTitle: getVideoMediaShellLogoTitle(item)
         logoPending: logoPending
         title: title
@@ -209,7 +209,7 @@ end function
 '-------------------------------------------------------------------------------
 ' getVideoMediaShellLogoUrl
 '-------------------------------------------------------------------------------
-function getVideoMediaShellLogoUrl(item as dynamic) as string
+function getVideoMediaShellLogoUrl() as string
     return getSeriesLogoUrl(m.state.request)
 end function
 

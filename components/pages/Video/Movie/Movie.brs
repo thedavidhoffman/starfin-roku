@@ -101,7 +101,7 @@ end sub
 sub loadThemeSong(item as dynamic)
     request = m.state.request
     if request = invalid then return
-    if isThemeMusicEnabled(request.settings) <> true then
+    if isThemeMusicEnabled() <> true then
         m.log.write("Theme music playback is disabled")
         return
     end if
@@ -903,7 +903,7 @@ end function
 '-------------------------------------------------------------------------------
 ' isThemeMusicEnabled
 '-------------------------------------------------------------------------------
-function isThemeMusicEnabled(settings as dynamic) as boolean
+function isThemeMusicEnabled() as boolean
     return false
 end function
 

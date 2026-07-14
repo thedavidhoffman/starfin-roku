@@ -46,7 +46,7 @@ sub executeRequest()
 
     url = request.server + "/Items/" + request.itemId + "/PlaybackInfo" + Url_BuildQueryString(params)
     body = buildPlaybackInfoBody()
-    logPlaybackRequest(request, url, body)
+    logPlaybackRequest(request, body)
 
     result = HttpClient_Request(url, "POST", invalid, body, JellyfinAuth_BuildTokenHeaders(request.token))
     if result.ok <> true then
@@ -83,7 +83,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' logPlaybackRequest
 '-------------------------------------------------------------------------------
-sub logPlaybackRequest(request as object, url as string, body as string)
+sub logPlaybackRequest(request as object, body as string)
     itemName = ""
     if request.item <> invalid then itemName = FirstNonEmpty([request.item.Name], "")
 

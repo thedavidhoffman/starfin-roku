@@ -78,7 +78,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' personHandlePersonOverviewOverlayClosed
 '-------------------------------------------------------------------------------
-sub personHandlePersonOverviewOverlayClosed(closed as object)
+sub personHandlePersonOverviewOverlayClosed()
     if m.personPage = invalid then return
 
     m.personPage.callFunc("handlePersonOverviewOverlayClosed")
