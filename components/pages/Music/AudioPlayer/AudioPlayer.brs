@@ -229,8 +229,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub updateTimeline(position as dynamic, duration as dynamic)
     positionValue = Number_ToFloat(position, 0.0)
-    durationValue = Number_ToFloat(duration, 0.0)
-    if durationValue < 1 then durationValue = getTrackDuration(getCurrentTrack())
+    durationValue = getTrackDuration(getCurrentTrack())
+    if durationValue < 1 then durationValue = Number_ToFloat(duration, 0.0)
     if durationValue < 1 then durationValue = 1
     if positionValue < 0 then positionValue = 0
     if positionValue > durationValue then positionValue = durationValue
@@ -245,7 +245,8 @@ end sub
 ' seekBy
 '-------------------------------------------------------------------------------
 sub seekBy(seconds as float)
-    duration = Number_ToFloat(m.audio.duration, getTrackDuration(getCurrentTrack()))
+    duration = getTrackDuration(getCurrentTrack())
+    if duration < 1 then duration = Number_ToFloat(m.audio.duration, 0.0)
     position = Number_ToFloat(m.audio.position, 0.0) + seconds
     if position < 0 then position = 0
     if duration > 0 and position > duration then position = duration
