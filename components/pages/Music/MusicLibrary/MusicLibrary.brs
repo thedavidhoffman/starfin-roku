@@ -30,6 +30,7 @@ sub init()
         selectedDecade: -1
         selectedGenre: ""
         filterCache: createEmptyFilterCache()
+        sortCache: createEmptySortCache()
         lifecycle: AsyncLifecycle_Create()
     }
     syncSortControls()
@@ -51,6 +52,7 @@ sub onLoadRequestChanged()
     m.state.selectedDecade = -1
     m.state.selectedGenre = ""
     m.state.filterCache = createEmptyFilterCache()
+    m.state.sortCache = createEmptySortCache()
     syncSortControls()
     hideFilterButtonRow()
     AsyncLifecycle_Begin(m.state.lifecycle, request.libraryId)
@@ -78,6 +80,7 @@ sub onMusicLibraryResponse()
 
     m.state.allAlbums = getItemsFromPayload(response.payload)
     m.state.filterCache = createFilterCacheFromOptions(response.filterOptions)
+    m.state.sortCache = createEmptySortCache()
     renderCurrentAlbums()
     updateTitleLabel(m.state.albums.Count())
     Status_ClearMessage()
@@ -249,18 +252,24 @@ end function
 ' getSortedAlbums
 '-------------------------------------------------------------------------------
 function getSortedAlbums(albums as object) as object
-    sortedAlbums = copyAlbums(albums)
-    if sortedAlbums.Count() < 2 then return sortedAlbums
-
     selection = m.state.selectedSort
     if selection = invalid then selection = getDefaultSortSelection()
 
     optionKey = SafeString(selection.optionKey, "Album")
-    if optionKey = "Random" then return shuffleAlbums(sortedAlbums)
+    if optionKey = "Random" then return shuffleAlbums(copyAlbums(albums))
+
     if optionKey = "ArtistAlbum" then
-        sortAlbumsByArtistThenYear(sortedAlbums)
+        if m.state.sortCache.artistAlbum = invalid then
+            m.state.sortCache.artistAlbum = copyAlbums(albums)
+            sortAlbumsByArtistThenYear(m.state.sortCache.artistAlbum)
+        end if
+        sortedAlbums = copyAlbums(m.state.sortCache.artistAlbum)
     else
-        sortAlbumsByTitleThenArtist(sortedAlbums)
+        if m.state.sortCache.album = invalid then
+            m.state.sortCache.album = copyAlbums(albums)
+            sortAlbumsByTitleThenArtist(m.state.sortCache.album)
+        end if
+        sortedAlbums = copyAlbums(m.state.sortCache.album)
     end if
 
     if SafeString(selection.sortOrder, "Ascending") = "Descending" then reverseAlbums(sortedAlbums)
@@ -271,88 +280,123 @@ end function
 ' sortAlbumsByTitleThenArtist
 '-------------------------------------------------------------------------------
 sub sortAlbumsByTitleThenArtist(albums as object)
-    for i = 1 to albums.Count() - 1
-        currentAlbum = albums[i]
-        insertIndex = i - 1
-        while insertIndex >= 0 and shouldTitleAlbumMoveRight(albums[insertIndex], currentAlbum)
-            albums[insertIndex + 1] = albums[insertIndex]
-            insertIndex = insertIndex - 1
-        end while
-        albums[insertIndex + 1] = currentAlbum
-    end for
+    sortAlbumsByMode(albums, "titleArtist")
 end sub
-
-'-------------------------------------------------------------------------------
-' shouldTitleAlbumMoveRight
-'-------------------------------------------------------------------------------
-function shouldTitleAlbumMoveRight(left as dynamic, right as dynamic) as boolean
-    titleCompare = String_NaturalCompare(getSortText(getAlbumTitle(left)), getSortText(getAlbumTitle(right)))
-    if titleCompare > 0 then return true
-    if titleCompare < 0 then return false
-
-    return String_NaturalCompare(getSortText(getAlbumArtistName(left)), getSortText(getAlbumArtistName(right))) > 0
-end function
 
 '-------------------------------------------------------------------------------
 ' sortAlbumsByArtistThenYear
 '-------------------------------------------------------------------------------
 sub sortAlbumsByArtistThenYear(albums as object)
-    for i = 1 to albums.Count() - 1
-        currentAlbum = albums[i]
-        insertIndex = i - 1
-        while insertIndex >= 0 and shouldArtistAlbumMoveRight(albums[insertIndex], currentAlbum)
-            albums[insertIndex + 1] = albums[insertIndex]
-            insertIndex = insertIndex - 1
-        end while
-        albums[insertIndex + 1] = currentAlbum
-    end for
+    sortAlbumsByMode(albums, "artistYearTitle")
 end sub
-
-'-------------------------------------------------------------------------------
-' shouldArtistAlbumMoveRight
-'-------------------------------------------------------------------------------
-function shouldArtistAlbumMoveRight(left as dynamic, right as dynamic) as boolean
-    artistCompare = String_NaturalCompare(getSortText(getAlbumArtistName(left)), getSortText(getAlbumArtistName(right)))
-    if artistCompare > 0 then return true
-    if artistCompare < 0 then return false
-
-    leftYear = getAlbumYear(left)
-    rightYear = getAlbumYear(right)
-    if leftYear > rightYear then return true
-    if leftYear < rightYear then return false
-
-    return String_NaturalCompare(getSortText(getAlbumTitle(left)), getSortText(getAlbumTitle(right))) > 0
-end function
 
 '-------------------------------------------------------------------------------
 ' sortAlbumsByYearThenTitle
 '-------------------------------------------------------------------------------
 sub sortAlbumsByYearThenTitle(albums as object)
-    for i = 1 to albums.Count() - 1
-        currentAlbum = albums[i]
-        insertIndex = i - 1
-        while insertIndex >= 0 and shouldYearAlbumMoveRight(albums[insertIndex], currentAlbum)
-            albums[insertIndex + 1] = albums[insertIndex]
-            insertIndex = insertIndex - 1
-        end while
-        albums[insertIndex + 1] = currentAlbum
+    sortAlbumsByMode(albums, "yearTitleArtist")
+end sub
+
+'-------------------------------------------------------------------------------
+' sortAlbumsByMode
+'-------------------------------------------------------------------------------
+sub sortAlbumsByMode(albums as object, mode as string)
+    if albums = invalid or albums.Count() < 2 then return
+
+    entries = []
+    for each album in albums
+        entries.Push({
+            album: album
+            artist: getSortText(getAlbumArtistName(album))
+            title: getSortText(getAlbumTitle(album))
+            year: getAlbumYear(album)
+        })
+    end for
+
+    sortedEntries = mergeSortAlbumEntries(entries, mode)
+    for i = 0 to sortedEntries.Count() - 1
+        albums[i] = sortedEntries[i].album
     end for
 end sub
 
 '-------------------------------------------------------------------------------
-' shouldYearAlbumMoveRight
+' mergeSortAlbumEntries
 '-------------------------------------------------------------------------------
-function shouldYearAlbumMoveRight(left as dynamic, right as dynamic) as boolean
-    leftYear = getAlbumYear(left)
-    rightYear = getAlbumYear(right)
-    if leftYear > rightYear then return true
-    if leftYear < rightYear then return false
+function mergeSortAlbumEntries(entries as object, mode as string) as object
+    sortedEntries = entries
+    width = 1
+    entryCount = sortedEntries.Count()
 
-    titleCompare = String_NaturalCompare(getSortText(getAlbumTitle(left)), getSortText(getAlbumTitle(right)))
-    if titleCompare > 0 then return true
-    if titleCompare < 0 then return false
+    while width < entryCount
+        mergedEntries = []
+        startIndex = 0
+        while startIndex < entryCount
+            leftIndex = startIndex
+            rightIndex = startIndex + width
+            leftEnd = rightIndex
+            if leftEnd > entryCount then leftEnd = entryCount
+            rightEnd = startIndex + (width * 2)
+            if rightEnd > entryCount then rightEnd = entryCount
 
-    return String_NaturalCompare(getSortText(getAlbumArtistName(left)), getSortText(getAlbumArtistName(right))) > 0
+            while leftIndex < leftEnd or rightIndex < rightEnd
+                if rightIndex >= rightEnd then
+                    mergedEntries.Push(sortedEntries[leftIndex])
+                    leftIndex = leftIndex + 1
+                else if leftIndex >= leftEnd then
+                    mergedEntries.Push(sortedEntries[rightIndex])
+                    rightIndex = rightIndex + 1
+                else if compareAlbumSortEntries(sortedEntries[leftIndex], sortedEntries[rightIndex], mode) <= 0 then
+                    mergedEntries.Push(sortedEntries[leftIndex])
+                    leftIndex = leftIndex + 1
+                else
+                    mergedEntries.Push(sortedEntries[rightIndex])
+                    rightIndex = rightIndex + 1
+                end if
+            end while
+
+            startIndex = startIndex + (width * 2)
+        end while
+
+        sortedEntries = mergedEntries
+        width = width * 2
+    end while
+
+    return sortedEntries
+end function
+
+'-------------------------------------------------------------------------------
+' compareAlbumSortEntries
+'-------------------------------------------------------------------------------
+function compareAlbumSortEntries(left as object, right as object, mode as string) as integer
+    if mode = "artistYearTitle" then
+        comparison = String_NaturalCompare(left.artist, right.artist)
+        if comparison <> 0 then return comparison
+        if left.year < right.year then return -1
+        if left.year > right.year then return 1
+        return String_NaturalCompare(left.title, right.title)
+    end if
+
+    if mode = "yearTitleArtist" then
+        if left.year < right.year then return -1
+        if left.year > right.year then return 1
+        comparison = String_NaturalCompare(left.title, right.title)
+        if comparison <> 0 then return comparison
+        return String_NaturalCompare(left.artist, right.artist)
+    end if
+
+    comparison = String_NaturalCompare(left.title, right.title)
+    if comparison <> 0 then return comparison
+    return String_NaturalCompare(left.artist, right.artist)
+end function
+
+'-------------------------------------------------------------------------------
+' createEmptySortCache
+'-------------------------------------------------------------------------------
+function createEmptySortCache() as object
+    return {
+        album: invalid
+        artistAlbum: invalid
+    }
 end function
 
 '-------------------------------------------------------------------------------
