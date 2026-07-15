@@ -927,8 +927,23 @@ sub onSortOverlayRequested()
     if request = invalid then return
 
     request.selectedSortKey = m.pageState.selectedSortKey
+    request.sortOptions = getVideoSortOptions()
     m.top.overlayRequested = request
 end sub
+
+'-------------------------------------------------------------------------------
+' getVideoSortOptions
+'-------------------------------------------------------------------------------
+function getVideoSortOptions() as object
+    return [
+        { optionKey: "SortName", sortKey: "SortName", sortOrder: "", label: "Title" }
+        { optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "", label: "Release Date" }
+        { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "", label: "Date Added" }
+        { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
+        { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
+        { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
+    ]
+end function
 
 '-------------------------------------------------------------------------------
 ' onSortOrderChanged

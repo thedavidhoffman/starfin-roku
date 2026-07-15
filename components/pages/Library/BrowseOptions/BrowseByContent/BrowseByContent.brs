@@ -52,16 +52,9 @@ end sub
 ' getSortOptions
 '-------------------------------------------------------------------------------
 function getSortOptions() as object
-    if m.top.sortOptions <> invalid and m.top.sortOptions.Count() > 0 then return m.top.sortOptions
+    if m.top.sortOptions = invalid then return []
 
-    return [
-        { optionKey: "SortName", sortKey: "SortName", sortOrder: "", label: "Title" }
-        { optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "", label: "Release Date" }
-        { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "", label: "Date Added" }
-        { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
-        { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
-        { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
-    ]
+    return m.top.sortOptions
 end function
 
 '-------------------------------------------------------------------------------

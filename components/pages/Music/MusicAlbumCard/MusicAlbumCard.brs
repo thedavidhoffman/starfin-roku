@@ -56,15 +56,8 @@ end function
 '-------------------------------------------------------------------------------
 sub syncYearLabel(item as object)
     releaseYear = getReleaseYear(item)
-    hasReleaseYear = releaseYear <> ""
-
     m.yearLabel.text = releaseYear
-    m.yearLabel.visible = hasReleaseYear
-    if hasReleaseYear then
-        m.albumLabel.width = 252
-    else
-        m.albumLabel.width = 340
-    end if
+    m.yearLabel.visible = releaseYear <> ""
 end sub
 
 '-------------------------------------------------------------------------------

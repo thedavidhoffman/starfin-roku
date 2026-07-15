@@ -7,6 +7,7 @@ sub init()
     m.browseByButton = m.top.findNode("browseByButton")
     m.sortButton = m.top.findNode("sortButton")
     m.filterButtonRow = m.top.findNode("filterButtonRow")
+    m.filterFocusTimer = m.top.findNode("filterFocusTimer")
     m.albumsGrid = m.top.findNode("albumsGrid")
     m.musicLibraryTask = m.top.findNode("musicLibraryTask")
     m.musicLibraryTask.observeField("response", "onMusicLibraryResponse")
@@ -17,6 +18,7 @@ sub init()
     m.filterButtonRow.observeField("filterSelected", "onFilterButtonRowSelected")
     m.filterButtonRow.observeField("focusExitUp", "onFilterButtonRowFocusExitUp")
     m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
+    m.filterFocusTimer.observeField("fire", "onFilterFocusTimerFired")
     m.albumsGrid.observeField("itemSelected", "onAlbumSelected")
     m.state = {
         request: invalid
@@ -98,20 +100,14 @@ sub renderAlbums(albums as object)
 
         albumName = getDisplayText(FirstNonEmpty([album.Name], "Untitled Album"))
         artistName = getDisplayText(getAlbumArtistName(album))
-        primaryLabel = artistName
-        secondaryLabel = albumName
-        if isAlbumBrowseMode() then
-            primaryLabel = albumName
-            secondaryLabel = artistName
-        end if
 
         child = content.createChild("ContentNode")
         child.title = albumName
         child.HDPosterUrl = getAlbumArtworkUrl(album, request)
         child.AddFields({
             artistName: artistName
-            primaryLabel: primaryLabel
-            secondaryLabel: secondaryLabel
+            primaryLabel: artistName
+            secondaryLabel: albumName
             releaseYear: getAlbumReleaseYearText(album)
             raw: album
         })
@@ -612,6 +608,7 @@ function applySortSelection(selection as object) as boolean
         m.state.selectedDecade = getFirstDecadeFilterValue(m.state.filterCache.decadeOptions)
         syncSortControls()
         showDecadeFilterRow()
+        queueFilterButtonRowFocus()
         return false
     end if
 
@@ -627,6 +624,7 @@ function applySortSelection(selection as object) as boolean
         m.state.selectedGenre = getFirstGenreFilterValue(m.state.filterCache.genreOptions)
         syncSortControls()
         showGenreFilterRow()
+        queueFilterButtonRowFocus()
         return false
     end if
 
@@ -769,6 +767,21 @@ function focusFilterButtonRow() as boolean
     m.filterButtonRow.callFunc("focusFirstButton")
     return true
 end function
+
+'-------------------------------------------------------------------------------
+' queueFilterButtonRowFocus
+'-------------------------------------------------------------------------------
+sub queueFilterButtonRowFocus()
+    m.filterFocusTimer.control = "stop"
+    m.filterFocusTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilterFocusTimerFired
+'-------------------------------------------------------------------------------
+sub onFilterFocusTimerFired()
+    focusFilterButtonRow()
+end sub
 
 '-------------------------------------------------------------------------------
 ' focusSortButton
