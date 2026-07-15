@@ -23,7 +23,7 @@ sub executeRequest()
         parentId: SafeString(request.libraryId, "")
         recursive: true
         includeItemTypes: "MusicAlbum"
-        fields: "SortName,AlbumArtist,Artists"
+        fields: "SortName,AlbumArtist,Artists,ProductionYear,PremiereDate,Genres"
         enableImageTypes: "Primary"
         imageTypeLimit: 1
         enableTotalRecordCount: false
@@ -45,8 +45,105 @@ sub executeRequest()
         action: "musicLibrary"
         libraryId: SafeString(request.libraryId, "")
         payload: response.data
+        filterOptions: buildFilterOptions(getItemsFromPayload(response.data))
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' buildFilterOptions
+'-------------------------------------------------------------------------------
+function buildFilterOptions(albums as object) as object
+    filterOptions = {
+        decadeOptions: []
+        genreOptions: []
+    }
+    if albums = invalid then return filterOptions
+
+    decadeValues = []
+    decadeValueByKey = {}
+    genreLabels = []
+    genreLabelByKey = {}
+
+    for each album in albums
+        year = getAlbumYear(album)
+        if year > 0 then
+            decade = Number_ToInteger(Fix(year / 10) * 10, 0)
+            decadeKey = decade.ToStr()
+            if decadeValueByKey[decadeKey] = invalid then
+                decadeValueByKey[decadeKey] = decade
+                decadeValues.Push(decade)
+            end if
+        end if
+
+        for each genre in getAlbumGenres(album)
+            genreLabel = String_Trim(SafeString(genre, ""))
+            if genreLabel = "" then continue for
+
+            genreKey = LCase(genreLabel)
+            if genreLabelByKey[genreKey] = invalid then
+                genreLabelByKey[genreKey] = genreLabel
+                genreLabels.Push(genreLabel)
+            end if
+        end for
+    end for
+
+    decadeValues.Sort()
+    for each decade in decadeValues
+        decadeKey = decade.ToStr()
+        filterOptions.decadeOptions.Push({
+            label: decadeKey
+            value: decade
+        })
+    end for
+
+    genreLabels.Sort()
+    for each genreLabel in genreLabels
+        filterOptions.genreOptions.Push({
+            label: genreLabel
+            value: genreLabel
+        })
+    end for
+
+    return filterOptions
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsFromPayload
+'-------------------------------------------------------------------------------
+function getItemsFromPayload(payload as dynamic) as object
+    if payload = invalid then return []
+    if Type(payload) = "roArray" then return payload
+    if Array_IsAssocArray(payload) = false then return []
+    if payload.Items <> invalid then return payload.Items
+    if payload.items <> invalid then return payload.items
+
+    return []
+end function
+
+'-------------------------------------------------------------------------------
+' getAlbumYear
+'-------------------------------------------------------------------------------
+function getAlbumYear(album as dynamic) as integer
+    if Array_IsAssocArray(album) = false then return 0
+
+    year = Number_ToInteger(album.ProductionYear, 0)
+    if year > 0 then return year
+
+    premiereDate = SafeString(album.PremiereDate, "")
+    if Len(premiereDate) < 4 then return 0
+
+    return Number_ToInteger(Left(premiereDate, 4), 0)
+end function
+
+'-------------------------------------------------------------------------------
+' getAlbumGenres
+'-------------------------------------------------------------------------------
+function getAlbumGenres(album as dynamic) as object
+    if Array_IsAssocArray(album) = false then return []
+    if album.Genres = invalid then return []
+
+    return album.Genres
+end function
 
 '-------------------------------------------------------------------------------
 ' validateRequest

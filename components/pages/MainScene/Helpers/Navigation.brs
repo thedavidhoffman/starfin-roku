@@ -47,7 +47,11 @@ sub navHandleOverlayClosed()
     end if
 
     if request <> invalid and request.id = "sort" then
-        videoLibraryHandleSortOverlayClosed(closed)
+        if SafeString(request.sourcePage, "") = "musicLibrary" then
+            musicLibraryHandleSortOverlayClosed(closed)
+        else
+            videoLibraryHandleSortOverlayClosed(closed)
+        end if
         return
     end if
 

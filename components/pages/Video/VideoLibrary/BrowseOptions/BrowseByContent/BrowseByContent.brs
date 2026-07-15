@@ -20,6 +20,13 @@ sub onSelectedSortKeyChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onSortOptionsChanged
+'-------------------------------------------------------------------------------
+sub onSortOptionsChanged()
+    renderOptions()
+end sub
+
+'-------------------------------------------------------------------------------
 ' renderOptions
 '-------------------------------------------------------------------------------
 sub renderOptions()
@@ -45,6 +52,8 @@ end sub
 ' getSortOptions
 '-------------------------------------------------------------------------------
 function getSortOptions() as object
+    if m.top.sortOptions <> invalid and m.top.sortOptions.Count() > 0 then return m.top.sortOptions
+
     return [
         { optionKey: "SortName", sortKey: "SortName", sortOrder: "", label: "Title" }
         { optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "", label: "Release Date" }

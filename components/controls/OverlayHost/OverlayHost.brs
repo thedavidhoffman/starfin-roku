@@ -54,6 +54,7 @@ sub applyOverlayRequestFields(overlay as object, request as object)
 
     if requestId = "sort" then
         overlay.selectedSortKey = request.selectedSortKey
+        if request.sortOptions <> invalid then overlay.sortOptions = request.sortOptions
         return
     end if
 

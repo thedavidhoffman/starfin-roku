@@ -28,6 +28,7 @@ sub musicLibraryShow(selection as object)
     page = CreateObject("roSGNode", "MusicLibrary")
     page.observeField("closeRequested", "musicLibraryHandleCloseRequested")
     page.observeField("focusExitUp", "musicLibraryHandleFocusExitUp")
+    page.observeField("overlayRequested", "musicLibraryHandleOverlayRequested")
     page.observeField("selectedAlbum", "musicLibraryHandleAlbumSelected")
     loadRequest = {
         server: m.session.server
@@ -55,6 +56,36 @@ sub musicLibraryHandleFocusExitUp()
     if m.header <> invalid and m.header.visible = true then
         m.header.callFunc("focusHeader")
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' musicLibraryHandleOverlayRequested
+'-------------------------------------------------------------------------------
+sub musicLibraryHandleOverlayRequested()
+    if m.musicLibraryPage = invalid then return
+
+    request = m.musicLibraryPage.overlayRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
+end sub
+
+'-------------------------------------------------------------------------------
+' musicLibraryHandleSortOverlayClosed
+'-------------------------------------------------------------------------------
+sub musicLibraryHandleSortOverlayClosed(closed as object)
+    if m.musicLibraryPage = invalid then return
+
+    overlay = closed.overlay
+    if overlay <> invalid and overlay.sortSelected <> invalid then
+        m.musicLibraryPage.callFunc("applySortSelection", overlay.sortSelected)
+        optionKey = SafeString(overlay.sortSelected.optionKey, "")
+        if optionKey = "Decade" or optionKey = "Genre" then
+            if m.musicLibraryPage.callFunc("focusFilterButtonRow") = true then return
+        end if
+    end if
+
+    m.musicLibraryPage.callFunc("focusBrowseByButton")
 end sub
 
 '-------------------------------------------------------------------------------

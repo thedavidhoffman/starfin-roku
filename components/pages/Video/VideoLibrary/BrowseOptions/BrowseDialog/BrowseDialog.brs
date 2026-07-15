@@ -26,6 +26,9 @@ sub syncContent()
     if content = invalid then return
 
     content.selectedSortKey = m.top.selectedSortKey
+    sortOptions = m.top.sortOptions
+    if sortOptions = invalid then sortOptions = []
+    content.sortOptions = sortOptions
     if m.browseByContent <> content then
         if m.browseByContent <> invalid then m.browseByContent.unobserveField("sortSelected")
         m.browseByContent = content
