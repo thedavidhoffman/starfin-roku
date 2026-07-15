@@ -289,6 +289,7 @@ sub resetDynamicPages()
     if m.liveTvPage <> invalid then m.liveTvPage.callFunc("deactivate")
     if m.musicLibraryPage <> invalid then m.musicLibraryPage.callFunc("deactivate")
     if m.musicArtistPage <> invalid then m.musicArtistPage.callFunc("deactivate")
+    if m.audioPlayerPage <> invalid then m.audioPlayerPage.callFunc("deactivate")
     if m.videoLibraryPage <> invalid then m.videoLibraryPage.callFunc("deactivate")
     if m.collectionsPage <> invalid then m.collectionsPage.callFunc("deactivate")
     if m.searchPage <> invalid then m.searchPage.callFunc("deactivate")
@@ -304,6 +305,7 @@ sub resetDynamicPages()
     m.liveTvPage = invalid
     m.musicLibraryPage = invalid
     m.musicArtistPage = invalid
+    m.audioPlayerPage = invalid
     m.videoLibraryPage = invalid
     m.moviePage = invalid
     m.tvShowPage = invalid

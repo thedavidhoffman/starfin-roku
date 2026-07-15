@@ -401,7 +401,7 @@ sub queueLatestMediaRows(libraries as object)
     end for
 
     m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp"]
-    for each library in sortLibrariesByName(latestLibraries)
+    for each library in latestLibraries
         m.homeState.rowOrder.Push("latest:" + library.id)
     end for
     m.homeState.rowOrder.Push("liveTvOnNow")
@@ -723,47 +723,6 @@ function getItemsFromPayload(payload as dynamic) as object
     if payload.Items <> invalid then return payload.Items
 
     return []
-end function
-
-'-------------------------------------------------------------------------------
-' sortLibrariesByName
-'-------------------------------------------------------------------------------
-function sortLibrariesByName(libraries as object) as object
-    sortedLibraries = []
-    if libraries = invalid then return sortedLibraries
-
-    for each library in libraries
-        sortedLibraries.Push(library)
-    end for
-
-    if sortedLibraries.Count() < 2 then return sortedLibraries
-
-    for i = 0 to sortedLibraries.Count() - 2
-        for j = i + 1 to sortedLibraries.Count() - 1
-            if shouldLibrarySortBeforeByName(sortedLibraries[j], sortedLibraries[i]) then
-                temp = sortedLibraries[i]
-                sortedLibraries[i] = sortedLibraries[j]
-                sortedLibraries[j] = temp
-            end if
-        end for
-    end for
-
-    return sortedLibraries
-end function
-
-'-------------------------------------------------------------------------------
-' shouldLibrarySortBeforeByName
-'-------------------------------------------------------------------------------
-function shouldLibrarySortBeforeByName(left as dynamic, right as dynamic) as boolean
-    return String_NaturalCompare(getLibraryName(left), getLibraryName(right)) < 0
-end function
-
-'-------------------------------------------------------------------------------
-' getLibraryName
-'-------------------------------------------------------------------------------
-function getLibraryName(library as dynamic) as string
-    if Array_IsAssocArray(library) = false then return ""
-    return FirstNonEmpty([library.name, library.Name], "")
 end function
 
 '-------------------------------------------------------------------------------

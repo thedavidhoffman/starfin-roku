@@ -93,7 +93,8 @@ end sub
 ' musicLibraryHandleAlbumSelected
 '-------------------------------------------------------------------------------
 sub musicLibraryHandleAlbumSelected()
-    ' Album detail and playback are intentionally left for the next music slice.
+    if m.musicLibraryPage = invalid then return
+    musicAudioPlayerShow(m.musicLibraryPage.selectedAlbum, "library")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -107,6 +108,7 @@ sub musicLibraryHandleArtistSelected()
     page = CreateObject("roSGNode", "MusicArtist")
     page.observeField("closeRequested", "musicArtistHandleCloseRequested")
     page.observeField("overlayRequested", "musicArtistHandleOverlayRequested")
+    page.observeField("selectedAlbum", "musicArtistHandleAlbumSelected")
     page.loadRequest = {
         itemId: selection.itemId
         server: m.session.server
@@ -123,6 +125,59 @@ sub musicLibraryHandleArtistSelected()
     m.musicLibraryPage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' musicArtistHandleAlbumSelected
+'-------------------------------------------------------------------------------
+sub musicArtistHandleAlbumSelected()
+    if m.musicArtistPage = invalid then return
+    musicAudioPlayerShow(m.musicArtistPage.selectedAlbum, "artist")
+end sub
+
+'-------------------------------------------------------------------------------
+' musicAudioPlayerShow
+'-------------------------------------------------------------------------------
+sub musicAudioPlayerShow(selection as dynamic, sourcePage as string)
+    if selection = invalid or SafeString(selection.itemId, "") = "" then return
+    themeAudioStop()
+    page = CreateObject("roSGNode", "AudioPlayer")
+    page.observeField("closeRequested", "musicAudioPlayerHandleCloseRequested")
+    page.loadRequest = {
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        albumId: selection.itemId
+        item: selection.item
+        sourcePage: sourcePage
+    }
+    if m.musicLibraryPage <> invalid then m.musicLibraryPage.visible = false
+    if m.musicArtistPage <> invalid then m.musicArtistPage.visible = false
+    m.header.visible = false
+    m.audioPlayerPage = page
+    m.dynamicPageHost.appendChild(page)
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' musicAudioPlayerHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub musicAudioPlayerHandleCloseRequested()
+    if m.audioPlayerPage = invalid then return
+    request = m.audioPlayerPage.loadRequest
+    m.audioPlayerPage.callFunc("deactivate")
+    m.dynamicPageHost.removeChild(m.audioPlayerPage)
+    m.audioPlayerPage = invalid
+    if request <> invalid and request.sourcePage = "artist" and m.musicArtistPage <> invalid then
+        m.musicArtistPage.visible = true
+        m.musicArtistPage.callFunc("activate")
+    else if m.musicLibraryPage <> invalid then
+        m.musicLibraryPage.visible = true
+        m.header.visible = true
+        m.musicLibraryPage.callFunc("activate")
+    else
+        showHome()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

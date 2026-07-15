@@ -7,11 +7,25 @@ sub init()
     m.artistTask = m.top.findNode("artistTask")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.artistTask.observeField("response", "onArtistResponse")
+    m.albumsRow.observeField("rowItemSelected", "onAlbumSelected")
     m.state = {
         request: invalid
         overview: ""
         lifecycle: AsyncLifecycle_Create()
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlbumSelected
+'-------------------------------------------------------------------------------
+sub onAlbumSelected()
+    selected = m.albumsRow.rowItemSelected
+    if selected = invalid or selected.Count() < 2 then return
+    row = m.albumsRow.content.getChild(selected[0])
+    if row = invalid then return
+    node = row.getChild(selected[1])
+    if node = invalid or node.raw = invalid then return
+    m.top.selectedAlbum = { itemId: SafeString(node.raw.Id, ""), item: node.raw }
 end sub
 
 '-------------------------------------------------------------------------------
