@@ -14,7 +14,7 @@ sub init()
     m.movieTask.observeField("response", "onMovieResponse")
     m.themeSongsTask.observeField("response", "onThemeSongsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
-    m.mediaShell.observeField("overlayRequested", "onVideoMediaShellOverlayRequested")
+    m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.mediaToolbar.observeField("focusExitDown", "onVideoMediaToolbarFocusExitDown")
     m.mediaToolbar.observeField("playSelected", "onVideoMediaToolbarPlaySelected")
     m.mediaToolbar.observeField("restartSelected", "onVideoMediaToolbarRestartSelected")
@@ -55,7 +55,7 @@ sub onLoadRequestChanged()
 
     m.state.request = request
     m.top.settings = request.settings
-    applyVideoMediaShellBackgroundSetting(request.settings)
+    applyMediaShellBackgroundSetting(request.settings)
     m.state.item = request.item
     m.state.themeLookupActive = false
     AsyncLifecycle_Begin(m.state.lifecycle, request.itemId)
@@ -213,9 +213,9 @@ sub deactivate()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaShellOverlayRequested
+' onMediaShellOverlayRequested
 '-------------------------------------------------------------------------------
-sub onVideoMediaShellOverlayRequested()
+sub onMediaShellOverlayRequested()
     request = m.mediaShell.overlayRequested
     if request = invalid then return
 
@@ -236,13 +236,13 @@ end sub
 sub onSettingsChanged()
     settings = m.top.settings
     if m.state <> invalid and m.state.request <> invalid then m.state.request.settings = settings
-    applyVideoMediaShellBackgroundSetting(settings)
+    applyMediaShellBackgroundSetting(settings)
 end sub
 
 '-------------------------------------------------------------------------------
-' applyVideoMediaShellBackgroundSetting
+' applyMediaShellBackgroundSetting
 '-------------------------------------------------------------------------------
-sub applyVideoMediaShellBackgroundSetting(settings as dynamic)
+sub applyMediaShellBackgroundSetting(settings as dynamic)
     keys = SettingsStore_Keys()
     m.mediaShell.backgroundDisplay = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
 end sub

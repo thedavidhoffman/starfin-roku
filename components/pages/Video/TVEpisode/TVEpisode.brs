@@ -41,7 +41,7 @@ end sub
 sub initHandlers()
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
-    m.mediaShell.observeField("overlayRequested", "onVideoMediaShellOverlayRequested")
+    m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.mediaToolbar.observeField("focusExitDown", "onVideoMediaToolbarFocusExitDown")
     m.mediaToolbar.observeField("playSelected", "onVideoMediaToolbarPlaySelected")
     m.mediaToolbar.observeField("restartSelected", "onVideoMediaToolbarRestartSelected")
@@ -63,9 +63,9 @@ sub initHandlers()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaShellOverlayRequested
+' onMediaShellOverlayRequested
 '-------------------------------------------------------------------------------
-sub onVideoMediaShellOverlayRequested()
+sub onMediaShellOverlayRequested()
     request = m.mediaShell.overlayRequested
     if request = invalid then return
 
@@ -86,9 +86,9 @@ sub onLoadRequestChanged()
     m.state.request = m.top.loadRequest
     if m.state.request <> invalid then
         m.top.settings = m.state.request.settings
-        applyVideoMediaShellBackgroundSetting(m.state.request.settings)
+        applyMediaShellBackgroundSetting(m.state.request.settings)
     else
-        applyVideoMediaShellBackgroundSetting(invalid)
+        applyMediaShellBackgroundSetting(invalid)
     end if
     if m.state.request <> invalid then
         AsyncLifecycle_Begin(m.state.lifecycle, m.state.request.itemId)
@@ -119,13 +119,13 @@ end sub
 sub onSettingsChanged()
     settings = m.top.settings
     if m.state <> invalid and m.state.request <> invalid then m.state.request.settings = settings
-    applyVideoMediaShellBackgroundSetting(settings)
+    applyMediaShellBackgroundSetting(settings)
 end sub
 
 '-------------------------------------------------------------------------------
-' applyVideoMediaShellBackgroundSetting
+' applyMediaShellBackgroundSetting
 '-------------------------------------------------------------------------------
-sub applyVideoMediaShellBackgroundSetting(settings as dynamic)
+sub applyMediaShellBackgroundSetting(settings as dynamic)
     keys = SettingsStore_Keys()
     m.mediaShell.backgroundDisplay = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
 end sub
@@ -173,10 +173,10 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
     episodePositionText = getEpisodePositionText(item)
     episodeMetadataText = getSecondaryMetadataText(item)
     m.mediaShell.mediaContent = {
-        mediaType: getVideoMediaShellType(item)
+        mediaType: getMediaShellType(item)
         backdropUrl: SafeString(item.HDPosterUrl, "")
-        logoUrl: getVideoMediaShellLogoUrl()
-        logoTitle: getVideoMediaShellLogoTitle(item)
+        logoUrl: getMediaShellLogoUrl()
+        logoTitle: getMediaShellLogoTitle(item)
         logoPending: logoPending
         title: title
         primaryInfoText: episodePositionText
@@ -199,24 +199,24 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
 end sub
 
 '-------------------------------------------------------------------------------
-' getVideoMediaShellType
+' getMediaShellType
 '-------------------------------------------------------------------------------
-function getVideoMediaShellType(item as dynamic) as string
+function getMediaShellType(item as dynamic) as string
     if isSeasonDetailsItem(item) then return "tv-season"
     return "tv-episode"
 end function
 
 '-------------------------------------------------------------------------------
-' getVideoMediaShellLogoUrl
+' getMediaShellLogoUrl
 '-------------------------------------------------------------------------------
-function getVideoMediaShellLogoUrl() as string
+function getMediaShellLogoUrl() as string
     return getSeriesLogoUrl(m.state.request)
 end function
 
 '-------------------------------------------------------------------------------
-' getVideoMediaShellLogoTitle
+' getMediaShellLogoTitle
 '-------------------------------------------------------------------------------
-function getVideoMediaShellLogoTitle(item as dynamic) as string
+function getMediaShellLogoTitle(item as dynamic) as string
     seriesName = ""
     if item <> invalid and item.raw <> invalid then seriesName = FirstNonEmpty([item.raw.SeriesName], "")
 

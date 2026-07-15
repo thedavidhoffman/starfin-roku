@@ -23,7 +23,7 @@ sub executeRequest()
         parentId: SafeString(request.libraryId, "")
         recursive: true
         includeItemTypes: "MusicAlbum"
-        fields: "SortName,AlbumArtist,Artists,ProductionYear,PremiereDate,Genres"
+        fields: "SortName,AlbumArtist,Artists,ArtistItems,ProductionYear,PremiereDate,Genres"
         enableImageTypes: "Primary"
         imageTypeLimit: 1
         enableTotalRecordCount: false

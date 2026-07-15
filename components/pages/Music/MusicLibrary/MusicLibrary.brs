@@ -9,8 +9,11 @@ sub init()
     m.filterButtonRow = m.top.findNode("filterButtonRow")
     m.filterFocusTimer = m.top.findNode("filterFocusTimer")
     m.albumsGrid = m.top.findNode("albumsGrid")
+    m.artistsGrid = m.top.findNode("artistsGrid")
     m.musicLibraryTask = m.top.findNode("musicLibraryTask")
+    m.musicArtistsTask = m.top.findNode("musicArtistsTask")
     m.musicLibraryTask.observeField("response", "onMusicLibraryResponse")
+    m.musicArtistsTask.observeField("response", "onMusicArtistsResponse")
     m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
     m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
@@ -20,10 +23,12 @@ sub init()
     m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
     m.filterFocusTimer.observeField("fire", "onFilterFocusTimerFired")
     m.albumsGrid.observeField("itemSelected", "onAlbumSelected")
+    m.artistsGrid.observeField("itemSelected", "onArtistSelected")
     m.state = {
         request: invalid
         allAlbums: []
         albums: []
+        artists: []
         selectedSortKey: "Album"
         selectedSort: getDefaultSortSelection()
         activeFilterType: ""
@@ -46,6 +51,7 @@ sub onLoadRequestChanged()
     m.state.request = request
     m.state.allAlbums = []
     m.state.albums = []
+    m.state.artists = []
     m.state.selectedSortKey = "Album"
     m.state.selectedSort = getDefaultSortSelection()
     m.state.activeFilterType = ""
@@ -62,6 +68,21 @@ sub onLoadRequestChanged()
 
     m.musicLibraryTask.request = request
     m.musicLibraryTask.control = "run"
+    m.musicArtistsTask.request = request
+    m.musicArtistsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onMusicArtistsResponse
+'-------------------------------------------------------------------------------
+sub onMusicArtistsResponse()
+    response = m.musicArtistsTask.response
+    if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
+    if response.ok <> true then return
+
+    m.state.artists = getItemsFromPayload(response.payload)
+    if isArtistBrowseMode() then renderArtists()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -140,11 +161,64 @@ end function
 ' renderCurrentAlbums
 '-------------------------------------------------------------------------------
 sub renderCurrentAlbums()
+    if isArtistBrowseMode() then
+        renderArtists()
+        return
+    end if
+
+    m.artistsGrid.visible = false
+    m.albumsGrid.visible = true
     renderAlbums(getVisibleAlbums())
     updateTitleLabel(m.state.albums.Count())
     m.albumsGrid.jumpToItem = 0
     m.albumsGrid.itemFocused = 0
 end sub
+
+'-------------------------------------------------------------------------------
+' renderArtists
+'-------------------------------------------------------------------------------
+sub renderArtists()
+    artists = copyAlbums(m.state.artists)
+    artists.SortBy("SortName")
+    if SafeString(m.state.selectedSort.sortOrder, "Ascending") = "Descending" then reverseAlbums(artists)
+
+    content = CreateObject("roSGNode", "ContentNode")
+    request = m.state.request
+    for each artist in artists
+        child = content.createChild("ContentNode")
+        artistId = SafeString(artist.Id, "")
+        child.title = FirstNonEmpty([artist.Name], "Unknown Artist")
+        child.HDPosterUrl = getArtistImageUrl(artist, request, "Primary", 340, 340)
+        child.AddFields({ raw: artist, itemId: artistId })
+    end for
+
+    m.artistsGrid.content = content
+    m.albumsGrid.visible = false
+    m.artistsGrid.visible = true
+    updateTitleLabel(artists.Count())
+    m.artistsGrid.jumpToItem = 0
+    m.artistsGrid.itemFocused = 0
+end sub
+
+'-------------------------------------------------------------------------------
+' getArtistImageUrl
+'-------------------------------------------------------------------------------
+function getArtistImageUrl(artist as object, request as object, imageType as string, width as integer, height as integer) as string
+    itemId = SafeString(artist.Id, "")
+    tag = ""
+    if imageType = "Primary" and artist.ImageTags <> invalid then tag = SafeString(artist.ImageTags.Primary, "")
+    if imageType = "Logo" and artist.ImageTags <> invalid then tag = SafeString(artist.ImageTags.Logo, "")
+    if imageType = "Backdrop" and artist.BackdropImageTags <> invalid and artist.BackdropImageTags.Count() > 0 then tag = SafeString(artist.BackdropImageTags[0], "")
+    if itemId = "" or tag = "" then return ""
+    return Url_BuildImageUrl(request.server, itemId, imageType, tag, width, height)
+end function
+
+'-------------------------------------------------------------------------------
+' isArtistBrowseMode
+'-------------------------------------------------------------------------------
+function isArtistBrowseMode() as boolean
+    return SafeString(m.state.selectedSortKey, "Album") = "Artist"
+end function
 
 '-------------------------------------------------------------------------------
 ' getVisibleAlbums
@@ -561,6 +635,7 @@ function getMusicSortOptions() as object
     return [
         { optionKey: "Album", sortKey: "Album", sortOrder: "Ascending", label: "Album" }
         { optionKey: "ArtistAlbum", sortKey: "ArtistAlbum", sortOrder: "Ascending", label: "Artist/Album" }
+        { optionKey: "Artist", sortKey: "Artist", sortOrder: "Ascending", label: "Artist" }
         { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
         { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
         { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
@@ -598,7 +673,7 @@ function canUseSortOrder(selection as object) as boolean
     if optionKey = "Decade" or optionKey = "Genre" or optionKey = "Random" then return false
 
     sortKey = SafeString(selection.sortKey, "")
-    return sortKey = "Album" or sortKey = "ArtistAlbum"
+    return sortKey = "Album" or sortKey = "ArtistAlbum" or sortKey = "Artist"
 end function
 
 '-------------------------------------------------------------------------------
@@ -691,6 +766,13 @@ function applySortSelection(selection as object) as boolean
             sortOrder: "Ascending"
             label: "Artist/Album"
         }
+    else if optionKey = "Artist" then
+        m.state.selectedSort = {
+            optionKey: "Artist"
+            sortKey: "Artist"
+            sortOrder: "Ascending"
+            label: "Artist"
+        }
     else
         m.state.selectedSort = getDefaultSortSelection()
     end if
@@ -750,6 +832,7 @@ sub updateGridLayout()
     y = 208
     if m.filterButtonRow <> invalid and m.filterButtonRow.visible = true then y = 292
     m.albumsGrid.translation = [48, y]
+    m.artistsGrid.translation = [48, y]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -870,14 +953,23 @@ end sub
 ' focusAlbums
 '-------------------------------------------------------------------------------
 sub focusAlbums()
-    if m.albumsGrid.content = invalid or m.albumsGrid.content.getChildCount() = 0 then
+    grid = getActiveGrid()
+    if grid.content = invalid or grid.content.getChildCount() = 0 then
         m.top.setFocus(true)
         return
     end if
 
     m.top.setFocus(true)
-    m.albumsGrid.setFocus(true)
+    grid.setFocus(true)
 end sub
+
+'-------------------------------------------------------------------------------
+' getActiveGrid
+'-------------------------------------------------------------------------------
+function getActiveGrid() as object
+    if isArtistBrowseMode() then return m.artistsGrid
+    return m.albumsGrid
+end function
 
 '-------------------------------------------------------------------------------
 ' activate
@@ -893,6 +985,7 @@ end sub
 sub deactivate()
     AsyncLifecycle_Deactivate(m.state.lifecycle)
     m.musicLibraryTask.control = "stop"
+    m.musicArtistsTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -919,20 +1012,80 @@ sub onAlbumSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' onArtistSelected
+'-------------------------------------------------------------------------------
+sub onArtistSelected()
+    selectedIndex = m.artistsGrid.itemSelected
+    content = m.artistsGrid.content
+    if content = invalid or selectedIndex < 0 or selectedIndex >= content.getChildCount() then return
+
+    node = content.getChild(selectedIndex)
+    raw = node.raw
+    if raw = invalid then return
+
+    musicBrainzArtistId = ""
+    if raw.ProviderIds <> invalid then musicBrainzArtistId = SafeString(raw.ProviderIds.MusicBrainzArtist, "")
+    m.top.selectedArtist = {
+        itemId: SafeString(raw.Id, "")
+        musicBrainzArtistId: musicBrainzArtistId
+        item: raw
+        albums: getAlbumsForArtist(raw)
+        backdropUrl: getArtistImageUrl(raw, m.state.request, "Backdrop", 1920, 1080)
+        logoUrl: getArtistImageUrl(raw, m.state.request, "Logo", 600, 300)
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' getAlbumsForArtist
+'-------------------------------------------------------------------------------
+function getAlbumsForArtist(artist as object) as object
+    albums = []
+    artistId = SafeString(artist.Id, "")
+    artistName = LCase(String_Trim(SafeString(artist.Name, "")))
+
+    for each album in m.state.allAlbums
+        if albumMatchesArtist(album, artistId, artistName) then albums.Push(album)
+    end for
+    sortAlbumsByYearThenTitle(albums)
+    return albums
+end function
+
+'-------------------------------------------------------------------------------
+' albumMatchesArtist
+'-------------------------------------------------------------------------------
+function albumMatchesArtist(album as object, artistId as string, artistName as string) as boolean
+    if album.ArtistItems <> invalid then
+        for each artistItem in album.ArtistItems
+            if artistId <> "" and SafeString(artistItem.Id, "") = artistId then return true
+            if artistName <> "" and LCase(String_Trim(SafeString(artistItem.Name, ""))) = artistName then return true
+        end for
+    end if
+
+    if artistName <> "" and LCase(String_Trim(SafeString(album.AlbumArtist, ""))) = artistName then return true
+    if album.Artists <> invalid then
+        for each name in album.Artists
+            if LCase(String_Trim(SafeString(name, ""))) = artistName then return true
+        end for
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
 ' isAlbumsGridAtFirstRow
 '-------------------------------------------------------------------------------
 function isAlbumsGridAtFirstRow() as boolean
-    focusedIndex = m.albumsGrid.itemFocused
+    grid = getActiveGrid()
+    focusedIndex = grid.itemFocused
     if focusedIndex = invalid then return true
 
-    return focusedIndex < m.albumsGrid.numColumns
+    return focusedIndex < grid.numColumns
 end function
 
 '-------------------------------------------------------------------------------
 ' isFirstAlbumFocused
 '-------------------------------------------------------------------------------
 function isFirstAlbumFocused() as boolean
-    focusedIndex = m.albumsGrid.itemFocused
+    focusedIndex = getActiveGrid().itemFocused
     if focusedIndex = invalid then return true
 
     return focusedIndex <= 0
@@ -968,7 +1121,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "back" then
         if isFirstAlbumFocused() <> true then
-            m.albumsGrid.jumpToItem = 0
+            getActiveGrid().jumpToItem = 0
             return true
         end if
 

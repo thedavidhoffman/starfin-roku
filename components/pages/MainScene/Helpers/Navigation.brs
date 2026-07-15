@@ -102,6 +102,8 @@ sub navHandleDescriptionOverlayClosed(closed as object)
     sourcePage = SafeString(request.sourcePage, "")
     if sourcePage = "movie" and m.moviePage <> invalid then
         m.moviePage.callFunc("handleDescriptionOverlayClosed")
+    else if sourcePage = "musicArtist" and m.musicArtistPage <> invalid then
+        m.musicArtistPage.callFunc("handleDescriptionOverlayClosed")
     else if sourcePage = "tvEpisode" and m.tvEpisodePage <> invalid then
         m.tvEpisodePage.callFunc("handleDescriptionOverlayClosed")
     else if sourcePage = "tvShow" and m.tvShowPage <> invalid then
@@ -286,6 +288,7 @@ sub resetDynamicPages()
     themeAudioStop()
     if m.liveTvPage <> invalid then m.liveTvPage.callFunc("deactivate")
     if m.musicLibraryPage <> invalid then m.musicLibraryPage.callFunc("deactivate")
+    if m.musicArtistPage <> invalid then m.musicArtistPage.callFunc("deactivate")
     if m.videoLibraryPage <> invalid then m.videoLibraryPage.callFunc("deactivate")
     if m.collectionsPage <> invalid then m.collectionsPage.callFunc("deactivate")
     if m.searchPage <> invalid then m.searchPage.callFunc("deactivate")
@@ -300,6 +303,7 @@ sub resetDynamicPages()
     m.collectionsPage = invalid
     m.liveTvPage = invalid
     m.musicLibraryPage = invalid
+    m.musicArtistPage = invalid
     m.videoLibraryPage = invalid
     m.moviePage = invalid
     m.tvShowPage = invalid

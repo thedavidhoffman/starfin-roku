@@ -236,7 +236,7 @@ sub onLibrariesResponse()
     end if
 
     libraries = getItemsFromPayload(response.payload)
-    addRow("libraries", "My Media", sortLibrariesByName(libraries))
+    addRow("libraries", "My Media", libraries)
     queueLatestMediaRows(libraries)
     renderRows()
     runMyListTask(libraries)

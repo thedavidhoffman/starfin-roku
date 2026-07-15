@@ -30,6 +30,7 @@ sub musicLibraryShow(selection as object)
     page.observeField("focusExitUp", "musicLibraryHandleFocusExitUp")
     page.observeField("overlayRequested", "musicLibraryHandleOverlayRequested")
     page.observeField("selectedAlbum", "musicLibraryHandleAlbumSelected")
+    page.observeField("selectedArtist", "musicLibraryHandleArtistSelected")
     loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -93,6 +94,65 @@ end sub
 '-------------------------------------------------------------------------------
 sub musicLibraryHandleAlbumSelected()
     ' Album detail and playback are intentionally left for the next music slice.
+end sub
+
+'-------------------------------------------------------------------------------
+' musicLibraryHandleArtistSelected
+'-------------------------------------------------------------------------------
+sub musicLibraryHandleArtistSelected()
+    if m.musicLibraryPage = invalid then return
+    selection = m.musicLibraryPage.selectedArtist
+    if selection = invalid or SafeString(selection.itemId, "") = "" then return
+
+    page = CreateObject("roSGNode", "MusicArtist")
+    page.observeField("closeRequested", "musicArtistHandleCloseRequested")
+    page.observeField("overlayRequested", "musicArtistHandleOverlayRequested")
+    page.loadRequest = {
+        itemId: selection.itemId
+        server: m.session.server
+        musicBrainzArtistId: SafeString(selection.musicBrainzArtistId, "")
+        item: selection.item
+        albums: selection.albums
+        backdropUrl: SafeString(selection.backdropUrl, "")
+        logoUrl: SafeString(selection.logoUrl, "")
+        settings: m.settings
+    }
+
+    m.musicArtistPage = page
+    m.dynamicPageHost.appendChild(page)
+    m.musicLibraryPage.visible = false
+    m.header.visible = false
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' musicArtistHandleOverlayRequested
+'-------------------------------------------------------------------------------
+sub musicArtistHandleOverlayRequested()
+    if m.musicArtistPage = invalid then return
+    request = m.musicArtistPage.overlayRequested
+    if request = invalid then return
+    m.overlayHost.callFunc("openOverlay", request)
+end sub
+
+'-------------------------------------------------------------------------------
+' musicArtistHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub musicArtistHandleCloseRequested()
+    clearStatus()
+    if m.musicArtistPage <> invalid then
+        m.musicArtistPage.callFunc("deactivate")
+        m.dynamicPageHost.removeChild(m.musicArtistPage)
+        m.musicArtistPage = invalid
+    end if
+
+    if m.musicLibraryPage <> invalid then
+        m.musicLibraryPage.visible = true
+        m.header.visible = true
+        m.musicLibraryPage.callFunc("activate")
+    else
+        showHome()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
