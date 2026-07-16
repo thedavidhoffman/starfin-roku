@@ -15,9 +15,10 @@ end function
 '-------------------------------------------------------------------------------
 function SettingsStore_Keys() as object
     return {
-        tvLibraryDisplay: "tv-library-display"
-        movieLibraryDisplay: "movie-library-display"
-        collectionDisplay: "collection-display"
+        tvLibraryDisplay: "tv-libray-image-type"
+        movieLibraryDisplay: "movie-library-image-type"
+        collectionCardsImageType: "collection-cards-image-type"
+        collectionItemsImageType: "collection-items-image-type"
         tvEpisodeListDisplay: "tv-ep-list-scroll"
         mediaShellBackground: "media-shell-background"
         tmdbApiKey: "tmdb-api-key"
@@ -32,7 +33,8 @@ function SettingsStore_Defaults() as object
     defaults = {}
     defaults[keys.tvLibraryDisplay] = "poster"
     defaults[keys.movieLibraryDisplay] = "poster"
-    defaults[keys.collectionDisplay] = "poster"
+    defaults[keys.collectionCardsImageType] = "poster"
+    defaults[keys.collectionItemsImageType] = "poster"
     defaults[keys.tvEpisodeListDisplay] = "vertical"
     defaults[keys.mediaShellBackground] = "full-screen"
     defaults[keys.tmdbApiKey] = ""
@@ -42,12 +44,13 @@ end function
 '-------------------------------------------------------------------------------
 ' SettingsStore_Save
 '-------------------------------------------------------------------------------
-sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionDisplay as string, tvEpisodeListDisplay as string, mediaShellBackground as string, tmdbApiKey as string)
+sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionCardsImageType as string, collectionItemsImageType as string, tvEpisodeListDisplay as string, mediaShellBackground as string, tmdbApiKey as string)
     settingsStore = GetSettingsStore()
     keys = SettingsStore_Keys()
     settingsStore.Write(keys.tvLibraryDisplay, tvLibraryDisplay)
     settingsStore.Write(keys.movieLibraryDisplay, movieLibraryDisplay)
-    settingsStore.Write(keys.collectionDisplay, collectionDisplay)
+    settingsStore.Write(keys.collectionCardsImageType, collectionCardsImageType)
+    settingsStore.Write(keys.collectionItemsImageType, collectionItemsImageType)
     settingsStore.Write(keys.tvEpisodeListDisplay, tvEpisodeListDisplay)
     settingsStore.Write(keys.mediaShellBackground, mediaShellBackground)
     settingsStore.Write(keys.tmdbApiKey, tmdbApiKey)
@@ -64,7 +67,8 @@ function SettingsStore_Load() as object
     values = settingsStore.ReadMulti([
         keys.tvLibraryDisplay
         keys.movieLibraryDisplay
-        keys.collectionDisplay
+        keys.collectionCardsImageType
+        keys.collectionItemsImageType
         keys.tvEpisodeListDisplay
         keys.mediaShellBackground
         keys.tmdbApiKey
@@ -74,7 +78,8 @@ function SettingsStore_Load() as object
     settings = {}
     settings[keys.tvLibraryDisplay] = SettingsStore_GetValue(values, keys.tvLibraryDisplay, defaults[keys.tvLibraryDisplay])
     settings[keys.movieLibraryDisplay] = SettingsStore_GetValue(values, keys.movieLibraryDisplay, defaults[keys.movieLibraryDisplay])
-    settings[keys.collectionDisplay] = SettingsStore_GetValue(values, keys.collectionDisplay, defaults[keys.collectionDisplay])
+    settings[keys.collectionCardsImageType] = SettingsStore_GetValue(values, keys.collectionCardsImageType, defaults[keys.collectionCardsImageType])
+    settings[keys.collectionItemsImageType] = SettingsStore_GetValue(values, keys.collectionItemsImageType, defaults[keys.collectionItemsImageType])
     settings[keys.tvEpisodeListDisplay] = SettingsStore_GetValue(values, keys.tvEpisodeListDisplay, defaults[keys.tvEpisodeListDisplay])
     settings[keys.mediaShellBackground] = SettingsStore_GetValue(values, keys.mediaShellBackground, defaults[keys.mediaShellBackground])
     settings[keys.tmdbApiKey] = SettingsStore_GetValue(values, keys.tmdbApiKey, defaults[keys.tmdbApiKey])
@@ -89,7 +94,8 @@ sub SettingsStore_Clear()
     keys = SettingsStore_Keys()
     settingsStore.Delete(keys.tvLibraryDisplay)
     settingsStore.Delete(keys.movieLibraryDisplay)
-    settingsStore.Delete(keys.collectionDisplay)
+    settingsStore.Delete(keys.collectionCardsImageType)
+    settingsStore.Delete(keys.collectionItemsImageType)
     settingsStore.Delete(keys.tvEpisodeListDisplay)
     settingsStore.Delete(keys.mediaShellBackground)
     settingsStore.Delete(keys.tmdbApiKey)
@@ -128,7 +134,8 @@ function SettingsStore_AreEqual(left as dynamic, right as dynamic) as boolean
     keys = SettingsStore_Keys()
     if SettingsStore_GetSettingValue(left, keys.tvLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.tvLibraryDisplay) then return false
     if SettingsStore_GetSettingValue(left, keys.movieLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.movieLibraryDisplay) then return false
-    if SettingsStore_GetSettingValue(left, keys.collectionDisplay) <> SettingsStore_GetSettingValue(right, keys.collectionDisplay) then return false
+    if SettingsStore_GetSettingValue(left, keys.collectionCardsImageType) <> SettingsStore_GetSettingValue(right, keys.collectionCardsImageType) then return false
+    if SettingsStore_GetSettingValue(left, keys.collectionItemsImageType) <> SettingsStore_GetSettingValue(right, keys.collectionItemsImageType) then return false
     if SettingsStore_GetSettingValue(left, keys.tvEpisodeListDisplay) <> SettingsStore_GetSettingValue(right, keys.tvEpisodeListDisplay) then return false
     if SettingsStore_GetSettingValue(left, keys.mediaShellBackground) <> SettingsStore_GetSettingValue(right, keys.mediaShellBackground) then return false
     if SettingsStore_GetSettingValue(left, keys.tmdbApiKey) <> SettingsStore_GetSettingValue(right, keys.tmdbApiKey) then return false

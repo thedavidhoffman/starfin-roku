@@ -1434,7 +1434,7 @@ function getVideoLibraryImageAspect() as string
     if collectionType = "tvshows" then
         settingKey = keys.tvLibraryDisplay
     else if collectionType = "collection" then
-        settingKey = keys.collectionDisplay
+        settingKey = keys.collectionItemsImageType
     end if
 
     if LCase(settings[settingKey]) = "thumbnail" then return "wide"

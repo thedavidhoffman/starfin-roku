@@ -143,7 +143,8 @@ function getApplicationRegistryText() as object
         { key: "token", value: truncateText(auth.token, 40) + "..." }
         { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
         { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
-        { key: keys.collectionDisplay, value: settings[keys.collectionDisplay] }
+        { key: keys.collectionCardsImageType, value: settings[keys.collectionCardsImageType] }
+        { key: keys.collectionItemsImageType, value: settings[keys.collectionItemsImageType] }
         { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
         { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
         { key: keys.tmdbApiKey, value: truncateText(settings[keys.tmdbApiKey], 40) }

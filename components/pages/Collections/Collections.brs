@@ -311,7 +311,7 @@ end function
 '-------------------------------------------------------------------------------
 function getCollectionImageAspect() as string
     keys = SettingsStore_Keys()
-    value = m.top.settings[keys.collectionDisplay]
+    value = m.top.settings[keys.collectionCardsImageType]
 
     if LCase(value) = "thumbnail" then return "wide"
     return "poster"

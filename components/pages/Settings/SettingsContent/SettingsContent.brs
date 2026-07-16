@@ -5,7 +5,8 @@ sub init()
     m.settingsControls = {
         tvLibraryOptions: m.top.findNode("tvLibraryOptions")
         movieLibraryOptions: m.top.findNode("movieLibraryOptions")
-        collectionDisplayOptions: m.top.findNode("collectionDisplayOptions")
+        collectionCardsImageTypeOptions: m.top.findNode("collectionCardsImageTypeOptions")
+        collectionItemsImageTypeOptions: m.top.findNode("collectionItemsImageTypeOptions")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
         mediaShellBackgroundOptions: m.top.findNode("mediaShellBackgroundOptions")
@@ -20,7 +21,8 @@ sub init()
     m.focusNodes = [
         m.settingsControls.tvLibraryOptions
         m.settingsControls.movieLibraryOptions
-        m.settingsControls.collectionDisplayOptions
+        m.settingsControls.collectionCardsImageTypeOptions
+        m.settingsControls.collectionItemsImageTypeOptions
         m.settingsControls.tvEpisodeListDisplayOptions
         m.settingsControls.tmdbApiKeyInput
         m.settingsControls.mediaShellBackgroundOptions
@@ -29,13 +31,15 @@ sub init()
     m.top.observeField("focusedChild", "onFocusChanged")
     m.settingsControls.tvLibraryOptions.observeField("itemSelected", "onTVLibraryDisplaySelected")
     m.settingsControls.movieLibraryOptions.observeField("itemSelected", "onMovieLibraryDisplaySelected")
-    m.settingsControls.collectionDisplayOptions.observeField("itemSelected", "onCollectionDisplaySelected")
+    m.settingsControls.collectionCardsImageTypeOptions.observeField("itemSelected", "onCollectionCardsImageTypeSelected")
+    m.settingsControls.collectionItemsImageTypeOptions.observeField("itemSelected", "onCollectionItemsImageTypeSelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
 
     initDisplayOptions(m.settingsControls.tvLibraryOptions)
     initDisplayOptions(m.settingsControls.movieLibraryOptions)
-    initDisplayOptions(m.settingsControls.collectionDisplayOptions)
+    initDisplayOptions(m.settingsControls.collectionCardsImageTypeOptions)
+    initDisplayOptions(m.settingsControls.collectionItemsImageTypeOptions)
     initTVEpisodeListDisplayOptions()
     initMediaShellBackgroundOptions()
     loadSettingsValues()
@@ -99,14 +103,16 @@ sub loadSettingsValues()
     m.settingsState.values = {}
     m.settingsState.values[keys.tvLibraryDisplay] = SettingsStore_GetSettingValue(settings, keys.tvLibraryDisplay)
     m.settingsState.values[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(settings, keys.movieLibraryDisplay)
-    m.settingsState.values[keys.collectionDisplay] = SettingsStore_GetSettingValue(settings, keys.collectionDisplay)
+    m.settingsState.values[keys.collectionCardsImageType] = SettingsStore_GetSettingValue(settings, keys.collectionCardsImageType)
+    m.settingsState.values[keys.collectionItemsImageType] = SettingsStore_GetSettingValue(settings, keys.collectionItemsImageType)
     m.settingsState.values[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
     m.settingsState.values[keys.mediaShellBackground] = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
     m.settingsState.values[keys.tmdbApiKey] = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
 
     setDisplayOption(m.settingsControls.tvLibraryOptions, m.settingsState.values[keys.tvLibraryDisplay])
     setDisplayOption(m.settingsControls.movieLibraryOptions, m.settingsState.values[keys.movieLibraryDisplay])
-    setDisplayOption(m.settingsControls.collectionDisplayOptions, m.settingsState.values[keys.collectionDisplay])
+    setDisplayOption(m.settingsControls.collectionCardsImageTypeOptions, m.settingsState.values[keys.collectionCardsImageType])
+    setDisplayOption(m.settingsControls.collectionItemsImageTypeOptions, m.settingsState.values[keys.collectionItemsImageType])
     setTVEpisodeListDisplayOption(m.settingsState.values[keys.tvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[keys.mediaShellBackground])
 
@@ -180,7 +186,8 @@ function getSettingsValues() as object
     settings = {}
     settings[keys.tvLibraryDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tvLibraryDisplay)
     settings[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.movieLibraryDisplay)
-    settings[keys.collectionDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.collectionDisplay)
+    settings[keys.collectionCardsImageType] = SettingsStore_GetSettingValue(m.settingsState.values, keys.collectionCardsImageType)
+    settings[keys.collectionItemsImageType] = SettingsStore_GetSettingValue(m.settingsState.values, keys.collectionItemsImageType)
     settings[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tvEpisodeListDisplay)
     settings[keys.mediaShellBackground] = SettingsStore_GetSettingValue(m.settingsState.values, keys.mediaShellBackground)
     settings[keys.tmdbApiKey] = SettingsStore_GetSettingValue(m.settingsState.values, keys.tmdbApiKey)
@@ -202,10 +209,17 @@ sub onMovieLibraryDisplaySelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onCollectionDisplaySelected
+' onCollectionCardsImageTypeSelected
 '-------------------------------------------------------------------------------
-sub onCollectionDisplaySelected()
-    setSelectedDisplayOptionValue(m.settingsControls.collectionDisplayOptions, SettingsStore_Keys().collectionDisplay)
+sub onCollectionCardsImageTypeSelected()
+    setSelectedDisplayOptionValue(m.settingsControls.collectionCardsImageTypeOptions, SettingsStore_Keys().collectionCardsImageType)
+end sub
+
+'-------------------------------------------------------------------------------
+' onCollectionItemsImageTypeSelected
+'-------------------------------------------------------------------------------
+sub onCollectionItemsImageTypeSelected()
+    setSelectedDisplayOptionValue(m.settingsControls.collectionItemsImageTypeOptions, SettingsStore_Keys().collectionItemsImageType)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -248,9 +262,10 @@ end sub
 ' focusRightColumn
 '-------------------------------------------------------------------------------
 function focusRightColumn() as boolean
-    if m.focusState.activeIndex = 0 then return focusField(3, getFocusedItemIndex(m.settingsControls.tvLibraryOptions))
-    if m.focusState.activeIndex = 1 then return focusField(4, invalid)
-    if m.focusState.activeIndex = 2 then return focusField(4, invalid)
+    if m.focusState.activeIndex = 0 then return focusField(4, getFocusedItemIndex(m.settingsControls.tvLibraryOptions))
+    if m.focusState.activeIndex = 1 then return focusField(5, invalid)
+    if m.focusState.activeIndex = 2 then return focusField(5, invalid)
+    if m.focusState.activeIndex = 3 then return focusField(6, invalid)
 
     return false
 end function
@@ -259,9 +274,9 @@ end function
 ' focusLeftColumn
 '-------------------------------------------------------------------------------
 function focusLeftColumn() as boolean
-    if m.focusState.activeIndex = 3 then return focusField(0, getFocusedItemIndex(m.settingsControls.tvEpisodeListDisplayOptions))
-    if m.focusState.activeIndex = 4 then return focusField(1, invalid)
-    if m.focusState.activeIndex = 5 then return focusField(2, getFocusedItemIndex(m.settingsControls.collectionDisplayOptions))
+    if m.focusState.activeIndex = 4 then return focusField(0, getFocusedItemIndex(m.settingsControls.tvEpisodeListDisplayOptions))
+    if m.focusState.activeIndex = 5 then return focusField(1, invalid)
+    if m.focusState.activeIndex = 6 then return focusField(3, getFocusedItemIndex(m.settingsControls.collectionItemsImageTypeOptions))
 
     return false
 end function
@@ -326,7 +341,7 @@ sub onKeyboardDialogButtonSelected()
 
     scene.dialog = invalid
     m.focusState.activeKeyboardField = invalid
-    focusField(4, invalid)
+    focusField(5, invalid)
 end sub
 
 '-------------------------------------------------------------------------------
