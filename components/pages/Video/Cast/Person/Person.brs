@@ -310,7 +310,7 @@ end sub
 function renderRelatedItems(items as object) as boolean
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
-    m.relatedTitleLabel.text = "More with " + getPersonName(m.pageState.person)
+    m.relatedTitleLabel.text = "Movies/Shows with " + getPersonName(m.pageState.person)
     sortedItems = sortItemsByProductionYearDesc(items)
 
     for each item in sortedItems
@@ -330,7 +330,7 @@ end function
 function renderRelatedEpisodes(items as object) as boolean
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
-    m.relatedEpisodesTitleLabel.text = "TV Episodes"
+    m.relatedEpisodesTitleLabel.text = "TV Episodes with " + getPersonName(m.pageState.person)
     sortedItems = EpisodeSort_BySeriesSeasonEpisode(items)
 
     for each item in sortedItems

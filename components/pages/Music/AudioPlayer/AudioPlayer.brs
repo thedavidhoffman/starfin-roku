@@ -69,7 +69,7 @@ sub onLoadRequestChanged()
     m.artistName.text = getAlbumArtist(album)
     artworkUrl = getAlbumArtworkUrl(album, request)
     m.albumArtwork.uri = artworkUrl
-    m.backdrop.uri = artworkUrl
+    m.backdrop.uri = ""
     m.trackList.content = CreateObject("roSGNode", "ContentNode")
     updateTimeline(0, 0)
 
@@ -92,6 +92,10 @@ sub onTracksResponse()
     if SafeString(response.albumId, "") <> SafeString(request.albumId, "") then return
     if response.ok <> true or response.data = invalid or response.data.Items = invalid then return
 
+    album = response.album
+    if album = invalid then album = request.item
+    artworkUrl = getAlbumArtworkUrl(album, request)
+    m.backdrop.uri = getAlbumBackgroundUrl(album, request, artworkUrl)
     m.playerState.tracks = response.data.Items
     renderTracks()
     if m.playerState.tracks.Count() > 0 then playTrack(0)
@@ -295,6 +299,26 @@ function getAlbumArtworkUrl(album as dynamic, request as object) as string
     if album.ImageTags <> invalid then tag = SafeString(album.ImageTags.Primary, "")
     if tag = "" then return "pkg:/images/music/album-placeholder-340x340.png"
     return Url_BuildImageUrl(request.server, request.albumId, "Primary", tag, 650, 650)
+end function
+
+'-------------------------------------------------------------------------------
+' getAlbumBackgroundUrl
+'-------------------------------------------------------------------------------
+function getAlbumBackgroundUrl(album as dynamic, request as object, fallbackUrl as string) as string
+    if album = invalid then return fallbackUrl
+
+    if album.BackdropImageTags <> invalid and album.BackdropImageTags.Count() > 0 then
+        tag = SafeString(album.BackdropImageTags[0], "")
+        if tag <> "" then return Url_BuildImageUrl(request.server, request.albumId, "Backdrop", tag, 1920, 1080)
+    end if
+
+    if album.ParentBackdropImageTags = invalid or album.ParentBackdropImageTags.Count() = 0 then return fallbackUrl
+
+    itemId = SafeString(album.ParentBackdropItemId, "")
+    tag = SafeString(album.ParentBackdropImageTags[0], "")
+    if itemId = "" or tag = "" then return fallbackUrl
+
+    return Url_BuildImageUrl(request.server, itemId, "Backdrop", tag, 1920, 1080)
 end function
 
 '-------------------------------------------------------------------------------

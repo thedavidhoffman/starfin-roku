@@ -15,6 +15,9 @@ sub executeRequest()
         return
     end if
 
+    userItemsUrl = request.server + "/Users/" + SafeString(request.userId, "") + "/Items/"
+    albumResult = HttpClient_Request(userItemsUrl + request.albumId, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+
     url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString({
         ParentId: request.albumId
         IncludeItemTypes: "Audio"
@@ -26,5 +29,6 @@ sub executeRequest()
     result = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     result.AddReplace("action", "albumTracks")
     result.AddReplace("albumId", request.albumId)
+    if albumResult.ok = true then result.AddReplace("album", albumResult.data)
     m.top.response = result
 end sub
