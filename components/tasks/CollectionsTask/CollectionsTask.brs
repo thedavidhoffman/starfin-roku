@@ -25,6 +25,7 @@ sub executeRequest()
         userId: SafeString(request.userId, "")
         parentId: SafeString(request.libraryId, "")
         fields: getFields(request)
+        enableUserData: false
         enableImageTypes: "Primary,Backdrop,Thumb"
         imageTypeLimit: 1
         enableTotalRecordCount: false
@@ -69,7 +70,7 @@ function getFields(request as dynamic) as string
     fields = SafeString(request.fields, "")
     if fields <> "" then return fields
 
-    return "PrimaryImageAspectRatio,SortName,Path,ChildCount,MediaSourceCount,Genres,Overview,Tags"
+    return "PrimaryImageAspectRatio,SortName,Tags"
 end function
 
 '-------------------------------------------------------------------------------
