@@ -40,7 +40,7 @@ sub onLoadRequestChanged()
     m.pageState.navigationStack = []
     m.pageState.pendingDrilldown = invalid
     m.pageState.imageAspect = getCollectionImageAspect()
-    m.titleLabel.text = SafeString(request.title, "Collections")
+    m.titleLabel.text = getCollectionTitle(request.title)
     applyGridLayout(m.pageState.imageAspect)
     Spinner_Show()
     renderCollections([])
@@ -151,7 +151,7 @@ sub handleDrilldownResponse(response as object)
     pushCollectionNavigationState()
     m.pageState.request = pending.request
     m.pageState.collections = collections
-    m.titleLabel.text = SafeString(pending.request.title, "Collections")
+    m.titleLabel.text = getCollectionTitle(pending.request.title)
     renderCollections(collections)
     Status_ClearMessage()
     focusCollectionsIfActive()
@@ -322,24 +322,31 @@ end function
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
     if imageAspect = "wide" then
-        m.titleLabel.translation = [23, 120]
         m.collectionsGrid.translation = [23, 208]
         m.collectionsGrid.itemSize = [465, 348]
-        m.collectionsGrid.itemSpacing = [0, 11]
+        m.collectionsGrid.itemSpacing = [0, -25]
         m.collectionsGrid.numColumns = 4
         m.collectionsGrid.numRows = 3
         m.collectionsGrid.focusBitmapUri = "pkg:/images/library/thumbnail-focus-465x348.png"
         return
     end if
 
-    m.titleLabel.translation = [96, 120]
     m.collectionsGrid.translation = [96, 208]
     m.collectionsGrid.itemSize = [295, 463]
-    m.collectionsGrid.itemSpacing = [-11, 26]
+    m.collectionsGrid.itemSpacing = [-11, -12]
     m.collectionsGrid.numColumns = 6
     m.collectionsGrid.numRows = 2
     m.collectionsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
 end sub
+
+'-------------------------------------------------------------------------------
+' getCollectionTitle
+'-------------------------------------------------------------------------------
+function getCollectionTitle(value as dynamic) as string
+    title = SafeString(value, "Collections")
+    if Instr(1, LCase(title), "collection") = 0 then return "Collections: " + title
+    return title
+end function
 
 ' getCollectionsFromPayload
 '-------------------------------------------------------------------------------
