@@ -15,13 +15,13 @@ sub init()
     m.themeSongsTask.observeField("response", "onThemeSongsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
-    m.mediaToolbar.observeField("focusExitDown", "onVideoMediaToolbarFocusExitDown")
-    m.mediaToolbar.observeField("playSelected", "onVideoMediaToolbarPlaySelected")
-    m.mediaToolbar.observeField("restartSelected", "onVideoMediaToolbarRestartSelected")
-    m.mediaToolbar.observeField("subtitlesSelected", "onVideoMediaToolbarSubtitlesSelected")
-    m.mediaToolbar.observeField("audioSelected", "onVideoMediaToolbarAudioSelected")
-    m.mediaToolbar.observeField("chaptersSelected", "onVideoMediaToolbarChaptersSelected")
-    m.mediaToolbar.observeField("mediaInfoSelected", "onVideoMediaToolbarMediaInfoSelected")
+    m.mediaToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
+    m.mediaToolbar.observeField("playSelected", "onVideoToolbarPlaySelected")
+    m.mediaToolbar.observeField("restartSelected", "onVideoToolbarRestartSelected")
+    m.mediaToolbar.observeField("subtitlesSelected", "onVideoToolbarSubtitlesSelected")
+    m.mediaToolbar.observeField("audioSelected", "onVideoToolbarAudioSelected")
+    m.mediaToolbar.observeField("chaptersSelected", "onVideoToolbarChaptersSelected")
+    m.mediaToolbar.observeField("mediaInfoSelected", "onVideoToolbarMediaInfoSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.streamOptions.observeField("overlayRequested", "onStreamOptionsOverlayRequested")
@@ -197,7 +197,7 @@ sub activate()
     if m.state.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
         focusCast()
     else
-        focusVideoMediaToolbar()
+        focusVideoToolbar()
     end if
 end sub
 
@@ -251,14 +251,14 @@ end sub
 ' handleVideoMediaInfoOverlayClosed
 '-------------------------------------------------------------------------------
 sub handleVideoMediaInfoOverlayClosed()
-    focusVideoMediaToolbar()
+    focusVideoToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
 ' onCastFocusExitUp
 '-------------------------------------------------------------------------------
 sub onCastFocusExitUp()
-    focusVideoMediaToolbar()
+    focusVideoToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -275,9 +275,9 @@ sub onCastPersonSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' focusVideoMediaToolbar
+' focusVideoToolbar
 '-------------------------------------------------------------------------------
-sub focusVideoMediaToolbar()
+sub focusVideoToolbar()
     m.state.focusArea = "toolbar"
     m.cast.callFunc("deactivate")
     m.top.setFocus(true)
@@ -309,16 +309,16 @@ sub focusCast()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarFocusExitDown
+' onVideoToolbarFocusExitDown
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarFocusExitDown()
+sub onVideoToolbarFocusExitDown()
     focusCast()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarPlaySelected
+' onVideoToolbarPlaySelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarPlaySelected()
+sub onVideoToolbarPlaySelected()
     selection = buildPlaySelection(invalid)
     if selection = invalid then return
 
@@ -327,9 +327,9 @@ sub onVideoMediaToolbarPlaySelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarRestartSelected
+' onVideoToolbarRestartSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarRestartSelected()
+sub onVideoToolbarRestartSelected()
     selection = buildPlaySelection(0)
     if selection = invalid then return
 
@@ -359,9 +359,9 @@ function buildPlaySelection(startPositionTicks as dynamic) as dynamic
 end function
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarSubtitlesSelected
+' onVideoToolbarSubtitlesSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarSubtitlesSelected()
+sub onVideoToolbarSubtitlesSelected()
     item = m.state.item
     if item = invalid then return
 
@@ -424,7 +424,7 @@ end function
 ' onStreamOptionsCloseRequested
 '-------------------------------------------------------------------------------
 sub onStreamOptionsCloseRequested()
-    focusVideoMediaToolbar()
+    focusVideoToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -446,9 +446,9 @@ sub onSubtitleOptionSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarAudioSelected
+' onVideoToolbarAudioSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarAudioSelected()
+sub onVideoToolbarAudioSelected()
     item = m.state.item
     if item = invalid then return
 
@@ -534,9 +534,9 @@ sub onWatchedTaskResponse()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarChaptersSelected
+' onVideoToolbarChaptersSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarChaptersSelected()
+sub onVideoToolbarChaptersSelected()
     item = m.state.item
     if item = invalid then return
 
@@ -552,9 +552,9 @@ sub onVideoMediaToolbarChaptersSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarMediaInfoSelected
+' onVideoToolbarMediaInfoSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarMediaInfoSelected()
+sub onVideoToolbarMediaInfoSelected()
     item = m.state.item
     if item = invalid then return
 
@@ -919,7 +919,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "up" and m.cast.isInFocusChain() then
-        focusVideoMediaToolbar()
+        focusVideoToolbar()
         return true
     end if
 
@@ -928,7 +928,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "down" and m.state.focusArea = "description" then
-        focusVideoMediaToolbar()
+        focusVideoToolbar()
         return true
     end if
 
@@ -938,7 +938,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "play" and m.state.focusArea = "toolbar" then
-        onVideoMediaToolbarPlaySelected()
+        onVideoToolbarPlaySelected()
         return true
     end if
 

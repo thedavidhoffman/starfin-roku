@@ -42,15 +42,15 @@ sub initHandlers()
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
-    m.mediaToolbar.observeField("focusExitDown", "onVideoMediaToolbarFocusExitDown")
-    m.mediaToolbar.observeField("playSelected", "onVideoMediaToolbarPlaySelected")
-    m.mediaToolbar.observeField("restartSelected", "onVideoMediaToolbarRestartSelected")
-    m.mediaToolbar.observeField("subtitlesSelected", "onVideoMediaToolbarSubtitlesSelected")
-    m.mediaToolbar.observeField("audioSelected", "onVideoMediaToolbarAudioSelected")
-    m.mediaToolbar.observeField("chaptersSelected", "onVideoMediaToolbarChaptersSelected")
-    m.mediaToolbar.observeField("mediaInfoSelected", "onVideoMediaToolbarMediaInfoSelected")
-    m.mediaToolbar.observeField("seriesSelected", "onVideoMediaToolbarSeriesSelected")
-    m.mediaToolbar.observeField("seasonSelected", "onVideoMediaToolbarSeasonSelected")
+    m.mediaToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
+    m.mediaToolbar.observeField("playSelected", "onVideoToolbarPlaySelected")
+    m.mediaToolbar.observeField("restartSelected", "onVideoToolbarRestartSelected")
+    m.mediaToolbar.observeField("subtitlesSelected", "onVideoToolbarSubtitlesSelected")
+    m.mediaToolbar.observeField("audioSelected", "onVideoToolbarAudioSelected")
+    m.mediaToolbar.observeField("chaptersSelected", "onVideoToolbarChaptersSelected")
+    m.mediaToolbar.observeField("mediaInfoSelected", "onVideoToolbarMediaInfoSelected")
+    m.mediaToolbar.observeField("seriesSelected", "onVideoToolbarSeriesSelected")
+    m.mediaToolbar.observeField("seasonSelected", "onVideoToolbarSeasonSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.streamOptions.observeField("overlayRequested", "onStreamOptionsOverlayRequested")
@@ -189,11 +189,14 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
     else
         m.mediaToolbar.mediaType = "tv-episode"
     end if
-    rawItem = item.raw
-    m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(rawItem).Count()
-    m.mediaToolbar.audioStreamCount = getAudioStreams(rawItem).Count()
-    m.mediaToolbar.chapterCount = getChapters(rawItem).Count()
-    m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(rawItem))
+    playbackItem = item.raw
+    if isSeasonDetailsItem(item) and m.state.playSelection <> invalid then playbackItem = m.state.playSelection.item
+    m.mediaToolbar.resumeItem = invalid
+    m.mediaToolbar.playItem = playbackItem
+    m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(playbackItem).Count()
+    m.mediaToolbar.audioStreamCount = getAudioStreams(playbackItem).Count()
+    m.mediaToolbar.chapterCount = getChapters(playbackItem).Count()
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(playbackItem))
     m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
     m.mediaToolbar.isWatched = isItemWatched(item)
 end sub
@@ -636,6 +639,8 @@ sub clearContent()
     m.mediaToolbar.audioStreamCount = 0
     m.mediaToolbar.chapterCount = 0
     m.mediaToolbar.resumePositionSeconds = 0
+    m.mediaToolbar.resumeItem = invalid
+    m.mediaToolbar.playItem = invalid
     m.state.itemContent = invalid
     m.state.playSelection = invalid
     m.cast.people = []
@@ -652,6 +657,8 @@ sub clearPageState()
     m.mediaToolbar.audioStreamCount = 0
     m.mediaToolbar.chapterCount = 0
     m.mediaToolbar.resumePositionSeconds = 0
+    m.mediaToolbar.resumeItem = invalid
+    m.mediaToolbar.playItem = invalid
     m.state.itemContent = invalid
     m.state.playSelection = invalid
     m.cast.people = []
@@ -666,7 +673,7 @@ sub activate()
     if m.state.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
         m.cast.callFunc("activate")
     else
-        focusVideoMediaToolbar()
+        focusVideoToolbar()
     end if
 end sub
 
@@ -690,9 +697,9 @@ sub resetFocus()
 end sub
 
 '-------------------------------------------------------------------------------
-' focusVideoMediaToolbar
+' focusVideoToolbar
 '-------------------------------------------------------------------------------
-sub focusVideoMediaToolbar()
+sub focusVideoToolbar()
     m.state.focusArea = "toolbar"
     m.mediaToolbar.callFunc("activate")
 end sub
@@ -721,7 +728,7 @@ end sub
 ' handleVideoMediaInfoOverlayClosed
 '-------------------------------------------------------------------------------
 sub handleVideoMediaInfoOverlayClosed()
-    focusVideoMediaToolbar()
+    focusVideoToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -736,16 +743,16 @@ sub focusCast()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarFocusExitDown
+' onVideoToolbarFocusExitDown
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarFocusExitDown()
+sub onVideoToolbarFocusExitDown()
     focusCast()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarPlaySelected
+' onVideoToolbarPlaySelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarPlaySelected()
+sub onVideoToolbarPlaySelected()
     if m.state.playSelection = invalid then return
     applySelectedStreamsToPlaySelection(m.state.playSelection)
     m.log.write("Play selected audioStreamIndex=" + SafeString(m.state.playSelection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(m.state.playSelection.subtitleStreamIndex, ""))
@@ -753,9 +760,9 @@ sub onVideoMediaToolbarPlaySelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarRestartSelected
+' onVideoToolbarRestartSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarRestartSelected()
+sub onVideoToolbarRestartSelected()
     if m.state.playSelection = invalid then return
 
     selection = buildRestartSelection(m.state.playSelection)
@@ -782,9 +789,9 @@ function buildRestartSelection(selection as dynamic) as dynamic
 end function
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarSubtitlesSelected
+' onVideoToolbarSubtitlesSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarSubtitlesSelected()
+sub onVideoToolbarSubtitlesSelected()
     item = m.state.itemContent
     if item = invalid or item.raw = invalid then return
 
@@ -847,7 +854,7 @@ end function
 ' onStreamOptionsCloseRequested
 '-------------------------------------------------------------------------------
 sub onStreamOptionsCloseRequested()
-    focusVideoMediaToolbar()
+    focusVideoToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -871,9 +878,9 @@ sub onSubtitleOptionSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarAudioSelected
+' onVideoToolbarAudioSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarAudioSelected()
+sub onVideoToolbarAudioSelected()
     item = m.state.itemContent
     if item = invalid or item.raw = invalid then return
 
@@ -886,9 +893,9 @@ sub onVideoMediaToolbarAudioSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarChaptersSelected
+' onVideoToolbarChaptersSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarChaptersSelected()
+sub onVideoToolbarChaptersSelected()
     item = m.state.itemContent
     if item = invalid or item.raw = invalid then return
 
@@ -904,9 +911,9 @@ sub onVideoMediaToolbarChaptersSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarMediaInfoSelected
+' onVideoToolbarMediaInfoSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarMediaInfoSelected()
+sub onVideoToolbarMediaInfoSelected()
     item = m.state.itemContent
     if item = invalid or item.raw = invalid then return
 
@@ -939,9 +946,9 @@ sub onChapterOptionSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarSeriesSelected
+' onVideoToolbarSeriesSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarSeriesSelected()
+sub onVideoToolbarSeriesSelected()
     selection = getCurrentSeriesSelection()
     if selection = invalid then return
 
@@ -949,9 +956,9 @@ sub onVideoMediaToolbarSeriesSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoMediaToolbarSeasonSelected
+' onVideoToolbarSeasonSelected
 '-------------------------------------------------------------------------------
-sub onVideoMediaToolbarSeasonSelected()
+sub onVideoToolbarSeasonSelected()
     selection = getCurrentSeasonSelection()
     if selection = invalid then return
 
@@ -1066,7 +1073,7 @@ end sub
 ' onCastFocusExitUp
 '-------------------------------------------------------------------------------
 sub onCastFocusExitUp()
-    focusVideoMediaToolbar()
+    focusVideoToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1198,7 +1205,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "down" and m.state.focusArea = "description" then
-        focusVideoMediaToolbar()
+        focusVideoToolbar()
         return true
     end if
 

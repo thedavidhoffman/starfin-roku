@@ -1,3 +1,7 @@
+' Displays a vertical scroll-position bar beside large poster libraries. It is
+' hidden for thumbnail layouts and short libraries, and its fill tracks the
+' currently focused poster row, including simulated progress during key holds.
+
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------

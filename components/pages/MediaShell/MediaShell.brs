@@ -5,6 +5,7 @@ sub init()
     m.mediaBackgroundFull = m.top.findNode("mediaBackgroundFull")
     m.mediaBackgroundPartialGroup = m.top.findNode("mediaBackgroundPartialGroup")
     m.mediaBackgroundPartial = m.top.findNode("mediaBackgroundPartial")
+    m.contentGroup = m.top.findNode("contentGroup")
     m.mediaBackgroundUrl = ""
     m.logoState = {
         url: ""
@@ -22,7 +23,15 @@ sub init()
 
     m.overviewDescription.observeField("overlayRequested", "onDescriptionOverlayRequested")
     m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
+    onContentTranslationChanged()
     applyBackgroundDisplay()
+end sub
+
+'-------------------------------------------------------------------------------
+' onContentTranslationChanged
+'-------------------------------------------------------------------------------
+sub onContentTranslationChanged()
+    m.contentGroup.translation = m.top.contentTranslation
 end sub
 
 '-------------------------------------------------------------------------------

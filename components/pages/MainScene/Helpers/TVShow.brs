@@ -19,6 +19,7 @@ sub tvShowShow(selection as object, shouldReset as boolean)
     page = CreateObject("roSGNode", "TVShow")
     page.observeField("closeRequested", "tvShowHandleCloseRequested")
     page.observeField("selectedSeason", "tvSeasonHandleTVShowSeasonSelected")
+    page.observeField("selectedEpisode", "tvShowHandleEpisodeSelected")
     page.observeField("selectedPerson", "personHandleTVShowPersonSelected")
     page.observeField("overlayRequested", "tvShowHandleOverlayRequested")
     page.observeField("themeRequested", "themeAudioHandleTVShowRequested")
@@ -39,6 +40,20 @@ sub tvShowShow(selection as object, shouldReset as boolean)
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' tvShowHandleEpisodeSelected
+'-------------------------------------------------------------------------------
+sub tvShowHandleEpisodeSelected()
+    if m.tvShowPage = invalid then return
+
+    selection = m.tvShowPage.selectedEpisode
+    if selection = invalid then return
+    if SafeString(selection.itemId, "") = "" then return
+
+    m.tvShowPage.callFunc("deactivate")
+    playerShow(selection)
 end sub
 
 '-------------------------------------------------------------------------------

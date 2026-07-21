@@ -5,7 +5,7 @@ sub init()
     m.log = CreateLogger("TVShow")
     m.contentGroup = m.top.findNode("contentGroup")
     m.mediaShell = m.top.findNode("mediaShell")
-    m.seasonsLabel = m.top.findNode("seasonsLabel")
+    m.videoToolbar = m.top.findNode("videoToolbar")
     m.seasonsGrid = m.top.findNode("seasonsGrid")
     m.cast = m.top.findNode("cast")
     m.chevronFooter = m.top.findNode("chevronFooter")
@@ -15,6 +15,9 @@ sub init()
     m.tvShowTask.observeField("response", "onTVShowResponse")
     m.themeSongsTask.observeField("response", "onThemeSongsResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
+    m.videoToolbar.observeField("playSelected", "onVideoToolbarPlaySelected")
+    m.videoToolbar.observeField("focusExitUp", "onVideoToolbarFocusExitUp")
+    m.videoToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
@@ -23,7 +26,9 @@ sub init()
         request: invalid
         series: invalid
         seasons: []
-        focusArea: "seasons"
+        playbackQueue: invalid
+        playbackQueueIndex: 0
+        focusArea: "videoToolbar"
         themeLookupActive: false
         lifecycle: AsyncLifecycle_Create()
     }
@@ -31,6 +36,60 @@ sub init()
         contentDefault: [96, 0]
         contentCastFocused: [96, -397]
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarPlaySelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarPlaySelected()
+    item = m.videoToolbar.playItem
+    shouldResume = false
+    if m.videoToolbar.resumeItem <> invalid then
+        item = m.videoToolbar.resumeItem
+        shouldResume = true
+    end if
+
+    emitEpisodeSelection(item, shouldResume)
+end sub
+
+'-------------------------------------------------------------------------------
+' emitEpisodeSelection
+'-------------------------------------------------------------------------------
+sub emitEpisodeSelection(item as dynamic, shouldResume as boolean)
+    if Array_IsAssocArray(item) = false then return
+
+    itemId = SafeString(item.Id, "")
+    if itemId = "" then return
+
+    startPositionTicks = 0
+    if shouldResume then startPositionTicks = PlaybackProgress_GetTicksFromItem(item)
+
+    m.top.selectedEpisode = {
+        itemId: itemId
+        item: item
+        series: SeriesIdentity_FromItem(SafeString(m.pageState.request.server, ""), m.pageState.series)
+        season: {
+            Id: SafeString(item.SeasonId, "")
+            Name: SafeString(item.SeasonName, "")
+        }
+        startPositionTicks: startPositionTicks
+        playbackQueue: m.pageState.playbackQueue
+        playbackQueueIndex: m.pageState.playbackQueueIndex
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarFocusExitUp
+'-------------------------------------------------------------------------------
+sub onVideoToolbarFocusExitUp()
+    focusMediaDescription()
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarFocusExitDown
+'-------------------------------------------------------------------------------
+sub onVideoToolbarFocusExitDown()
+    focusSeasonsIfActive()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -97,9 +156,11 @@ sub onLoadRequestChanged()
     m.top.settings = request.settings
     applyMediaShellBackgroundSetting(request.settings)
     m.pageState.series = request.item
+    m.pageState.playbackQueue = invalid
+    m.pageState.playbackQueueIndex = 0
     m.pageState.themeLookupActive = false
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
-    m.pageState.focusArea = "seasons"
+    m.pageState.focusArea = "videoToolbar"
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
     updateFocusChevron()
@@ -108,6 +169,8 @@ sub onLoadRequestChanged()
     Spinner_Show()
     renderSeries(request.item, true)
     renderSeasons([])
+    m.videoToolbar.resumeItem = invalid
+    m.videoToolbar.playItem = invalid
 
     m.tvShowTask.request = request
     m.tvShowTask.control = "run"
@@ -153,11 +216,19 @@ sub onTVShowResponse()
 
     m.pageState.series = payload.series
     m.pageState.seasons = getItemsFromPayload(payload.seasons)
+    m.pageState.playbackQueue = payload.playbackQueue
+    m.pageState.playbackQueueIndex = Number_ToInteger(payload.playbackQueueIndex, 0)
+    m.videoToolbar.resumeItem = payload.resumeItem
+    m.videoToolbar.playItem = payload.upNextItem
     renderSeries(payload.series, false)
     renderSeasons(m.pageState.seasons)
     Spinner_Hide()
     Status_ClearMessage()
-    focusSeasonsIfActive()
+    if m.pageState.focusArea = "videoToolbar" then
+        focusVideoToolbar()
+    else
+        focusSeasonsIfActive()
+    end if
     loadThemeSong(payload.series)
 end sub
 
@@ -292,7 +363,6 @@ end function
 sub setSeasonsVisible(isVisible as boolean)
     hasSeasons = m.seasonsGrid.content <> invalid and m.seasonsGrid.content.getChildCount() > 0
     visible = isVisible and hasSeasons
-    m.seasonsLabel.visible = visible
     m.seasonsGrid.visible = visible
     updateFocusChevron()
 end sub
@@ -304,6 +374,8 @@ sub activate()
     AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
     if m.pageState.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
         focusCast()
+    else if m.pageState.focusArea = "videoToolbar" then
+        focusVideoToolbar()
     else
         focusSeasonsIfActive()
     end if
@@ -317,6 +389,7 @@ sub deactivate()
     m.pageState.themeLookupActive = false
     m.tvShowTask.control = "stop"
     m.themeSongsTask.control = "stop"
+    m.videoToolbar.callFunc("deactivate")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -330,9 +403,23 @@ sub focusSeasonsIfActive()
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
+    m.videoToolbar.callFunc("deactivate")
     updateFocusChevron()
     m.top.setFocus(true)
     m.seasonsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusVideoToolbar
+'-------------------------------------------------------------------------------
+sub focusVideoToolbar()
+    m.pageState.focusArea = "videoToolbar"
+    m.contentGroup.translation = m.layout.contentDefault
+    setSeasonsVisible(true)
+    m.cast.callFunc("deactivate")
+    updateFocusChevron()
+    m.top.setFocus(true)
+    m.videoToolbar.callFunc("activate")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -345,6 +432,7 @@ function focusMediaDescription() as boolean
     m.contentGroup.translation = m.layout.contentDefault
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
+    m.videoToolbar.callFunc("deactivate")
     updateFocusChevron()
     m.top.setFocus(true)
     return m.mediaShell.callFunc("focusDescription")
@@ -366,6 +454,7 @@ sub focusCast()
     m.pageState.focusArea = "cast"
     m.contentGroup.translation = m.layout.contentCastFocused
     setSeasonsVisible(false)
+    m.videoToolbar.callFunc("deactivate")
     m.cast.callFunc("activate")
     updateFocusChevron()
 end sub
@@ -627,11 +716,12 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "up" and m.pageState.focusArea = "seasons" then
-        return focusMediaDescription()
+        focusVideoToolbar()
+        return true
     end if
 
     if key = "down" and m.pageState.focusArea = "description" then
-        focusSeasonsIfActive()
+        focusVideoToolbar()
         return true
     end if
 

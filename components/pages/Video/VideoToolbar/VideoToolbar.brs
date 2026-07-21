@@ -173,6 +173,20 @@ sub onResumePositionChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onPlaybackItemChanged
+'-------------------------------------------------------------------------------
+sub onPlaybackItemChanged()
+    updateToolbarButtons()
+end sub
+
+'-------------------------------------------------------------------------------
+' onCapabilitiesChanged
+'-------------------------------------------------------------------------------
+sub onCapabilitiesChanged()
+    updateToolbarButtons()
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusWatchedAction
 '-------------------------------------------------------------------------------
 sub focusWatchedAction()
@@ -190,76 +204,131 @@ end sub
 '-------------------------------------------------------------------------------
 sub updateToolbarButtons()
     previousFocusedButtonId = getCurrentFocusedButtonId()
-    isWatched = m.top.isWatched = true
-    supportsWatchedActions = m.top.supportsWatchedActions <> false
+    state = getToolbarState()
+
+    configureToolbarButtons(state)
+    m.focusState.buttons = buildToolbarButtonList()
+    restoreToolbarFocus(previousFocusedButtonId, state.hasResumeAction)
+    layoutButtons()
+end sub
+
+'-------------------------------------------------------------------------------
+' getToolbarState
+'-------------------------------------------------------------------------------
+function getToolbarState() as object
     mediaType = m.top.mediaType
-    isMovie = mediaType = "movie"
-    isEpisode = mediaType = "tv-episode"
-    isSeason = mediaType = "tv-season"
-    hasSubtitleOptions = m.top.subtitleStreamCount > 0
-    hasAudioOptions = m.top.audioStreamCount > 1
-    hasChapterOptions = m.top.chapterCount > 0
     hasResumeProgress = m.top.resumePositionSeconds > 0
-    m.resumeButton.visible = hasResumeProgress
-    m.restartButton.visible = hasResumeProgress
-    m.playButton.visible = hasResumeProgress <> true
-    m.resumeButton.text = "Resume"
-    m.markWatchedButton.visible = supportsWatchedActions and (isWatched <> true)
-    m.markUnwatchedButton.visible = supportsWatchedActions and (isWatched = true)
-    m.subtitlesButton.visible = isSeason <> true and hasSubtitleOptions
-    m.audioButton.visible = isSeason <> true and hasAudioOptions
-    m.chaptersButton.visible = isSeason <> true and hasChapterOptions
-    m.videoButton.visible = isSeason <> true and isMovie <> true
-    m.mediaInfoButton.visible = isMovie or isEpisode
-    m.seriesButton.visible = isMovie <> true
-    m.seasonButton.visible = isMovie <> true
+    hasResumeItem = m.top.resumeItem <> invalid
 
-    streamButtons = []
-    if isSeason <> true then
-        if hasSubtitleOptions then streamButtons.Push(m.subtitlesButton)
-        if hasAudioOptions then streamButtons.Push(m.audioButton)
-        if hasChapterOptions then streamButtons.Push(m.chaptersButton)
-        if isMovie <> true then streamButtons.Push(m.videoButton)
-        if isMovie or isEpisode then streamButtons.Push(m.mediaInfoButton)
+    return {
+        isWatched: m.top.isWatched = true
+        supportsWatchedActions: m.top.supportsWatchedActions <> false
+        supportsItemNavigation: m.top.supportsItemNavigation <> false
+        isMovie: mediaType = "movie"
+        isEpisode: mediaType = "tv-episode"
+        isSeason: mediaType = "tv-season"
+        hasSubtitleOptions: m.top.subtitleStreamCount > 0
+        hasAudioOptions: m.top.audioStreamCount > 1
+        hasChapterOptions: m.top.chapterCount > 0
+        hasResumeProgress: hasResumeProgress
+        hasResumeItem: hasResumeItem
+        hasResumeAction: hasResumeItem or hasResumeProgress
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' configureToolbarButtons
+'-------------------------------------------------------------------------------
+sub configureToolbarButtons(state as object)
+    m.resumeButton.visible = state.hasResumeAction
+    m.restartButton.visible = state.hasResumeProgress and m.top.supportsRestart <> false
+    m.playButton.visible = state.hasResumeAction <> true
+
+    resumeLabelItem = m.top.playItem
+    if state.hasResumeItem then resumeLabelItem = m.top.resumeItem
+    resumeText = getPlaybackButtonText("Resume", resumeLabelItem)
+    playText = getPlaybackButtonText("Play", m.top.playItem)
+    m.resumeButton.text = resumeText
+    m.resumeButton.expandedWidth = getPlaybackButtonExpandedWidth(resumeText, "Resume", 195)
+    m.playButton.text = playText
+    m.playButton.expandedWidth = getPlaybackButtonExpandedWidth(playText, "Play", 145)
+
+    m.markWatchedButton.visible = state.supportsWatchedActions and state.isWatched <> true
+    m.markUnwatchedButton.visible = state.supportsWatchedActions and state.isWatched
+    m.subtitlesButton.visible = state.isSeason <> true and state.hasSubtitleOptions
+    m.audioButton.visible = state.isSeason <> true and state.hasAudioOptions
+    m.chaptersButton.visible = state.isSeason <> true and state.hasChapterOptions
+    m.videoButton.visible = state.isSeason <> true and state.isMovie <> true
+    m.mediaInfoButton.visible = state.isMovie or state.isEpisode
+    m.seriesButton.visible = state.supportsItemNavigation and state.isMovie <> true
+    m.seasonButton.visible = state.supportsItemNavigation and state.isMovie <> true
+end sub
+
+'-------------------------------------------------------------------------------
+' buildToolbarButtonList
+'-------------------------------------------------------------------------------
+function buildToolbarButtonList() as object
+    buttons = []
+    if m.resumeButton.visible then buttons.Push(m.resumeButton)
+    if m.restartButton.visible then buttons.Push(m.restartButton)
+    if m.playButton.visible then buttons.Push(m.playButton)
+    if m.markWatchedButton.visible then buttons.Push(m.markWatchedButton)
+    if m.markUnwatchedButton.visible then buttons.Push(m.markUnwatchedButton)
+    if m.subtitlesButton.visible then buttons.Push(m.subtitlesButton)
+    if m.audioButton.visible then buttons.Push(m.audioButton)
+    if m.chaptersButton.visible then buttons.Push(m.chaptersButton)
+    if m.videoButton.visible then buttons.Push(m.videoButton)
+    if m.mediaInfoButton.visible then buttons.Push(m.mediaInfoButton)
+    if m.seriesButton.visible then buttons.Push(m.seriesButton)
+    if m.seasonButton.visible then buttons.Push(m.seasonButton)
+
+    return buttons
+end function
+
+'-------------------------------------------------------------------------------
+' restoreToolbarFocus
+'-------------------------------------------------------------------------------
+sub restoreToolbarFocus(previousFocusedButtonId as string, hasResumeAction as boolean)
+    focusedIndex = findFocusedButtonIndex(previousFocusedButtonId)
+    if focusedIndex < 0 and previousFocusedButtonId = "playButton" and hasResumeAction then
+        focusedIndex = findFocusedButtonIndex("resumeButton")
     end if
-
-    if supportsWatchedActions <> true then
-        m.focusState.buttons = []
-    else if isWatched then
-        m.focusState.buttons = []
-    else
-        m.focusState.buttons = []
+    if focusedIndex < 0 and previousFocusedButtonId = "resumeButton" and hasResumeAction <> true then
+        focusedIndex = findFocusedButtonIndex("playButton")
     end if
+    if focusedIndex < 0 and m.focusState.buttons.Count() > 0 then focusedIndex = 0
+    if focusedIndex >= m.focusState.buttons.Count() then focusedIndex = m.focusState.buttons.Count() - 1
+    m.focusState.focusedIndex = focusedIndex
 
-    if hasResumeProgress then m.focusState.buttons.Push(m.resumeButton)
-    if hasResumeProgress then m.focusState.buttons.Push(m.restartButton)
-    if hasResumeProgress <> true then m.focusState.buttons.Push(m.playButton)
-    if supportsWatchedActions = true and isWatched then
-        m.focusState.buttons.Push(m.markUnwatchedButton)
-    else if supportsWatchedActions = true then
-        m.focusState.buttons.Push(m.markWatchedButton)
-    end if
-
-    m.focusState.buttons.Append(streamButtons)
-    if isMovie <> true then m.focusState.buttons.Append([m.seriesButton, m.seasonButton])
-
-    m.focusState.focusedIndex = findFocusedButtonIndex(previousFocusedButtonId)
-    if m.focusState.focusedIndex < 0 and previousFocusedButtonId = "playButton" and hasResumeProgress then
-        m.focusState.focusedIndex = findFocusedButtonIndex("resumeButton")
-    end if
-    if m.focusState.focusedIndex < 0 and previousFocusedButtonId = "resumeButton" and hasResumeProgress <> true then
-        m.focusState.focusedIndex = findFocusedButtonIndex("playButton")
-    end if
-    if m.focusState.focusedIndex < 0 then m.focusState.focusedIndex = 0
-    if m.focusState.focusedIndex >= m.focusState.buttons.Count() then m.focusState.focusedIndex = m.focusState.buttons.Count() - 1
-
-    if m.focusState.focusedIndex >= 0 and m.focusState.focusedIndex < m.focusState.buttons.Count() then
-        m.focusState.focusedButtonId = getButtonId(m.focusState.buttons[m.focusState.focusedIndex])
+    if focusedIndex >= 0 and focusedIndex < m.focusState.buttons.Count() then
+        m.focusState.focusedButtonId = getButtonId(m.focusState.buttons[focusedIndex])
     else
         m.focusState.focusedButtonId = ""
     end if
-    layoutButtons()
 end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackButtonText
+'-------------------------------------------------------------------------------
+function getPlaybackButtonText(action as string, item as dynamic) as string
+    if item = invalid then return action
+
+    seasonNumber = SafeString(item.ParentIndexNumber, "")
+    episodeNumber = SafeString(item.IndexNumber, "")
+    if seasonNumber = "" or episodeNumber = "" then return action
+
+    return action + " S" + seasonNumber + ":E" + episodeNumber
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackButtonExpandedWidth
+'-------------------------------------------------------------------------------
+function getPlaybackButtonExpandedWidth(text as string, action as string, fallback as integer) as integer
+    suffixLength = Len(text) - Len(action)
+    if suffixLength <= 0 then return fallback
+
+    return fallback + (suffixLength * 13)
+end function
 
 '-------------------------------------------------------------------------------
 ' getCurrentFocusedButtonId
@@ -389,6 +458,11 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+
+    if key = "up" and m.top.supportsFocusExitUp = true then
+        m.top.focusExitUp = true
+        return true
+    end if
 
     if key = "down" then
         m.top.focusExitDown = true

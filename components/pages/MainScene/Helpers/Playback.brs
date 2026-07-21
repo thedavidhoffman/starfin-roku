@@ -30,6 +30,7 @@ sub playerShow(selection as object)
     player.playRequest = playRequest
 
     if m.moviePage <> invalid then m.moviePage.visible = false
+    if m.tvShowPage <> invalid then m.tvShowPage.visible = false
     if m.tvEpisodePage <> invalid then m.tvEpisodePage.visible = false
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     if m.tvEpisodeUpNextAutoPlayPage <> invalid then m.tvEpisodeUpNextAutoPlayPage.visible = false
@@ -153,6 +154,10 @@ sub playerHandleCloseRequested()
         m.tvSeasonPage.visible = true
         m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
+    else if m.tvShowPage <> invalid then
+        m.tvShowPage.visible = true
+        m.header.visible = false
+        m.tvShowPage.callFunc("activate")
     else if m.liveTvPage <> invalid then
         m.liveTvPage.visible = true
         m.header.visible = true
@@ -229,6 +234,7 @@ sub prepareTVEpisodePageForClosedPlayer(playRequest as dynamic)
     loadRequest = buildClosedPlayerTVEpisodeLoadRequest(playRequest)
     if loadRequest = invalid then return
     if isCurrentTVEpisodePage(loadRequest.itemId) then return
+    if m.tvShowPage <> invalid and m.tvSeasonPage = invalid and m.tvEpisodePage = invalid then return
 
     if m.tvEpisodePage <> invalid then
         m.dynamicPageHost.removeChild(m.tvEpisodePage)
@@ -330,6 +336,10 @@ sub closeTVEpisodeUpNextAutoPlayPage(restorePreviousPage as boolean)
         m.tvSeasonPage.visible = true
         m.header.visible = false
         m.tvSeasonPage.callFunc("activate")
+    else if m.tvShowPage <> invalid then
+        m.tvShowPage.visible = true
+        m.header.visible = false
+        m.tvShowPage.callFunc("activate")
     else
         showHome()
     end if
