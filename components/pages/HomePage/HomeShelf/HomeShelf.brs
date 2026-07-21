@@ -49,6 +49,7 @@ sub onLayoutChanged()
     layout = m.top.layout
     if layout = invalid then return
 
+    m.items.itemComponentName = SafeString(layout.itemComponentName, "VideoMediaCard")
     m.items.itemSize = [layout.itemSizeWidth, layout.height]
     m.items.rowItemSize = [[layout.width, layout.height]]
     m.items.rowItemSpacing = [[layout.itemSpacing, 0]]
@@ -71,6 +72,7 @@ sub onRowItemSelected()
 
     m.top.selectedItem = {
         rowIndex: m.top.rowIndex
+        rowKey: SafeString(row.rowKey, "")
         itemIndex: selected[1]
         item: itemNode.raw
     }

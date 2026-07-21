@@ -257,6 +257,64 @@ sub renderItems(items as object)
 end sub
 
 '-------------------------------------------------------------------------------
+' onWatchedStateChange
+'-------------------------------------------------------------------------------
+sub onWatchedStateChange()
+    change = m.top.watchedStateChange
+    if change = invalid then return
+
+    item = findVideoLibraryItem(SafeString(change.itemId, ""))
+    if item = invalid then return
+    if item.UserData = invalid then item.UserData = {}
+
+    item.UserData.Played = change.isWatched = true
+    item.UserData.PlayedPercentage = 0
+    if change.isWatched = true then item.UserData.PlaybackPositionTicks = 0
+    notifyVideoLibraryItemChanged(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    if change = invalid then return
+
+    item = findVideoLibraryItem(SafeString(change.itemId, ""))
+    if item = invalid then return
+    if PlaybackProgress_ApplyChangeToItem(item, change) <> true then return
+
+    notifyVideoLibraryItemChanged(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' findVideoLibraryItem
+'-------------------------------------------------------------------------------
+function findVideoLibraryItem(itemId as string) as dynamic
+    if itemId = "" then return invalid
+
+    for each item in m.pageState.allItems
+        if SafeString(FirstNonEmpty([item.Id], ""), "") = itemId then return item
+    end for
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' notifyVideoLibraryItemChanged
+'-------------------------------------------------------------------------------
+sub notifyVideoLibraryItemChanged(item as object)
+    itemId = getVideoLibraryItemCacheKey(item)
+    if itemId = "" then return
+
+    node = m.pageState.itemNodeCache[itemId]
+    if node = invalid then return
+
+    node.raw = invalid
+    node.raw = item
+end sub
+
+'-------------------------------------------------------------------------------
 ' detachVideoLibraryGridContent
 '-------------------------------------------------------------------------------
 sub detachVideoLibraryGridContent()

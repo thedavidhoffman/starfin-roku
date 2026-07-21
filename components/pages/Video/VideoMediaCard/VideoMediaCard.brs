@@ -5,6 +5,7 @@ sub init()
     m.posterMask = m.top.findNode("posterMask")
     m.poster = m.top.findNode("poster")
     m.progressBar = m.top.findNode("progressBar")
+    m.watchedIndicator = m.top.findNode("watchedIndicator")
     m.title = m.top.findNode("title")
     m.subtitle = m.top.findNode("subtitle")
 end sub
@@ -25,6 +26,27 @@ sub onItemContentChanged()
     m.poster.visible = true
     renderPoster(item, imageAspect)
     updateProgress(item, imageAspect)
+    updateWatchedIndicator(item, imageAspect)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateWatchedIndicator
+'-------------------------------------------------------------------------------
+sub updateWatchedIndicator(item as object, imageAspect as string)
+    if imageAspect = "wide" then
+        indicatorSize = 58
+        posterWidth = 440
+    else
+        indicatorSize = 42
+        posterWidth = 250
+    end if
+
+    m.watchedIndicator.width = indicatorSize
+    m.watchedIndicator.height = indicatorSize
+    m.watchedIndicator.translation = [posterWidth - indicatorSize - 10, 10]
+
+    raw = getRawItem(item)
+    m.watchedIndicator.visible = raw <> invalid and raw.UserData <> invalid and raw.UserData.Played = true
 end sub
 
 '-------------------------------------------------------------------------------

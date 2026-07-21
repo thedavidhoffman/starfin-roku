@@ -530,6 +530,10 @@ sub onWatchedTaskResponse()
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isWatched
     m.mediaToolbar.callFunc("focusWatchedAction")
+    m.top.watchedStateChanged = {
+        itemId: itemId
+        isWatched: isWatched
+    }
     Status_ClearMessage()
 end sub
 
@@ -603,6 +607,7 @@ sub onPlaybackProgressChange()
     updateItemPlaybackProgress(item, change)
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isItemWatched(item)
+    m.top.playbackProgressChanged = change
 end sub
 
 '-------------------------------------------------------------------------------

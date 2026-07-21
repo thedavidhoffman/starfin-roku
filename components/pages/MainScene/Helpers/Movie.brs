@@ -23,6 +23,8 @@ sub movieShow(selection as object, shouldReset as boolean)
     page.observeField("streamOptionsRequested", "movieHandleStreamOptionsRequested")
     page.observeField("overlayRequested", "movieHandleOverlayRequested")
     page.observeField("themeRequested", "themeAudioHandleMovieRequested")
+    page.observeField("watchedStateChanged", "movieHandleWatchedStateChanged")
+    page.observeField("playbackProgressChanged", "movieHandlePlaybackProgressChanged")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -40,6 +42,30 @@ sub movieShow(selection as object, shouldReset as boolean)
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' movieHandleWatchedStateChanged
+'-------------------------------------------------------------------------------
+sub movieHandleWatchedStateChanged()
+    if m.moviePage = invalid then return
+    change = m.moviePage.watchedStateChanged
+    if change = invalid then return
+
+    markHomePlaybackRowsDirty()
+    if m.videoLibraryPage <> invalid then m.videoLibraryPage.watchedStateChange = change
+end sub
+
+'-------------------------------------------------------------------------------
+' movieHandlePlaybackProgressChanged
+'-------------------------------------------------------------------------------
+sub movieHandlePlaybackProgressChanged()
+    if m.moviePage = invalid then return
+    change = m.moviePage.playbackProgressChanged
+    if change = invalid then return
+
+    markHomePlaybackRowsDirty()
+    if m.videoLibraryPage <> invalid then m.videoLibraryPage.playbackProgressChange = change
 end sub
 
 '-------------------------------------------------------------------------------

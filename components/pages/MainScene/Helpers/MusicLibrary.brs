@@ -19,6 +19,16 @@ sub musicLibraryHandleHomeLibrarySelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' musicLibraryHandleHomeAlbumSelected
+'-------------------------------------------------------------------------------
+sub musicLibraryHandleHomeAlbumSelected()
+    selection = m.homePage.selectedAlbum
+    if selection = invalid then return
+
+    musicAudioPlayerShow(selection, "home")
+end sub
+
+'-------------------------------------------------------------------------------
 ' musicLibraryShow
 '-------------------------------------------------------------------------------
 sub musicLibraryShow(selection as object)
@@ -153,6 +163,7 @@ sub musicAudioPlayerShow(selection as dynamic, sourcePage as string)
     }
     if m.musicLibraryPage <> invalid then m.musicLibraryPage.visible = false
     if m.musicArtistPage <> invalid then m.musicArtistPage.visible = false
+    if sourcePage = "home" then m.homePage.visible = false
     m.header.visible = false
     m.audioPlayerPage = page
     m.dynamicPageHost.appendChild(page)

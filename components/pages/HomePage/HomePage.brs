@@ -54,7 +54,24 @@ sub onHomeShelfSelected(event as object)
     if selection = invalid then return
 
     item = selection.item
-    selectHomeItem(item)
+    if isMusicLatestRow(SafeString(selection.rowKey, "")) then
+        selectHomeAlbum(item)
+    else
+        selectHomeItem(item)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' selectHomeAlbum
+'-------------------------------------------------------------------------------
+sub selectHomeAlbum(item as dynamic)
+    itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
+    if itemId = "" then return
+
+    m.top.selectedAlbum = {
+        itemId: itemId
+        item: item
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -580,15 +597,31 @@ end sub
 ' getRowLayout
 '-------------------------------------------------------------------------------
 function getRowLayout(key as string) as object
+    if isMusicLatestRow(key) then
+        return { width: 344, height: 422, itemSizeWidth: 1824, itemSpacing: -22, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-music-focus-344x422.png", itemComponentName: "HomeMusicAlbumCard" }
+    end if
+
     if key = "libraries" then
-        return { width: 485, height: 306, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-my-media-thumbnail-focus-485x306.png" }
+        return { width: 485, height: 306, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-my-media-thumbnail-focus-485x306.png", itemComponentName: "VideoMediaCard" }
     end if
 
     if getRowImageAspect(key) = "wide" then
-        return { width: 485, height: 348, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-485x348.png" }
+        return { width: 485, height: 348, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-485x348.png", itemComponentName: "VideoMediaCard" }
     end if
 
-    return { width: 295, height: 463, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-295x463.png" }
+    return { width: 295, height: 463, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-295x463.png", itemComponentName: "VideoMediaCard" }
+end function
+
+'-------------------------------------------------------------------------------
+' isMusicLatestRow
+'-------------------------------------------------------------------------------
+function isMusicLatestRow(key as string) as boolean
+    for each libraryId in m.homeState.latestLibraries
+        library = m.homeState.latestLibraries[libraryId]
+        if key = "latest:" + SafeString(library.id, "") then return library.collectionType = "music"
+    end for
+
+    return false
 end function
 
 '-------------------------------------------------------------------------------
