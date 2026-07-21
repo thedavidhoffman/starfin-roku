@@ -458,6 +458,12 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+
+    if key = "up" and isCollectionsGridAtFirstRow() then
+        m.top.focusExitUp = true
+        return true
+    end if
+
     if key = "back" then
         if navigateBackToParentCollection() then return true
 
@@ -465,4 +471,16 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
     return false
+end function
+
+'-------------------------------------------------------------------------------
+' isCollectionsGridAtFirstRow
+'-------------------------------------------------------------------------------
+function isCollectionsGridAtFirstRow() as boolean
+    if m.collectionsGrid.isInFocusChain() <> true then return false
+
+    focusedIndex = m.collectionsGrid.itemFocused
+    if focusedIndex = invalid then return true
+
+    return focusedIndex < m.collectionsGrid.numColumns
 end function

@@ -1,7 +1,3 @@
-'===============================================================================
-' Collections
-'===============================================================================
-
 '-------------------------------------------------------------------------------
 ' collectionsHandleHomeCollectionsSelected
 '-------------------------------------------------------------------------------
@@ -13,6 +9,7 @@ sub collectionsHandleHomeCollectionsSelected()
     page = CreateObject("roSGNode", "Collections")
     page.observeField("closeRequested", "collectionsHandleCloseRequested")
     page.observeField("selectedCollection", "collectionsHandleCollectionSelected")
+    page.observeField("focusExitUp", "collectionsHandleFocusExitUp")
     page.settings = m.settings
 
     resetDynamicPages()
@@ -29,6 +26,15 @@ sub collectionsHandleHomeCollectionsSelected()
         item: selection.item
     }
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' collectionsHandleFocusExitUp
+'-------------------------------------------------------------------------------
+sub collectionsHandleFocusExitUp()
+    if m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusHeader")
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
