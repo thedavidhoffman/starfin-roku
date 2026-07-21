@@ -10,12 +10,15 @@ sub init()
     m.cast = m.top.findNode("cast")
     m.chevronFooter = m.top.findNode("chevronFooter")
     m.tvShowTask = m.top.findNode("tvShowTask")
+    m.randomPlaybackTask = m.top.findNode("randomPlaybackTask")
     m.themeSongsTask = m.top.findNode("themeSongsTask")
 
     m.tvShowTask.observeField("response", "onTVShowResponse")
+    m.randomPlaybackTask.observeField("response", "onRandomPlaybackResponse")
     m.themeSongsTask.observeField("response", "onThemeSongsResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.videoToolbar.observeField("playSelected", "onVideoToolbarPlaySelected")
+    m.videoToolbar.observeField("randomPlaySelected", "onVideoToolbarRandomPlaySelected")
     m.videoToolbar.observeField("focusExitUp", "onVideoToolbarFocusExitUp")
     m.videoToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
@@ -28,6 +31,8 @@ sub init()
         seasons: []
         playbackQueue: invalid
         playbackQueueIndex: 0
+        randomPlaybackQueue: invalid
+        randomQueueLoading: false
         focusArea: "videoToolbar"
         themeLookupActive: false
         lifecycle: AsyncLifecycle_Create()
@@ -37,6 +42,90 @@ sub init()
         contentCastFocused: [96, -397]
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarRandomPlaySelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarRandomPlaySelected()
+    if m.pageState.randomPlaybackQueue <> invalid then
+        startRandomPlayback()
+        return
+    end if
+    if m.pageState.randomQueueLoading then return
+
+    request = m.pageState.request
+    if request = invalid then return
+
+    m.pageState.randomQueueLoading = true
+    Spinner_Show()
+    m.randomPlaybackTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: request.itemId
+    }
+    m.randomPlaybackTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onRandomPlaybackResponse
+'-------------------------------------------------------------------------------
+sub onRandomPlaybackResponse()
+    response = m.randomPlaybackTask.response
+    if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "tvShowRandomPlayback") <> true then return
+
+    m.pageState.randomQueueLoading = false
+    Spinner_Hide()
+    if response.ok <> true then
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load random playback."))
+        return
+    end if
+
+    m.pageState.randomPlaybackQueue = response.playbackQueue
+    Status_ClearMessage()
+    startRandomPlayback()
+end sub
+
+'-------------------------------------------------------------------------------
+' startRandomPlayback
+'-------------------------------------------------------------------------------
+sub startRandomPlayback()
+    queue = shuffledPlaybackQueue(m.pageState.randomPlaybackQueue)
+    if queue.Count() = 0 then return
+
+    queueItem = queue[0]
+    m.top.selectedEpisode = {
+        itemId: queueItem.itemId
+        item: queueItem.item
+        series: SeriesIdentity_FromItem(SafeString(m.pageState.request.server, ""), m.pageState.series)
+        season: queueItem.season
+        startPositionTicks: 0
+        playbackQueue: queue
+        playbackQueueIndex: 0
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' shuffledPlaybackQueue
+'-------------------------------------------------------------------------------
+function shuffledPlaybackQueue(sourceQueue as dynamic) as object
+    queue = []
+    if sourceQueue = invalid then return queue
+    queue.Append(sourceQueue)
+
+    for i = queue.Count() - 1 to 1 step -1
+        swapIndex = Number_ToInteger(Rnd(0) * (i + 1), 0)
+        if swapIndex < 0 then swapIndex = 0
+        if swapIndex > i then swapIndex = i
+
+        item = queue[i]
+        queue[i] = queue[swapIndex]
+        queue[swapIndex] = item
+    end for
+
+    return queue
+end function
 
 '-------------------------------------------------------------------------------
 ' onVideoToolbarPlaySelected
@@ -158,6 +247,9 @@ sub onLoadRequestChanged()
     m.pageState.series = request.item
     m.pageState.playbackQueue = invalid
     m.pageState.playbackQueueIndex = 0
+    m.pageState.randomPlaybackQueue = invalid
+    m.pageState.randomQueueLoading = false
+    m.randomPlaybackTask.control = "stop"
     m.pageState.themeLookupActive = false
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.focusArea = "videoToolbar"
@@ -388,6 +480,9 @@ sub deactivate()
     AsyncLifecycle_Deactivate(m.pageState.lifecycle)
     m.pageState.themeLookupActive = false
     m.tvShowTask.control = "stop"
+    m.randomPlaybackTask.control = "stop"
+    if m.pageState.randomQueueLoading then Spinner_Hide()
+    m.pageState.randomQueueLoading = false
     m.themeSongsTask.control = "stop"
     m.videoToolbar.callFunc("deactivate")
 end sub

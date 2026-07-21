@@ -6,6 +6,7 @@ sub init()
     m.resumeButton = m.top.findNode("resumeButton")
     m.restartButton = m.top.findNode("restartButton")
     m.playButton = m.top.findNode("playButton")
+    m.randomPlayButton = m.top.findNode("randomPlayButton")
     m.markWatchedButton = m.top.findNode("markWatchedButton")
     m.markUnwatchedButton = m.top.findNode("markUnwatchedButton")
     m.seriesButton = m.top.findNode("seriesButton")
@@ -18,6 +19,7 @@ sub init()
     m.resumeButton.observeField("buttonSelected", "onResumeButtonSelected")
     m.restartButton.observeField("buttonSelected", "onRestartButtonSelected")
     m.playButton.observeField("buttonSelected", "onPlayButtonSelected")
+    m.randomPlayButton.observeField("buttonSelected", "onRandomPlayButtonSelected")
     m.markWatchedButton.observeField("buttonSelected", "onMarkWatchedButtonSelected")
     m.markUnwatchedButton.observeField("buttonSelected", "onMarkUnwatchedButtonSelected")
     m.seriesButton.observeField("buttonSelected", "onSeriesButtonSelected")
@@ -243,6 +245,7 @@ sub configureToolbarButtons(state as object)
     m.resumeButton.visible = state.hasResumeAction
     m.restartButton.visible = state.hasResumeProgress and m.top.supportsRestart <> false
     m.playButton.visible = state.hasResumeAction <> true
+    m.randomPlayButton.visible = m.top.supportsRandomPlay = true
 
     resumeLabelItem = m.top.playItem
     if state.hasResumeItem then resumeLabelItem = m.top.resumeItem
@@ -272,6 +275,7 @@ function buildToolbarButtonList() as object
     if m.resumeButton.visible then buttons.Push(m.resumeButton)
     if m.restartButton.visible then buttons.Push(m.restartButton)
     if m.playButton.visible then buttons.Push(m.playButton)
+    if m.randomPlayButton.visible then buttons.Push(m.randomPlayButton)
     if m.markWatchedButton.visible then buttons.Push(m.markWatchedButton)
     if m.markUnwatchedButton.visible then buttons.Push(m.markUnwatchedButton)
     if m.subtitlesButton.visible then buttons.Push(m.subtitlesButton)
@@ -388,6 +392,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlayButtonSelected()
     m.top.playSelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onRandomPlayButtonSelected
+'-------------------------------------------------------------------------------
+sub onRandomPlayButtonSelected()
+    m.top.randomPlaySelected = true
 end sub
 
 '-------------------------------------------------------------------------------
