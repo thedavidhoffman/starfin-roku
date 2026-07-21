@@ -483,6 +483,8 @@ function buildPlaySelection(details as dynamic) as dynamic
     request = m.state.request
     if request = invalid then return invalid
 
+    if SafeString(details.Type, "") = "Season" then return buildSeasonPlaySelection(request)
+
     itemId = SafeString(FirstNonEmpty([details.Id, request.itemId], ""), "")
     if itemId = "" then return invalid
 
@@ -497,6 +499,33 @@ function buildPlaySelection(details as dynamic) as dynamic
         startPositionTicks: startPositionTicks
         playbackQueue: request.playbackQueue
         playbackQueueIndex: request.playbackQueueIndex
+    }
+    applySelectedStreamsToPlaySelection(selection)
+    return selection
+end function
+
+'-------------------------------------------------------------------------------
+' buildSeasonPlaySelection
+'-------------------------------------------------------------------------------
+function buildSeasonPlaySelection(request as object) as dynamic
+    playbackQueue = request.playbackQueue
+    if playbackQueue = invalid or playbackQueue.Count() = 0 then return invalid
+
+    queueItem = playbackQueue[0]
+    if Array_IsAssocArray(queueItem) = false then return invalid
+
+    itemId = SafeString(queueItem.itemId, "")
+    item = queueItem.item
+    if itemId = "" or Array_IsAssocArray(item) = false then return invalid
+
+    selection = {
+        itemId: itemId
+        item: item
+        series: SeriesIdentity_FromItem(SafeString(request.server, ""), request.series)
+        season: queueItem.season
+        startPositionTicks: PlaybackProgress_GetTicksFromSelection(queueItem)
+        playbackQueue: playbackQueue
+        playbackQueueIndex: 0
     }
     applySelectedStreamsToPlaySelection(selection)
     return selection

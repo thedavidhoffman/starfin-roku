@@ -15,6 +15,7 @@ sub init()
         navigationStack: []
         pendingDrilldown: invalid
         imageAspect: "poster"
+        usingTopCollections: false
         lifecycle: AsyncLifecycle_Create()
     }
 end sub
@@ -39,6 +40,7 @@ sub onLoadRequestChanged()
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
     m.pageState.navigationStack = []
     m.pageState.pendingDrilldown = invalid
+    m.pageState.usingTopCollections = false
     m.pageState.imageAspect = getCollectionImageAspect()
     m.titleLabel.text = getCollectionTitle(request.title)
     applyGridLayout(m.pageState.imageAspect)
@@ -68,7 +70,9 @@ sub onCollectionsResponse()
         return
     end if
 
-    m.pageState.collections = filterRootCollections(getCollectionsFromPayload(response.payload))
+    rootCollections = getCollectionsFromPayload(response.payload)
+    m.pageState.usingTopCollections = hasTopCollections(rootCollections)
+    m.pageState.collections = filterRootCollections(rootCollections)
     renderCollections(m.pageState.collections)
     Spinner_Hide()
     Status_ClearMessage()
@@ -151,6 +155,7 @@ sub handleDrilldownResponse(response as object)
     pushCollectionNavigationState()
     m.pageState.request = pending.request
     m.pageState.collections = collections
+    m.pageState.usingTopCollections = false
     m.titleLabel.text = getCollectionTitle(pending.request.title)
     renderCollections(collections)
     Status_ClearMessage()
@@ -165,6 +170,7 @@ sub pushCollectionNavigationState()
         request: m.pageState.request
         collections: m.pageState.collections
         title: SafeString(m.titleLabel.text, "Collections")
+        usingTopCollections: m.pageState.usingTopCollections
     })
 end sub
 
@@ -182,6 +188,7 @@ function navigateBackToParentCollection() as boolean
     m.pageState.pendingDrilldown = invalid
     m.collectionsTask.control = "stop"
     m.pageState.request = previous.request
+    m.pageState.usingTopCollections = previous.usingTopCollections
     AsyncLifecycle_Begin(m.pageState.lifecycle, previous.request.libraryId)
     m.pageState.collections = previous.collections
     m.titleLabel.text = SafeString(previous.title, "Collections")
@@ -222,6 +229,7 @@ sub renderCollections(collections as object)
 
     m.collectionsGrid.content = content
     m.collectionsGrid.visible = content.getChildCount() > 0
+    applyGridTranslation(imageAspect, content.getChildCount())
 end sub
 
 '-------------------------------------------------------------------------------
@@ -340,6 +348,26 @@ sub applyGridLayout(imageAspect as string)
 end sub
 
 '-------------------------------------------------------------------------------
+' applyGridTranslation
+'-------------------------------------------------------------------------------
+sub applyGridTranslation(imageAspect as string, itemCount as integer)
+    if m.pageState.usingTopCollections <> true or itemCount <> 2 then
+        if imageAspect = "wide" then
+            m.collectionsGrid.translation = [23, 208]
+        else
+            m.collectionsGrid.translation = [96, 208]
+        end if
+        return
+    end if
+
+    if imageAspect = "wide" then
+        m.collectionsGrid.translation = [495, 208]
+    else
+        m.collectionsGrid.translation = [671, 208]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
 ' getCollectionTitle
 '-------------------------------------------------------------------------------
 function getCollectionTitle(value as dynamic) as string
@@ -388,6 +416,17 @@ function filterRootCollections(collections as object) as object
 
     if topCollections.Count() > 0 then return topCollections
     return collections
+end function
+
+'-------------------------------------------------------------------------------
+' hasTopCollections
+'-------------------------------------------------------------------------------
+function hasTopCollections(collections as object) as boolean
+    for each item in collections
+        if hasTopTag(item) then return true
+    end for
+
+    return false
 end function
 
 '-------------------------------------------------------------------------------
