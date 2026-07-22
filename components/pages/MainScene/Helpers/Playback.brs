@@ -94,6 +94,7 @@ sub playerHandlePlaybackProgressChanged()
     ' Keep sub-5% progress alive only for this navigation session; Jellyfin
     ' remains authoritative after reload because it discards early resume points.
     routeMoviePlaybackProgress(change)
+    routeTVShowPlaybackProgress(change)
     routeTVEpisodePlaybackProgress(change)
     routeTVSeasonPlaybackProgress(change)
 end sub
@@ -105,6 +106,16 @@ sub routeMoviePlaybackProgress(change as object)
     if m.moviePage = invalid then return
 
     m.moviePage.playbackProgressChange = change
+end sub
+
+'-------------------------------------------------------------------------------
+' routeTVShowPlaybackProgress
+'-------------------------------------------------------------------------------
+sub routeTVShowPlaybackProgress(change as object)
+    if m.tvShowPage = invalid then return
+    if m.tvSeasonPage <> invalid or m.tvEpisodePage <> invalid then return
+
+    m.tvShowPage.playbackProgressChange = change
 end sub
 
 '-------------------------------------------------------------------------------

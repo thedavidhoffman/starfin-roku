@@ -325,6 +325,33 @@ sub onTVShowResponse()
 end sub
 
 '-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    if change = invalid or change.isFinished <> true then return
+
+    queue = m.pageState.playbackQueue
+    if queue = invalid then return
+
+    currentIndex = Number_ToInteger(m.pageState.playbackQueueIndex, 0)
+    if currentIndex < 0 or currentIndex >= queue.Count() then return
+
+    currentItem = queue[currentIndex]
+    if SafeString(currentItem.itemId, "") <> SafeString(change.itemId, "") then return
+
+    nextIndex = currentIndex + 1
+    if nextIndex >= queue.Count() then return
+
+    nextItem = queue[nextIndex]
+    if nextItem = invalid or nextItem.item = invalid then return
+
+    m.pageState.playbackQueueIndex = nextIndex
+    m.videoToolbar.resumeItem = invalid
+    m.videoToolbar.playItem = nextItem.item
+end sub
+
+'-------------------------------------------------------------------------------
 ' loadThemeSong
 '-------------------------------------------------------------------------------
 sub loadThemeSong(item as dynamic)
