@@ -30,6 +30,7 @@ sub init()
         pendingFocusTarget: ""
         refocusBrowseByButtonAfterLoad: false
         refocusSortButtonAfterLoad: false
+        isLoading: false
         lifecycle: AsyncLifecycle_Create()
     }
     m.browseByButton.selectedSort = getDefaultSortSelection()
@@ -48,6 +49,7 @@ sub initReferences()
     m.sortButton = m.top.findNode("sortButton")
     m.letterGutterButton = m.top.findNode("letterGutterButton")
     m.filterButtonRow = m.top.findNode("filterButtonRow")
+    m.emptyFavoritesLabel = m.top.findNode("emptyFavoritesLabel")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.videoLibraryTask = m.top.findNode("videoLibraryTask")
     m.videoLibraryProgressIndicator = m.top.findNode("videoLibraryProgressIndicator")
@@ -107,7 +109,11 @@ sub prepareLoadRequest(request as object)
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
     m.pageState.imageAspect = getVideoLibraryImageAspect()
     normalizeLoadRequestSort(request)
-    m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
+    if request.favoriteOnly = true then
+        m.pageState.selectedSort = getFavoritesSortSelection()
+    else
+        m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
+    end if
     m.pageState.selectedSortKey = m.pageState.selectedSort.optionKey
     request.sortBy = SafeString(m.pageState.selectedSort.sortKey, "SortName")
     request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
@@ -125,6 +131,7 @@ end sub
 ' resetVideoLibraryForLoad
 '-------------------------------------------------------------------------------
 sub resetVideoLibraryForLoad()
+    m.pageState.isLoading = true
     resetFilterState()
     resetVideoLibraryItemsState()
     resetLoadFocusState()
@@ -191,11 +198,13 @@ sub onVideoLibraryResponse()
     if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "videoLibrary") <> true then return
 
     if response.ok <> true then
+        m.pageState.isLoading = false
         Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load library."))
         return
     end if
 
+    m.pageState.isLoading = false
     m.pageState.allItems = getItemsFromPayload(response.payload)
     m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
     rebuildVideoLibraryItemNodeCache()
@@ -252,6 +261,7 @@ sub renderItems(items as object)
     content = buildVideoLibraryContent(items)
     m.itemsGrid.content = content
     m.itemsGrid.visible = content.getChildCount() > 0
+    m.emptyFavoritesLabel.visible = isFavoriteBrowseActive() and m.pageState.isLoading <> true and content.getChildCount() = 0
     updateAvailableLetters(items)
     updateVideoLibraryProgressItemCount(content.getChildCount())
 end sub
@@ -999,6 +1009,7 @@ function getVideoSortOptions() as object
         { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "", label: "Date Added" }
         { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
         { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
+        { optionKey: "Favorites", sortKey: "SortName", sortOrder: "", label: "Favorites" }
         { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
     ]
 end function
@@ -1019,6 +1030,34 @@ function applySortSelection(selection as object) as boolean
     selection = resetSortOrder(selection)
     selectedSortKey = getSelectionOptionKey(selection)
     if selectedSortKey = "" then return false
+    if selectedSortKey = "Favorites" then
+        if isFavoriteBrowseActive() then return false
+
+        resetFilterState()
+        hideFilterButtonRow()
+        m.pageState.selectedSortKey = selectedSortKey
+        m.pageState.selectedSort = getFavoritesSortSelection()
+        m.pageState.request.favoriteOnly = true
+        m.browseByButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+        reloadVideoLibraryForSort()
+        return false
+    end if
+
+    if isFavoriteBrowseActive() then
+        m.pageState.request.favoriteOnly = false
+        if selectedSortKey = "Decade" or selectedSortKey = "Genre" then selection = getDefaultSortSelection()
+
+        m.pageState.selectedSortKey = getSelectionOptionKey(selection)
+        m.pageState.selectedSort = selection
+        m.browseByButton.selectedSort = selection
+        m.sortButton.selectedSort = selection
+        m.sortButton.sortEnabled = canUseSortOrder(selection)
+        reloadVideoLibraryForSort()
+        return false
+    end if
+
     if selectedSortKey = "Decade" then
         if SafeString(m.pageState.selectedSortKey, "") = "Decade" then
             m.pageState.pendingFocusTarget = "filterButtonRow"
@@ -1186,6 +1225,7 @@ sub reloadVideoLibraryForSort(refocusTarget = invalid as dynamic)
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
     m.pageState.refocusBrowseByButtonAfterLoad = refocusTarget <> "sort"
     m.pageState.refocusSortButtonAfterLoad = refocusTarget = "sort"
+    m.pageState.isLoading = true
     Spinner_Show(0)
     renderItems([])
     m.itemsGrid.jumpToItem = 0
@@ -1215,6 +1255,25 @@ function getDefaultSortSelection() as object
         sortOrder: "Ascending"
         label: "Title"
     }
+end function
+
+'-------------------------------------------------------------------------------
+' getFavoritesSortSelection
+'-------------------------------------------------------------------------------
+function getFavoritesSortSelection() as object
+    return {
+        optionKey: "Favorites"
+        sortKey: "SortName"
+        sortOrder: "Ascending"
+        label: "Favorites"
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' isFavoriteBrowseActive
+'-------------------------------------------------------------------------------
+function isFavoriteBrowseActive() as boolean
+    return m.pageState.request <> invalid and m.pageState.request.favoriteOnly = true
 end function
 
 '-------------------------------------------------------------------------------

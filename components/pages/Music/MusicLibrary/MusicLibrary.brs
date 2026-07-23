@@ -7,6 +7,7 @@ sub init()
     m.browseByButton = m.top.findNode("browseByButton")
     m.sortButton = m.top.findNode("sortButton")
     m.filterButtonRow = m.top.findNode("filterButtonRow")
+    m.emptyFilterLabel = m.top.findNode("emptyFilterLabel")
     m.filterFocusTimer = m.top.findNode("filterFocusTimer")
     m.albumsGrid = m.top.findNode("albumsGrid")
     m.artistsGrid = m.top.findNode("artistsGrid")
@@ -52,8 +53,13 @@ sub onLoadRequestChanged()
     m.state.allAlbums = []
     m.state.albums = []
     m.state.artists = []
-    m.state.selectedSortKey = "Album"
-    m.state.selectedSort = getDefaultSortSelection()
+    if request.favoriteOnly = true then
+        m.state.selectedSortKey = "Favorites"
+        m.state.selectedSort = getFavoritesSortSelection()
+    else
+        m.state.selectedSortKey = "Album"
+        m.state.selectedSort = getDefaultSortSelection()
+    end if
     m.state.activeFilterType = ""
     m.state.selectedDecade = -1
     m.state.selectedGenre = ""
@@ -68,8 +74,10 @@ sub onLoadRequestChanged()
 
     m.musicLibraryTask.request = request
     m.musicLibraryTask.control = "run"
-    m.musicArtistsTask.request = request
-    m.musicArtistsTask.control = "run"
+    if request.favoriteOnly <> true then
+        m.musicArtistsTask.request = request
+        m.musicArtistsTask.control = "run"
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -115,6 +123,7 @@ end sub
 sub renderAlbums(albums as object)
     if albums = invalid then albums = []
     m.state.albums = albums
+    m.emptyFilterLabel.visible = isFavoriteBrowseActive() and albums.Count() = 0
 
     content = CreateObject("roSGNode", "ContentNode")
     request = m.state.request
@@ -162,6 +171,7 @@ end function
 '-------------------------------------------------------------------------------
 sub renderCurrentAlbums()
     if isArtistBrowseMode() then
+        m.emptyFilterLabel.visible = false
         renderArtists()
         return
     end if
@@ -573,7 +583,6 @@ function isGenreFilterActive() as boolean
     return SafeString(m.state.activeFilterType, "") = "Genre"
 end function
 
-'-------------------------------------------------------------------------------
 ' getSortedDecadeAlbums
 '-------------------------------------------------------------------------------
 function getSortedDecadeAlbums(decadeKey as string) as object
@@ -639,6 +648,7 @@ function getMusicSortOptions() as object
         { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
         { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
         { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
+        { optionKey: "Favorites", sortKey: "Album", sortOrder: "Ascending", label: "Favorites" }
     ]
 end function
 
@@ -652,6 +662,25 @@ function getDefaultSortSelection() as object
         sortOrder: "Ascending"
         label: "Album"
     }
+end function
+
+'-------------------------------------------------------------------------------
+' getFavoritesSortSelection
+'-------------------------------------------------------------------------------
+function getFavoritesSortSelection() as object
+    return {
+        optionKey: "Favorites"
+        sortKey: "Album"
+        sortOrder: "Ascending"
+        label: "Favorites"
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' isFavoriteBrowseActive
+'-------------------------------------------------------------------------------
+function isFavoriteBrowseActive() as boolean
+    return m.state.request <> invalid and m.state.request.favoriteOnly = true
 end function
 
 '-------------------------------------------------------------------------------
@@ -714,6 +743,26 @@ function applySortSelection(selection as object) as boolean
 
     optionKey = SafeString(selection.optionKey, "")
     if optionKey = "" then return false
+    if optionKey = "Favorites" then
+        if isFavoriteBrowseActive() then return false
+
+        m.state.activeFilterType = ""
+        m.state.selectedDecade = -1
+        m.state.selectedGenre = ""
+        hideFilterButtonRow()
+        m.state.selectedSortKey = "Favorites"
+        m.state.selectedSort = getFavoritesSortSelection()
+        m.state.request.favoriteOnly = true
+        syncSortControls()
+        reloadMusicLibrary()
+        return false
+    end if
+
+    wasFavoriteBrowse = isFavoriteBrowseActive()
+    if wasFavoriteBrowse then
+        m.state.request.favoriteOnly = false
+        if optionKey = "Decade" or optionKey = "Genre" then optionKey = "Album"
+    end if
 
     if optionKey = "Decade" then
         m.state.selectedSortKey = optionKey
@@ -779,9 +828,41 @@ function applySortSelection(selection as object) as boolean
 
     m.state.selectedSortKey = SafeString(m.state.selectedSort.optionKey, "Album")
     syncSortControls()
-    renderCurrentAlbums()
+    if wasFavoriteBrowse then
+        reloadMusicLibrary()
+    else
+        renderCurrentAlbums()
+    end if
     return false
 end function
+
+'-------------------------------------------------------------------------------
+' reloadMusicLibrary
+'-------------------------------------------------------------------------------
+sub reloadMusicLibrary()
+    request = m.state.request
+    if request = invalid then return
+
+    m.state.allAlbums = []
+    m.state.albums = []
+    m.state.artists = []
+    m.state.filterCache = createEmptyFilterCache()
+    m.state.sortCache = createEmptySortCache()
+    m.albumsGrid.visible = true
+    m.artistsGrid.visible = false
+    AsyncLifecycle_Begin(m.state.lifecycle, request.libraryId)
+    updateTitleLabel(0)
+    renderAlbums([])
+    Spinner_Show(0)
+    m.musicLibraryTask.control = "stop"
+    m.musicLibraryTask.request = request
+    m.musicLibraryTask.control = "run"
+    m.musicArtistsTask.control = "stop"
+    if request.favoriteOnly <> true then
+        m.musicArtistsTask.request = request
+        m.musicArtistsTask.control = "run"
+    end if
+end sub
 
 '-------------------------------------------------------------------------------
 ' showDecadeFilterRow

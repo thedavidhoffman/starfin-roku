@@ -30,6 +30,7 @@ sub executeRequest()
         sortBy: getSortBy(request)
         sortOrder: getSortOrder(request)
     }
+    if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
 
     url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))

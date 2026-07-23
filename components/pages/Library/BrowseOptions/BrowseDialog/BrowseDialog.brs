@@ -14,7 +14,7 @@ end sub
 sub configureDialog()
     m.top.title = "Browse By"
     m.top.dialogWidth = 520
-    m.top.dialogHeight = 490
+    m.top.dialogHeight = 542
     m.top.contentComponentName = "BrowseByContent"
 end sub
 

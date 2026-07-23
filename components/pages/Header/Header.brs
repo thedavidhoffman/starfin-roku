@@ -21,7 +21,6 @@ sub initReferences()
     m.navGroup = m.top.findNode("navGroup")
     m.homeButton = m.top.findNode("homeButton")
     m.searchButton = m.top.findNode("searchButton")
-    m.favoritesButton = m.top.findNode("favoritesButton")
     m.settingsButton = m.top.findNode("settingsButton")
     m.userMenuButton = m.top.findNode("userMenuButton")
     m.accountDropdownMenu = m.top.findNode("accountDropdownMenu")
@@ -49,7 +48,6 @@ sub initStyle()
     headerBgColor = palette.background.header
     m.homeButton.headerBgColor = headerBgColor
     m.searchButton.headerBgColor = headerBgColor
-    m.favoritesButton.headerBgColor = headerBgColor
     m.settingsButton.headerBgColor = headerBgColor
     m.userMenuButton.headerBgColor = headerBgColor
     m.accountDropdownMenu.headerBgColor = headerBgColor
@@ -215,7 +213,6 @@ sub rebuildFocusableHeaderButtons()
 
     m.focusableHeaderButtons.Push(m.homeButton)
     m.focusableHeaderButtons.Push(m.searchButton)
-    m.focusableHeaderButtons.Push(m.favoritesButton)
     m.focusableHeaderButtons.Push(m.settingsButton)
     m.focusableHeaderButtons.Push(m.userMenuButton)
 end sub
