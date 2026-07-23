@@ -15,7 +15,6 @@ sub init()
         latestMedia: m.top.findNode("latestMediaTask")
         liveTvOnNow: m.top.findNode("liveTvOnNowTask")
         myList: m.top.findNode("myListTask")
-        favorites: m.top.findNode("favoritesTask")
     }
 
     m.tasks.libraries.observeField("response", "onLibrariesResponse")
@@ -24,11 +23,10 @@ sub init()
     m.tasks.nextUp.observeField("response", "onSectionResponse")
     m.tasks.liveTvOnNow.observeField("response", "onSectionResponse")
     m.tasks.myList.observeField("response", "onSectionResponse")
-    m.tasks.favorites.observeField("response", "onSectionResponse")
     m.homeState = {
         request: invalid
         rows: {}
-        rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList", "favorites"]
+        rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList"]
         latestLibraries: {}
         latestTasks: []
         playbackRows: {
@@ -174,7 +172,6 @@ sub refreshHomeData(blocking = false as boolean)
             continueListening: true
             nextUp: true
             liveTvOnNow: true
-            favorites: true
         }
     }
     if blocking = true then
@@ -183,7 +180,7 @@ sub refreshHomeData(blocking = false as boolean)
     end if
 
     m.homeState.rows = {}
-    m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList", "favorites"]
+    m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList"]
     m.homeState.latestLibraries = {}
     m.homeState.latestTasks = []
     m.homeState.playbackRows = {
@@ -203,7 +200,6 @@ sub refreshHomeData(blocking = false as boolean)
     runTask(m.tasks.continueListening, request)
     runTask(m.tasks.nextUp, request)
     runTask(m.tasks.liveTvOnNow, request)
-    runTask(m.tasks.favorites, request)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -298,8 +294,6 @@ sub onSectionResponse(event as object)
         addRow(action, "On Now", getItemsFromPayload(response.payload))
     else if action = "myList" then
         addRow(action, "My List", getMyListItems(response.payload))
-    else if action = "favorites" then
-        addRow(action, "Favorites", getFavoriteItems(response.payload))
     end if
 
     renderRows()
@@ -423,7 +417,6 @@ sub queueLatestMediaRows(libraries as object)
     end for
     m.homeState.rowOrder.Push("liveTvOnNow")
     m.homeState.rowOrder.Push("myList")
-    m.homeState.rowOrder.Push("favorites")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -766,28 +759,6 @@ function getMyListItems(payload as dynamic) as object
     if payload.items = invalid then return []
 
     return getItemsFromPayload(payload.items)
-end function
-
-'-------------------------------------------------------------------------------
-' getFavoriteItems
-'-------------------------------------------------------------------------------
-function getFavoriteItems(payload as dynamic) as object
-    items = []
-    if Array_IsAssocArray(payload) = false then return items
-
-    if payload.items <> invalid then
-        for each item in getItemsFromPayload(payload.items)
-            items.Push(item)
-        end for
-    end if
-
-    if payload.people <> invalid then
-        for each person in getItemsFromPayload(payload.people)
-            items.Push(person)
-        end for
-    end if
-
-    return items
 end function
 
 '-------------------------------------------------------------------------------
