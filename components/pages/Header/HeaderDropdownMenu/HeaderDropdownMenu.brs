@@ -30,7 +30,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyle()
     palette = Color()
-    if m.background <> invalid then m.background.color = palette.control.menu
+    if m.background <> invalid then m.background.color = &h41405AFF
     if m.top.headerBgColor = invalid or m.top.headerBgColor = 0 then m.top.headerBgColor = palette.background.header
 end sub
 

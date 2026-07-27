@@ -30,7 +30,7 @@ sub onResumeRequested()
             userId: m.savedSession.userId
         })
     else
-        publishLoginRequired("Enter your Audiobookshelf server to begin.")
+        publishLoginRequired("Enter your Jellyfin server and credentials to begin.")
     end if
 end sub
 
