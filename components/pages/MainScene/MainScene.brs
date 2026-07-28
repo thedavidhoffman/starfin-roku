@@ -18,6 +18,7 @@ end sub
 sub initReferences()
     m.authenticatedContent = m.top.findNode("authenticatedContent")
     m.authController = m.top.findNode("authController")
+    m.mediaActionsController = m.top.findNode("mediaActionsController")
     m.header = m.top.findNode("header")
     m.homePage = m.top.findNode("homePage")
     m.login = m.top.findNode("login")
@@ -36,6 +37,9 @@ sub initValues()
     m.homeRefreshState = {
         playbackRowsDirty: false
     }
+    m.mediaActionState = {
+        activeRequest: invalid
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -49,6 +53,8 @@ sub initHandlers()
     m.authController.observeField("loginRequired", "authHandleLoginRequired")
     m.authController.observeField("savedSession", "authHandleSavedSessionChanged")
     m.authController.observeField("sessionExpired", "authHandleSessionExpired")
+    m.mediaActionsController.observeField("mediaStateChanged", "navHandleMediaStateChanged")
+    m.mediaActionsController.observeField("actionFailed", "navHandleMediaActionFailed")
     m.homePage.observeField("selectedMovie", "movieHandleHomeMovieSelected")
     m.homePage.observeField("selectedSeries", "tvShowHandleHomeSeriesSelected")
     m.homePage.observeField("selectedEpisode", "tvEpisodeHandleHomeEpisodeSelected")
@@ -57,6 +63,7 @@ sub initHandlers()
     m.homePage.observeField("selectedAlbum", "musicLibraryHandleHomeAlbumSelected")
     m.homePage.observeField("selectedLiveTV", "liveTvHandleHomeSelected")
     m.homePage.observeField("selectedCollections", "collectionsHandleHomeCollectionsSelected")
+    m.homePage.observeField("overlayRequested", "navHandleHomeOverlayRequested")
     m.homePage.observeField("focusExitUp", "navHandleHomeFocusExitUp")
     m.homePage.observeField("playbackRowsRefreshCompleted", "homeHandlePlaybackRowsRefreshCompleted")
     m.header.observeField("homeSelected", "navHandleHeaderHomeSelected")

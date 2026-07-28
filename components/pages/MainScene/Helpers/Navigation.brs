@@ -1,4 +1,14 @@
 '-------------------------------------------------------------------------------
+' navHandleHomeOverlayRequested
+'-------------------------------------------------------------------------------
+sub navHandleHomeOverlayRequested()
+    request = m.homePage.overlayRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
+end sub
+
+'-------------------------------------------------------------------------------
 ' navHandleHomeFocusExitUp
 '-------------------------------------------------------------------------------
 sub navHandleHomeFocusExitUp()
@@ -70,6 +80,11 @@ sub navHandleOverlayClosed()
         return
     end if
 
+    if request <> invalid and request.id = "mediaActions" then
+        navHandleMediaActionsOverlayClosed(closed)
+        return
+    end if
+
     if request <> invalid and isStreamOptionsOverlayRequest(request) then
         navHandleStreamOptionsOverlayClosed(closed)
         return
@@ -82,6 +97,77 @@ sub navHandleOverlayClosed()
     end if
 
     focusActiveSurface()
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleMediaActionsOverlayClosed
+'-------------------------------------------------------------------------------
+sub navHandleMediaActionsOverlayClosed(closed as object)
+    request = closed.request
+    overlay = closed.overlay
+    if request = invalid or overlay = invalid then
+        focusActiveSurface()
+        return
+    end if
+
+    selection = overlay.mediaActionSelected
+    focusActiveSurface()
+    if selection = invalid then return
+
+    if m.mediaActionState.activeRequest <> invalid then
+        Status_SetMessage("A media action is already in progress.")
+        return
+    end if
+
+    actionRequest = {
+        action: selection.action
+        itemId: selection.itemId
+        server: request.server
+        token: request.token
+        userId: request.userId
+        sourcePage: request.sourcePage
+    }
+    m.mediaActionState.activeRequest = actionRequest
+    m.mediaActionsController.actionRequest = actionRequest
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleMediaStateChanged
+'-------------------------------------------------------------------------------
+sub navHandleMediaStateChanged()
+    change = m.mediaActionsController.mediaStateChanged
+    request = m.mediaActionState.activeRequest
+    m.mediaActionState.activeRequest = invalid
+    if change = invalid or request = invalid then return
+
+    routeMediaStateChange(SafeString(request.sourcePage, ""), change)
+    Status_ClearMessage()
+end sub
+
+'-------------------------------------------------------------------------------
+' navHandleMediaActionFailed
+'-------------------------------------------------------------------------------
+sub navHandleMediaActionFailed()
+    failure = m.mediaActionsController.actionFailed
+    m.mediaActionState.activeRequest = invalid
+    if failure = invalid then return
+
+    Status_SetMessage(SafeString(failure.errorMessage, "Unable to update media state."))
+end sub
+
+'-------------------------------------------------------------------------------
+' routeMediaStateChange
+'-------------------------------------------------------------------------------
+sub routeMediaStateChange(sourcePage as string, change as object)
+    if sourcePage = "home" then
+        m.homePage.callFunc("applyMediaStateChange", change)
+    else if sourcePage = "search" and m.searchPage <> invalid then
+        m.searchPage.callFunc("applyMediaStateChange", change)
+    else if sourcePage = "videoLibrary" and m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.mediaStateChange = change
+    else if sourcePage = "musicLibrary" and m.musicLibraryPage <> invalid then
+        m.musicLibraryPage.callFunc("applyMediaStateChange", change)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -286,6 +372,8 @@ end sub
 sub resetDynamicPages()
     clearStatus()
     themeAudioStop()
+    m.mediaActionsController.callFunc("cancelActiveAction")
+    m.mediaActionState.activeRequest = invalid
     if m.liveTvPage <> invalid then m.liveTvPage.callFunc("deactivate")
     if m.musicLibraryPage <> invalid then m.musicLibraryPage.callFunc("deactivate")
     if m.musicArtistPage <> invalid then m.musicArtistPage.callFunc("deactivate")

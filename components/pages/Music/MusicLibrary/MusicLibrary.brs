@@ -1177,6 +1177,7 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if key = "options" and getActiveGrid().isInFocusChain() then return openMediaActions()
 
     if key = "up" and m.browseByButton.isInFocusChain() then
         m.top.focusExitUp = true
@@ -1211,4 +1212,110 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     return false
+end function
+
+'-------------------------------------------------------------------------------
+' openMediaActions
+'-------------------------------------------------------------------------------
+function openMediaActions() as boolean
+    grid = getActiveGrid()
+    if grid.content = invalid then return false
+
+    focusedIndex = grid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then return false
+
+    focusedNode = grid.content.getChild(focusedIndex)
+    if focusedNode = invalid or focusedNode.raw = invalid then return false
+
+    m.top.overlayRequested = {
+        id: "mediaActions"
+        sourcePage: "musicLibrary"
+        componentName: "MediaActionsDialog"
+        openFunction: "openMediaActions"
+        closeField: "closeRequested"
+        item: focusedNode.raw
+        server: m.state.request.server
+        token: m.state.request.token
+        userId: m.state.request.userId
+    }
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' applyMediaStateChange
+'-------------------------------------------------------------------------------
+sub applyMediaStateChange(change as object)
+    applyItemsMediaStateChange(m.state.allAlbums, change)
+    applyItemsMediaStateChange(m.state.albums, change)
+    applyItemsMediaStateChange(m.state.artists, change)
+    if isFavoriteBrowseActive() and SafeString(change.action, "") = "favorite" and change.value <> true then
+        itemId = SafeString(change.itemId, "")
+        m.state.allAlbums = withoutMusicLibraryItem(m.state.allAlbums, itemId)
+        m.state.albums = withoutMusicLibraryItem(m.state.albums, itemId)
+        m.state.artists = withoutMusicLibraryItem(m.state.artists, itemId)
+        renderCurrentAlbums()
+        return
+    end if
+
+    applyGridMediaStateChange(m.albumsGrid, change)
+    applyGridMediaStateChange(m.artistsGrid, change)
+end sub
+
+'-------------------------------------------------------------------------------
+' withoutMusicLibraryItem
+'-------------------------------------------------------------------------------
+function withoutMusicLibraryItem(items as object, itemId as string) as object
+    remaining = []
+    for each item in items
+        if SafeString(item.Id, "") <> itemId then remaining.Push(item)
+    end for
+    return remaining
+end function
+
+'-------------------------------------------------------------------------------
+' applyItemsMediaStateChange
+'-------------------------------------------------------------------------------
+sub applyItemsMediaStateChange(items as object, change as object)
+    for each item in items
+        if SafeString(item.Id, "") = SafeString(change.itemId, "") then
+            MediaState_ApplyToItem(item, change)
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' applyGridMediaStateChange
+'-------------------------------------------------------------------------------
+sub applyGridMediaStateChange(grid as object, change as object)
+    if grid.content = invalid then return
+
+    for i = 0 to grid.content.getChildCount() - 1
+        itemNode = grid.content.getChild(i)
+        item = itemNode.raw
+        if item <> invalid and SafeString(item.Id, "") = SafeString(change.itemId, "") then
+            updatedItem = cloneMusicLibraryItem(item)
+            if MediaState_ApplyToItem(updatedItem, change) <> true then return
+            itemNode.raw = updatedItem
+            return
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' cloneMusicLibraryItem
+'-------------------------------------------------------------------------------
+function cloneMusicLibraryItem(item as object) as object
+    clone = {}
+    for each key in item
+        clone[key] = item[key]
+    end for
+
+    userData = {}
+    if item.UserData <> invalid then
+        for each key in item.UserData
+            userData[key] = item.UserData[key]
+        end for
+    end if
+    clone.UserData = userData
+    return clone
 end function

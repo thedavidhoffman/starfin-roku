@@ -19,6 +19,63 @@ sub activate()
 end sub
 
 '-------------------------------------------------------------------------------
+' getFocusedItem
+'-------------------------------------------------------------------------------
+function getFocusedItem() as dynamic
+    focused = m.items.rowItemFocused
+    if focused = invalid or focused.Count() < 2 then return invalid
+    if m.items.content = invalid then return invalid
+
+    row = m.items.content.getChild(focused[0])
+    if row = invalid then return invalid
+
+    itemNode = row.getChild(focused[1])
+    if itemNode = invalid then return invalid
+
+    return itemNode.raw
+end function
+
+'-------------------------------------------------------------------------------
+' applyMediaStateChange
+'-------------------------------------------------------------------------------
+function applyMediaStateChange(change as object) as boolean
+    rowContent = m.top.rowContent
+    if rowContent = invalid then return false
+
+    for i = 0 to rowContent.getChildCount() - 1
+        itemNode = rowContent.getChild(i)
+        item = itemNode.raw
+        if item <> invalid and SafeString(item.Id, "") = SafeString(change.itemId, "") then
+            updatedItem = cloneMediaItem(item)
+            if MediaState_ApplyToItem(updatedItem, change) <> true then return false
+            itemNode.raw = updatedItem
+            return true
+        end if
+    end for
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' cloneMediaItem
+'-------------------------------------------------------------------------------
+function cloneMediaItem(item as object) as object
+    clone = {}
+    for each key in item
+        clone[key] = item[key]
+    end for
+
+    userData = {}
+    if item.UserData <> invalid then
+        for each key in item.UserData
+            userData[key] = item.UserData[key]
+        end for
+    end if
+    clone.UserData = userData
+    return clone
+end function
+
+'-------------------------------------------------------------------------------
 ' onFocusExitAvailabilityChanged
 '-------------------------------------------------------------------------------
 sub onFocusExitAvailabilityChanged()

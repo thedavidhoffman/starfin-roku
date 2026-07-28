@@ -534,6 +534,7 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if key = "options" then return openFocusedMediaActions()
 
     if key = "up" then
         if m.searchButton.isInFocusChain() then
@@ -579,3 +580,39 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     return false
 end function
+
+'-------------------------------------------------------------------------------
+' openFocusedMediaActions
+'-------------------------------------------------------------------------------
+function openFocusedMediaActions() as boolean
+    if hasRows() <> true or m.searchState.focusedRowIndex < 0 then return false
+
+    row = m.searchState.rowNodes[m.searchState.focusedRowIndex]
+    if row = invalid or row.subtype() <> "HomeShelf" then return false
+    if row.isInFocusChain() <> true then return false
+
+    item = row.callFunc("getFocusedItem")
+    if item = invalid then return false
+
+    m.top.overlayRequested = {
+        id: "mediaActions"
+        sourcePage: "search"
+        componentName: "MediaActionsDialog"
+        openFunction: "openMediaActions"
+        closeField: "closeRequested"
+        item: item
+        server: m.searchState.request.server
+        token: m.searchState.request.token
+        userId: m.searchState.request.userId
+    }
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' applyMediaStateChange
+'-------------------------------------------------------------------------------
+sub applyMediaStateChange(change as object)
+    for each row in m.searchState.rowNodes
+        if row.subtype() = "HomeShelf" then row.callFunc("applyMediaStateChange", change)
+    end for
+end sub

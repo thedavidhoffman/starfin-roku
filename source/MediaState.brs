@@ -1,0 +1,18 @@
+'-------------------------------------------------------------------------------
+' MediaState_ApplyToItem
+'-------------------------------------------------------------------------------
+function MediaState_ApplyToItem(item as object, change as object) as boolean
+    action = SafeString(change.action, "")
+    if action <> "watched" and action <> "favorite" then return false
+    if item.UserData = invalid then item.UserData = {}
+
+    if action = "watched" then
+        item.UserData.Played = change.value = true
+        item.UserData.PlayedPercentage = 0
+        if change.value = true then item.UserData.PlaybackPositionTicks = 0
+        return true
+    end if
+
+    item.UserData.IsFavorite = change.value = true
+    return true
+end function

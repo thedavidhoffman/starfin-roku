@@ -1018,6 +1018,7 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if key = "options" then return openFocusedMediaActions()
 
     if key = "up" then
         if moveShelfFocus(-1) then return true
@@ -1036,3 +1037,39 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     return false
 end function
+
+'-------------------------------------------------------------------------------
+' openFocusedMediaActions
+'-------------------------------------------------------------------------------
+function openFocusedMediaActions() as boolean
+    if m.homeState.shelfNodes.Count() = 0 then return false
+
+    shelf = m.homeState.shelfNodes[m.homeState.focusedShelfIndex]
+    if shelf = invalid or shelf.isInFocusChain() <> true then return false
+    if SafeString(shelf.rowContent.rowKey, "") = "libraries" then return false
+
+    item = shelf.callFunc("getFocusedItem")
+    if item = invalid then return false
+
+    m.top.overlayRequested = {
+        id: "mediaActions"
+        sourcePage: "home"
+        componentName: "MediaActionsDialog"
+        openFunction: "openMediaActions"
+        closeField: "closeRequested"
+        item: item
+        server: m.homeState.request.server
+        token: m.homeState.request.token
+        userId: m.homeState.request.userId
+    }
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' applyMediaStateChange
+'-------------------------------------------------------------------------------
+sub applyMediaStateChange(change as object)
+    for each shelf in m.homeState.shelfNodes
+        shelf.callFunc("applyMediaStateChange", change)
+    end for
+end sub

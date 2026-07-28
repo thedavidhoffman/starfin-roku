@@ -267,21 +267,38 @@ sub renderItems(items as object)
 end sub
 
 '-------------------------------------------------------------------------------
-' onWatchedStateChange
+' onMediaStateChange
 '-------------------------------------------------------------------------------
-sub onWatchedStateChange()
-    change = m.top.watchedStateChange
+sub onMediaStateChange()
+    change = m.top.mediaStateChange
     if change = invalid then return
 
     item = findVideoLibraryItem(SafeString(change.itemId, ""))
     if item = invalid then return
-    if item.UserData = invalid then item.UserData = {}
+    action = SafeString(change.action, "")
+    if MediaState_ApplyToItem(item, change) <> true then return
 
-    item.UserData.Played = change.isWatched = true
-    item.UserData.PlayedPercentage = 0
-    if change.isWatched = true then item.UserData.PlaybackPositionTicks = 0
+    if isFavoriteBrowseActive() and action = "favorite" and change.value <> true then
+        itemId = SafeString(change.itemId, "")
+        m.pageState.allItems = getItemsExcludingId(m.pageState.allItems, itemId)
+        renderItems(m.pageState.allItems)
+        updateTitleLabel(m.pageState.allItems.Count())
+        return
+    end if
+
     notifyVideoLibraryItemChanged(item)
 end sub
+
+'-------------------------------------------------------------------------------
+' getItemsExcludingId
+'-------------------------------------------------------------------------------
+function getItemsExcludingId(items as object, itemId as string) as object
+    remaining = []
+    for each item in items
+        if SafeString(item.Id, "") <> itemId then remaining.Push(item)
+    end for
+    return remaining
+end function
 
 '-------------------------------------------------------------------------------
 ' onPlaybackProgressChange
@@ -1865,6 +1882,7 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if key = "options" and m.itemsGrid.isInFocusChain() then return openMediaActions()
     if key = "up" and m.browseByButton.isInFocusChain() then return requestHeaderFocus()
     if key = "up" and m.sortButton.isInFocusChain() then return requestHeaderFocus()
     if key = "right" and m.browseByButton.isInFocusChain() then
@@ -1898,4 +1916,30 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
     return false
+end function
+
+'-------------------------------------------------------------------------------
+' openMediaActions
+'-------------------------------------------------------------------------------
+function openMediaActions() as boolean
+    if m.itemsGrid.content = invalid then return false
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then return false
+
+    focusedNode = m.itemsGrid.content.getChild(focusedIndex)
+    if focusedNode = invalid or focusedNode.raw = invalid then return false
+
+    m.top.overlayRequested = {
+        id: "mediaActions"
+        sourcePage: "videoLibrary"
+        componentName: "MediaActionsDialog"
+        openFunction: "openMediaActions"
+        closeField: "closeRequested"
+        item: focusedNode.raw
+        server: m.pageState.request.server
+        token: m.pageState.request.token
+        userId: m.pageState.request.userId
+    }
+    return true
 end function

@@ -53,7 +53,13 @@ sub movieHandleWatchedStateChanged()
     if change = invalid then return
 
     markHomePlaybackRowsDirty()
-    if m.videoLibraryPage <> invalid then m.videoLibraryPage.watchedStateChange = change
+    if m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.mediaStateChange = {
+            itemId: SafeString(change.itemId, "")
+            action: "watched"
+            value: change.isWatched = true
+        }
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

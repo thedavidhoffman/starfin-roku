@@ -1,3 +1,8 @@
+' Option selection supports two dialog behaviors. By default, selecting checks
+' an option and the dialog remains open until the user closes it. When the
+' owning OptionPickerDialog enables closeOnSelect, selection also closes the
+' dialog immediately after publishing the selected option.
+
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
@@ -236,6 +241,7 @@ end function
 '-------------------------------------------------------------------------------
 sub onOptionListItemSelected()
     selectOptionListIndex(m.optionList.itemSelected)
+    if m.state.pendingSelection <> invalid then m.top.optionSelected = m.state.pendingSelection
 end sub
 
 '-------------------------------------------------------------------------------

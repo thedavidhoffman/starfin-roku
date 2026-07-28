@@ -5,6 +5,7 @@ sub openOptions()
     m.top.selectedOptionChanged = false
     configureDialog()
     syncContent()
+    observeContentSelection()
     m.top.visible = true
     m.top.callFunc("openDialog")
     focusContent()
@@ -24,6 +25,25 @@ sub configureDialog()
     m.top.panelX = 600
     m.top.panelY = panelY
     m.top.contentComponentName = "OptionPickerContent"
+end sub
+
+'-------------------------------------------------------------------------------
+' observeContentSelection
+'-------------------------------------------------------------------------------
+sub observeContentSelection()
+    content = getOptionsContent()
+    if content = invalid then return
+
+    content.unobserveField("optionSelected")
+    content.observeField("optionSelected", "onContentOptionSelected")
+end sub
+
+'-------------------------------------------------------------------------------
+' onContentOptionSelected
+'-------------------------------------------------------------------------------
+sub onContentOptionSelected()
+    if m.top.closeOnSelect <> true then return
+    m.top.callFunc("closeDialog")
 end sub
 
 '-------------------------------------------------------------------------------

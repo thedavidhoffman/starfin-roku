@@ -23,6 +23,7 @@ sub searchShow()
     page.observeField("selectedSeries", "searchHandleSeriesSelected")
     page.observeField("selectedEpisode", "searchHandleEpisodeSelected")
     page.observeField("selectedPerson", "searchHandlePersonSelected")
+    page.observeField("overlayRequested", "searchHandleOverlayRequested")
     page.loadRequest = buildSessionLoadRequest()
 
     m.searchPage = page
@@ -30,6 +31,18 @@ sub searchShow()
     m.homePage.visible = false
     m.header.visible = true
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' searchHandleOverlayRequested
+'-------------------------------------------------------------------------------
+sub searchHandleOverlayRequested()
+    if m.searchPage = invalid then return
+
+    request = m.searchPage.overlayRequested
+    if request = invalid then return
+
+    m.overlayHost.callFunc("openOverlay", request)
 end sub
 
 '-------------------------------------------------------------------------------
