@@ -21,6 +21,7 @@ sub init()
     m.mediaToolbar.observeField("subtitlesSelected", "onVideoToolbarSubtitlesSelected")
     m.mediaToolbar.observeField("audioSelected", "onVideoToolbarAudioSelected")
     m.mediaToolbar.observeField("chaptersSelected", "onVideoToolbarChaptersSelected")
+    m.mediaToolbar.observeField("videoSelected", "onVideoToolbarVideoSelected")
     m.mediaToolbar.observeField("mediaInfoSelected", "onVideoToolbarMediaInfoSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
@@ -28,6 +29,7 @@ sub init()
     m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
     m.streamOptions.observeField("selectedAudio", "onAudioOptionSelected")
     m.streamOptions.observeField("selectedChapter", "onChapterOptionSelected")
+    m.streamOptions.observeField("selectedVideoMode", "onVideoModeSelected")
     m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
@@ -40,6 +42,7 @@ sub init()
             subtitleOff: false
         }
         selectedChapterKey: ""
+        videoMode: "automatic"
         focusArea: "toolbar"
         themeLookupActive: false
         lifecycle: AsyncLifecycle_Create()
@@ -65,6 +68,7 @@ sub onLoadRequestChanged()
         subtitleOff: false
     }
     m.state.selectedChapterKey = ""
+    applyPlaybackVideoMode(request.videoMode)
     m.cast.server = request.server
     Spinner_Show()
     renderMovie(request.item, true)
@@ -355,6 +359,7 @@ function buildPlaySelection(startPositionTicks as dynamic) as dynamic
     if startPositionTicks <> invalid then selection.AddReplace("startPositionTicks", startPositionTicks)
 
     applySelectedStreamsToPlaySelection(selection)
+    selection.AddReplace("videoMode", m.state.videoMode)
     return selection
 end function
 
@@ -408,6 +413,8 @@ sub applyClosedStreamOptionsSelection(closed as object)
         m.streamOptions.callFunc("applyAudioSelection", selection)
     else if SafeString(request.id, "") = "chapterOptions" and overlay.selectedOptionChanged = true then
         m.streamOptions.callFunc("applyChapterSelection", selection)
+    else if SafeString(request.id, "") = "videoOptions" then
+        m.streamOptions.callFunc("applyVideoModeSelection", overlay.selectedOption)
     end if
 end sub
 
@@ -608,6 +615,37 @@ sub onPlaybackProgressChange()
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress_TicksToSeconds(PlaybackProgress_GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isItemWatched(item)
     m.top.playbackProgressChanged = change
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarVideoSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarVideoSelected()
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "videoOptions"
+    m.streamOptions.callFunc("openVideoOptions", {
+        selectedKey: m.state.videoMode
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoModeSelected
+'-------------------------------------------------------------------------------
+sub onVideoModeSelected()
+    selection = m.streamOptions.selectedVideoMode
+    if selection = invalid then return
+
+    applyPlaybackVideoMode(selection.key)
+    m.log.write("Video mode selected: " + m.state.videoMode)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackVideoMode
+'-------------------------------------------------------------------------------
+sub applyPlaybackVideoMode(videoMode as dynamic)
+    mode = SafeString(videoMode, "automatic")
+    if mode <> "directPlay" and mode <> "transcodeAllowRemux" and mode <> "transcodeNoRemux" then mode = "automatic"
+    m.state.videoMode = mode
 end sub
 
 '-------------------------------------------------------------------------------

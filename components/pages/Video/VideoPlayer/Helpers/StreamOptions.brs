@@ -14,6 +14,7 @@ sub updatePlaybackControlsOptions(item as dynamic)
     m.playbackControls.hasSubtitleOptions = subtitleStreams.Count() > 0
     m.playbackControls.hasAudioOptions = audioStreams.Count() > 1
     m.playbackControls.hasChapterOptions = chapters.Count() > 0
+    m.playbackControls.hasVideoOptions = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -127,6 +128,24 @@ sub onAudioOptionsPressed()
 end sub
 
 '-------------------------------------------------------------------------------
+' onVideoOptionsPressed
+'-------------------------------------------------------------------------------
+sub onVideoOptionsPressed()
+    request = m.top.playRequest
+    if request = invalid then return
+
+    m.controlsHideTimer.control = "stop"
+    m.top.streamOptionsRequested = {
+        id: "videoOptions"
+        sourcePage: "videoPlayer"
+        componentName: "VideoOptionsDialog"
+        openFunction: "openVideoOptions"
+        closeField: "closeRequested"
+        selectedKey: SafeString(request.videoMode, "automatic")
+    }
+end sub
+
+'-------------------------------------------------------------------------------
 ' onChapterOptionsPressed
 '-------------------------------------------------------------------------------
 sub onChapterOptionsPressed()
@@ -157,15 +176,19 @@ sub handleStreamOptionsOverlayClosed(closed as object)
     if request = invalid or overlay = invalid then return
 
     requestId = SafeString(request.id, "")
-    selection = getClosedOptionValue(overlay)
     chapterSelected = false
     if requestId = "subtitleOptions" then
+        selection = getClosedOptionValue(overlay)
         applySubtitleSelection(selection)
     else if requestId = "audioOptions" then
+        selection = getClosedOptionValue(overlay)
         applyAudioSelection(selection)
     else if requestId = "chapterOptions" and overlay.selectedOptionChanged = true then
+        selection = getClosedOptionValue(overlay)
         applyChapterSelection(selection)
         chapterSelected = true
+    else if requestId = "videoOptions" then
+        applyVideoModeSelection(overlay.selectedOption)
     end if
 
     if chapterSelected = true then
@@ -180,6 +203,41 @@ sub handleStreamOptionsOverlayClosed(closed as object)
     else
         m.top.setFocus(true)
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' applyVideoModeSelection
+'-------------------------------------------------------------------------------
+sub applyVideoModeSelection(selection as dynamic)
+    if selection = invalid then return
+
+    videoMode = SafeString(selection.key, "automatic")
+    request = m.top.playRequest
+    if request = invalid then return
+    if videoMode = SafeString(request.videoMode, "automatic") then return
+
+    m.streamOptions.pendingVideoMode = videoMode
+
+    ' Yield one SceneGraph turn so OverlayHost removal renders before the
+    ' playRequest change performs synchronous player teardown and setup.
+    m.videoModeApplyTimer.control = "stop"
+    m.videoModeApplyTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoModeApplyTimerFire
+'-------------------------------------------------------------------------------
+sub onVideoModeApplyTimerFire()
+    videoMode = m.streamOptions.pendingVideoMode
+    m.streamOptions.pendingVideoMode = ""
+    if videoMode = "" then return
+
+    restartRequest = buildStreamRestartPlayRequest()
+    if restartRequest = invalid then return
+
+    restartRequest.AddReplace("videoMode", videoMode)
+    m.log.write("Restarting playback with video mode=" + videoMode)
+    m.top.playRequest = restartRequest
 end sub
 
 '-------------------------------------------------------------------------------
@@ -280,6 +338,7 @@ function buildStreamRestartPlayRequest() as dynamic
         subtitleStreamIndex: m.streamOptions.selectedSubtitleStreamIndex
     }
     if request.mediaSourceId <> invalid then restartRequest.AddReplace("mediaSourceId", request.mediaSourceId)
+    if request.videoMode <> invalid then restartRequest.AddReplace("videoMode", request.videoMode)
 
     return restartRequest
 end function

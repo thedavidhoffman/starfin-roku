@@ -65,6 +65,22 @@ sub openChapterOptions(request as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
+' openVideoOptions
+'-------------------------------------------------------------------------------
+sub openVideoOptions(request as dynamic)
+    if request = invalid then return
+
+    m.top.visible = true
+    m.top.overlayRequested = {
+        id: "videoOptions"
+        componentName: "VideoOptionsDialog"
+        openFunction: "openVideoOptions"
+        closeField: "closeRequested"
+        selectedKey: SafeString(request.selectedKey, "automatic")
+    }
+end sub
+
+'-------------------------------------------------------------------------------
 ' closeOptions
 '-------------------------------------------------------------------------------
 sub closeOptions()
@@ -97,6 +113,15 @@ sub applyChapterSelection(selection as dynamic)
     if selection = invalid then return
 
     m.top.selectedChapter = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' applyVideoModeSelection
+'-------------------------------------------------------------------------------
+sub applyVideoModeSelection(selection as dynamic)
+    if selection = invalid then return
+
+    m.top.selectedVideoMode = selection
 end sub
 
 '-------------------------------------------------------------------------------

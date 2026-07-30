@@ -75,6 +75,11 @@ sub applyOverlayRequestFields(overlay as object, request as object)
         return
     end if
 
+    if requestId = "videoOptions" then
+        overlay.selectedKey = request.selectedKey
+        return
+    end if
+
     if requestId = "mediaActions" then
         overlay.item = request.item
         return

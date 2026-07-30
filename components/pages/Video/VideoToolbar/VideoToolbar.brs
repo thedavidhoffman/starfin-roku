@@ -261,7 +261,7 @@ sub configureToolbarButtons(state as object)
     m.subtitlesButton.visible = state.isSeason <> true and state.hasSubtitleOptions
     m.audioButton.visible = state.isSeason <> true and state.hasAudioOptions
     m.chaptersButton.visible = state.isSeason <> true and state.hasChapterOptions
-    m.videoButton.visible = state.isSeason <> true and state.isMovie <> true
+    m.videoButton.visible = state.isSeason <> true
     m.mediaInfoButton.visible = state.isMovie or state.isEpisode
     m.seriesButton.visible = state.supportsItemNavigation and state.isMovie <> true
     m.seasonButton.visible = state.supportsItemNavigation and state.isMovie <> true

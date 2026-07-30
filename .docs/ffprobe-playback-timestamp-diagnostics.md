@@ -139,6 +139,32 @@ The results can support the following conclusions:
 - Similar anomalies in a known-good file would mean the anomaly alone is not
   sufficient to explain the symptom.
 
+## Testing The Video Playback Options
+
+For the playback issues described in this document, test **Force Transcode
+(Remux Disabled)** first.
+
+This option forces Jellyfin to re-encode the video and create new keyframes and
+HLS segments while potentially normalizing timing behavior. It is the option
+most likely to resolve playback stalls, broken seeking, timing errors, or files
+that begin playback incorrectly.
+
+Use the following testing order:
+
+1. **Force Transcode (Remux Disabled)** provides the strongest compatibility
+   test.
+2. **Force Transcode (Allow Remux)** determines whether repackaging alone fixes
+   the problem while using less server processing.
+3. **Direct Play** provides a baseline using the original file without
+   conversion or repackaging.
+
+If Direct Play reproduces the problem while either forced option works, the
+original file, container, or stream structure is likely triggering the issue.
+
+If Force Transcode (Remux Disabled) works but Force Transcode (Allow Remux)
+does not, the problem is probably in the source video stream or its timestamp
+or keyframe structure, rather than only in the container.
+
 These commands cannot prove what Roku displayed. They inspect the source file,
 not the client's decoded output. Correlating a timestamp anomaly with the
 visible jump position, or comparing it with Starfish's playback-position

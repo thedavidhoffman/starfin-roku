@@ -5,6 +5,7 @@ sub init()
     m.castButton = m.top.findNode("castButton")
     m.subtitleButton = m.top.findNode("subtitleButton")
     m.audioButton = m.top.findNode("audioButton")
+    m.videoButton = m.top.findNode("videoButton")
     m.chapterButton = m.top.findNode("chapterButton")
     m.skipBackButton = m.top.findNode("skipBackButton")
     m.playPauseButton = m.top.findNode("playPauseButton")
@@ -59,6 +60,8 @@ sub init()
     m.subtitleButton.focusedIcon = "pkg:/images/icons/playback-controls/subtitles-focused.png"
     m.audioButton.icon = "pkg:/images/icons/playback-controls/audio-unfocused.png"
     m.audioButton.focusedIcon = "pkg:/images/icons/playback-controls/audio-focused.png"
+    m.videoButton.icon = "pkg:/images/icons/playback-controls/video-unfocused.png"
+    m.videoButton.focusedIcon = "pkg:/images/icons/playback-controls/video-focused.png"
     m.chapterButton.icon = "pkg:/images/icons/playback-controls/chapters-unfocused.png"
     m.chapterButton.focusedIcon = "pkg:/images/icons/playback-controls/chapters-focused.png"
     m.skipBackButton.icon = "pkg:/images/icons/playback-controls/skip-back-unfocused.png"
@@ -69,6 +72,7 @@ sub init()
     m.castButton.observeField("buttonSelected", "onCastButtonSelected")
     m.subtitleButton.observeField("buttonSelected", "onSubtitleButtonSelected")
     m.audioButton.observeField("buttonSelected", "onAudioButtonSelected")
+    m.videoButton.observeField("buttonSelected", "onVideoButtonSelected")
     m.chapterButton.observeField("buttonSelected", "onChapterButtonSelected")
     m.skipBackButton.observeField("buttonSelected", "onSkipBackButtonSelected")
     m.playPauseButton.observeField("buttonSelected", "onPlayPauseButtonSelected")
@@ -148,6 +152,7 @@ sub onOptionsChanged()
     m.chapterButton.visible = m.top.hasChapterOptions = true
     m.subtitleButton.visible = m.top.hasSubtitleOptions = true
     m.audioButton.visible = m.top.hasAudioOptions = true
+    m.videoButton.visible = m.top.hasVideoOptions = true
     layoutOptionButtons()
     rebuildButtonList()
 end sub
@@ -172,7 +177,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub layoutOptionButtons()
     x = m.optionButtonLayout.startX
-    optionButtons = [m.chapterButton, m.castButton, m.subtitleButton, m.audioButton]
+    optionButtons = [m.chapterButton, m.castButton, m.subtitleButton, m.audioButton, m.videoButton]
     for each button in optionButtons
         if button <> invalid and button.visible <> false then
             button.translation = [x, m.optionButtonLayout.y]
@@ -223,6 +228,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onAudioButtonSelected()
     m.top.audioOptionsPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoButtonSelected
+'-------------------------------------------------------------------------------
+sub onVideoButtonSelected()
+    m.top.videoOptionsPressed = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -342,7 +354,7 @@ end sub
 ' getAllButtons
 '-------------------------------------------------------------------------------
 function getAllButtons() as object
-    return [m.chapterButton, m.castButton, m.subtitleButton, m.audioButton, m.skipBackButton, m.playPauseButton, m.skipForwardButton, m.last5Button]
+    return [m.chapterButton, m.castButton, m.subtitleButton, m.audioButton, m.videoButton, m.skipBackButton, m.playPauseButton, m.skipForwardButton, m.last5Button]
 end function
 
 '-------------------------------------------------------------------------------

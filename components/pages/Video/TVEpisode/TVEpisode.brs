@@ -30,6 +30,7 @@ sub initReferences()
             subtitleOff: false
         }
         selectedChapterKey: ""
+        videoMode: "automatic"
         focusArea: "toolbar"
         lifecycle: AsyncLifecycle_Create()
     }
@@ -48,6 +49,7 @@ sub initHandlers()
     m.mediaToolbar.observeField("subtitlesSelected", "onVideoToolbarSubtitlesSelected")
     m.mediaToolbar.observeField("audioSelected", "onVideoToolbarAudioSelected")
     m.mediaToolbar.observeField("chaptersSelected", "onVideoToolbarChaptersSelected")
+    m.mediaToolbar.observeField("videoSelected", "onVideoToolbarVideoSelected")
     m.mediaToolbar.observeField("mediaInfoSelected", "onVideoToolbarMediaInfoSelected")
     m.mediaToolbar.observeField("seriesSelected", "onVideoToolbarSeriesSelected")
     m.mediaToolbar.observeField("seasonSelected", "onVideoToolbarSeasonSelected")
@@ -57,6 +59,7 @@ sub initHandlers()
     m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
     m.streamOptions.observeField("selectedAudio", "onAudioOptionSelected")
     m.streamOptions.observeField("selectedChapter", "onChapterOptionSelected")
+    m.streamOptions.observeField("selectedVideoMode", "onVideoModeSelected")
     m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
@@ -105,6 +108,9 @@ sub onLoadRequestChanged()
         subtitleOff: false
     }
     m.state.selectedChapterKey = ""
+    videoMode = invalid
+    if m.state.request <> invalid then videoMode = m.state.request.videoMode
+    applyPlaybackVideoMode(videoMode)
     clearPageState()
     if m.state.request <> invalid then
         m.cast.server = m.state.request.server
@@ -838,6 +844,8 @@ sub applyClosedStreamOptionsSelection(closed as object)
         m.streamOptions.callFunc("applyAudioSelection", selection)
     else if SafeString(request.id, "") = "chapterOptions" and overlay.selectedOptionChanged = true then
         m.streamOptions.callFunc("applyChapterSelection", selection)
+    else if SafeString(request.id, "") = "videoOptions" then
+        m.streamOptions.callFunc("applyVideoModeSelection", overlay.selectedOption)
     end if
 end sub
 
@@ -890,6 +898,39 @@ sub onVideoToolbarAudioSelected()
         audioStreams: getAudioStreams(item.raw)
         selectedAudioStreamIndex: getSelectedAudioStreamIndex()
     })
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarVideoSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarVideoSelected()
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "videoOptions"
+    m.streamOptions.callFunc("openVideoOptions", {
+        selectedKey: m.state.videoMode
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoModeSelected
+'-------------------------------------------------------------------------------
+sub onVideoModeSelected()
+    selection = m.streamOptions.selectedVideoMode
+    if selection = invalid then return
+
+    applyPlaybackVideoMode(selection.key)
+    applySelectedStreamsToPlaySelection(m.state.playSelection)
+    m.log.write("Video mode selected: " + m.state.videoMode)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackVideoMode
+'-------------------------------------------------------------------------------
+sub applyPlaybackVideoMode(videoMode as dynamic)
+    mode = SafeString(videoMode, "automatic")
+    if mode <> "directPlay" and mode <> "transcodeAllowRemux" and mode <> "transcodeNoRemux" then mode = "automatic"
+    m.state.videoMode = mode
+    if m.state.playSelection <> invalid then m.state.playSelection.AddReplace("videoMode", mode)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1273,6 +1314,8 @@ end function
 '-------------------------------------------------------------------------------
 sub applySelectedStreamsToPlaySelection(selection as dynamic)
     if selection = invalid then return
+
+    selection.AddReplace("videoMode", m.state.videoMode)
 
     audioIndex = getSelectedAudioStreamIndex()
     if audioIndex >= 0 then selection.AddReplace("audioStreamIndex", audioIndex)

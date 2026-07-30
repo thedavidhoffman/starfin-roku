@@ -25,6 +25,9 @@ sub executeRequest()
     requestedMediaSource = getPlaybackRequestMediaSource(request)
     forceTranscode = shouldForceTranscodeAudio(requestedAudioStream, requestedMediaSource)
     forceStreamSelection = shouldForceStreamSelection(request, requestedMediaSource, requestedAudioStreamIndex)
+    forceSubtitleSelection = requestedSubtitleStreamIndex >= 0
+    playbackMode = getPlaybackMode(request)
+    playbackFlags = getPlaybackFlags(playbackMode, forceTranscode, forceStreamSelection, forceSubtitleSelection)
     params = {
         UserId: SafeString(request.userId, "")
         StartTimeTicks: getStartPositionTicks(request)
@@ -32,14 +35,18 @@ sub executeRequest()
         AutoOpenLiveStream: true
         MaxStreamingBitrate: "120000000"
         MaxStaticBitrate: "100000000"
-        EnableDirectPlay: forceTranscode <> true and forceStreamSelection <> true
-        EnableDirectStream: forceTranscode <> true
+        EnableDirectPlay: playbackFlags.enableDirectPlay
+        EnableDirectStream: playbackFlags.enableDirectStream
+        EnableTranscoding: playbackFlags.enableTranscoding
+        AllowVideoStreamCopy: playbackMode <> "transcodeNoRemux"
+        AllowAudioStreamCopy: true
     }
 
-    if forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
-    if forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
+    if playbackMode = "automatic" and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    if playbackMode = "automatic" and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
     m.log.write("Device profile display cap width=" + SafeString(displaySize.width, "") + " height=" + SafeString(displaySize.height, "") + " source=" + SafeString(displaySize.source, ""))
     m.log.write("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
+    m.log.write("Requested video mode=" + playbackMode)
     if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
     if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex
     if requestedSubtitleStreamIndex >= -1 then params.SubtitleStreamIndex = requestedSubtitleStreamIndex
@@ -79,6 +86,71 @@ sub executeRequest()
         startPositionTicks: getStartPositionTicks(request)
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackMode
+'-------------------------------------------------------------------------------
+function getPlaybackMode(request as dynamic) as string
+    if request = invalid or request.videoMode = invalid then return "automatic"
+
+    mode = SafeString(request.videoMode, "")
+    if mode = "automatic" or mode = "directPlay" or mode = "transcodeAllowRemux" or mode = "transcodeNoRemux" then return mode
+    return "automatic"
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackFlags
+'-------------------------------------------------------------------------------
+function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, forceStreamSelection as boolean, forceSubtitleSelection as boolean) as object
+    if playbackMode = "transcodeNoRemux" then
+        return {
+            enableDirectPlay: false
+            enableDirectStream: false
+            enableTranscoding: true
+        }
+    end if
+
+    if playbackMode = "transcodeAllowRemux" or (playbackMode = "automatic" and (forceTranscode = true or forceStreamSelection = true)) then
+        enableDirectStream = true
+        if playbackMode = "automatic" and forceTranscode = true then enableDirectStream = false
+
+        return {
+            enableDirectPlay: false
+            enableDirectStream: enableDirectStream
+            enableTranscoding: true
+        }
+    end if
+
+    if playbackMode = "automatic" then
+        return {
+            enableDirectPlay: true
+            enableDirectStream: true
+            enableTranscoding: true
+        }
+    end if
+
+    if forceTranscode = true then
+        return {
+            enableDirectPlay: false
+            enableDirectStream: false
+            enableTranscoding: true
+        }
+    end if
+
+    if forceStreamSelection = true or forceSubtitleSelection = true then
+        return {
+            enableDirectPlay: false
+            enableDirectStream: true
+            enableTranscoding: true
+        }
+    end if
+
+    return {
+        enableDirectPlay: true
+        enableDirectStream: false
+        enableTranscoding: false
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' logPlaybackRequest

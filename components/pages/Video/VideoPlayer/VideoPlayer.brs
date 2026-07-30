@@ -24,6 +24,7 @@ sub initReferences()
     m.fastSeekTimer = m.top.findNode("fastSeekTimer")
     m.leftSeekRepeatTimer = m.top.findNode("leftSeekRepeatTimer")
     m.rightSeekRepeatTimer = m.top.findNode("rightSeekRepeatTimer")
+    m.videoModeApplyTimer = m.top.findNode("videoModeApplyTimer")
 
     m.playback = {
         isSeeking: false
@@ -69,6 +70,7 @@ sub initReferences()
         selectedSubtitleStreamIndex: -1
         selectedAudioStreamIndex: -1
         selectedChapterKey: ""
+        pendingVideoMode: ""
     }
 
     m.seek = {
@@ -108,6 +110,7 @@ sub initHandlers()
     m.playbackControls.observeField("chapterOptionsPressed", "onChapterOptionsPressed")
     m.playbackControls.observeField("subtitleOptionsPressed", "onSubtitleOptionsPressed")
     m.playbackControls.observeField("audioOptionsPressed", "onAudioOptionsPressed")
+    m.playbackControls.observeField("videoOptionsPressed", "onVideoOptionsPressed")
     m.playbackControls.observeField("focusExitDown", "onPlaybackControlsFocusExitDown")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
@@ -119,6 +122,7 @@ sub initHandlers()
     m.fastSeekTimer.observeField("fire", "onFastSeekTimerFire")
     m.leftSeekRepeatTimer.observeField("fire", "onLeftSeekRepeatTimerFire")
     m.rightSeekRepeatTimer.observeField("fire", "onRightSeekRepeatTimerFire")
+    m.videoModeApplyTimer.observeField("fire", "onVideoModeApplyTimerFire")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -233,6 +237,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub stopPlayback()
     if m.playback <> invalid then m.playback.startupPending = false
+    m.videoModeApplyTimer.control = "stop"
+    m.streamOptions.pendingVideoMode = ""
     Spinner_Hide()
     hideControls()
     hideCast()
