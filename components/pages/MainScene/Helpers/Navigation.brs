@@ -114,6 +114,16 @@ sub navHandleMediaActionsOverlayClosed(closed as object)
     focusActiveSurface()
     if selection = invalid then return
 
+    if selection.action = "GoToSeries" then
+        navOpenEpisodeSeries(selection, request)
+        return
+    end if
+
+    if selection.action = "GoToSeason" then
+        navOpenEpisodeSeason(selection, request)
+        return
+    end if
+
     if m.mediaActionState.activeRequest <> invalid then
         Status_SetMessage("A media action is already in progress.")
         return
@@ -129,6 +139,75 @@ sub navHandleMediaActionsOverlayClosed(closed as object)
     }
     m.mediaActionState.activeRequest = actionRequest
     m.mediaActionsController.actionRequest = actionRequest
+end sub
+
+'-------------------------------------------------------------------------------
+' navOpenEpisodeSeries
+'-------------------------------------------------------------------------------
+sub navOpenEpisodeSeries(selection as object, request as object)
+    item = selection.item
+    if item = invalid then return
+
+    seriesId = SafeString(item.SeriesId, "")
+    if seriesId = "" then return
+
+    prepareMediaActionNavigation(SafeString(request.sourcePage, ""))
+    tvShowShow({
+        itemId: seriesId
+        item: buildEpisodeSeriesIdentity(item, selection.itemImageUrl)
+    }, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' navOpenEpisodeSeason
+'-------------------------------------------------------------------------------
+sub navOpenEpisodeSeason(selection as object, request as object)
+    item = selection.item
+    if item = invalid then return
+
+    seriesId = SafeString(item.SeriesId, "")
+    seasonId = SafeString(item.SeasonId, "")
+    if seriesId = "" or seasonId = "" then return
+
+    prepareMediaActionNavigation(SafeString(request.sourcePage, ""))
+    tvSeasonShow({
+        seriesId: seriesId
+        seasonId: seasonId
+        series: buildEpisodeSeriesIdentity(item, selection.itemImageUrl)
+        season: {
+            Id: seasonId
+            Name: SafeString(item.SeasonName, "")
+        }
+        seasons: invalid
+        nextSeason: invalid
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' buildEpisodeSeriesIdentity
+'-------------------------------------------------------------------------------
+function buildEpisodeSeriesIdentity(item as object, imageUrl as dynamic) as object
+    cachedImageUrl = SafeString(imageUrl, "")
+    return {
+        Id: SafeString(item.SeriesId, "")
+        Name: SafeString(item.SeriesName, "")
+        thumbUrl: cachedImageUrl
+        backdropUrl: cachedImageUrl
+        detailBackdropUrl: cachedImageUrl
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' prepareMediaActionNavigation
+'-------------------------------------------------------------------------------
+sub prepareMediaActionNavigation(sourcePage as string)
+    if sourcePage = "search" then
+        searchHidePage()
+    else if sourcePage = "videoLibrary" and m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.callFunc("deactivate")
+    else if sourcePage = "home" then
+        resetDynamicPages()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

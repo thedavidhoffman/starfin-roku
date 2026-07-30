@@ -7,12 +7,33 @@ sub openMediaActions()
     m.top.allowDefaultSelection = false
     m.top.selectedKey = ""
     m.top.emptyText = ""
-    m.top.options = [getWatchedOption(), getFavoriteOption()]
+    m.top.options = getMediaActionOptions()
 
     m.top.callFunc("openOptions")
     m.top.unobserveField("selectedOption")
     m.top.observeField("selectedOption", "onMediaActionSelected")
 end sub
+
+'-------------------------------------------------------------------------------
+' getMediaActionOptions
+'-------------------------------------------------------------------------------
+function getMediaActionOptions() as object
+    options = [getWatchedOption(), getFavoriteOption()]
+    if isTVEpisode() then
+        if SafeString(m.top.item.SeriesId, "") <> "" then options.Push({ key: "GoToSeries", label: "Go to Series" })
+        if SafeString(m.top.item.SeasonId, "") <> "" then options.Push({ key: "GoToSeason", label: "Go to Season" })
+    end if
+
+    return options
+end function
+
+'-------------------------------------------------------------------------------
+' isTVEpisode
+'-------------------------------------------------------------------------------
+function isTVEpisode() as boolean
+    if m.top.item = invalid then return false
+    return LCase(SafeString(m.top.item.Type, "")) = "episode"
+end function
 
 '-------------------------------------------------------------------------------
 ' getMediaTitle
@@ -58,6 +79,8 @@ sub onMediaActionSelected(event as object)
     m.top.mediaActionSelected = {
         itemId: itemId
         action: action
+        item: m.top.item
+        itemImageUrl: m.top.itemImageUrl
     }
 end sub
 
@@ -65,5 +88,5 @@ end sub
 ' isSupportedAction
 '-------------------------------------------------------------------------------
 function isSupportedAction(action as string) as boolean
-    return action = "MarkAsWatched" or action = "MarkAsUnwatched" or action = "AddToFavorites" or action = "RemoveFromFavorites"
+    return action = "MarkAsWatched" or action = "MarkAsUnwatched" or action = "AddToFavorites" or action = "RemoveFromFavorites" or action = "GoToSeries" or action = "GoToSeason"
 end function

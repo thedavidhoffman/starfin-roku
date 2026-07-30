@@ -82,6 +82,7 @@ sub applyOverlayRequestFields(overlay as object, request as object)
 
     if requestId = "mediaActions" then
         overlay.item = request.item
+        overlay.itemImageUrl = SafeString(request.itemImageUrl, "")
         return
     end if
 

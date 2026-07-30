@@ -14,7 +14,6 @@ sub init()
         nextUp: m.top.findNode("nextUpTask")
         latestMedia: m.top.findNode("latestMediaTask")
         liveTvOnNow: m.top.findNode("liveTvOnNowTask")
-        myList: m.top.findNode("myListTask")
     }
 
     m.tasks.libraries.observeField("response", "onLibrariesResponse")
@@ -22,11 +21,10 @@ sub init()
     m.tasks.continueListening.observeField("response", "onSectionResponse")
     m.tasks.nextUp.observeField("response", "onSectionResponse")
     m.tasks.liveTvOnNow.observeField("response", "onSectionResponse")
-    m.tasks.myList.observeField("response", "onSectionResponse")
     m.homeState = {
         request: invalid
         rows: {}
-        rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList"]
+        rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow"]
         latestLibraries: {}
         latestTasks: []
         playbackRows: {
@@ -180,7 +178,7 @@ sub refreshHomeData(blocking = false as boolean)
     end if
 
     m.homeState.rows = {}
-    m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow", "myList"]
+    m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow"]
     m.homeState.latestLibraries = {}
     m.homeState.latestTasks = []
     m.homeState.playbackRows = {
@@ -252,21 +250,8 @@ sub onLibrariesResponse()
     addRow("libraries", "My Media", libraries)
     queueLatestMediaRows(libraries)
     renderRows()
-    runMyListTask(libraries)
     runLatestMediaTasks()
     markCoreTaskComplete("libraries")
-end sub
-
-'-------------------------------------------------------------------------------
-' runMyListTask
-'-------------------------------------------------------------------------------
-sub runMyListTask(libraries as object)
-    request = cloneRequest(m.homeState.request)
-    request.playlistsViewId = findCollectionId(libraries, "playlists")
-    if request.playlistsViewId = "" then return
-
-    m.homeState.refresh.pendingCore.myList = true
-    runTask(m.tasks.myList, request)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -292,8 +277,6 @@ sub onSectionResponse(event as object)
         refreshNextUpRow()
     else if action = "liveTvOnNow" then
         addRow(action, "On Now", getItemsFromPayload(response.payload))
-    else if action = "myList" then
-        addRow(action, "My List", getMyListItems(response.payload))
     end if
 
     renderRows()
@@ -416,7 +399,6 @@ sub queueLatestMediaRows(libraries as object)
         m.homeState.rowOrder.Push("latest:" + library.id)
     end for
     m.homeState.rowOrder.Push("liveTvOnNow")
-    m.homeState.rowOrder.Push("myList")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -752,16 +734,6 @@ function getItemsFromPayload(payload as dynamic) as object
 end function
 
 '-------------------------------------------------------------------------------
-' getMyListItems
-'-------------------------------------------------------------------------------
-function getMyListItems(payload as dynamic) as object
-    if Array_IsAssocArray(payload) = false then return []
-    if payload.items = invalid then return []
-
-    return getItemsFromPayload(payload.items)
-end function
-
-'-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as string) as string
@@ -1058,6 +1030,7 @@ function openFocusedMediaActions() as boolean
         openFunction: "openMediaActions"
         closeField: "closeRequested"
         item: item
+        itemImageUrl: shelf.callFunc("getFocusedItemImageUrl")
         server: m.homeState.request.server
         token: m.homeState.request.token
         userId: m.homeState.request.userId

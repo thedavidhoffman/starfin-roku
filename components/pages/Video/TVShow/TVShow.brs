@@ -306,6 +306,7 @@ sub onTVShowResponse()
         return
     end if
 
+    preserveRequestedSeriesImages(payload.series)
     m.pageState.series = payload.series
     m.pageState.seasons = getItemsFromPayload(payload.seasons)
     m.pageState.playbackQueue = payload.playbackQueue
@@ -322,6 +323,20 @@ sub onTVShowResponse()
         focusSeasonsIfActive()
     end if
     loadThemeSong(payload.series)
+end sub
+
+'-------------------------------------------------------------------------------
+' preserveRequestedSeriesImages
+'-------------------------------------------------------------------------------
+sub preserveRequestedSeriesImages(series as dynamic)
+    if Array_IsAssocArray(series) = false then return
+
+    requestedSeries = m.pageState.series
+    if Array_IsAssocArray(requestedSeries) = false then return
+
+    if SafeString(series.thumbUrl, "") = "" then series.thumbUrl = SafeString(requestedSeries.thumbUrl, "")
+    if SafeString(series.backdropUrl, "") = "" then series.backdropUrl = SafeString(requestedSeries.backdropUrl, "")
+    if SafeString(series.detailBackdropUrl, "") = "" then series.detailBackdropUrl = SafeString(requestedSeries.detailBackdropUrl, "")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -752,6 +767,7 @@ end function
 '-------------------------------------------------------------------------------
 function getBackdropUrl(item as dynamic) as string
     if item = invalid then return ""
+
     imageSize = DeviceCapabilities_GetMaxScreenImageSize()
     if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
         itemId = FirstNonEmpty([item.Id], "")
@@ -760,7 +776,10 @@ function getBackdropUrl(item as dynamic) as string
         return Url_BuildImageUrl(request.server, itemId, "Backdrop", item.BackdropImageTags[0], imageSize.width, imageSize.height)
     end if
 
-    return getImageUrl(item, "Primary", imageSize.width, imageSize.height)
+    imageUrl = getImageUrl(item, "Primary", imageSize.width, imageSize.height)
+    if imageUrl <> "" then return imageUrl
+
+    return SafeString(item.backdropUrl, "")
 end function
 
 '-------------------------------------------------------------------------------

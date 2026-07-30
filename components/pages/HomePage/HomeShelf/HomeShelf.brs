@@ -36,6 +36,23 @@ function getFocusedItem() as dynamic
 end function
 
 '-------------------------------------------------------------------------------
+' getFocusedItemImageUrl
+'-------------------------------------------------------------------------------
+function getFocusedItemImageUrl() as string
+    focused = m.items.rowItemFocused
+    if focused = invalid or focused.Count() < 2 then return ""
+    if m.items.content = invalid then return ""
+
+    row = m.items.content.getChild(focused[0])
+    if row = invalid then return ""
+
+    itemNode = row.getChild(focused[1])
+    if itemNode = invalid then return ""
+
+    return SafeString(itemNode.HDPosterUrl, "")
+end function
+
+'-------------------------------------------------------------------------------
 ' applyMediaStateChange
 '-------------------------------------------------------------------------------
 function applyMediaStateChange(change as object) as boolean

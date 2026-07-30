@@ -75,6 +75,8 @@ sub tvSeasonHandleCloseRequested()
         m.videoLibraryPage.visible = true
         m.header.visible = true
         m.videoLibraryPage.callFunc("activate")
+    else if searchReturnToPage() then
+        return
     else
         showHome()
     end if
