@@ -201,6 +201,7 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         startPositionTicks: 0
         playbackQueue: m.queue.items
         playbackQueueIndex: queueIndex
+        videoMode: SafeString(m.top.playRequest.videoMode, "automatic")
     }
 end function
 

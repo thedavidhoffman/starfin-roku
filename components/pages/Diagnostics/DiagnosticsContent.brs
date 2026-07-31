@@ -147,6 +147,7 @@ function getApplicationRegistryText() as object
         { key: keys.collectionItemsImageType, value: settings[keys.collectionItemsImageType] }
         { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
         { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
+        { key: keys.videoStreamingMode, value: settings[keys.videoStreamingMode] }
         { key: keys.tmdbApiKey, value: truncateText(settings[keys.tmdbApiKey], 40) }
     ])
 end function

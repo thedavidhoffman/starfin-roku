@@ -126,6 +126,7 @@ sub onSettingsChanged()
     settings = m.top.settings
     if m.state <> invalid and m.state.request <> invalid then m.state.request.settings = settings
     applyMediaShellBackgroundSetting(settings)
+    applyPlaybackVideoMode(invalid)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -927,7 +928,9 @@ end sub
 ' applyPlaybackVideoMode
 '-------------------------------------------------------------------------------
 sub applyPlaybackVideoMode(videoMode as dynamic)
-    mode = SafeString(videoMode, "automatic")
+    mode = ""
+    if videoMode <> invalid then mode = videoMode.ToStr()
+    if mode = "" then mode = SettingsStore_GetSettingValue(m.top.settings, SettingsStore_Keys().videoStreamingMode)
     if mode <> "directPlay" and mode <> "transcodeAllowRemux" and mode <> "transcodeNoRemux" then mode = "automatic"
     m.state.videoMode = mode
     if m.state.playSelection <> invalid then m.state.playSelection.AddReplace("videoMode", mode)

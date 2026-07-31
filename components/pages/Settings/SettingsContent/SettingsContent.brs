@@ -3,10 +3,13 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.categoryList = m.top.findNode("categoryList")
+    m.videoStreamingModeDescription = m.top.findNode("videoStreamingModeDescription")
+    m.videoStreamingModeDescription.font.size = m.videoStreamingModeDescription.font.size + 3
     m.categoryPanels = [
         m.top.findNode("mediaShellPanel")
         m.top.findNode("tvPanel")
         m.top.findNode("moviePanel")
+        m.top.findNode("videoPanel")
         m.top.findNode("collectionsPanel")
         m.top.findNode("integrationsPanel")
     ]
@@ -15,6 +18,7 @@ sub init()
         tvLibraryOptions: m.top.findNode("tvLibraryOptions")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         movieLibraryOptions: m.top.findNode("movieLibraryOptions")
+        videoStreamingModeOptions: m.top.findNode("videoStreamingModeOptions")
         collectionCardsImageTypeOptions: m.top.findNode("collectionCardsImageTypeOptions")
         collectionItemsImageTypeOptions: m.top.findNode("collectionItemsImageTypeOptions")
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
@@ -23,6 +27,7 @@ sub init()
         [m.settingsControls.mediaShellBackgroundOptions]
         [m.settingsControls.tvLibraryOptions, m.settingsControls.tvEpisodeListDisplayOptions]
         [m.settingsControls.movieLibraryOptions]
+        [m.settingsControls.videoStreamingModeOptions]
         [m.settingsControls.collectionCardsImageTypeOptions, m.settingsControls.collectionItemsImageTypeOptions]
         [m.settingsControls.tmdbApiKeyInput]
     ]
@@ -42,6 +47,7 @@ sub init()
     initDisplayOptions(m.settingsControls.collectionItemsImageTypeOptions)
     initTVEpisodeListDisplayOptions()
     initMediaShellBackgroundOptions()
+    initVideoStreamingModeOptions()
 
     m.categoryList.observeField("itemFocused", "onCategoryFocused")
     m.categoryList.observeField("itemSelected", "onCategorySelected")
@@ -51,6 +57,8 @@ sub init()
     m.settingsControls.collectionItemsImageTypeOptions.observeField("itemSelected", "onCollectionItemsImageTypeSelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
+    m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
+    m.settingsControls.videoStreamingModeOptions.observeField("itemFocused", "onVideoStreamingModeFocused")
 
     loadSettingsValues()
     showCategory(0)
@@ -61,7 +69,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initCategoryList()
     content = CreateObject("roSGNode", "ContentNode")
-    for each title in ["Media Shell", "TV", "Movie", "Collections", "Integrations"]
+    for each title in ["Media Shell", "TV", "Movie", "Video", "Collections", "Integrations"]
         item = content.createChild("ContentNode")
         item.title = title
     end for
@@ -87,6 +95,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub initMediaShellBackgroundOptions()
     setOptionTitles(m.settingsControls.mediaShellBackgroundOptions, ["Full Screen", "Partial Screen"])
+end sub
+
+'-------------------------------------------------------------------------------
+' initVideoStreamingModeOptions
+'-------------------------------------------------------------------------------
+sub initVideoStreamingModeOptions()
+    setOptionTitles(m.settingsControls.videoStreamingModeOptions, ["Automatic", "Direct Play", "Force Transcode (Allow Remux)", "Force Transcode (Remux Disabled)"])
 end sub
 
 '-------------------------------------------------------------------------------
@@ -116,6 +131,7 @@ sub loadSettingsValues()
     m.settingsState.values[keys.collectionItemsImageType] = SettingsStore_GetSettingValue(settings, keys.collectionItemsImageType)
     m.settingsState.values[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
     m.settingsState.values[keys.mediaShellBackground] = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
+    m.settingsState.values[keys.videoStreamingMode] = SettingsStore_GetSettingValue(settings, keys.videoStreamingMode)
     m.settingsState.values[keys.tmdbApiKey] = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
 
     setDisplayOption(m.settingsControls.tvLibraryOptions, m.settingsState.values[keys.tvLibraryDisplay])
@@ -124,6 +140,7 @@ sub loadSettingsValues()
     setDisplayOption(m.settingsControls.collectionItemsImageTypeOptions, m.settingsState.values[keys.collectionItemsImageType])
     setTVEpisodeListDisplayOption(m.settingsState.values[keys.tvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[keys.mediaShellBackground])
+    setVideoStreamingModeOption(m.settingsState.values[keys.videoStreamingMode])
     m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[keys.tmdbApiKey]
 end sub
 
@@ -234,7 +251,7 @@ end function
 function getSettingsValues() as object
     keys = SettingsStore_Keys()
     settings = {}
-    for each key in [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.tmdbApiKey]
+    for each key in [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.videoStreamingMode, keys.tmdbApiKey]
         settings[key] = SettingsStore_GetSettingValue(m.settingsState.values, key)
     end for
     return settings
@@ -297,6 +314,25 @@ sub onMediaShellBackgroundSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' onVideoStreamingModeSelected
+'-------------------------------------------------------------------------------
+sub onVideoStreamingModeSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.videoStreamingModeOptions)
+    if selectedIndex < 0 then return
+
+    m.settingsControls.videoStreamingModeOptions.checkedItem = selectedIndex
+    m.settingsState.values[SettingsStore_Keys().videoStreamingMode] = getVideoStreamingModeForIndex(selectedIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoStreamingModeFocused
+'-------------------------------------------------------------------------------
+sub onVideoStreamingModeFocused()
+    index = getListIndex(m.settingsControls.videoStreamingModeOptions.itemFocused, 4)
+    m.videoStreamingModeDescription.text = getVideoStreamingModeDescription(index)
+end sub
+
+'-------------------------------------------------------------------------------
 ' setDisplayOption
 '-------------------------------------------------------------------------------
 sub setDisplayOption(options as object, value as dynamic)
@@ -342,6 +378,45 @@ sub setMediaShellBackgroundOption(value as dynamic)
         m.settingsControls.mediaShellBackgroundOptions.checkedItem = 0
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' setVideoStreamingModeOption
+'-------------------------------------------------------------------------------
+sub setVideoStreamingModeOption(value as dynamic)
+    mode = "automatic"
+    if value <> invalid and value <> "" then mode = value.ToStr()
+    selectedIndex = 0
+    if mode = "directPlay" then
+        selectedIndex = 1
+    else if mode = "transcodeAllowRemux" then
+        selectedIndex = 2
+    else if mode = "transcodeNoRemux" then
+        selectedIndex = 3
+    end if
+    m.settingsControls.videoStreamingModeOptions.checkedItem = selectedIndex
+    m.settingsControls.videoStreamingModeOptions.jumpToItem = selectedIndex
+    m.videoStreamingModeDescription.text = getVideoStreamingModeDescription(selectedIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' getVideoStreamingModeDescription
+'-------------------------------------------------------------------------------
+function getVideoStreamingModeDescription(index as integer) as string
+    if index = 1 then return "Plays the original file without changing its container, video, or audio. Preserves the original quality and uses the least server processing, but requires the device and network to support the file."
+    if index = 2 then return "Disables Direct Play. Jellyfin may repackage compatible video or audio without converting it, while transcoding anything the device cannot play. This can improve compatibility while preserving quality where possible."
+    if index = 3 then return "Disables Direct Play and forces Jellyfin to convert the video to a supported format, usually H.264. This uses more server processing and may reduce quality, but can resolve playback, timing, keyframe, and seeking problems."
+    return "Allows Jellyfin to choose Direct Play, remuxing, or transcoding based on the file, selected audio and subtitle tracks, device capabilities, and network limits. This is the normal playback mode and balances original quality, compatibility, and server processing."
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoStreamingModeForIndex
+'-------------------------------------------------------------------------------
+function getVideoStreamingModeForIndex(index as integer) as string
+    if index = 1 then return "directPlay"
+    if index = 2 then return "transcodeAllowRemux"
+    if index = 3 then return "transcodeNoRemux"
+    return "automatic"
+end function
 
 '-------------------------------------------------------------------------------
 ' openKeyboardDialog
@@ -406,14 +481,15 @@ end function
 ' isFocusedAtFirstItem
 '-------------------------------------------------------------------------------
 function isFocusedAtFirstItem(list as dynamic) as boolean
-    return list <> invalid and list.isInFocusChain() and getListIndex(list.itemFocused, 2) = 0
+    return list <> invalid and list.isInFocusChain() and getListIndex(list.itemFocused, getListItemCount(list)) = 0
 end function
 
 '-------------------------------------------------------------------------------
 ' isFocusedAtLastItem
 '-------------------------------------------------------------------------------
 function isFocusedAtLastItem(list as dynamic) as boolean
-    return list <> invalid and list.isInFocusChain() and getListIndex(list.itemFocused, 2) = 1
+    itemCount = getListItemCount(list)
+    return list <> invalid and list.isInFocusChain() and getListIndex(list.itemFocused, itemCount) = itemCount - 1
 end function
 
 '-------------------------------------------------------------------------------
@@ -422,13 +498,22 @@ end function
 function getSelectedItemIndex(list as object) as integer
     selectedIndex = list.itemSelected
     if selectedIndex = invalid or selectedIndex < 0 then return -1
-    return getListIndex(selectedIndex, 2)
+    return getListIndex(selectedIndex, getListItemCount(list))
+end function
+
+'-------------------------------------------------------------------------------
+' getListItemCount
+'-------------------------------------------------------------------------------
+function getListItemCount(list as object) as integer
+    if list.content = invalid then return 0
+    return list.content.getChildCount()
 end function
 
 '-------------------------------------------------------------------------------
 ' getListIndex
 '-------------------------------------------------------------------------------
 function getListIndex(value as dynamic, count as integer) as integer
+    if count <= 0 then return 0
     if value = invalid or value < 0 then return 0
     if value >= count then return count - 1
     return value

@@ -21,6 +21,7 @@ function SettingsStore_Keys() as object
         collectionItemsImageType: "collection-items-image-type"
         tvEpisodeListDisplay: "tv-ep-list-scroll"
         mediaShellBackground: "media-shell-background"
+        videoStreamingMode: "video-streaming-mode"
         tmdbApiKey: "tmdb-api-key"
     }
 end function
@@ -37,6 +38,7 @@ function SettingsStore_Defaults() as object
     defaults[keys.collectionItemsImageType] = "poster"
     defaults[keys.tvEpisodeListDisplay] = "vertical"
     defaults[keys.mediaShellBackground] = "full-screen"
+    defaults[keys.videoStreamingMode] = "automatic"
     defaults[keys.tmdbApiKey] = ""
     return defaults
 end function
@@ -44,7 +46,7 @@ end function
 '-------------------------------------------------------------------------------
 ' SettingsStore_Save
 '-------------------------------------------------------------------------------
-sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionCardsImageType as string, collectionItemsImageType as string, tvEpisodeListDisplay as string, mediaShellBackground as string, tmdbApiKey as string)
+sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionCardsImageType as string, collectionItemsImageType as string, tvEpisodeListDisplay as string, mediaShellBackground as string, videoStreamingMode as string, tmdbApiKey as string)
     settingsStore = GetSettingsStore()
     keys = SettingsStore_Keys()
     settingsStore.Write(keys.tvLibraryDisplay, tvLibraryDisplay)
@@ -53,6 +55,7 @@ sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string
     settingsStore.Write(keys.collectionItemsImageType, collectionItemsImageType)
     settingsStore.Write(keys.tvEpisodeListDisplay, tvEpisodeListDisplay)
     settingsStore.Write(keys.mediaShellBackground, mediaShellBackground)
+    settingsStore.Write(keys.videoStreamingMode, videoStreamingMode)
     settingsStore.Write(keys.tmdbApiKey, tmdbApiKey)
     settingsStore.Flush()
 end sub
@@ -71,6 +74,7 @@ function SettingsStore_Load() as object
         keys.collectionItemsImageType
         keys.tvEpisodeListDisplay
         keys.mediaShellBackground
+        keys.videoStreamingMode
         keys.tmdbApiKey
     ])
     if values = invalid then values = {}
@@ -82,6 +86,7 @@ function SettingsStore_Load() as object
     settings[keys.collectionItemsImageType] = SettingsStore_GetValue(values, keys.collectionItemsImageType, defaults[keys.collectionItemsImageType])
     settings[keys.tvEpisodeListDisplay] = SettingsStore_GetValue(values, keys.tvEpisodeListDisplay, defaults[keys.tvEpisodeListDisplay])
     settings[keys.mediaShellBackground] = SettingsStore_GetValue(values, keys.mediaShellBackground, defaults[keys.mediaShellBackground])
+    settings[keys.videoStreamingMode] = SettingsStore_GetValue(values, keys.videoStreamingMode, defaults[keys.videoStreamingMode])
     settings[keys.tmdbApiKey] = SettingsStore_GetValue(values, keys.tmdbApiKey, defaults[keys.tmdbApiKey])
     return settings
 end function
@@ -98,6 +103,7 @@ sub SettingsStore_Clear()
     settingsStore.Delete(keys.collectionItemsImageType)
     settingsStore.Delete(keys.tvEpisodeListDisplay)
     settingsStore.Delete(keys.mediaShellBackground)
+    settingsStore.Delete(keys.videoStreamingMode)
     settingsStore.Delete(keys.tmdbApiKey)
     settingsStore.Flush()
 end sub
@@ -138,6 +144,7 @@ function SettingsStore_AreEqual(left as dynamic, right as dynamic) as boolean
     if SettingsStore_GetSettingValue(left, keys.collectionItemsImageType) <> SettingsStore_GetSettingValue(right, keys.collectionItemsImageType) then return false
     if SettingsStore_GetSettingValue(left, keys.tvEpisodeListDisplay) <> SettingsStore_GetSettingValue(right, keys.tvEpisodeListDisplay) then return false
     if SettingsStore_GetSettingValue(left, keys.mediaShellBackground) <> SettingsStore_GetSettingValue(right, keys.mediaShellBackground) then return false
+    if SettingsStore_GetSettingValue(left, keys.videoStreamingMode) <> SettingsStore_GetSettingValue(right, keys.videoStreamingMode) then return false
     if SettingsStore_GetSettingValue(left, keys.tmdbApiKey) <> SettingsStore_GetSettingValue(right, keys.tmdbApiKey) then return false
 
     return true

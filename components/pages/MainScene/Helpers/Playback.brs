@@ -24,6 +24,7 @@ sub playerShow(selection as object)
         startPositionTicks: PlaybackProgress_GetTicksFromSelection(selection)
         playbackQueue: selection.playbackQueue
         playbackQueueIndex: selection.playbackQueueIndex
+        videoMode: SettingsStore_GetSettingValue(m.settings, SettingsStore_Keys().videoStreamingMode)
     }
     if selection.audioStreamIndex <> invalid then playRequest.AddReplace("audioStreamIndex", selection.audioStreamIndex)
     if selection.subtitleStreamIndex <> invalid then playRequest.AddReplace("subtitleStreamIndex", selection.subtitleStreamIndex)
@@ -150,10 +151,10 @@ sub playerHandleCloseRequested()
         m.videoPlayer = invalid
     end if
 
+    resetPlaybackVideoMode()
     if showTVEpisodeUpNextAutoPlayPage(closedPlayRequest) then return
 
     prepareTVEpisodePageForClosedPlayer(closedPlayRequest)
-    applyClosedPlayerVideoMode(closedPlayRequest)
 
     if m.moviePage <> invalid then
         m.moviePage.visible = true
@@ -181,20 +182,11 @@ sub playerHandleCloseRequested()
 end sub
 
 '-------------------------------------------------------------------------------
-' applyClosedPlayerVideoMode
+' resetPlaybackVideoMode
 '-------------------------------------------------------------------------------
-sub applyClosedPlayerVideoMode(playRequest as dynamic)
-    if playRequest = invalid or playRequest.videoMode = invalid then return
-
-    item = playRequest.item
-    if item = invalid then return
-
-    itemType = LCase(SafeString(item.Type, ""))
-    if itemType = "movie" and m.moviePage <> invalid then
-        m.moviePage.callFunc("applyPlaybackVideoMode", playRequest.videoMode)
-    else if itemType = "episode" and m.tvEpisodePage <> invalid then
-        m.tvEpisodePage.callFunc("applyPlaybackVideoMode", playRequest.videoMode)
-    end if
+sub resetPlaybackVideoMode()
+    if m.moviePage <> invalid then m.moviePage.callFunc("applyPlaybackVideoMode", invalid)
+    if m.tvEpisodePage <> invalid then m.tvEpisodePage.callFunc("applyPlaybackVideoMode", invalid)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -309,7 +301,6 @@ function buildClosedPlayerTVEpisodeLoadRequest(playRequest as dynamic) as dynami
         startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
         playbackQueue: playRequest.playbackQueue
         playbackQueueIndex: playRequest.playbackQueueIndex
-        videoMode: SafeString(playRequest.videoMode, "automatic")
     }
 end function
 
