@@ -1338,6 +1338,7 @@ end function
 '-------------------------------------------------------------------------------
 sub activate()
     AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
+    m.top.thumbnailLayoutActive = m.pageState.isThumbnailLayout
     m.top.setFocus(true)
     if focusPendingTarget() then return
 
@@ -1362,6 +1363,7 @@ end function
 '-------------------------------------------------------------------------------
 sub deactivate()
     AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    m.top.thumbnailLayoutActive = false
     stopVideoLibraryProgressHold()
     closeLetterGrid(false)
     m.videoLibraryTask.control = "stop"
@@ -1711,7 +1713,10 @@ sub applyGridLayout(imageAspect as string)
 
     if imageAspect = "wide" then
         m.pageState.isThumbnailLayout = true
+        m.top.thumbnailLayoutActive = true
         m.titleLabel.translation = [480, 120]
+        m.browseByButton.translation = [1634, 120]
+        m.sortButton.translation = [1832, 120]
         m.filterButtonRow.translation = [264, 208]
         m.itemsGrid.translation = [24, 207 + filterRowOffset]
         applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
@@ -1726,7 +1731,10 @@ sub applyGridLayout(imageAspect as string)
     end if
 
     m.pageState.isThumbnailLayout = false
+    m.top.thumbnailLayoutActive = false
     m.titleLabel.translation = [480, 120]
+    m.browseByButton.translation = [1618, 120]
+    m.sortButton.translation = [1816, 120]
     m.filterButtonRow.translation = [264, 208]
     m.itemsGrid.translation = [96, 207 + filterRowOffset]
     applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])

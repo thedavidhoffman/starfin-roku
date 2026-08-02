@@ -32,6 +32,7 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
     page.observeField("selectedMovie", "videoLibraryHandleMovieSelected")
     page.observeField("selectedSeries", "videoLibraryHandleSeriesSelected")
     page.observeField("focusExitUp", "videoLibraryHandleFocusExitUp")
+    page.observeField("thumbnailLayoutActive", "videoLibraryHandleThumbnailLayoutChanged")
     page.settings = m.settings
     loadRequest = {
         server: m.session.server
@@ -47,12 +48,22 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
 
     if fromCollections <> true then resetDynamicPages()
     m.videoLibraryPage = page
+    m.header.thumbnailLibraryLayout = page.thumbnailLayoutActive
     m.dynamicPageHost.appendChild(page)
     if m.collectionsPage <> invalid then m.collectionsPage.visible = false
     m.homePage.visible = false
     m.header.visible = true
     page.loadRequest = loadRequest
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' videoLibraryHandleThumbnailLayoutChanged
+'-------------------------------------------------------------------------------
+sub videoLibraryHandleThumbnailLayoutChanged()
+    if m.videoLibraryPage = invalid then return
+
+    m.header.thumbnailLibraryLayout = m.videoLibraryPage.thumbnailLayoutActive
 end sub
 
 '-------------------------------------------------------------------------------

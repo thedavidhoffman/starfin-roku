@@ -23,9 +23,21 @@ sub initReferences()
     m.searchButton = m.top.findNode("searchButton")
     m.settingsButton = m.top.findNode("settingsButton")
     m.userMenuButton = m.top.findNode("userMenuButton")
+    m.clock = m.top.findNode("clock")
     m.accountDropdownMenu = m.top.findNode("accountDropdownMenu")
     m.usernameUpSequenceTimer = m.top.findNode("usernameUpSequenceTimer")
     m.focusableHeaderButtons = []
+end sub
+
+'-------------------------------------------------------------------------------
+' onThumbnailLibraryLayoutChanged
+'-------------------------------------------------------------------------------
+sub onThumbnailLibraryLayoutChanged()
+    if m.top.thumbnailLibraryLayout = true then
+        m.clock.translation = [1704, 32]
+    else
+        m.clock.translation = [1680, 32]
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
