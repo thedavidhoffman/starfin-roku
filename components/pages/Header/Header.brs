@@ -6,8 +6,6 @@ sub init()
     rebuildFocusableHeaderButtons()
     initHandlers()
 
-    m.usernameUpPressCount = 0
-
     initStyle()
     updateUserMenuButton()
     closeAccountMenu()
@@ -25,7 +23,6 @@ sub initReferences()
     m.userMenuButton = m.top.findNode("userMenuButton")
     m.clock = m.top.findNode("clock")
     m.accountDropdownMenu = m.top.findNode("accountDropdownMenu")
-    m.usernameUpSequenceTimer = m.top.findNode("usernameUpSequenceTimer")
     m.focusableHeaderButtons = []
 end sub
 
@@ -49,7 +46,6 @@ sub initHandlers()
     m.settingsButton.observeField("buttonSelected", "onSettingsPressed")
     m.userMenuButton.observeField("buttonSelected", "onUserMenuPressed")
     m.accountDropdownMenu.observeField("selectedItem", "onAccountDropdownItemSelected")
-    m.usernameUpSequenceTimer.observeField("fire", "onUsernameUpSequenceTimerFired")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -111,10 +107,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if key = "down" then return m.accountDropdownMenu.callFunc("focusByOffset", 1)
     end if
 
-    if key = "up" then return trackUsernameUpSequence()
-
-    resetUsernameUpSequence()
-
     if key = "left" then
         return focusHeaderButtonByOffset(-1)
     else if key = "right" then
@@ -136,56 +128,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     return false
 end function
-
-'-------------------------------------------------------------------------------
-' trackUsernameUpSequence
-'-------------------------------------------------------------------------------
-function trackUsernameUpSequence() as boolean
-    if m.userMenuButton = invalid or m.userMenuButton.isInFocusChain() = false then
-        resetUsernameUpSequence()
-        return false
-    end if
-
-    m.usernameUpPressCount = m.usernameUpPressCount + 1
-    restartUsernameUpSequenceTimer()
-
-    if m.usernameUpPressCount >= 5 then
-        resetUsernameUpSequence()
-        m.top.overlayRequested = {
-            id: "systemInformation"
-            componentName: "SystemInformationDialog"
-            closeField: "closeRequested"
-            openFunction: "openSystemInformation"
-        }
-    end if
-
-    return true
-end function
-
-'-------------------------------------------------------------------------------
-' restartUsernameUpSequenceTimer
-'-------------------------------------------------------------------------------
-sub restartUsernameUpSequenceTimer()
-    if m.usernameUpSequenceTimer = invalid then return
-
-    m.usernameUpSequenceTimer.control = "stop"
-    m.usernameUpSequenceTimer.control = "start"
-end sub
-
-'-------------------------------------------------------------------------------
-' resetUsernameUpSequence
-'-------------------------------------------------------------------------------
-sub resetUsernameUpSequence()
-    m.usernameUpPressCount = 0
-    if m.usernameUpSequenceTimer <> invalid then m.usernameUpSequenceTimer.control = "stop"
-end sub
-
-'-------------------------------------------------------------------------------
-' onUsernameUpSequenceTimerFired
-'-------------------------------------------------------------------------------
-sub onUsernameUpSequenceTimerFired()
-    resetUsernameUpSequence()
-end sub
 
 '-------------------------------------------------------------------------------
 ' focusHeaderButtonByOffset
@@ -301,9 +243,23 @@ sub onAccountDropdownItemSelected()
     if selectedItem = invalid then return
 
     closeMenu()
-    if selectedItem.id = "logout" then
+    if selectedItem.id = "systemInformation" then
+        requestSystemInformationOverlay()
+    else if selectedItem.id = "logout" then
         m.top.logoutSelected = true
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' requestSystemInformationOverlay
+'-------------------------------------------------------------------------------
+sub requestSystemInformationOverlay()
+    m.top.overlayRequested = {
+        id: "systemInformation"
+        componentName: "SystemInformationDialog"
+        closeField: "closeRequested"
+        openFunction: "openSystemInformation"
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -371,7 +327,8 @@ end sub
 '-------------------------------------------------------------------------------
 function getAccountDropdownItems() as object
     return [
-        { id: "logout", text: "Logout" }
+        { id: "systemInformation", text: "System Info", textAlign: "center" }
+        { id: "logout", text: "Logout", textAlign: "center" }
     ]
 end function
 
