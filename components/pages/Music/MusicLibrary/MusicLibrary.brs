@@ -198,7 +198,7 @@ sub renderArtists()
         child = content.createChild("ContentNode")
         artistId = SafeString(artist.Id, "")
         child.title = FirstNonEmpty([artist.Name], "Unknown Artist")
-        child.HDPosterUrl = getArtistImageUrl(artist, request, "Primary", 340, 340)
+        child.HDPosterUrl = getArtistImageUrl(artist, request, "Primary", 342, 342)
         child.AddFields({ raw: artist, itemId: artistId })
     end for
 
@@ -257,7 +257,7 @@ function getAlbumArtworkUrl(album as dynamic, request as dynamic) as string
     if album.ImageTags <> invalid and album.ImageTags.Primary <> invalid then primaryTag = album.ImageTags.Primary
     if primaryTag = "" then return ""
 
-    return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 340, 340)
+    return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 342, 342)
 end function
 
 '-------------------------------------------------------------------------------

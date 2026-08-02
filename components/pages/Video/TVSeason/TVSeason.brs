@@ -477,7 +477,7 @@ sub appendEpisodeItem(parent as object, episode as object)
     child = parent.createChild("ContentNode")
     child.title = getItemTitle(episode)
     child.description = FirstNonEmpty([episode.Overview], "")
-    child.HDPosterUrl = getImageUrl(episode, "Primary", 530, 298)
+    child.HDPosterUrl = getImageUrl(episode, "Primary", 531, 300)
     child.AddFields({
         itemId: SafeString(FirstNonEmpty([episode.Id], ""), "")
         itemType: SafeString(FirstNonEmpty([episode.Type], ""), "")
@@ -1178,13 +1178,13 @@ function getSeasonBackgroundUrl() as string
         imageUrl = FirstNonEmpty([request.series.thumbUrl], "")
         if imageUrl <> "" then return imageUrl
 
-        imageUrl = getImageUrl(request.series, "Thumb", 530, 298)
+        imageUrl = getImageUrl(request.series, "Thumb", 531, 300)
         if imageUrl <> "" then return imageUrl
 
         imageUrl = FirstNonEmpty([request.series.backdropUrl], "")
         if imageUrl <> "" then return imageUrl
 
-        imageUrl = getImageUrl(request.series, "Backdrop", 530, 298)
+        imageUrl = getImageUrl(request.series, "Backdrop", 531, 300)
         if imageUrl <> "" then return imageUrl
     end if
 

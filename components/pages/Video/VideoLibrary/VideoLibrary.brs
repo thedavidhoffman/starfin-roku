@@ -1510,16 +1510,16 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if itemId = "" then return ""
 
     if imageAspect = "wide" then
-        imageUrl = getImageUrlForType(itemId, item, "Thumb", 440, 248)
+        imageUrl = getImageUrlForType(itemId, item, "Thumb", 441, 249)
         if imageUrl <> "" then return imageUrl
 
-        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 440, 248)
+        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 441, 249)
         if imageUrl <> "" then return imageUrl
 
-        return getImageUrlForType(itemId, item, "Primary", 440, 248)
+        return getImageUrlForType(itemId, item, "Primary", 441, 249)
     end if
 
-    return getImageUrlForType(itemId, item, "Primary", 250, 375)
+    return getImageUrlForType(itemId, item, "Primary", 252, 378)
 end function
 
 '-------------------------------------------------------------------------------
@@ -1713,11 +1713,11 @@ sub applyGridLayout(imageAspect as string)
         m.pageState.isThumbnailLayout = true
         m.titleLabel.translation = [460, 120]
         m.filterButtonRow.translation = [264, 208]
-        m.itemsGrid.translation = [23, 208 + filterRowOffset]
+        m.itemsGrid.translation = [24, 207 + filterRowOffset]
         applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
         applyLetterGridLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
         m.itemsGrid.itemSize = [465, 348]
-        m.itemsGrid.itemSpacing = [0, 11]
+        m.itemsGrid.itemSpacing = [0, 12]
         m.itemsGrid.numColumns = 4
         m.itemsGrid.numRows = 3
         m.itemsGrid.focusBitmapUri = "pkg:/images/library/thumbnail-focus-465x348.png"
@@ -1728,14 +1728,14 @@ sub applyGridLayout(imageAspect as string)
     m.pageState.isThumbnailLayout = false
     m.titleLabel.translation = [460, 120]
     m.filterButtonRow.translation = [264, 208]
-    m.itemsGrid.translation = [96, 208 + filterRowOffset]
+    m.itemsGrid.translation = [96, 207 + filterRowOffset]
     applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
     applyLetterGridLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
-    m.itemsGrid.itemSize = [295, 463]
-    m.itemsGrid.itemSpacing = [-11, 26]
+    m.itemsGrid.itemSize = [297, 465]
+    m.itemsGrid.itemSpacing = [-12, 27]
     m.itemsGrid.numColumns = 6
     m.itemsGrid.numRows = 2
-    m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
+    m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-297x465.png"
     updateVideoLibraryProgressLayout(imageAspect)
 end sub
 

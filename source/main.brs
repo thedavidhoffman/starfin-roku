@@ -2,6 +2,7 @@ sub Main()
     screen = CreateObject("roSGScreen")
     port = CreateObject("roMessagePort")
     screen.SetMessagePort(port)
+    screen.GetGlobalNode().AddFields({ maskAssetProfile: MaskAssetProfile_Create() })
     
     ' required for Roku app certification
     memoryMonitor = CreateObject("roAppMemoryMonitor")

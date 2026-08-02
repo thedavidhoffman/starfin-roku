@@ -101,14 +101,18 @@ sub updateThumbnailSlot(slot as object, data as dynamic, slotIndex as integer, l
     slot.hasImage = true
     scale = getThumbnailSlotScale(slotIndex, layout)
 
-    tileWidth = layout.tileWidth * scale
-    tileHeight = layout.tileHeight * scale
+    tileWidth = snapFhdMeasurement(layout.tileWidth * scale)
+    tileHeight = snapFhdMeasurement(layout.tileHeight * scale)
     sheetWidth = data.sheetColumns * tileWidth
     sheetHeight = data.sheetRows * tileHeight
 
     slot.group.translation = getThumbnailSlotTranslation(slotIndex, tileHeight, layout)
     slot.imageMask.translation = [0, 0]
-    slot.imageMask.maskSize = [tileWidth, tileHeight]
+    hdTileWidth = Number_ToInteger((tileWidth * 2) / 3, tileWidth)
+    hdTileHeight = Number_ToInteger((tileHeight * 2) / 3, tileHeight)
+    maskFilename = "trickplay-side-mask.png"
+    if slotIndex = 2 then maskFilename = "trickplay-center-mask.png"
+    MaskAssets_Apply(slot.imageMask, maskFilename, [tileWidth, tileHeight], [hdTileWidth, hdTileHeight])
     slot.clip.clippingRect = [0, 0, tileWidth, tileHeight]
     slot.background.width = tileWidth
     slot.background.height = tileHeight
@@ -136,7 +140,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getThumbnailLayout(data as object) as object
     layoutWidth = data.layoutWidth
-    if layoutWidth = invalid or layoutWidth <= 0 then layoutWidth = 1714
+    if layoutWidth = invalid or layoutWidth <= 0 then layoutWidth = 1713
 
     gap = data.gap
     if gap = invalid then gap = 15
@@ -175,20 +179,30 @@ end function
 ' getThumbnailSlotTranslation
 '-------------------------------------------------------------------------------
 function getThumbnailSlotTranslation(slotIndex as integer, tileHeight as float, layout as object) as object
-    largeWidth = layout.tileWidth * layout.largeScale
-    smallWidth = layout.tileWidth * layout.smallScale
-    largeHeight = layout.tileHeight * layout.largeScale
+    largeWidth = snapFhdMeasurement(layout.tileWidth * layout.largeScale)
+    smallWidth = snapFhdMeasurement(layout.tileWidth * layout.smallScale)
+    largeHeight = snapFhdMeasurement(layout.tileHeight * layout.largeScale)
     totalWidth = largeWidth + (smallWidth * 4) + (layout.gap * 4)
     x = (layout.layoutWidth - totalWidth) / 2
 
     for i = 0 to slotIndex - 1
-        x = x + (layout.tileWidth * getThumbnailSlotScale(i, layout)) + layout.gap
+        x = x + snapFhdMeasurement(layout.tileWidth * getThumbnailSlotScale(i, layout)) + layout.gap
     end for
 
     y = 0
     if slotIndex <> 2 then y = (largeHeight - tileHeight) / 2
 
-    return [x, y]
+    return [snapFhdMeasurement(x), snapFhdMeasurement(y)]
+end function
+
+'-------------------------------------------------------------------------------
+' snapFhdMeasurement
+'-------------------------------------------------------------------------------
+function snapFhdMeasurement(value as float) as integer
+    snapped = Number_ToInteger((value / 3) + 0.5, 1) * 3
+    if snapped < 3 then return 3
+
+    return snapped
 end function
 
 '-------------------------------------------------------------------------------

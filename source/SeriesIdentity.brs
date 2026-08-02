@@ -24,8 +24,8 @@ function SeriesIdentity_FromItem(server as string, item as dynamic) as object
         Id: FirstNonEmpty([item.Id], "")
         Name: FirstNonEmpty([item.Name, item.SeriesName], "")
         logoUrl: SeriesIdentity_GetLogoUrl(server, item)
-        thumbUrl: SeriesIdentity_GetImageUrl(server, item, "Thumb", 530, 298)
-        backdropUrl: SeriesIdentity_GetImageUrl(server, item, "Backdrop", 530, 298)
+        thumbUrl: SeriesIdentity_GetImageUrl(server, item, "Thumb", 531, 300)
+        backdropUrl: SeriesIdentity_GetImageUrl(server, item, "Backdrop", 531, 300)
         detailBackdropUrl: SeriesIdentity_GetDetailBackdropUrl(server, item)
     }
 end function

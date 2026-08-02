@@ -24,7 +24,7 @@ sub updateTrickplayPreview(position as float)
     end for
 
     m.playbackControls.thumbnailData = {
-        layoutWidth: 1714
+        layoutWidth: 1713
         gap: tileBuffer
         tileWidth: m.trickplay.tileWidth
         tileHeight: m.trickplay.tileHeight
@@ -53,7 +53,7 @@ end function
 function getFiveImageTrickplayScale(tileWidth as dynamic, tileBuffer as integer) as float
     if tileWidth = invalid or tileWidth <= 0 then return 1.0
 
-    progressBarWidth = 1714
+    progressBarWidth = 1713
     availableWidth = progressBarWidth - (tileBuffer * 4)
     if availableWidth <= 0 then return 1.0
 

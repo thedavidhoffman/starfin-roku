@@ -2,6 +2,8 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.contentGroup = m.top.findNode("contentGroup")
+    if MaskAssets_IsHd() then m.contentGroup.translation = [25, 0]
     m.posterMask = m.top.findNode("posterMask")
     m.poster = m.top.findNode("poster")
     m.progressBar = m.top.findNode("progressBar")
@@ -34,16 +36,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub updateWatchedIndicator(item as object, imageAspect as string)
     if imageAspect = "wide" then
-        indicatorSize = 58
-        posterWidth = 440
+        indicatorSize = 57
+        posterWidth = 441
     else
         indicatorSize = 42
-        posterWidth = 250
+        posterWidth = 252
     end if
 
     m.watchedIndicator.width = indicatorSize
     m.watchedIndicator.height = indicatorSize
-    m.watchedIndicator.translation = [posterWidth - indicatorSize - 10, 10]
+    m.watchedIndicator.translation = [posterWidth - indicatorSize - 9, 9]
 
     raw = getRawItem(item)
     m.watchedIndicator.visible = raw <> invalid and raw.UserData <> invalid and raw.UserData.Played = true
@@ -143,8 +145,8 @@ function getImageUrl(item as object, imageAspect as string) as string
     imageUrl = SafeString(item.HDPosterUrl, "")
     if imageUrl <> "" then return imageUrl
 
-    if imageAspect = "wide" then return "pkg:/images/media-card/thumbnail-placeholder-440x248.png"
-    return "pkg:/images/media-card/poster-placeholder-250x375.png"
+    if imageAspect = "wide" then return "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
+    return "pkg:/images/media-card/poster-placeholder-252x378.png"
 end function
 
 '-------------------------------------------------------------------------------
@@ -152,15 +154,14 @@ end function
 '-------------------------------------------------------------------------------
 sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
     if imageAspect = "wide" then
-        m.posterMask.maskUri = "pkg:/images/media-card/thumbnail-mask-440x248.png"
-        m.posterMask.maskSize = [440, 248]
-        m.poster.width = 440
-        m.poster.height = 248
-        applyProgressLayout(440, 248)
-        m.title.width = 440
+        MaskAssets_Apply(m.posterMask, "media-card-thumbnail-mask.png", [441, 249], [294, 166])
+        m.poster.width = 441
+        m.poster.height = 249
+        applyProgressLayout(441, 249)
+        m.title.width = 441
         m.title.translation = [0, 261]
-        m.subtitle.width = 440
-        m.subtitle.translation = [0, 296]
+        m.subtitle.width = 441
+        m.subtitle.translation = [0, 297]
 
         if showSubtitle = true then
             m.title.height = 34
@@ -170,17 +171,16 @@ sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
             m.title.numLines = 2
         end if
     else
-        m.posterMask.maskUri = "pkg:/images/media-card/poster-mask-250x375.png"
-        m.posterMask.maskSize = [250, 375]
-        m.poster.width = 250
-        m.poster.height = 375
-        applyProgressLayout(250, 375)
-        m.title.width = 250
-        m.title.translation = [0, 388]
+        MaskAssets_Apply(m.posterMask, "media-card-poster-mask.png", [252, 378], [168, 252])
+        m.poster.width = 252
+        m.poster.height = 378
+        applyProgressLayout(252, 378)
+        m.title.width = 252
+        m.title.translation = [0, 390]
         m.title.height = 48
         m.title.numLines = 2
-        m.subtitle.width = 250
-        m.subtitle.translation = [0, 426]
+        m.subtitle.width = 252
+        m.subtitle.translation = [0, 429]
     end if
 end sub
 
@@ -188,9 +188,9 @@ end sub
 ' applyProgressLayout
 '-------------------------------------------------------------------------------
 sub applyProgressLayout(width as integer, height as integer)
-    marginX = 10
-    progressHeight = 10
-    progressBottom = 10
+    marginX = 9
+    progressHeight = 9
+    progressBottom = 9
     progressWidth = width - (marginX * 2)
     progressY = height - progressBottom - progressHeight
 
@@ -221,8 +221,8 @@ end sub
 ' getProgressTrackWidth
 '-------------------------------------------------------------------------------
 function getProgressTrackWidth(imageAspect as string) as integer
-    if imageAspect = "wide" then return 420
-    return 230
+    if imageAspect = "wide" then return 423
+    return 234
 end function
 
 '-------------------------------------------------------------------------------

@@ -452,14 +452,14 @@ end function
 ' getPosterLayout
 '-------------------------------------------------------------------------------
 function getPosterLayout() as object
-    return { width: 295, height: 463, itemSizeWidth: 1450, itemSpacing: -11, spacingAfter: 37, imageAspect: "poster", focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-295x463.png" }
+    return { width: 297, height: 465, itemSizeWidth: 1452, itemSpacing: -12, spacingAfter: 36, imageAspect: "poster", focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-297x465.png" }
 end function
 
 '-------------------------------------------------------------------------------
 ' getWideLayout
 '-------------------------------------------------------------------------------
 function getWideLayout() as object
-    return { width: 485, height: 348, itemSizeWidth: 1450, itemSpacing: -27, spacingAfter: 37, imageAspect: "wide", focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-485x348.png" }
+    return { width: 486, height: 348, itemSizeWidth: 1452, itemSpacing: -27, spacingAfter: 36, imageAspect: "wide", focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-486x348.png" }
 end function
 
 '-------------------------------------------------------------------------------
@@ -472,16 +472,16 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if itemId = "" then return ""
 
     if imageAspect = "wide" then
-        imageUrl = getImageUrlForType(itemId, item, "Thumb", 440, 248)
+        imageUrl = getImageUrlForType(itemId, item, "Thumb", 441, 249)
         if imageUrl <> "" then return imageUrl
 
-        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 440, 248)
+        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 441, 249)
         if imageUrl <> "" then return imageUrl
 
-        return getImageUrlForType(itemId, item, "Primary", 440, 248)
+        return getImageUrlForType(itemId, item, "Primary", 441, 249)
     end if
 
-    return getImageUrlForType(itemId, item, "Primary", 250, 375)
+    return getImageUrlForType(itemId, item, "Primary", 252, 378)
 end function
 
 '-------------------------------------------------------------------------------

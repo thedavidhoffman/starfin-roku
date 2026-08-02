@@ -271,16 +271,16 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if itemId = "" then return ""
 
     if imageAspect = "wide" then
-        imageUrl = getImageUrlForType(itemId, item, "Thumb", 440, 248)
+        imageUrl = getImageUrlForType(itemId, item, "Thumb", 441, 249)
         if imageUrl <> "" then return imageUrl
 
-        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 440, 248)
+        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 441, 249)
         if imageUrl <> "" then return imageUrl
 
-        return getImageUrlForType(itemId, item, "Primary", 440, 248)
+        return getImageUrlForType(itemId, item, "Primary", 441, 249)
     end if
 
-    return getImageUrlForType(itemId, item, "Primary", 250, 375)
+    return getImageUrlForType(itemId, item, "Primary", 252, 378)
 end function
 
 '-------------------------------------------------------------------------------
@@ -330,21 +330,21 @@ end function
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
     if imageAspect = "wide" then
-        m.collectionsGrid.translation = [23, 208]
+        m.collectionsGrid.translation = [24, 207]
         m.collectionsGrid.itemSize = [465, 348]
-        m.collectionsGrid.itemSpacing = [0, -25]
+        m.collectionsGrid.itemSpacing = [0, -24]
         m.collectionsGrid.numColumns = 4
         m.collectionsGrid.numRows = 3
         m.collectionsGrid.focusBitmapUri = "pkg:/images/library/thumbnail-focus-465x348.png"
         return
     end if
 
-    m.collectionsGrid.translation = [96, 208]
-    m.collectionsGrid.itemSize = [295, 463]
-    m.collectionsGrid.itemSpacing = [-11, -12]
+    m.collectionsGrid.translation = [96, 207]
+    m.collectionsGrid.itemSize = [297, 465]
+    m.collectionsGrid.itemSpacing = [-12, -12]
     m.collectionsGrid.numColumns = 6
     m.collectionsGrid.numRows = 2
-    m.collectionsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-295x463.png"
+    m.collectionsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-297x465.png"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -353,17 +353,17 @@ end sub
 sub applyGridTranslation(imageAspect as string, itemCount as integer)
     if m.pageState.usingTopCollections <> true or itemCount <> 2 then
         if imageAspect = "wide" then
-            m.collectionsGrid.translation = [23, 208]
+            m.collectionsGrid.translation = [24, 207]
         else
-            m.collectionsGrid.translation = [96, 208]
+            m.collectionsGrid.translation = [96, 207]
         end if
         return
     end if
 
     if imageAspect = "wide" then
-        m.collectionsGrid.translation = [495, 208]
+        m.collectionsGrid.translation = [495, 207]
     else
-        m.collectionsGrid.translation = [671, 208]
+        m.collectionsGrid.translation = [672, 207]
     end if
 end sub
 

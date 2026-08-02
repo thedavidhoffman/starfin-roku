@@ -31,13 +31,6 @@ function DeviceCapabilities_GetDisplaySize() as object
         return displaySize
     end if
 
-    uiResolution = SafeString(deviceInfo.GetUIResolution(), "")
-    displaySize = __DeviceCapabilities_DisplaySizeFromText(uiResolution)
-    if __DeviceCapabilities_IsValidDisplaySize(displaySize) then
-        displaySize.source = "uiResolution"
-        return displaySize
-    end if
-
     return fallback
 end function
 

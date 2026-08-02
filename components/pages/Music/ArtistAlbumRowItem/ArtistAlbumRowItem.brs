@@ -2,6 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    MaskAssets_Apply(m.top.findNode("albumMask"), "album-mask-300.png", [300, 300], [200, 200])
     m.artwork = m.top.findNode("albumArtwork")
     m.albumLabel = m.top.findNode("albumLabel")
     m.yearLabel = m.top.findNode("yearLabel")

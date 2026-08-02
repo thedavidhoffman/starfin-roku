@@ -2,7 +2,13 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.albumMask = m.top.findNode("albumMask")
     m.artwork = m.top.findNode("albumArtwork")
+    if m.artwork.width = 300 then
+        MaskAssets_Apply(m.albumMask, "album-mask-300.png", [300, 300], [200, 200])
+    else
+        MaskAssets_Apply(m.albumMask, "album-mask-342.png", [342, 342], [228, 228])
+    end if
     m.artistLabel = m.top.findNode("artistLabel")
     m.albumLabel = m.top.findNode("albumLabel")
     m.yearLabel = m.top.findNode("yearLabel")
@@ -28,7 +34,7 @@ function getArtworkUrl(item as object) as string
     imageUrl = SafeString(item.HDPosterUrl, "")
     if imageUrl <> "" then return imageUrl
 
-    return "pkg:/images/music/album-placeholder-340x340.png"
+    return "pkg:/images/music/album-placeholder-342x342.png"
 end function
 
 '-------------------------------------------------------------------------------

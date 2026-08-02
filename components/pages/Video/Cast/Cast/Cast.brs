@@ -196,4 +196,3 @@ function getPersonImageUrl(person as object) as string
 
     return Url_BuildImageUrl(m.top.server, personId, "Primary", tag, 195, 195)
 end function
-

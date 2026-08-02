@@ -7,14 +7,14 @@ sub init()
     m.progressBar = m.top.findNode("progressBar")
     m.watchedIndicator = m.top.findNode("watchedIndicator")
     m.layout = {
-        defaultWidth: 530
-        defaultHeight: 298
-        progressMarginX: 10
-        progressBottom: 10
+        defaultWidth: 531
+        defaultHeight: 300
+        progressMarginX: 9
+        progressBottom: 9
         progressHeight: 15
-        watchedSize: 58
-        watchedTop: 10
-        watchedRight: 11
+        watchedSize: 57
+        watchedTop: 9
+        watchedRight: 12
     }
     applyPosterLayout()
 end sub
@@ -36,7 +36,9 @@ sub applyPosterLayout()
     progressWidth = getProgressTrackWidth(width)
     progressY = height - m.layout.progressBottom - m.layout.progressHeight
 
-    m.posterMask.maskSize = [width, height]
+    hdWidth = Number_ToInteger((width * 2) / 3, width)
+    hdHeight = Number_ToInteger((height * 2) / 3, height)
+    MaskAssets_Apply(m.posterMask, "episode-thumbnail-mask.png", [width, height], [hdWidth, hdHeight])
     m.poster.width = width
     m.poster.height = height
 
@@ -125,7 +127,7 @@ end sub
 function getPosterImageUrl(imageUrl as string) as string
     if imageUrl <> "" then return imageUrl
 
-    return "pkg:/images/media-card/thumbnail-placeholder-440x248.png"
+    return "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
 end function
 
 '-------------------------------------------------------------------------------

@@ -4,6 +4,7 @@
 sub init()
     m.mediaBackgroundFull = m.top.findNode("mediaBackgroundFull")
     m.mediaBackgroundPartialGroup = m.top.findNode("mediaBackgroundPartialGroup")
+    MaskAssets_Apply(m.mediaBackgroundPartialGroup, "media-shell-backdrop-mask.png", [1152, 648], [768, 432])
     m.mediaBackgroundPartial = m.top.findNode("mediaBackgroundPartial")
     m.contentGroup = m.top.findNode("contentGroup")
     m.mediaBackgroundUrl = ""

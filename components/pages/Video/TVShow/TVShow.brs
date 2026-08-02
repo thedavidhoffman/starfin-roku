@@ -485,10 +485,10 @@ end sub
 ' getSeasonPosterUrl
 '-------------------------------------------------------------------------------
 function getSeasonPosterUrl(season as dynamic) as string
-    posterUrl = getImageUrl(season, "Primary", 208, 312)
+    posterUrl = getImageUrl(season, "Primary", 207, 312)
     if posterUrl <> "" then return posterUrl
 
-    return getImageUrl(m.pageState.series, "Primary", 208, 312)
+    return getImageUrl(m.pageState.series, "Primary", 207, 312)
 end function
 
 '-------------------------------------------------------------------------------

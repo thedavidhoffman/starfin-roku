@@ -2,6 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    MaskAssets_Apply(m.top.findNode("albumArtworkMask"), "audio-player-album-mask.png", [651, 651], [434, 434])
     m.albumArtwork = m.top.findNode("albumArtwork")
     m.backdrop = m.top.findNode("backdrop")
     m.albumTitle = m.top.findNode("albumTitle")
@@ -294,10 +295,10 @@ end function
 ' getAlbumArtworkUrl
 '-------------------------------------------------------------------------------
 function getAlbumArtworkUrl(album as dynamic, request as object) as string
-    if album = invalid then return "pkg:/images/music/album-placeholder-340x340.png"
+    if album = invalid then return "pkg:/images/music/album-placeholder-342x342.png"
     tag = ""
     if album.ImageTags <> invalid then tag = SafeString(album.ImageTags.Primary, "")
-    if tag = "" then return "pkg:/images/music/album-placeholder-340x340.png"
+    if tag = "" then return "pkg:/images/music/album-placeholder-342x342.png"
     return Url_BuildImageUrl(request.server, request.albumId, "Primary", tag, 650, 650)
 end function
 

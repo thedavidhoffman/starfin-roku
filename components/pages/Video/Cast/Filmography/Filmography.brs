@@ -2,6 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    MaskAssets_Apply(m.top.findNode("previewPosterMask"), "filmography-movie-mask.png", [342, 513], [228, 342])
     m.log = CreateLogger("Filmography")
     m.titleLabel = m.top.findNode("titleLabel")
     m.filmographyList = m.top.findNode("filmographyList")
@@ -25,8 +26,8 @@ sub init()
     }
     m.listLayout = {
         rowCount: 8
-        rowStride: 104
-        focusInsetY: 2
+        rowStride: 105
+        focusInsetY: 3
     }
     m.cards = [
         m.top.findNode("filmographyCard0")

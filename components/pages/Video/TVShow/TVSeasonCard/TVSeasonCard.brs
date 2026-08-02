@@ -2,6 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    MaskAssets_Apply(m.top.findNode("seasonPosterMask"), "season-poster-mask.png", [207, 312], [138, 208])
     m.placeholder = m.top.findNode("placeholder")
     m.poster = m.top.findNode("poster")
     m.watchedIndicator = m.top.findNode("watchedIndicator")

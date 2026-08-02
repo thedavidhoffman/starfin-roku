@@ -3,6 +3,7 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.log = CreateLogger("Person")
+    MaskAssets_Apply(m.top.findNode("personImageMask"), "person-mask.png", [399, 600], [266, 400])
     m.bioGroup = m.top.findNode("bioGroup")
     m.personImage = m.top.findNode("personImage")
     m.nameLabel = m.top.findNode("nameLabel")
@@ -114,9 +115,9 @@ sub renderPerson(person as dynamic)
     renderBirthPlace(person)
     updateOverviewPosition()
 
-    imageUrl = getPersonImageUrl(person, 400, 600)
+    imageUrl = getPersonImageUrl(person, 399, 600)
     posterUrl = imageUrl
-    if posterUrl = "" then posterUrl = "pkg:/images/cast/person-placeholder-400x600.png"
+    if posterUrl = "" then posterUrl = "pkg:/images/cast/person-placeholder-399x600.png"
     m.personImage.visible = true
     m.personImage.uri = posterUrl
 
@@ -131,7 +132,7 @@ sub onSettingsChanged()
     person = m.pageState.person
     if Array_IsAssocArray(person) = false then return
 
-    updateFilmographyButton(person, getPersonImageUrl(person, 400, 600))
+    updateFilmographyButton(person, getPersonImageUrl(person, 399, 600))
     updateReadMoreButton()
 end sub
 

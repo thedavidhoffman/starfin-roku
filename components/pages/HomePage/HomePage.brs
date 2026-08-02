@@ -573,18 +573,18 @@ end sub
 '-------------------------------------------------------------------------------
 function getRowLayout(key as string) as object
     if isMusicLatestRow(key) then
-        return { width: 344, height: 422, itemSizeWidth: 1824, itemSpacing: -22, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-music-focus-344x422.png", itemComponentName: "HomeMusicAlbumCard" }
+        return { width: 345, height: 423, itemSizeWidth: 1824, itemSpacing: -24, spacingAfter: 36, focusBitmapUri: "pkg:/images/homepage/home-page-music-focus-345x423.png", itemComponentName: "HomeMusicAlbumCard" }
     end if
 
     if key = "libraries" then
-        return { width: 485, height: 306, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-my-media-thumbnail-focus-485x306.png", itemComponentName: "VideoMediaCard" }
+        return { width: 486, height: 306, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapUri: "pkg:/images/homepage/home-page-my-media-thumbnail-focus-486x306.png", itemComponentName: "VideoMediaCard" }
     end if
 
     if getRowImageAspect(key) = "wide" then
-        return { width: 485, height: 348, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-485x348.png", itemComponentName: "VideoMediaCard" }
+        return { width: 486, height: 348, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-486x348.png", itemComponentName: "VideoMediaCard" }
     end if
 
-    return { width: 295, height: 463, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 37, focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-295x463.png", itemComponentName: "VideoMediaCard" }
+    return { width: 297, height: 465, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-297x465.png", itemComponentName: "VideoMediaCard" }
 end function
 
 '-------------------------------------------------------------------------------
@@ -891,8 +891,8 @@ end function
 ' getImageSize
 '-------------------------------------------------------------------------------
 function getImageSize(imageAspect as string) as object
-    if imageAspect = "wide" then return { width: 440, height: 248 }
-    return { width: 250, height: 375 }
+    if imageAspect = "wide" then return { width: 441, height: 249 }
+    return { width: 252, height: 378 }
 end function
 
 '-------------------------------------------------------------------------------

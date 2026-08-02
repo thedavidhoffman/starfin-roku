@@ -31,7 +31,7 @@ sub init()
         buttons: []
     }
     m.optionButtonLayout = {
-        startX: 103
+        startX: 102
         y: 962
         spacing: 95
     }
@@ -46,8 +46,8 @@ sub init()
         }
     }
     m.trickplayPositions = {
-        default: [103, 421]
-        tall: [103, 360]
+        default: [102, 420]
+        tall: [102, 360]
     }
 
     colors = Color()

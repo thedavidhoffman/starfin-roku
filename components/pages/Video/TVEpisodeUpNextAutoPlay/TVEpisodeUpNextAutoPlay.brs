@@ -188,7 +188,7 @@ function getEpisodePosterUrl(item as dynamic) as string
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
     if tag = "" then return ""
 
-    return Url_BuildImageUrl(SafeString(request.server, ""), itemId, "Primary", tag, 530, 298, invalid)
+    return Url_BuildImageUrl(SafeString(request.server, ""), itemId, "Primary", tag, 531, 300, invalid)
 end function
 
 '-------------------------------------------------------------------------------
