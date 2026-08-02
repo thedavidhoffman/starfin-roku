@@ -42,7 +42,7 @@ sub executeRequest()
         return
     end if
 
-    filteredItems = filterPersonItems(itemsResult.data, request)
+    filteredItems = itemsResult.data
     filteredEpisodeItems = filterPersonEpisodeItems(episodeItemsResult.data, request, filteredItems)
 
     m.top.response = {
@@ -113,29 +113,6 @@ function loadPersonEpisodeItems(request as object) as object
 end function
 
 '-------------------------------------------------------------------------------
-' filterPersonItems
-'-------------------------------------------------------------------------------
-function filterPersonItems(payload as dynamic, request as object) as dynamic
-    sourceItemType = LCase(SafeString(request.sourceItemType, ""))
-
-    if sourceItemType = "movie" then
-        sourceItemId = SafeString(request.sourceItemId, "")
-        if sourceItemId = "" then return payload
-
-        return filterPayloadItems(payload, sourceItemId, "")
-    end if
-
-    if sourceItemType = "series" then
-        sourceSeriesId = SafeString(request.sourceSeriesId, "")
-        if sourceSeriesId = "" then return payload
-
-        return filterPayloadItems(payload, sourceSeriesId, sourceSeriesId)
-    end if
-
-    return payload
-end function
-
-'-------------------------------------------------------------------------------
 ' filterPersonEpisodeItems
 '-------------------------------------------------------------------------------
 function filterPersonEpisodeItems(payload as dynamic, request as object, relatedItemsPayload as dynamic) as dynamic
@@ -188,22 +165,6 @@ function filterPayloadItemsBySeriesIds(payload as dynamic, excludedSeriesIds as 
 end function
 
 '-------------------------------------------------------------------------------
-' filterPayloadItems
-'-------------------------------------------------------------------------------
-function filterPayloadItems(payload as dynamic, excludedItemId as string, excludedSeriesId as string) as dynamic
-    items = getPayloadItems(payload)
-    if items = invalid then return payload
-
-    filteredItems = []
-    for each item in items
-        if shouldExcludeItem(item, excludedItemId, excludedSeriesId) then continue for
-        filteredItems.Push(item)
-    end for
-
-    return replacePayloadItems(payload, filteredItems)
-end function
-
-'-------------------------------------------------------------------------------
 ' replacePayloadItems
 '-------------------------------------------------------------------------------
 function replacePayloadItems(payload as dynamic, items as object) as dynamic
@@ -223,21 +184,6 @@ function getPayloadItems(payload as dynamic) as dynamic
     if Array_IsAssocArray(payload) = false then return invalid
 
     return payload.Items
-end function
-
-'-------------------------------------------------------------------------------
-' shouldExcludeItem
-'-------------------------------------------------------------------------------
-function shouldExcludeItem(item as dynamic, excludedItemId as string, excludedSeriesId as string) as boolean
-    if Array_IsAssocArray(item) = false then return false
-
-    if excludedItemId <> "" and SafeString(FirstNonEmpty([item.Id], ""), "") = excludedItemId then return true
-    if excludedSeriesId <> "" then
-        if SafeString(FirstNonEmpty([item.Id], ""), "") = excludedSeriesId then return true
-        if SafeString(FirstNonEmpty([item.SeriesId], ""), "") = excludedSeriesId then return true
-    end if
-
-    return false
 end function
 
 '-------------------------------------------------------------------------------
@@ -265,4 +211,3 @@ function validateRequest(request as dynamic) as dynamic
 
     return invalid
 end function
-

@@ -312,7 +312,7 @@ function renderRelatedItems(items as object) as boolean
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
     m.relatedTitleLabel.text = "Movies/Shows with " + getPersonName(m.pageState.person)
-    sortedItems = sortItemsByProductionYearDesc(items)
+    sortedItems = sortRelatedItems(items)
 
     for each item in sortedItems
         addRelatedItemNode(row, item, "poster")
@@ -363,9 +363,9 @@ sub addRelatedItemNode(row as object, item as dynamic, imageAspect as string)
 end sub
 
 '-------------------------------------------------------------------------------
-' sortItemsByProductionYearDesc
+' sortRelatedItems
 '-------------------------------------------------------------------------------
-function sortItemsByProductionYearDesc(items as object) as object
+function sortRelatedItems(items as object) as object
     if items = invalid then return []
 
     sortedItems = []
@@ -377,7 +377,7 @@ function sortItemsByProductionYearDesc(items as object) as object
 
     for i = 0 to sortedItems.Count() - 2
         for j = i + 1 to sortedItems.Count() - 1
-            if getProductionYearValue(sortedItems[j]) > getProductionYearValue(sortedItems[i]) then
+            if relatedItemComesBefore(sortedItems[j], sortedItems[i]) then
                 temp = sortedItems[i]
                 sortedItems[i] = sortedItems[j]
                 sortedItems[j] = temp
@@ -389,15 +389,42 @@ function sortItemsByProductionYearDesc(items as object) as object
 end function
 
 '-------------------------------------------------------------------------------
-' getProductionYearValue
+' relatedItemComesBefore
 '-------------------------------------------------------------------------------
-function getProductionYearValue(item as dynamic) as integer
-    if Array_IsAssocArray(item) = false then return -1
+function relatedItemComesBefore(candidate as dynamic, current as dynamic) as boolean
+    candidateDate = getRelatedItemDateKey(candidate)
+    currentDate = getRelatedItemDateKey(current)
+
+    if candidateDate <> currentDate then return candidateDate > currentDate
+
+    candidateTitle = getRelatedItemTitleKey(candidate)
+    currentTitle = getRelatedItemTitleKey(current)
+    return candidateTitle < currentTitle
+end function
+
+'-------------------------------------------------------------------------------
+' getRelatedItemDateKey
+'-------------------------------------------------------------------------------
+function getRelatedItemDateKey(item as dynamic) as string
+    if Array_IsAssocArray(item) = false then return ""
+
+    premiereDate = SafeString(FirstNonEmpty([item.PremiereDate], ""), "")
+    if Len(premiereDate) >= 10 then return Left(premiereDate, 10)
 
     year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then return -1
+    productionYear = Number_ToInteger(year, 0)
+    if productionYear <= 0 then return ""
 
-    return val(year)
+    return productionYear.ToStr() + "-00-00"
+end function
+
+'-------------------------------------------------------------------------------
+' getRelatedItemTitleKey
+'-------------------------------------------------------------------------------
+function getRelatedItemTitleKey(item as dynamic) as string
+    if Array_IsAssocArray(item) = false then return ""
+
+    return LCase(SafeString(FirstNonEmpty([item.SortName, item.Name], ""), ""))
 end function
 
 '-------------------------------------------------------------------------------
