@@ -40,6 +40,8 @@ sub init()
     m.layout = {
         contentDefault: [96, 0]
         contentCastFocused: [96, -397]
+        toolbarDefault: [0, 529]
+        toolbarCastFocused: [0, 926]
     }
 end sub
 
@@ -254,6 +256,7 @@ sub onLoadRequestChanged()
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.focusArea = "videoToolbar"
     m.contentGroup.translation = m.layout.contentDefault
+    m.videoToolbar.translation = m.layout.toolbarDefault
     setSeasonsVisible(true)
     updateFocusChevron()
     m.cast.server = request.server
@@ -538,6 +541,7 @@ sub focusSeasonsIfActive()
 
     m.pageState.focusArea = "seasons"
     m.contentGroup.translation = m.layout.contentDefault
+    m.videoToolbar.translation = m.layout.toolbarDefault
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
     m.videoToolbar.callFunc("deactivate")
@@ -552,6 +556,7 @@ end sub
 sub focusVideoToolbar()
     m.pageState.focusArea = "videoToolbar"
     m.contentGroup.translation = m.layout.contentDefault
+    m.videoToolbar.translation = m.layout.toolbarDefault
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
     updateFocusChevron()
@@ -567,6 +572,7 @@ function focusMediaDescription() as boolean
 
     m.pageState.focusArea = "description"
     m.contentGroup.translation = m.layout.contentDefault
+    m.videoToolbar.translation = m.layout.toolbarDefault
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
     m.videoToolbar.callFunc("deactivate")
@@ -590,6 +596,7 @@ sub focusCast()
 
     m.pageState.focusArea = "cast"
     m.contentGroup.translation = m.layout.contentCastFocused
+    m.videoToolbar.translation = m.layout.toolbarCastFocused
     setSeasonsVisible(false)
     m.videoToolbar.callFunc("deactivate")
     m.cast.callFunc("activate")
