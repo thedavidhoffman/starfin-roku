@@ -2,114 +2,41 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.appSectionTitle = m.top.findNode("appSectionTitle")
-    m.appInfoKeysLabel = m.top.findNode("appInfoKeysLabel")
-    m.appInfoValuesLabel = m.top.findNode("appInfoValuesLabel")
-    m.cacheSectionTitle = m.top.findNode("cacheSectionTitle")
-    m.cacheKeysLabel = m.top.findNode("cacheKeysLabel")
-    m.cacheValuesLabel = m.top.findNode("cacheValuesLabel")
-    m.deviceSectionTitle = m.top.findNode("deviceSectionTitle")
-    m.deviceInfoKeysLabel = m.top.findNode("deviceInfoKeysLabel")
-    m.deviceInfoValuesLabel = m.top.findNode("deviceInfoValuesLabel")
-    m.registrySectionTitle = m.top.findNode("registrySectionTitle")
-    m.registryKeysLabel = m.top.findNode("registryKeysLabel")
-    m.registryValuesLabel = m.top.findNode("registryValuesLabel")
-
-    initStyle()
+    m.diagnosticsText = m.top.findNode("diagnosticsText")
     updateDiagnostics()
 end sub
 
 '-------------------------------------------------------------------------------
-' initStyle
+' focusDiagnostics
 '-------------------------------------------------------------------------------
-sub initStyle()
-    setSectionTitleColor(m.appSectionTitle)
-    setSectionTitleColor(m.cacheSectionTitle)
-    setSectionTitleColor(m.deviceSectionTitle)
-    setSectionTitleColor(m.registrySectionTitle)
-    setBodyColor(m.appInfoKeysLabel)
-    setBodyColor(m.appInfoValuesLabel)
-    setBodyColor(m.cacheKeysLabel)
-    setBodyColor(m.cacheValuesLabel)
-    setBodyColor(m.deviceInfoKeysLabel)
-    setBodyColor(m.deviceInfoValuesLabel)
-    setBodyColor(m.registryKeysLabel)
-    setBodyColor(m.registryValuesLabel)
-end sub
-
-'-------------------------------------------------------------------------------
-' setSectionTitleColor
-'-------------------------------------------------------------------------------
-sub setSectionTitleColor(label as dynamic)
-    if label <> invalid then label.color = &hF3F7FBFF
-end sub
-
-'-------------------------------------------------------------------------------
-' setBodyColor
-'-------------------------------------------------------------------------------
-sub setBodyColor(label as dynamic)
-    if label <> invalid then label.color = &hD5E0EAFF
+sub focusDiagnostics()
+    m.diagnosticsText.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
 ' updateDiagnostics
 '-------------------------------------------------------------------------------
 sub updateDiagnostics()
-    appInfoText = getAppInfoText()
-    cacheText = getCacheInfoText()
-    deviceInfoText = getDeviceInfoText()
-    registryText = getApplicationRegistryText()
-
-    setLabelText(m.appInfoKeysLabel, appInfoText.keys)
-    setLabelText(m.appInfoValuesLabel, appInfoText.values)
-    setLabelText(m.cacheKeysLabel, cacheText.keys)
-    setLabelText(m.cacheValuesLabel, cacheText.values)
-    setLabelText(m.deviceInfoKeysLabel, deviceInfoText.keys)
-    setLabelText(m.deviceInfoValuesLabel, deviceInfoText.values)
-    setLabelText(m.registryKeysLabel, registryText.keys)
-    setLabelText(m.registryValuesLabel, registryText.values)
+    separator = Chr(10) + Chr(10)
+    m.diagnosticsText.text = getAppInfoText() + separator + getDeviceInfoText() + separator + getApplicationRegistryText()
 end sub
 
 '-------------------------------------------------------------------------------
 ' getAppInfoText
 '-------------------------------------------------------------------------------
-function getAppInfoText() as object
+function getAppInfoText() as string
     appInfo = CreateObject("roAppInfo")
 
-    return keyValueText([
+    return sectionText("Application Information", [
         { key: "title", value: appInfo.GetTitle() }
         { key: "version", value: appInfo.GetVersion() }
     ])
 end function
 
 '-------------------------------------------------------------------------------
-' getCacheInfoText
-'-------------------------------------------------------------------------------
-function getCacheInfoText() as object
-    cacheInfo = m.top.cacheInfo
-    if cacheInfo = invalid or cacheInfo.Count() = 0 then
-        return keyValueText([
-            { key: "cache", value: "(empty)" }
-        ])
-    end if
-
-    entries = []
-    for each cacheEntry in cacheInfo
-        if cacheEntry <> invalid then
-            entries.Push({
-                key: cacheEntry.key
-                value: formatValue(cacheEntry.itemCount) + " items, " + formatValue(cacheEntry.size)
-            })
-        end if
-    end for
-
-    return keyValueText(entries)
-end function
-
-'-------------------------------------------------------------------------------
 ' getDeviceInfoText
 '-------------------------------------------------------------------------------
-function getDeviceInfoText() as object
+function getDeviceInfoText() as string
     deviceInfo = CreateObject("roDeviceInfo")
 
     model = deviceInfo.GetModel()
@@ -119,7 +46,7 @@ function getDeviceInfoText() as object
     displayMode = deviceInfo.GetDisplayMode()
     connectionInfo = deviceInfo.GetConnectionInfo()
 
-    return keyValueText([
+    return sectionText("Roku Device Information", [
         { key: "model", value: modelDisplayName + " " + model }
         { key: "os version", value: osVersion }
         { key: "ui resolution", value: uiResolution }
@@ -131,12 +58,12 @@ end function
 '-------------------------------------------------------------------------------
 ' getApplicationRegistryText
 '-------------------------------------------------------------------------------
-function getApplicationRegistryText() as object
+function getApplicationRegistryText() as string
     auth = AuthStore_Load()
     settings = SettingsStore_Load()
     keys = SettingsStore_Keys()
 
-    return keyValueText([
+    return sectionText("Application Registry", [
         { key: "server", value: auth.server }
         { key: "username", value: auth.username }
         { key: "userId", value: auth.userId }
@@ -162,26 +89,16 @@ function truncateText(value as dynamic, maxLength as integer) as string
 end function
 
 '-------------------------------------------------------------------------------
-' keyValueText
+' sectionText
 '-------------------------------------------------------------------------------
-function keyValueText(entries as object) as object
-    keys = ""
-    values = ""
+function sectionText(title as string, entries as object) as string
+    text = UCase(title)
 
     for each entry in entries
-        if keys <> "" then
-            keys = keys + Chr(10)
-            values = values + Chr(10)
-        end if
-
-        keys = keys + UCase(entry.key) + ":"
-        values = values + formatValue(entry.value)
+        text = text + Chr(10) + UCase(entry.key) + ": " + formatValue(entry.value)
     end for
 
-    return {
-        keys: keys
-        values: values
-    }
+    return text
 end function
 
 '-------------------------------------------------------------------------------
@@ -243,10 +160,3 @@ function formatArray(value as object) as string
 
     return text + "]"
 end function
-
-'-------------------------------------------------------------------------------
-' setLabelText
-'-------------------------------------------------------------------------------
-sub setLabelText(label as dynamic, text as string)
-    if label <> invalid then label.text = text
-end sub

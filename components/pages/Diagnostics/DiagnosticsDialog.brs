@@ -1,28 +1,14 @@
 '-------------------------------------------------------------------------------
-' init
-'-------------------------------------------------------------------------------
-sub init()
-    m.dialog = m.top.findNode("diagnosticsDialog")
-    if m.dialog <> invalid then m.dialog.observeField("closeRequested", "onDialogCloseRequested")
-end sub
-
-'-------------------------------------------------------------------------------
 ' openDiagnostics
 '-------------------------------------------------------------------------------
 sub openDiagnostics()
-    if m.dialog = invalid then return
+    m.top.title = "Diagnostics"
+    m.top.dialogWidth = 1152
+    m.top.dialogHeight = 940
+    m.top.contentComponentName = "DiagnosticsContent"
 
-    content = m.dialog.callFunc("getContentComponent")
-    if content <> invalid then
-        content.cacheInfo = m.top.cacheInfo
-        content.callFunc("updateDiagnostics")
-    end if
-    m.dialog.callFunc("openDialog")
-end sub
-
-'-------------------------------------------------------------------------------
-' onDialogCloseRequested
-'-------------------------------------------------------------------------------
-sub onDialogCloseRequested()
-    m.top.closeRequested = true
+    content = m.top.callFunc("getContentComponent")
+    content.callFunc("updateDiagnostics")
+    m.top.callFunc("openDialog")
+    content.callFunc("focusDiagnostics")
 end sub
