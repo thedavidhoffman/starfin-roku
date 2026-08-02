@@ -44,7 +44,7 @@ sub onLoadRequestChanged()
     m.pageState.imageAspect = getCollectionImageAspect()
     m.titleLabel.text = getCollectionTitle(request.title)
     applyGridLayout(m.pageState.imageAspect)
-    Spinner_Show()
+    Spinner_Show(0)
     renderCollections([])
 
     m.collectionsTask.request = request
