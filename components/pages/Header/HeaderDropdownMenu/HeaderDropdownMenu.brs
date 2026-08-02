@@ -13,7 +13,8 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.background = m.top.findNode("background")
+    m.backgroundColor = m.top.findNode("backgroundColor")
+    m.backgroundGlass = m.top.findNode("backgroundGlass")
     m.itemsGroup = m.top.findNode("itemsGroup")
 end sub
 
@@ -30,7 +31,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyle()
     palette = Color()
-    if m.background <> invalid then m.background.color = &h41405AFF
     if m.top.headerBgColor = invalid or m.top.headerBgColor = 0 then m.top.headerBgColor = palette.background.header
 end sub
 
@@ -241,8 +241,6 @@ end function
 ' updateBackground
 '-------------------------------------------------------------------------------
 sub updateBackground(itemCount as integer)
-    if m.background = invalid then return
-
     menuWidth = int(m.top.menuWidth)
     itemHeight = int(m.top.itemHeight)
     itemSpacing = int(m.top.itemSpacing)
@@ -253,8 +251,11 @@ sub updateBackground(itemCount as integer)
     spacingHeight = 0
     if itemCount > 1 then spacingHeight = (itemCount - 1) * itemSpacing
 
-    m.background.width = menuWidth
-    m.background.height = 36 + (itemCount * itemHeight) + spacingHeight
+    menuHeight = 36 + (itemCount * itemHeight) + spacingHeight
+    m.backgroundColor.width = menuWidth
+    m.backgroundColor.height = menuHeight
+    m.backgroundGlass.width = menuWidth
+    m.backgroundGlass.height = menuHeight
 end sub
 
 '-------------------------------------------------------------------------------
