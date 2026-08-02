@@ -327,8 +327,8 @@ end sub
 '-------------------------------------------------------------------------------
 function getAccountDropdownItems() as object
     return [
-        { id: "systemInformation", text: "System Info", textAlign: "center" }
-        { id: "logout", text: "Logout", textAlign: "center" }
+        { id: "systemInformation", text: "System Info" }
+        { id: "logout", text: "Logout" }
     ]
 end function
 

@@ -180,12 +180,8 @@ sub renderItems()
             button.translation = [0, index * (itemHeight + itemSpacing)]
             button.buttonWidth = itemWidth
             button.buttonHeight = itemHeight
-            button.textAlign = SafeString(item.textAlign, "left")
-            if button.textAlign = "center" then
-                button.textInset = 0
-            else
-                button.textInset = m.top.textInset
-            end if
+            button.textAlign = "center"
+            button.textInset = 0
             button.text = FirstNonEmpty([item.text], "")
             button.headerBgColor = m.top.headerBgColor
             button.observeField("buttonSelected", "onItemPressed")
