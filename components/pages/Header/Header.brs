@@ -152,10 +152,10 @@ function trackUsernameUpSequence() as boolean
     if m.usernameUpPressCount >= 5 then
         resetUsernameUpSequence()
         m.top.overlayRequested = {
-            id: "diagnostics"
-            componentName: "DiagnosticsDialog"
+            id: "systemInformation"
+            componentName: "SystemInformationDialog"
             closeField: "closeRequested"
-            openFunction: "openDiagnostics"
+            openFunction: "openSystemInformation"
         }
     end if
 

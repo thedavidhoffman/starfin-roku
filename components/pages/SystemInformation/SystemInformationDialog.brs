@@ -1,14 +1,14 @@
 '-------------------------------------------------------------------------------
-' openDiagnostics
+' openSystemInformation
 '-------------------------------------------------------------------------------
-sub openDiagnostics()
-    m.top.title = "Diagnostics"
+sub openSystemInformation()
+    m.top.title = "System Information"
     m.top.dialogWidth = 1152
     m.top.dialogHeight = 940
-    m.top.contentComponentName = "DiagnosticsContent"
+    m.top.contentComponentName = "SystemInformationContent"
 
     content = m.top.callFunc("getContentComponent")
-    content.callFunc("updateDiagnostics")
+    content.callFunc("updateSystemInformation")
     m.top.callFunc("openDialog")
-    content.callFunc("focusDiagnostics")
+    content.callFunc("focusSystemInformation")
 end sub

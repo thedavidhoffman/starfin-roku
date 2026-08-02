@@ -2,23 +2,23 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.diagnosticsText = m.top.findNode("diagnosticsText")
-    updateDiagnostics()
+    m.systemInformationText = m.top.findNode("systemInformationText")
+    updateSystemInformation()
 end sub
 
 '-------------------------------------------------------------------------------
-' focusDiagnostics
+' focusSystemInformation
 '-------------------------------------------------------------------------------
-sub focusDiagnostics()
-    m.diagnosticsText.setFocus(true)
+sub focusSystemInformation()
+    m.systemInformationText.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
-' updateDiagnostics
+' updateSystemInformation
 '-------------------------------------------------------------------------------
-sub updateDiagnostics()
+sub updateSystemInformation()
     separator = Chr(10) + Chr(10)
-    m.diagnosticsText.text = getAppInfoText() + separator + getDeviceInfoText() + separator + getApplicationRegistryText()
+    m.systemInformationText.text = getAppInfoText() + separator + getDeviceInfoText() + separator + getApplicationRegistryText()
 end sub
 
 '-------------------------------------------------------------------------------
