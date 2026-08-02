@@ -26,6 +26,16 @@ sub onTitleChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onViewportWidthChanged
+'-------------------------------------------------------------------------------
+sub onViewportWidthChanged()
+    width = m.top.viewportWidth
+    if width <= 0 then width = 1848
+
+    m.castRows.itemSize = [width, 264]
+end sub
+
+'-------------------------------------------------------------------------------
 ' onCastChanged
 '-------------------------------------------------------------------------------
 sub onCastChanged()

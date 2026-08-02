@@ -207,6 +207,7 @@ function addPeopleRow(rowIndex as integer, y as integer, people as dynamic) as i
 
     cast = CreateObject("roSGNode", "Cast")
     cast.translation = [getCastOffsetX(), y]
+    cast.viewportWidth = 1452 - getCastOffsetX()
     cast.server = SafeString(m.searchState.request.server, "")
     cast.title = "People"
     cast.showSubtitles = false
