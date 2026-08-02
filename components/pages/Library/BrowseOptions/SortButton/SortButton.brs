@@ -24,6 +24,7 @@ sub updateFocusVisual()
     if isSortEnabled() <> true then
         m.background.uri = "pkg:/images/buttons/primary_unfocused.9.png"
         m.sortOrderIcon.opacity = 0.45
+        updateSortDisplay()
         return
     end if
 
@@ -33,6 +34,8 @@ sub updateFocusVisual()
     else
         m.background.uri = "pkg:/images/buttons/primary_unfocused.9.png"
     end if
+
+    updateSortDisplay()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -57,10 +60,13 @@ end sub
 ' updateSortDisplay
 '-------------------------------------------------------------------------------
 sub updateSortDisplay()
+    iconSuffix = "-light"
+    if m.top.isInFocusChain() then iconSuffix = ""
+
     if isSortEnabled() = true and isDescending() then
-        m.sortOrderIcon.uri = "pkg:/images/icons/sort/sort-arrow-up.png"
+        m.sortOrderIcon.uri = "pkg:/images/icons/sort/sort-arrow-up" + iconSuffix + ".png"
     else
-        m.sortOrderIcon.uri = "pkg:/images/icons/sort/sort-arrow-down.png"
+        m.sortOrderIcon.uri = "pkg:/images/icons/sort/sort-arrow-down" + iconSuffix + ".png"
     end if
 end sub
 

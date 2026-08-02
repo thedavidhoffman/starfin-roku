@@ -1711,7 +1711,7 @@ sub applyGridLayout(imageAspect as string)
 
     if imageAspect = "wide" then
         m.pageState.isThumbnailLayout = true
-        m.titleLabel.translation = [460, 120]
+        m.titleLabel.translation = [480, 120]
         m.filterButtonRow.translation = [264, 208]
         m.itemsGrid.translation = [24, 207 + filterRowOffset]
         applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
@@ -1726,7 +1726,7 @@ sub applyGridLayout(imageAspect as string)
     end if
 
     m.pageState.isThumbnailLayout = false
-    m.titleLabel.translation = [460, 120]
+    m.titleLabel.translation = [480, 120]
     m.filterButtonRow.translation = [264, 208]
     m.itemsGrid.translation = [96, 207 + filterRowOffset]
     applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])

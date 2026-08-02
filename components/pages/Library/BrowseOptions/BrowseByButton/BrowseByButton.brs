@@ -24,11 +24,11 @@ sub updateFocusVisual()
 
     if hasFocus then
         m.background.uri = "pkg:/images/buttons/primary_focused.9.png"
+        m.sortLabel.color = &h0F1A2AFF
     else
         m.background.uri = "pkg:/images/buttons/primary_unfocused.9.png"
+        m.sortLabel.color = &hFFFFFFFF
     end if
-
-    m.sortLabel.color = &h0F1A2AFF
 end sub
 
 '-------------------------------------------------------------------------------

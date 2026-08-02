@@ -66,7 +66,7 @@ sub onFocusVisualChanged()
         if m.textLabel <> invalid then m.textLabel.color = &h0F1A2AFF
     else
         m.bg.uri = "pkg:/images/buttons/primary_unfocused.9.png"
-        if m.textLabel <> invalid then m.textLabel.color = &h0F1A2AFF
+        if m.textLabel <> invalid then m.textLabel.color = &hFFFFFFFF
     end if
 end sub
 
