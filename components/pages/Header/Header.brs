@@ -17,6 +17,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initReferences()
     m.navGroup = m.top.findNode("navGroup")
+    m.navGlassBackground = m.top.findNode("navGlassBackground")
     m.homeButton = m.top.findNode("homeButton")
     m.searchButton = m.top.findNode("searchButton")
     m.settingsButton = m.top.findNode("settingsButton")
@@ -53,6 +54,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyle()
     palette = Color()
+    m.navGlassBackground.uri = ButtonAssets_GetUri("header-glass-background.9.png")
     headerBgColor = palette.background.header
     m.homeButton.headerBgColor = headerBgColor
     m.searchButton.headerBgColor = headerBgColor

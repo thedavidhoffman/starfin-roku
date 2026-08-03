@@ -31,6 +31,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub initStyle()
     palette = Color()
+    m.backgroundColor.uri = ButtonAssets_GetUri("header-glass-background-fill.9.png")
+    m.backgroundGlass.uri = ButtonAssets_GetUri("header-glass-background.9.png")
     if m.top.headerBgColor = invalid or m.top.headerBgColor = 0 then m.top.headerBgColor = palette.background.header
 end sub
 

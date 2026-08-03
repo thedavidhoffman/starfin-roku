@@ -62,10 +62,10 @@ sub onFocusVisualChanged()
     if m.bg = invalid then return
 
     if m.top.hasFocusVisual = true then
-        m.bg.uri = "pkg:/images/buttons/primary_focused.9.png"
+        m.bg.uri = ButtonAssets_GetUri("primary-focused.9.png")
         if m.textLabel <> invalid then m.textLabel.color = &h0F1A2AFF
     else
-        m.bg.uri = "pkg:/images/buttons/primary_unfocused.9.png"
+        m.bg.uri = ButtonAssets_GetUri("primary-unfocused.9.png")
         if m.textLabel <> invalid then m.textLabel.color = &hFFFFFFFF
     end if
 end sub

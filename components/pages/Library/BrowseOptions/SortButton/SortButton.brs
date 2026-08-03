@@ -22,7 +22,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub updateFocusVisual()
     if isSortEnabled() <> true then
-        m.background.uri = "pkg:/images/buttons/primary_unfocused.9.png"
+        m.background.uri = ButtonAssets_GetUri("primary-unfocused.9.png")
         m.sortOrderIcon.opacity = 0.45
         updateSortDisplay()
         return
@@ -30,9 +30,9 @@ sub updateFocusVisual()
 
     m.sortOrderIcon.opacity = 1.0
     if m.top.isInFocusChain() then
-        m.background.uri = "pkg:/images/buttons/primary_focused.9.png"
+        m.background.uri = ButtonAssets_GetUri("primary-focused.9.png")
     else
-        m.background.uri = "pkg:/images/buttons/primary_unfocused.9.png"
+        m.background.uri = ButtonAssets_GetUri("primary-unfocused.9.png")
     end if
 
     updateSortDisplay()
