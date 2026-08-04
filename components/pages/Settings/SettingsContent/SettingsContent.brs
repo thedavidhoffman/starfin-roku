@@ -11,6 +11,7 @@ sub init()
         m.top.findNode("moviePanel")
         m.top.findNode("videoPanel")
         m.top.findNode("collectionsPanel")
+        m.top.findNode("playlistsPanel")
         m.top.findNode("integrationsPanel")
     ]
     m.settingsControls = {
@@ -21,6 +22,7 @@ sub init()
         videoStreamingModeOptions: m.top.findNode("videoStreamingModeOptions")
         collectionCardsImageTypeOptions: m.top.findNode("collectionCardsImageTypeOptions")
         collectionItemsImageTypeOptions: m.top.findNode("collectionItemsImageTypeOptions")
+        playlistImageTypeOptions: m.top.findNode("playlistImageTypeOptions")
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
     }
     m.categoryControls = [
@@ -29,6 +31,7 @@ sub init()
         [m.settingsControls.movieLibraryOptions]
         [m.settingsControls.videoStreamingModeOptions]
         [m.settingsControls.collectionCardsImageTypeOptions, m.settingsControls.collectionItemsImageTypeOptions]
+        [m.settingsControls.playlistImageTypeOptions]
         [m.settingsControls.tmdbApiKeyInput]
     ]
     m.focusState = {
@@ -45,6 +48,7 @@ sub init()
     initDisplayOptions(m.settingsControls.movieLibraryOptions)
     initDisplayOptions(m.settingsControls.collectionCardsImageTypeOptions)
     initDisplayOptions(m.settingsControls.collectionItemsImageTypeOptions)
+    initDisplayOptions(m.settingsControls.playlistImageTypeOptions)
     initTVEpisodeListDisplayOptions()
     initMediaShellBackgroundOptions()
     initVideoStreamingModeOptions()
@@ -55,6 +59,7 @@ sub init()
     m.settingsControls.movieLibraryOptions.observeField("itemSelected", "onMovieLibraryDisplaySelected")
     m.settingsControls.collectionCardsImageTypeOptions.observeField("itemSelected", "onCollectionCardsImageTypeSelected")
     m.settingsControls.collectionItemsImageTypeOptions.observeField("itemSelected", "onCollectionItemsImageTypeSelected")
+    m.settingsControls.playlistImageTypeOptions.observeField("itemSelected", "onPlaylistImageTypeSelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
@@ -69,7 +74,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initCategoryList()
     content = CreateObject("roSGNode", "ContentNode")
-    for each title in ["Media Shell", "TV", "Movie", "Video", "Collections", "Integrations"]
+    for each title in ["Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Integrations"]
         item = content.createChild("ContentNode")
         item.title = title
     end for
@@ -129,6 +134,7 @@ sub loadSettingsValues()
     m.settingsState.values[keys.movieLibraryDisplay] = SettingsStore_GetSettingValue(settings, keys.movieLibraryDisplay)
     m.settingsState.values[keys.collectionCardsImageType] = SettingsStore_GetSettingValue(settings, keys.collectionCardsImageType)
     m.settingsState.values[keys.collectionItemsImageType] = SettingsStore_GetSettingValue(settings, keys.collectionItemsImageType)
+    m.settingsState.values[keys.playlistImageType] = SettingsStore_GetSettingValue(settings, keys.playlistImageType)
     m.settingsState.values[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
     m.settingsState.values[keys.mediaShellBackground] = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
     m.settingsState.values[keys.videoStreamingMode] = SettingsStore_GetSettingValue(settings, keys.videoStreamingMode)
@@ -138,6 +144,7 @@ sub loadSettingsValues()
     setDisplayOption(m.settingsControls.movieLibraryOptions, m.settingsState.values[keys.movieLibraryDisplay])
     setDisplayOption(m.settingsControls.collectionCardsImageTypeOptions, m.settingsState.values[keys.collectionCardsImageType])
     setDisplayOption(m.settingsControls.collectionItemsImageTypeOptions, m.settingsState.values[keys.collectionItemsImageType])
+    setDisplayOption(m.settingsControls.playlistImageTypeOptions, m.settingsState.values[keys.playlistImageType])
     setTVEpisodeListDisplayOption(m.settingsState.values[keys.tvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[keys.mediaShellBackground])
     setVideoStreamingModeOption(m.settingsState.values[keys.videoStreamingMode])
@@ -251,7 +258,7 @@ end function
 function getSettingsValues() as object
     keys = SettingsStore_Keys()
     settings = {}
-    for each key in [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.videoStreamingMode, keys.tmdbApiKey]
+    for each key in [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.playlistImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.videoStreamingMode, keys.tmdbApiKey]
         settings[key] = SettingsStore_GetSettingValue(m.settingsState.values, key)
     end for
     return settings
@@ -283,6 +290,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onCollectionItemsImageTypeSelected()
     setSelectedDisplayOptionValue(m.settingsControls.collectionItemsImageTypeOptions, SettingsStore_Keys().collectionItemsImageType)
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaylistImageTypeSelected
+'-------------------------------------------------------------------------------
+sub onPlaylistImageTypeSelected()
+    setSelectedDisplayOptionValue(m.settingsControls.playlistImageTypeOptions, SettingsStore_Keys().playlistImageType)
 end sub
 
 '-------------------------------------------------------------------------------

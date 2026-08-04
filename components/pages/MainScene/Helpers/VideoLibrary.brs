@@ -25,12 +25,15 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
     if selection = invalid then return
     if selection.libraryId = invalid or selection.libraryId = "" then return
 
-    page = CreateObject("roSGNode", "VideoLibrary")
+    pageComponentName = "VideoLibrary"
+    if LCase(SafeString(selection.collectionType, "")) = "playlists" then pageComponentName = "Playlists"
+    page = CreateObject("roSGNode", pageComponentName)
     page.observeField("closeRequested", "videoLibraryHandleCloseRequested")
     page.observeField("letterGridRequested", "videoLibraryHandleLetterGridRequested")
     page.observeField("overlayRequested", "videoLibraryHandleOverlayRequested")
     page.observeField("selectedMovie", "videoLibraryHandleMovieSelected")
     page.observeField("selectedSeries", "videoLibraryHandleSeriesSelected")
+    page.observeField("selectedEpisode", "videoLibraryHandleEpisodeSelected")
     page.observeField("focusExitUp", "videoLibraryHandleFocusExitUp")
     page.observeField("thumbnailLayoutActive", "videoLibraryHandleThumbnailLayoutChanged")
     page.settings = m.settings
@@ -150,6 +153,8 @@ end sub
 function getVideoLibraryIncludeItemTypes(collectionType as string) as string
     if collectionType = "tvshows" then return "Series"
     if collectionType = "collection" then return "Movie,Series"
+    if collectionType = "playlists" then return "Playlist"
+    if collectionType = "playlist" then return "Movie,Series,Episode,Video"
     return "Movie"
 end function
 
@@ -171,6 +176,21 @@ sub videoLibraryHandleSeriesSelected()
     if selection = invalid then return
     if m.videoLibraryPage <> invalid then m.videoLibraryPage.callFunc("deactivate")
     tvShowShow(selection, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' videoLibraryHandleEpisodeSelected
+'-------------------------------------------------------------------------------
+sub videoLibraryHandleEpisodeSelected()
+    selection = m.videoLibraryPage.selectedEpisode
+    if selection = invalid then return
+
+    loadRequest = buildHomeEpisodeLoadRequest(selection)
+    if loadRequest = invalid then return
+
+    m.videoLibraryPage.callFunc("deactivate")
+    m.videoLibraryPage.visible = false
+    tvEpisodeShow({ loadRequest: loadRequest })
 end sub
 
 '-------------------------------------------------------------------------------

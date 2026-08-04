@@ -78,7 +78,7 @@ sub updatePlaybackSkipAvailability(request as object, item as dynamic)
     isEpisode = isTVEpisodePlayback(request, item)
     isMovie = isMoviePlayback(request, item)
     m.playbackControls.skipBackEnabled = isEpisode or isMovie
-    m.playbackControls.skipForwardEnabled = isEpisode and hasQueueItemAtOffset(1)
+    m.playbackControls.skipForwardEnabled = (isEpisode or isMovie) and hasQueueItemAtOffset(1)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -88,7 +88,8 @@ function isMoviePlayback(request as dynamic, item as dynamic) as boolean
     if isTVEpisodePlayback(request, item) = true then return false
     if item = invalid then return false
 
-    return LCase(FirstNonEmpty([item.Type], "")) = "movie"
+    itemType = LCase(FirstNonEmpty([item.Type], ""))
+    return itemType = "movie" or itemType = "video"
 end function
 
 '-------------------------------------------------------------------------------
@@ -119,7 +120,7 @@ sub onSkipBackPressed()
     item = getCurrentPlaybackItem(request)
     if isTVEpisodePlayback(request, item) <> true and isMoviePlayback(request, item) <> true then return
 
-    if isTVEpisodePlayback(request, item) = true and getCurrentPlaybackPosition() < 15 then
+    if (isTVEpisodePlayback(request, item) = true or isMoviePlayback(request, item) = true) and getCurrentPlaybackPosition() < 15 then
         if startQueueItemAtOffset(-1) = true then return
     end if
 
@@ -133,7 +134,7 @@ sub onSkipForwardPressed()
     request = m.top.playRequest
     item = getCurrentPlaybackItem(request)
 
-    if isTVEpisodePlayback(request, item) <> true then return
+    if isTVEpisodePlayback(request, item) <> true and isMoviePlayback(request, item) <> true then return
     startQueueItemAtOffset(1)
 end sub
 
@@ -187,8 +188,15 @@ end function
 ' buildQueuePlaybackRequest
 '-------------------------------------------------------------------------------
 function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) as object
+    series = m.context.series
     season = m.context.season
-    if queueItem.season <> invalid then season = queueItem.season
+    if queueItem.hasPlaybackIdentity = true then
+        series = queueItem.series
+        season = queueItem.season
+    else
+        if queueItem.series <> invalid then series = queueItem.series
+        if queueItem.season <> invalid then season = queueItem.season
+    end if
 
     return {
         server: m.session.server
@@ -196,13 +204,24 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         userId: m.session.userId
         itemId: SafeString(queueItem.itemId, "")
         item: queueItem.item
-        series: m.context.series
+        series: series
         season: season
         startPositionTicks: 0
         playbackQueue: m.queue.items
         playbackQueueIndex: queueIndex
         videoMode: SafeString(m.top.playRequest.videoMode, "automatic")
     }
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylistPlaybackQueue
+'-------------------------------------------------------------------------------
+function isPlaylistPlaybackQueue() as boolean
+    if m.queue = invalid or m.queue.items = invalid then return false
+    if m.queue.index < 0 or m.queue.index >= m.queue.items.Count() then return false
+
+    currentItem = m.queue.items[m.queue.index]
+    return currentItem <> invalid and currentItem.hasPlaybackIdentity = true
 end function
 
 '-------------------------------------------------------------------------------
@@ -362,6 +381,10 @@ end function
 ' requestUpNextAutoPlay
 '-------------------------------------------------------------------------------
 sub requestUpNextAutoPlay()
+    if isPlaylistPlaybackQueue() then
+        m.log.write("Skipping up-next overlay for playlist playback queue")
+        return
+    end if
     if m.queue = invalid then
         m.log.write("Skipping up-next autoplay: queue is invalid")
         return
@@ -390,7 +413,7 @@ sub requestUpNextAutoPlay()
     m.top.upNextRequested = {
         finishedItem: currentItem
         nextItem: nextItem
-        series: m.context.series
+        series: getQueueItemSeries(nextItem)
         season: getQueueItemSeason(nextItem)
         playbackQueue: m.queue.items
         playbackQueueIndex: nextIndex
@@ -399,9 +422,19 @@ sub requestUpNextAutoPlay()
 end sub
 
 '-------------------------------------------------------------------------------
+' getQueueItemSeries
+'-------------------------------------------------------------------------------
+function getQueueItemSeries(item as dynamic) as dynamic
+    if item <> invalid and item.hasPlaybackIdentity = true then return item.series
+    if item <> invalid and item.series <> invalid then return item.series
+    return m.context.series
+end function
+
+'-------------------------------------------------------------------------------
 ' getQueueItemSeason
 '-------------------------------------------------------------------------------
 function getQueueItemSeason(item as dynamic) as dynamic
+    if item <> invalid and item.hasPlaybackIdentity = true then return item.season
     if item <> invalid and item.season <> invalid then return item.season
     return m.context.season
 end function

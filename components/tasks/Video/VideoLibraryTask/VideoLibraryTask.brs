@@ -21,7 +21,7 @@ sub executeRequest()
     params = {
         userId: SafeString(request.userId, "")
         parentId: SafeString(request.libraryId, "")
-        recursive: true
+        recursive: LCase(SafeString(request.collectionType, "")) <> "playlists"
         includeItemTypes: SafeString(request.includeItemTypes, "")
         fields: "SortName,ProductionYear,PremiereDate,DateCreated,Genres"
         enableImageTypes: "Primary,Backdrop,Thumb,Logo"
@@ -32,7 +32,17 @@ sub executeRequest()
     }
     if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
 
-    url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
+    if LCase(SafeString(request.collectionType, "")) = "playlist" then
+        playlistParams = {
+            userId: SafeString(request.userId, "")
+            fields: "SortName,ProductionYear,PremiereDate,DateCreated,Genres"
+            enableImageTypes: "Primary,Backdrop,Thumb,Logo"
+            imageTypeLimit: 1
+        }
+        url = request.server + "/Playlists/" + SafeString(request.libraryId, "") + "/Items" + Url_BuildQueryString(playlistParams)
+    else
+        url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
+    end if
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
     if response.ok <> true then
         response.AddReplace("action", "videoLibrary")

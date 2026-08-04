@@ -99,6 +99,16 @@ sub playerHandlePlaybackProgressChanged()
     routeTVShowPlaybackProgress(change)
     routeTVEpisodePlaybackProgress(change)
     routeTVSeasonPlaybackProgress(change)
+    routeVideoLibraryPlaybackProgress(change)
+end sub
+
+'-------------------------------------------------------------------------------
+' routeVideoLibraryPlaybackProgress
+'-------------------------------------------------------------------------------
+sub routeVideoLibraryPlaybackProgress(change as object)
+    if m.videoLibraryPage = invalid then return
+
+    m.videoLibraryPage.playbackProgressChange = change
 end sub
 
 '-------------------------------------------------------------------------------

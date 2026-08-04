@@ -929,7 +929,8 @@ end function
 ' isMediaLibrary
 '-------------------------------------------------------------------------------
 function isMediaLibrary(item as dynamic) as boolean
-    return item.CollectionType = "movies" or item.CollectionType = "tvshows"
+    collectionType = LCase(SafeString(item.CollectionType, ""))
+    return collectionType = "movies" or collectionType = "tvshows" or collectionType = "playlists"
 end function
 
 '-------------------------------------------------------------------------------

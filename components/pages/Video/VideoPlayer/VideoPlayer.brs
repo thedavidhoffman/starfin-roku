@@ -149,6 +149,7 @@ sub onVideoStateChanged()
     else if state = "finished" then
         reportPlaystateStop()
         emitPlaybackProgress(true)
+        if isPlaylistPlaybackQueue() and startQueueItemAtOffset(1) then return
         requestUpNextAutoPlay()
         stopPlayback()
         m.top.closeRequested = true

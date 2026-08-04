@@ -356,6 +356,8 @@ function buildPlaySelection(startPositionTicks as dynamic) as dynamic
     selection = {
         itemId: itemId
         item: item
+        playbackQueue: request.playbackQueue
+        playbackQueueIndex: request.playbackQueueIndex
     }
     if startPositionTicks <> invalid then selection.AddReplace("startPositionTicks", startPositionTicks)
 

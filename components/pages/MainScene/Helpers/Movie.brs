@@ -32,6 +32,8 @@ sub movieShow(selection as object, shouldReset as boolean)
         itemId: selection.itemId
         item: selection.item
         settings: m.settings
+        playbackQueue: selection.playbackQueue
+        playbackQueueIndex: selection.playbackQueueIndex
     }
 
     if shouldReset then resetDynamicPages()

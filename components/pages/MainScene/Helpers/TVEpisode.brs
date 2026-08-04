@@ -117,6 +117,8 @@ function buildHomeEpisodeLoadRequest(selection as object) as object
             Name: FirstNonEmpty([item.SeriesName], "")
         }
         startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
+        playbackQueue: selection.playbackQueue
+        playbackQueueIndex: selection.playbackQueueIndex
     }
 end function
 
@@ -146,6 +148,11 @@ sub tvEpisodeHandleCloseRequested()
         m.tvShowPage.visible = true
         m.header.visible = false
         m.tvShowPage.callFunc("activate")
+    else if m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.visible = true
+        m.header.visible = true
+        if playbackProgressChange <> invalid then m.videoLibraryPage.playbackProgressChange = playbackProgressChange
+        m.videoLibraryPage.callFunc("activate")
     else if searchReturnToPage() then
         return
     else

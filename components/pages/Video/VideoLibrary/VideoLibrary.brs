@@ -31,6 +31,8 @@ sub init()
         refocusBrowseByButtonAfterLoad: false
         refocusSortButtonAfterLoad: false
         isLoading: false
+        playlistNavigationStack: []
+        pendingAutomaticPlaylist: invalid
         lifecycle: AsyncLifecycle_Create()
     }
     m.browseByButton.selectedSort = getDefaultSortSelection()
@@ -54,6 +56,7 @@ sub initReferences()
     m.videoLibraryTask = m.top.findNode("videoLibraryTask")
     m.videoLibraryProgressIndicator = m.top.findNode("videoLibraryProgressIndicator")
     m.videoLibraryProgressHoldTimer = m.top.findNode("videoLibraryProgressHoldTimer")
+    m.singlePlaylistOpenTimer = m.top.findNode("singlePlaylistOpenTimer")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -62,6 +65,7 @@ end sub
 sub initHandlers()
     m.videoLibraryTask.observeField("response", "onVideoLibraryResponse")
     m.videoLibraryProgressHoldTimer.observeField("fire", "onVideoLibraryProgressHoldTimerFire")
+    m.singlePlaylistOpenTimer.observeField("fire", "onSinglePlaylistOpenTimerFire")
     m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
     m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
@@ -176,6 +180,9 @@ end sub
 ' syncSortControls
 '-------------------------------------------------------------------------------
 sub syncSortControls()
+    sortControlsVisible = isPlaylistContentRequest() <> true
+    m.browseByButton.visible = sortControlsVisible
+    m.sortButton.visible = sortControlsVisible
     m.browseByButton.selectedSort = m.pageState.selectedSort
     m.sortButton.selectedSort = m.pageState.selectedSort
     m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
@@ -208,6 +215,15 @@ sub onVideoLibraryResponse()
     m.pageState.allItems = getItemsFromPayload(response.payload)
     m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
     rebuildVideoLibraryItemNodeCache()
+    if isPlaylistLibraryRequest() and m.pageState.allItems.Count() = 1 then
+        playlist = m.pageState.allItems[0]
+        if SafeString(playlist.Id, "") <> "" then
+            Status_ClearMessage()
+            m.pageState.pendingAutomaticPlaylist = playlist
+            m.singlePlaylistOpenTimer.control = "start"
+            return
+        end if
+    end if
     if isDecadeFilterActive() then
         showDecadeFilterRow()
     else if isGenreFilterActive() then
@@ -244,11 +260,104 @@ sub onItemSelected()
     itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId = "" then return
 
-    if isPlayableMovie(item) then
-        m.top.selectedMovie = { itemId: itemId, item: item }
-    else if isTVSeries(item) then
-        m.top.selectedSeries = { itemId: itemId, item: item }
+    selection = { itemId: itemId, item: item }
+    playbackContext = buildPlaylistPlaybackContext(selected)
+    if playbackContext <> invalid then
+        selection.AddReplace("playbackQueue", playbackContext.queue)
+        selection.AddReplace("playbackQueueIndex", playbackContext.index)
     end if
+
+    if isPlayableMovie(item) then
+        m.top.selectedMovie = selection
+    else if isTVSeries(item) then
+        m.top.selectedSeries = selection
+    else if isTVEpisode(item) then
+        m.top.selectedEpisode = selection
+    else if isPlaylist(item) then
+        openPlaylist(item)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' buildPlaylistPlaybackContext
+'-------------------------------------------------------------------------------
+function buildPlaylistPlaybackContext(selectedIndex as integer) as dynamic
+    if isPlaylistContentRequest() <> true then return invalid
+
+    queue = []
+    queueIndex = -1
+    for i = 0 to m.pageState.items.Count() - 1
+        item = m.pageState.items[i]
+        if isPlayableMovie(item) <> true and isTVEpisode(item) <> true then continue for
+
+        if i = selectedIndex then queueIndex = queue.Count()
+        queue.Push(buildPlaylistPlaybackQueueItem(item))
+    end for
+
+    if queueIndex < 0 then return invalid
+    return { queue: queue, index: queueIndex }
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaylistPlaybackQueueItem
+'-------------------------------------------------------------------------------
+function buildPlaylistPlaybackQueueItem(item as object) as object
+    queueItem = {
+        itemId: SafeString(item.Id, "")
+        item: item
+        startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
+        hasPlaybackIdentity: true
+        series: invalid
+        season: invalid
+    }
+
+    if isTVEpisode(item) then
+        queueItem.AddReplace("series", {
+            Id: SafeString(item.SeriesId, "")
+            Name: SafeString(item.SeriesName, "")
+        })
+        queueItem.AddReplace("season", {
+            Id: SafeString(item.SeasonId, "")
+            Name: SafeString(item.SeasonName, "")
+        })
+    end if
+
+    return queueItem
+end function
+
+'-------------------------------------------------------------------------------
+' onSinglePlaylistOpenTimerFire
+'-------------------------------------------------------------------------------
+sub onSinglePlaylistOpenTimerFire()
+    playlist = m.pageState.pendingAutomaticPlaylist
+    m.pageState.pendingAutomaticPlaylist = invalid
+    if playlist = invalid then
+        Spinner_Hide()
+        return
+    end if
+
+    openPlaylist(playlist, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' openPlaylist
+'-------------------------------------------------------------------------------
+sub openPlaylist(item as object, addToNavigationStack = true as boolean)
+    request = m.pageState.request
+    if request = invalid then return
+
+    if addToNavigationStack then m.pageState.playlistNavigationStack.Push(request)
+    m.top.loadRequest = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        libraryId: SafeString(item.Id, "")
+        collectionType: "playlist"
+        includeItemTypes: "Movie,Series,Episode,Video"
+        title: SafeString(item.Name, "Playlist")
+        item: item
+        fromCollections: false
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -273,21 +382,33 @@ sub onMediaStateChange()
     change = m.top.mediaStateChange
     if change = invalid then return
 
-    item = findVideoLibraryItem(SafeString(change.itemId, ""))
-    if item = invalid then return
+    itemId = SafeString(change.itemId, "")
+    if itemId = "" then return
     action = SafeString(change.action, "")
-    if MediaState_ApplyToItem(item, change) <> true then return
+    if applyMediaStateChangeToMatchingItems(itemId, change) <> true then return
 
     if isFavoriteBrowseActive() and action = "favorite" and change.value <> true then
-        itemId = SafeString(change.itemId, "")
         m.pageState.allItems = getItemsExcludingId(m.pageState.allItems, itemId)
         renderItems(m.pageState.allItems)
         updateTitleLabel(m.pageState.allItems.Count())
         return
     end if
 
-    notifyVideoLibraryItemChanged(item)
+    notifyVideoLibraryItemsChanged(itemId)
 end sub
+
+'-------------------------------------------------------------------------------
+' applyMediaStateChangeToMatchingItems
+'-------------------------------------------------------------------------------
+function applyMediaStateChangeToMatchingItems(itemId as string, change as object) as boolean
+    didApply = false
+    for each item in m.pageState.allItems
+        if SafeString(item.Id, "") = itemId then
+            if MediaState_ApplyToItem(item, change) then didApply = true
+        end if
+    end for
+    return didApply
+end function
 
 '-------------------------------------------------------------------------------
 ' getItemsExcludingId
@@ -307,34 +428,44 @@ sub onPlaybackProgressChange()
     change = m.top.playbackProgressChange
     if change = invalid then return
 
-    item = findVideoLibraryItem(SafeString(change.itemId, ""))
-    if item = invalid then return
-    if PlaybackProgress_ApplyChangeToItem(item, change) <> true then return
+    itemId = SafeString(change.itemId, "")
+    if itemId = "" then return
+    if applyPlaybackProgressChangeToMatchingItems(itemId, change) <> true then return
 
-    notifyVideoLibraryItemChanged(item)
+    notifyVideoLibraryItemsChanged(itemId)
 end sub
 
 '-------------------------------------------------------------------------------
-' findVideoLibraryItem
+' applyPlaybackProgressChangeToMatchingItems
 '-------------------------------------------------------------------------------
-function findVideoLibraryItem(itemId as string) as dynamic
-    if itemId = "" then return invalid
-
+function applyPlaybackProgressChangeToMatchingItems(itemId as string, change as object) as boolean
+    didApply = false
     for each item in m.pageState.allItems
-        if SafeString(FirstNonEmpty([item.Id], ""), "") = itemId then return item
+        if SafeString(item.Id, "") = itemId then
+            if PlaybackProgress_ApplyChangeToItem(item, change) then didApply = true
+        end if
     end for
-
-    return invalid
+    return didApply
 end function
+
+'-------------------------------------------------------------------------------
+' notifyVideoLibraryItemsChanged
+'-------------------------------------------------------------------------------
+sub notifyVideoLibraryItemsChanged(itemId as string)
+    for i = 0 to m.pageState.allItems.Count() - 1
+        item = m.pageState.allItems[i]
+        if SafeString(item.Id, "") = itemId then notifyVideoLibraryItemChanged(item, i)
+    end for
+end sub
 
 '-------------------------------------------------------------------------------
 ' notifyVideoLibraryItemChanged
 '-------------------------------------------------------------------------------
-sub notifyVideoLibraryItemChanged(item as object)
-    itemId = getVideoLibraryItemCacheKey(item)
-    if itemId = "" then return
+sub notifyVideoLibraryItemChanged(item as object, occurrenceIndex = invalid as dynamic)
+    cacheKey = getVideoLibraryItemCacheKey(item, occurrenceIndex)
+    if cacheKey = "" then return
 
-    node = m.pageState.itemNodeCache[itemId]
+    node = m.pageState.itemNodeCache[cacheKey]
     if node = invalid then return
 
     node.raw = invalid
@@ -360,8 +491,9 @@ function buildVideoLibraryContent(items as object) as object
     if items = invalid then return content
 
     ensureVideoLibraryItemNodeCache()
-    for each item in items
-        node = getCachedVideoLibraryItemNode(item)
+    for i = 0 to items.Count() - 1
+        item = items[i]
+        node = getCachedVideoLibraryItemNode(item, i)
         if node <> invalid then content.appendChild(node)
     end for
 
@@ -397,15 +529,15 @@ end sub
 '-------------------------------------------------------------------------------
 ' getCachedVideoLibraryItemNode
 '-------------------------------------------------------------------------------
-function getCachedVideoLibraryItemNode(item as dynamic) as dynamic
-    itemId = getVideoLibraryItemCacheKey(item)
-    if itemId = "" then return createVideoLibraryItemNode(item)
+function getCachedVideoLibraryItemNode(item as dynamic, occurrenceIndex = invalid as dynamic) as dynamic
+    cacheKey = getVideoLibraryItemCacheKey(item, occurrenceIndex)
+    if cacheKey = "" then return createVideoLibraryItemNode(item)
 
     ensureVideoLibraryItemNodeCache()
-    node = m.pageState.itemNodeCache[itemId]
+    node = m.pageState.itemNodeCache[cacheKey]
     if node = invalid then
         node = createVideoLibraryItemNode(item)
-        m.pageState.itemNodeCache[itemId] = node
+        m.pageState.itemNodeCache[cacheKey] = node
     end if
 
     return node
@@ -430,10 +562,16 @@ end function
 '-------------------------------------------------------------------------------
 ' getVideoLibraryItemCacheKey
 '-------------------------------------------------------------------------------
-function getVideoLibraryItemCacheKey(item as dynamic) as string
+function getVideoLibraryItemCacheKey(item as dynamic, occurrenceIndex = invalid as dynamic) as string
     if Array_IsAssocArray(item) = false then return ""
 
-    return SafeString(FirstNonEmpty([item.Id], ""), "")
+    itemId = SafeString(item.Id, "")
+    if isPlaylistContentRequest() <> true then return itemId
+
+    playlistItemId = SafeString(item.PlaylistItemId, "")
+    if playlistItemId <> "" then return "playlist:" + playlistItemId
+    if itemId = "" or occurrenceIndex = invalid then return ""
+    return "playlist:" + itemId + ":" + occurrenceIndex.ToStr()
 end function
 
 '-------------------------------------------------------------------------------
@@ -618,6 +756,7 @@ function getCachedFilterItems(filterType as string, filterValue as string) as ob
             items = getItemsForDecade(filterKey)
             cache.decadeItemsByValue[filterKey] = items
         end if
+        if isPlaylistContentRequest() then return items
         if cache.sortedDecadeValues[filterKey] <> true then
             items = getItemsSortedByVideoLibraryYear(items)
             cache.decadeItemsByValue[filterKey] = items
@@ -634,6 +773,7 @@ function getCachedFilterItems(filterType as string, filterValue as string) as ob
             items = getItemsForGenre(filterKey)
             cache.genreItemsByValue[filterKey] = items
         end if
+        if isPlaylistContentRequest() then return items
         if cache.sortedGenreValues[filterKey] <> true then
             items = getItemsSortedBySortName(items)
             cache.genreItemsByValue[filterKey] = items
@@ -697,6 +837,7 @@ end function
 function getSortedVideoLibraryItems(items as object) as object
     sortedItems = copyVideoLibraryItems(items)
     if sortedItems.Count() < 2 then return sortedItems
+    if isPlaylistContentRequest() then return sortedItems
 
     selection = m.pageState.selectedSort
     if selection = invalid then selection = getDefaultSortSelection()
@@ -1364,6 +1505,8 @@ end function
 sub deactivate()
     AsyncLifecycle_Deactivate(m.pageState.lifecycle)
     m.top.thumbnailLayoutActive = false
+    m.pageState.pendingAutomaticPlaylist = invalid
+    m.singlePlaylistOpenTimer.control = "stop"
     stopVideoLibraryProgressHold()
     closeLetterGrid(false)
     m.videoLibraryTask.control = "stop"
@@ -1511,6 +1654,15 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     itemId = FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
 
+    request = m.pageState.request
+    collectionType = ""
+    if request <> invalid then collectionType = LCase(SafeString(request.collectionType, ""))
+    if collectionType = "playlists" or collectionType = "playlist" then
+        if isTVEpisode(item) then return getPlaylistEpisodeImageUrl(item, imageAspect)
+        if imageAspect = "wide" then return getImageUrlForType(itemId, item, "Thumb", 441, 249)
+        return getImageUrlForType(itemId, item, "Primary", 252, 378)
+    end if
+
     if imageAspect = "wide" then
         imageUrl = getImageUrlForType(itemId, item, "Thumb", 441, 249)
         if imageUrl <> "" then return imageUrl
@@ -1522,6 +1674,44 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     end if
 
     return getImageUrlForType(itemId, item, "Primary", 252, 378)
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylistContentRequest
+'-------------------------------------------------------------------------------
+function isPlaylistContentRequest() as boolean
+    request = m.pageState.request
+    if request = invalid then return false
+    return LCase(SafeString(request.collectionType, "")) = "playlist"
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylistLibraryRequest
+'-------------------------------------------------------------------------------
+function isPlaylistLibraryRequest() as boolean
+    request = m.pageState.request
+    if request = invalid then return false
+    return LCase(SafeString(request.collectionType, "")) = "playlists"
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaylistEpisodeImageUrl
+'-------------------------------------------------------------------------------
+function getPlaylistEpisodeImageUrl(item as object, imageAspect as string) as string
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    if imageAspect = "wide" then
+        itemId = SafeString(item.Id, "")
+        primaryTag = getImageTag(item, "Primary")
+        if itemId = "" or primaryTag = "" then return ""
+        return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 441, 249)
+    end if
+
+    seriesId = SafeString(item.SeriesId, "")
+    seriesPrimaryTag = SafeString(item.SeriesPrimaryImageTag, "")
+    if seriesId = "" or seriesPrimaryTag = "" then return ""
+    return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesPrimaryTag, 252, 378)
 end function
 
 '-------------------------------------------------------------------------------
@@ -1571,6 +1761,8 @@ function getVideoLibraryImageAspect() as string
         settingKey = keys.tvLibraryDisplay
     else if collectionType = "collection" then
         settingKey = keys.collectionItemsImageType
+    else if collectionType = "playlists" or collectionType = "playlist" then
+        settingKey = keys.playlistImageType
     end if
 
     if LCase(settings[settingKey]) = "thumbnail" then return "wide"
@@ -1886,6 +2078,22 @@ function isTVSeries(item as dynamic) as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' isTVEpisode
+'-------------------------------------------------------------------------------
+function isTVEpisode(item as dynamic) as boolean
+    if Array_IsAssocArray(item) = false then return false
+    return LCase(FirstNonEmpty([item.Type], "")) = "episode"
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylist
+'-------------------------------------------------------------------------------
+function isPlaylist(item as dynamic) as boolean
+    if Array_IsAssocArray(item) = false then return false
+    return LCase(FirstNonEmpty([item.Type], "")) = "playlist"
+end function
+
+'-------------------------------------------------------------------------------
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
@@ -1918,6 +2126,13 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
         if isFirstVideoLibraryItemFocused() <> true then
             focusFirstVideoLibraryItem()
+            return true
+        end if
+        if m.pageState.playlistNavigationStack.Count() > 0 then
+            lastIndex = m.pageState.playlistNavigationStack.Count() - 1
+            previousRequest = m.pageState.playlistNavigationStack[lastIndex]
+            m.pageState.playlistNavigationStack.Delete(lastIndex)
+            m.top.loadRequest = previousRequest
             return true
         end if
         m.top.closeRequested = true
