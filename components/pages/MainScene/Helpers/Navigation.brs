@@ -154,7 +154,7 @@ sub navOpenEpisodeSeries(selection as object, request as object)
     prepareMediaActionNavigation(SafeString(request.sourcePage, ""))
     tvShowShow({
         itemId: seriesId
-        item: buildEpisodeSeriesIdentity(item, selection.itemImageUrl)
+        item: buildEpisodeSeriesIdentity(item)
     }, false)
 end sub
 
@@ -173,7 +173,8 @@ sub navOpenEpisodeSeason(selection as object, request as object)
     tvSeasonShow({
         seriesId: seriesId
         seasonId: seasonId
-        series: buildEpisodeSeriesIdentity(item, selection.itemImageUrl)
+        series: buildEpisodeSeriesIdentity(item)
+        seriesMetadataPending: true
         season: {
             Id: seasonId
             Name: SafeString(item.SeasonName, "")
@@ -186,14 +187,13 @@ end sub
 '-------------------------------------------------------------------------------
 ' buildEpisodeSeriesIdentity
 '-------------------------------------------------------------------------------
-function buildEpisodeSeriesIdentity(item as object, imageUrl as dynamic) as object
-    cachedImageUrl = SafeString(imageUrl, "")
+function buildEpisodeSeriesIdentity(item as object) as object
     return {
         Id: SafeString(item.SeriesId, "")
         Name: SafeString(item.SeriesName, "")
-        thumbUrl: cachedImageUrl
-        backdropUrl: cachedImageUrl
-        detailBackdropUrl: cachedImageUrl
+        thumbUrl: ""
+        backdropUrl: ""
+        detailBackdropUrl: ""
     }
 end function
 

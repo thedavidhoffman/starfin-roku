@@ -120,9 +120,9 @@ sub onLoadRequestChanged()
     m.pageState.focusArea = "episodes"
     if request.keepSeasonNavFocus = true then m.pageState.focusArea = "seasonNav"
     clearEpisodes()
-    Spinner_Show()
+    Spinner_Show(0)
     updateAdjacentSeasons()
-    renderSeason(request.season)
+    renderSeason(request.season, request.seriesMetadataPending <> true, false)
     if m.pageState.focusArea = "seasonNav" then focusSeasonNav()
 
     m.tvSeasonTask.request = request
@@ -153,6 +153,23 @@ sub onTVSeasonResponse()
     if SafeString(response.action, "") = "nextSeasonEpisodes" then
         if isCurrentNextSeasonResponse(response) <> true then return
         onNextSeasonEpisodesResponse(response)
+        return
+    end if
+    if SafeString(response.action, "") = "tvSeasonSeries" then
+        if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeries") <> true then return
+        m.pageState.request.seriesMetadataPending = false
+        if response.ok = true and response.payload <> invalid then m.pageState.request.series = response.payload
+        renderSeason(m.pageState.season, true, m.pageState.episodesLoaded)
+        updateSeasonSummaryArtwork()
+        return
+    end if
+    if SafeString(response.action, "") = "tvSeasonSeasons" then
+        if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeasons") <> true then return
+        if response.ok = true and response.payload <> invalid then
+            m.pageState.seasons = getItemsFromPayload(response.payload)
+            updateAdjacentSeasons()
+            renderSeason(m.pageState.season)
+        end if
         return
     end if
     if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeason") <> true then return
@@ -271,16 +288,25 @@ end sub
 '-------------------------------------------------------------------------------
 ' renderSeason
 '-------------------------------------------------------------------------------
-sub renderSeason(item as dynamic)
+sub renderSeason(item as dynamic, renderSeriesIdentity = true as boolean, renderSeasonLabel = true as boolean)
     if Array_IsAssocArray(item) = false then return
 
     request = m.pageState.request
     series = invalid
     if request <> invalid then series = request.series
 
-    m.logoBanner.title = FirstNonEmpty([series.Name, item.SeriesName], "")
-    m.logoBanner.logoUrl = getSeriesLogoUrl()
-    m.seasonLabel.text = getItemTitle(item)
+    if renderSeriesIdentity then
+        m.logoBanner.title = FirstNonEmpty([series.Name, item.SeriesName], "")
+        m.logoBanner.logoUrl = getSeriesLogoUrl()
+    else
+        m.logoBanner.title = ""
+        m.logoBanner.logoUrl = ""
+    end if
+    if renderSeasonLabel then
+        m.seasonLabel.text = getItemTitle(item)
+    else
+        m.seasonLabel.text = ""
+    end if
     m.seasonNav.hasPreviousSeason = m.pageState.previousSeason <> invalid
     m.seasonNav.hasNextSeason = m.pageState.nextSeason <> invalid
 end sub
@@ -676,6 +702,27 @@ sub appendSeasonSummaryItem(row as object)
         detailBackdropUrl: getSeasonDetailBackdropUrl()
         raw: season
     })
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSeasonSummaryArtwork
+'-------------------------------------------------------------------------------
+sub updateSeasonSummaryArtwork()
+    content = m.episodesGrid.content
+    if isVerticalEpisodeList() <> true then
+        if m.episodesList.content = invalid or m.episodesList.content.getChildCount() = 0 then return
+        content = m.episodesList.content.getChild(0)
+    end if
+    if content = invalid then return
+
+    for i = 0 to content.getChildCount() - 1
+        child = content.getChild(i)
+        if child <> invalid and SafeString(child.itemType, "") = "SeasonSummary" then
+            child.HDPosterUrl = getSeasonBackgroundUrl()
+            child.detailBackdropUrl = getSeasonDetailBackdropUrl()
+            return
+        end if
+    end for
 end sub
 
 '-------------------------------------------------------------------------------

@@ -33,6 +33,7 @@ sub init()
         playbackQueueIndex: 0
         randomPlaybackQueue: invalid
         randomQueueLoading: false
+        seriesLoaded: false
         focusArea: "videoToolbar"
         themeLookupActive: false
         lifecycle: AsyncLifecycle_Create()
@@ -251,17 +252,19 @@ sub onLoadRequestChanged()
     m.pageState.playbackQueueIndex = 0
     m.pageState.randomPlaybackQueue = invalid
     m.pageState.randomQueueLoading = false
+    m.pageState.seriesLoaded = false
     m.randomPlaybackTask.control = "stop"
     m.pageState.themeLookupActive = false
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.focusArea = "videoToolbar"
     m.contentGroup.translation = m.layout.contentDefault
     m.videoToolbar.translation = m.layout.toolbarDefault
+    m.videoToolbar.visible = false
     setSeasonsVisible(true)
     updateFocusChevron()
     m.cast.server = request.server
     m.cast.people = []
-    Spinner_Show()
+    Spinner_Show(0)
     renderSeries(request.item, true)
     renderSeasons([])
     m.videoToolbar.resumeItem = invalid
@@ -297,6 +300,7 @@ sub onTVShowResponse()
     if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "tvShow") <> true then return
 
     if response.ok <> true then
+        m.videoToolbar.visible = false
         Spinner_Hide()
         renderSeries(m.pageState.series, false)
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load this series."))
@@ -305,7 +309,10 @@ sub onTVShowResponse()
 
     payload = response.payload
     if payload = invalid then
+        m.videoToolbar.visible = false
         Spinner_Hide()
+        renderSeries(m.pageState.series, false)
+        Status_SetMessage("Unable to load this series.")
         return
     end if
 
@@ -316,6 +323,8 @@ sub onTVShowResponse()
     m.pageState.playbackQueueIndex = Number_ToInteger(payload.playbackQueueIndex, 0)
     m.videoToolbar.resumeItem = payload.resumeItem
     m.videoToolbar.playItem = payload.upNextItem
+    m.pageState.seriesLoaded = true
+    m.videoToolbar.visible = true
     renderSeries(payload.series, false)
     renderSeasons(m.pageState.seasons)
     Spinner_Hide()
@@ -509,6 +518,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
+    if m.pageState.seriesLoaded <> true then
+        m.top.setFocus(true)
+        return
+    end if
     if m.pageState.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
         focusCast()
     else if m.pageState.focusArea = "videoToolbar" then

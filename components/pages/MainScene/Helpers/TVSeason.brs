@@ -31,6 +31,7 @@ sub tvSeasonShow(selection as object)
         seriesId: selection.seriesId
         seasonId: selection.seasonId
         series: selection.series
+        seriesMetadataPending: selection.seriesMetadataPending
         season: selection.season
         seasons: selection.seasons
         nextSeason: selection.nextSeason
