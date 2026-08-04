@@ -162,6 +162,19 @@ sub playerHandleCloseRequested()
     end if
 
     resetPlaybackVideoMode()
+    if isPlaylistPlayRequest(closedPlayRequest) then
+        m.pendingUpNextAutoPlayRequest = invalid
+        if m.videoLibraryPage <> invalid then
+            playlistItemIndex = getPlaylistPlayRequestItemIndex(closedPlayRequest)
+            if playlistItemIndex >= 0 then m.videoLibraryPage.callFunc("restorePlaylistPlaybackFocus", playlistItemIndex)
+            m.videoLibraryPage.visible = true
+            m.header.visible = true
+            m.videoLibraryPage.callFunc("activate")
+        else
+            showHome()
+        end if
+        return
+    end if
     if showTVEpisodeUpNextAutoPlayPage(closedPlayRequest) then return
 
     prepareTVEpisodePageForClosedPlayer(closedPlayRequest)
@@ -194,6 +207,31 @@ sub playerHandleCloseRequested()
         showHome()
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' isPlaylistPlayRequest
+'-------------------------------------------------------------------------------
+function isPlaylistPlayRequest(playRequest as dynamic) as boolean
+    if playRequest = invalid or playRequest.playbackQueue = invalid then return false
+
+    queue = playRequest.playbackQueue
+    queueIndex = Number_ToInteger(playRequest.playbackQueueIndex, -1)
+    if queueIndex < 0 or queueIndex >= queue.Count() then return false
+
+    queueItem = queue[queueIndex]
+    return queueItem <> invalid and queueItem.hasPlaybackIdentity = true
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaylistPlayRequestItemIndex
+'-------------------------------------------------------------------------------
+function getPlaylistPlayRequestItemIndex(playRequest as dynamic) as integer
+    if isPlaylistPlayRequest(playRequest) <> true then return -1
+
+    queueIndex = Number_ToInteger(playRequest.playbackQueueIndex, -1)
+    queueItem = playRequest.playbackQueue[queueIndex]
+    return Number_ToInteger(queueItem.playlistItemIndex, -1)
+end function
 
 '-------------------------------------------------------------------------------
 ' resetPlaybackVideoMode

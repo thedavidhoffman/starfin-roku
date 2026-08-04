@@ -6,6 +6,7 @@ sub specializationInitialize()
         navigationStack: []
         pendingAutomaticPlaylist: invalid
         actionFocusId: ""
+        restoreItemIndex: -1
     }
     m.playlistChrome = CreateObject("roSGNode", "PlaylistPlaybackControls")
     m.top.appendChild(m.playlistChrome)
@@ -60,19 +61,20 @@ function specializationHandleItemSelected(selectedIndex as integer, item as obje
         return true
     end if
 
-    selection = { itemId: itemId, item: item }
     playbackContext = buildPlaylistPlaybackContext(selectedIndex)
-    if playbackContext <> invalid then
-        selection.AddReplace("playbackQueue", playbackContext.queue)
-        selection.AddReplace("playbackQueueIndex", playbackContext.index)
-    end if
-    if isPlayableMovie(item) then
-        m.top.selectedMovie = selection
-    else if isTVSeries(item) then
-        m.top.selectedSeries = selection
-    else if isTVEpisode(item) then
-        m.top.selectedEpisode = selection
-    end if
+    if playbackContext = invalid then return true
+
+    queueItem = playbackContext.queue[playbackContext.index]
+    m.playlistState.restoreItemIndex = selectedIndex
+    m.top.playbackSelected = {
+        itemId: queueItem.itemId
+        item: queueItem.item
+        series: queueItem.series
+        season: queueItem.season
+        startPositionTicks: queueItem.startPositionTicks
+        playbackQueue: playbackContext.queue
+        playbackQueueIndex: playbackContext.index
+    }
     return true
 end function
 
@@ -87,6 +89,12 @@ end sub
 ' specializationActivate
 '-------------------------------------------------------------------------------
 function specializationActivate() as boolean
+    if m.playlistState.restoreItemIndex >= 0 then
+        restoreItemIndex = m.playlistState.restoreItemIndex
+        m.playlistState.restoreItemIndex = -1
+        focusVideoLibraryItem(restoreItemIndex)
+        return true
+    end if
     if m.playlistState.actionFocusId <> "" then
         button = m.top.findNode(m.playlistState.actionFocusId)
         if focusPlaylistPlaybackButton(button) then return true
@@ -205,7 +213,7 @@ function buildPlaylistPlaybackContext(selectedIndex as integer) as dynamic
         item = m.pageState.items[i]
         if isPlayableMovie(item) <> true and isTVEpisode(item) <> true then continue for
         if i = selectedIndex then queueIndex = queue.Count()
-        queue.Push(buildPlaylistPlaybackQueueItem(item))
+        queue.Push(buildPlaylistPlaybackQueueItem(item, i))
     end for
     if queueIndex < 0 then return invalid
     return { queue: queue, index: queueIndex }
@@ -216,8 +224,9 @@ end function
 '-------------------------------------------------------------------------------
 function getPlaylistPlaybackQueue() as object
     queue = []
-    for each item in m.pageState.items
-        if isPlayableMovie(item) or isTVEpisode(item) then queue.Push(buildPlaylistPlaybackQueueItem(item))
+    for i = 0 to m.pageState.items.Count() - 1
+        item = m.pageState.items[i]
+        if isPlayableMovie(item) or isTVEpisode(item) then queue.Push(buildPlaylistPlaybackQueueItem(item, i))
     end for
     return queue
 end function
@@ -391,10 +400,11 @@ end sub
 '-------------------------------------------------------------------------------
 ' buildPlaylistPlaybackQueueItem
 '-------------------------------------------------------------------------------
-function buildPlaylistPlaybackQueueItem(item as object) as object
+function buildPlaylistPlaybackQueueItem(item as object, playlistItemIndex as integer) as object
     queueItem = {
         itemId: SafeString(item.Id, "")
         item: item
+        playlistItemIndex: playlistItemIndex
         startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
         hasPlaybackIdentity: true
         series: invalid
@@ -406,6 +416,13 @@ function buildPlaylistPlaybackQueueItem(item as object) as object
     end if
     return queueItem
 end function
+
+'-------------------------------------------------------------------------------
+' restorePlaylistPlaybackFocus
+'-------------------------------------------------------------------------------
+sub restorePlaylistPlaybackFocus(playlistItemIndex as integer)
+    m.playlistState.restoreItemIndex = playlistItemIndex
+end sub
 
 '-------------------------------------------------------------------------------
 ' onSinglePlaylistOpenTimerFire
