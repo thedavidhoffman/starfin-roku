@@ -186,6 +186,10 @@ sub playerHandleCloseRequested()
         m.liveTvPage.visible = true
         m.header.visible = true
         m.liveTvPage.callFunc("activate")
+    else if m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.visible = true
+        m.header.visible = true
+        m.videoLibraryPage.callFunc("activate")
     else
         showHome()
     end if

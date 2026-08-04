@@ -3,7 +3,12 @@
 '-------------------------------------------------------------------------------
 sub init()
     initReferences()
+    if hasLibrarySpecialization() then
+        m.browseByButton.visible = false
+        m.sortButton.visible = false
+    end if
     initHandlers()
+    m.specializationInitialized = false
     m.pageState = {
         request: invalid
         allItems: []
@@ -31,8 +36,6 @@ sub init()
         refocusBrowseByButtonAfterLoad: false
         refocusSortButtonAfterLoad: false
         isLoading: false
-        playlistNavigationStack: []
-        pendingAutomaticPlaylist: invalid
         lifecycle: AsyncLifecycle_Create()
     }
     m.browseByButton.selectedSort = getDefaultSortSelection()
@@ -56,7 +59,6 @@ sub initReferences()
     m.videoLibraryTask = m.top.findNode("videoLibraryTask")
     m.videoLibraryProgressIndicator = m.top.findNode("videoLibraryProgressIndicator")
     m.videoLibraryProgressHoldTimer = m.top.findNode("videoLibraryProgressHoldTimer")
-    m.singlePlaylistOpenTimer = m.top.findNode("singlePlaylistOpenTimer")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -65,7 +67,6 @@ end sub
 sub initHandlers()
     m.videoLibraryTask.observeField("response", "onVideoLibraryResponse")
     m.videoLibraryProgressHoldTimer.observeField("fire", "onVideoLibraryProgressHoldTimerFire")
-    m.singlePlaylistOpenTimer.observeField("fire", "onSinglePlaylistOpenTimerFire")
     m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
     m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
@@ -84,6 +85,7 @@ end sub
 ' onSettingsChanged
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
+    ensureLibrarySpecializationInitialized()
     imageAspect = getVideoLibraryImageAspect()
     if imageAspect <> m.pageState.imageAspect then
         m.pageState.imageAspect = imageAspect
@@ -100,6 +102,7 @@ sub onLoadRequestChanged()
     request = m.top.loadRequest
     if request = invalid then return
 
+    ensureLibrarySpecializationInitialized()
     prepareLoadRequest(request)
     resetVideoLibraryForLoad()
     runVideoLibraryTask(request)
@@ -140,6 +143,7 @@ sub resetVideoLibraryForLoad()
     resetVideoLibraryItemsState()
     resetLoadFocusState()
     syncSortControls()
+    if hasLibrarySpecialization() then m.top.callFunc("specializationReset")
     updateTitleLabel()
     hideFilterButtonRow()
     Spinner_Show(0)
@@ -180,7 +184,8 @@ end sub
 ' syncSortControls
 '-------------------------------------------------------------------------------
 sub syncSortControls()
-    sortControlsVisible = isPlaylistContentRequest() <> true
+    sortControlsVisible = true
+    if hasLibrarySpecialization() then sortControlsVisible = m.top.callFunc("specializationShowsSortControls")
     m.browseByButton.visible = sortControlsVisible
     m.sortButton.visible = sortControlsVisible
     m.browseByButton.selectedSort = m.pageState.selectedSort
@@ -215,15 +220,8 @@ sub onVideoLibraryResponse()
     m.pageState.allItems = getItemsFromPayload(response.payload)
     m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
     rebuildVideoLibraryItemNodeCache()
-    if isPlaylistLibraryRequest() and m.pageState.allItems.Count() = 1 then
-        playlist = m.pageState.allItems[0]
-        if SafeString(playlist.Id, "") <> "" then
-            Status_ClearMessage()
-            m.pageState.pendingAutomaticPlaylist = playlist
-            m.singlePlaylistOpenTimer.control = "start"
-            return
-        end if
-    end if
+    if hasLibrarySpecialization() and m.top.callFunc("specializationItemsLoaded") then return
+    if hasLibrarySpecialization() then syncSortControls()
     if isDecadeFilterActive() then
         showDecadeFilterRow()
     else if isGenreFilterActive() then
@@ -231,6 +229,7 @@ sub onVideoLibraryResponse()
     else
         renderItems(m.pageState.allItems)
     end if
+    if hasLibrarySpecialization() then m.top.callFunc("specializationSyncState")
     updateTitleLabel(m.pageState.items.Count())
     Status_ClearMessage()
     if m.pageState.refocusBrowseByButtonAfterLoad = true then
@@ -240,7 +239,7 @@ sub onVideoLibraryResponse()
         m.pageState.refocusSortButtonAfterLoad = false
         focusSortButton()
     else
-        focusItemsIfActive()
+        if hasLibrarySpecialization() = false or m.top.callFunc("specializationActivate") <> true then focusItemsIfActive()
     end if
     Spinner_Hide()
 end sub
@@ -257,107 +256,18 @@ sub onItemSelected()
     if node = invalid then return
 
     item = node.raw
+    if hasLibrarySpecialization() and m.top.callFunc("specializationHandleItemSelected", selected, item) then return
     itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
     if itemId = "" then return
 
     selection = { itemId: itemId, item: item }
-    playbackContext = buildPlaylistPlaybackContext(selected)
-    if playbackContext <> invalid then
-        selection.AddReplace("playbackQueue", playbackContext.queue)
-        selection.AddReplace("playbackQueueIndex", playbackContext.index)
-    end if
-
     if isPlayableMovie(item) then
         m.top.selectedMovie = selection
     else if isTVSeries(item) then
         m.top.selectedSeries = selection
     else if isTVEpisode(item) then
         m.top.selectedEpisode = selection
-    else if isPlaylist(item) then
-        openPlaylist(item)
     end if
-end sub
-
-'-------------------------------------------------------------------------------
-' buildPlaylistPlaybackContext
-'-------------------------------------------------------------------------------
-function buildPlaylistPlaybackContext(selectedIndex as integer) as dynamic
-    if isPlaylistContentRequest() <> true then return invalid
-
-    queue = []
-    queueIndex = -1
-    for i = 0 to m.pageState.items.Count() - 1
-        item = m.pageState.items[i]
-        if isPlayableMovie(item) <> true and isTVEpisode(item) <> true then continue for
-
-        if i = selectedIndex then queueIndex = queue.Count()
-        queue.Push(buildPlaylistPlaybackQueueItem(item))
-    end for
-
-    if queueIndex < 0 then return invalid
-    return { queue: queue, index: queueIndex }
-end function
-
-'-------------------------------------------------------------------------------
-' buildPlaylistPlaybackQueueItem
-'-------------------------------------------------------------------------------
-function buildPlaylistPlaybackQueueItem(item as object) as object
-    queueItem = {
-        itemId: SafeString(item.Id, "")
-        item: item
-        startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
-        hasPlaybackIdentity: true
-        series: invalid
-        season: invalid
-    }
-
-    if isTVEpisode(item) then
-        queueItem.AddReplace("series", {
-            Id: SafeString(item.SeriesId, "")
-            Name: SafeString(item.SeriesName, "")
-        })
-        queueItem.AddReplace("season", {
-            Id: SafeString(item.SeasonId, "")
-            Name: SafeString(item.SeasonName, "")
-        })
-    end if
-
-    return queueItem
-end function
-
-'-------------------------------------------------------------------------------
-' onSinglePlaylistOpenTimerFire
-'-------------------------------------------------------------------------------
-sub onSinglePlaylistOpenTimerFire()
-    playlist = m.pageState.pendingAutomaticPlaylist
-    m.pageState.pendingAutomaticPlaylist = invalid
-    if playlist = invalid then
-        Spinner_Hide()
-        return
-    end if
-
-    openPlaylist(playlist, false)
-end sub
-
-'-------------------------------------------------------------------------------
-' openPlaylist
-'-------------------------------------------------------------------------------
-sub openPlaylist(item as object, addToNavigationStack = true as boolean)
-    request = m.pageState.request
-    if request = invalid then return
-
-    if addToNavigationStack then m.pageState.playlistNavigationStack.Push(request)
-    m.top.loadRequest = {
-        server: request.server
-        token: request.token
-        userId: request.userId
-        libraryId: SafeString(item.Id, "")
-        collectionType: "playlist"
-        includeItemTypes: "Movie,Series,Episode,Video"
-        title: SafeString(item.Name, "Playlist")
-        item: item
-        fromCollections: false
-    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -395,6 +305,7 @@ sub onMediaStateChange()
     end if
 
     notifyVideoLibraryItemsChanged(itemId)
+    if hasLibrarySpecialization() then m.top.callFunc("specializationSyncState")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -433,6 +344,7 @@ sub onPlaybackProgressChange()
     if applyPlaybackProgressChangeToMatchingItems(itemId, change) <> true then return
 
     notifyVideoLibraryItemsChanged(itemId)
+    if hasLibrarySpecialization() then m.top.callFunc("specializationSyncState")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -564,14 +476,8 @@ end function
 '-------------------------------------------------------------------------------
 function getVideoLibraryItemCacheKey(item as dynamic, occurrenceIndex = invalid as dynamic) as string
     if Array_IsAssocArray(item) = false then return ""
-
-    itemId = SafeString(item.Id, "")
-    if isPlaylistContentRequest() <> true then return itemId
-
-    playlistItemId = SafeString(item.PlaylistItemId, "")
-    if playlistItemId <> "" then return "playlist:" + playlistItemId
-    if itemId = "" or occurrenceIndex = invalid then return ""
-    return "playlist:" + itemId + ":" + occurrenceIndex.ToStr()
+    if hasLibrarySpecialization() then return m.top.callFunc("specializationCacheKey", item, occurrenceIndex)
+    return SafeString(item.Id, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -756,7 +662,6 @@ function getCachedFilterItems(filterType as string, filterValue as string) as ob
             items = getItemsForDecade(filterKey)
             cache.decadeItemsByValue[filterKey] = items
         end if
-        if isPlaylistContentRequest() then return items
         if cache.sortedDecadeValues[filterKey] <> true then
             items = getItemsSortedByVideoLibraryYear(items)
             cache.decadeItemsByValue[filterKey] = items
@@ -773,7 +678,6 @@ function getCachedFilterItems(filterType as string, filterValue as string) as ob
             items = getItemsForGenre(filterKey)
             cache.genreItemsByValue[filterKey] = items
         end if
-        if isPlaylistContentRequest() then return items
         if cache.sortedGenreValues[filterKey] <> true then
             items = getItemsSortedBySortName(items)
             cache.genreItemsByValue[filterKey] = items
@@ -837,7 +741,7 @@ end function
 function getSortedVideoLibraryItems(items as object) as object
     sortedItems = copyVideoLibraryItems(items)
     if sortedItems.Count() < 2 then return sortedItems
-    if isPlaylistContentRequest() then return sortedItems
+    if hasLibrarySpecialization() then return sortedItems
 
     selection = m.pageState.selectedSort
     if selection = invalid then selection = getDefaultSortSelection()
@@ -1102,6 +1006,7 @@ end sub
 ' openLetterGrid
 '-------------------------------------------------------------------------------
 function openLetterGrid() as boolean
+    if canUseLetterNavigation() <> true then return false
     m.pageState.letterGridOpen = true
     m.top.letterGridRequested = {
         id: "letterGrid"
@@ -1483,6 +1388,7 @@ sub activate()
     m.top.setFocus(true)
     if focusPendingTarget() then return
 
+    if hasLibrarySpecialization() and m.top.callFunc("specializationActivate") then return
     focusItemsIfActive()
 end sub
 
@@ -1505,8 +1411,7 @@ end function
 sub deactivate()
     AsyncLifecycle_Deactivate(m.pageState.lifecycle)
     m.top.thumbnailLayoutActive = false
-    m.pageState.pendingAutomaticPlaylist = invalid
-    m.singlePlaylistOpenTimer.control = "stop"
+    if hasLibrarySpecialization() then m.top.callFunc("specializationDeactivate")
     stopVideoLibraryProgressHold()
     closeLetterGrid(false)
     m.videoLibraryTask.control = "stop"
@@ -1639,6 +1544,7 @@ end sub
 '-------------------------------------------------------------------------------
 function focusLetterGutterButton() as boolean
     if m.letterGutterButton = invalid then return false
+    if canUseLetterNavigation() <> true then return false
     if m.itemsGrid.visible <> true then return false
 
     m.letterGutterButton.setFocus(true)
@@ -1650,18 +1556,10 @@ end function
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if Array_IsAssocArray(item) = false then return ""
+    if hasLibrarySpecialization() then return m.top.callFunc("specializationImageUrl", item, imageAspect)
 
     itemId = FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
-
-    request = m.pageState.request
-    collectionType = ""
-    if request <> invalid then collectionType = LCase(SafeString(request.collectionType, ""))
-    if collectionType = "playlists" or collectionType = "playlist" then
-        if isTVEpisode(item) then return getPlaylistEpisodeImageUrl(item, imageAspect)
-        if imageAspect = "wide" then return getImageUrlForType(itemId, item, "Thumb", 441, 249)
-        return getImageUrlForType(itemId, item, "Primary", 252, 378)
-    end if
 
     if imageAspect = "wide" then
         imageUrl = getImageUrlForType(itemId, item, "Thumb", 441, 249)
@@ -1674,44 +1572,6 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     end if
 
     return getImageUrlForType(itemId, item, "Primary", 252, 378)
-end function
-
-'-------------------------------------------------------------------------------
-' isPlaylistContentRequest
-'-------------------------------------------------------------------------------
-function isPlaylistContentRequest() as boolean
-    request = m.pageState.request
-    if request = invalid then return false
-    return LCase(SafeString(request.collectionType, "")) = "playlist"
-end function
-
-'-------------------------------------------------------------------------------
-' isPlaylistLibraryRequest
-'-------------------------------------------------------------------------------
-function isPlaylistLibraryRequest() as boolean
-    request = m.pageState.request
-    if request = invalid then return false
-    return LCase(SafeString(request.collectionType, "")) = "playlists"
-end function
-
-'-------------------------------------------------------------------------------
-' getPlaylistEpisodeImageUrl
-'-------------------------------------------------------------------------------
-function getPlaylistEpisodeImageUrl(item as object, imageAspect as string) as string
-    request = m.pageState.request
-    if request = invalid then return ""
-
-    if imageAspect = "wide" then
-        itemId = SafeString(item.Id, "")
-        primaryTag = getImageTag(item, "Primary")
-        if itemId = "" or primaryTag = "" then return ""
-        return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 441, 249)
-    end if
-
-    seriesId = SafeString(item.SeriesId, "")
-    seriesPrimaryTag = SafeString(item.SeriesPrimaryImageTag, "")
-    if seriesId = "" or seriesPrimaryTag = "" then return ""
-    return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesPrimaryTag, 252, 378)
 end function
 
 '-------------------------------------------------------------------------------
@@ -1749,6 +1609,7 @@ end function
 ' getVideoLibraryImageAspect
 '-------------------------------------------------------------------------------
 function getVideoLibraryImageAspect() as string
+    if hasLibrarySpecialization() then return m.top.callFunc("specializationImageAspect")
     settings = m.top.settings
     keys = SettingsStore_Keys()
     settingKey = keys.movieLibraryDisplay
@@ -1761,8 +1622,6 @@ function getVideoLibraryImageAspect() as string
         settingKey = keys.tvLibraryDisplay
     else if collectionType = "collection" then
         settingKey = keys.collectionItemsImageType
-    else if collectionType = "playlists" or collectionType = "playlist" then
-        settingKey = keys.playlistImageType
     end if
 
     if LCase(settings[settingKey]) = "thumbnail" then return "wide"
@@ -1909,6 +1768,7 @@ sub applyGridLayout(imageAspect as string)
         m.titleLabel.translation = [480, 120]
         m.browseByButton.translation = [1634, 120]
         m.sortButton.translation = [1832, 120]
+        if hasLibrarySpecialization() then m.top.callFunc("specializationApplyLayout", "wide")
         m.filterButtonRow.translation = [264, 208]
         m.itemsGrid.translation = [24, 207 + filterRowOffset]
         applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
@@ -1927,6 +1787,7 @@ sub applyGridLayout(imageAspect as string)
     m.titleLabel.translation = [480, 120]
     m.browseByButton.translation = [1618, 120]
     m.sortButton.translation = [1816, 120]
+    if hasLibrarySpecialization() then m.top.callFunc("specializationApplyLayout", "poster")
     m.filterButtonRow.translation = [264, 208]
     m.itemsGrid.translation = [96, 207 + filterRowOffset]
     applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
@@ -2086,19 +1947,12 @@ function isTVEpisode(item as dynamic) as boolean
 end function
 
 '-------------------------------------------------------------------------------
-' isPlaylist
-'-------------------------------------------------------------------------------
-function isPlaylist(item as dynamic) as boolean
-    if Array_IsAssocArray(item) = false then return false
-    return LCase(FirstNonEmpty([item.Type], "")) = "playlist"
-end function
-
-'-------------------------------------------------------------------------------
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
     if key = "options" and m.itemsGrid.isInFocusChain() then return openMediaActions()
+    if hasLibrarySpecialization() and m.top.callFunc("specializationHandleKey", key) then return true
     if key = "up" and m.browseByButton.isInFocusChain() then return requestHeaderFocus()
     if key = "up" and m.sortButton.isInFocusChain() then return requestHeaderFocus()
     if key = "right" and m.browseByButton.isInFocusChain() then
@@ -2107,12 +1961,12 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     if key = "left" and m.sortButton.isInFocusChain() then return focusBrowseByButton()
     if key = "up" and m.letterGutterButton.isInFocusChain() then return requestHeaderFocus()
-    if key = "left" and isItemsGridAtFirstColumn() then return openLetterGrid()
+    if key = "left" and isItemsGridAtFirstColumn() and canUseLetterNavigation() then return openLetterGrid()
     if key = "up" and isItemsGridAtFirstRow() and canFocusFilterButtonRow() then
         stopVideoLibraryProgressHold("up")
         return focusFilterButtonRow()
     end if
-    if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() then return requestHeaderFocus()
+    if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() and canFocusBrowseByButton() <> true then return requestHeaderFocus()
     if key = "up" and isItemsGridAtFirstRow() then
         stopVideoLibraryProgressHold("up")
         if canFocusBrowseByButton() <> true then return requestHeaderFocus()
@@ -2128,17 +1982,36 @@ function onKeyEvent(key as string, press as boolean) as boolean
             focusFirstVideoLibraryItem()
             return true
         end if
-        if m.pageState.playlistNavigationStack.Count() > 0 then
-            lastIndex = m.pageState.playlistNavigationStack.Count() - 1
-            previousRequest = m.pageState.playlistNavigationStack[lastIndex]
-            m.pageState.playlistNavigationStack.Delete(lastIndex)
-            m.top.loadRequest = previousRequest
-            return true
-        end if
         m.top.closeRequested = true
         return true
     end if
     return false
+end function
+
+'-------------------------------------------------------------------------------
+' hasLibrarySpecialization
+'-------------------------------------------------------------------------------
+function hasLibrarySpecialization() as boolean
+    return m.top.isSubtype("Playlists")
+end function
+
+'-------------------------------------------------------------------------------
+' ensureLibrarySpecializationInitialized
+'-------------------------------------------------------------------------------
+sub ensureLibrarySpecializationInitialized()
+    if hasLibrarySpecialization() <> true then return
+    if m.specializationInitialized then return
+
+    m.top.callFunc("specializationInitialize")
+    m.specializationInitialized = true
+end sub
+
+'-------------------------------------------------------------------------------
+' canUseLetterNavigation
+'-------------------------------------------------------------------------------
+function canUseLetterNavigation() as boolean
+    if hasLibrarySpecialization() then return false
+    return m.letterGutterButton <> invalid and m.letterGutterButton.visible = true
 end function
 
 '-------------------------------------------------------------------------------

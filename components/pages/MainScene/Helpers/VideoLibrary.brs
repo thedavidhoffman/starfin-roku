@@ -34,6 +34,7 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
     page.observeField("selectedMovie", "videoLibraryHandleMovieSelected")
     page.observeField("selectedSeries", "videoLibraryHandleSeriesSelected")
     page.observeField("selectedEpisode", "videoLibraryHandleEpisodeSelected")
+    if pageComponentName = "Playlists" then page.observeField("playbackSelected", "videoLibraryHandlePlaybackSelected")
     page.observeField("focusExitUp", "videoLibraryHandleFocusExitUp")
     page.observeField("thumbnailLayoutActive", "videoLibraryHandleThumbnailLayoutChanged")
     page.settings = m.settings
@@ -58,6 +59,19 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
     m.header.visible = true
     page.loadRequest = loadRequest
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' videoLibraryHandlePlaybackSelected
+'-------------------------------------------------------------------------------
+sub videoLibraryHandlePlaybackSelected()
+    if m.videoLibraryPage = invalid then return
+    selection = m.videoLibraryPage.playbackSelected
+    if selection = invalid or SafeString(selection.itemId, "") = "" then return
+
+    m.videoLibraryPage.callFunc("deactivate")
+    m.videoLibraryPage.visible = false
+    playerShow(selection)
 end sub
 
 '-------------------------------------------------------------------------------
