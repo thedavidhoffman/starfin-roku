@@ -23,7 +23,7 @@ In this model:
 - Sheet index: which JPG contains that tile.
 - Row/column: where the tile lives inside the sheet grid.
 
-## Starfish Flow
+## Starfin Flow
 
 `VideoPlayer` owns the trickplay state. It reads Jellyfin's trickplay metadata, computes which five preview tiles should be shown while scrubbing, and sends those tiles to `PlaybackControls` as `thumbnailData`.
 
@@ -35,4 +35,4 @@ The center preview image is larger. The two images on each side are smaller and 
 
 ## Why This Matters
 
-Without preloading and load-status gating, Roku may show empty poster rectangles for a few seconds when scrubbing starts. The official Jellyfin Roku app avoids that by downloading preview sheets into `tmp:/` and rendering from local files. Starfish follows the same idea in a smaller component structure.
+Without preloading and load-status gating, Roku may show empty poster rectangles for a few seconds when scrubbing starts. The official Jellyfin Roku app avoids that by downloading preview sheets into `tmp:/` and rendering from local files. Starfin follows the same idea in a smaller component structure.

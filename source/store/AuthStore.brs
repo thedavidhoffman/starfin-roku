@@ -2,7 +2,7 @@
 ' Auth Registry Storage
 '-------------------------------------------------------------------------------
 ' roRegistrySection is Roku's persistent key/value storage API. A registry
-' section groups related values under an app-owned name, such as "ROKU_STARTER_APP".
+' section groups related values under an app-owned name, such as "STARFIN_ROKU".
 ' Values written with Write() can be read across app launches with Read().
 ' Delete() removes saved values, and Flush() commits pending writes/deletes.
 ' This app uses the registry to remember auth state: server, username, token,
@@ -12,7 +12,7 @@
 ' GetAuthStore
 '-------------------------------------------------------------------------------
 function GetAuthStore() as object
-    return CreateObject("roRegistrySection", "ROKU_STARTER_APP")
+    return CreateObject("roRegistrySection", "STARFIN_ROKU")
 end function
 
 '-------------------------------------------------------------------------------

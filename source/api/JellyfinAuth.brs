@@ -12,7 +12,7 @@ function JellyfinAuth_BuildClientHeader() as string
     deviceId = SafeString(deviceInfo.GetChannelClientId(), "")
     if deviceId = "" then deviceId = SafeString(deviceInfo.GetModel(), "roku")
 
-    auth = "MediaBrowser Client=" + quote + "Starfish Roku" + quote
+    auth = "MediaBrowser Client=" + quote + "Starfin Roku" + quote
     auth = auth + ", Device=" + quote + deviceName + quote
     auth = auth + ", Version=" + quote + SafeString(appInfo.GetVersion(), "1.0.0") + quote
     auth = auth + ", DeviceId=" + quote + deviceId + quote

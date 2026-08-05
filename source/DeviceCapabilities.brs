@@ -4,7 +4,7 @@
 function DeviceCapabilities_BuildDeviceProfileJson() as string
     displaySize = DeviceCapabilities_GetDisplaySize()
     return Json_Object([
-        Json_Pair("Name", "Starfish Roku")
+        Json_Pair("Name", "Starfin Roku")
         Json_NumberPair("MaxStreamingBitrate", 120000000)
         Json_NumberPair("MaxStaticBitrate", 100000000)
         Json_NumberPair("MusicStreamingTranscodingBitrate", 192000)

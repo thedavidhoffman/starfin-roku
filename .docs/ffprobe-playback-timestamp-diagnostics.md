@@ -167,5 +167,5 @@ or keyframe structure, rather than only in the container.
 
 These commands cannot prove what Roku displayed. They inspect the source file,
 not the client's decoded output. Correlating a timestamp anomaly with the
-visible jump position, or comparing it with Starfish's playback-position
+visible jump position, or comparing it with Starfin's playback-position
 diagnostics—provides the strongest evidence.

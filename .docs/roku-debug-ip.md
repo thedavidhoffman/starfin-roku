@@ -13,7 +13,7 @@ setting before starting a new debug session.
    "brightscript.debug.host": "192.168.0.107"
    ```
 
-4. Stop any active debug session, then run the `Starfish` debug configuration
+4. Stop any active debug session, then run the `Starfin` debug configuration
    again.
 
 The VS Code debugger does not read `rokudeploy.json`. That file is used by the

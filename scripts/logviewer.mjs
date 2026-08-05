@@ -804,6 +804,6 @@ if (logMode === 'socket') {
   connectRoku();
 } else {
   console.log(`Watching VS Code Roku device log at ${logFilePath}`);
-  console.log('Start the Starfish VS Code debug configuration to generate the log file.');
+  console.log('Start the Starfin VS Code debug configuration to generate the log file.');
   await startFileTail();
 }

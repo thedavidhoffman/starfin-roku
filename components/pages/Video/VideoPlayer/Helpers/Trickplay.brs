@@ -148,7 +148,7 @@ function getLocalTrickplayUri(tileIndex as integer) as string
     if m.trickplay.loadedTiles = invalid then return ""
     if m.trickplay.loadedTiles[tileIndex.ToStr()] <> true then return ""
 
-    return "tmp:/starfish-trickplay-" + m.session.itemId + "-" + m.trickplay.tileWidth.ToStr() + "-" + tileIndex.ToStr() + ".jpg"
+    return "tmp:/starfin-trickplay-" + m.session.itemId + "-" + m.trickplay.tileWidth.ToStr() + "-" + tileIndex.ToStr() + ".jpg"
 end function
 
 '-------------------------------------------------------------------------------

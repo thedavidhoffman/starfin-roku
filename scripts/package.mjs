@@ -27,7 +27,7 @@ const manifest = await fs.readFile(manifestPath, 'utf8');
 const majorVersion = getManifestValue(manifest, 'major_version');
 const minorVersion = getManifestValue(manifest, 'minor_version');
 const buildVersion = getManifestValue(manifest, 'build_version');
-const outFile = `starfish.${majorVersion}.${minorVersion}.${buildVersion}`;
+const outFile = `starfin.${majorVersion}.${minorVersion}.${buildVersion}`;
 
 await fs.mkdir(outDir, { recursive: true });
 

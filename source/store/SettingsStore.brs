@@ -7,7 +7,7 @@
 ' GetSettingsStore
 '-------------------------------------------------------------------------------
 function GetSettingsStore() as object
-    return CreateObject("roRegistrySection", "ROKU_STARTER_APP")
+    return CreateObject("roRegistrySection", "STARFIN_ROKU")
 end function
 
 '-------------------------------------------------------------------------------

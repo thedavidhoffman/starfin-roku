@@ -8,9 +8,9 @@ Forks are part of open source but if your goal is to fix bugs, add features, or 
 
 I've been running Plex for well over 10+ years and with the direction that Plex is heading, I wanted to make a move. I tried Emby for 3 months and the Roku experience didn't have the level of polish I'm used to with Plex. Jellyfin was never an option for me because their Roku client is... well... let's just say, not great. Sure, there's Moonfin, and that's better, and I'm by no means taking a stab at Moonfin, but it's just not for me.
 
-So with the help of AI, and my senior software developer skills guiding it, I created Starfish. Now if anything with the UI sucks, there's no one to blame but me. As soon as this project had legs enough to stand on its own, browse and play media, I started using/testing it as my daily driver. And I soon found that I was leaving Plex behind now that I had a Jellyfin Roku client that aligned with my wants, needs, and desires. For any AI haters out there, you do your thing, I'll do mine :) But as a well seasoned senior software engineer, AI helps accelerate what you can accomplish. This project took about 6 weeks of HEAVY work, testing, guiding the architecture, the UI, and so on. Before AI, this project would have taken months, if not a year or longer (coding it in my spare time).
+So with the help of AI, and my senior software developer skills guiding it, I created Starfin. Now if anything with the UI sucks, there's no one to blame but me. As soon as this project had legs enough to stand on its own, browse and play media, I started using/testing it as my daily driver. And I soon found that I was leaving Plex behind now that I had a Jellyfin Roku client that aligned with my wants, needs, and desires. For any AI haters out there, you do your thing, I'll do mine :) But as a well seasoned senior software engineer, AI helps accelerate what you can accomplish. This project took about 6 weeks of HEAVY work, testing, guiding the architecture, the UI, and so on. Before AI, this project would have taken months, if not a year or longer (coding it in my spare time).
 
-OK, now that all my jib jab is out of the way, I present to you `Starfish` a modern Jellyfin client for Roku devices.
+OK, now that all my jib jab is out of the way, I present to you `Starfin`, a modern Jellyfin client for Roku devices.
 
 # CAVEATS
 - I've tested a library with around 2,000 movies and performance is great. I don't know how this thing will hold up with a library of 10,000 movies. That being said, if anyone out there tries this app and has a huge library, let me know how it goes.
@@ -21,20 +21,20 @@ The code for this app is NOT a fork of the Jellyfin Roku code repo. IMHO the Jel
 
 ## Fork renaming checklist
 
-If you fork this repository for your own Roku channel, replace the starter-kit
-names in these places:
+If you fork this repository for your own Roku channel, replace the Starfin names
+in these places:
 
-- `manifest`: `title=Roku Starter Kit`
-- `package.json`: `"name": "roku-starter-kit"`
-- `package.json`: `"description": "A starter kit for building a Roku application."`
-- `.vscode/launch.json`: `"name": "Roku Starter App"`
-- `scripts/deploy.mjs`: `const outFile = 'roku-starter-kit'`
-- `scripts/logviewer.mjs`: the console message that references the Roku Starter
-  Kit VS Code debug configuration.
+- `manifest`: `title=Starfin`
+- `package.json`: `"name": "starfin-roku"`
+- `package.json`: `"description": "A Jellyfin client for Roku."`
+- `.vscode/launch.json`: `"name": "Starfin"`
+- `scripts/deploy.mjs`: `const outFile = 'starfin'`
+- `scripts/logviewer.mjs`: the console message that references the Starfin VS
+  Code debug configuration.
 - `scripts/package.mjs`: the package filename template
-  `roku.starter.kit.<major>.<minor>.<build>`.
-- `source/store/AuthStore.brs`: the `ROKU_STARTER_APP` registry section name.
-- `source/store/SettingsStore.brs`: the `ROKU_STARTER_APP` registry section name.
+  `starfin.<major>.<minor>.<build>`.
+- `source/store/AuthStore.brs` and `source/store/SettingsStore.brs`: the
+  `STARFIN_ROKU` registry section name.
 
 Use an app-specific registry section name before shipping so auth and settings
 data for your fork do not collide with another app based on this starter kit.
@@ -112,7 +112,7 @@ Increments `build_version`, cleans, validates, and creates a Roku package.
 
 The package script uses `scripts/package.mjs` and writes the packaged channel to a versioned zip using the manifest version:
 
-`out/roku-starter-kit.<major_version>.<minor_version>.<build_version>.zip`
+`out/starfin.<major_version>.<minor_version>.<build_version>.zip`
 
 `npm run deploy`
 

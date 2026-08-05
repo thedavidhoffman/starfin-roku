@@ -141,7 +141,7 @@ function getLocalTrickplayUri(request as object, tileIndex as integer) as string
     tileWidth = getTileWidth(request)
     if itemId = "" or tileWidth <= 0 then return ""
 
-    return "tmp:/starfish-trickplay-" + itemId + "-" + tileWidth.ToStr() + "-" + tileIndex.ToStr() + ".jpg"
+    return "tmp:/starfin-trickplay-" + itemId + "-" + tileWidth.ToStr() + "-" + tileIndex.ToStr() + ".jpg"
 end function
 
 '-------------------------------------------------------------------------------

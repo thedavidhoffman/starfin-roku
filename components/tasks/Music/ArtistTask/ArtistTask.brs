@@ -215,7 +215,7 @@ end function
 '-------------------------------------------------------------------------------
 function getExternalApiHeaders() as object
     return {
-        "User-Agent": "Starfish-Roku/1.0 (https://github.com/thedavidhoffman/starfish-roku)"
+        "User-Agent": "Starfin-Roku/1.0 (https://github.com/thedavidhoffman/starfin-roku)"
     }
 end function
 

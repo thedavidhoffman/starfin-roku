@@ -310,7 +310,7 @@ for (const definition of focusGeometry) {
   if (!referencedImages.has(definition.asset)) failures.push(`${definition.asset}: focus geometry asset is not referenced by SceneGraph code`);
 }
 
-const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "starfish-mask-geometry-"));
+const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "starfin-mask-geometry-"));
 try {
   const generation = spawnSync("powershell", [
     "-NoProfile",
