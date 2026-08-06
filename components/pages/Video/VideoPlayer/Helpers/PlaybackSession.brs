@@ -5,7 +5,12 @@ sub onPlayRequestChanged()
     request = m.top.playRequest
     if request = invalid then return
 
-    stopPlayback()
+    isRecoveryRestart = m.recovery.internalRestartPending = true
+    stopPlayback(isRecoveryRestart)
+    isRecoveryRestart = beginPlaybackRecoveryRequest(request)
+#if playbackChaosMonkey
+    beginPlaybackChaosMonkeyRequest(request, isRecoveryRestart)
+#endif
     m.playback.startupPending = true
     Spinner_Show(0)
 
@@ -20,10 +25,16 @@ sub onPlaybackInfoResponse()
     response = m.playbackInfoTask.response
     if response = invalid then return
 
+#if playbackChaosMonkey
+    if response.ok = true and consumePlaybackChaosMonkeyStartupFailure() then return
+#endif
+
     if response.ok <> true then
         m.playback.startupPending = false
+        errorMessage = SafeString(response.errorMessage, "Unable to play this item.")
+        if handlePlaybackRecoveryFailure("playbackInfo", errorMessage) then return
         Spinner_Hide()
-        Status_SetMessage(SafeString(response.errorMessage, "Unable to play this item."))
+        finalizePlaybackRecoveryFailure("Unable to play this item after recovery attempts.")
         return
     end if
 
@@ -198,7 +209,7 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         if queueItem.season <> invalid then season = queueItem.season
     end if
 
-    return {
+    request = {
         server: m.session.server
         token: m.session.token
         userId: m.session.userId
@@ -209,8 +220,9 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         startPositionTicks: 0
         playbackQueue: m.queue.items
         playbackQueueIndex: queueIndex
-        videoMode: SafeString(m.top.playRequest.videoMode, "automatic")
+        videoMode: getOriginalPlaybackMode()
     }
+    return request
 end function
 
 '-------------------------------------------------------------------------------
@@ -245,6 +257,7 @@ sub resetPlaybackForStart(item as dynamic, startPositionSeconds as integer)
     m.playback.duration = getRuntimeSeconds(item)
     m.playback.hasEmittedFinalProgress = false
     m.playback.position = startPositionSeconds
+    m.playback.waitingForStartPosition = startPositionSeconds > 0
     m.playback.previewPosition = startPositionSeconds
     resetSeekState()
     m.playbackControls.duration = m.playback.duration

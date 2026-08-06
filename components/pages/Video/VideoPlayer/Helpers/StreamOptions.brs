@@ -338,7 +338,7 @@ function buildStreamRestartPlayRequest() as dynamic
         subtitleStreamIndex: m.streamOptions.selectedSubtitleStreamIndex
     }
     if request.mediaSourceId <> invalid then restartRequest.AddReplace("mediaSourceId", request.mediaSourceId)
-    if request.videoMode <> invalid then restartRequest.AddReplace("videoMode", request.videoMode)
+    restartRequest.AddReplace("videoMode", getOriginalPlaybackMode())
 
     return restartRequest
 end function

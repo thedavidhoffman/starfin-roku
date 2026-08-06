@@ -25,6 +25,8 @@ sub initReferences()
     m.leftSeekRepeatTimer = m.top.findNode("leftSeekRepeatTimer")
     m.rightSeekRepeatTimer = m.top.findNode("rightSeekRepeatTimer")
     m.videoModeApplyTimer = m.top.findNode("videoModeApplyTimer")
+    m.recoveryBufferTimer = m.top.findNode("recoveryBufferTimer")
+    m.recoveryStableTimer = m.top.findNode("recoveryStableTimer")
 
     m.playback = {
         isSeeking: false
@@ -32,6 +34,7 @@ sub initReferences()
         startupPending: false
         hasReportedStart: false
         hasEmittedFinalProgress: false
+        waitingForStartPosition: false
         previewPosition: 0
         position: 0
         duration: 0
@@ -82,6 +85,10 @@ sub initReferences()
     
     m.trickplay = invalid
     m.trickplayPreloadRequest = invalid
+    initPlaybackRecovery()
+#if playbackChaosMonkey
+    initPlaybackChaosMonkey()
+#endif
 end sub
 
 '-------------------------------------------------------------------------------
@@ -123,6 +130,8 @@ sub initHandlers()
     m.leftSeekRepeatTimer.observeField("fire", "onLeftSeekRepeatTimerFire")
     m.rightSeekRepeatTimer.observeField("fire", "onRightSeekRepeatTimerFire")
     m.videoModeApplyTimer.observeField("fire", "onVideoModeApplyTimerFire")
+    m.recoveryBufferTimer.observeField("fire", "onPlaybackRecoveryBufferTimerFire")
+    m.recoveryStableTimer.observeField("fire", "onPlaybackRecoveryStableTimerFire")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -140,13 +149,18 @@ sub onVideoStateChanged()
     state = LCase(SafeString(m.videoPlayer.state, ""))
     m.log.write("Video state changed state=" + state + " position=" + SafeString(m.videoPlayer.position, ""))
     updateBufferingSpinner(state)
+    onPlaybackRecoveryStateChanged(state)
+#if playbackChaosMonkey
+    onPlaybackChaosMonkeyStateChanged(state)
+#endif
     m.playback.isPlaying = state = "playing" or state = "buffering"
     m.playbackControls.isPlaying = m.playback.isPlaying
     if state = "error" then
         reportPlaystateStop()
-        enableScreenSaver()
-        Status_SetMessage("Unable to play this video.")
+        if handlePlaybackRecoveryFailure("videoError", SafeString(m.videoPlayer.errorStr, "")) then return
+        finalizePlaybackRecoveryFailure("Unable to play this video after recovery attempts.")
     else if state = "finished" then
+        stopPlaybackRecoveryTimers()
         reportPlaystateStop()
         emitPlaybackProgress(true)
         if isPlaylistPlaybackQueue() and startQueueItemAtOffset(1) then return
@@ -164,6 +178,7 @@ sub onVideoStateChanged()
         m.playstateTimer.control = "stop"
         reportPlaystateUpdate()
     else if state = "stopped" then
+        if isPlaybackRecoveryRestarting() then return
         emitPlaybackProgress(false)
         reportPlaystateStop()
         enableScreenSaver()
@@ -190,7 +205,12 @@ end sub
 ' onVideoPositionChanged
 '-------------------------------------------------------------------------------
 sub onVideoPositionChanged()
-    m.playback.position = m.videoPlayer.position
+    position = Number_ToFloat(m.videoPlayer.position, 0)
+    if m.playback.waitingForStartPosition and position <= 0 then return
+
+    m.playback.waitingForStartPosition = false
+    m.playback.position = position
+    recordPlaybackRecoveryPosition(position)
     if m.playback.isSeeking <> true then
         m.playbackControls.position = m.playback.position
     end if
@@ -236,9 +256,14 @@ end sub
 '-------------------------------------------------------------------------------
 ' stopPlayback
 '-------------------------------------------------------------------------------
-sub stopPlayback()
+sub stopPlayback(preserveRecovery = false as boolean)
     if m.playback <> invalid then m.playback.startupPending = false
+    m.playbackInfoTask.control = "stop"
     m.videoModeApplyTimer.control = "stop"
+    stopPlaybackRecoveryTimers()
+#if playbackChaosMonkey
+    stopPlaybackChaosMonkeyTimer()
+#endif
     m.streamOptions.pendingVideoMode = ""
     Spinner_Hide()
     hideControls()
@@ -247,6 +272,10 @@ sub stopPlayback()
     cleanupTrickplayPreload()
     m.videoPlayer.control = "stop"
     enableScreenSaver()
+    if preserveRecovery <> true then resetPlaybackRecovery()
+#if playbackChaosMonkey
+    if preserveRecovery <> true then stopPlaybackChaosMonkey()
+#endif
 end sub
 
 '-------------------------------------------------------------------------------

@@ -19,40 +19,6 @@ OK, now that all my jib jab is out of the way, I present to you `Starfin`, a mod
 
 The code for this app is NOT a fork of the Jellyfin Roku code repo. IMHO the Jellyfin Roku code base isn't a good starting point as the code isn't structured very well. But the Jellyfin Roku code is an excellent reference for how to do things. Instead I used all of my learnings from the [ABSTV Roku app](https://github.com/thedavidhoffman/abs-tv-roku) I build as a Roku client for [Audiobookshelf](https://www.audiobookshelf.org/) as a foundation for this app (stripping it down to its bare essentials without any Audiobookshelf stuff as a starting base).
 
-## Fork renaming checklist
-
-If you fork this repository for your own Roku channel, replace the Starfin names
-in these places:
-
-- `manifest`: `title=Starfin`
-- `package.json`: `"name": "starfin-roku"`
-- `package.json`: `"description": "A Jellyfin client for Roku."`
-- `.vscode/launch.json`: `"name": "Starfin"`
-- `scripts/deploy.mjs`: `const outFile = 'starfin'`
-- `scripts/logviewer.mjs`: the console message that references the Starfin VS
-  Code debug configuration.
-- `scripts/package.mjs`: the package filename template
-  `starfin.<major>.<minor>.<build>`.
-- `source/store/AuthStore.brs` and `source/store/SettingsStore.brs`: the
-  `STARFIN_ROKU` registry section name.
-
-Use an app-specific registry section name before shipping so auth and settings
-data for your fork do not collide with another app based on this starter kit.
-
-## BrightScript vs BrighterScript
-
-This sample app is written in BrightScript rather than BrighterScript.
-BrightScript is Roku's native scripting language for SceneGraph channels.
-BrighterScript is a superset and toolchain that adds conveniences such as
-stronger typing, classes, namespaces, imports, and other language features that
-compile back down to BrightScript for Roku devices.
-
-This repo intentionally sticks with BrightScript so the code stays close
-to Roku's platform concepts and does not hide SceneGraph or BrightScript patterns
-behind extra abstractions. BrighterScript can still be a good option for teams
-that want stronger tooling or a more structured application style, and this
-starter kit could be modified to use it.
-
 # Developer Commands
 
 This project uses npm scripts for local build, package, deploy, and log-viewer
@@ -75,6 +41,32 @@ Optional helper extensions:
   for launch/debug.
 - `redhat.vscode-xml`: XML formatting for SceneGraph files; useful but not
   required for launch/debug.
+
+## Playback Chaos Monkey
+
+Playback Chaos Monkey is a development-only stress tool for exercising the
+video player's bounded recovery behavior on a reliable server and network. In
+VS Code, select the `Starfin — Playback Chaos Monkey` launch profile instead of
+the normal `Starfin` profile. The special profile enables the manifest
+`playbackChaosMonkey` compile constant and activates the tool automatically;
+there is no in-app setting.
+
+While an on-demand video is playing, Chaos Monkey waits a random 30–60 seconds
+and then injects a video error, playback-info failure, buffering stall, or
+buffering-at-100-percent condition through the real recovery path. Injection is
+postponed while seeking, buffering, changing streams, showing an overlay, or
+already recovering. Follow-up failures are capped to the recovery attempts still
+available, allowing long-running playback tests without intentionally exhausting
+the player.
+
+An on-screen badge starts at `CHAOS MONKEY 0` and increments for every injected
+incident. Search `logs/rokuDevice.log` for `Playback Chaos Monkey` to see when the
+tool is enabled, scheduled, injecting failures, continuing an incident,
+stabilizing, or exhausting recovery. Logs include the effective playback mode
+and preserved position but do not include playback URLs or tokens.
+
+The checked-in manifest defaults `playbackChaosMonkey` to `false`, so normal VS
+Code launches and release packages compile the feature out.
 
 ## Setup
 
