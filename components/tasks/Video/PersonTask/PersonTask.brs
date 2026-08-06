@@ -34,16 +34,15 @@ sub executeRequest()
         return
     end if
 
-    episodeItemsResult = loadPersonEpisodeItems(request)
+    filteredItems = itemsResult.data
+    excludedSeriesIds = getRelatedSeriesIds(filteredItems)
+    episodeItemsResult = loadPersonEpisodeItems(request, excludedSeriesIds)
     if episodeItemsResult.ok <> true then
         episodeItemsResult.AddReplace("action", "person")
         episodeItemsResult.AddReplace("itemId", SafeString(request.itemId, ""))
         m.top.response = episodeItemsResult
         return
     end if
-
-    filteredItems = itemsResult.data
-    filteredEpisodeItems = filterPersonEpisodeItems(episodeItemsResult.data, request, filteredItems)
 
     m.top.response = {
         ok: true
@@ -52,7 +51,7 @@ sub executeRequest()
         payload: {
             person: personResult.data
             items: filteredItems
-            episodeItems: filteredEpisodeItems
+            episodeItems: episodeItemsResult.data
         }
     }
 end sub
@@ -94,7 +93,10 @@ end function
 '-------------------------------------------------------------------------------
 ' loadPersonEpisodeItems
 '-------------------------------------------------------------------------------
-function loadPersonEpisodeItems(request as object) as object
+function loadPersonEpisodeItems(request as object, excludedSeriesIds as object) as object
+    itemLimit = 40
+    episodeItems = []
+
     params = {
         UserId: SafeString(request.userId, "")
         PersonIds: SafeString(request.itemId, "")
@@ -105,25 +107,27 @@ function loadPersonEpisodeItems(request as object) as object
         Fields: "PrimaryImageAspectRatio,Overview,SeriesName"
         ImageTypeLimit: 1
         EnableImageTypes: "Primary,Backdrop,Thumb"
-        Limit: 40
+        Limit: 500
     }
 
     url = request.server + "/Users/" + request.userId + "/Items" + Url_BuildQueryString(params)
-    return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
-end function
+    response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+    if response.ok <> true then return response
 
-'-------------------------------------------------------------------------------
-' filterPersonEpisodeItems
-'-------------------------------------------------------------------------------
-function filterPersonEpisodeItems(payload as dynamic, request as object, relatedItemsPayload as dynamic) as dynamic
-    excludedSeriesIds = getRelatedSeriesIds(relatedItemsPayload)
+    items = getPayloadItems(response.data)
+    if items <> invalid then
+        for each item in items
+            seriesId = ""
+            if Array_IsAssocArray(item) then seriesId = SafeString(FirstNonEmpty([item.SeriesId], ""), "")
+            if seriesId <> "" and arrayContainsString(excludedSeriesIds, seriesId) then continue for
 
-    sourceSeriesId = SafeString(request.sourceSeriesId, "")
-    if LCase(SafeString(request.sourceItemType, "")) = "series" and sourceSeriesId <> "" then excludedSeriesIds.Push(sourceSeriesId)
+            episodeItems.Push(item)
+            if episodeItems.Count() = itemLimit then exit for
+        end for
+    end if
 
-    if excludedSeriesIds.Count() = 0 then return payload
-
-    return filterPayloadItemsBySeriesIds(payload, excludedSeriesIds)
+    response.AddReplace("data", episodeItems)
+    return response
 end function
 
 '-------------------------------------------------------------------------------
@@ -143,36 +147,6 @@ function getRelatedSeriesIds(payload as dynamic) as object
     end for
 
     return seriesIds
-end function
-
-'-------------------------------------------------------------------------------
-' filterPayloadItemsBySeriesIds
-'-------------------------------------------------------------------------------
-function filterPayloadItemsBySeriesIds(payload as dynamic, excludedSeriesIds as object) as dynamic
-    items = getPayloadItems(payload)
-    if items = invalid then return payload
-
-    filteredItems = []
-    for each item in items
-        seriesId = ""
-        if Array_IsAssocArray(item) then seriesId = SafeString(FirstNonEmpty([item.SeriesId], ""), "")
-        if seriesId <> "" and arrayContainsString(excludedSeriesIds, seriesId) then continue for
-
-        filteredItems.Push(item)
-    end for
-
-    return replacePayloadItems(payload, filteredItems)
-end function
-
-'-------------------------------------------------------------------------------
-' replacePayloadItems
-'-------------------------------------------------------------------------------
-function replacePayloadItems(payload as dynamic, items as object) as dynamic
-    if Type(payload) = "roArray" then return items
-
-    payload.Items = items
-    if payload.TotalRecordCount <> invalid then payload.TotalRecordCount = items.Count()
-    return payload
 end function
 
 '-------------------------------------------------------------------------------
