@@ -10,6 +10,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
+    m.contentGroup = m.top.findNode("contentGroup")
     m.episodePoster = m.top.findNode("episodePoster")
     m.episodeNumber = m.top.findNode("episodeNumber")
     m.episodeDate = m.top.findNode("episodeDate")
@@ -38,6 +39,8 @@ end sub
 sub onItemContentChanged()
     item = m.top.itemContent
     if item = invalid then return
+    m.contentGroup.visible = SafeString(item.itemType, "") <> "LayoutSpacer"
+    if m.contentGroup.visible <> true then return
     isSeasonSummary = SafeString(item.itemType, "") = "SeasonSummary"
 
     m.episodeNumber.text = getNumberText(item, isSeasonSummary)

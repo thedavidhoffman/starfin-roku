@@ -11,6 +11,18 @@ sub tvSeasonHandleTVShowSeasonSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' tvSeasonHandleTVShowAllEpisodesSelected
+'-------------------------------------------------------------------------------
+sub tvSeasonHandleTVShowAllEpisodesSelected()
+    selection = m.tvShowPage.selectedAllEpisodes
+    if selection = invalid then return
+    if selection.seriesId = invalid or selection.seriesId = "" then return
+    if selection.seasonId = invalid or selection.seasonId = "" then return
+
+    tvSeasonShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
 ' tvSeasonShow
 '-------------------------------------------------------------------------------
 sub tvSeasonShow(selection as object)
@@ -35,6 +47,7 @@ sub tvSeasonShow(selection as object)
         season: selection.season
         seasons: selection.seasons
         nextSeason: selection.nextSeason
+        allEpisodes: selection.allEpisodes = true
     }
 
     m.tvSeasonPage = page

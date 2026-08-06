@@ -5,6 +5,9 @@ sub init()
     m.log = CreateLogger("TVSeason")
     initReferences()
     initHandlers()
+    m.layout = {
+        episodeGridColumns: m.episodesGrid.numColumns
+    }
     m.pageState = {
         request: invalid
         season: invalid
@@ -18,6 +21,8 @@ sub init()
         episodesLoaded: false
         episodeWindowStart: 0
         episodeListScroll: "horizontal"
+        allEpisodes: false
+        focusedEpisodeGridIndex: -1
         focusArea: "episodes"
         lifecycle: AsyncLifecycle_Create()
     }
@@ -116,6 +121,8 @@ sub onLoadRequestChanged()
     m.pageState.nextSeasonEpisodesLoaded = false
     m.pageState.pendingEpisodeSelection = invalid
     m.pageState.episodesLoaded = false
+    m.pageState.allEpisodes = request.allEpisodes = true
+    m.pageState.focusedEpisodeGridIndex = -1
     m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
     m.pageState.focusArea = "episodes"
     if request.keepSeasonNavFocus = true then m.pageState.focusArea = "seasonNav"
@@ -123,6 +130,7 @@ sub onLoadRequestChanged()
     Spinner_Show(0)
     updateAdjacentSeasons()
     renderSeason(request.season, request.seriesMetadataPending <> true, false)
+    m.seasonNav.visible = m.pageState.allEpisodes <> true
     if m.pageState.focusArea = "seasonNav" then focusSeasonNav()
 
     m.tvSeasonTask.request = request
@@ -246,8 +254,36 @@ end function
 ' onEpisodeFocused
 '-------------------------------------------------------------------------------
 sub onEpisodeFocused()
+    if m.pageState.allEpisodes then
+        if redirectSpacerFocus() then return
+        m.pageState.focusedEpisodeGridIndex = m.episodesGrid.itemFocused
+        updateAllEpisodesSeasonLabel()
+    end if
     updateChevrons()
 end sub
+
+'-------------------------------------------------------------------------------
+' redirectSpacerFocus
+'-------------------------------------------------------------------------------
+function redirectSpacerFocus() as boolean
+    index = m.episodesGrid.itemFocused
+    node = getGridEpisodeNodeAtPosition(index)
+    if node = invalid or SafeString(node.itemType, "") <> "LayoutSpacer" then return false
+
+    stepValue = 1
+    if m.pageState.focusedEpisodeGridIndex > index then stepValue = -1
+    targetIndex = index
+    while targetIndex >= 0 and targetIndex < m.episodesGrid.content.getChildCount()
+        targetIndex = targetIndex + stepValue
+        target = getGridEpisodeNodeAtPosition(targetIndex)
+        if target <> invalid and SafeString(target.itemType, "") <> "LayoutSpacer" then
+            m.episodesGrid.jumpToItem = targetIndex
+            return true
+        end if
+    end while
+
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' onWatchedStateChange
@@ -260,10 +296,11 @@ sub onWatchedStateChange()
     if itemId = "" then return
 
     isWatched = change.isWatched = true
-    updateEpisodeWatchedState(itemId, isWatched)
+    affectedSeason = updateEpisodeWatchedState(itemId, isWatched)
+    if affectedSeason = invalid then return
     renderEpisodes(m.pageState.episodes)
     restoreEpisodeFocus(itemId)
-    notifySeasonWatchedStateChanged()
+    notifySeasonWatchedStateChanged(affectedSeason)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -276,13 +313,12 @@ sub onPlaybackProgressChange()
     itemId = SafeString(change.itemId, "")
     if itemId = "" then return
 
-    if updateEpisodePlaybackProgress(itemId, change) <> true then
-        return
-    end if
+    affectedSeason = updateEpisodePlaybackProgress(itemId, change)
+    if affectedSeason = invalid then return
 
     renderEpisodes(m.pageState.episodes)
     restoreEpisodeFocus(itemId)
-    notifySeasonWatchedStateChanged()
+    notifySeasonWatchedStateChanged(affectedSeason)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -307,8 +343,13 @@ sub renderSeason(item as dynamic, renderSeriesIdentity = true as boolean, render
     else
         m.seasonLabel.text = ""
     end if
-    m.seasonNav.hasPreviousSeason = m.pageState.previousSeason <> invalid
-    m.seasonNav.hasNextSeason = m.pageState.nextSeason <> invalid
+    if m.pageState.allEpisodes then
+        m.seasonNav.hasPreviousSeason = false
+        m.seasonNav.hasNextSeason = false
+    else
+        m.seasonNav.hasPreviousSeason = m.pageState.previousSeason <> invalid
+        m.seasonNav.hasNextSeason = m.pageState.nextSeason <> invalid
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -447,13 +488,34 @@ sub renderEpisodes(episodes as object)
 end sub
 
 '-------------------------------------------------------------------------------
+' updateAllEpisodesSeasonLabel
+'-------------------------------------------------------------------------------
+sub updateAllEpisodesSeasonLabel()
+    node = getFocusedEpisodeNode()
+    if node = invalid or node.raw = invalid then return
+
+    seasonId = SafeString(node.raw.SeasonId, "")
+    for each season in m.pageState.seasons
+        if Array_IsAssocArray(season) and SafeString(season.Id, "") = seasonId then
+            m.pageState.season = season
+            m.seasonLabel.text = getItemTitle(season)
+            return
+        end if
+    end for
+
+    seasonName = SafeString(node.raw.SeasonName, "")
+    if seasonName = "" and node.raw.ParentIndexNumber <> invalid then seasonName = "Season " + SafeString(node.raw.ParentIndexNumber, "")
+    m.seasonLabel.text = seasonName
+end sub
+
+'-------------------------------------------------------------------------------
 ' renderEpisodesList
 '-------------------------------------------------------------------------------
 sub renderEpisodesList(episodes as object)
     rowContent = CreateObject("roSGNode", "ContentNode")
     row = rowContent.createChild("ContentNode")
 
-    appendSeasonSummaryItem(row)
+    if m.pageState.allEpisodes <> true then appendSeasonSummaryItem(row)
 
     for each episode in episodes
         if Array_IsAssocArray(episode) = false then continue for
@@ -471,16 +533,43 @@ end sub
 sub renderEpisodesGrid(episodes as object)
     gridContent = CreateObject("roSGNode", "ContentNode")
 
-    appendSeasonSummaryItem(gridContent)
+    if m.pageState.allEpisodes <> true then appendSeasonSummaryItem(gridContent)
 
+    currentSeasonKey = ""
     for each episode in episodes
         if Array_IsAssocArray(episode) = false then continue for
 
+        if m.pageState.allEpisodes then
+            seasonKey = getEpisodeSeasonKey(episode)
+            if currentSeasonKey <> "" and seasonKey <> currentSeasonKey then
+                while gridContent.getChildCount() mod m.layout.episodeGridColumns <> 0
+                    appendGridLayoutSpacer(gridContent)
+                end while
+            end if
+            currentSeasonKey = seasonKey
+        end if
         appendEpisodeItem(gridContent, episode)
     end for
 
     m.episodesList.content = CreateObject("roSGNode", "ContentNode")
     m.episodesGrid.content = gridContent
+end sub
+
+'-------------------------------------------------------------------------------
+' getEpisodeSeasonKey
+'-------------------------------------------------------------------------------
+function getEpisodeSeasonKey(episode as object) as string
+    seasonId = SafeString(episode.SeasonId, "")
+    if seasonId <> "" then return seasonId
+    return "season-" + SafeString(episode.ParentIndexNumber, "")
+end function
+
+'-------------------------------------------------------------------------------
+' appendGridLayoutSpacer
+'-------------------------------------------------------------------------------
+sub appendGridLayoutSpacer(parent as object)
+    child = parent.createChild("ContentNode")
+    child.AddFields({ itemType: "LayoutSpacer" })
 end sub
 
 '-------------------------------------------------------------------------------
@@ -533,6 +622,7 @@ end function
 ' shouldLoadNextSeasonEpisodesForSelection
 '-------------------------------------------------------------------------------
 function shouldLoadNextSeasonEpisodesForSelection() as boolean
+    if m.pageState.allEpisodes then return false
     if m.pageState.nextSeason = invalid then return false
     return m.pageState.nextSeasonEpisodesLoaded <> true
 end function
@@ -600,9 +690,9 @@ function buildEpisodeLoadRequest(node as dynamic) as dynamic
         token: request.token
         userId: request.userId
         seriesId: request.seriesId
-        seasonId: request.seasonId
+        seasonId: getEpisodeSeasonId(playSelection.item, request.seasonId)
         series: buildSeriesIdentity(request, playSelection.item)
-        season: buildSeasonIdentity(request)
+        season: buildEpisodeSeasonIdentity(playSelection.item, request)
         seasons: m.pageState.seasons
         itemId: playSelection.itemId
         item: playSelection.item
@@ -611,6 +701,31 @@ function buildEpisodeLoadRequest(node as dynamic) as dynamic
         playbackQueue: playSelection.playbackQueue
         playbackQueueIndex: playSelection.playbackQueueIndex
     }
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeSeasonId
+'-------------------------------------------------------------------------------
+function getEpisodeSeasonId(item as dynamic, fallbackSeasonId as string) as string
+    if item <> invalid then
+        seasonId = SafeString(item.SeasonId, "")
+        if seasonId <> "" then return seasonId
+    end if
+    return fallbackSeasonId
+end function
+
+'-------------------------------------------------------------------------------
+' buildEpisodeSeasonIdentity
+'-------------------------------------------------------------------------------
+function buildEpisodeSeasonIdentity(item as dynamic, request as object) as object
+    seasonId = getEpisodeSeasonId(item, SafeString(request.seasonId, ""))
+    for each season in m.pageState.seasons
+        if Array_IsAssocArray(season) and SafeString(season.Id, "") = seasonId then return season
+    end for
+
+    seasonName = ""
+    if item <> invalid then seasonName = SafeString(item.SeasonName, "")
+    return { Id: seasonId, Name: seasonName }
 end function
 
 '-------------------------------------------------------------------------------
@@ -760,6 +875,7 @@ end function
 ' isVerticalEpisodeList
 '-------------------------------------------------------------------------------
 function isVerticalEpisodeList() as boolean
+    if m.pageState.allEpisodes then return true
     return m.pageState.episodeListScroll = "vertical"
 end function
 
@@ -852,6 +968,7 @@ end sub
 ' hasSeasonNavigation
 '-------------------------------------------------------------------------------
 function hasSeasonNavigation() as boolean
+    if m.pageState.allEpisodes then return false
     return m.pageState.previousSeason <> invalid or m.pageState.nextSeason <> invalid
 end function
 
@@ -965,11 +1082,11 @@ end function
 '-------------------------------------------------------------------------------
 ' updateEpisodeWatchedState
 '-------------------------------------------------------------------------------
-sub updateEpisodeWatchedState(itemId as string, isWatched as boolean)
+function updateEpisodeWatchedState(itemId as string, isWatched as boolean) as dynamic
     if Array_IsAssocArray(m.pageState.season) and SafeString(FirstNonEmpty([m.pageState.season.Id], ""), "") = itemId then
         updateItemWatchedState(m.pageState.season, isWatched)
         updateSeasonEpisodesWatchedState(isWatched)
-        return
+        return m.pageState.season
     end if
 
     for each episode in m.pageState.episodes
@@ -978,10 +1095,11 @@ sub updateEpisodeWatchedState(itemId as string, isWatched as boolean)
 
         wasWatched = isItemWatched(episode)
         updateItemWatchedState(episode, isWatched)
-        updateSeasonUnplayedCount(wasWatched, isWatched)
-        return
+        return updateSeasonUnplayedCount(episode, wasWatched, isWatched)
     end for
-end sub
+
+    return invalid
+end function
 
 '-------------------------------------------------------------------------------
 ' updateSeasonEpisodesWatchedState
@@ -1004,29 +1122,48 @@ end sub
 '-------------------------------------------------------------------------------
 ' updateSeasonUnplayedCount
 '-------------------------------------------------------------------------------
-sub updateSeasonUnplayedCount(wasWatched as boolean, isWatched as boolean)
-    if Array_IsAssocArray(m.pageState.season) = false then return
-    if m.pageState.season.UserData = invalid then m.pageState.season.UserData = {}
+function updateSeasonUnplayedCount(episode as object, wasWatched as boolean, isWatched as boolean) as dynamic
+    season = getSeasonForEpisode(episode)
+    if Array_IsAssocArray(season) = false then return invalid
+    if season.UserData = invalid then season.UserData = {}
 
-    current = m.pageState.season.UserData.UnplayedItemCount
-    if current = invalid then current = countUnplayedEpisodes()
-    current = int(current)
-
-    if isWatched then
-        if wasWatched <> true and current > 0 then current = current - 1
+    current = season.UserData.UnplayedItemCount
+    if current = invalid then
+        current = countUnplayedEpisodes(SafeString(season.Id, ""))
     else
-        if wasWatched = true or current = 0 then current = current + 1
+        current = Number_ToInteger(current, 0)
+        if isWatched then
+            if wasWatched <> true and current > 0 then current = current - 1
+        else
+            if wasWatched = true or current = 0 then current = current + 1
+        end if
     end if
 
     if current < 0 then current = 0
-    m.pageState.season.UserData.UnplayedItemCount = current
-end sub
+    season.UserData.UnplayedItemCount = current
+    return season
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonForEpisode
+'-------------------------------------------------------------------------------
+function getSeasonForEpisode(episode as object) as dynamic
+    seasonId = SafeString(episode.SeasonId, "")
+    currentSeason = m.pageState.season
+    if Array_IsAssocArray(currentSeason) and SafeString(currentSeason.Id, "") = seasonId then return currentSeason
+
+    for each season in m.pageState.seasons
+        if Array_IsAssocArray(season) and SafeString(season.Id, "") = seasonId then return season
+    end for
+
+    if m.pageState.allEpisodes <> true and Array_IsAssocArray(currentSeason) then return currentSeason
+    return invalid
+end function
 
 '-------------------------------------------------------------------------------
 ' notifySeasonWatchedStateChanged
 '-------------------------------------------------------------------------------
-sub notifySeasonWatchedStateChanged()
-    season = m.pageState.season
+sub notifySeasonWatchedStateChanged(season as dynamic)
     if Array_IsAssocArray(season) = false then return
 
     seasonId = SafeString(FirstNonEmpty([season.Id], ""), "")
@@ -1047,10 +1184,12 @@ end sub
 '-------------------------------------------------------------------------------
 ' countUnplayedEpisodes
 '-------------------------------------------------------------------------------
-function countUnplayedEpisodes() as integer
+function countUnplayedEpisodes(seasonId = "" as string) as integer
     count = 0
     for each episode in m.pageState.episodes
-        if Array_IsAssocArray(episode) and isItemWatched(episode) <> true then count = count + 1
+        if Array_IsAssocArray(episode) = false then continue for
+        if seasonId <> "" and SafeString(episode.SeasonId, "") <> seasonId then continue for
+        if isItemWatched(episode) <> true then count = count + 1
     end for
 
     return count
@@ -1093,18 +1232,17 @@ end sub
 '-------------------------------------------------------------------------------
 ' updateEpisodePlaybackProgress
 '-------------------------------------------------------------------------------
-function updateEpisodePlaybackProgress(itemId as string, change as object) as boolean
+function updateEpisodePlaybackProgress(itemId as string, change as object) as dynamic
     for each episode in m.pageState.episodes
         if Array_IsAssocArray(episode) = false then continue for
         if SafeString(FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
 
         wasWatched = isItemWatched(episode)
         updateItemPlaybackProgress(episode, change)
-        updateSeasonUnplayedCount(wasWatched, isItemWatched(episode))
-        return true
+        return updateSeasonUnplayedCount(episode, wasWatched, isItemWatched(episode))
     end for
 
-    return false
+    return invalid
 end function
 
 '-------------------------------------------------------------------------------
@@ -1315,10 +1453,12 @@ sub appendEpisodesToPlaybackQueue(queue as object, episodes as dynamic, season a
         episodeId = SafeString(FirstNonEmpty([episode.Id], ""), "")
         if episodeId = "" then continue for
 
+        queueSeason = season
+        if m.pageState.allEpisodes and m.pageState.request <> invalid then queueSeason = buildEpisodeSeasonIdentity(episode, m.pageState.request)
         queue.Push({
             itemId: episodeId
             item: episode
-            season: season
+            season: queueSeason
             startPositionTicks: PlaybackProgress_GetTicksFromItem(episode)
         })
     end for

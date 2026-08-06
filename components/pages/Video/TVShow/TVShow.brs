@@ -19,6 +19,7 @@ sub init()
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.videoToolbar.observeField("playSelected", "onVideoToolbarPlaySelected")
     m.videoToolbar.observeField("randomPlaySelected", "onVideoToolbarRandomPlaySelected")
+    m.videoToolbar.observeField("allEpisodesSelected", "onVideoToolbarAllEpisodesSelected")
     m.videoToolbar.observeField("focusExitUp", "onVideoToolbarFocusExitUp")
     m.videoToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
@@ -43,6 +44,28 @@ sub init()
         contentCastFocused: [96, -397]
         toolbarDefault: [0, 529]
         toolbarCastFocused: [0, 926]
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarAllEpisodesSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarAllEpisodesSelected()
+    request = m.pageState.request
+    if request = invalid then return
+
+    firstSeason = getFirstValidSeason()
+    if firstSeason = invalid then return
+    seasonId = SafeString(FirstNonEmpty([firstSeason.Id], ""), "")
+    if seasonId = "" then return
+
+    m.top.selectedAllEpisodes = {
+        seriesId: SafeString(request.itemId, "")
+        seasonId: seasonId
+        series: SeriesIdentity_FromItem(request.server, m.pageState.series)
+        season: firstSeason
+        seasons: m.pageState.seasons
+        allEpisodes: true
     }
 end sub
 
@@ -260,6 +283,7 @@ sub onLoadRequestChanged()
     m.contentGroup.translation = m.layout.contentDefault
     m.videoToolbar.translation = m.layout.toolbarDefault
     m.videoToolbar.visible = false
+    m.videoToolbar.supportsAllEpisodes = false
     setSeasonsVisible(true)
     updateFocusChevron()
     m.cast.server = request.server
@@ -319,6 +343,7 @@ sub onTVShowResponse()
     preserveRequestedSeriesImages(payload.series)
     m.pageState.series = payload.series
     m.pageState.seasons = getItemsFromPayload(payload.seasons)
+    updateAllEpisodesAvailability()
     m.pageState.playbackQueue = payload.playbackQueue
     m.pageState.playbackQueueIndex = Number_ToInteger(payload.playbackQueueIndex, 0)
     m.videoToolbar.resumeItem = payload.resumeItem
@@ -336,6 +361,24 @@ sub onTVShowResponse()
     end if
     loadThemeSong(payload.series)
 end sub
+
+'-------------------------------------------------------------------------------
+' updateAllEpisodesAvailability
+'-------------------------------------------------------------------------------
+sub updateAllEpisodesAvailability()
+    m.videoToolbar.supportsAllEpisodes = getFirstValidSeason() <> invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' getFirstValidSeason
+'-------------------------------------------------------------------------------
+function getFirstValidSeason() as dynamic
+    for each season in m.pageState.seasons
+        if Array_IsAssocArray(season) and SafeString(season.Id, "") <> "" then return season
+    end for
+
+    return invalid
+end function
 
 '-------------------------------------------------------------------------------
 ' preserveRequestedSeriesImages

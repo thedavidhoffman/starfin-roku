@@ -7,6 +7,7 @@ sub init()
     m.restartButton = m.top.findNode("restartButton")
     m.playButton = m.top.findNode("playButton")
     m.randomPlayButton = m.top.findNode("randomPlayButton")
+    m.allEpisodesButton = m.top.findNode("allEpisodesButton")
     m.markWatchedButton = m.top.findNode("markWatchedButton")
     m.markUnwatchedButton = m.top.findNode("markUnwatchedButton")
     m.seriesButton = m.top.findNode("seriesButton")
@@ -20,6 +21,7 @@ sub init()
     m.restartButton.observeField("buttonSelected", "onRestartButtonSelected")
     m.playButton.observeField("buttonSelected", "onPlayButtonSelected")
     m.randomPlayButton.observeField("buttonSelected", "onRandomPlayButtonSelected")
+    m.allEpisodesButton.observeField("buttonSelected", "onAllEpisodesButtonSelected")
     m.markWatchedButton.observeField("buttonSelected", "onMarkWatchedButtonSelected")
     m.markUnwatchedButton.observeField("buttonSelected", "onMarkUnwatchedButtonSelected")
     m.seriesButton.observeField("buttonSelected", "onSeriesButtonSelected")
@@ -246,6 +248,7 @@ sub configureToolbarButtons(state as object)
     m.restartButton.visible = state.hasResumeProgress and m.top.supportsRestart <> false
     m.playButton.visible = state.hasResumeAction <> true
     m.randomPlayButton.visible = m.top.supportsRandomPlay = true
+    m.allEpisodesButton.visible = m.top.supportsAllEpisodes = true
 
     resumeLabelItem = m.top.playItem
     if state.hasResumeItem then resumeLabelItem = m.top.resumeItem
@@ -276,6 +279,7 @@ function buildToolbarButtonList() as object
     if m.restartButton.visible then buttons.Push(m.restartButton)
     if m.playButton.visible then buttons.Push(m.playButton)
     if m.randomPlayButton.visible then buttons.Push(m.randomPlayButton)
+    if m.allEpisodesButton.visible then buttons.Push(m.allEpisodesButton)
     if m.markWatchedButton.visible then buttons.Push(m.markWatchedButton)
     if m.markUnwatchedButton.visible then buttons.Push(m.markUnwatchedButton)
     if m.subtitlesButton.visible then buttons.Push(m.subtitlesButton)
@@ -399,6 +403,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onRandomPlayButtonSelected()
     m.top.randomPlaySelected = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onAllEpisodesButtonSelected
+'-------------------------------------------------------------------------------
+sub onAllEpisodesButtonSelected()
+    m.top.allEpisodesSelected = true
 end sub
 
 '-------------------------------------------------------------------------------

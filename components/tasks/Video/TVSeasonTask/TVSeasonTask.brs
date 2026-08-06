@@ -35,7 +35,9 @@ sub executeRequest()
         return
     end if
 
-    episodesResult = loadEpisodes(request, SafeString(request.seasonId, ""))
+    episodesSeasonId = SafeString(request.seasonId, "")
+    if request.allEpisodes = true then episodesSeasonId = ""
+    episodesResult = loadEpisodes(request, episodesSeasonId)
     if episodesResult.ok <> true then
         episodesResult.AddReplace("action", "tvSeason")
         episodesResult.AddReplace("seriesId", SafeString(request.seriesId, ""))
@@ -151,11 +153,13 @@ end function
 function loadEpisodes(request as object, seasonId as string) as object
     params = {
         userId: SafeString(request.userId, "")
-        seasonId: seasonId
         fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
+        sortBy: "ParentIndexNumber,IndexNumber"
+        sortOrder: "Ascending"
         enableImageTypes: "Primary,Backdrop,Thumb"
         imageTypeLimit: 1
     }
+    if seasonId <> "" then params.seasonId = seasonId
 
     url = request.server + "/Shows/" + request.seriesId + "/Episodes" + Url_BuildQueryString(params)
     return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
