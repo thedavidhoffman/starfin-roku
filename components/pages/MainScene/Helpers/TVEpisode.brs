@@ -168,7 +168,7 @@ sub tvEpisodeHandleEpisodeSelected()
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
-    if m.tvEpisodePage <> invalid then m.tvEpisodePage.callFunc("deactivate")
+    if m.tvEpisodePage <> invalid then m.tvEpisodePage.callFunc("suspendForPlayback")
     playerShow(selection)
 end sub
 
