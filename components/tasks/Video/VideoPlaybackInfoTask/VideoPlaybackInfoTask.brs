@@ -83,9 +83,128 @@ sub executeRequest()
         streamUrl: streamInfo.streamUrl
         streamFormat: streamInfo.streamFormat
         playSessionId: streamInfo.playSessionId
+        playbackIdentity: buildPlaybackIdentity(request, streamInfo, firstMediaSource(result.data))
         startPositionTicks: getStartPositionTicks(request)
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' buildPlaybackIdentity
+'-------------------------------------------------------------------------------
+function buildPlaybackIdentity(request as object, streamInfo as object, mediaSource as dynamic) as object
+    videoStream = getMediaStreamByIndex(mediaSource, "video", streamInfo.videoStreamIndex)
+    audioStream = getMediaStreamByIndex(mediaSource, "audio", streamInfo.audioStreamIndex)
+    subtitleStream = getMediaStreamByIndex(mediaSource, "subtitle", streamInfo.subtitleStreamIndex)
+    if videoStream = invalid then videoStream = {}
+    if audioStream = invalid then audioStream = {}
+    if subtitleStream = invalid then subtitleStream = {}
+
+    return {
+        itemId: SafeString(request.itemId, "")
+        title: getPlaybackItemTitle(request.item)
+        playSessionId: streamInfo.playSessionId
+        mediaSourceId: streamInfo.mediaSourceId
+        liveStreamId: streamInfo.liveStreamId
+        playbackMode: getPlaybackMode(request)
+        playMethod: getPlaybackMethodDisplay(streamInfo.playbackMethod)
+        transcodeReason: getTranscodeReason(mediaSource, streamInfo.playbackMethod)
+        streamFormat: streamInfo.streamFormat
+        container: SafeString(mediaSource.Container, "")
+        videoStreamIndex: streamInfo.videoStreamIndex
+        audioStreamIndex: streamInfo.audioStreamIndex
+        subtitleStreamIndex: streamInfo.subtitleStreamIndex
+        videoStreamTitle: FirstNonEmpty([videoStream.DisplayTitle, videoStream.Title], "")
+        audioStreamTitle: FirstNonEmpty([audioStream.DisplayTitle, audioStream.Title], "")
+        subtitleStreamTitle: FirstNonEmpty([subtitleStream.DisplayTitle, subtitleStream.Title], "")
+        videoCodec: SafeString(videoStream.Codec, "")
+        audioCodec: SafeString(audioStream.Codec, "")
+        width: Number_ToInteger(videoStream.Width, 0)
+        height: Number_ToInteger(videoStream.Height, 0)
+        videoBitrate: Number_ToInteger(videoStream.BitRate, 0)
+        audioBitrate: Number_ToInteger(audioStream.BitRate, 0)
+        audioChannels: Number_ToInteger(audioStream.Channels, 0)
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getTranscodeReason
+'-------------------------------------------------------------------------------
+function getTranscodeReason(mediaSource as dynamic, playbackMethod as string) as string
+    method = LCase(playbackMethod)
+    if method = "direct" or method = "directplay" then return "Not required (direct play)"
+    if mediaSource = invalid then return "Not reported by Jellyfin"
+
+    if mediaSource.TranscodingReasons <> invalid then
+        reasons = String_GetJoinedText(mediaSource.TranscodingReasons)
+        if reasons <> "" then return reasons
+    end if
+
+    reason = getUrlQueryValue(SafeString(mediaSource.TranscodingUrl, ""), "TranscodeReasons")
+    if reason = "" then return "Not reported by Jellyfin"
+    return String_Replace(reason, ",", ", ")
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackMethodDisplay
+'-------------------------------------------------------------------------------
+function getPlaybackMethodDisplay(value as dynamic) as string
+    method = LCase(SafeString(value, ""))
+    if method = "direct" then return "Direct Play"
+    if method = "transcode" then return "Transcode"
+    return SafeString(value, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getUrlQueryValue
+'-------------------------------------------------------------------------------
+function getUrlQueryValue(url as string, name as string) as string
+    queryStart = Instr(1, url, "?")
+    if queryStart = 0 then return ""
+
+    lowerUrl = LCase(url)
+    lowerName = LCase(name)
+    valueStart = Instr(queryStart + 1, lowerUrl, lowerName + "=")
+    while valueStart > 0
+        if valueStart = queryStart + 1 or Mid(url, valueStart - 1, 1) = "&" then
+            valueStart = valueStart + Len(name) + 1
+            valueEnd = Instr(valueStart, url, "&")
+            if valueEnd = 0 then valueEnd = Len(url) + 1
+
+            value = Mid(url, valueStart, valueEnd - valueStart)
+            value = String_Replace(value, "%2C", ",")
+            value = String_Replace(value, "%2c", ",")
+            return value
+        end if
+
+        valueStart = Instr(valueStart + Len(name) + 1, lowerUrl, lowerName + "=")
+    end while
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackItemTitle
+'-------------------------------------------------------------------------------
+function getPlaybackItemTitle(item as dynamic) as string
+    if item = invalid then return ""
+    return SafeString(item.Name, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaStreamByIndex
+'-------------------------------------------------------------------------------
+function getMediaStreamByIndex(mediaSource as dynamic, streamType as string, streamIndex as integer) as dynamic
+    if mediaSource = invalid or mediaSource.MediaStreams = invalid then return invalid
+
+    for i = 0 to mediaSource.MediaStreams.Count() - 1
+        mediaStream = mediaSource.MediaStreams[i]
+        if mediaStream = invalid then continue for
+        if LCase(SafeString(mediaStream.Type, "")) <> streamType then continue for
+        if getMediaStreamIndex(mediaStream, i) = streamIndex then return mediaStream
+    end for
+
+    return invalid
+end function
 
 '-------------------------------------------------------------------------------
 ' getPlaybackMode
@@ -266,6 +385,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         playSessionId: playSessionId
         playbackMethod: playbackMethod
         mediaSourceId: mediaSourceId
+        liveStreamId: SafeString(mediaSource.LiveStreamId, "")
         videoStreamIndex: getDefaultVideoStreamIndex(mediaSource)
         audioStreamIndex: audioStreamIndex
         subtitleStreamIndex: requestedSubtitleStreamIndex

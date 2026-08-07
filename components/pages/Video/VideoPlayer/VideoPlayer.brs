@@ -48,6 +48,7 @@ sub initReferences()
         userId: ""
         itemId: ""
         playSessionId: ""
+        playbackIdentity: {}
     }
 
     m.queue = {
@@ -64,6 +65,7 @@ sub initReferences()
     m.overlay = {
         area: "none"
         hasCast: false
+        resumeAfterPlaybackInformation: false
         resumeAfterPersonNavigation: false
         restoreCastAfterPersonNavigation: false
     }
@@ -122,6 +124,7 @@ sub initHandlers()
     m.playbackControls.observeField("subtitleOptionsPressed", "onSubtitleOptionsPressed")
     m.playbackControls.observeField("audioOptionsPressed", "onAudioOptionsPressed")
     m.playbackControls.observeField("videoOptionsPressed", "onVideoOptionsPressed")
+    m.playbackControls.observeField("playbackInfoPressed", "onPlaybackInfoPressed")
     m.playbackControls.observeField("focusExitDown", "onPlaybackControlsFocusExitDown")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")

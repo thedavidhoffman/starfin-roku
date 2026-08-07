@@ -80,6 +80,11 @@ sub navHandleOverlayClosed()
         return
     end if
 
+    if request <> invalid and request.id = "playbackInfo" then
+        if m.videoPlayer <> invalid then m.videoPlayer.callFunc("handlePlaybackInfoOverlayClosed")
+        return
+    end if
+
     if request <> invalid and request.id = "mediaActions" then
         navHandleMediaActionsOverlayClosed(closed)
         return

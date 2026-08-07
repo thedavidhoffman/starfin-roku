@@ -80,6 +80,11 @@ sub applyOverlayRequestFields(overlay as object, request as object)
         return
     end if
 
+    if requestId = "playbackInfo" then
+        overlay.playbackInfo = request.playbackInfo
+        return
+    end if
+
     if requestId = "mediaActions" then
         overlay.item = request.item
         overlay.itemImageUrl = SafeString(request.itemImageUrl, "")

@@ -68,6 +68,7 @@ sub applyPlaybackSessionState(response as object, request as object, item as dyn
         userId: SafeString(request.userId, "")
         itemId: SafeString(request.itemId, "")
         playSessionId: SafeString(response.playSessionId, "")
+        playbackIdentity: response.playbackIdentity
     }
     m.queue = {
         items: getPlaybackQueue(request.playbackQueue)
