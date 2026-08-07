@@ -16,7 +16,9 @@ sub initReferences()
     m.clock = m.top.findNode("clock")
     m.castGradient = m.top.findNode("castGradient")
     m.cast = m.top.findNode("cast")
+    m.skipIntroButton = m.top.findNode("skipIntroButton")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
+    m.mediaSegmentsTask = m.top.findNode("mediaSegmentsTask")
     m.playstateTask = m.top.findNode("playstateTask")
     m.trickplayPreloadTask = m.top.findNode("trickplayPreloadTask")
     m.controlsHideTimer = m.top.findNode("controlsHideTimer")
@@ -85,6 +87,7 @@ sub initReferences()
     
     m.trickplay = invalid
     m.trickplayPreloadRequest = invalid
+    initMediaSegments()
     initPlaybackRecovery()
 #if playbackChaosMonkey
     initPlaybackChaosMonkey()
@@ -96,6 +99,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
+    m.mediaSegmentsTask.observeField("response", "onMediaSegmentsResponse")
     m.trickplayPreloadTask.observeField("response", "onTrickplayPreloadResponse")
     m.videoPlayer.observeField("state", "onVideoStateChanged")
     m.videoPlayer.observeField("position", "onVideoPositionChanged")
@@ -155,6 +159,7 @@ sub onVideoStateChanged()
 #endif
     m.playback.isPlaying = state = "playing" or state = "buffering"
     m.playbackControls.isPlaying = m.playback.isPlaying
+    updateSkipIntroButton(m.playback.position)
     if state = "error" then
         reportPlaystateStop()
         if handlePlaybackRecoveryFailure("videoError", SafeString(m.videoPlayer.errorStr, "")) then return
@@ -211,6 +216,7 @@ sub onVideoPositionChanged()
     m.playback.waitingForStartPosition = false
     m.playback.position = position
     recordPlaybackRecoveryPosition(position)
+    updateSkipIntroButton(position)
     if m.playback.isSeeking <> true then
         m.playbackControls.position = m.playback.position
     end if
@@ -259,6 +265,7 @@ end sub
 sub stopPlayback(preserveRecovery = false as boolean)
     if m.playback <> invalid then m.playback.startupPending = false
     m.playbackInfoTask.control = "stop"
+    m.mediaSegmentsTask.control = "stop"
     m.videoModeApplyTimer.control = "stop"
     stopPlaybackRecoveryTimers()
 #if playbackChaosMonkey
@@ -272,6 +279,7 @@ sub stopPlayback(preserveRecovery = false as boolean)
     cleanupTrickplayPreload()
     m.videoPlayer.control = "stop"
     enableScreenSaver()
+    if preserveRecovery <> true then resetMediaSegments()
     if preserveRecovery <> true then resetPlaybackRecovery()
 #if playbackChaosMonkey
     if preserveRecovery <> true then stopPlaybackChaosMonkey()
@@ -422,6 +430,7 @@ end function
 ' showControls
 '-------------------------------------------------------------------------------
 sub showControls(restartTimer as boolean)
+    hideSkipIntroButton()
     hideCast()
     m.overlay.area = "controls"
     m.playbackControls.visible = true
@@ -477,6 +486,7 @@ sub hideControls()
     m.playbackControls.visible = false
     if m.overlay.area = "controls" then m.overlay.area = "none"
     m.top.setFocus(true)
+    updateSkipIntroButton(m.playback.position)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -528,6 +538,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "back" then
+        if m.skipIntroButton.visible = true then
+            dismissCurrentIntroSegment()
+            return true
+        end if
+
         if m.playback.isSeeking = true then
             cancelSeek()
             return true
@@ -560,7 +575,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
         handleProgressSeekInput("fastforward")
         return true
     else if key = "OK" then
-        if m.playback.isSeeking = true then
+        if m.skipIntroButton.visible = true then
+            onSkipIntroSelected()
+        else if m.playback.isSeeking = true then
             commitSeek()
         else if m.playbackControls.visible = true then
             hideControls()

@@ -51,6 +51,7 @@ sub applyPlaybackResponse(response as object, request as object)
     startPositionSeconds = PlaybackProgress_TicksToSeconds(response.startPositionTicks)
 
     applyPlaybackSessionState(response, request, item)
+    loadMediaSegments(response)
     content = buildVideoContent(response, request, item, startPositionSeconds)
     resetPlaybackForStart(item, startPositionSeconds)
     updatePlaybackOverlayData(request, item)

@@ -1,6 +1,6 @@
 # Changing the Roku Debug IP Address
 
-When a Roku receives a new IP address, update the VS Code BrightScript debugger
+When a Roku device receives a new IP address, update the VS Code BrightScript debugger
 setting before starting a new debug session.
 
 1. Confirm the Roku's current address under **Settings > Network > About** on
