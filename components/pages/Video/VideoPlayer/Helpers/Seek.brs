@@ -221,7 +221,7 @@ sub commitSeek()
     m.playback.isSeeking = false
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
-    showControls(true)
+    showControlsWithProgressFocus()
 end sub
 
 '-------------------------------------------------------------------------------
