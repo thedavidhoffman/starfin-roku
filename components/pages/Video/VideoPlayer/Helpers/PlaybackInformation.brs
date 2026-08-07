@@ -32,7 +32,7 @@ function buildPlaybackInformation() as object
         duration: m.playback.duration
         isPaused: LCase(SafeString(m.videoPlayer.state, "")) = "paused"
         isSeeking: m.playback.isSeeking
-        canSeek: m.playback.duration > 0
+        canSeek: identity.canSeek = true
         itemId: identity.itemId
         playSessionId: identity.playSessionId
         mediaSourceId: identity.mediaSourceId

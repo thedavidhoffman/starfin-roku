@@ -106,7 +106,8 @@ function buildPlaybackIdentity(request as object, streamInfo as object, mediaSou
         mediaSourceId: streamInfo.mediaSourceId
         liveStreamId: streamInfo.liveStreamId
         playbackMode: getPlaybackMode(request)
-        playMethod: getPlaybackMethodDisplay(streamInfo.playbackMethod)
+        playMethod: streamInfo.playbackMethod
+        canSeek: getCanSeek(request, mediaSource)
         transcodeReason: getTranscodeReason(mediaSource, streamInfo.playbackMethod)
         streamFormat: streamInfo.streamFormat
         container: SafeString(mediaSource.Container, "")
@@ -145,13 +146,19 @@ function getTranscodeReason(mediaSource as dynamic, playbackMethod as string) as
 end function
 
 '-------------------------------------------------------------------------------
-' getPlaybackMethodDisplay
+' getCanSeek
 '-------------------------------------------------------------------------------
-function getPlaybackMethodDisplay(value as dynamic) as string
-    method = LCase(SafeString(value, ""))
-    if method = "direct" then return "Direct Play"
-    if method = "transcode" then return "Transcode"
-    return SafeString(value, "")
+function getCanSeek(request as dynamic, mediaSource as dynamic) as boolean
+    if isLiveTvPlaybackRequest(request) = true then return false
+    if mediaSource <> invalid and mediaSource.IsInfiniteStream = true then return false
+
+    runtimeTicks = 0
+    if mediaSource <> invalid then runtimeTicks = Number_ToFloat(mediaSource.RunTimeTicks, 0)
+    if runtimeTicks <= 0 and request <> invalid and request.item <> invalid then
+        runtimeTicks = Number_ToFloat(request.item.RunTimeTicks, 0)
+    end if
+
+    return runtimeTicks > 0
 end function
 
 '-------------------------------------------------------------------------------
@@ -358,7 +365,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         streamUrl = buildServerUrl(request.server, streamUrl)
         if requestedSubtitleStreamIndex >= -1 then streamUrl = Url_SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
         streamFormat = "hls"
-        playbackMethod = "transcode"
+        playbackMethod = getTranscodingPlaybackMethod(mediaSource)
     else
         streamFormat = getStreamFormat(container)
         if isLiveTvPlaybackRequest(request) = true and isHttpDirectMediaSource(mediaSource) then
@@ -375,7 +382,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
             if requestedSubtitleStreamIndex >= -1 then streamParams.SubtitleStreamIndex = requestedSubtitleStreamIndex
             streamUrl = request.server + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
         end if
-        playbackMethod = "direct"
+        playbackMethod = "DirectPlay"
     end if
 
     return {
@@ -390,6 +397,62 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         audioStreamIndex: audioStreamIndex
         subtitleStreamIndex: requestedSubtitleStreamIndex
     }
+end function
+
+'-------------------------------------------------------------------------------
+' getTranscodingPlaybackMethod
+'-------------------------------------------------------------------------------
+function getTranscodingPlaybackMethod(mediaSource as dynamic) as string
+    reasons = getPlaybackMethodReasons(mediaSource)
+    if reasons.Count() = 0 then return "Transcode"
+
+    for each reason in reasons
+        if isDirectStreamReason(reason, mediaSource) <> true then return "Transcode"
+    end for
+
+    return "DirectStream"
+end function
+
+'-------------------------------------------------------------------------------
+' isDirectStreamReason
+'-------------------------------------------------------------------------------
+function isDirectStreamReason(reason as dynamic, mediaSource as dynamic) as boolean
+    normalized = LCase(SafeString(reason, ""))
+    if normalized = "containernotsupported" then return true
+    if Left(normalized, 5) = "audio" then return true
+    if normalized = "secondaryaudionotsupported" then return true
+
+    if normalized = "subtitlecodecnotsupported" then
+        subtitleMethod = LCase(getUrlQueryValue(SafeString(mediaSource.TranscodingUrl, ""), "SubtitleMethod"))
+        return subtitleMethod = "embed" or subtitleMethod = "external"
+    end if
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackMethodReasons
+'-------------------------------------------------------------------------------
+function getPlaybackMethodReasons(mediaSource as dynamic) as object
+    reasons = []
+    if mediaSource = invalid then return reasons
+
+    if mediaSource.TranscodingReasons <> invalid then
+        for each reason in mediaSource.TranscodingReasons
+            reasonText = SafeString(reason, "")
+            if reasonText <> "" then reasons.Push(reasonText)
+        end for
+    end if
+    if reasons.Count() > 0 then return reasons
+
+    reasonText = getUrlQueryValue(SafeString(mediaSource.TranscodingUrl, ""), "TranscodeReasons")
+    if reasonText = "" then return reasons
+
+    for each reason in reasonText.Split(",")
+        if reason <> "" then reasons.Push(reason)
+    end for
+
+    return reasons
 end function
 
 '-------------------------------------------------------------------------------

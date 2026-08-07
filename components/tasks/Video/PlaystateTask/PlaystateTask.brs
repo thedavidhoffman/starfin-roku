@@ -79,6 +79,15 @@ function buildPlaystateBody(request as object) as string
     playSessionId = SafeString(request.playSessionId, "")
     if playSessionId <> "" then parts.Push(Json_Pair("PlaySessionId", playSessionId))
 
+    mediaSourceId = SafeString(request.mediaSourceId, "")
+    if mediaSourceId <> "" then parts.Push(Json_Pair("MediaSourceId", mediaSourceId))
+
+    liveStreamId = SafeString(request.liveStreamId, "")
+    if liveStreamId <> "" then parts.Push(Json_Pair("LiveStreamId", liveStreamId))
+
+    parts.Push(Json_Pair("PlayMethod", SafeString(request.playMethod, "DirectPlay")))
+    parts.Push(Json_BooleanPair("CanSeek", request.canSeek = true))
+
     return Json_Object(parts)
 end function
 

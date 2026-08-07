@@ -30,7 +30,7 @@ sub render()
     y = 0
     y = addSectionHeader("Transcoding Information", &h9EE6FFFF, y)
     y = addPropertyRow("Playback mode", playbackModeText(info.playbackMode), &h9EE6FFFF, y)
-    y = addPropertyRow("Play method", displayValue(info.playMethod), &h9EE6FFFF, y)
+    y = addPropertyRow("Play method", playMethodText(info.playMethod), &h9EE6FFFF, y)
     y = addPropertyRow("Reason", transcodeReason, &h9EE6FFFF, y)
     y = addPropertyRow("Delivery format", UCase(displayValue(info.streamFormat)), &h9EE6FFFF, y)
 
@@ -53,6 +53,17 @@ sub render()
         addPropertyRow("Live stream ID", displayValue(info.liveStreamId), &h7DD9A9FF, y)
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' playMethodText
+'-------------------------------------------------------------------------------
+function playMethodText(value as dynamic) as string
+    method = LCase(SafeString(value, ""))
+    if method = "directplay" then return "Direct Play"
+    if method = "directstream" then return "Direct Stream"
+    if method = "transcode" then return "Transcode"
+    return displayValue(value)
+end function
 
 '-------------------------------------------------------------------------------
 ' addSectionHeader

@@ -500,6 +500,10 @@ sub reportPlaystate(status as string)
         token: m.session.token
         itemId: m.session.itemId
         playSessionId: m.session.playSessionId
+        mediaSourceId: SafeString(m.session.playbackIdentity.mediaSourceId, "")
+        liveStreamId: SafeString(m.session.playbackIdentity.liveStreamId, "")
+        playMethod: SafeString(m.session.playbackIdentity.playMethod, "DirectPlay")
+        canSeek: m.session.playbackIdentity.canSeek = true
         status: status
         position: position
         isPaused: isPaused
