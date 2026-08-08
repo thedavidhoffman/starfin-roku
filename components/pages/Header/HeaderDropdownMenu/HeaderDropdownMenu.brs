@@ -76,7 +76,7 @@ sub updateIdentity()
     m.identityNodes.group.visible = hasIdentity
     if hasIdentity <> true then return
 
-    imageSize = Number_ToInteger(identity.imageSize, 64)
+    imageSize = Number_ToInteger(identity.imageSize, 144)
     m.identityNodes.mask.maskUri = SafeString(identity.maskUri, "")
     m.identityNodes.mask.maskSize = identity.maskSize
     m.identityNodes.image.width = imageSize
@@ -208,7 +208,7 @@ sub renderItems()
     clearItems()
 
     if m.identityNodes.group.visible then
-        m.itemsGroup.translation = [20, 114]
+        m.itemsGroup.translation = [20, 230]
     else
         m.itemsGroup.translation = [20, 18]
     end if
@@ -302,7 +302,7 @@ sub updateBackground(itemCount as integer)
     if itemCount > 1 then spacingHeight = (itemCount - 1) * itemSpacing
 
     menuHeight = 36 + (itemCount * itemHeight) + spacingHeight
-    if m.identityNodes.group.visible then menuHeight = menuHeight + 96
+    if m.identityNodes.group.visible then menuHeight = menuHeight + 212
     m.backgroundColor.width = menuWidth
     m.backgroundColor.height = menuHeight
     m.backgroundGlass.width = menuWidth

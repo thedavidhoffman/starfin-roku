@@ -226,13 +226,13 @@ sub configureAccountDropdownIdentity()
         imageSource = "profile"
     end if
     m.log.write("User identity image selected source=" + imageSource + " uri=" + imageUri)
-    menuMaskProfile = MaskAssets_GetProfile("account-menu-user-mask.png", [64, 64], [43, 43])
+    menuMaskProfile = MaskAssets_GetProfile("account-menu-user-mask.png", [144, 144], [96, 96])
     m.accountDropdownMenu.identity = {
         name: m.top.username
         imageUri: imageUri
         maskUri: menuMaskProfile.uri
         maskSize: menuMaskProfile.size
-        imageSize: 64
+        imageSize: 144
     }
 end sub
 
@@ -246,8 +246,8 @@ function buildUserProfileImageUrl(request as object) as string
 
     query = Url_BuildQueryString({
         tag: SafeString(request.primaryImageTag, "")
-        maxWidth: 195
-        maxHeight: 195
+        maxWidth: 144
+        maxHeight: 144
         quality: 90
     })
     return server + "/Users/" + userId + "/Images/Primary" + query
