@@ -2,6 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = CreateLogger("Header")
     initReferences()
     rebuildFocusableHeaderButtons()
     initHandlers()
@@ -205,6 +206,54 @@ sub onUsernameChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onUserIdentityRequestChanged
+'-------------------------------------------------------------------------------
+sub onUserIdentityRequestChanged()
+    updateUserMenuButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' configureAccountDropdownIdentity
+'-------------------------------------------------------------------------------
+sub configureAccountDropdownIdentity()
+    request = m.top.userIdentityRequest
+    if request = invalid then return
+
+    imageUri = "pkg:/images/cast/cast-placeholder-195x195.png"
+    imageSource = "placeholder"
+    if SafeString(request.primaryImageTag, "") <> "" then
+        imageUri = buildUserProfileImageUrl(request)
+        imageSource = "profile"
+    end if
+    m.log.write("User identity image selected source=" + imageSource + " uri=" + imageUri)
+    menuMaskProfile = MaskAssets_GetProfile("account-menu-user-mask.png", [64, 64], [43, 43])
+    m.accountDropdownMenu.identity = {
+        name: m.top.username
+        imageUri: imageUri
+        maskUri: menuMaskProfile.uri
+        maskSize: menuMaskProfile.size
+        imageSize: 64
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' buildUserProfileImageUrl
+'-------------------------------------------------------------------------------
+function buildUserProfileImageUrl(request as object) as string
+    server = Url_NormalizeServer(SafeString(request.server, ""))
+    userId = SafeString(request.userId, "")
+    if server = "" or userId = "" then return ""
+
+    query = Url_BuildQueryString({
+        tag: SafeString(request.primaryImageTag, "")
+        maxWidth: 195
+        maxHeight: 195
+        quality: 90
+    })
+    return server + "/Users/" + userId + "/Images/Primary" + query
+end function
+
+'-------------------------------------------------------------------------------
 ' onHomePressed
 '-------------------------------------------------------------------------------
 sub onHomePressed()
@@ -318,10 +367,12 @@ end function
 '-------------------------------------------------------------------------------
 sub updateUserMenuButton()
     if m.userMenuButton = invalid then return
+    if m.top.userIdentityRequest <> invalid then
+        configureAccountDropdownIdentity()
+        return
+    end if
 
-    ' leaving this here in case we ever go back to displaying the username
-    'buttonText = FirstNonEmpty([m.top.username], "Account")
-    'm.userMenuButton.text = buttonText
+    m.accountDropdownMenu.identity = invalid
 end sub
 
 '-------------------------------------------------------------------------------

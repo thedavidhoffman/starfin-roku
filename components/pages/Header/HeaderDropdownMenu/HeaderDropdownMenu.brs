@@ -2,9 +2,11 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = CreateLogger("HeaderDropdownMenu")
     initReferences()
     initValues()
     initStyle()
+    updateIdentity()
     renderItems()
     onOpenChanged()
 end sub
@@ -16,6 +18,13 @@ sub initReferences()
     m.backgroundColor = m.top.findNode("backgroundColor")
     m.backgroundGlass = m.top.findNode("backgroundGlass")
     m.itemsGroup = m.top.findNode("itemsGroup")
+    m.identityNodes = {
+        group: m.top.findNode("identityGroup")
+        mask: m.top.findNode("identityImageMask")
+        image: m.top.findNode("identityImage")
+        name: m.top.findNode("identityName")
+    }
+    m.identityNodes.image.observeField("loadStatus", "onIdentityImageLoadStatusChanged")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -48,6 +57,39 @@ end sub
 '-------------------------------------------------------------------------------
 sub onDimensionsChanged()
     renderItems()
+end sub
+
+'-------------------------------------------------------------------------------
+' onIdentityChanged
+'-------------------------------------------------------------------------------
+sub onIdentityChanged()
+    updateIdentity()
+    renderItems()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateIdentity
+'-------------------------------------------------------------------------------
+sub updateIdentity()
+    identity = m.top.identity
+    hasIdentity = identity <> invalid and SafeString(identity.imageUri, "") <> ""
+    m.identityNodes.group.visible = hasIdentity
+    if hasIdentity <> true then return
+
+    imageSize = Number_ToInteger(identity.imageSize, 64)
+    m.identityNodes.mask.maskUri = SafeString(identity.maskUri, "")
+    m.identityNodes.mask.maskSize = identity.maskSize
+    m.identityNodes.image.width = imageSize
+    m.identityNodes.image.height = imageSize
+    m.identityNodes.image.uri = SafeString(identity.imageUri, "")
+    m.identityNodes.name.text = SafeString(identity.name, "")
+end sub
+
+'-------------------------------------------------------------------------------
+' onIdentityImageLoadStatusChanged
+'-------------------------------------------------------------------------------
+sub onIdentityImageLoadStatusChanged()
+    m.log.write("Identity image loadStatus=" + m.identityNodes.image.loadStatus + " uri=" + m.identityNodes.image.uri)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -165,12 +207,18 @@ end function
 sub renderItems()
     clearItems()
 
+    if m.identityNodes.group.visible then
+        m.itemsGroup.translation = [20, 114]
+    else
+        m.itemsGroup.translation = [20, 18]
+    end if
+
     items = m.top.items
     if items = invalid then items = []
 
-    itemHeight = int(m.top.itemHeight)
-    itemSpacing = int(m.top.itemSpacing)
-    itemWidth = int(m.top.itemWidth)
+    itemHeight = Number_ToInteger(m.top.itemHeight, 56)
+    itemSpacing = Number_ToInteger(m.top.itemSpacing, 10)
+    itemWidth = Number_ToInteger(m.top.itemWidth, 220)
     if itemHeight <= 0 then itemHeight = 56
     if itemWidth <= 0 then itemWidth = 220
 
@@ -243,9 +291,9 @@ end function
 ' updateBackground
 '-------------------------------------------------------------------------------
 sub updateBackground(itemCount as integer)
-    menuWidth = int(m.top.menuWidth)
-    itemHeight = int(m.top.itemHeight)
-    itemSpacing = int(m.top.itemSpacing)
+    menuWidth = Number_ToInteger(m.top.menuWidth, 260)
+    itemHeight = Number_ToInteger(m.top.itemHeight, 56)
+    itemSpacing = Number_ToInteger(m.top.itemSpacing, 10)
     if menuWidth <= 0 then menuWidth = 260
     if itemHeight <= 0 then itemHeight = 56
     if itemSpacing < 0 then itemSpacing = 0
@@ -254,6 +302,7 @@ sub updateBackground(itemCount as integer)
     if itemCount > 1 then spacingHeight = (itemCount - 1) * itemSpacing
 
     menuHeight = 36 + (itemCount * itemHeight) + spacingHeight
+    if m.identityNodes.group.visible then menuHeight = menuHeight + 96
     m.backgroundColor.width = menuWidth
     m.backgroundColor.height = menuHeight
     m.backgroundGlass.width = menuWidth

@@ -402,6 +402,24 @@ sub applySettingsFromOverlay(overlay as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
+' syncHeaderUserIdentity
+'-------------------------------------------------------------------------------
+sub syncHeaderUserIdentity()
+    if m.session = invalid then
+        m.header.username = ""
+        m.header.userIdentityRequest = invalid
+        return
+    end if
+
+    m.header.username = SafeString(m.session.username, "")
+    m.header.userIdentityRequest = {
+        server: SafeString(m.session.server, "")
+        userId: SafeString(m.session.userId, "")
+        primaryImageTag: SafeString(m.session.primaryImageTag, "")
+    }
+end sub
+
+'-------------------------------------------------------------------------------
 ' fanOutSettings
 '-------------------------------------------------------------------------------
 sub fanOutSettings()

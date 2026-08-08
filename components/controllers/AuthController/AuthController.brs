@@ -181,6 +181,7 @@ function buildAuthenticatedSession(response as object) as object
     sessionToken = response.token
     username = ""
     userId = invalid
+    primaryImageTag = ""
 
     if payload <> invalid and payload.AccessToken <> invalid then
         sessionToken = payload.AccessToken
@@ -191,6 +192,7 @@ function buildAuthenticatedSession(response as object) as object
     if payload <> invalid and payload.User <> invalid then
         username = SafeString(payload.User.Name, "")
         userId = payload.User.Id
+        primaryImageTag = SafeString(payload.User.PrimaryImageTag, "")
     end if
 
     return {
@@ -198,6 +200,7 @@ function buildAuthenticatedSession(response as object) as object
         username: username
         token: sessionToken
         userId: userId
+        primaryImageTag: primaryImageTag
     }
 
 end function

@@ -82,6 +82,7 @@ sub authHandleAuthenticatedSession()
     if session = invalid then return
 
     m.session = session
+    syncHeaderUserIdentity()
     navShowApp()
 end sub
 

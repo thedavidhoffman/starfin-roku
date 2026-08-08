@@ -26,8 +26,8 @@ end sub
 ' onDimensionsChanged
 '-------------------------------------------------------------------------------
 sub onDimensionsChanged()
-    width = int(m.top.buttonWidth)
-    height = int(m.top.buttonHeight)
+    width = Number_ToInteger(m.top.buttonWidth, 300)
+    height = Number_ToInteger(m.top.buttonHeight, 56)
     if width <= 0 then width = 300
     if height <= 0 then height = 56
 
@@ -45,8 +45,8 @@ end sub
 ' onTextLayoutChanged
 '-------------------------------------------------------------------------------
 sub onTextLayoutChanged()
-    width = int(m.top.buttonWidth)
-    height = int(m.top.buttonHeight)
+    width = Number_ToInteger(m.top.buttonWidth, 300)
+    height = Number_ToInteger(m.top.buttonHeight, 56)
     if width <= 0 then width = 300
     if height <= 0 then height = 56
 
@@ -59,13 +59,13 @@ end sub
 sub updateTextLayout(width as integer, height as integer)
     if m.textLabel = invalid then return
 
-    inset = int(m.top.textInset)
+    inset = Number_ToInteger(m.top.textInset, 0)
     if inset < 0 then inset = 0
     if inset * 2 >= width then inset = 0
 
     m.textLabel.horizAlign = getTextAlign()
     m.textLabel.width = width - (inset * 2)
-    m.textLabel.translation = [inset, int((height - 28) / 2)]
+    m.textLabel.translation = [inset, Number_ToInteger((height - 28) / 2, 0)]
 end sub
 
 '-------------------------------------------------------------------------------
