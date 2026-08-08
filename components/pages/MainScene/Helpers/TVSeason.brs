@@ -51,7 +51,7 @@ sub tvSeasonShow(selection as object)
     }
 
     m.tvSeasonPage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     if m.tvShowPage <> invalid then m.tvShowPage.visible = false
     m.homePage.visible = false
     m.header.visible = false

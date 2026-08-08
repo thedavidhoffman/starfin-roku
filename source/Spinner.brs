@@ -4,6 +4,7 @@
 sub Spinner_Show(showDelay = invalid as dynamic)
     spinner = __Spinner_GetNode()
     if spinner = invalid then return
+    if spinner.blockInteraction = true and showDelay <> 0 then return
 
     resolvedShowDelay = 2.0
     if showDelay <> invalid then resolvedShowDelay = showDelay
@@ -18,6 +19,7 @@ end sub
 sub Spinner_Hide()
     spinner = __Spinner_GetNode()
     if spinner = invalid then return
+    if spinner.blockInteraction = true then return
 
     spinner.control = "stop"
     spinner.visible = false

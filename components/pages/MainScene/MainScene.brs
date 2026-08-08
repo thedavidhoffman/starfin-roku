@@ -26,6 +26,7 @@ sub initReferences()
     m.dynamicPageHost = m.top.findNode("dynamicPageHost")
     m.themeAudio = m.top.findNode("themeAudio")
     m.statusLabel = m.top.findNode("statusLabel")
+    m.loadingSpinner = m.top.findNode("loadingSpinner")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -33,7 +34,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initValues()
     m.session = invalid
-    m.settings = SettingsStore_Load()
+    m.settings = SettingsStore_Load("")
     m.homeRefreshState = {
         playbackRowsDirty: false
     }
@@ -48,6 +49,8 @@ end sub
 sub initHandlers()
 
     m.login.observeField("loginRequested", "authHandleLoginRequested")
+    m.login.observeField("accountPickerRequested", "authHandleLoginAccountPickerRequested")
+    m.login.observeField("serverValue", "authHandleLoginServerChanged")
     m.authController.observeField("authenticatedSession", "authHandleAuthenticatedSession")
     m.authController.observeField("loginFailed", "authHandleLoginFailed")
     m.authController.observeField("loginRequired", "authHandleLoginRequired")
@@ -70,7 +73,9 @@ sub initHandlers()
     m.header.observeField("searchSelected", "searchHandleHeaderSelected")
     m.header.observeField("downSelected", "navHandleHeaderDownSelected")
     m.header.observeField("logoutSelected", "authHandleLogoutPressed")
+    m.header.observeField("switchAccountSelected", "authHandleSwitchAccountPressed")
     m.header.observeField("overlayRequested", "navHandleHeaderOverlayRequested")
     m.overlayHost.observeField("closed", "navHandleOverlayClosed")
+    authObserveTaskResponses(m.homePage)
 
 end sub

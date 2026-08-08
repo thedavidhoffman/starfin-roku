@@ -53,7 +53,7 @@ sub musicLibraryShow(selection as object)
 
     resetDynamicPages()
     m.musicLibraryPage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     m.homePage.visible = false
     m.header.visible = true
     page.loadRequest = loadRequest
@@ -131,7 +131,7 @@ sub musicLibraryHandleArtistSelected()
     }
 
     m.musicArtistPage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     m.musicLibraryPage.visible = false
     m.header.visible = false
     page.callFunc("activate")
@@ -166,7 +166,7 @@ sub musicAudioPlayerShow(selection as dynamic, sourcePage as string)
     if sourcePage = "home" then m.homePage.visible = false
     m.header.visible = false
     m.audioPlayerPage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     page.callFunc("activate")
 end sub
 

@@ -52,7 +52,7 @@ sub personShow(selection as object)
     }
 
     m.personPage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     if m.tvEpisodePage <> invalid then m.tvEpisodePage.visible = false
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     if m.moviePage <> invalid then m.moviePage.visible = false

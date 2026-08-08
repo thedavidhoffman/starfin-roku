@@ -25,7 +25,7 @@ sub liveTvShow(selection as object)
 
     resetDynamicPages()
     m.liveTvPage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     m.homePage.visible = false
     m.header.visible = true
     page.loadRequest = loadRequest

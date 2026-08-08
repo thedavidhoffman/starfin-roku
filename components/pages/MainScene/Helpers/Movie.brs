@@ -38,7 +38,7 @@ sub movieShow(selection as object, shouldReset as boolean)
 
     if shouldReset then resetDynamicPages()
     m.moviePage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     if m.videoLibraryPage <> invalid then m.videoLibraryPage.visible = false
     if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false

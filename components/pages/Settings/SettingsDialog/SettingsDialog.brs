@@ -10,6 +10,7 @@ sub openSettings()
 
     content = getSettingsContent()
     if content <> invalid then
+        content.accountKey = m.top.accountKey
         content.callFunc("loadSettingsValues")
         m.originalSettings = content.callFunc("getSettingsValues")
     end if
@@ -35,8 +36,7 @@ sub saveSettings()
     if settings = invalid then return
     if SettingsStore_AreEqual(settings, m.originalSettings) then return
 
-    keys = SettingsStore_Keys()
-    SettingsStore_Save(settings[keys.tvLibraryDisplay], settings[keys.movieLibraryDisplay], settings[keys.collectionCardsImageType], settings[keys.collectionItemsImageType], settings[keys.playlistImageType], settings[keys.tvEpisodeListDisplay], settings[keys.mediaShellBackground], settings[keys.videoStreamingMode], settings[keys.tmdbApiKey])
+    SettingsStore_Save(m.top.accountKey, settings)
     m.top.savedSettings = settings
     m.top.settingsSaved = true
 end sub

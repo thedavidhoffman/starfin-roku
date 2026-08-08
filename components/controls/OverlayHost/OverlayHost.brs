@@ -43,6 +43,16 @@ end function
 sub applyOverlayRequestFields(overlay as object, request as object)
     requestId = SafeString(request.id, "")
 
+    if requestId = "settings" then
+        overlay.accountKey = SafeString(request.accountKey, "")
+        return
+    end if
+
+    if requestId = "accountPicker" then
+        overlay.accounts = request.accounts
+        return
+    end if
+
     if requestId = "subtitleOptions" or requestId = "audioOptions" or requestId = "chapterOptions" then
         overlay.dialogTitle = request.dialogTitle
         overlay.options = request.options

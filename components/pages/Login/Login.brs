@@ -6,6 +6,7 @@ sub init()
     m.usernameInput = m.top.findNode("usernameInput")
     m.passwordInput = m.top.findNode("passwordInput")
     m.loginButton = m.top.findNode("loginButton")
+    m.savedAccountsButton = m.top.findNode("savedAccountsButton")
     m.loginStatus = m.top.findNode("loginStatus")
 
     m.loginFocusNodes = [
@@ -13,17 +14,12 @@ sub init()
         m.usernameInput
         m.passwordInput
         m.loginButton
+        m.savedAccountsButton
     ]
    
     m.activeKeyboardField = invalid
     m.loginButton.observeField("buttonSelected", "onLoginPressed")
-
-    '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ' remove this...
-    '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    m.top.serverValue = "http://192.168.0.178:8097"
-    m.top.usernameValue = "dev"
-    m.top.passwordValue = "donkeykong"
+    m.savedAccountsButton.observeField("buttonSelected", "onSavedAccountsPressed")
     
     preloadSavedSession()
     syncFieldsFromState()
@@ -35,6 +31,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onServerValueChanged()
     syncFieldsFromState()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSavedAccountsChanged
+'-------------------------------------------------------------------------------
+sub onSavedAccountsChanged()
+    updateSavedAccountsButton()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -70,7 +73,50 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     syncFieldsFromState()
+    updateSavedAccountsButton()
     focusLoginField(0)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusSavedAccountsButton
+'-------------------------------------------------------------------------------
+function focusSavedAccountsButton() as boolean
+    updateSavedAccountsButton()
+    if m.savedAccountsButton.visible <> true then
+        focusLoginField(0)
+        return false
+    end if
+    focusLoginField(m.loginFocusNodes.Count() - 1)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' focusLoginButton
+'-------------------------------------------------------------------------------
+function focusLoginButton() as boolean
+    focusLoginField(3)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onSavedAccountsPressed
+'-------------------------------------------------------------------------------
+sub onSavedAccountsPressed()
+    accounts = m.top.savedAccounts
+    if accounts = invalid then accounts = []
+    if accounts.Count() = 0 then return
+    m.top.accountPickerRequested = { server: Url_NormalizeServer(m.top.serverValue), accounts: accounts }
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSavedAccountsButton
+'-------------------------------------------------------------------------------
+sub updateSavedAccountsButton()
+    accounts = m.top.savedAccounts
+    if accounts = invalid then accounts = []
+    m.savedAccountsButton.visible = (accounts.Count() > 0)
+    m.loginFocusNodes = [m.serverInput, m.usernameInput, m.passwordInput, m.loginButton]
+    if m.savedAccountsButton.visible then m.loginFocusNodes.Push(m.savedAccountsButton)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -210,6 +256,7 @@ sub focusLoginField(index as integer)
     if m.usernameInput <> invalid then m.usernameInput.hasFocusVisual = (index = 1)
     if m.passwordInput <> invalid then m.passwordInput.hasFocusVisual = (index = 2)
     if m.loginButton <> invalid then m.loginButton.hasFocusVisual = (index = 3)
+    if m.savedAccountsButton <> invalid then m.savedAccountsButton.hasFocusVisual = (index = 4)
     node = m.loginFocusNodes[index]
     if node <> invalid then
         node.setFocus(true)
@@ -243,16 +290,26 @@ function handleLoginNavigation(key as string) as boolean
     end if
 
     if key = "down" then
-        nextIndex = focusedIndex + 1
-        if nextIndex >= m.loginFocusNodes.Count() then nextIndex = 0
-        focusLoginField(nextIndex)
+        if focusedIndex < 3 then focusLoginField(focusedIndex + 1)
         return true
     end if
 
     if key = "up" then
-        nextIndex = focusedIndex - 1
-        if nextIndex < 0 then nextIndex = m.loginFocusNodes.Count() - 1
-        focusLoginField(nextIndex)
+        if focusedIndex = 3 or focusedIndex = 4 then
+            focusLoginField(2)
+        else if focusedIndex > 0 then
+            focusLoginField(focusedIndex - 1)
+        end if
+        return true
+    end if
+
+    if key = "right" and focusedIndex = 3 and m.savedAccountsButton.visible then
+        focusLoginField(4)
+        return true
+    end if
+
+    if key = "left" and focusedIndex = 4 then
+        focusLoginField(3)
         return true
     end if
 
@@ -268,6 +325,9 @@ function handleLoginNavigation(key as string) as boolean
             return true
         else if focusedIndex = 3 then
             onLoginPressed()
+            return true
+        else if focusedIndex = 4 then
+            onSavedAccountsPressed()
             return true
         end if
     end if

@@ -1,13 +1,12 @@
 '-------------------------------------------------------------------------------
 ' Settings Registry Storage
 '-------------------------------------------------------------------------------
-' roRegistrySection is Roku's persistent key/value storage API.
-'
+
 '-------------------------------------------------------------------------------
-' GetSettingsStore
+' __GetSettingsAccountSectionName
 '-------------------------------------------------------------------------------
-function GetSettingsStore() as object
-    return CreateObject("roRegistrySection", "STARFIN_ROKU")
+function __GetSettingsAccountSectionName(accountKey as string) as string
+    return "STARFIN_ACCOUNT_" + accountKey
 end function
 
 '-------------------------------------------------------------------------------
@@ -46,80 +45,78 @@ function SettingsStore_Defaults() as object
 end function
 
 '-------------------------------------------------------------------------------
-' SettingsStore_Save
+' SettingsStore_AccountKeys
 '-------------------------------------------------------------------------------
-sub SettingsStore_Save(tvLibraryDisplay as string, movieLibraryDisplay as string, collectionCardsImageType as string, collectionItemsImageType as string, playlistImageType as string, tvEpisodeListDisplay as string, mediaShellBackground as string, videoStreamingMode as string, tmdbApiKey as string)
-    settingsStore = GetSettingsStore()
+function SettingsStore_AccountKeys() as object
     keys = SettingsStore_Keys()
-    settingsStore.Write(keys.tvLibraryDisplay, tvLibraryDisplay)
-    settingsStore.Write(keys.movieLibraryDisplay, movieLibraryDisplay)
-    settingsStore.Write(keys.collectionCardsImageType, collectionCardsImageType)
-    settingsStore.Write(keys.collectionItemsImageType, collectionItemsImageType)
-    settingsStore.Write(keys.playlistImageType, playlistImageType)
-    settingsStore.Write(keys.tvEpisodeListDisplay, tvEpisodeListDisplay)
-    settingsStore.Write(keys.mediaShellBackground, mediaShellBackground)
-    settingsStore.Write(keys.videoStreamingMode, videoStreamingMode)
-    settingsStore.Write(keys.tmdbApiKey, tmdbApiKey)
-    settingsStore.Flush()
-end sub
+    return [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.playlistImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.videoStreamingMode]
+end function
 
 '-------------------------------------------------------------------------------
 ' SettingsStore_Load
 '-------------------------------------------------------------------------------
-function SettingsStore_Load() as object
-    settingsStore = GetSettingsStore()
-    keys = SettingsStore_Keys()
+function SettingsStore_Load(accountKey as string) as object
     defaults = SettingsStore_Defaults()
-    values = settingsStore.ReadMulti([
-        keys.tvLibraryDisplay
-        keys.movieLibraryDisplay
-        keys.collectionCardsImageType
-        keys.collectionItemsImageType
-        keys.playlistImageType
-        keys.tvEpisodeListDisplay
-        keys.mediaShellBackground
-        keys.videoStreamingMode
-        keys.tmdbApiKey
-    ])
-    if values = invalid then values = {}
-
     settings = {}
-    settings[keys.tvLibraryDisplay] = SettingsStore_GetValue(values, keys.tvLibraryDisplay, defaults[keys.tvLibraryDisplay])
-    settings[keys.movieLibraryDisplay] = SettingsStore_GetValue(values, keys.movieLibraryDisplay, defaults[keys.movieLibraryDisplay])
-    settings[keys.collectionCardsImageType] = SettingsStore_GetValue(values, keys.collectionCardsImageType, defaults[keys.collectionCardsImageType])
-    settings[keys.collectionItemsImageType] = SettingsStore_GetValue(values, keys.collectionItemsImageType, defaults[keys.collectionItemsImageType])
-    settings[keys.playlistImageType] = SettingsStore_GetValue(values, keys.playlistImageType, defaults[keys.playlistImageType])
-    settings[keys.tvEpisodeListDisplay] = SettingsStore_GetValue(values, keys.tvEpisodeListDisplay, defaults[keys.tvEpisodeListDisplay])
-    settings[keys.mediaShellBackground] = SettingsStore_GetValue(values, keys.mediaShellBackground, defaults[keys.mediaShellBackground])
-    settings[keys.videoStreamingMode] = SettingsStore_GetValue(values, keys.videoStreamingMode, defaults[keys.videoStreamingMode])
-    settings[keys.tmdbApiKey] = SettingsStore_GetValue(values, keys.tmdbApiKey, defaults[keys.tmdbApiKey])
+    values = {}
+    if accountKey <> "" then
+        accountStore = CreateObject("roRegistrySection", __GetSettingsAccountSectionName(accountKey))
+        values = accountStore.ReadMulti(SettingsStore_AccountKeys())
+        if values = invalid then values = {}
+    end if
+
+    for each key in SettingsStore_AccountKeys()
+        settings[key] = SettingsStore_GetValue(values, key, defaults[key])
+    end for
+    keys = SettingsStore_Keys()
+    settings[keys.tmdbApiKey] = SettingsStore_LoadIntegration(keys.tmdbApiKey)
     return settings
 end function
 
 '-------------------------------------------------------------------------------
-' SettingsStore_Clear
+' SettingsStore_Save
 '-------------------------------------------------------------------------------
-sub SettingsStore_Clear()
-    settingsStore = GetSettingsStore()
+sub SettingsStore_Save(accountKey as string, settings as object)
+    if accountKey <> "" then
+        accountStore = CreateObject("roRegistrySection", __GetSettingsAccountSectionName(accountKey))
+        for each key in SettingsStore_AccountKeys()
+            accountStore.Write(key, SettingsStore_GetSettingValue(settings, key))
+        end for
+        accountStore.Flush()
+    end if
     keys = SettingsStore_Keys()
-    settingsStore.Delete(keys.tvLibraryDisplay)
-    settingsStore.Delete(keys.movieLibraryDisplay)
-    settingsStore.Delete(keys.collectionCardsImageType)
-    settingsStore.Delete(keys.collectionItemsImageType)
-    settingsStore.Delete(keys.playlistImageType)
-    settingsStore.Delete(keys.tvEpisodeListDisplay)
-    settingsStore.Delete(keys.mediaShellBackground)
-    settingsStore.Delete(keys.videoStreamingMode)
-    settingsStore.Delete(keys.tmdbApiKey)
+    SettingsStore_SaveIntegration(keys.tmdbApiKey, SettingsStore_GetSettingValue(settings, keys.tmdbApiKey))
+end sub
+
+'-------------------------------------------------------------------------------
+' SettingsStore_LoadIntegration
+'-------------------------------------------------------------------------------
+function SettingsStore_LoadIntegration(key as string) as string
+    defaults = SettingsStore_Defaults()
+    return SettingsStore_GetValue(CreateObject("roRegistrySection", "STARFIN_ROKU"), key, defaults[key])
+end function
+
+'-------------------------------------------------------------------------------
+' SettingsStore_SaveIntegration
+'-------------------------------------------------------------------------------
+sub SettingsStore_SaveIntegration(key as string, value as string)
+    settingsStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
+    settingsStore.Write(key, value)
     settingsStore.Flush()
 end sub
 
 '-------------------------------------------------------------------------------
 ' SettingsStore_GetValue
 '-------------------------------------------------------------------------------
-function SettingsStore_GetValue(values as object, key as string, defaultValue as string) as string
+function SettingsStore_GetValue(values as dynamic, key as string, defaultValue as string) as string
     value = invalid
-    if values <> invalid then value = values[key]
+    if values <> invalid then
+        if GetInterface(values, "ifAssociativeArray") <> invalid then
+            value = values[key]
+        else
+            value = values.Read(key)
+        end if
+    end if
     if value = invalid or value = "" then return defaultValue
     return value
 end function
@@ -131,7 +128,6 @@ function SettingsStore_GetSettingValue(settings as dynamic, key as string) as st
     defaults = SettingsStore_Defaults()
     defaultValue = ""
     if defaults[key] <> invalid then defaultValue = defaults[key]
-
     if settings = invalid then return defaultValue
     if settings[key] = invalid or settings[key] = "" then return defaultValue
     return settings[key].ToStr()
@@ -142,17 +138,8 @@ end function
 '-------------------------------------------------------------------------------
 function SettingsStore_AreEqual(left as dynamic, right as dynamic) as boolean
     if left = invalid or right = invalid then return false
-
-    keys = SettingsStore_Keys()
-    if SettingsStore_GetSettingValue(left, keys.tvLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.tvLibraryDisplay) then return false
-    if SettingsStore_GetSettingValue(left, keys.movieLibraryDisplay) <> SettingsStore_GetSettingValue(right, keys.movieLibraryDisplay) then return false
-    if SettingsStore_GetSettingValue(left, keys.collectionCardsImageType) <> SettingsStore_GetSettingValue(right, keys.collectionCardsImageType) then return false
-    if SettingsStore_GetSettingValue(left, keys.collectionItemsImageType) <> SettingsStore_GetSettingValue(right, keys.collectionItemsImageType) then return false
-    if SettingsStore_GetSettingValue(left, keys.playlistImageType) <> SettingsStore_GetSettingValue(right, keys.playlistImageType) then return false
-    if SettingsStore_GetSettingValue(left, keys.tvEpisodeListDisplay) <> SettingsStore_GetSettingValue(right, keys.tvEpisodeListDisplay) then return false
-    if SettingsStore_GetSettingValue(left, keys.mediaShellBackground) <> SettingsStore_GetSettingValue(right, keys.mediaShellBackground) then return false
-    if SettingsStore_GetSettingValue(left, keys.videoStreamingMode) <> SettingsStore_GetSettingValue(right, keys.videoStreamingMode) then return false
-    if SettingsStore_GetSettingValue(left, keys.tmdbApiKey) <> SettingsStore_GetSettingValue(right, keys.tmdbApiKey) then return false
-
+    for each key in SettingsStore_Defaults()
+        if SettingsStore_GetSettingValue(left, key) <> SettingsStore_GetSettingValue(right, key) then return false
+    end for
     return true
 end function

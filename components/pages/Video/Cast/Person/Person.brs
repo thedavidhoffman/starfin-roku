@@ -675,8 +675,7 @@ function getTmdbApiKey() as string
     apiKey = SettingsStore_GetSettingValue(request.settings, keys.tmdbApiKey)
     if apiKey <> "" then return apiKey
 
-    settings = SettingsStore_Load()
-    return SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
+    return SettingsStore_LoadIntegration(keys.tmdbApiKey)
 end function
 
 '-------------------------------------------------------------------------------

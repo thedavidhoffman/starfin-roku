@@ -201,6 +201,15 @@ function getTextWidth() as integer
 end function
 
 '-------------------------------------------------------------------------------
+' getPreferredWidth
+'-------------------------------------------------------------------------------
+function getPreferredWidth(horizontalPadding as integer) as integer
+    padding = horizontalPadding
+    if padding < 0 then padding = 0
+    return getTextWidth() + (padding * 2)
+end function
+
+'-------------------------------------------------------------------------------
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean

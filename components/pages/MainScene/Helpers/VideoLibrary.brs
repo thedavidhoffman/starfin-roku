@@ -53,7 +53,7 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
     if fromCollections <> true then resetDynamicPages()
     m.videoLibraryPage = page
     m.header.thumbnailLibraryLayout = page.thumbnailLayoutActive
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     if m.collectionsPage <> invalid then m.collectionsPage.visible = false
     m.homePage.visible = false
     m.header.visible = true

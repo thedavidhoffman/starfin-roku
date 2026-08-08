@@ -76,3 +76,10 @@ sub setVisualsVisible(isVisible as boolean)
     m.scrim.visible = isVisible
     m.spinner.visible = isVisible
 end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    return m.top.blockInteraction = true
+end function

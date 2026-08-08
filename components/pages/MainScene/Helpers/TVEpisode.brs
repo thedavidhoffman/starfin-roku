@@ -38,7 +38,7 @@ sub tvEpisodeShow(selection as object)
 
     page = createTVEpisodePage(selection.loadRequest, true)
     m.tvEpisodePage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false

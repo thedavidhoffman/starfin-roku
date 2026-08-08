@@ -22,7 +22,7 @@ sub filmographyShow(selection as object)
 
     if m.personPage <> invalid then m.personPage.callFunc("deactivate")
     m.filmographyPage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     if m.personPage <> invalid then m.personPage.visible = false
     m.homePage.visible = false
     m.header.visible = false

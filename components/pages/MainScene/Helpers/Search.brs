@@ -27,7 +27,7 @@ sub searchShow()
     page.loadRequest = buildSessionLoadRequest()
 
     m.searchPage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     m.homePage.visible = false
     m.header.visible = true
     page.callFunc("activate")

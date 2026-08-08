@@ -59,24 +59,56 @@ end function
 ' getApplicationRegistryText
 '-------------------------------------------------------------------------------
 function getApplicationRegistryText() as string
-    auth = AuthStore_Load()
-    settings = SettingsStore_Load()
     keys = SettingsStore_Keys()
+    separator = Chr(10) + Chr(10)
+    text = sectionText("Global Application Registry", [
+        { key: "active-account-key", value: AuthStore_GetActiveAccountKey() }
+        { key: "last-server", value: AuthStore_GetLastServer() }
+        { key: keys.tmdbApiKey, value: truncateText(SettingsStore_LoadIntegration(keys.tmdbApiKey), 40) }
+    ])
 
-    return sectionText("Application Registry", [
-        { key: "server", value: auth.server }
-        { key: "username", value: auth.username }
-        { key: "userId", value: auth.userId }
-        { key: "token", value: truncateText(auth.token, 40) + "..." }
+    accounts = AuthStore_ListAllAccounts(true)
+    if accounts.Count() = 0 then return text + separator + "SAVED ACCOUNTS" + Chr(10) + "(none)"
+
+    for each account in accounts
+        text = text + separator + getAccountRegistryText(account, keys)
+    end for
+    return text
+end function
+
+'-------------------------------------------------------------------------------
+' getAccountRegistryText
+'-------------------------------------------------------------------------------
+function getAccountRegistryText(account as object, keys as object) as string
+    settings = SettingsStore_Load(account.accountKey)
+    title = "Account: " + account.username
+    if account.isActive then title = title + " (active)"
+
+    return sectionText(title, [
+        { key: "account-key", value: account.accountKey }
+        { key: "server", value: account.server }
+        { key: "username", value: account.username }
+        { key: "userId", value: account.userId }
+        { key: "primary-image-tag", value: account.primaryImageTag }
+        { key: "token", value: truncateWithEllipsis(account.token, 10) }
         { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
         { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
         { key: keys.collectionCardsImageType, value: settings[keys.collectionCardsImageType] }
         { key: keys.collectionItemsImageType, value: settings[keys.collectionItemsImageType] }
+        { key: keys.playlistImageType, value: settings[keys.playlistImageType] }
         { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
         { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
         { key: keys.videoStreamingMode, value: settings[keys.videoStreamingMode] }
-        { key: keys.tmdbApiKey, value: truncateText(settings[keys.tmdbApiKey], 40) }
     ])
+end function
+
+'-------------------------------------------------------------------------------
+' truncateWithEllipsis
+'-------------------------------------------------------------------------------
+function truncateWithEllipsis(value as dynamic, maxLength as integer) as string
+    text = formatValue(value)
+    if Len(text) <= maxLength then return text
+    return Left(text, maxLength) + "..."
 end function
 
 '-------------------------------------------------------------------------------

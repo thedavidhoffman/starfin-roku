@@ -40,6 +40,8 @@ sub navHandleHeaderOverlayRequested()
     request = m.header.overlayRequested
     if request = invalid then return
 
+    if request.id = "settings" and m.session <> invalid then request.accountKey = SafeString(m.session.accountKey, "")
+
     m.overlayHost.callFunc("openOverlay", request)
 end sub
 
@@ -51,6 +53,10 @@ sub navHandleOverlayClosed()
     if closed = invalid then return
 
     request = closed.request
+    if request <> invalid and request.id = "accountPicker" then
+        authHandleAccountPickerClosed(closed)
+        return
+    end if
     if request <> invalid and request.id = "letterGrid" then
         videoLibraryHandleLetterGridOverlayClosed(closed)
         return
@@ -382,7 +388,7 @@ end sub
 ' navShowApp
 '-------------------------------------------------------------------------------
 sub navShowApp()
-    m.settings = SettingsStore_Load()
+    m.settings = SettingsStore_Load(SafeString(m.session.accountKey, ""))
     loadRequest = buildSessionLoadRequest()
     m.homePage.loadRequest = loadRequest
     navShowAppRoute()

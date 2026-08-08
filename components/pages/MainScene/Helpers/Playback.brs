@@ -39,7 +39,7 @@ sub playerShow(selection as object)
     if m.tvEpisodeUpNextAutoPlayPage <> invalid then m.tvEpisodeUpNextAutoPlayPage.visible = false
     if m.liveTvPage <> invalid then m.liveTvPage.visible = false
     m.videoPlayer = player
-    m.dynamicPageHost.appendChild(player)
+    authAppendDynamicPage(player)
     m.homePage.visible = false
     m.header.visible = false
     player.setFocus(true)
@@ -282,7 +282,7 @@ function showTVEpisodeUpNextAutoPlayPage(restorePlayRequest as dynamic) as boole
 
     m.tvEpisodeUpNextAutoPlayPage = page
     m.tvEpisodeUpNextRestorePlayRequest = restorePlayRequest
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("openAutoPlay")
@@ -330,7 +330,7 @@ sub prepareTVEpisodePageForClosedPlayer(playRequest as dynamic)
 
     page = createTVEpisodePage(loadRequest, false)
     m.tvEpisodePage = page
-    m.dynamicPageHost.appendChild(page)
+    authAppendDynamicPage(page)
     if m.tvSeasonPage <> invalid then m.tvSeasonPage.visible = false
     if m.personPage <> invalid then m.personPage.visible = false
 end sub

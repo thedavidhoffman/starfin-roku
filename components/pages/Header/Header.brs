@@ -222,7 +222,7 @@ sub configureAccountDropdownIdentity()
     imageUri = "pkg:/images/cast/cast-placeholder-195x195.png"
     imageSource = "placeholder"
     if SafeString(request.primaryImageTag, "") <> "" then
-        imageUri = buildUserProfileImageUrl(request)
+        imageUri = AccountImage_GetUri(request, 144, 144)
         imageSource = "profile"
     end if
     m.log.write("User identity image selected source=" + imageSource + " uri=" + imageUri)
@@ -235,23 +235,6 @@ sub configureAccountDropdownIdentity()
         imageSize: 144
     }
 end sub
-
-'-------------------------------------------------------------------------------
-' buildUserProfileImageUrl
-'-------------------------------------------------------------------------------
-function buildUserProfileImageUrl(request as object) as string
-    server = Url_NormalizeServer(SafeString(request.server, ""))
-    userId = SafeString(request.userId, "")
-    if server = "" or userId = "" then return ""
-
-    query = Url_BuildQueryString({
-        tag: SafeString(request.primaryImageTag, "")
-        maxWidth: 144
-        maxHeight: 144
-        quality: 90
-    })
-    return server + "/Users/" + userId + "/Images/Primary" + query
-end function
 
 '-------------------------------------------------------------------------------
 ' onHomePressed
@@ -296,6 +279,8 @@ sub onAccountDropdownItemSelected()
     closeMenu()
     if selectedItem.id = "systemInformation" then
         requestSystemInformationOverlay()
+    else if selectedItem.id = "switchAccount" then
+        m.top.switchAccountSelected = true
     else if selectedItem.id = "logout" then
         m.top.logoutSelected = true
     end if
@@ -381,6 +366,7 @@ end sub
 function getAccountDropdownItems() as object
     return [
         { id: "systemInformation", text: "System Info" }
+        { id: "switchAccount", text: "Switch" }
         { id: "logout", text: "Logout" }
     ]
 end function

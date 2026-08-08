@@ -125,7 +125,7 @@ end sub
 ' loadSettingsValues
 '-------------------------------------------------------------------------------
 sub loadSettingsValues()
-    settings = SettingsStore_Load()
+    settings = SettingsStore_Load(m.top.accountKey)
     if settings = invalid then return
     keys = SettingsStore_Keys()
 
