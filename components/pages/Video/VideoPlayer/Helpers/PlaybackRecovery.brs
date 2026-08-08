@@ -238,7 +238,7 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
     end if
 
     if nextMode = "" then
-        m.log.error("Playback recovery exhausted itemId=" + m.recovery.itemId + " reason=" + reason + " effectiveMode=" + m.recovery.effectiveMode)
+        m.log.error("Playback recovery exhausted itemId=" + m.recovery.itemId + " reason=" + reason + " detail=" + detail + " effectiveMode=" + m.recovery.effectiveMode)
 #if playbackChaosMonkey
         onPlaybackChaosMonkeyRecoveryExhausted(reason)
 #endif
@@ -247,7 +247,7 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
 
     failurePhase = "startup"
     if m.recovery.hasEverPlayed then failurePhase = "runtime"
-    m.log.write("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
+    m.log.write("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
     restartRequest = buildStreamRestartPlayRequest()
     if restartRequest = invalid then return false
 
