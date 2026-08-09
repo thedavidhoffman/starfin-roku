@@ -117,6 +117,7 @@ sub authHandleAccountPickerClosed(closed as object)
         restoreAccountPickerFocus(source)
         return
     end if
+    if source = "login" and overlay.accountsUpdated = true then authRefreshLoginSavedAccounts()
     if overlay.signInSelected = true then
         server = m.login.serverValue
         if m.session <> invalid then server = SafeString(m.session.server, server)

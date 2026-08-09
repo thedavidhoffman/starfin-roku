@@ -205,6 +205,19 @@ sub AuthStore_RemoveToken(accountKey as string)
 end sub
 
 '-------------------------------------------------------------------------------
+' AuthStore_ForgetAccount
+'-------------------------------------------------------------------------------
+function AuthStore_ForgetAccount(accountKey as string) as boolean
+    if accountKey = "" then return false
+    if AuthStore_GetActiveAccountKey() = accountKey then return false
+
+    registry = CreateObject("roRegistry")
+    wasDeleted = registry.Delete(__GetAuthAccountSectionName(accountKey))
+    registry.Flush()
+    return wasDeleted
+end function
+
+'-------------------------------------------------------------------------------
 ' AuthStore_ClearActiveAccount
 '-------------------------------------------------------------------------------
 sub AuthStore_ClearActiveAccount()

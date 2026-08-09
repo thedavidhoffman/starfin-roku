@@ -4,7 +4,7 @@
 sub openAccountPicker()
     m.top.title = "Switch Account"
     m.top.dialogWidth = 920
-    m.top.dialogHeight = 620
+    m.top.dialogHeight = 590
     m.top.contentComponentName = "AccountPickerContent"
 
     content = m.top.callFunc("getContentComponent")
@@ -12,8 +12,18 @@ sub openAccountPicker()
     content.accounts = m.top.accounts
     content.observeField("accountSelected", "onAccountSelected")
     content.observeField("signInSelected", "onSignInSelected")
+    content.observeField("accountsChanged", "onAccountsChanged")
     m.top.callFunc("openDialog")
     content.callFunc("focusAccounts")
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountsChanged
+'-------------------------------------------------------------------------------
+sub onAccountsChanged()
+    content = m.top.callFunc("getContentComponent")
+    m.top.accounts = content.accountsChanged
+    m.top.accountsUpdated = true
 end sub
 
 '-------------------------------------------------------------------------------
