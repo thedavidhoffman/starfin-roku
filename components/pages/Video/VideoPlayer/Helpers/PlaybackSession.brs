@@ -301,6 +301,21 @@ sub onPlaystateTimerFire()
 end sub
 
 '-------------------------------------------------------------------------------
+' onPlaystateResponse
+'-------------------------------------------------------------------------------
+sub onPlaystateResponse()
+    response = m.playstateTask.response
+    if response = invalid then return
+    if SafeString(response.statusName, "") <> "stop" then return
+    if m.playback.closeAfterStopReport <> true then return
+
+    emitPlaybackProgress(false)
+    m.playback.closeAfterStopReport = false
+    stopPlayback()
+    m.top.closeRequested = true
+end sub
+
+'-------------------------------------------------------------------------------
 ' emitPlaybackProgress
 '-------------------------------------------------------------------------------
 sub emitPlaybackProgress(isFinished as boolean)

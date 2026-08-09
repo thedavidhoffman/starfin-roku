@@ -24,6 +24,7 @@ sub initReferences()
         itemContent: invalid
         playSelection: invalid
         playbackProgressChange: invalid
+        playbackRefreshPending: false
         selectedStreams: {
             audio: invalid
             subtitle: invalid
@@ -409,15 +410,57 @@ sub onEpisodeDetailsResponse()
     if response = invalid then return
     if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "itemId", "tvEpisodeDetails") <> true then return
     if response.ok <> true then
+        m.state.playbackRefreshPending = false
         renderEpisodeContent(m.state.itemContent, false)
         return
     end if
     if SafeString(response.itemId, "") <> m.state.itemId then return
 
+    isPlaybackRefresh = m.state.playbackRefreshPending = true
+    m.state.playbackRefreshPending = false
+    if isPlaybackRefresh then m.state.request.startPositionTicks = invalid
+
     applySeriesDetails(response.series)
     applyPlaybackQueueDetails(response)
     applyEpisodeDetails(response.payload, false)
     m.cast.people = getPeople(response.payload)
+    if isPlaybackRefresh then notifyRefreshedWatchedState(response.payload)
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshPlaybackState
+'-------------------------------------------------------------------------------
+sub refreshPlaybackState()
+    request = m.state.request
+    if request = invalid then return
+
+    itemId = SafeString(request.itemId, "")
+    if itemId = "" then return
+
+    m.state.playbackRefreshPending = true
+    m.episodeDetailsTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+        loadPlaybackQueue: false
+    }
+    m.episodeDetailsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' notifyRefreshedWatchedState
+'-------------------------------------------------------------------------------
+sub notifyRefreshedWatchedState(item as dynamic)
+    if item = invalid or item.UserData = invalid then return
+    if item.UserData.Played <> true then return
+
+    m.state.playbackProgressChange = invalid
+    m.top.playbackProgressChanged = invalid
+    m.top.watchedStateChanged = {
+        itemId: SafeString(item.Id, "")
+        isWatched: true
+    }
 end sub
 
 '-------------------------------------------------------------------------------

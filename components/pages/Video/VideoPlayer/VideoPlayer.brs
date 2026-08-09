@@ -36,6 +36,7 @@ sub initReferences()
         startupPending: false
         hasReportedStart: false
         hasEmittedFinalProgress: false
+        closeAfterStopReport: false
         waitingForStartPosition: false
         previewPosition: 0
         position: 0
@@ -101,6 +102,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
+    m.playstateTask.observeField("response", "onPlaystateResponse")
     m.mediaSegmentsTask.observeField("response", "onMediaSegmentsResponse")
     m.trickplayPreloadTask.observeField("response", "onTrickplayPreloadResponse")
     m.videoPlayer.observeField("state", "onVideoStateChanged")
@@ -561,9 +563,14 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         end if
 
-        emitPlaybackProgress(false)
-        stopPlayback()
-        m.top.closeRequested = true
+        if m.playback.hasReportedStart = true then
+            m.playback.closeAfterStopReport = true
+            reportPlaystateStop()
+        else
+            emitPlaybackProgress(false)
+            stopPlayback()
+            m.top.closeRequested = true
+        end if
         return true
     else if key = "left" then
         handleProgressSeekInput("left")

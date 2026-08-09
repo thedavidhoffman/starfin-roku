@@ -296,6 +296,7 @@ sub onWatchedStateChange()
     if itemId = "" then return
 
     isWatched = change.isWatched = true
+    if isWatched then m.top.playbackProgressChange = invalid
     affectedSeason = updateEpisodeWatchedState(itemId, isWatched)
     if affectedSeason = invalid then return
     renderEpisodes(m.pageState.episodes)

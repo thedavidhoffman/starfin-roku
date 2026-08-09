@@ -128,8 +128,10 @@ end function
 sub tvEpisodeHandleCloseRequested()
     clearStatus()
     playbackProgressChange = invalid
+    watchedStateChange = invalid
     if m.tvEpisodePage <> invalid then
         playbackProgressChange = m.tvEpisodePage.playbackProgressChanged
+        watchedStateChange = m.tvEpisodePage.watchedStateChanged
         m.tvEpisodePage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvEpisodePage)
         m.tvEpisodePage = invalid
@@ -142,7 +144,11 @@ sub tvEpisodeHandleCloseRequested()
     else if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.visible = true
         m.header.visible = false
-        if playbackProgressChange <> invalid then m.tvSeasonPage.playbackProgressChange = playbackProgressChange
+        if watchedStateChange <> invalid and watchedStateChange.isWatched = true then
+            m.tvSeasonPage.watchedStateChange = watchedStateChange
+        else if playbackProgressChange <> invalid then
+            m.tvSeasonPage.playbackProgressChange = playbackProgressChange
+        end if
         m.tvSeasonPage.callFunc("activate")
     else if m.tvShowPage <> invalid then
         m.tvShowPage.visible = true
@@ -215,8 +221,10 @@ sub tvEpisodeHandleSeasonSelected()
 
     clearStatus()
     playbackProgressChange = invalid
+    watchedStateChange = invalid
     if m.tvEpisodePage <> invalid then
         playbackProgressChange = m.tvEpisodePage.playbackProgressChanged
+        watchedStateChange = m.tvEpisodePage.watchedStateChanged
         m.tvEpisodePage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvEpisodePage)
         m.tvEpisodePage = invalid
@@ -225,7 +233,11 @@ sub tvEpisodeHandleSeasonSelected()
     if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.visible = true
         m.header.visible = false
-        if playbackProgressChange <> invalid then m.tvSeasonPage.playbackProgressChange = playbackProgressChange
+        if watchedStateChange <> invalid and watchedStateChange.isWatched = true then
+            m.tvSeasonPage.watchedStateChange = watchedStateChange
+        else if playbackProgressChange <> invalid then
+            m.tvSeasonPage.playbackProgressChange = playbackProgressChange
+        end if
         m.tvSeasonPage.callFunc("activate")
     else
         tvSeasonShow(selection)

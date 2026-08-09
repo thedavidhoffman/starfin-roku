@@ -191,7 +191,7 @@ sub playerHandleCloseRequested()
     if showTVEpisodeUpNextAutoPlayPage(closedPlayRequest) then return
 
     prepareTVEpisodePageForClosedPlayer(closedPlayRequest)
-
+    if m.tvEpisodePage <> invalid then m.tvEpisodePage.callFunc("refreshPlaybackState")
     if m.moviePage <> invalid then
         m.moviePage.visible = true
         m.header.visible = false
