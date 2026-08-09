@@ -21,8 +21,23 @@ end function
 '-------------------------------------------------------------------------------
 function AuthStore_BuildAccountKey(server as string, userId as dynamic) as string
     normalizedServer = LCase(Url_NormalizeServer(server))
-    safeServer = Encode_Url(normalizedServer)
-    return safeServer + "--" + Encode_Url(SafeString(userId, ""))
+    authority = normalizedServer
+    if Left(authority, 7) = "http://" then
+        authority = Mid(authority, 8)
+    else if Left(authority, 8) = "https://" then
+        authority = Mid(authority, 9)
+    end if
+
+    authorityEnd = Len(authority) + 1
+    pathStart = Instr(1, authority, "/")
+    queryStart = Instr(1, authority, "?")
+    fragmentStart = Instr(1, authority, "#")
+    if pathStart > 0 and pathStart < authorityEnd then authorityEnd = pathStart
+    if queryStart > 0 and queryStart < authorityEnd then authorityEnd = queryStart
+    if fragmentStart > 0 and fragmentStart < authorityEnd then authorityEnd = fragmentStart
+    authority = Left(authority, authorityEnd - 1)
+
+    return authority + "/" + SafeString(userId, "")
 end function
 
 '-------------------------------------------------------------------------------

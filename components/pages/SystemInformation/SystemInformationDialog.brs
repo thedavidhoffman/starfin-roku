@@ -3,7 +3,7 @@
 '-------------------------------------------------------------------------------
 sub openSystemInformation()
     m.top.title = "System Information"
-    m.top.dialogWidth = 1152
+    m.top.dialogWidth = 1536
     m.top.dialogHeight = 940
     m.top.contentComponentName = "SystemInformationContent"
 

@@ -2,7 +2,29 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.systemInformationText = m.top.findNode("systemInformationText")
+    m.propertySheet = m.top.findNode("propertySheet")
+    m.scrollTrack = m.top.findNode("scrollTrack")
+    m.scrollThumb = m.top.findNode("scrollThumb")
+    m.scrollHoldDelayTimer = m.top.findNode("scrollHoldDelayTimer")
+    m.scrollRepeatTimer = m.top.findNode("scrollRepeatTimer")
+    m.scrollState = {
+        offset: 0
+        contentHeight: 0
+        viewportHeight: 710
+        step: 108
+        heldKey: ""
+    }
+    m.layoutState = {
+        contentWidth: 1416
+        tableWidth: 1388
+        keyWidth: 530
+        valueX: 554
+        valueWidth: 834
+        minimumThumbHeight: 60
+        scrollThumbX: 1404
+    }
+    m.scrollHoldDelayTimer.observeField("fire", "onScrollHoldDelayTimerFire")
+    m.scrollRepeatTimer.observeField("fire", "onScrollRepeatTimerFire")
     updateSystemInformation()
 end sub
 
@@ -10,97 +32,287 @@ end sub
 ' focusSystemInformation
 '-------------------------------------------------------------------------------
 sub focusSystemInformation()
-    m.systemInformationText.setFocus(true)
+    m.top.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
 ' updateSystemInformation
 '-------------------------------------------------------------------------------
 sub updateSystemInformation()
-    separator = Chr(10) + Chr(10)
-    m.systemInformationText.text = getAppInfoText() + separator + getDeviceInfoText() + separator + getApplicationRegistryText()
+    sections = [getAppInfoSection(), getDeviceInfoSection(), getGlobalRegistrySection()]
+    keys = SettingsStore_Keys()
+    accounts = AuthStore_ListAllAccounts(true)
+    for each account in accounts
+        sections.Push(getAccountRegistrySection(account, keys))
+    end for
+    renderSections(sections)
 end sub
 
 '-------------------------------------------------------------------------------
-' getAppInfoText
+' getAppInfoSection
 '-------------------------------------------------------------------------------
-function getAppInfoText() as string
+function getAppInfoSection() as object
     appInfo = CreateObject("roAppInfo")
-
-    return sectionText("Application Information", [
-        { key: "title", value: appInfo.GetTitle() }
-        { key: "version", value: appInfo.GetVersion() }
-    ])
+    return {
+        title: "Application Information"
+        entries: [
+            { key: "title", value: appInfo.GetTitle() }
+            { key: "version", value: appInfo.GetVersion() }
+        ]
+    }
 end function
 
 '-------------------------------------------------------------------------------
-' getDeviceInfoText
+' getDeviceInfoSection
 '-------------------------------------------------------------------------------
-function getDeviceInfoText() as string
+function getDeviceInfoSection() as object
     deviceInfo = CreateObject("roDeviceInfo")
-
-    model = deviceInfo.GetModel()
-    modelDisplayName = deviceInfo.GetModelDisplayName()
+    connectionInfo = deviceInfo.GetConnectionInfo()
     osVersion = deviceInfo.GetOSVersion()
     uiResolution = deviceInfo.GetUIResolution()
-    displayMode = deviceInfo.GetDisplayMode()
-    connectionInfo = deviceInfo.GetConnectionInfo()
-
-    return sectionText("Roku Device Information", [
-        { key: "model", value: modelDisplayName + " " + model }
-        { key: "os version", value: osVersion }
-        { key: "ui resolution", value: uiResolution }
-        { key: "display mode", value: displayMode }
-        { key: "connection Info", value: connectionInfo.type + " (" + LCase(connectionInfo.quality) + " quality) " + connectionInfo.ip }
-    ])
+    return {
+        title: "Roku Device Information"
+        entries: [
+            { key: "model", value: deviceInfo.GetModelDisplayName() + " " + deviceInfo.GetModel() }
+            { key: "os version", value: osVersionText(osVersion) }
+            { key: "ui resolution", value: uiResolutionText(uiResolution) }
+            { key: "display mode", value: deviceInfo.GetDisplayMode() }
+            { key: "connection info", value: connectionInfo.type + " (" + LCase(connectionInfo.quality) + " quality) " + connectionInfo.ip }
+        ]
+    }
 end function
 
 '-------------------------------------------------------------------------------
-' getApplicationRegistryText
+' osVersionText
 '-------------------------------------------------------------------------------
-function getApplicationRegistryText() as string
-    keys = SettingsStore_Keys()
-    separator = Chr(10) + Chr(10)
-    text = sectionText("Global Application Registry", [
-        { key: "active-account-key", value: AuthStore_GetActiveAccountKey() }
-        { key: "last-server", value: AuthStore_GetLastServer() }
-        { key: keys.tmdbApiKey, value: truncateText(SettingsStore_LoadIntegration(keys.tmdbApiKey), 40) }
-    ])
-
-    accounts = AuthStore_ListAllAccounts(true)
-    if accounts.Count() = 0 then return text + separator + "SAVED ACCOUNTS" + Chr(10) + "(none)"
-
-    for each account in accounts
-        text = text + separator + getAccountRegistryText(account, keys)
-    end for
+function osVersionText(osVersion as dynamic) as string
+    if osVersion = invalid or GetInterface(osVersion, "ifAssociativeArray") = invalid then return "(not set)"
+    text = SafeString(osVersion.major, "")
+    minor = SafeString(osVersion.minor, "")
+    revision = SafeString(osVersion.revision, "")
+    build = SafeString(osVersion.build, "")
+    if minor <> "" then text = text + "." + minor
+    if revision <> "" then text = text + "." + revision
+    if build <> "" then text = text + " build " + build
+    if text = "" then return "(not set)"
     return text
 end function
 
 '-------------------------------------------------------------------------------
-' getAccountRegistryText
+' uiResolutionText
 '-------------------------------------------------------------------------------
-function getAccountRegistryText(account as object, keys as object) as string
+function uiResolutionText(uiResolution as dynamic) as string
+    if uiResolution = invalid or GetInterface(uiResolution, "ifAssociativeArray") = invalid then return "(not set)"
+    name = SafeString(uiResolution.name, "")
+    width = SafeString(uiResolution.width, "")
+    height = SafeString(uiResolution.height, "")
+    dimensions = ""
+    if width <> "" and height <> "" then dimensions = width + " x " + height
+    if name <> "" and dimensions <> "" then return UCase(name) + " (" + dimensions + ")"
+    if dimensions <> "" then return dimensions
+    if name <> "" then return UCase(name)
+    return "(not set)"
+end function
+
+'-------------------------------------------------------------------------------
+' getGlobalRegistrySection
+'-------------------------------------------------------------------------------
+function getGlobalRegistrySection() as object
+    keys = SettingsStore_Keys()
+    return {
+        title: "Global Application Registry"
+        entries: [
+            { key: "active-account-key", value: AuthStore_GetActiveAccountKey() }
+            { key: "last-server", value: AuthStore_GetLastServer() }
+            { key: keys.tmdbApiKey, value: truncateText(SettingsStore_LoadIntegration(keys.tmdbApiKey), 40) }
+        ]
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getAccountRegistrySection
+'-------------------------------------------------------------------------------
+function getAccountRegistrySection(account as object, keys as object) as object
     settings = SettingsStore_Load(account.accountKey)
     title = "Account: " + account.username
     if account.isActive then title = title + " (active)"
-
-    return sectionText(title, [
-        { key: "account-key", value: account.accountKey }
-        { key: "server", value: account.server }
-        { key: "username", value: account.username }
-        { key: "userId", value: account.userId }
-        { key: "primary-image-tag", value: account.primaryImageTag }
-        { key: "token", value: truncateWithEllipsis(account.token, 10) }
-        { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
-        { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
-        { key: keys.collectionCardsImageType, value: settings[keys.collectionCardsImageType] }
-        { key: keys.collectionItemsImageType, value: settings[keys.collectionItemsImageType] }
-        { key: keys.playlistImageType, value: settings[keys.playlistImageType] }
-        { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
-        { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
-        { key: keys.videoStreamingMode, value: settings[keys.videoStreamingMode] }
-    ])
+    return {
+        title: title
+        entries: [
+            { key: "account-key", value: account.accountKey }
+            { key: "server", value: account.server }
+            { key: "username", value: account.username }
+            { key: "userId", value: account.userId }
+            { key: "primary-image-tag", value: account.primaryImageTag }
+            { key: "token", value: truncateWithEllipsis(account.token, 10) }
+            { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
+            { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
+            { key: keys.collectionCardsImageType, value: settings[keys.collectionCardsImageType] }
+            { key: keys.collectionItemsImageType, value: settings[keys.collectionItemsImageType] }
+            { key: keys.playlistImageType, value: settings[keys.playlistImageType] }
+            { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
+            { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
+            { key: keys.videoStreamingMode, value: settings[keys.videoStreamingMode] }
+        ]
+    }
 end function
+
+'-------------------------------------------------------------------------------
+' renderSections
+'-------------------------------------------------------------------------------
+sub renderSections(sections as object)
+    childCount = m.propertySheet.getChildCount()
+    if childCount > 0 then m.propertySheet.removeChildrenIndex(0, childCount)
+
+    y = 0
+    for each section in sections
+        if y > 0 then y = y + 32
+        y = addSectionHeader(section.title, y)
+        for each entry in section.entries
+            y = addPropertyRow(entry.key, formatValue(entry.value), y)
+        end for
+    end for
+
+    m.scrollState.offset = 0
+    m.scrollState.contentHeight = y
+    applyScrollOffset()
+end sub
+
+'-------------------------------------------------------------------------------
+' addSectionHeader
+'-------------------------------------------------------------------------------
+function addSectionHeader(title as string, y as integer) as integer
+    accentColor = &hF2C27FFF
+    heading = CreateObject("roSGNode", "Label")
+    heading.translation = [0, y]
+    heading.width = m.layoutState.tableWidth
+    heading.height = 32
+    heading.text = UCase(title)
+    heading.color = accentColor
+    heading.font = "font:SmallerBoldSystemFont"
+    m.propertySheet.appendChild(heading)
+
+    rule = CreateObject("roSGNode", "Rectangle")
+    rule.translation = [0, y + 34]
+    rule.width = m.layoutState.tableWidth
+    rule.height = 2
+    rule.color = accentColor
+    m.propertySheet.appendChild(rule)
+    return y + 42
+end function
+
+'-------------------------------------------------------------------------------
+' addPropertyRow
+'-------------------------------------------------------------------------------
+function addPropertyRow(keyText as string, valueText as string, y as integer) as integer
+    rowHeight = 36
+    keyLabel = CreateObject("roSGNode", "Label")
+    keyLabel.translation = [0, y]
+    keyLabel.width = m.layoutState.keyWidth
+    keyLabel.height = rowHeight - 1
+    keyLabel.text = UCase(keyText)
+    keyLabel.color = Color().text.light.secondary
+    keyLabel.font = "font:SmallerBoldSystemFont"
+    keyLabel.vertAlign = "center"
+    m.propertySheet.appendChild(keyLabel)
+
+    valueLabel = CreateObject("roSGNode", "Label")
+    valueLabel.translation = [m.layoutState.valueX, y]
+    valueLabel.width = m.layoutState.valueWidth
+    valueLabel.height = rowHeight - 1
+    valueLabel.text = valueText
+    valueLabel.color = &hD7DFEAFF
+    valueLabel.font = "font:SmallerSystemFont"
+    valueLabel.vertAlign = "center"
+    valueLabel.wrap = false
+    valueLabel.numLines = 1
+    m.propertySheet.appendChild(valueLabel)
+
+    separator = CreateObject("roSGNode", "Rectangle")
+    separator.translation = [0, y + rowHeight - 1]
+    separator.width = m.layoutState.tableWidth
+    separator.height = 1
+    separator.color = &hF3F7FB1F
+    m.propertySheet.appendChild(separator)
+    return y + rowHeight
+end function
+
+'-------------------------------------------------------------------------------
+' applyScrollOffset
+'-------------------------------------------------------------------------------
+sub applyScrollOffset()
+    maxOffset = m.scrollState.contentHeight - m.scrollState.viewportHeight
+    if maxOffset < 0 then maxOffset = 0
+    if m.scrollState.offset < 0 then m.scrollState.offset = 0
+    if m.scrollState.offset > maxOffset then m.scrollState.offset = maxOffset
+    m.propertySheet.translation = [0, 0 - m.scrollState.offset]
+    updateScrollBar(maxOffset)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateScrollBar
+'-------------------------------------------------------------------------------
+sub updateScrollBar(maxOffset as integer)
+    hasOverflow = maxOffset > 0
+    m.scrollTrack.visible = hasOverflow
+    m.scrollThumb.visible = hasOverflow
+    if hasOverflow = false then return
+
+    thumbHeight = Number_ToInteger((m.scrollState.viewportHeight * m.scrollState.viewportHeight) / m.scrollState.contentHeight, m.layoutState.minimumThumbHeight)
+    if thumbHeight < m.layoutState.minimumThumbHeight then thumbHeight = m.layoutState.minimumThumbHeight
+    if thumbHeight > m.scrollState.viewportHeight then thumbHeight = m.scrollState.viewportHeight
+    thumbTravel = m.scrollState.viewportHeight - thumbHeight
+    thumbY = Number_ToInteger((m.scrollState.offset * thumbTravel) / maxOffset, 0)
+    m.scrollThumb.height = thumbHeight
+    m.scrollThumb.translation = [m.layoutState.scrollThumbX, thumbY]
+end sub
+
+'-------------------------------------------------------------------------------
+' scrollForKey
+'-------------------------------------------------------------------------------
+sub scrollForKey(key as string)
+    if key = "down" then
+        m.scrollState.offset = m.scrollState.offset + m.scrollState.step
+    else if key = "up" then
+        m.scrollState.offset = m.scrollState.offset - m.scrollState.step
+    else
+        return
+    end if
+    applyScrollOffset()
+end sub
+
+'-------------------------------------------------------------------------------
+' startScrollHold
+'-------------------------------------------------------------------------------
+sub startScrollHold(key as string)
+    stopScrollHold()
+    m.scrollState.heldKey = key
+    m.scrollHoldDelayTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' stopScrollHold
+'-------------------------------------------------------------------------------
+sub stopScrollHold()
+    m.scrollHoldDelayTimer.control = "stop"
+    m.scrollRepeatTimer.control = "stop"
+    m.scrollState.heldKey = ""
+end sub
+
+'-------------------------------------------------------------------------------
+' onScrollHoldDelayTimerFire
+'-------------------------------------------------------------------------------
+sub onScrollHoldDelayTimerFire()
+    if m.scrollState.heldKey = "" then return
+    m.scrollRepeatTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' onScrollRepeatTimerFire
+'-------------------------------------------------------------------------------
+sub onScrollRepeatTimerFire()
+    scrollForKey(m.scrollState.heldKey)
+end sub
 
 '-------------------------------------------------------------------------------
 ' truncateWithEllipsis
@@ -121,74 +333,38 @@ function truncateText(value as dynamic, maxLength as integer) as string
 end function
 
 '-------------------------------------------------------------------------------
-' sectionText
-'-------------------------------------------------------------------------------
-function sectionText(title as string, entries as object) as string
-    text = UCase(title)
-
-    for each entry in entries
-        text = text + Chr(10) + UCase(entry.key) + ": " + formatValue(entry.value)
-    end for
-
-    return text
-end function
-
-'-------------------------------------------------------------------------------
 ' formatValue
 '-------------------------------------------------------------------------------
 function formatValue(value as dynamic) as string
     if value = invalid then return "(not set)"
-
     valueType = Type(value)
-    if valueType = "roAssociativeArray" or valueType = "roSGNodeEvent" then return formatAssocArray(value)
-    if valueType = "roArray" then return formatArray(value)
-    if valueType = "String" or valueType = "roString" then return value
+    if valueType = "String" or valueType = "roString" then
+        if value = "" then return "(not set)"
+        return value
+    end if
     if valueType = "Boolean" or valueType = "roBoolean" then
         if value then return "true"
         return "false"
     end if
     if valueType = "Integer" or valueType = "roInt" or valueType = "LongInteger" or valueType = "roLongInteger" then return StrI(value)
     if valueType = "Float" or valueType = "roFloat" or valueType = "Double" or valueType = "roDouble" then return Str(value)
-
     return "(unsupported " + valueType + ")"
 end function
 
 '-------------------------------------------------------------------------------
-' formatAssocArray
+' onKeyEvent
 '-------------------------------------------------------------------------------
-function formatAssocArray(value as object) as string
-    text = "{"
-    isFirst = true
-
-    for each key in value
-        if isFirst then
-            isFirst = false
-        else
-            text = text + ", "
+function onKeyEvent(key as string, press as boolean) as boolean
+    if key = "down" or key = "up" then
+        if press = false then
+            if m.scrollState.heldKey = key then stopScrollHold()
+            return true
         end if
 
-        text = text + key + ": " + formatValue(value[key])
-    end for
-
-    return text + "}"
-end function
-
-'-------------------------------------------------------------------------------
-' formatArray
-'-------------------------------------------------------------------------------
-function formatArray(value as object) as string
-    text = "["
-    isFirst = true
-
-    for each item in value
-        if isFirst then
-            isFirst = false
-        else
-            text = text + ", "
-        end if
-
-        text = text + formatValue(item)
-    end for
-
-    return text + "]"
+        scrollForKey(key)
+        startScrollHold(key)
+        return true
+    end if
+    if press = false then return false
+    return false
 end function
