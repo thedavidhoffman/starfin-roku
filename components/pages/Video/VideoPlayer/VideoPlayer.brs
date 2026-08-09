@@ -22,6 +22,12 @@ sub initReferences()
     m.playstateTask = m.top.findNode("playstateTask")
     m.trickplayPreloadTask = m.top.findNode("trickplayPreloadTask")
     m.controlsHideTimer = m.top.findNode("controlsHideTimer")
+    m.controlsAnimation = {
+        node: m.top.findNode("controlsHideAnimation")
+        playbackControlsOpacity: m.top.findNode("playbackControlsOpacity")
+        clockOpacity: m.top.findNode("clockOpacity")
+        hiding: false
+    }
     m.playstateTimer = m.top.findNode("playstateTimer")
     m.fastSeekTimer = m.top.findNode("fastSeekTimer")
     m.leftSeekRepeatTimer = m.top.findNode("leftSeekRepeatTimer")
@@ -134,6 +140,7 @@ sub initHandlers()
     m.cast.observeField("userInteraction", "onCastUserInteraction")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.controlsHideTimer.observeField("fire", "onControlsHideTimerFire")
+    m.controlsAnimation.node.observeField("state", "onControlsHideAnimationStateChanged")
     m.playstateTimer.observeField("fire", "onPlaystateTimerFire")
     m.fastSeekTimer.observeField("fire", "onFastSeekTimerFire")
     m.leftSeekRepeatTimer.observeField("fire", "onLeftSeekRepeatTimerFire")
@@ -437,6 +444,10 @@ end function
 sub showControls(restartTimer as boolean)
     hideSkipIntroButton()
     hideCast()
+    m.controlsAnimation.hiding = false
+    m.controlsAnimation.node.control = "stop"
+    m.playbackControls.opacity = 1.0
+    m.clock.opacity = 1.0
     m.overlay.area = "controls"
     m.playbackControls.visible = true
     m.playbackControls.callFunc("resetFocus")
@@ -488,10 +499,42 @@ sub hideControls()
     m.playbackControls.isSeeking = false
     m.playbackControls.thumbnailData = {}
     m.playbackControls.callFunc("deactivate")
-    m.playbackControls.visible = false
     if m.overlay.area = "controls" then m.overlay.area = "none"
     m.top.setFocus(true)
     updateSkipIntroButton(m.playback.position)
+
+    if m.controlsAnimation.hiding = true then return
+
+    if m.playbackControls.visible <> true then
+        finishControlsHide()
+        return
+    end if
+
+    m.controlsAnimation.node.control = "stop"
+    m.controlsAnimation.playbackControlsOpacity.keyValue = [m.playbackControls.opacity, 0.0]
+    m.controlsAnimation.clockOpacity.keyValue = [m.clock.opacity, 0.0]
+    m.controlsAnimation.hiding = true
+    m.controlsAnimation.node.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' onControlsHideAnimationStateChanged
+'-------------------------------------------------------------------------------
+sub onControlsHideAnimationStateChanged()
+    if m.controlsAnimation.hiding <> true then return
+    if m.controlsAnimation.node.state <> "stopped" then return
+
+    finishControlsHide()
+end sub
+
+'-------------------------------------------------------------------------------
+' finishControlsHide
+'-------------------------------------------------------------------------------
+sub finishControlsHide()
+    m.controlsAnimation.hiding = false
+    m.playbackControls.visible = false
+    m.playbackControls.opacity = 1.0
+    m.clock.opacity = 1.0
 end sub
 
 '-------------------------------------------------------------------------------
