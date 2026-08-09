@@ -23,6 +23,10 @@ sub initReferences()
     m.searchButton = m.top.findNode("searchButton")
     m.settingsButton = m.top.findNode("settingsButton")
     m.userMenuButton = m.top.findNode("userMenuButton")
+    m.accountBadge = m.top.findNode("accountBadge")
+    m.accountBadgeImageMask = m.top.findNode("accountBadgeImageMask")
+    m.accountBadgeImage = m.top.findNode("accountBadgeImage")
+    m.accountBadgeName = m.top.findNode("accountBadgeName")
     m.clock = m.top.findNode("clock")
     m.accountDropdownMenu = m.top.findNode("accountDropdownMenu")
     m.focusableHeaderButtons = []
@@ -213,6 +217,13 @@ sub onUserIdentityRequestChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    updateAccountBadge()
+end sub
+
+'-------------------------------------------------------------------------------
 ' configureAccountDropdownIdentity
 '-------------------------------------------------------------------------------
 sub configureAccountDropdownIdentity()
@@ -354,10 +365,31 @@ sub updateUserMenuButton()
     if m.userMenuButton = invalid then return
     if m.top.userIdentityRequest <> invalid then
         configureAccountDropdownIdentity()
+        updateAccountBadge()
         return
     end if
 
     m.accountDropdownMenu.identity = invalid
+    updateAccountBadge()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateAccountBadge
+'-------------------------------------------------------------------------------
+sub updateAccountBadge()
+    keys = SettingsStore_Keys()
+    showBadge = SettingsStore_GetSettingValue(m.top.settings, keys.displayAccountBadge) = "on"
+    request = m.top.userIdentityRequest
+    m.accountBadge.visible = showBadge and request <> invalid
+    if m.accountBadge.visible <> true then return
+
+    imageUri = "pkg:/images/cast/cast-placeholder-195x195.png"
+    if SafeString(request.primaryImageTag, "") <> "" then imageUri = AccountImage_GetUri(request, 128, 128)
+    MaskAssets_Apply(m.accountBadgeImageMask, "account-menu-user-mask.png", [64, 64], [43, 43])
+    m.accountBadgeImage.width = m.accountBadgeImageMask.maskSize[0]
+    m.accountBadgeImage.height = m.accountBadgeImageMask.maskSize[1]
+    m.accountBadgeImage.uri = imageUri
+    m.accountBadgeName.text = m.top.username
 end sub
 
 '-------------------------------------------------------------------------------

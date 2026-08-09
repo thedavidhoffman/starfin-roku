@@ -6,6 +6,7 @@ sub init()
     m.videoStreamingModeDescription = m.top.findNode("videoStreamingModeDescription")
     m.videoStreamingModeDescription.font.size = m.videoStreamingModeDescription.font.size + 3
     m.categoryPanels = [
+        m.top.findNode("systemPanel")
         m.top.findNode("mediaShellPanel")
         m.top.findNode("tvPanel")
         m.top.findNode("moviePanel")
@@ -15,6 +16,7 @@ sub init()
         m.top.findNode("integrationsPanel")
     ]
     m.settingsControls = {
+        displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
         mediaShellBackgroundOptions: m.top.findNode("mediaShellBackgroundOptions")
         tvLibraryOptions: m.top.findNode("tvLibraryOptions")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
@@ -26,6 +28,7 @@ sub init()
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
     }
     m.categoryControls = [
+        [m.settingsControls.displayAccountBadgeOptions]
         [m.settingsControls.mediaShellBackgroundOptions]
         [m.settingsControls.tvLibraryOptions, m.settingsControls.tvEpisodeListDisplayOptions]
         [m.settingsControls.movieLibraryOptions]
@@ -44,6 +47,7 @@ sub init()
     }
 
     initCategoryList()
+    initDisplayAccountBadgeOptions()
     initDisplayOptions(m.settingsControls.tvLibraryOptions)
     initDisplayOptions(m.settingsControls.movieLibraryOptions)
     initDisplayOptions(m.settingsControls.collectionCardsImageTypeOptions)
@@ -55,6 +59,7 @@ sub init()
 
     m.categoryList.observeField("itemFocused", "onCategoryFocused")
     m.categoryList.observeField("itemSelected", "onCategorySelected")
+    m.settingsControls.displayAccountBadgeOptions.observeField("itemSelected", "onDisplayAccountBadgeSelected")
     m.settingsControls.tvLibraryOptions.observeField("itemSelected", "onTVLibraryDisplaySelected")
     m.settingsControls.movieLibraryOptions.observeField("itemSelected", "onMovieLibraryDisplaySelected")
     m.settingsControls.collectionCardsImageTypeOptions.observeField("itemSelected", "onCollectionCardsImageTypeSelected")
@@ -74,11 +79,18 @@ end sub
 '-------------------------------------------------------------------------------
 sub initCategoryList()
     content = CreateObject("roSGNode", "ContentNode")
-    for each title in ["Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Integrations"]
+    for each title in ["System", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Integrations"]
         item = content.createChild("ContentNode")
         item.title = title
     end for
     m.categoryList.content = content
+end sub
+
+'-------------------------------------------------------------------------------
+' initDisplayAccountBadgeOptions
+'-------------------------------------------------------------------------------
+sub initDisplayAccountBadgeOptions()
+    setOptionTitles(m.settingsControls.displayAccountBadgeOptions, ["Off", "On"])
 end sub
 
 '-------------------------------------------------------------------------------
@@ -138,6 +150,7 @@ sub loadSettingsValues()
     m.settingsState.values[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
     m.settingsState.values[keys.mediaShellBackground] = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
     m.settingsState.values[keys.videoStreamingMode] = SettingsStore_GetSettingValue(settings, keys.videoStreamingMode)
+    m.settingsState.values[keys.displayAccountBadge] = SettingsStore_GetSettingValue(settings, keys.displayAccountBadge)
     m.settingsState.values[keys.tmdbApiKey] = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
 
     setDisplayOption(m.settingsControls.tvLibraryOptions, m.settingsState.values[keys.tvLibraryDisplay])
@@ -148,6 +161,7 @@ sub loadSettingsValues()
     setTVEpisodeListDisplayOption(m.settingsState.values[keys.tvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[keys.mediaShellBackground])
     setVideoStreamingModeOption(m.settingsState.values[keys.videoStreamingMode])
+    setOnOffOption(m.settingsControls.displayAccountBadgeOptions, m.settingsState.values[keys.displayAccountBadge])
     m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[keys.tmdbApiKey]
 end sub
 
@@ -258,11 +272,25 @@ end function
 function getSettingsValues() as object
     keys = SettingsStore_Keys()
     settings = {}
-    for each key in [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.playlistImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.videoStreamingMode, keys.tmdbApiKey]
+    for each key in [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.playlistImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.videoStreamingMode, keys.displayAccountBadge, keys.tmdbApiKey]
         settings[key] = SettingsStore_GetSettingValue(m.settingsState.values, key)
     end for
     return settings
 end function
+
+'-------------------------------------------------------------------------------
+' onDisplayAccountBadgeSelected
+'-------------------------------------------------------------------------------
+sub onDisplayAccountBadgeSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.displayAccountBadgeOptions)
+    if selectedIndex < 0 then return
+    m.settingsControls.displayAccountBadgeOptions.checkedItem = selectedIndex
+    if selectedIndex = 1 then
+        m.settingsState.values[SettingsStore_Keys().displayAccountBadge] = "on"
+    else
+        m.settingsState.values[SettingsStore_Keys().displayAccountBadge] = "off"
+    end if
+end sub
 
 '-------------------------------------------------------------------------------
 ' onTVLibraryDisplaySelected
@@ -351,6 +379,17 @@ end sub
 '-------------------------------------------------------------------------------
 sub setDisplayOption(options as object, value as dynamic)
     if value <> invalid and LCase(value.ToStr()) = "thumbnail" then
+        options.checkedItem = 1
+    else
+        options.checkedItem = 0
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' setOnOffOption
+'-------------------------------------------------------------------------------
+sub setOnOffOption(options as object, value as dynamic)
+    if value <> invalid and LCase(value.ToStr()) = "on" then
         options.checkedItem = 1
     else
         options.checkedItem = 0

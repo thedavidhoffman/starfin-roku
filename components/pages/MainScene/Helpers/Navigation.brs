@@ -389,6 +389,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub navShowApp()
     m.settings = SettingsStore_Load(SafeString(m.session.accountKey, ""))
+    fanOutSettings()
     loadRequest = buildSessionLoadRequest()
     m.homePage.loadRequest = loadRequest
     navShowAppRoute()
@@ -429,6 +430,7 @@ end sub
 ' fanOutSettings
 '-------------------------------------------------------------------------------
 sub fanOutSettings()
+    applySettingsToPage(m.header)
     applySettingsToPage(m.collectionsPage)
     applySettingsToPage(m.videoLibraryPage)
     applySettingsToPage(m.moviePage)

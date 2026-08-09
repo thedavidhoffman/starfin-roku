@@ -22,6 +22,7 @@ function SettingsStore_Keys() as object
         tvEpisodeListDisplay: "tv-ep-list-scroll"
         mediaShellBackground: "media-shell-background"
         videoStreamingMode: "video-streaming-mode"
+        displayAccountBadge: "display-account-badge"
         tmdbApiKey: "tmdb-api-key"
     }
 end function
@@ -40,6 +41,7 @@ function SettingsStore_Defaults() as object
     defaults[keys.tvEpisodeListDisplay] = "vertical"
     defaults[keys.mediaShellBackground] = "full-screen"
     defaults[keys.videoStreamingMode] = "automatic"
+    defaults[keys.displayAccountBadge] = "off"
     defaults[keys.tmdbApiKey] = ""
     return defaults
 end function
@@ -69,6 +71,7 @@ function SettingsStore_Load(accountKey as string) as object
         settings[key] = SettingsStore_GetValue(values, key, defaults[key])
     end for
     keys = SettingsStore_Keys()
+    settings[keys.displayAccountBadge] = SettingsStore_LoadGlobal(keys.displayAccountBadge)
     settings[keys.tmdbApiKey] = SettingsStore_LoadIntegration(keys.tmdbApiKey)
     return settings
 end function
@@ -85,24 +88,39 @@ sub SettingsStore_Save(accountKey as string, settings as object)
         accountStore.Flush()
     end if
     keys = SettingsStore_Keys()
+    SettingsStore_SaveGlobal(keys.displayAccountBadge, SettingsStore_GetSettingValue(settings, keys.displayAccountBadge))
     SettingsStore_SaveIntegration(keys.tmdbApiKey, SettingsStore_GetSettingValue(settings, keys.tmdbApiKey))
+end sub
+
+'-------------------------------------------------------------------------------
+' SettingsStore_LoadGlobal
+'-------------------------------------------------------------------------------
+function SettingsStore_LoadGlobal(key as string) as string
+    defaults = SettingsStore_Defaults()
+    return SettingsStore_GetValue(CreateObject("roRegistrySection", "STARFIN_ROKU"), key, defaults[key])
+end function
+
+'-------------------------------------------------------------------------------
+' SettingsStore_SaveGlobal
+'-------------------------------------------------------------------------------
+sub SettingsStore_SaveGlobal(key as string, value as string)
+    settingsStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
+    settingsStore.Write(key, value)
+    settingsStore.Flush()
 end sub
 
 '-------------------------------------------------------------------------------
 ' SettingsStore_LoadIntegration
 '-------------------------------------------------------------------------------
 function SettingsStore_LoadIntegration(key as string) as string
-    defaults = SettingsStore_Defaults()
-    return SettingsStore_GetValue(CreateObject("roRegistrySection", "STARFIN_ROKU"), key, defaults[key])
+    return SettingsStore_LoadGlobal(key)
 end function
 
 '-------------------------------------------------------------------------------
 ' SettingsStore_SaveIntegration
 '-------------------------------------------------------------------------------
 sub SettingsStore_SaveIntegration(key as string, value as string)
-    settingsStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
-    settingsStore.Write(key, value)
-    settingsStore.Flush()
+    SettingsStore_SaveGlobal(key, value)
 end sub
 
 '-------------------------------------------------------------------------------
