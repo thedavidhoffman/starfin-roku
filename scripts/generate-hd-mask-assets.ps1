@@ -20,6 +20,8 @@ $hdDirectory = Join-Path $OutputRoot "images\masks\hd"
 New-Item -ItemType Directory -Force -Path $fhdDirectory, $hdDirectory | Out-Null
 
 $assets = @(
+    @{ Source = "images\header\account-badge-user-mask-96x96.png"; Name = "account-badge-user-mask.png"; Width = 96; Height = 96 },
+    @{ Source = "images\header\account-menu-user-mask-144x144.png"; Name = "account-menu-user-mask.png"; Width = 144; Height = 144 },
     @{ Source = "images\cast\cast-mask-195x195.png"; Name = "cast-mask.png"; Width = 195; Height = 195 },
     @{ Source = "images\cast\person-mask-399x600.png"; Name = "person-mask.png"; Width = 399; Height = 600 },
     @{ Source = "images\cast\filmography-movie-mask-342x513.png"; Name = "filmography-movie-mask.png"; Width = 342; Height = 513 },

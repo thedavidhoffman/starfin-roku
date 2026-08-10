@@ -23,10 +23,14 @@ sub initReferences()
     m.searchButton = m.top.findNode("searchButton")
     m.settingsButton = m.top.findNode("settingsButton")
     m.userMenuButton = m.top.findNode("userMenuButton")
-    m.accountBadge = m.top.findNode("accountBadge")
-    m.accountBadgeImageMask = m.top.findNode("accountBadgeImageMask")
-    m.accountBadgeImage = m.top.findNode("accountBadgeImage")
-    m.accountBadgeName = m.top.findNode("accountBadgeName")
+    m.accountBadgeNodes = {
+        group: m.top.findNode("accountBadge")
+        ring: m.top.findNode("accountBadgeRing")
+        glass: m.top.findNode("accountBadgeGlass")
+        imageMask: m.top.findNode("accountBadgeImageMask")
+        image: m.top.findNode("accountBadgeImage")
+        name: m.top.findNode("accountBadgeName")
+    }
     m.clock = m.top.findNode("clock")
     m.accountDropdownMenu = m.top.findNode("accountDropdownMenu")
     m.focusableHeaderButtons = []
@@ -66,6 +70,8 @@ sub initStyle()
     m.settingsButton.headerBgColor = headerBgColor
     m.userMenuButton.headerBgColor = headerBgColor
     m.accountDropdownMenu.headerBgColor = headerBgColor
+    m.accountBadgeNodes.ring.blendColor = palette.control.accountDropdownBackground
+    m.accountBadgeNodes.glass.blendColor = palette.control.headerGlass
     m.accountDropdownMenu.items = getAccountDropdownItems()
 end sub
 
@@ -380,16 +386,35 @@ sub updateAccountBadge()
     keys = SettingsStore_Keys()
     showBadge = SettingsStore_GetSettingValue(m.top.settings, keys.displayAccountBadge) = "on"
     request = m.top.userIdentityRequest
-    m.accountBadge.visible = showBadge and request <> invalid
-    if m.accountBadge.visible <> true then return
+    m.accountBadgeNodes.group.visible = showBadge and request <> invalid
+    if m.accountBadgeNodes.group.visible <> true then return
 
     imageUri = "pkg:/images/cast/cast-placeholder-195x195.png"
-    if SafeString(request.primaryImageTag, "") <> "" then imageUri = AccountImage_GetUri(request, 128, 128)
-    MaskAssets_Apply(m.accountBadgeImageMask, "account-menu-user-mask.png", [64, 64], [43, 43])
-    m.accountBadgeImage.width = m.accountBadgeImageMask.maskSize[0]
-    m.accountBadgeImage.height = m.accountBadgeImageMask.maskSize[1]
-    m.accountBadgeImage.uri = imageUri
-    m.accountBadgeName.text = m.top.username
+    if SafeString(request.primaryImageTag, "") <> "" then imageUri = AccountImage_GetUri(request, 192, 192)
+    MaskAssets_Apply(m.accountBadgeNodes.imageMask, "account-badge-user-mask.png", [96, 96], [64, 64])
+    m.accountBadgeNodes.image.width = m.accountBadgeNodes.imageMask.maskSize[0]
+    m.accountBadgeNodes.image.height = m.accountBadgeNodes.imageMask.maskSize[1]
+    m.accountBadgeNodes.image.uri = imageUri
+    m.accountBadgeNodes.name.text = m.top.username
+    if MaskAssets_IsHd() then
+        m.accountBadgeNodes.ring.translation = [-2, -2]
+        m.accountBadgeNodes.ring.width = 68
+        m.accountBadgeNodes.ring.height = 68
+        m.accountBadgeNodes.ring.uri = "pkg:/images/header/account-badge-ring-68x68.png"
+        m.accountBadgeNodes.glass.translation = [-2, -2]
+        m.accountBadgeNodes.glass.width = 68
+        m.accountBadgeNodes.glass.height = 68
+        m.accountBadgeNodes.glass.uri = "pkg:/images/header/account-badge-glass-68x68.png"
+    else
+        m.accountBadgeNodes.ring.translation = [-3, -3]
+        m.accountBadgeNodes.ring.width = 102
+        m.accountBadgeNodes.ring.height = 102
+        m.accountBadgeNodes.ring.uri = "pkg:/images/header/account-badge-ring-102x102.png"
+        m.accountBadgeNodes.glass.translation = [-3, -3]
+        m.accountBadgeNodes.glass.width = 102
+        m.accountBadgeNodes.glass.height = 102
+        m.accountBadgeNodes.glass.uri = "pkg:/images/header/account-badge-glass-102x102.png"
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

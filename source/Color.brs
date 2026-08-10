@@ -48,6 +48,8 @@ function ThemeDefault() as object
             divider: &hF3F7FB33
         }
         control: {
+            accountDropdownBackground: &h010D29FF
+            headerGlass: &hE1E8F7FF
             input: &h16263BFF
             inputFocus: &h21405EFF
             badge: &h0F1A2AFF

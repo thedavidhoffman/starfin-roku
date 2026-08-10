@@ -9,6 +9,8 @@ const root = process.cwd();
 
 // Bounds are inclusive and describe the intended visible mask or focus artwork.
 const assets = {
+  "images/masks/fhd/account-badge-user-mask.png": [96, 96, [0, 0, 95, 95]],
+  "images/masks/fhd/account-menu-user-mask.png": [144, 144, [0, 0, 143, 143]],
   "images/masks/fhd/cast-mask.png": [195, 195, [0, 0, 194, 194]],
   "images/masks/fhd/person-mask.png": [399, 600, [0, 0, 398, 599]],
   "images/masks/fhd/filmography-movie-mask.png": [342, 513, [0, 0, 341, 512]],
@@ -46,6 +48,8 @@ const assets = {
 };
 
 const hdMaskAssets = {
+  "images/masks/hd/account-badge-user-mask.png": [64, 64, [0, 0, 63, 63], 96, 96],
+  "images/masks/hd/account-menu-user-mask.png": [96, 96, [0, 0, 95, 95], 144, 144],
   "images/masks/hd/cast-mask.png": [130, 130, [0, 0, 129, 129], 195, 195],
   "images/masks/hd/person-mask.png": [266, 400, [0, 0, 265, 399], 399, 600],
   "images/masks/hd/filmography-movie-mask.png": [228, 342, [0, 0, 227, 341], 342, 513],
@@ -62,6 +66,8 @@ const hdMaskAssets = {
 };
 
 const generatedMaskSources = {
+  "account-badge-user-mask.png": "images/header/account-badge-user-mask-96x96.png",
+  "account-menu-user-mask.png": "images/header/account-menu-user-mask-144x144.png",
   "cast-mask.png": "images/cast/cast-mask-195x195.png",
   "person-mask.png": "images/cast/person-mask-399x600.png",
   "filmography-movie-mask.png": "images/cast/filmography-movie-mask-342x513.png",
@@ -78,6 +84,7 @@ const generatedMaskSources = {
 };
 
 const geometryChecks = {
+  "components/pages/Header/Header.brs": ["MaskAssets_Apply(m.accountBadgeNodes.imageMask, \"account-badge-user-mask.png\", [96, 96], [64, 64])"],
   "components/pages/Video/Cast/CastItem/CastItem.brs": ["MaskAssets_GetProfile(\"cast-mask.png\", [195, 195], [130, 130])"],
   "components/pages/Video/Cast/Person/Person.brs": ["MaskAssets_Apply(m.top.findNode(\"personImageMask\"), \"person-mask.png\", [399, 600], [266, 400])"],
   "components/pages/Video/Cast/Filmography/Filmography.brs": ["MaskAssets_Apply(m.top.findNode(\"previewPosterMask\"), \"filmography-movie-mask.png\", [342, 513], [228, 342])"],
