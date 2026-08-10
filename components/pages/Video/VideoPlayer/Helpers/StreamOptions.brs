@@ -289,6 +289,7 @@ sub applyChapterSelection(selection as dynamic)
     end if
 
     stopSeekTimers()
+    logPlaybackSeekRequest("chapterSelection", targetPosition)
     m.playback.isSeeking = false
     m.playback.previewPosition = targetPosition
     m.playback.position = targetPosition

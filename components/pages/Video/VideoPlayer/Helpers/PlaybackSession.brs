@@ -6,6 +6,7 @@ sub onPlayRequestChanged()
     if request = invalid then return
 
     isRecoveryRestart = m.recovery.internalRestartPending = true
+    logPlaybackRequest(request, isRecoveryRestart)
     stopPlayback(isRecoveryRestart)
     isRecoveryRestart = beginPlaybackRecoveryRequest(request)
 #if playbackChaosMonkey
@@ -167,6 +168,7 @@ end function
 sub restartCurrentPlayback()
     stopSeekTimers()
     targetPosition = 0
+    logPlaybackSeekRequest("restartCurrentPlayback", targetPosition)
     m.playback.isSeeking = false
     m.playback.previewPosition = targetPosition
     m.playback.position = targetPosition
@@ -283,7 +285,7 @@ end sub
 ' startVideoContent
 '-------------------------------------------------------------------------------
 sub startVideoContent(content as object, response as object, startPositionSeconds as integer)
-    m.log.write("Assigning video content itemId=" + m.session.itemId + " streamFormat=" + SafeString(response.streamFormat, "") + " startPosition=" + SafeString(startPositionSeconds, ""))
+    logPlaybackContentAssignment(response, startPositionSeconds)
     m.videoPlayer.content = content
     m.top.setFocus(true)
     disableScreenSaver()

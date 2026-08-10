@@ -216,6 +216,7 @@ sub commitSeek()
     if m.playback.isSeeking <> true then return
 
     stopSeekTimers()
+    logPlaybackSeekRequest("progressSeekCommit", m.playback.previewPosition)
     m.videoPlayer.seek = m.playback.previewPosition
     m.videoPlayer.control = "resume"
     m.playback.isSeeking = false
@@ -289,6 +290,7 @@ sub seekToLast5Seconds()
 
     stopSeekTimers()
     m.playback.isSeeking = false
+    logPlaybackSeekRequest("seekToLast5Seconds", targetPosition)
     m.videoPlayer.seek = targetPosition
     m.playback.position = targetPosition
     m.playback.previewPosition = targetPosition
@@ -369,6 +371,7 @@ sub skipPlayback(offsetSeconds as integer)
 
     stopSeekTimers()
     targetPosition = clampSeconds(m.videoPlayer.position + offsetSeconds, 0, m.playback.duration)
+    logPlaybackSeekRequest("skipPlayback:" + SafeString(offsetSeconds, ""), targetPosition)
     m.playback.isSeeking = false
     m.playback.previewPosition = targetPosition
     m.playback.position = targetPosition

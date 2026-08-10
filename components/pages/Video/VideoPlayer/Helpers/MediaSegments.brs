@@ -164,6 +164,7 @@ sub onSkipIntroSelected()
     m.playback.previewPosition = targetPosition
     m.playbackControls.position = targetPosition
     m.playbackControls.previewPosition = targetPosition
+    logPlaybackSeekRequest("skipIntro", targetPosition)
     m.videoPlayer.seek = targetPosition
     m.videoPlayer.control = "resume"
     m.top.setFocus(true)

@@ -98,6 +98,7 @@ sub initReferences()
     m.trickplayPreloadRequest = invalid
     initMediaSegments()
     initPlaybackRecovery()
+    initPlaybackDiagnostics()
 #if playbackChaosMonkey
     initPlaybackChaosMonkey()
 #endif
@@ -163,7 +164,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onVideoStateChanged()
     state = LCase(SafeString(m.videoPlayer.state, ""))
-    m.log.write("Video state changed state=" + state + " position=" + SafeString(m.videoPlayer.position, ""))
+    diagnosePlaybackState(state)
     updateBufferingSpinner(state)
     onPlaybackRecoveryStateChanged(state)
 #if playbackChaosMonkey
@@ -226,6 +227,7 @@ sub onVideoPositionChanged()
     if m.playback.waitingForStartPosition and position <= 0 then return
 
     m.playback.waitingForStartPosition = false
+    diagnosePlaybackPosition(position)
     m.playback.position = position
     recordPlaybackRecoveryPosition(position)
     updateSkipIntroButton(position)
