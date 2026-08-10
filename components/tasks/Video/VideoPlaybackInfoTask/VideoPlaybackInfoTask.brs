@@ -11,8 +11,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
+    requestId = getPlaybackRequestId(request)
     validationError = validateRequest(request)
     if validationError <> invalid then
+        validationError.AddReplace("requestId", requestId)
         m.top.response = validationError
         return
     end if
@@ -59,6 +61,7 @@ sub executeRequest()
     if result.ok <> true then
         logPlaybackError(result)
         result.AddReplace("action", "playbackInfo")
+        result.AddReplace("requestId", requestId)
         m.top.response = result
         return
     end if
@@ -68,6 +71,7 @@ sub executeRequest()
     streamInfo = buildStreamInfo(request, result.data, requestedAudioStreamIndex, requestedSubtitleStreamIndex)
     if streamInfo.ok <> true then
         m.log.error(streamInfo.errorMessage)
+        streamInfo.AddReplace("requestId", requestId)
         m.top.response = streamInfo
         return
     end if
@@ -78,6 +82,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "playbackInfo"
+        requestId: requestId
         payload: result.data
         item: request.item
         streamUrl: streamInfo.streamUrl
@@ -87,6 +92,14 @@ sub executeRequest()
         startPositionTicks: getStartPositionTicks(request)
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestId
+'-------------------------------------------------------------------------------
+function getPlaybackRequestId(request as dynamic) as integer
+    if request = invalid then return -1
+    return Number_ToInteger(request.requestId, -1)
+end function
 
 '-------------------------------------------------------------------------------
 ' buildPlaybackIdentity

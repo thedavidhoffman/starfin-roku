@@ -44,6 +44,7 @@ sub initReferences()
         hasEmittedFinalProgress: false
         closeAfterStopReport: false
         waitingForStartPosition: false
+        requestId: 0
         previewPosition: 0
         position: 0
         duration: 0

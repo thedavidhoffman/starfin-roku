@@ -5,6 +5,8 @@ sub onPlayRequestChanged()
     request = m.top.playRequest
     if request = invalid then return
 
+    m.playback.requestId = m.playback.requestId + 1
+    request.AddReplace("requestId", m.playback.requestId)
     isRecoveryRestart = m.recovery.internalRestartPending = true
     logPlaybackRequest(request, isRecoveryRestart)
     stopPlayback(isRecoveryRestart)
@@ -25,6 +27,11 @@ end sub
 sub onPlaybackInfoResponse()
     response = m.playbackInfoTask.response
     if response = invalid then return
+    responseRequestId = Number_ToInteger(response.requestId, -1)
+    if responseRequestId <> m.playback.requestId then
+        m.log.write("Ignoring stale playback info response responseRequestId=" + SafeString(responseRequestId, "") + " currentRequestId=" + SafeString(m.playback.requestId, ""))
+        return
+    end if
 
 #if playbackChaosMonkey
     if response.ok = true and consumePlaybackChaosMonkeyStartupFailure() then return
