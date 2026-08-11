@@ -13,7 +13,6 @@ sub init()
         m.top.findNode("videoPanel")
         m.top.findNode("collectionsPanel")
         m.top.findNode("playlistsPanel")
-        m.top.findNode("integrationsPanel")
     ]
     m.settingsControls = {
         displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
@@ -28,14 +27,13 @@ sub init()
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
     }
     m.categoryControls = [
-        [m.settingsControls.displayAccountBadgeOptions]
+        [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
         [m.settingsControls.mediaShellBackgroundOptions]
         [m.settingsControls.tvLibraryOptions, m.settingsControls.tvEpisodeListDisplayOptions]
         [m.settingsControls.movieLibraryOptions]
         [m.settingsControls.videoStreamingModeOptions]
         [m.settingsControls.collectionCardsImageTypeOptions, m.settingsControls.collectionItemsImageTypeOptions]
         [m.settingsControls.playlistImageTypeOptions]
-        [m.settingsControls.tmdbApiKeyInput]
     ]
     m.focusState = {
         categoryIndex: 0
@@ -79,7 +77,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initCategoryList()
     content = CreateObject("roSGNode", "ContentNode")
-    for each title in ["System", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Integrations"]
+    for each title in ["Global", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists"]
         item = content.createChild("ContentNode")
         item.title = title
     end for
@@ -503,7 +501,7 @@ sub onKeyboardDialogButtonSelected()
 
     scene.dialog = invalid
     m.focusState.activeKeyboardField = invalid
-    focusCategoryControl(0, invalid)
+    focusCategoryControl(m.focusState.controlIndex, invalid)
 end sub
 
 '-------------------------------------------------------------------------------

@@ -124,6 +124,7 @@ function getGlobalRegistrySection() as object
         entries: [
             { key: "active-account-key", value: AuthStore_GetActiveAccountKey() }
             { key: "last-server", value: AuthStore_GetLastServer() }
+            { key: keys.displayAccountBadge, value: SettingsStore_LoadGlobal(keys.displayAccountBadge) }
             { key: keys.tmdbApiKey, value: truncateText(SettingsStore_LoadIntegration(keys.tmdbApiKey), 40) }
         ]
     }
