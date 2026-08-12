@@ -126,16 +126,16 @@ end sub
 '-------------------------------------------------------------------------------
 ' onAccountFocused
 '-------------------------------------------------------------------------------
-sub onAccountFocused()
+sub onAccountFocused(event as object)
     saveFocusedAccount()
-    updateChevrons()
+    updateChevrons(event.getData())
 end sub
 
 '-------------------------------------------------------------------------------
 ' updateChevrons
 '-------------------------------------------------------------------------------
-sub updateChevrons()
-    overflow = getAccountOverflowState()
+sub updateChevrons(focused = invalid as dynamic)
+    overflow = getAccountOverflowState(focused)
     m.leftChevron.visible = overflow.left
     m.rightChevron.visible = overflow.right
 end sub
@@ -143,7 +143,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' getAccountOverflowState
 '-------------------------------------------------------------------------------
-function getAccountOverflowState() as object
+function getAccountOverflowState(focused = invalid as dynamic) as object
     state = { left: false, right: false }
     visibleItemCount = m.layoutState.visibleItemCount
 
@@ -156,18 +156,15 @@ function getAccountOverflowState() as object
     itemCount = row.getChildCount()
     if itemCount <= visibleItemCount then return state
 
-    focused = m.accountRows.rowItemFocused
+    if focused = invalid then focused = m.accountRows.rowItemFocused
     finalWindowStart = itemCount - visibleItemCount
     windowStart = m.accountState.windowStart
     if windowStart = invalid then windowStart = 0
 
     if focused <> invalid and focused.Count() >= 2 then
         focusedIndex = focused[1]
-        if focusedIndex < windowStart then
-            windowStart = focusedIndex
-        else if focusedIndex >= windowStart + visibleItemCount then
-            windowStart = focusedIndex - visibleItemCount + 1
-        end if
+        centerOffset = Number_ToInteger(visibleItemCount / 2, 0)
+        windowStart = focusedIndex - centerOffset
     end if
 
     if windowStart < 0 then windowStart = 0
