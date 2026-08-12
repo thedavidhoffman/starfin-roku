@@ -68,7 +68,7 @@ sub executeRequest()
 
     logPlaybackResponse(result.data)
 
-    streamInfo = buildStreamInfo(request, result.data, requestedAudioStreamIndex, requestedSubtitleStreamIndex)
+    streamInfo = buildStreamInfo(request, result.data, requestedAudioStreamIndex, requestedSubtitleStreamIndex, playbackFlags)
     if streamInfo.ok <> true then
         m.log.error(streamInfo.errorMessage)
         streamInfo.AddReplace("requestId", requestId)
@@ -249,6 +249,14 @@ function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, for
         }
     end if
 
+    if playbackMode = "directPlay" then
+        return {
+            enableDirectPlay: true
+            enableDirectStream: false
+            enableTranscoding: false
+        }
+    end if
+
     if playbackMode = "transcodeAllowRemux" or (playbackMode = "automatic" and (forceTranscode = true or forceStreamSelection = true)) then
         enableDirectStream = true
         if playbackMode = "automatic" and forceTranscode = true then enableDirectStream = false
@@ -363,7 +371,7 @@ end function
 '-------------------------------------------------------------------------------
 ' buildStreamInfo
 '-------------------------------------------------------------------------------
-function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAudioStreamIndex as integer, requestedSubtitleStreamIndex as integer) as object
+function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAudioStreamIndex as integer, requestedSubtitleStreamIndex as integer, playbackFlags as object) as object
     mediaSource = firstMediaSource(playbackInfo)
     if mediaSource = invalid then
         return { ok: false, action: "playbackInfo", errorMessage: "The selected item has no playable media source." }
@@ -372,14 +380,13 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
     mediaSourceId = SafeString(mediaSource.Id, "")
     container = SafeString(mediaSource.Container, "")
     playSessionId = SafeString(playbackInfo.PlaySessionId, "")
-    streamUrl = SafeString(mediaSource.TranscodingUrl, "")
+    transcodingUrl = SafeString(mediaSource.TranscodingUrl, "")
     audioStreamIndex = getResolvedAudioStreamIndex(mediaSource, requestedAudioStreamIndex)
-    if streamUrl <> "" then
-        streamUrl = buildServerUrl(request.server, streamUrl)
-        if requestedSubtitleStreamIndex >= -1 then streamUrl = Url_SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
-        streamFormat = "hls"
-        playbackMethod = getTranscodingPlaybackMethod(mediaSource)
-    else
+    directPlaySupported = mediaSource.SupportsDirectPlay = true
+    directPlayAllowed = playbackFlags.enableDirectPlay = true
+    transcodingAllowed = playbackFlags.enableDirectStream = true or playbackFlags.enableTranscoding = true
+
+    if directPlayAllowed and directPlaySupported then
         streamFormat = getStreamFormat(container)
         if isLiveTvPlaybackRequest(request) = true and isHttpDirectMediaSource(mediaSource) then
             streamUrl = buildHttpDirectStreamUrl(request.server, mediaSource.Path)
@@ -396,6 +403,24 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
             streamUrl = request.server + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
         end if
         playbackMethod = "DirectPlay"
+        m.log.write("Playback selection chose DirectPlay because the request allows direct play and Jellyfin reported SupportsDirectPlay=true alternativeHlsAvailable=" + boolToText(transcodingUrl <> ""))
+    else if transcodingAllowed and transcodingUrl <> "" then
+        streamUrl = buildServerUrl(request.server, transcodingUrl)
+        if requestedSubtitleStreamIndex >= -1 then streamUrl = Url_SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
+        streamFormat = "hls"
+        playbackMethod = getTranscodingPlaybackMethod(mediaSource)
+        m.log.write("Playback selection chose HLS directPlayAllowed=" + boolToText(directPlayAllowed) + " supportsDirectPlay=" + boolToText(directPlaySupported) + " playbackMethod=" + playbackMethod)
+    else
+        mode = getPlaybackMode(request)
+        if mode = "directPlay" then
+            errorMessage = "Direct Play was requested, but Jellyfin reported that the selected media source does not support it."
+        else if directPlayAllowed and directPlaySupported <> true then
+            errorMessage = "Jellyfin did not provide a playable stream for the selected media source."
+        else
+            errorMessage = "Jellyfin did not provide the required transcoding stream."
+        end if
+        m.log.error("Playback selection failed mode=" + mode + " directPlayAllowed=" + boolToText(directPlayAllowed) + " supportsDirectPlay=" + boolToText(directPlaySupported) + " transcodingAllowed=" + boolToText(transcodingAllowed) + " transcodingUrlAvailable=" + boolToText(transcodingUrl <> ""))
+        return { ok: false, action: "playbackInfo", errorMessage: errorMessage }
     end if
 
     return {

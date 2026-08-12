@@ -27,7 +27,7 @@ sub logPlaybackContentAssignment(response as dynamic, startPosition as dynamic)
     m.playbackDiagnostics.expectedPosition = Number_ToFloat(startPosition, 0)
     m.playbackDiagnostics.expectedReason = "contentAssignment"
 
-    m.log.write("Playback content assignment itemId=" + m.session.itemId + " playSessionId=" + m.session.playSessionId + " method=" + SafeString(response.playMethod, "") + " format=" + SafeString(response.streamFormat, "") + " startPosition=" + SafeString(startPosition, ""))
+    m.log.write("Playback content assignment itemId=" + m.session.itemId + " playSessionId=" + m.session.playSessionId + " method=" + SafeString(response.playbackIdentity.playMethod, "") + " format=" + SafeString(response.streamFormat, "") + " startPosition=" + SafeString(startPosition, ""))
 end sub
 
 '-------------------------------------------------------------------------------
