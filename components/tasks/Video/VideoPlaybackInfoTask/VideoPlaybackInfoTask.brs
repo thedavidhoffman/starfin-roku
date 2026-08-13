@@ -40,12 +40,12 @@ sub executeRequest()
         EnableDirectPlay: playbackFlags.enableDirectPlay
         EnableDirectStream: playbackFlags.enableDirectStream
         EnableTranscoding: playbackFlags.enableTranscoding
-        AllowVideoStreamCopy: playbackMode <> "transcodeNoRemux"
+        AllowVideoStreamCopy: playbackMode <> "automaticNoRemux" and playbackMode <> "transcodeNoRemux"
         AllowAudioStreamCopy: true
     }
 
-    if playbackMode = "automatic" and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
-    if playbackMode = "automatic" and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
+    if (playbackMode = "automatic" or playbackMode = "automaticNoRemux") and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    if (playbackMode = "automatic" or playbackMode = "automaticNoRemux") and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
     m.log.write("Device profile display cap width=" + SafeString(displaySize.width, "") + " height=" + SafeString(displaySize.height, "") + " source=" + SafeString(displaySize.source, ""))
     m.log.write("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
     m.log.write("Requested video mode=" + playbackMode)
@@ -233,7 +233,7 @@ function getPlaybackMode(request as dynamic) as string
     if request = invalid or request.videoMode = invalid then return "automatic"
 
     mode = SafeString(request.videoMode, "")
-    if mode = "automatic" or mode = "directPlay" or mode = "transcodeAllowRemux" or mode = "transcodeNoRemux" then return mode
+    if mode = "automatic" or mode = "automaticNoRemux" or mode = "transcodeAllowRemux" or mode = "transcodeNoRemux" then return mode
     return "automatic"
 end function
 
@@ -249,11 +249,11 @@ function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, for
         }
     end if
 
-    if playbackMode = "directPlay" then
+    if playbackMode = "automaticNoRemux" then
         return {
-            enableDirectPlay: true
+            enableDirectPlay: forceTranscode <> true and forceStreamSelection <> true
             enableDirectStream: false
-            enableTranscoding: false
+            enableTranscoding: true
         }
     end if
 
@@ -412,9 +412,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         m.log.write("Playback selection chose HLS directPlayAllowed=" + boolToText(directPlayAllowed) + " supportsDirectPlay=" + boolToText(directPlaySupported) + " playbackMethod=" + playbackMethod)
     else
         mode = getPlaybackMode(request)
-        if mode = "directPlay" then
-            errorMessage = "Direct Play was requested, but Jellyfin reported that the selected media source does not support it."
-        else if directPlayAllowed and directPlaySupported <> true then
+        if directPlayAllowed and directPlaySupported <> true then
             errorMessage = "Jellyfin did not provide a playable stream for the selected media source."
         else
             errorMessage = "Jellyfin did not provide the required transcoding stream."

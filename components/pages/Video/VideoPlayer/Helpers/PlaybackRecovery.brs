@@ -69,7 +69,7 @@ end sub
 function getRecoveryRequestMode(request as dynamic) as string
     if request = invalid then return "automatic"
     mode = SafeString(request.videoMode, "automatic")
-    if mode = "directPlay" or mode = "transcodeAllowRemux" or mode = "transcodeNoRemux" then return mode
+    if mode = "automaticNoRemux" or mode = "transcodeAllowRemux" or mode = "transcodeNoRemux" then return mode
     return "automatic"
 end function
 
@@ -223,12 +223,18 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
 
     nextMode = ""
     attemptKind = ""
-    if m.recovery.sameModeRetryUsed <> true then
+    playMethod = ""
+    if reason <> "playbackInfo" then playMethod = getRecoveryPlayMethod(request)
+    shouldForceNoRemux = playMethod = "" or playMethod = "directplay"
+    if m.recovery.originalMode = "automaticNoRemux" and m.recovery.effectiveMode = "automaticNoRemux" and shouldForceNoRemux then
+        nextMode = "transcodeNoRemux"
+        attemptKind = "fullTranscode"
+    else if m.recovery.sameModeRetryUsed <> true then
         nextMode = m.recovery.effectiveMode
         attemptKind = "sameMode"
         m.recovery.sameModeRetryUsed = true
     else if m.recovery.originalMode = "automatic" then
-        if m.recovery.effectiveMode = "automatic" or m.recovery.effectiveMode = "directPlay" then
+        if m.recovery.effectiveMode = "automatic" then
             nextMode = "transcodeAllowRemux"
             attemptKind = "allowRemux"
         else if m.recovery.effectiveMode = "transcodeAllowRemux" then
@@ -264,6 +270,15 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
     Spinner_Show(0)
     m.top.playRequest = restartRequest
     return true
+end function
+
+'-------------------------------------------------------------------------------
+' getRecoveryPlayMethod
+'-------------------------------------------------------------------------------
+function getRecoveryPlayMethod(request as object) as string
+    if m.session = invalid or m.session.playbackIdentity = invalid then return ""
+    if SafeString(m.session.itemId, "") <> SafeString(request.itemId, "") then return ""
+    return LCase(SafeString(m.session.playbackIdentity.playMethod, ""))
 end function
 
 '-------------------------------------------------------------------------------

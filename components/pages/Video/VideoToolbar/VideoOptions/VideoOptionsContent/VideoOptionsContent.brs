@@ -22,9 +22,9 @@ function buildOptions() as object
             description: "Allows Jellyfin to choose Direct Play, remuxing, or transcoding based on the file, selected audio and subtitle tracks, device capabilities, and network limits. This is the normal playback mode and balances original quality, compatibility, and server processing."
         }
         {
-            key: "directPlay"
-            label: "Direct Play"
-            description: "Plays the original file without changing its container, video, or audio. Preserves the original quality and uses the least server processing, but requires the device and network to support the file."
+            key: "automaticNoRemux"
+            label: "Automatic (Remux Disabled)"
+            description: "Prefers Direct Play. When Direct Play is unavailable, Jellyfin fully converts the video instead of copying it into a new stream. Compatible audio may still be copied. This can resolve playback, timing, keyframe, and seeking problems caused by video remuxing."
         }
         {
             key: "transcodeAllowRemux"

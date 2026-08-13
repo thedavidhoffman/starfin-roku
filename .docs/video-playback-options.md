@@ -17,7 +17,7 @@ on the title's MediaShell page when playback stops.
 | Option | Direct Play | Direct Stream | Transcoding | Video stream copy | Audio stream copy |
 | --- | --- | --- | --- | --- | --- |
 | Automatic | Enabled | Enabled | Enabled | Allowed | Allowed |
-| Direct Play | Enabled | Disabled | Disabled | Not applicable | Not applicable |
+| Automatic (Remux Disabled) | Enabled | Disabled | Enabled | Disabled | Allowed |
 | Force Transcode (Allow Remux) | Disabled | Enabled | Enabled | Allowed | Allowed |
 | Force Transcode (Remux Disabled) | Disabled | Disabled | Enabled | Disabled | Allowed |
 
@@ -26,30 +26,33 @@ Play, Direct Stream/remuxing, or transcoding based on the file, selected audio
 and subtitle tracks, device capabilities, and network limits. It also preserves
 the app's existing compatibility handling for selected streams.
 
-The Direct Play matrix row describes the normal request. If the user explicitly
-selects a non-default audio stream or enables a subtitle stream, the app allows
-Direct Stream and transcoding as a compatibility fallback so Jellyfin can honor
-that selection.
+## Automatic With Remux Disabled
 
-## Direct Play
-
-Direct Play sends Jellyfin the following controls:
+Automatic (Remux Disabled) sends Jellyfin the following controls:
 
 ```text
 EnableDirectPlay=true
 EnableDirectStream=false
-EnableTranscoding=false
-AllowVideoStreamCopy=true
+EnableTranscoding=true
+AllowVideoStreamCopy=false
 AllowAudioStreamCopy=true
 ```
 
-The stream-copy settings are not used when Jellyfin selects Direct Play. They
-remain enabled in the request because no transcoding session should be
-created.
+These are the normal request controls when the selected audio is compatible
+and no non-default audio stream requires explicit selection. The app disables
+Direct Play when its Roku capability check determines that selected
+multichannel AAC must be converted, or when a non-default audio stream is
+selected. Direct Stream and video stream copying remain disabled in either
+case.
 
-Without an explicit audio or subtitle selection that requires conversion, the
-resulting playback should use the original file without changing its container,
-video stream, or audio stream.
+Jellyfin may Direct Play the original file when the complete file and selected
+tracks are compatible. If Direct Play is unavailable, Jellyfin must provide a
+transcoding stream and may not copy the video stream into it. This preserves
+original quality and avoids server processing when Direct Play is possible,
+while avoiding the video-remux path when fallback conversion is required.
+
+Audio stream copying remains allowed. Jellyfin may copy compatible audio or
+encode incompatible audio according to the Roku device profile.
 
 ## Force Transcode With Remux Allowed
 
@@ -98,6 +101,28 @@ Audio stream copying remains allowed because this option specifically requires
 Jellyfin to rebuild the video stream. Jellyfin may still encode audio when the
 source audio is incompatible with the Roku device profile.
 
+## HEVC Video With Multichannel AAC
+
+An HEVC SDR video may be compatible with Roku while its AAC 5.1 audio is not.
+Automatic playback can therefore produce a partial transcode that copies the
+HEVC video while converting the audio:
+
+```text
+-codec:v:0 copy
+-codec:a:0 libfdk_aac -ac 2
+```
+
+Although the video codec is device-compatible, converting the audio prevents
+whole-file Direct Play. Jellyfin rebuilds the output as HLS while retaining the
+original video packets, timestamps, and keyframe layout. Timestamp or segment
+handling on this copied-video path can cause seeking errors or repeated frames.
+
+Automatic (Remux Disabled) still allows Direct Play when the complete file is
+compatible. When fallback is necessary, `AllowVideoStreamCopy=false` makes
+Jellyfin encode the video and generate a new video timeline and keyframe
+structure. The incompatible AAC 5.1 audio is converted normally; compatible
+audio would remain eligible for copying.
+
 ## Verifying Jellyfin Behavior
 
 Inspect the Jellyfin transcoding URL and FFmpeg command after starting
@@ -117,7 +142,7 @@ Audio may be copied or encoded independently.
 
 ### Remux Disabled
 
-The transcoding URL should contain:
+For either Remux Disabled mode, a transcoding URL should contain:
 
 ```text
 allowVideoStreamCopy=false
@@ -145,11 +170,13 @@ successfully.
 For playback stalls, broken seeking, timing errors, repeated scenes, or
 incorrect playback starts, test the options in this order:
 
-1. **Force Transcode (Remux Disabled)** to re-encode the video and create new
-   keyframes and HLS segments while potentially normalizing timing behavior.
-2. **Force Transcode (Allow Remux)** to determine whether repackaging alone is
+1. **Automatic (Remux Disabled)** to retain Direct Play for wholly compatible
+   files while encoding video whenever fallback is required.
+2. **Force Transcode (Remux Disabled)** to require video encoding even when the
+   original file could Direct Play.
+3. **Force Transcode (Allow Remux)** to determine whether repackaging alone is
    sufficient.
-3. **Direct Play** as a baseline using the original file.
+4. **Automatic** as the normal baseline that permits every playback method.
 
 If Remux Disabled works but Allow Remux does not, the source video stream or
 its timestamp or keyframe structure is more likely to be involved than the

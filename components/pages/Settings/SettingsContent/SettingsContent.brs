@@ -116,7 +116,7 @@ end sub
 ' initVideoStreamingModeOptions
 '-------------------------------------------------------------------------------
 sub initVideoStreamingModeOptions()
-    setOptionTitles(m.settingsControls.videoStreamingModeOptions, ["Automatic", "Direct Play", "Force Transcode (Allow Remux)", "Force Transcode (Remux Disabled)"])
+    setOptionTitles(m.settingsControls.videoStreamingModeOptions, ["Automatic", "Automatic (Remux Disabled)", "Force Transcode (Allow Remux)", "Force Transcode (Remux Disabled)"])
 end sub
 
 '-------------------------------------------------------------------------------
@@ -437,7 +437,7 @@ sub setVideoStreamingModeOption(value as dynamic)
     mode = "automatic"
     if value <> invalid and value <> "" then mode = value.ToStr()
     selectedIndex = 0
-    if mode = "directPlay" then
+    if mode = "automaticNoRemux" then
         selectedIndex = 1
     else if mode = "transcodeAllowRemux" then
         selectedIndex = 2
@@ -453,7 +453,7 @@ end sub
 ' getVideoStreamingModeDescription
 '-------------------------------------------------------------------------------
 function getVideoStreamingModeDescription(index as integer) as string
-    if index = 1 then return "Plays the original file without changing its container, video, or audio. Preserves the original quality and uses the least server processing, but requires the device and network to support the file."
+    if index = 1 then return "Prefers Direct Play. When Direct Play is unavailable, Jellyfin fully converts the video instead of copying it into a new stream. Compatible audio may still be copied. This can resolve playback, timing, keyframe, and seeking problems caused by video remuxing."
     if index = 2 then return "Disables Direct Play. Jellyfin may repackage compatible video or audio without converting it, while transcoding anything the device cannot play. This can improve compatibility while preserving quality where possible."
     if index = 3 then return "Disables Direct Play and forces Jellyfin to convert the video to a supported format, usually H.264. This uses more server processing and may reduce quality, but can resolve playback, timing, keyframe, and seeking problems."
     return "Allows Jellyfin to choose Direct Play, remuxing, or transcoding based on the file, selected audio and subtitle tracks, device capabilities, and network limits. This is the normal playback mode and balances original quality, compatibility, and server processing."
@@ -463,7 +463,7 @@ end function
 ' getVideoStreamingModeForIndex
 '-------------------------------------------------------------------------------
 function getVideoStreamingModeForIndex(index as integer) as string
-    if index = 1 then return "directPlay"
+    if index = 1 then return "automaticNoRemux"
     if index = 2 then return "transcodeAllowRemux"
     if index = 3 then return "transcodeNoRemux"
     return "automatic"

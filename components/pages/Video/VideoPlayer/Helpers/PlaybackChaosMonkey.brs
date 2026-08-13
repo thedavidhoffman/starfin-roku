@@ -144,8 +144,9 @@ end sub
 ' getPlaybackChaosMonkeyFollowupLimit
 '-------------------------------------------------------------------------------
 function getPlaybackChaosMonkeyFollowupLimit() as integer
+    if m.recovery.originalMode = "automaticNoRemux" then return 1
     if m.recovery.originalMode <> "automatic" then return 0
-    if m.recovery.effectiveMode = "automatic" or m.recovery.effectiveMode = "directPlay" then return 2
+    if m.recovery.effectiveMode = "automatic" then return 2
     if m.recovery.effectiveMode = "transcodeAllowRemux" then return 1
     return 0
 end function

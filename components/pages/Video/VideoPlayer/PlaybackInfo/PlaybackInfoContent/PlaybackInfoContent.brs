@@ -132,7 +132,7 @@ end function
 function playbackModeText(value as dynamic) as string
     mode = LCase(SafeString(value, ""))
     if mode = "automatic" then return "Automatic"
-    if mode = "directplay" then return "Direct Play"
+    if mode = "automaticnoremux" then return "Automatic — Remux Disabled"
     if mode = "transcodeallowremux" then return "Force Transcode — Remux Allowed"
     if mode = "transcodenoremux" then return "Force Transcode — Remux Disabled"
     return "Not available"
