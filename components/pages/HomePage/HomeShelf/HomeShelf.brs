@@ -4,8 +4,13 @@
 sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.items = m.top.findNode("items")
+    m.focusState = {
+        isHd: ResolutionProfile_IsHd()
+        layoutFilename: ""
+    }
 
     m.items.observeField("rowItemSelected", "onRowItemSelected")
+    m.items.observeField("rowItemFocused", "onRowItemFocused")
     m.items.observeField("focusExitUp", "onFocusExitUp")
     m.items.observeField("focusExitDown", "onFocusExitDown")
     onFocusExitAvailabilityChanged()
@@ -74,6 +79,29 @@ function applyMediaStateChange(change as object) as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' applyPlaybackProgressChange
+'-------------------------------------------------------------------------------
+function applyPlaybackProgressChange(change as object) as boolean
+    rowContent = m.top.rowContent
+    if rowContent = invalid then return false
+
+    didApply = false
+    for i = 0 to rowContent.getChildCount() - 1
+        itemNode = rowContent.getChild(i)
+        item = itemNode.raw
+        if item <> invalid and SafeString(item.Id, "") = SafeString(change.itemId, "") then
+            updatedItem = cloneMediaItem(item)
+            if PlaybackProgress_ApplyChangeToItem(updatedItem, change) then
+                itemNode.raw = updatedItem
+                didApply = true
+            end if
+        end if
+    end for
+
+    return didApply
+end function
+
+'-------------------------------------------------------------------------------
 ' cloneMediaItem
 '-------------------------------------------------------------------------------
 function cloneMediaItem(item as object) as object
@@ -127,7 +155,30 @@ sub onLayoutChanged()
     m.items.itemSize = [layout.itemSizeWidth, layout.height]
     m.items.rowItemSize = [[layout.width, layout.height]]
     m.items.rowItemSpacing = [[layout.itemSpacing, 0]]
-    m.items.focusBitmapUri = layout.focusBitmapUri
+    m.focusState.layoutFilename = layout.focusBitmapFilename
+    applyFocusBitmapUri()
+end sub
+
+'-------------------------------------------------------------------------------
+' onRowItemFocused
+'-------------------------------------------------------------------------------
+sub onRowItemFocused()
+    applyFocusBitmapUri()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyFocusBitmapUri
+'-------------------------------------------------------------------------------
+sub applyFocusBitmapUri()
+    focusBitmapFilename = m.focusState.layoutFilename
+    if m.focusState.isHd and focusBitmapFilename = "home-page-my-media-thumbnail-focus.png" then
+        focused = m.items.rowItemFocused
+        if focused <> invalid and focused.Count() >= 2 and focused[1] = 0 then
+            focusBitmapFilename = "home-page-my-media-first-focus.png"
+        end if
+    end if
+
+    m.items.focusBitmapUri = HomepageAssets_GetUri(focusBitmapFilename)
 end sub
 
 '-------------------------------------------------------------------------------

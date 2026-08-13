@@ -396,24 +396,24 @@ sub updateAccountBadge()
     m.accountBadgeNodes.image.height = m.accountBadgeNodes.imageMask.maskSize[1]
     m.accountBadgeNodes.image.uri = imageUri
     m.accountBadgeNodes.name.text = m.top.username
-    if MaskAssets_IsHd() then
+    if ResolutionProfile_IsHd() then
         m.accountBadgeNodes.ring.translation = [-2, -2]
         m.accountBadgeNodes.ring.width = 68
         m.accountBadgeNodes.ring.height = 68
-        m.accountBadgeNodes.ring.uri = "pkg:/images/header/account-badge-ring-68x68.png"
+        m.accountBadgeNodes.ring.uri = HeaderAssets_GetUri("account-badge-ring.png")
         m.accountBadgeNodes.glass.translation = [-2, -2]
         m.accountBadgeNodes.glass.width = 68
         m.accountBadgeNodes.glass.height = 68
-        m.accountBadgeNodes.glass.uri = "pkg:/images/header/account-badge-glass-68x68.png"
+        m.accountBadgeNodes.glass.uri = HeaderAssets_GetUri("account-badge-glass.png")
     else
         m.accountBadgeNodes.ring.translation = [-3, -3]
         m.accountBadgeNodes.ring.width = 102
         m.accountBadgeNodes.ring.height = 102
-        m.accountBadgeNodes.ring.uri = "pkg:/images/header/account-badge-ring-102x102.png"
+        m.accountBadgeNodes.ring.uri = HeaderAssets_GetUri("account-badge-ring.png")
         m.accountBadgeNodes.glass.translation = [-3, -3]
         m.accountBadgeNodes.glass.width = 102
         m.accountBadgeNodes.glass.height = 102
-        m.accountBadgeNodes.glass.uri = "pkg:/images/header/account-badge-glass-102x102.png"
+        m.accountBadgeNodes.glass.uri = HeaderAssets_GetUri("account-badge-glass.png")
     end if
 end sub
 

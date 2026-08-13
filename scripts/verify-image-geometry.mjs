@@ -9,6 +9,9 @@ const root = process.cwd();
 
 // Bounds are inclusive and describe the intended visible mask or focus artwork.
 const assets = {
+  "images/header/fhd/account-badge-glass.png": [102, 102, [0, 0, 101, 101]],
+  "images/header/fhd/account-badge-ring.png": [102, 102, [0, 0, 101, 101]],
+  "images/icons/fhd/busy-spinner.png": [192, 192, [29, 29, 162, 162]],
   "images/masks/fhd/account-badge-user-mask.png": [96, 96, [0, 0, 95, 95]],
   "images/masks/fhd/account-menu-user-mask.png": [144, 144, [0, 0, 143, 143]],
   "images/masks/fhd/cast-mask.png": [195, 195, [0, 0, 194, 194]],
@@ -42,7 +45,6 @@ const assets = {
   "images/trickplay/preview-center-mask.png": [384, 216, [0, 0, 383, 215]],
   "images/trickplay/preview-side-mask.png": [225, 126, [0, 0, 224, 125]],
   "images/tv-season/episode-thumbnail-mask-531x300.png": [531, 300, [0, 0, 530, 299]],
-  "images/tv-show/season-poster-focus-207x354.png": [207, 354, [0, 0, 206, 313]],
   "images/tv-show/season-poster-mask-207x312.png": [207, 312, [0, 0, 206, 311]],
   "images/tv-show/season-placeholder-207x312.png": [207, 312, [0, 0, 206, 311]],
 };
@@ -65,6 +67,12 @@ const hdMaskAssets = {
   "images/masks/hd/season-poster-mask.png": [138, 208, [0, 0, 137, 207], 207, 312],
 };
 
+const hdImageAssets = {
+  "images/header/hd/account-badge-glass.png": [68, 68, [0, 0, 67, 67], 102, 102],
+  "images/header/hd/account-badge-ring.png": [68, 68, [0, 0, 67, 67], 102, 102],
+  "images/icons/hd/busy-spinner.png": [128, 128, [19, 19, 108, 108], 192, 192],
+};
+
 const generatedMaskSources = {
   "account-badge-user-mask.png": "images/header/account-badge-user-mask-96x96.png",
   "account-menu-user-mask.png": "images/header/account-menu-user-mask-144x144.png",
@@ -84,11 +92,14 @@ const generatedMaskSources = {
 };
 
 const geometryChecks = {
-  "components/pages/Header/Header.brs": ["MaskAssets_Apply(m.accountBadgeNodes.imageMask, \"account-badge-user-mask.png\", [96, 96], [64, 64])"],
+  "components/pages/Header/Header.brs": ["MaskAssets_Apply(m.accountBadgeNodes.imageMask, \"account-badge-user-mask.png\", [96, 96], [64, 64])", "ResolutionProfile_IsHd()", "HeaderAssets_GetUri(\"account-badge-ring.png\")", "HeaderAssets_GetUri(\"account-badge-glass.png\")"],
   "components/pages/Video/Cast/CastItem/CastItem.brs": ["MaskAssets_GetProfile(\"cast-mask.png\", [195, 195], [130, 130])"],
   "components/pages/Video/Cast/Person/Person.brs": ["MaskAssets_Apply(m.top.findNode(\"personImageMask\"), \"person-mask.png\", [399, 600], [266, 400])"],
   "components/pages/Video/Cast/Filmography/Filmography.brs": ["MaskAssets_Apply(m.top.findNode(\"previewPosterMask\"), \"filmography-movie-mask.png\", [342, 513], [228, 342])"],
-  "components/pages/Video/VideoMediaCard/VideoMediaCard.brs": ["if MaskAssets_IsHd() then m.contentGroup.translation = [25, 0]", "MaskAssets_Apply(m.posterMask, \"media-card-poster-mask.png\", [252, 378], [168, 252])", "MaskAssets_Apply(m.posterMask, \"media-card-thumbnail-mask.png\", [441, 249], [294, 166])"],
+  "components/pages/Video/VideoMediaCard/VideoMediaCard.brs": ["MaskAssets_Apply(m.posterMask, \"media-card-poster-mask.png\", [252, 378], [168, 252])", "MaskAssets_Apply(m.posterMask, \"media-card-thumbnail-mask.png\", [441, 249], [294, 166])"],
+  "components/controls/Spinner/Spinner.brs": ["m.spinner.uri = IconAssets_GetUri(\"busy-spinner.png\")"],
+  "source/ResolutionAssets.brs": ["ResolutionAssets_GetUri(category as string, filename as string)", "ResolutionProfile_GetName()"],
+  "source/ButtonAssets.brs": ["return ResolutionAssets_GetUri(\"buttons\", filename)"],
   "components/pages/Video/TVShow/TVSeasonCard/TVSeasonCard.brs": ["MaskAssets_Apply(m.top.findNode(\"seasonPosterMask\"), \"season-poster-mask.png\", [207, 312], [138, 208])"],
   "components/pages/Video/TVSeason/TVEpisodePoster/TVEpisodePoster.brs": ["MaskAssets_Apply(m.posterMask, \"episode-thumbnail-mask.png\", [width, height], [hdWidth, hdHeight])"],
   "components/pages/Video/VideoPlayer/TrickplayPreviewStrip/TrickplayPreviewStrip.brs": ["MaskAssets_Apply(slot.imageMask, maskFilename, [tileWidth, tileHeight], [hdTileWidth, hdTileHeight])"],
@@ -100,9 +111,9 @@ const geometryChecks = {
   "components/pages/Video/TVShow/TVShow.xml": ["itemSize=\"[207,381]\""],
   "components/pages/Music/MusicLibrary/MusicLibrary.xml": ["itemSize=\"[360,432]\""],
   "components/pages/MediaShell/MediaShell.brs": ["MaskAssets_Apply(m.mediaBackgroundPartialGroup, \"media-shell-backdrop-mask.png\", [1152, 648], [768, 432])"],
-  "source/main.brs": ["screen.GetGlobalNode().AddFields({ maskAssetProfile: MaskAssetProfile_Create() })"],
-  "source/MaskAssets.brs": ["profile = m.global.maskAssetProfile"],
-  "source/MaskAssetProfile.brs": ["uiResolution = deviceInfo.GetUIResolution()", "type(uiResolution) = \"roAssociativeArray\""],
+  "source/main.brs": ["screen.GetGlobalNode().AddFields({ resolutionProfile: ResolutionProfile_Create() })"],
+  "source/MaskAssets.brs": ["if ResolutionProfile_IsHd() then", "ResolutionAssets_GetUri(\"masks\", filename)"],
+  "source/ResolutionProfile.brs": ["deviceInfo.GetUIResolution()", "uiResolution.height <= 720", "profile = m.global.resolutionProfile", "return ResolutionProfile_GetName() = \"hd\""],
 };
 
 function decodePng(filePath) {
@@ -282,6 +293,17 @@ for (const [relativePath, [expectedWidth, expectedHeight, expectedBounds, fhdWid
   }
 }
 
+for (const [relativePath, [expectedWidth, expectedHeight, expectedBounds, fhdWidth, fhdHeight]] of Object.entries(hdImageAssets)) {
+  try {
+    const actual = decodePng(path.join(root, relativePath));
+    if (actual.width !== expectedWidth || actual.height !== expectedHeight) failures.push(`${relativePath}: expected ${expectedWidth}x${expectedHeight}, found ${actual.width}x${actual.height}`);
+    if (actual.bounds.join(",") !== expectedBounds.join(",")) failures.push(`${relativePath}: expected alpha bounds ${expectedBounds}, found ${actual.bounds}`);
+    if ((expectedWidth * 3) !== (fhdWidth * 2) || (expectedHeight * 3) !== (fhdHeight * 2)) failures.push(`${relativePath}: HD image must be exactly two-thirds of its FHD canvas`);
+  } catch (error) {
+    failures.push(`${relativePath}: ${error.message}`);
+  }
+}
+
 const expectedMaskNames = Object.keys(generatedMaskSources).sort();
 for (const resolution of ["fhd", "hd"]) {
   const directory = path.join(root, "images", "masks", resolution);
@@ -296,6 +318,19 @@ for (const [filename, sourcePath] of Object.entries(generatedMaskSources)) {
 }
 
 const referencedImages = new Set();
+const hdOnlyHomepageAssets = new Set([
+  "home-page-my-media-first-focus.png",
+]);
+
+const addHomepageAssetReference = (filename, sourcePath) => {
+  const resolutions = hdOnlyHomepageAssets.has(filename) ? ["hd"] : ["fhd", "hd"];
+  for (const resolution of resolutions) {
+    const relativeImagePath = `images/homepage/${resolution}/${filename}`;
+    referencedImages.add(relativeImagePath);
+    if (!fs.existsSync(path.join(root, relativeImagePath))) failures.push(`${sourcePath}: missing pkg:/${relativeImagePath}`);
+  }
+};
+
 const scanImageReferences = (directory) => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const entryPath = path.join(directory, entry.name);
@@ -303,10 +338,16 @@ const scanImageReferences = (directory) => {
       scanImageReferences(entryPath);
     } else if (entry.name.endsWith(".brs") || entry.name.endsWith(".xml")) {
       const contents = fs.readFileSync(entryPath, "utf8");
-      for (const match of contents.matchAll(/pkg:\/images\/[^"'\s]+/g)) {
+      for (const match of contents.matchAll(/pkg:\/images\/[^"'\s+]+\.png/g)) {
         const relativeImagePath = match[0].substring("pkg:/".length);
         referencedImages.add(relativeImagePath);
         if (!fs.existsSync(path.join(root, relativeImagePath))) failures.push(`${path.relative(root, entryPath)}: missing ${match[0]}`);
+      }
+      for (const match of contents.matchAll(/focusBitmapFilename(?::|\s*=)\s*"([^"]+)"/g)) {
+        addHomepageAssetReference(match[1], path.relative(root, entryPath));
+      }
+      for (const match of contents.matchAll(/HomepageAssets_GetUri\("([^"]+)"\)/g)) {
+        addHomepageAssetReference(match[1], path.relative(root, entryPath));
       }
     }
   }

@@ -453,14 +453,14 @@ end function
 ' getPosterLayout
 '-------------------------------------------------------------------------------
 function getPosterLayout() as object
-    return { width: 297, height: 465, itemSizeWidth: 1452, itemSpacing: -12, spacingAfter: 36, imageAspect: "poster", focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-297x465.png" }
+    return { width: 297, height: 465, itemSizeWidth: 1452, itemSpacing: -12, spacingAfter: 36, imageAspect: "poster", focusBitmapFilename: "home-page-poster-focus.png" }
 end function
 
 '-------------------------------------------------------------------------------
 ' getWideLayout
 '-------------------------------------------------------------------------------
 function getWideLayout() as object
-    return { width: 486, height: 348, itemSizeWidth: 1452, itemSpacing: -27, spacingAfter: 36, imageAspect: "wide", focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-486x348.png" }
+    return { width: 486, height: 348, itemSizeWidth: 1452, itemSpacing: -27, spacingAfter: 36, imageAspect: "wide", focusBitmapFilename: "home-page-thumbnail-focus.png" }
 end function
 
 '-------------------------------------------------------------------------------

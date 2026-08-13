@@ -573,18 +573,18 @@ end sub
 '-------------------------------------------------------------------------------
 function getRowLayout(key as string) as object
     if isMusicLatestRow(key) then
-        return { width: 345, height: 423, itemSizeWidth: 1824, itemSpacing: -24, spacingAfter: 36, focusBitmapUri: "pkg:/images/homepage/home-page-music-focus-345x423.png", itemComponentName: "HomeMusicAlbumCard" }
+        return { width: 345, height: 423, itemSizeWidth: 1824, itemSpacing: -24, spacingAfter: 36, focusBitmapFilename: "home-page-music-focus.png", itemComponentName: "HomeMusicAlbumCard" }
     end if
 
     if key = "libraries" then
-        return { width: 486, height: 306, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapUri: "pkg:/images/homepage/home-page-my-media-thumbnail-focus-486x306.png", itemComponentName: "VideoMediaCard" }
+        return { width: 486, height: 306, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapFilename: "home-page-my-media-thumbnail-focus.png", itemComponentName: "VideoMediaCard" }
     end if
 
     if getRowImageAspect(key) = "wide" then
-        return { width: 486, height: 348, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapUri: "pkg:/images/homepage/home-page-thumbnail-focus-486x348.png", itemComponentName: "VideoMediaCard" }
+        return { width: 486, height: 348, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapFilename: "home-page-thumbnail-focus.png", itemComponentName: "VideoMediaCard" }
     end if
 
-    return { width: 297, height: 465, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapUri: "pkg:/images/homepage/home-page-poster-focus-297x465.png", itemComponentName: "VideoMediaCard" }
+    return { width: 297, height: 465, itemSizeWidth: 1824, itemSpacing: -27, spacingAfter: 36, focusBitmapFilename: "home-page-poster-focus.png", itemComponentName: "VideoMediaCard" }
 end function
 
 '-------------------------------------------------------------------------------
@@ -1045,5 +1045,14 @@ end function
 sub applyMediaStateChange(change as object)
     for each shelf in m.homeState.shelfNodes
         shelf.callFunc("applyMediaStateChange", change)
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub applyPlaybackProgressChange(change as object)
+    for each shelf in m.homeState.shelfNodes
+        shelf.callFunc("applyPlaybackProgressChange", change)
     end for
 end sub

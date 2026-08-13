@@ -2,27 +2,19 @@
 ' MaskAssets_GetProfile
 '-------------------------------------------------------------------------------
 function MaskAssets_GetProfile(filename as string, fhdSize as object, hdSize as object) as object
-    if MaskAssets_IsHd() then
+    if ResolutionProfile_IsHd() then
         return {
-            uri: "pkg:/images/masks/hd/" + filename
+            uri: ResolutionAssets_GetUri("masks", filename)
             size: hdSize
             isHd: true
         }
     end if
 
     return {
-        uri: "pkg:/images/masks/fhd/" + filename
+        uri: ResolutionAssets_GetUri("masks", filename)
         size: fhdSize
         isHd: false
     }
-end function
-
-'-------------------------------------------------------------------------------
-' MaskAssets_IsHd
-'-------------------------------------------------------------------------------
-function MaskAssets_IsHd() as boolean
-    profile = m.global.maskAssetProfile
-    return profile <> invalid and profile.isHd = true
 end function
 
 '-------------------------------------------------------------------------------

@@ -6,7 +6,7 @@ sub init()
     m.spinner = m.top.findNode("spinner")
     m.showDelayTimer = m.top.findNode("showDelayTimer")
 
-    m.spinner.uri = "pkg:/images/icons/busy-spinner.png"
+    m.spinner.uri = IconAssets_GetUri("busy-spinner.png")
     m.showDelayTimer.observeField("fire", "onShowDelayTimerFire")
     m.top.visible = false
     setVisualsVisible(false)

@@ -3,7 +3,6 @@
 '-------------------------------------------------------------------------------
 sub init()
     m.contentGroup = m.top.findNode("contentGroup")
-    if MaskAssets_IsHd() then m.contentGroup.translation = [25, 0]
     m.posterMask = m.top.findNode("posterMask")
     m.poster = m.top.findNode("poster")
     m.progressBar = m.top.findNode("progressBar")

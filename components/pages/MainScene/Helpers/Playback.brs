@@ -104,6 +104,7 @@ sub playerHandlePlaybackProgressChanged()
     change = m.videoPlayer.playbackProgressChanged
     if change = invalid then return
 
+    m.homePage.callFunc("applyPlaybackProgressChange", change)
     markHomePlaybackRowsDirty()
 
     ' Keep sub-5% progress alive only for this navigation session; Jellyfin
