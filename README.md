@@ -1,19 +1,69 @@
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/thedavidhoffman)
 
-# INTRODUCTION
+# Introduction
 
-Starfin is a modern Jellyfin client for Roku devices. It provides a polished interface for
-browsing and playing movies, TV shows, music, playlists, and Live TV from your Jellyfin server.
+Starfin is a modern, full-featured Jellyfin client for Roku devices. It provides a polished interface for browsing and playing movies, TV shows, music, playlists, and Live TV from your Jellyfin server.
 
-# WHY I BUILT THIS
+![Splash](images/splash-fhd.png)
 
-I've been running Plex for well over 10+ years and with the direction that Plex is heading, I wanted to make a move. I tried Emby for 3 months and the Roku experience didn't have the level of polish I'm used to with Plex. Jellyfin was never an option for me because their Roku client is... well... let's just say, not great. Sure, there's Moonfin, and that's better, and I'm by no means taking a stab at Moonfin, but it's just not for me.
+![Home](screenshots/home.jpg)
 
-So with the help of AI, and my senior software developer skills guiding it, I created Starfin. Now if anything with the UI sucks, there's no one to blame but me. As soon as this project had legs enough to stand on its own, browse and play media, I started using/testing it as my daily driver. And I soon found that I was leaving Plex behind now that I had a Jellyfin Roku client that aligned with my wants, needs, and desires. For any AI haters out there, you do your thing, I'll do mine :) But as a well seasoned senior software engineer, AI helps accelerate what you can accomplish. This project took about 6 weeks of HEAVY work, testing, guiding the architecture, the UI, and so on. Before AI, this project would have taken months, if not a year or longer (coding it in my spare time).
+![Movies](screenshots/movies.jpg)
 
-# CAVEATS
+![Movie](screenshots/movie.jpg)
+
+![TV Series](screenshots/tv-series.jpg)
+
+![TV Season](screenshots/tv-season.jpg)
+
+![Account Switcher](screenshots/account-switcher.jpg)
+
+![Video Settings](screenshots/settings-video.jpg)
+
+## Installing
+
+In the future this app will be released on the Roku Channel Store. Until then it must be side-loaded onto your Roku device. Side-loading can sound a little intimidating at first, but it's actually pretty straightforward.
+
+### Video Instructions
+
+The official Roku Developer YouTube channel has a helpful video that walks through how to sideload a Roku app. You can skip the intro; this link starts at the 26-second mark.
+
+https://youtu.be/r9HhUIWA4L0?si=OGK6Tm1SdCcLLhN-&t=26
+
+### Written Instructions
+
+1. On the Roku remote, press `Home` three times, `Up` two times, then `Right`, `Left`, `Right`, `Left`, `Right`.
+2. Follow the on-screen prompts to enable the Developer Application Installer.
+3. When the "Developer Settings" screen displays...
+   - Note the `IP address`.
+   - Note the username (it's always `rokudev`)
+4. Read and accept the license agreement.
+5. Set and note the developer web server password.
+6. Restart the Roku device when prompted.
+
+After the Roku device restarts, upload the Starfin app:
+
+1. Find the Roku IP address under `Settings > Network > About`.
+2. Download the Starfin app zip file from the [latest Starfin GitHub release](https://github.com/thedavidhoffman/starfin-roku/releases).
+3. In a browser, open `http://ROKU_IP_ADDRESS`.
+4. Sign in with username `rokudev` and the developer password you set.
+5. Use the upload form to select the Starfin zip file from the most current release in this GitHub repository, then click `Install`.
+
+After installation, Starfin will be available from the Roku home screen.
+
+## Legal/Policies
+
+- [License](LICENSE)
+- [Privacy Policy](PRIVACY-POLICY.md)
+- [Terms of Use](TERMS-OF-USE.md)
+
+## AI Usage Disclaimer
+
+This app was built with Codex, but it was not simply "vibe coded." As a senior software engineer, I used AI to accelerate development while staying deeply involved in the implementation. The commit history on this repository reflects an active, hands-on process of guiding the work, refining generated code, making design decisions, and shaping the project toward a deliberate standard within the constraints of Roku’s BrightScript ecosystem.
+
+# Caveats
 - I've tested a library with around 2,000 movies and performance is great. I don't know how this thing will hold up with a library of 10,000 movies. That being said, if anyone out there tries this app and has a huge library, let me know how it goes.
 
-# DEVELOPMENT
+# Development
 
 See [README.DEV.md](README.DEV.md) for contributing, setup, build, deployment, debugging, and logging instructions.
