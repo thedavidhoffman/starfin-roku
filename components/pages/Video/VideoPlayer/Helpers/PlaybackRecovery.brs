@@ -2,10 +2,11 @@
 ' initPlaybackRecovery
 '-------------------------------------------------------------------------------
 sub initPlaybackRecovery()
+    modes = PlaybackMode_Values()
     m.recovery = {
         itemId: ""
-        originalMode: "automatic"
-        effectiveMode: "automatic"
+        originalMode: modes.automatic
+        effectiveMode: modes.automatic
         internalRestartPending: false
         restartInProgress: false
         sameModeRetryUsed: false
@@ -42,7 +43,7 @@ end function
 '-------------------------------------------------------------------------------
 sub resetPlaybackRecovery(request = invalid as dynamic)
     stopPlaybackRecoveryTimers()
-    mode = "automatic"
+    mode = PlaybackMode_Values().automatic
     itemId = ""
     startPosition = 0
     if request <> invalid then
@@ -67,18 +68,16 @@ end sub
 ' getRecoveryRequestMode
 '-------------------------------------------------------------------------------
 function getRecoveryRequestMode(request as dynamic) as string
-    if request = invalid then return "automatic"
-    mode = SafeString(request.videoMode, "automatic")
-    if mode = "automaticNoRemux" or mode = "transcodeAllowRemux" or mode = "transcodeNoRemux" then return mode
-    return "automatic"
+    if request = invalid then return PlaybackMode_Values().automatic
+    return PlaybackMode_Normalize(request.videoMode)
 end function
 
 '-------------------------------------------------------------------------------
 ' getOriginalPlaybackMode
 '-------------------------------------------------------------------------------
 function getOriginalPlaybackMode() as string
-    if m.recovery = invalid then return "automatic"
-    return SafeString(m.recovery.originalMode, "automatic")
+    if m.recovery = invalid then return PlaybackMode_Values().automatic
+    return PlaybackMode_Normalize(m.recovery.originalMode)
 end function
 
 '-------------------------------------------------------------------------------
@@ -226,19 +225,20 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
     playMethod = ""
     if reason <> "playbackInfo" then playMethod = getRecoveryPlayMethod(request)
     shouldForceNoRemux = playMethod = "" or playMethod = "directplay"
-    if m.recovery.originalMode = "automaticNoRemux" and m.recovery.effectiveMode = "automaticNoRemux" and shouldForceNoRemux then
-        nextMode = "transcodeNoRemux"
+    modes = PlaybackMode_Values()
+    if m.recovery.originalMode = modes.automaticNoRemux and m.recovery.effectiveMode = modes.automaticNoRemux and shouldForceNoRemux then
+        nextMode = modes.transcodeNoRemux
         attemptKind = "fullTranscode"
     else if m.recovery.sameModeRetryUsed <> true then
         nextMode = m.recovery.effectiveMode
         attemptKind = "sameMode"
         m.recovery.sameModeRetryUsed = true
-    else if m.recovery.originalMode = "automatic" then
-        if m.recovery.effectiveMode = "automatic" then
-            nextMode = "transcodeAllowRemux"
+    else if m.recovery.originalMode = modes.automatic then
+        if m.recovery.effectiveMode = modes.automatic then
+            nextMode = modes.transcodeAllowRemux
             attemptKind = "allowRemux"
-        else if m.recovery.effectiveMode = "transcodeAllowRemux" then
-            nextMode = "transcodeNoRemux"
+        else if m.recovery.effectiveMode = modes.transcodeAllowRemux then
+            nextMode = modes.transcodeNoRemux
             attemptKind = "fullTranscode"
         end if
     end if

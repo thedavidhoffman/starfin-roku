@@ -29,6 +29,7 @@ sub executeRequest()
     forceStreamSelection = shouldForceStreamSelection(request, requestedMediaSource, requestedAudioStreamIndex)
     forceSubtitleSelection = requestedSubtitleStreamIndex >= 0
     playbackMode = getPlaybackMode(request)
+    modes = PlaybackMode_Values()
     playbackFlags = getPlaybackFlags(playbackMode, forceTranscode, forceStreamSelection, forceSubtitleSelection)
     params = {
         UserId: SafeString(request.userId, "")
@@ -40,12 +41,12 @@ sub executeRequest()
         EnableDirectPlay: playbackFlags.enableDirectPlay
         EnableDirectStream: playbackFlags.enableDirectStream
         EnableTranscoding: playbackFlags.enableTranscoding
-        AllowVideoStreamCopy: playbackMode <> "automaticNoRemux" and playbackMode <> "transcodeNoRemux"
+        AllowVideoStreamCopy: playbackMode <> modes.automaticNoRemux and playbackMode <> modes.transcodeNoRemux
         AllowAudioStreamCopy: true
     }
 
-    if (playbackMode = "automatic" or playbackMode = "automaticNoRemux") and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
-    if (playbackMode = "automatic" or playbackMode = "automaticNoRemux") and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
+    if (playbackMode = modes.automatic or playbackMode = modes.automaticNoRemux) and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    if (playbackMode = modes.automatic or playbackMode = modes.automaticNoRemux) and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
     m.log.write("Device profile display cap width=" + SafeString(displaySize.width, "") + " height=" + SafeString(displaySize.height, "") + " source=" + SafeString(displaySize.source, ""))
     m.log.write("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
     m.log.write("Requested video mode=" + playbackMode)
@@ -230,18 +231,16 @@ end function
 ' getPlaybackMode
 '-------------------------------------------------------------------------------
 function getPlaybackMode(request as dynamic) as string
-    if request = invalid or request.videoMode = invalid then return "automatic"
-
-    mode = SafeString(request.videoMode, "")
-    if mode = "automatic" or mode = "automaticNoRemux" or mode = "transcodeAllowRemux" or mode = "transcodeNoRemux" then return mode
-    return "automatic"
+    if request = invalid then return PlaybackMode_Values().automatic
+    return PlaybackMode_Normalize(request.videoMode)
 end function
 
 '-------------------------------------------------------------------------------
 ' getPlaybackFlags
 '-------------------------------------------------------------------------------
 function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, forceStreamSelection as boolean, forceSubtitleSelection as boolean) as object
-    if playbackMode = "transcodeNoRemux" then
+    modes = PlaybackMode_Values()
+    if playbackMode = modes.transcodeNoRemux then
         return {
             enableDirectPlay: false
             enableDirectStream: false
@@ -249,7 +248,7 @@ function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, for
         }
     end if
 
-    if playbackMode = "automaticNoRemux" then
+    if playbackMode = modes.automaticNoRemux then
         return {
             enableDirectPlay: forceTranscode <> true and forceStreamSelection <> true
             enableDirectStream: false
@@ -257,9 +256,9 @@ function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, for
         }
     end if
 
-    if playbackMode = "transcodeAllowRemux" or (playbackMode = "automatic" and (forceTranscode = true or forceStreamSelection = true)) then
+    if playbackMode = modes.transcodeAllowRemux or (playbackMode = modes.automatic and (forceTranscode = true or forceStreamSelection = true)) then
         enableDirectStream = true
-        if playbackMode = "automatic" and forceTranscode = true then enableDirectStream = false
+        if playbackMode = modes.automatic and forceTranscode = true then enableDirectStream = false
 
         return {
             enableDirectPlay: false
@@ -268,7 +267,7 @@ function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, for
         }
     end if
 
-    if playbackMode = "automatic" then
+    if playbackMode = modes.automatic then
         return {
             enableDirectPlay: true
             enableDirectStream: true

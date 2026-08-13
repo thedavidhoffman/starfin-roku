@@ -141,7 +141,7 @@ sub onVideoOptionsPressed()
         componentName: "VideoOptionsDialog"
         openFunction: "openVideoOptions"
         closeField: "closeRequested"
-        selectedKey: SafeString(request.videoMode, "automatic")
+        selectedKey: SafeString(request.videoMode, PlaybackMode_Values().automatic)
     }
 end sub
 
@@ -211,10 +211,10 @@ end sub
 sub applyVideoModeSelection(selection as dynamic)
     if selection = invalid then return
 
-    videoMode = SafeString(selection.key, "automatic")
+    videoMode = PlaybackMode_Normalize(selection.key)
     request = m.top.playRequest
     if request = invalid then return
-    if videoMode = SafeString(request.videoMode, "automatic") then return
+    if videoMode = PlaybackMode_Normalize(request.videoMode) then return
 
     m.streamOptions.pendingVideoMode = videoMode
 

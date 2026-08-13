@@ -16,7 +16,7 @@ end sub
 sub logPlaybackRequest(request as dynamic, isRecoveryRestart as boolean)
     if request = invalid then return
 
-    m.log.write("Playback request itemId=" + SafeString(request.itemId, "") + " mode=" + SafeString(request.videoMode, "automatic") + " startPosition=" + SafeString(PlaybackProgress_TicksToSeconds(request.startPositionTicks), "") + " recoveryRestart=" + playbackDiagnosticBool(isRecoveryRestart) + " currentPosition=" + SafeString(getCurrentPlaybackPosition(), "") + " state=" + LCase(SafeString(m.videoPlayer.state, "")))
+    m.log.write("Playback request itemId=" + SafeString(request.itemId, "") + " mode=" + SafeString(request.videoMode, PlaybackMode_Values().automatic) + " startPosition=" + SafeString(PlaybackProgress_TicksToSeconds(request.startPositionTicks), "") + " recoveryRestart=" + playbackDiagnosticBool(isRecoveryRestart) + " currentPosition=" + SafeString(getCurrentPlaybackPosition(), "") + " state=" + LCase(SafeString(m.videoPlayer.state, "")))
 end sub
 
 '-------------------------------------------------------------------------------

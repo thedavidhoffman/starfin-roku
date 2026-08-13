@@ -40,7 +40,7 @@ function SettingsStore_Defaults() as object
     defaults[keys.playlistImageType] = "thumbnail"
     defaults[keys.tvEpisodeListDisplay] = "vertical"
     defaults[keys.mediaShellBackground] = "full-screen"
-    defaults[keys.videoStreamingMode] = "automatic"
+    defaults[keys.videoStreamingMode] = PlaybackMode_Values().automatic
     defaults[keys.displayAccountBadge] = "off"
     defaults[keys.tmdbApiKey] = ""
     return defaults

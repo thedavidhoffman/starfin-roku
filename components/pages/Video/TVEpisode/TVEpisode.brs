@@ -31,7 +31,7 @@ sub initReferences()
             subtitleOff: false
         }
         selectedChapterKey: ""
-        videoMode: "automatic"
+        videoMode: PlaybackMode_Values().automatic
         focusArea: "toolbar"
         lifecycle: AsyncLifecycle_Create()
     }
@@ -982,7 +982,7 @@ sub applyPlaybackVideoMode(videoMode as dynamic)
     mode = ""
     if videoMode <> invalid then mode = videoMode.ToStr()
     if mode = "" then mode = SettingsStore_GetSettingValue(m.top.settings, SettingsStore_Keys().videoStreamingMode)
-    if mode <> "automaticNoRemux" and mode <> "transcodeAllowRemux" and mode <> "transcodeNoRemux" then mode = "automatic"
+    mode = PlaybackMode_Normalize(mode)
     m.state.videoMode = mode
     if m.state.playSelection <> invalid then m.state.playSelection.AddReplace("videoMode", mode)
 end sub

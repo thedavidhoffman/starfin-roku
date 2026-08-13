@@ -76,7 +76,7 @@ sub openVideoOptions(request as dynamic)
         componentName: "VideoOptionsDialog"
         openFunction: "openVideoOptions"
         closeField: "closeRequested"
-        selectedKey: SafeString(request.selectedKey, "automatic")
+        selectedKey: SafeString(request.selectedKey, PlaybackMode_Values().automatic)
     }
 end sub
 

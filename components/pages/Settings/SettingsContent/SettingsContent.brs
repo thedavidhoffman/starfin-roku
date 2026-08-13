@@ -434,14 +434,14 @@ end sub
 ' setVideoStreamingModeOption
 '-------------------------------------------------------------------------------
 sub setVideoStreamingModeOption(value as dynamic)
-    mode = "automatic"
-    if value <> invalid and value <> "" then mode = value.ToStr()
+    modes = PlaybackMode_Values()
+    mode = PlaybackMode_Normalize(value)
     selectedIndex = 0
-    if mode = "automaticNoRemux" then
+    if mode = modes.automaticNoRemux then
         selectedIndex = 1
-    else if mode = "transcodeAllowRemux" then
+    else if mode = modes.transcodeAllowRemux then
         selectedIndex = 2
-    else if mode = "transcodeNoRemux" then
+    else if mode = modes.transcodeNoRemux then
         selectedIndex = 3
     end if
     m.settingsControls.videoStreamingModeOptions.checkedItem = selectedIndex
@@ -463,10 +463,11 @@ end function
 ' getVideoStreamingModeForIndex
 '-------------------------------------------------------------------------------
 function getVideoStreamingModeForIndex(index as integer) as string
-    if index = 1 then return "automaticNoRemux"
-    if index = 2 then return "transcodeAllowRemux"
-    if index = 3 then return "transcodeNoRemux"
-    return "automatic"
+    modes = PlaybackMode_Values()
+    if index = 1 then return modes.automaticNoRemux
+    if index = 2 then return modes.transcodeAllowRemux
+    if index = 3 then return modes.transcodeNoRemux
+    return modes.automatic
 end function
 
 '-------------------------------------------------------------------------------

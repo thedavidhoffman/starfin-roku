@@ -131,10 +131,11 @@ end function
 '-------------------------------------------------------------------------------
 function playbackModeText(value as dynamic) as string
     mode = LCase(SafeString(value, ""))
-    if mode = "automatic" then return "Automatic"
-    if mode = "automaticnoremux" then return "Automatic — Remux Disabled"
-    if mode = "transcodeallowremux" then return "Force Transcode — Remux Allowed"
-    if mode = "transcodenoremux" then return "Force Transcode — Remux Disabled"
+    modes = PlaybackMode_Values()
+    if mode = LCase(modes.automatic) then return "Automatic"
+    if mode = LCase(modes.automaticNoRemux) then return "Automatic — Remux Disabled"
+    if mode = LCase(modes.transcodeAllowRemux) then return "Force Transcode — Remux Allowed"
+    if mode = LCase(modes.transcodeNoRemux) then return "Force Transcode — Remux Disabled"
     return "Not available"
 end function
 

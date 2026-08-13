@@ -10,7 +10,7 @@ sub openVideoOptions()
     m.top.contentComponentName = "VideoOptionsContent"
 
     content = m.top.callFunc("getContentComponent")
-    content.selectedKey = SafeString(m.top.selectedKey, "automatic")
+    content.selectedKey = SafeString(m.top.selectedKey, PlaybackMode_Values().automatic)
     content.observeField("optionSelected", "onContentOptionSelected")
 
     m.top.callFunc("openDialog")

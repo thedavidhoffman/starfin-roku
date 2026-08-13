@@ -15,24 +15,25 @@ end sub
 ' buildOptions
 '-------------------------------------------------------------------------------
 function buildOptions() as object
+    modes = PlaybackMode_Values()
     return [
         {
-            key: "automatic"
+            key: modes.automatic
             label: "Automatic"
             description: "Allows Jellyfin to choose Direct Play, remuxing, or transcoding based on the file, selected audio and subtitle tracks, device capabilities, and network limits. This is the normal playback mode and balances original quality, compatibility, and server processing."
         }
         {
-            key: "automaticNoRemux"
+            key: modes.automaticNoRemux
             label: "Automatic (Remux Disabled)"
             description: "Prefers Direct Play. When Direct Play is unavailable, Jellyfin fully converts the video instead of copying it into a new stream. Compatible audio may still be copied. This can resolve playback, timing, keyframe, and seeking problems caused by video remuxing."
         }
         {
-            key: "transcodeAllowRemux"
+            key: modes.transcodeAllowRemux
             label: "Force Transcode (Allow Remux)"
             description: "Disables Direct Play. Jellyfin may repackage compatible video or audio without converting it, while transcoding anything the device cannot play. This can improve compatibility while preserving quality where possible."
         }
         {
-            key: "transcodeNoRemux"
+            key: modes.transcodeNoRemux
             label: "Force Transcode (Remux Disabled)"
             description: "Disables Direct Play and forces Jellyfin to convert the video to a supported format, usually H.264. This uses more server processing and may reduce quality, but can resolve playback, timing, keyframe, and seeking problems."
         }
@@ -66,7 +67,7 @@ end sub
 ' applySelectedKey
 '-------------------------------------------------------------------------------
 sub applySelectedKey()
-    selectedIndex = getOptionIndex(SafeString(m.top.selectedKey, "automatic"))
+    selectedIndex = getOptionIndex(SafeString(m.top.selectedKey, PlaybackMode_Values().automatic))
     focusedIndex = selectedIndex
     if focusedIndex < 0 then focusedIndex = 0
 
