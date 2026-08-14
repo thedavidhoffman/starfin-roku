@@ -21,11 +21,6 @@ sub executeRequest()
         return
     end if
 
-    if SafeString(request.action, "") = "nextSeasonEpisodes" then
-        executeNextSeasonEpisodesRequest(request)
-        return
-    end if
-
     seasonResult = loadSeason(request)
     if seasonResult.ok <> true then
         seasonResult.AddReplace("action", "tvSeason")
@@ -84,36 +79,6 @@ sub executeRequest()
             }
         end if
     end if
-end sub
-
-'-------------------------------------------------------------------------------
-' executeNextSeasonEpisodesRequest
-'-------------------------------------------------------------------------------
-sub executeNextSeasonEpisodesRequest(request as object)
-    nextSeasonId = getNextSeasonId(request)
-    if nextSeasonId = "" then
-        m.top.response = {
-            ok: true
-            action: "nextSeasonEpisodes"
-            payload: invalid
-        }
-        return
-    end if
-
-    nextEpisodesResult = loadEpisodes(request, nextSeasonId)
-    if nextEpisodesResult.ok <> true then
-        nextEpisodesResult.AddReplace("action", "nextSeasonEpisodes")
-        nextEpisodesResult.AddReplace("seasonId", nextSeasonId)
-        m.top.response = nextEpisodesResult
-        return
-    end if
-
-    m.top.response = {
-        ok: true
-        action: "nextSeasonEpisodes"
-        seasonId: nextSeasonId
-        payload: nextEpisodesResult.data
-    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -188,16 +153,6 @@ function hasRequestSeasons(request as object) as boolean
     if Type(request.seasons) <> "roArray" then return false
 
     return request.seasons.Count() > 0
-end function
-
-'-------------------------------------------------------------------------------
-' getNextSeasonId
-'-------------------------------------------------------------------------------
-function getNextSeasonId(request as object) as string
-    nextSeason = request.nextSeason
-    if nextSeason = invalid then return ""
-
-    return SafeString(FirstNonEmpty([nextSeason.Id], ""), "")
 end function
 
 '-------------------------------------------------------------------------------

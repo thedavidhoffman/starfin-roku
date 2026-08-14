@@ -18,6 +18,7 @@ sub initReferences()
     m.cast = m.top.findNode("cast")
     m.skipIntroButton = m.top.findNode("skipIntroButton")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
+    m.nextSeasonPlaybackTask = m.top.findNode("nextSeasonPlaybackTask")
     m.mediaSegmentsTask = m.top.findNode("mediaSegmentsTask")
     m.playstateTask = m.top.findNode("playstateTask")
     m.trickplayPreloadTask = m.top.findNode("trickplayPreloadTask")
@@ -62,6 +63,12 @@ sub initReferences()
     m.queue = {
         items: []
         index: -1
+        mode: "sequential"
+    }
+
+    m.nextSeasonPlayback = {
+        pending: false
+        requestId: -1
     }
 
     m.context = {
@@ -110,6 +117,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
+    m.nextSeasonPlaybackTask.observeField("response", "onNextSeasonPlaybackResponse")
     m.playstateTask.observeField("response", "onPlaystateResponse")
     m.mediaSegmentsTask.observeField("response", "onMediaSegmentsResponse")
     m.trickplayPreloadTask.observeField("response", "onTrickplayPreloadResponse")
@@ -183,9 +191,12 @@ sub onVideoStateChanged()
         reportPlaystateStop()
         emitPlaybackProgress(true)
         if isPlaylistPlaybackQueue() and startQueueItemAtOffset(1) then return
-        requestUpNextAutoPlay()
-        stopPlayback()
-        m.top.closeRequested = true
+        if requestUpNextAutoPlay() then
+            finishEpisodePlayback()
+            return
+        end if
+        if beginNextSeasonPlaybackRequest() then return
+        finishEpisodePlayback()
     else if state = "playing" then
         if m.playback.hasReportedStart = true then
             reportPlaystateUpdate()

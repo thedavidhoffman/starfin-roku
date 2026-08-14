@@ -25,6 +25,7 @@ sub playerShow(selection as object)
         startPositionTicks: PlaybackProgress_GetTicksFromSelection(selection)
         playbackQueue: selection.playbackQueue
         playbackQueueIndex: selection.playbackQueueIndex
+        playbackQueueMode: selection.playbackQueueMode
         videoMode: SettingsStore_GetSettingValue(m.settings, SettingsStore_Keys().videoStreamingMode)
     }
     if selection.audioStreamIndex <> invalid then playRequest.AddReplace("audioStreamIndex", selection.audioStreamIndex)
@@ -312,6 +313,7 @@ sub tvEpisodeUpNextHandlePlaySelected()
         season: request.season
         playbackQueue: request.playbackQueue
         playbackQueueIndex: request.playbackQueueIndex
+        playbackQueueMode: request.playbackQueueMode
     })
 end sub
 
@@ -367,6 +369,7 @@ function buildClosedPlayerTVEpisodeLoadRequest(playRequest as dynamic) as dynami
         startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
         playbackQueue: playRequest.playbackQueue
         playbackQueueIndex: playRequest.playbackQueueIndex
+        playbackQueueMode: playRequest.playbackQueueMode
     }
 end function
 

@@ -129,6 +129,7 @@ sub startRandomPlayback()
         startPositionTicks: 0
         playbackQueue: queue
         playbackQueueIndex: 0
+        playbackQueueMode: "random"
     }
 end sub
 

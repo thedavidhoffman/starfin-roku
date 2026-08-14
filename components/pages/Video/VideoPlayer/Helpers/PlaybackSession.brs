@@ -6,6 +6,8 @@ sub onPlayRequestChanged()
     if request = invalid then return
 
     m.playback.requestId = m.playback.requestId + 1
+    m.nextSeasonPlayback.pending = false
+    m.nextSeasonPlayback.requestId = -1
     request.AddReplace("requestId", m.playback.requestId)
     isRecoveryRestart = m.recovery.internalRestartPending = true
     logPlaybackRequest(request, isRecoveryRestart)
@@ -81,6 +83,7 @@ sub applyPlaybackSessionState(response as object, request as object, item as dyn
     m.queue = {
         items: getPlaybackQueue(request.playbackQueue)
         index: getPlaybackQueueIndex(request.playbackQueueIndex)
+        mode: SafeString(request.playbackQueueMode, "sequential")
     }
     m.context = {
         item: item
@@ -231,6 +234,7 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         startPositionTicks: 0
         playbackQueue: m.queue.items
         playbackQueueIndex: queueIndex
+        playbackQueueMode: m.queue.mode
         videoMode: getOriginalPlaybackMode()
     }
     return request
@@ -419,24 +423,24 @@ end function
 '-------------------------------------------------------------------------------
 ' requestUpNextAutoPlay
 '-------------------------------------------------------------------------------
-sub requestUpNextAutoPlay()
+function requestUpNextAutoPlay() as boolean
     if isPlaylistPlaybackQueue() then
         m.log.write("Skipping up-next overlay for playlist playback queue")
-        return
+        return false
     end if
     if m.queue = invalid then
         m.log.write("Skipping up-next autoplay: queue is invalid")
-        return
+        return false
     end if
     if m.queue.items = invalid then
         m.log.write("Skipping up-next autoplay: queue items are invalid")
-        return
+        return false
     end if
 
     nextIndex = m.queue.index + 1
     if nextIndex < 0 or nextIndex >= m.queue.items.Count() then
         m.log.write("Skipping up-next autoplay: no next item queueIndex=" + SafeString(m.queue.index, "") + " queueCount=" + SafeString(m.queue.items.Count(), ""))
-        return
+        return false
     end if
 
     currentItem = invalid
@@ -445,7 +449,7 @@ sub requestUpNextAutoPlay()
     nextItem = m.queue.items[nextIndex]
     if nextItem = invalid or SafeString(nextItem.itemId, "") = "" then
         m.log.write("Skipping up-next autoplay: next item is invalid nextIndex=" + SafeString(nextIndex, ""))
-        return
+        return false
     end if
 
     m.log.write("Requesting up-next autoplay currentIndex=" + SafeString(m.queue.index, "") + " nextIndex=" + SafeString(nextIndex, "") + " nextItemId=" + SafeString(nextItem.itemId, ""))
@@ -456,8 +460,101 @@ sub requestUpNextAutoPlay()
         season: getQueueItemSeason(nextItem)
         playbackQueue: m.queue.items
         playbackQueueIndex: nextIndex
+        playbackQueueMode: m.queue.mode
         server: m.session.server
     }
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' beginNextSeasonPlaybackRequest
+'-------------------------------------------------------------------------------
+function beginNextSeasonPlaybackRequest() as boolean
+    if m.nextSeasonPlayback.pending = true then return true
+    if m.queue.mode <> "sequential" then return false
+    if isPlaylistPlaybackQueue() then return false
+    if isTVEpisodePlayback(m.top.playRequest, m.context.item) <> true then return false
+    if m.context.item = invalid then return false
+
+    seriesId = SafeString(FirstNonEmpty([m.context.item.SeriesId], ""), "")
+    if seriesId = "" and m.context.series <> invalid then seriesId = SafeString(FirstNonEmpty([m.context.series.Id], ""), "")
+
+    seasonId = SafeString(FirstNonEmpty([m.context.item.SeasonId, m.context.item.ParentId], ""), "")
+    if seasonId = "" and m.context.season <> invalid then seasonId = SafeString(FirstNonEmpty([m.context.season.Id], ""), "")
+    if seriesId = "" or seasonId = "" then return false
+
+    m.nextSeasonPlayback.pending = true
+    m.nextSeasonPlayback.requestId = m.playback.requestId
+    Spinner_Show(0)
+    m.nextSeasonPlaybackTask.request = {
+        requestId: m.playback.requestId
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        seriesId: seriesId
+        seasonId: seasonId
+    }
+    m.nextSeasonPlaybackTask.control = "run"
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onNextSeasonPlaybackResponse
+'-------------------------------------------------------------------------------
+sub onNextSeasonPlaybackResponse()
+    response = m.nextSeasonPlaybackTask.response
+    if response = invalid then return
+    responseRequestId = Number_ToInteger(response.requestId, -1)
+    if m.nextSeasonPlayback.pending <> true then return
+    if responseRequestId <> m.nextSeasonPlayback.requestId or responseRequestId <> m.playback.requestId then return
+
+    m.nextSeasonPlayback.pending = false
+    m.nextSeasonPlayback.requestId = -1
+    Spinner_Hide()
+
+    if response.ok = true and response.payload <> invalid then
+        appendNextSeasonQueueItems(response.payload.items)
+        if requestUpNextAutoPlay() then
+            finishEpisodePlayback()
+            return
+        end if
+    else if response.ok <> true then
+        m.log.write("Unable to extend episode playback queue: " + SafeString(response.errorMessage, "unknown error"))
+    end if
+
+    finishEpisodePlayback()
+end sub
+
+'-------------------------------------------------------------------------------
+' appendNextSeasonQueueItems
+'-------------------------------------------------------------------------------
+sub appendNextSeasonQueueItems(items as dynamic)
+    if items = invalid or Type(items) <> "roArray" then return
+    if m.queue = invalid or m.queue.items = invalid then return
+
+    existingIds = {}
+    for each queueItem in m.queue.items
+        if queueItem <> invalid then
+            itemId = SafeString(queueItem.itemId, "")
+            if itemId <> "" then existingIds[itemId] = true
+        end if
+    end for
+
+    for each queueItem in items
+        if queueItem = invalid then continue for
+        itemId = SafeString(queueItem.itemId, "")
+        if itemId = "" or existingIds.DoesExist(itemId) then continue for
+        m.queue.items.Push(queueItem)
+        existingIds[itemId] = true
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' finishEpisodePlayback
+'-------------------------------------------------------------------------------
+sub finishEpisodePlayback()
+    stopPlayback()
+    m.top.closeRequested = true
 end sub
 
 '-------------------------------------------------------------------------------

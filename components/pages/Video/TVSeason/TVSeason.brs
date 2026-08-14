@@ -15,9 +15,6 @@ sub init()
         previousSeason: invalid
         nextSeason: invalid
         episodes: []
-        nextSeasonEpisodes: []
-        nextSeasonEpisodesLoaded: false
-        pendingEpisodeSelection: invalid
         episodesLoaded: false
         episodeWindowStart: 0
         episodeListScroll: "horizontal"
@@ -61,12 +58,6 @@ end sub
 sub onEpisodeSelected()
     selection = buildFocusedEpisodeDetailsSelection()
     if selection = invalid then return
-
-    if shouldLoadNextSeasonEpisodesForSelection() then
-        m.pageState.pendingEpisodeSelection = selection
-        requestNextSeasonEpisodes()
-        return
-    end if
 
     m.top.selectedEpisodeDetails = selection
 end sub
@@ -117,9 +108,6 @@ sub onLoadRequestChanged()
     m.pageState.previousSeason = invalid
     m.pageState.nextSeason = request.nextSeason
     m.pageState.episodes = []
-    m.pageState.nextSeasonEpisodes = []
-    m.pageState.nextSeasonEpisodesLoaded = false
-    m.pageState.pendingEpisodeSelection = invalid
     m.pageState.episodesLoaded = false
     m.pageState.allEpisodes = request.allEpisodes = true
     m.pageState.focusedEpisodeGridIndex = -1
@@ -158,11 +146,6 @@ sub onTVSeasonResponse()
     response = m.tvSeasonTask.response
     if response = invalid then return
 
-    if SafeString(response.action, "") = "nextSeasonEpisodes" then
-        if isCurrentNextSeasonResponse(response) <> true then return
-        onNextSeasonEpisodesResponse(response)
-        return
-    end if
     if SafeString(response.action, "") = "tvSeasonSeries" then
         if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeries") <> true then return
         m.pageState.request.seriesMetadataPending = false
@@ -213,42 +196,12 @@ sub onTVSeasonResponse()
 end sub
 
 '-------------------------------------------------------------------------------
-' onNextSeasonEpisodesResponse
-'-------------------------------------------------------------------------------
-sub onNextSeasonEpisodesResponse(response as object)
-    m.pageState.nextSeasonEpisodesLoaded = true
-    m.pageState.nextSeasonEpisodes = []
-
-    if response.ok = true then
-        m.pageState.nextSeasonEpisodes = getItemsFromPayload(response.payload)
-    else
-        m.log.write("Unable to load next season episodes for playback queue: " + SafeString(response.errorMessage, "unknown error"))
-    end if
-
-    emitPendingEpisodeSelection()
-end sub
-
-'-------------------------------------------------------------------------------
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
     AsyncLifecycle_Deactivate(m.pageState.lifecycle)
-    m.pageState.pendingEpisodeSelection = invalid
     m.tvSeasonTask.control = "stop"
 end sub
-
-'-------------------------------------------------------------------------------
-' isCurrentNextSeasonResponse
-'-------------------------------------------------------------------------------
-function isCurrentNextSeasonResponse(response as dynamic) as boolean
-    if m.pageState.lifecycle.isActive <> true then return false
-    if SafeString(response.action, "") <> "nextSeasonEpisodes" then return false
-
-    expectedSeasonId = ""
-    if m.pageState.nextSeason <> invalid then expectedSeasonId = getSeasonId(m.pageState.nextSeason)
-    responseKey = SafeString(response.seasonId, "")
-    return expectedSeasonId <> "" and responseKey = expectedSeasonId
-end function
 
 '-------------------------------------------------------------------------------
 ' onEpisodeFocused
@@ -618,63 +571,6 @@ function buildFocusedEpisodeDetailsSelection() as dynamic
         loadRequest: buildEpisodeLoadRequest(focusedEpisode)
     }
 end function
-
-'-------------------------------------------------------------------------------
-' shouldLoadNextSeasonEpisodesForSelection
-'-------------------------------------------------------------------------------
-function shouldLoadNextSeasonEpisodesForSelection() as boolean
-    if m.pageState.allEpisodes then return false
-    if m.pageState.nextSeason = invalid then return false
-    return m.pageState.nextSeasonEpisodesLoaded <> true
-end function
-
-'-------------------------------------------------------------------------------
-' requestNextSeasonEpisodes
-'-------------------------------------------------------------------------------
-sub requestNextSeasonEpisodes()
-    request = m.pageState.request
-    if request = invalid then
-        emitPendingEpisodeSelection()
-        return
-    end if
-
-    nextSeasonId = ""
-    if m.pageState.nextSeason <> invalid then nextSeasonId = getSeasonId(m.pageState.nextSeason)
-    if nextSeasonId = "" then
-        m.pageState.nextSeasonEpisodesLoaded = true
-        m.pageState.nextSeasonEpisodes = []
-        emitPendingEpisodeSelection()
-        return
-    end if
-
-    m.tvSeasonTask.request = {
-        action: "nextSeasonEpisodes"
-        server: request.server
-        token: request.token
-        userId: request.userId
-        seriesId: request.seriesId
-        seasonId: request.seasonId
-        nextSeason: m.pageState.nextSeason
-    }
-    m.tvSeasonTask.control = "run"
-end sub
-
-'-------------------------------------------------------------------------------
-' emitPendingEpisodeSelection
-'-------------------------------------------------------------------------------
-sub emitPendingEpisodeSelection()
-    selection = m.pageState.pendingEpisodeSelection
-    m.pageState.pendingEpisodeSelection = invalid
-    if selection = invalid then return
-
-    loadRequest = selection.loadRequest
-    if loadRequest <> invalid then
-        loadRequest.playbackQueue = buildPlaybackQueue(m.pageState.episodes, m.pageState.nextSeasonEpisodes)
-        loadRequest.playbackQueueIndex = getPlaybackQueueIndex(loadRequest.playbackQueue, SafeString(loadRequest.itemId, ""))
-    end if
-
-    m.top.selectedEpisodeDetails = selection
-end sub
 
 '-------------------------------------------------------------------------------
 ' buildEpisodeLoadRequest
@@ -1419,7 +1315,7 @@ function buildEpisodePlaySelection(node as dynamic) as dynamic
     item = node.raw
     if Array_IsAssocArray(item) = false then return invalid
 
-    playbackQueue = buildPlaybackQueue(m.pageState.episodes, m.pageState.nextSeasonEpisodes)
+    playbackQueue = buildPlaybackQueue(m.pageState.episodes)
     playbackQueueIndex = getPlaybackQueueIndex(playbackQueue, itemId)
 
     return {
@@ -1434,10 +1330,9 @@ end function
 '-------------------------------------------------------------------------------
 ' buildPlaybackQueue
 '-------------------------------------------------------------------------------
-function buildPlaybackQueue(episodes as object, nextSeasonEpisodes = invalid as dynamic) as object
+function buildPlaybackQueue(episodes as object) as object
     queue = []
     appendEpisodesToPlaybackQueue(queue, episodes, m.pageState.season)
-    appendEpisodesToPlaybackQueue(queue, nextSeasonEpisodes, m.pageState.nextSeason)
 
     return queue
 end function

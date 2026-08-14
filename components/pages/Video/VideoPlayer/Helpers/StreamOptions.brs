@@ -335,6 +335,7 @@ function buildStreamRestartPlayRequest() as dynamic
         startPositionTicks: secondsToTicks(m.playback.position)
         playbackQueue: request.playbackQueue
         playbackQueueIndex: request.playbackQueueIndex
+        playbackQueueMode: request.playbackQueueMode
         audioStreamIndex: m.streamOptions.selectedAudioStreamIndex
         subtitleStreamIndex: m.streamOptions.selectedSubtitleStreamIndex
     }
