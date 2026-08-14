@@ -28,29 +28,29 @@ sub render()
     transcodeReason = displayValue(info.transcodeReason)
 
     y = 0
-    y = addSectionHeader("Transcoding Information", &h9EE6FFFF, y)
-    y = addPropertyRow("Playback mode", playbackModeText(info.playbackMode), &h9EE6FFFF, y)
-    y = addPropertyRow("Play method", playMethodText(info.playMethod), &h9EE6FFFF, y)
-    y = addPropertyRow("Reason", transcodeReason, &h9EE6FFFF, y)
-    y = addPropertyRow("Delivery format", UCase(displayValue(info.streamFormat)), &h9EE6FFFF, y)
+    y = addSectionHeader("Transcoding Information", y)
+    y = addPropertyRow("Playback mode", playbackModeText(info.playbackMode), y)
+    y = addPropertyRow("Play method", playMethodText(info.playMethod), y)
+    y = addPropertyRow("Reason", transcodeReason, y)
+    y = addPropertyRow("Delivery format", UCase(displayValue(info.streamFormat)), y)
 
     y = y + sectionGap
-    y = addSectionHeader("Stream Information", &hF2C27FFF, y)
-    y = addPropertyRow("Container", UCase(displayValue(info.container)), &hF2C27FFF, y)
-    y = addPropertyRow("Resolution", resolutionText(info), &hF2C27FFF, y)
-    y = addPropertyRow("Video", streamText(info.videoCodec, info.videoBitrate), &hF2C27FFF, y)
-    y = addPropertyRow("Audio", audioText(info), &hF2C27FFF, y)
-    y = addPropertyRow("Video stream", streamTitleText(info.videoStreamTitle, info.videoStreamIndex, "Default"), &hF2C27FFF, y)
-    y = addPropertyRow("Audio stream", streamTitleText(info.audioStreamTitle, info.audioStreamIndex, "Default"), &hF2C27FFF, y)
-    y = addPropertyRow("Subtitle stream", streamTitleText(info.subtitleStreamTitle, info.subtitleStreamIndex, "Off"), &hF2C27FFF, y)
+    y = addSectionHeader("Stream Information", y)
+    y = addPropertyRow("Container", UCase(displayValue(info.container)), y)
+    y = addPropertyRow("Resolution", resolutionText(info), y)
+    y = addPropertyRow("Video", streamText(info.videoCodec, info.videoBitrate), y)
+    y = addPropertyRow("Audio", audioText(info), y)
+    y = addPropertyRow("Video stream", streamTitleText(info.videoStreamTitle, info.videoStreamIndex, "Default"), y)
+    y = addPropertyRow("Audio stream", streamTitleText(info.audioStreamTitle, info.audioStreamIndex, "Default"), y)
+    y = addPropertyRow("Subtitle stream", streamTitleText(info.subtitleStreamTitle, info.subtitleStreamIndex, "Off"), y)
 
     y = y + sectionGap
-    y = addSectionHeader("Session Identity", &h7DD9A9FF, y)
-    y = addPropertyRow("Item ID", displayValue(info.itemId), &h7DD9A9FF, y)
-    y = addPropertyRow("Play session ID", displayValue(info.playSessionId), &h7DD9A9FF, y)
-    y = addPropertyRow("Media source ID", displayValue(info.mediaSourceId), &h7DD9A9FF, y)
+    y = addSectionHeader("Session Identity", y)
+    y = addPropertyRow("Item ID", displayValue(info.itemId), y)
+    y = addPropertyRow("Play session ID", displayValue(info.playSessionId), y)
+    y = addPropertyRow("Media source ID", displayValue(info.mediaSourceId), y)
     if hasLiveStream then
-        addPropertyRow("Live stream ID", displayValue(info.liveStreamId), &h7DD9A9FF, y)
+        addPropertyRow("Live stream ID", displayValue(info.liveStreamId), y)
     end if
 end sub
 
@@ -68,7 +68,8 @@ end function
 '-------------------------------------------------------------------------------
 ' addSectionHeader
 '-------------------------------------------------------------------------------
-function addSectionHeader(title as string, accentColor as integer, y as integer) as integer
+function addSectionHeader(title as string, y as integer) as integer
+    accentColor = &hF2C27FFF
     heading = CreateObject("roSGNode", "Label")
     heading.translation = [0, y]
     heading.width = 1032
@@ -91,7 +92,7 @@ end function
 '-------------------------------------------------------------------------------
 ' addPropertyRow
 '-------------------------------------------------------------------------------
-function addPropertyRow(keyText as string, valueText as string, keyColor as integer, y as integer) as integer
+function addPropertyRow(keyText as string, valueText as string, y as integer) as integer
     rowHeight = 36
 
     keyLabel = CreateObject("roSGNode", "Label")
@@ -99,7 +100,7 @@ function addPropertyRow(keyText as string, valueText as string, keyColor as inte
     keyLabel.width = 280
     keyLabel.height = rowHeight - 1
     keyLabel.text = UCase(keyText)
-    keyLabel.color = keyColor
+    keyLabel.color = Color().text.light.secondary
     keyLabel.font = "font:SmallerBoldSystemFont"
     keyLabel.vertAlign = "center"
     m.propertySheet.appendChild(keyLabel)
