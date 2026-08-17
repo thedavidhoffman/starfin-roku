@@ -17,10 +17,88 @@ function __LibraryViewStateStore_GetKey(libraryId as string) as string
 end function
 
 '-------------------------------------------------------------------------------
-' __LibraryViewStateStore_GetKeyPrefix
+' __LibraryViewStateStore_GetIndexKey
 '-------------------------------------------------------------------------------
-function __LibraryViewStateStore_GetKeyPrefix() as string
-    return "library-view-state-"
+function __LibraryViewStateStore_GetIndexKey() as string
+    return "library-view-state-index"
+end function
+
+'-------------------------------------------------------------------------------
+' __LibraryViewStateStore_IndexContains
+'-------------------------------------------------------------------------------
+function __LibraryViewStateStore_IndexContains(libraryIds as object, targetLibraryId as string) as boolean
+    for each libraryId in libraryIds
+        if libraryId = targetLibraryId then return true
+    end for
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' __LibraryViewStateStore_LoadIndex
+'-------------------------------------------------------------------------------
+function __LibraryViewStateStore_LoadIndex(accountStore as object) as object
+    value = accountStore.Read(__LibraryViewStateStore_GetIndexKey())
+    if value = invalid or value = "" then return []
+
+    libraryIds = ParseJson(value)
+    if Type(libraryIds) <> "roArray" then return []
+
+    validLibraryIds = []
+    for each libraryId in libraryIds
+        libraryIdType = Type(libraryId)
+        isString = libraryIdType = "String" or libraryIdType = "roString"
+        if isString and libraryId <> "" and __LibraryViewStateStore_IndexContains(validLibraryIds, libraryId) = false then
+            validLibraryIds.Push(libraryId)
+        end if
+    end for
+    return validLibraryIds
+end function
+
+'-------------------------------------------------------------------------------
+' __LibraryViewStateStore_SerializeIndex
+'-------------------------------------------------------------------------------
+function __LibraryViewStateStore_SerializeIndex(libraryIds as object) as string
+    parts = []
+    for each libraryId in libraryIds
+        parts.Push(Json_String(libraryId))
+    end for
+    return "[" + Json_JoinParts(parts) + "]"
+end function
+
+'-------------------------------------------------------------------------------
+' __LibraryViewStateStore_IsString
+'-------------------------------------------------------------------------------
+function __LibraryViewStateStore_IsString(value as dynamic) as boolean
+    valueType = Type(value)
+    return valueType = "String" or valueType = "roString"
+end function
+
+'-------------------------------------------------------------------------------
+' __LibraryViewStateStore_IsNumber
+'-------------------------------------------------------------------------------
+function __LibraryViewStateStore_IsNumber(value as dynamic) as boolean
+    valueType = Type(value)
+    return valueType = "Integer" or valueType = "roInt" or valueType = "LongInteger" or valueType = "roLongInteger" or valueType = "Float" or valueType = "roFloat" or valueType = "Double" or valueType = "roDouble"
+end function
+
+'-------------------------------------------------------------------------------
+' __LibraryViewStateStore_IsValidState
+'-------------------------------------------------------------------------------
+function __LibraryViewStateStore_IsValidState(state as dynamic) as boolean
+    if Array_IsAssocArray(state) = false then return false
+
+    hasKnownField = false
+    for each key in state
+        value = state[key]
+        if key = "optionKey" or key = "sortKey" or key = "sortOrder" or key = "selectedGenre" or key = "libraryTitle" or key = "collectionType" then
+            hasKnownField = true
+            if __LibraryViewStateStore_IsString(value) = false then return false
+        else if key = "selectedDecade" then
+            hasKnownField = true
+            if __LibraryViewStateStore_IsNumber(value) = false then return false
+        end if
+    end for
+    return hasKnownField
 end function
 
 '-------------------------------------------------------------------------------
@@ -34,7 +112,7 @@ function LibraryViewStateStore_Load(accountKey as string, libraryId as string) a
     if value = invalid or value = "" then return invalid
 
     state = ParseJson(value)
-    if Array_IsAssocArray(state) = false then return invalid
+    if __LibraryViewStateStore_IsValidState(state) = false then return invalid
     return state
 end function
 
@@ -55,6 +133,13 @@ sub LibraryViewStateStore_Save(accountKey as string, libraryId as string, state 
     ])
     accountStore = CreateObject("roRegistrySection", __LibraryViewStateStore_GetAccountSectionName(accountKey))
     accountStore.Write(__LibraryViewStateStore_GetKey(libraryId), value)
+
+    libraryIds = __LibraryViewStateStore_LoadIndex(accountStore)
+    if __LibraryViewStateStore_IndexContains(libraryIds, libraryId) = false then
+        libraryIds.Push(libraryId)
+    end if
+    libraryIds.Sort()
+    accountStore.Write(__LibraryViewStateStore_GetIndexKey(), __LibraryViewStateStore_SerializeIndex(libraryIds))
     accountStore.Flush()
 end sub
 
@@ -66,19 +151,13 @@ function LibraryViewStateStore_List(accountKey as string) as object
     if accountKey = "" then return states
 
     accountStore = CreateObject("roRegistrySection", __LibraryViewStateStore_GetAccountSectionName(accountKey))
-    keys = accountStore.GetKeyList()
-    if keys = invalid then return states
-    prefix = __LibraryViewStateStore_GetKeyPrefix()
-    for each key in keys
-        if Left(key, Len(prefix)) = prefix then
-            libraryId = Mid(key, Len(prefix) + 1)
-            state = LibraryViewStateStore_Load(accountKey, libraryId)
-            if state <> invalid then
-                state.libraryId = libraryId
-                states.Push(state)
-            end if
+    libraryIds = __LibraryViewStateStore_LoadIndex(accountStore)
+    for each libraryId in libraryIds
+        state = LibraryViewStateStore_Load(accountKey, libraryId)
+        if state <> invalid then
+            state.libraryId = libraryId
+            states.Push(state)
         end if
     end for
-    states.SortBy("libraryId")
     return states
 end function

@@ -25,7 +25,6 @@ sub init()
     }
     m.scrollHoldDelayTimer.observeField("fire", "onScrollHoldDelayTimerFire")
     m.scrollRepeatTimer.observeField("fire", "onScrollRepeatTimerFire")
-    updateSystemInformation()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -77,9 +76,34 @@ function getDeviceInfoSection() as object
             { key: "os version", value: osVersionText(osVersion) }
             { key: "ui resolution", value: uiResolutionText(uiResolution) }
             { key: "display mode", value: deviceInfo.GetDisplayMode() }
-            { key: "connection info", value: connectionInfo.type + " (" + LCase(connectionInfo.quality) + " quality) " + connectionInfo.ip }
+            { key: "connection info", value: connectionInfoText(connectionInfo) }
         ]
     }
+end function
+
+'-------------------------------------------------------------------------------
+' connectionInfoText
+'-------------------------------------------------------------------------------
+function connectionInfoText(connectionInfo as dynamic) as string
+    if connectionInfo = invalid or GetInterface(connectionInfo, "ifAssociativeArray") = invalid then return "(not set)"
+
+    connectionType = SafeString(connectionInfo.type, "")
+    quality = LCase(SafeString(connectionInfo.quality, ""))
+    ipAddress = SafeString(connectionInfo.ip, "")
+    text = connectionType
+    if quality <> "" then
+        if text = "" then
+            text = quality + " quality"
+        else
+            text = text + " (" + quality + " quality)"
+        end if
+    end if
+    if ipAddress <> "" then
+        if text <> "" then text = text + " "
+        text = text + ipAddress
+    end if
+    if text = "" then return "(not set)"
+    return text
 end function
 
 '-------------------------------------------------------------------------------

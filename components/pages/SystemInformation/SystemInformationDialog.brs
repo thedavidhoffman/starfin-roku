@@ -8,7 +8,7 @@ sub openSystemInformation()
     m.top.contentComponentName = "SystemInformationContent"
 
     content = m.top.callFunc("getContentComponent")
-    content.callFunc("updateSystemInformation")
     m.top.callFunc("openDialog")
+    content.callFunc("updateSystemInformation")
     content.callFunc("focusSystemInformation")
 end sub
