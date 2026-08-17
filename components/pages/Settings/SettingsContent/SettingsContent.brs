@@ -17,6 +17,7 @@ sub init()
     m.settingsControls = {
         displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
         mediaShellBackgroundOptions: m.top.findNode("mediaShellBackgroundOptions")
+        themeMusicOptions: m.top.findNode("themeMusicOptions")
         tvLibraryOptions: m.top.findNode("tvLibraryOptions")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         movieLibraryOptions: m.top.findNode("movieLibraryOptions")
@@ -28,7 +29,7 @@ sub init()
     }
     m.categoryControls = [
         [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
-        [m.settingsControls.mediaShellBackgroundOptions]
+        [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
         [m.settingsControls.tvLibraryOptions, m.settingsControls.tvEpisodeListDisplayOptions]
         [m.settingsControls.movieLibraryOptions]
         [m.settingsControls.videoStreamingModeOptions]
@@ -53,6 +54,7 @@ sub init()
     initDisplayOptions(m.settingsControls.playlistImageTypeOptions)
     initTVEpisodeListDisplayOptions()
     initMediaShellBackgroundOptions()
+    initThemeMusicOptions()
     initVideoStreamingModeOptions()
 
     m.categoryList.observeField("itemFocused", "onCategoryFocused")
@@ -65,6 +67,7 @@ sub init()
     m.settingsControls.playlistImageTypeOptions.observeField("itemSelected", "onPlaylistImageTypeSelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
+    m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemFocused", "onVideoStreamingModeFocused")
 
@@ -113,6 +116,13 @@ sub initMediaShellBackgroundOptions()
 end sub
 
 '-------------------------------------------------------------------------------
+' initThemeMusicOptions
+'-------------------------------------------------------------------------------
+sub initThemeMusicOptions()
+    setOptionTitles(m.settingsControls.themeMusicOptions, ["Off", "On"])
+end sub
+
+'-------------------------------------------------------------------------------
 ' initVideoStreamingModeOptions
 '-------------------------------------------------------------------------------
 sub initVideoStreamingModeOptions()
@@ -147,6 +157,7 @@ sub loadSettingsValues()
     m.settingsState.values[keys.playlistImageType] = SettingsStore_GetSettingValue(settings, keys.playlistImageType)
     m.settingsState.values[keys.tvEpisodeListDisplay] = SettingsStore_GetSettingValue(settings, keys.tvEpisodeListDisplay)
     m.settingsState.values[keys.mediaShellBackground] = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
+    m.settingsState.values[keys.themeMusic] = SettingsStore_GetSettingValue(settings, keys.themeMusic)
     m.settingsState.values[keys.videoStreamingMode] = SettingsStore_GetSettingValue(settings, keys.videoStreamingMode)
     m.settingsState.values[keys.displayAccountBadge] = SettingsStore_GetSettingValue(settings, keys.displayAccountBadge)
     m.settingsState.values[keys.tmdbApiKey] = SettingsStore_GetSettingValue(settings, keys.tmdbApiKey)
@@ -158,6 +169,7 @@ sub loadSettingsValues()
     setDisplayOption(m.settingsControls.playlistImageTypeOptions, m.settingsState.values[keys.playlistImageType])
     setTVEpisodeListDisplayOption(m.settingsState.values[keys.tvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[keys.mediaShellBackground])
+    setOnOffOption(m.settingsControls.themeMusicOptions, m.settingsState.values[keys.themeMusic])
     setVideoStreamingModeOption(m.settingsState.values[keys.videoStreamingMode])
     setOnOffOption(m.settingsControls.displayAccountBadgeOptions, m.settingsState.values[keys.displayAccountBadge])
     m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[keys.tmdbApiKey]
@@ -270,7 +282,7 @@ end function
 function getSettingsValues() as object
     keys = SettingsStore_Keys()
     settings = {}
-    for each key in [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.playlistImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.videoStreamingMode, keys.displayAccountBadge, keys.tmdbApiKey]
+    for each key in [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.playlistImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.themeMusic, keys.videoStreamingMode, keys.displayAccountBadge, keys.tmdbApiKey]
         settings[key] = SettingsStore_GetSettingValue(m.settingsState.values, key)
     end for
     return settings
@@ -503,6 +515,20 @@ sub onKeyboardDialogButtonSelected()
     scene.dialog = invalid
     m.focusState.activeKeyboardField = invalid
     focusCategoryControl(m.focusState.controlIndex, invalid)
+end sub
+
+'-------------------------------------------------------------------------------
+' onThemeMusicSelected
+'-------------------------------------------------------------------------------
+sub onThemeMusicSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.themeMusicOptions)
+    if selectedIndex < 0 then return
+    m.settingsControls.themeMusicOptions.checkedItem = selectedIndex
+    if selectedIndex = 1 then
+        m.settingsState.values[SettingsStore_Keys().themeMusic] = "on"
+    else
+        m.settingsState.values[SettingsStore_Keys().themeMusic] = "off"
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

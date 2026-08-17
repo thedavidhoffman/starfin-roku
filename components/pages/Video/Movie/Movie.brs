@@ -239,9 +239,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
     settings = m.top.settings
+    wasThemeMusicEnabled = isThemeMusicSettingEnabled(m.state.request.settings)
     if m.state <> invalid and m.state.request <> invalid then m.state.request.settings = settings
     applyMediaShellBackgroundSetting(settings)
     applyPlaybackVideoMode(invalid)
+    if wasThemeMusicEnabled = false and isThemeMusicEnabled() then loadThemeSong(m.state.item)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -952,7 +954,15 @@ end function
 ' isThemeMusicEnabled
 '-------------------------------------------------------------------------------
 function isThemeMusicEnabled() as boolean
-    return false
+    return isThemeMusicSettingEnabled(m.top.settings)
+end function
+
+'-------------------------------------------------------------------------------
+' isThemeMusicSettingEnabled
+'-------------------------------------------------------------------------------
+function isThemeMusicSettingEnabled(settings as dynamic) as boolean
+    keys = SettingsStore_Keys()
+    return LCase(SettingsStore_GetSettingValue(settings, keys.themeMusic)) = "on"
 end function
 
 '-------------------------------------------------------------------------------

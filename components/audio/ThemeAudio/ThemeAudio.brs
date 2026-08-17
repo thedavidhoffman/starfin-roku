@@ -32,6 +32,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub stopTheme()
     m.themeAudioState.isActive = false
+    m.themeAudioState.request = invalid
     m.playbackInfoTask.control = "stop"
     m.audio.control = "stop"
     m.audio.content = invalid
@@ -71,7 +72,7 @@ sub onAudioStateChanged()
     state = SafeString(m.audio.state, "")
     m.log.write("Theme music audio state changed state=" + state)
     if state = "finished" and m.themeAudioState.isActive = true then
-        m.audio.control = "play"
+        stopTheme()
     else if state = "error" then
         m.log.write("Theme music playback error")
         stopTheme()

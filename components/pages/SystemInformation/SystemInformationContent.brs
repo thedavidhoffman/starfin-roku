@@ -153,6 +153,7 @@ function getAccountRegistrySection(account as object, keys as object) as object
             { key: keys.playlistImageType, value: settings[keys.playlistImageType] }
             { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
             { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
+            { key: keys.themeMusic, value: settings[keys.themeMusic] }
             { key: keys.videoStreamingMode, value: settings[keys.videoStreamingMode] }
         ]
     }

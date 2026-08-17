@@ -21,6 +21,7 @@ function SettingsStore_Keys() as object
         playlistImageType: "playlist-image-type"
         tvEpisodeListDisplay: "tv-ep-list-scroll"
         mediaShellBackground: "media-shell-background"
+        themeMusic: "theme-music"
         videoStreamingMode: "video-streaming-mode"
         displayAccountBadge: "display-account-badge"
         tmdbApiKey: "tmdb-api-key"
@@ -40,6 +41,7 @@ function SettingsStore_Defaults() as object
     defaults[keys.playlistImageType] = "thumbnail"
     defaults[keys.tvEpisodeListDisplay] = "vertical"
     defaults[keys.mediaShellBackground] = "full-screen"
+    defaults[keys.themeMusic] = "off"
     defaults[keys.videoStreamingMode] = PlaybackMode_Values().automatic
     defaults[keys.displayAccountBadge] = "off"
     defaults[keys.tmdbApiKey] = ""
@@ -51,7 +53,7 @@ end function
 '-------------------------------------------------------------------------------
 function SettingsStore_AccountKeys() as object
     keys = SettingsStore_Keys()
-    return [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.playlistImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.videoStreamingMode]
+    return [keys.tvLibraryDisplay, keys.movieLibraryDisplay, keys.collectionCardsImageType, keys.collectionItemsImageType, keys.playlistImageType, keys.tvEpisodeListDisplay, keys.mediaShellBackground, keys.themeMusic, keys.videoStreamingMode]
 end function
 
 '-------------------------------------------------------------------------------

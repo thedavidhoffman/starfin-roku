@@ -304,8 +304,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
     settings = m.top.settings
+    wasThemeMusicEnabled = isThemeMusicSettingEnabled(m.pageState.request.settings)
     if m.pageState <> invalid and m.pageState.request <> invalid then m.pageState.request.settings = settings
     applyMediaShellBackgroundSetting(settings)
+    if wasThemeMusicEnabled = false and isThemeMusicEnabled() then loadThemeSong(m.pageState.series)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -906,7 +908,15 @@ end function
 ' isThemeMusicEnabled
 '-------------------------------------------------------------------------------
 function isThemeMusicEnabled() as boolean
-    return false
+    return isThemeMusicSettingEnabled(m.top.settings)
+end function
+
+'-------------------------------------------------------------------------------
+' isThemeMusicSettingEnabled
+'-------------------------------------------------------------------------------
+function isThemeMusicSettingEnabled(settings as dynamic) as boolean
+    keys = SettingsStore_Keys()
+    return LCase(SettingsStore_GetSettingValue(settings, keys.themeMusic)) = "on"
 end function
 
 '-------------------------------------------------------------------------------
