@@ -21,9 +21,9 @@ function JellyfinAuth_BuildClientHeader() as string
 end function
 
 '-------------------------------------------------------------------------------
-' JellyfinAuth_BuildPlaybackHeader
+' JellyfinAuth_BuildAuthorizationHeader
 '-------------------------------------------------------------------------------
-function JellyfinAuth_BuildPlaybackHeader(token as dynamic, userId = invalid as dynamic) as string
+function JellyfinAuth_BuildAuthorizationHeader(token as dynamic, userId = invalid as dynamic) as string
     quote = Chr(34)
     auth = JellyfinAuth_BuildClientHeader()
 
@@ -43,6 +43,6 @@ end function
 '-------------------------------------------------------------------------------
 function JellyfinAuth_BuildTokenHeaders(token as dynamic) as object
     return {
-        "X-Emby-Token": SafeString(token, "")
+        Authorization: JellyfinAuth_BuildAuthorizationHeader(token)
     }
 end function

@@ -97,7 +97,7 @@ function authorize(request as object) as object
     ' We validate the token directly against the current user endpoint instead.
     userUrl = request.server + "/Users/" + SafeString(request.userId, "")
     result = HttpClient_Request(userUrl, "GET", request.token, invalid, {
-        Authorization: JellyfinAuth_BuildPlaybackHeader(request.token, request.userId)
+        Authorization: JellyfinAuth_BuildAuthorizationHeader(request.token, request.userId)
     })
 
     if result.ok <> true then

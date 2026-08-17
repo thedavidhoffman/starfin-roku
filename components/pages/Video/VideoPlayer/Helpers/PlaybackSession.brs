@@ -260,7 +260,7 @@ function buildVideoContent(response as object, request as object, item as dynami
     content.streamFormat = response.streamFormat
     content.title = getItemTitle(item)
     content.PlayStart = startPositionSeconds
-    content.AddHeader("Authorization", JellyfinAuth_BuildPlaybackHeader(request.token, request.userId))
+    content.AddHeader("Authorization", JellyfinAuth_BuildAuthorizationHeader(request.token, request.userId))
 
     return content
 end function
