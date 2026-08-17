@@ -87,7 +87,8 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
         return { ok: false, status: status, errorMessage: message }
     end if
 
-    if status = 401 and token <> invalid and token <> "" then
+    hasAuthenticatedRequest = (token <> invalid and token <> "") or __HeaderHasValue(headers, "X-Emby-Token")
+    if status = 401 and hasAuthenticatedRequest then
         message = "Your session has expired. Please sign in again."
         log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=" + status.ToStr() + " message=" + message)
         return { ok: false, status: status, authExpired: true, errorMessage: message }
@@ -171,6 +172,20 @@ function __HeadersInclude(headers as Dynamic, name as String) as Boolean
     lowerName = LCase(name)
     for each key in headers
         if LCase(key.ToStr()) = lowerName then return true
+    end for
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' HeaderHasValue
+'-------------------------------------------------------------------------------
+function __HeaderHasValue(headers as Dynamic, name as String) as Boolean
+    if headers = invalid then return false
+
+    lowerName = LCase(name)
+    for each key in headers
+        if LCase(key.ToStr()) = lowerName then return SafeString(headers[key], "") <> ""
     end for
 
     return false

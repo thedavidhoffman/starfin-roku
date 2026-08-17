@@ -474,6 +474,7 @@ sub navShowAppRoute()
 
     m.header.visible = true
     m.homePage.callFunc("activate")
+    m.homePage.callFunc("focusHome")
 end sub
 
 '-------------------------------------------------------------------------------
