@@ -53,16 +53,22 @@ sub onLoadRequestChanged()
     m.state.allAlbums = []
     m.state.albums = []
     m.state.artists = []
-    if request.favoriteOnly = true then
+    savedState = LibraryViewStateStore_Load(SafeString(request.accountKey, ""), SafeString(request.libraryId, ""))
+    if savedState <> invalid then
+        applySavedMusicLibraryViewState(request, savedState)
+    else if request.favoriteOnly = true then
         m.state.selectedSortKey = "Favorites"
         m.state.selectedSort = getFavoritesSortSelection()
+        m.state.activeFilterType = ""
+        m.state.selectedDecade = -1
+        m.state.selectedGenre = ""
     else
         m.state.selectedSortKey = "Album"
         m.state.selectedSort = getDefaultSortSelection()
+        m.state.activeFilterType = ""
+        m.state.selectedDecade = -1
+        m.state.selectedGenre = ""
     end if
-    m.state.activeFilterType = ""
-    m.state.selectedDecade = -1
-    m.state.selectedGenre = ""
     m.state.filterCache = createEmptyFilterCache()
     m.state.sortCache = createEmptySortCache()
     syncSortControls()
@@ -87,10 +93,21 @@ sub onMusicArtistsResponse()
     response = m.musicArtistsTask.response
     if response = invalid then return
     if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
-    if response.ok <> true then return
+    if response.ok <> true then
+        if isArtistBrowseMode() then
+            Spinner_Hide()
+            Status_SetMessage(SafeString(response.errorMessage, "Unable to load music artists."))
+        end if
+        return
+    end if
 
     m.state.artists = getItemsFromPayload(response.payload)
-    if isArtistBrowseMode() then renderArtists()
+    if isArtistBrowseMode() then
+        renderArtists()
+        Status_ClearMessage()
+        Spinner_Hide()
+        focusAlbums()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -102,6 +119,7 @@ sub onMusicLibraryResponse()
     if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicLibrary") <> true then return
 
     if response.ok <> true then
+        if isArtistBrowseMode() then return
         Spinner_Hide()
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load music library."))
         return
@@ -110,7 +128,14 @@ sub onMusicLibraryResponse()
     m.state.allAlbums = getItemsFromPayload(response.payload)
     m.state.filterCache = createFilterCacheFromOptions(response.filterOptions)
     m.state.sortCache = createEmptySortCache()
-    renderCurrentAlbums()
+    if isArtistBrowseMode() then return
+    if isDecadeFilterActive() then
+        showDecadeFilterRow()
+    else if isGenreFilterActive() then
+        showGenreFilterRow()
+    else
+        renderCurrentAlbums()
+    end if
     updateTitleLabel(m.state.albums.Count())
     Status_ClearMessage()
     Spinner_Hide()
@@ -733,6 +758,7 @@ sub onSortOrderChanged()
     m.state.selectedSort.sortOrder = sortOrder
     syncSortControls()
     renderCurrentAlbums()
+    persistMusicLibraryViewState()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -754,6 +780,7 @@ function applySortSelection(selection as object) as boolean
         m.state.selectedSort = getFavoritesSortSelection()
         m.state.request.favoriteOnly = true
         syncSortControls()
+        persistMusicLibraryViewState()
         reloadMusicLibrary()
         return false
     end if
@@ -777,6 +804,7 @@ function applySortSelection(selection as object) as boolean
         syncSortControls()
         showDecadeFilterRow()
         queueFilterButtonRowFocus()
+        persistMusicLibraryViewState()
         return false
     end if
 
@@ -793,6 +821,7 @@ function applySortSelection(selection as object) as boolean
         syncSortControls()
         showGenreFilterRow()
         queueFilterButtonRowFocus()
+        persistMusicLibraryViewState()
         return false
     end if
 
@@ -829,9 +858,11 @@ function applySortSelection(selection as object) as boolean
     m.state.selectedSortKey = SafeString(m.state.selectedSort.optionKey, "Album")
     syncSortControls()
     if wasFavoriteBrowse then
+        persistMusicLibraryViewState()
         reloadMusicLibrary()
     else
         renderCurrentAlbums()
+        persistMusicLibraryViewState()
     end if
     return false
 end function
@@ -870,7 +901,7 @@ end sub
 sub showDecadeFilterRow()
     options = m.state.filterCache.decadeOptions
     if options = invalid then options = []
-    if m.state.selectedDecade < 0 then m.state.selectedDecade = getFirstDecadeFilterValue(options)
+    if filterOptionsContainValue(options, m.state.selectedDecade.ToStr()) <> true then m.state.selectedDecade = getFirstDecadeFilterValue(options)
 
     m.filterButtonRow.filterType = "Decade"
     m.filterButtonRow.items = options
@@ -886,7 +917,7 @@ end sub
 sub showGenreFilterRow()
     options = m.state.filterCache.genreOptions
     if options = invalid then options = []
-    if m.state.selectedGenre = "" then m.state.selectedGenre = getFirstGenreFilterValue(options)
+    if filterOptionsContainValue(options, m.state.selectedGenre) <> true then m.state.selectedGenre = getFirstGenreFilterValue(options)
 
     m.filterButtonRow.filterType = "Genre"
     m.filterButtonRow.items = options
@@ -954,6 +985,7 @@ sub onFilterButtonRowSelected()
 
     m.filterButtonRow.setFocus(true)
     renderCurrentAlbums()
+    persistMusicLibraryViewState()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1259,6 +1291,77 @@ sub applyMediaStateChange(change as object)
 
     applyGridMediaStateChange(m.albumsGrid, change)
     applyGridMediaStateChange(m.artistsGrid, change)
+end sub
+
+'-------------------------------------------------------------------------------
+' filterOptionsContainValue
+'-------------------------------------------------------------------------------
+function filterOptionsContainValue(options as object, value as string) as boolean
+    if options = invalid or value = "" then return false
+    for each option in options
+        if SafeString(option.value, "") = value then return true
+    end for
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' applySavedMusicLibraryViewState
+'-------------------------------------------------------------------------------
+sub applySavedMusicLibraryViewState(request as object, state as object)
+    optionKey = SafeString(state.optionKey, "")
+    sortOrder = getNormalizedMusicSortOrder(SafeString(state.sortOrder, "Ascending"))
+    request.favoriteOnly = false
+    m.state.activeFilterType = ""
+    m.state.selectedDecade = -1
+    m.state.selectedGenre = ""
+
+    if optionKey = "Favorites" then
+        request.favoriteOnly = true
+        m.state.selectedSort = getFavoritesSortSelection()
+        m.state.selectedSort.sortOrder = sortOrder
+    else if optionKey = "Decade" or optionKey = "Genre" then
+        m.state.selectedSort = { optionKey: optionKey, sortKey: "Album", sortOrder: "Ascending", label: optionKey }
+        m.state.activeFilterType = optionKey
+        m.state.selectedDecade = Number_ToInteger(state.selectedDecade, -1)
+        m.state.selectedGenre = SafeString(state.selectedGenre, "")
+    else if optionKey = "Random" then
+        m.state.selectedSort = { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
+    else if optionKey = "ArtistAlbum" then
+        m.state.selectedSort = { optionKey: "ArtistAlbum", sortKey: "ArtistAlbum", sortOrder: sortOrder, label: "Artist/Album" }
+    else if optionKey = "Artist" then
+        m.state.selectedSort = { optionKey: "Artist", sortKey: "Artist", sortOrder: sortOrder, label: "Artist" }
+    else
+        m.state.selectedSort = getDefaultSortSelection()
+        m.state.selectedSort.sortOrder = sortOrder
+    end if
+    m.state.selectedSortKey = SafeString(m.state.selectedSort.optionKey, "Album")
+end sub
+
+'-------------------------------------------------------------------------------
+' getNormalizedMusicSortOrder
+'-------------------------------------------------------------------------------
+function getNormalizedMusicSortOrder(sortOrder as string) as string
+    if sortOrder = "Descending" then return "Descending"
+    return "Ascending"
+end function
+
+'-------------------------------------------------------------------------------
+' persistMusicLibraryViewState
+'-------------------------------------------------------------------------------
+sub persistMusicLibraryViewState()
+    request = m.state.request
+    selection = m.state.selectedSort
+    if request = invalid or selection = invalid then return
+
+    LibraryViewStateStore_Save(SafeString(request.accountKey, ""), SafeString(request.libraryId, ""), {
+        optionKey: SafeString(m.state.selectedSortKey, "Album")
+        sortKey: SafeString(selection.sortKey, "Album")
+        sortOrder: SafeString(selection.sortOrder, "Ascending")
+        selectedDecade: m.state.selectedDecade
+        selectedGenre: m.state.selectedGenre
+        libraryTitle: SafeString(request.title, "")
+        collectionType: SafeString(request.collectionType, "")
+    })
 end sub
 
 '-------------------------------------------------------------------------------

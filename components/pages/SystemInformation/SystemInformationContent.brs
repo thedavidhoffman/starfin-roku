@@ -137,26 +137,58 @@ function getAccountRegistrySection(account as object, keys as object) as object
     settings = SettingsStore_Load(account.accountKey)
     title = "Account: " + account.username
     if account.isActive then title = title + " (active)"
+    entries = [
+        { key: "account-key", value: account.accountKey }
+        { key: "server", value: account.server }
+        { key: "username", value: account.username }
+        { key: "userId", value: account.userId }
+        { key: "primary-image-tag", value: account.primaryImageTag }
+        { key: "token", value: truncateWithEllipsis(account.token, 10) }
+        { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
+        { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
+        { key: keys.collectionCardsImageType, value: settings[keys.collectionCardsImageType] }
+        { key: keys.collectionItemsImageType, value: settings[keys.collectionItemsImageType] }
+        { key: keys.playlistImageType, value: settings[keys.playlistImageType] }
+        { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
+        { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
+        { key: keys.themeMusic, value: settings[keys.themeMusic] }
+        { key: keys.videoStreamingMode, value: settings[keys.videoStreamingMode] }
+    ]
+    for each state in LibraryViewStateStore_List(account.accountKey)
+        entries.Push(getLibraryViewStateEntry(state))
+    end for
     return {
         title: title
-        entries: [
-            { key: "account-key", value: account.accountKey }
-            { key: "server", value: account.server }
-            { key: "username", value: account.username }
-            { key: "userId", value: account.userId }
-            { key: "primary-image-tag", value: account.primaryImageTag }
-            { key: "token", value: truncateWithEllipsis(account.token, 10) }
-            { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
-            { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
-            { key: keys.collectionCardsImageType, value: settings[keys.collectionCardsImageType] }
-            { key: keys.collectionItemsImageType, value: settings[keys.collectionItemsImageType] }
-            { key: keys.playlistImageType, value: settings[keys.playlistImageType] }
-            { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
-            { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
-            { key: keys.themeMusic, value: settings[keys.themeMusic] }
-            { key: keys.videoStreamingMode, value: settings[keys.videoStreamingMode] }
-        ]
+        entries: entries
     }
+end function
+
+'-------------------------------------------------------------------------------
+' getLibraryViewStateEntry
+'-------------------------------------------------------------------------------
+function getLibraryViewStateEntry(state as object) as object
+    libraryId = SafeString(state.libraryId, "")
+    libraryTitle = SafeString(state.libraryTitle, "")
+    if libraryTitle = "" then libraryTitle = libraryId
+    key = "library-view: " + libraryTitle
+    if libraryId <> "" then key = key + Chr(10) + "library id: " + libraryId
+
+    optionKey = SafeString(state.optionKey, "")
+    value = "browse=" + optionKey
+    collectionType = SafeString(state.collectionType, "")
+    if collectionType <> "" then value = collectionType + "; " + value
+    detail = ""
+    sortKey = SafeString(state.sortKey, "")
+    sortOrder = SafeString(state.sortOrder, "")
+    if sortKey <> "" then
+        detail = "sort=" + sortKey
+        if sortOrder <> "" then detail = detail + " " + sortOrder
+    end if
+    if optionKey = "Decade" then detail = detail + "; decade=" + SafeString(state.selectedDecade, "")
+    if optionKey = "Genre" then detail = detail + "; genre=" + SafeString(state.selectedGenre, "")
+    if Left(detail, 2) = "; " then detail = Mid(detail, 3)
+    if detail <> "" then value = value + Chr(10) + detail
+    return { key: key, value: value }
 end function
 
 '-------------------------------------------------------------------------------
@@ -208,6 +240,11 @@ end function
 '-------------------------------------------------------------------------------
 function addPropertyRow(keyText as string, valueText as string, y as integer) as integer
     rowHeight = 36
+    keyLineCount = 1
+    valueLineCount = 1
+    if Instr(1, keyText, Chr(10)) > 0 then keyLineCount = 2
+    if Instr(1, valueText, Chr(10)) > 0 then valueLineCount = 2
+    if keyLineCount > 1 or valueLineCount > 1 then rowHeight = 68
     keyLabel = CreateObject("roSGNode", "Label")
     keyLabel.translation = [0, y]
     keyLabel.width = m.layoutState.keyWidth
@@ -216,6 +253,9 @@ function addPropertyRow(keyText as string, valueText as string, y as integer) as
     keyLabel.color = Color().text.light.secondary
     keyLabel.font = "font:SmallerBoldSystemFont"
     keyLabel.vertAlign = "center"
+    keyLabel.wrap = keyLineCount > 1
+    keyLabel.numLines = keyLineCount
+    if keyLineCount > 1 then keyLabel.lineSpacing = 0
     m.propertySheet.appendChild(keyLabel)
 
     valueLabel = CreateObject("roSGNode", "Label")
@@ -226,8 +266,9 @@ function addPropertyRow(keyText as string, valueText as string, y as integer) as
     valueLabel.color = &hD7DFEAFF
     valueLabel.font = "font:SmallerSystemFont"
     valueLabel.vertAlign = "center"
-    valueLabel.wrap = false
-    valueLabel.numLines = 1
+    valueLabel.wrap = valueLineCount > 1
+    valueLabel.numLines = valueLineCount
+    if valueLineCount > 1 then valueLabel.lineSpacing = 0
     m.propertySheet.appendChild(valueLabel)
 
     separator = CreateObject("roSGNode", "Rectangle")

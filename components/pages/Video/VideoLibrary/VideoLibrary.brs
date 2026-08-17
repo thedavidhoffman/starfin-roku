@@ -115,10 +115,16 @@ sub prepareLoadRequest(request as object)
     m.pageState.request = request
     AsyncLifecycle_Begin(m.pageState.lifecycle, request.libraryId)
     m.pageState.imageAspect = getVideoLibraryImageAspect()
-    normalizeLoadRequestSort(request)
+    restoredState = loadSavedVideoLibraryViewState(request)
+    if restoredState <> invalid then
+        applySavedVideoLibraryViewState(request, restoredState)
+    else
+        normalizeLoadRequestSort(request)
+    end if
     if request.favoriteOnly = true then
         m.pageState.selectedSort = getFavoritesSortSelection()
-    else
+        if restoredState <> invalid then m.pageState.selectedSort.sortOrder = getNormalizedSortOrder(SafeString(restoredState.sortOrder, "Ascending"))
+    else if restoredState = invalid then
         m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
     end if
     m.pageState.selectedSortKey = m.pageState.selectedSort.optionKey
@@ -155,6 +161,16 @@ end sub
 ' resetFilterState
 '-------------------------------------------------------------------------------
 sub resetFilterState()
+    optionKey = SafeString(m.pageState.selectedSort.optionKey, "")
+    if optionKey = "Decade" or optionKey = "Genre" then
+        m.pageState.activeFilterType = optionKey
+        if optionKey = "Decade" then m.pageState.selectedGenre = ""
+        if optionKey = "Genre" then m.pageState.selectedDecade = -1
+        m.pageState.renderDecadeFilterOnApply = false
+        m.pageState.filterCache = createEmptyFilterCache()
+        return
+    end if
+
     m.pageState.activeFilterType = ""
     m.pageState.selectedDecade = -1
     m.pageState.selectedGenre = ""
@@ -267,6 +283,78 @@ sub onItemSelected()
         m.top.selectedSeries = selection
     else if isTVEpisode(item) then
         m.top.selectedEpisode = selection
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' loadSavedVideoLibraryViewState
+'-------------------------------------------------------------------------------
+function loadSavedVideoLibraryViewState(request as object) as dynamic
+    if canPersistVideoLibraryViewState(request) <> true then return invalid
+    return LibraryViewStateStore_Load(SafeString(request.accountKey, ""), SafeString(request.libraryId, ""))
+end function
+
+'-------------------------------------------------------------------------------
+' canPersistVideoLibraryViewState
+'-------------------------------------------------------------------------------
+function canPersistVideoLibraryViewState(request as dynamic) as boolean
+    if request = invalid then return false
+    collectionType = LCase(SafeString(request.collectionType, ""))
+    return collectionType = "movies" or collectionType = "tvshows"
+end function
+
+'-------------------------------------------------------------------------------
+' persistVideoLibraryViewState
+'-------------------------------------------------------------------------------
+sub persistVideoLibraryViewState()
+    request = m.pageState.request
+    if canPersistVideoLibraryViewState(request) <> true then return
+    selection = m.pageState.selectedSort
+    if selection = invalid then return
+
+    LibraryViewStateStore_Save(SafeString(request.accountKey, ""), SafeString(request.libraryId, ""), {
+        optionKey: SafeString(m.pageState.selectedSortKey, "SortName")
+        sortKey: SafeString(selection.sortKey, "SortName")
+        sortOrder: getSortOrderFromSelection(selection)
+        selectedDecade: m.pageState.selectedDecade
+        selectedGenre: m.pageState.selectedGenre
+        libraryTitle: SafeString(request.title, "")
+        collectionType: SafeString(request.collectionType, "")
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' applySavedVideoLibraryViewState
+'-------------------------------------------------------------------------------
+sub applySavedVideoLibraryViewState(request as object, state as object)
+    optionKey = SafeString(state.optionKey, "")
+    request.favoriteOnly = false
+
+    if optionKey = "Favorites" then
+        request.favoriteOnly = true
+        request.sortBy = "SortName"
+        request.sortOrder = getNormalizedSortOrder(SafeString(state.sortOrder, "Ascending"))
+        m.pageState.selectedSort = getFavoritesSortSelection()
+        m.pageState.selectedSort.sortOrder = request.sortOrder
+    else if optionKey = "Decade" or optionKey = "Genre" then
+        request.sortBy = "SortName"
+        request.sortOrder = "Ascending"
+        m.pageState.selectedSort = { optionKey: optionKey, sortKey: "SortName", sortOrder: "Ascending", label: optionKey }
+        m.pageState.activeFilterType = optionKey
+        m.pageState.selectedDecade = Number_ToInteger(state.selectedDecade, -1)
+        m.pageState.selectedGenre = SafeString(state.selectedGenre, "")
+    else if optionKey = "Random" then
+        request.sortBy = "Random"
+        request.sortOrder = ""
+        m.pageState.selectedSort = buildSortSelection("Random", "")
+    else if optionKey = "PremiereDate" or optionKey = "DateCreated" or optionKey = "SortName" then
+        request.sortBy = optionKey
+        request.sortOrder = getNormalizedSortOrder(SafeString(state.sortOrder, "Ascending"))
+        m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
+    else
+        request.sortBy = "SortName"
+        request.sortOrder = "Ascending"
+        m.pageState.selectedSort = getDefaultSortSelection()
     end if
 end sub
 
@@ -520,7 +608,7 @@ end function
 sub showDecadeFilterRow()
     options = m.pageState.filterCache.decadeOptions
     if options = invalid then options = []
-    if m.pageState.selectedDecade < 0 then m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
+    if filterOptionsContainValue(options, m.pageState.selectedDecade.ToStr()) <> true then m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
     m.filterButtonRow.filterType = "Decade"
     m.filterButtonRow.items = options
     m.filterButtonRow.selectedValue = m.pageState.selectedDecade.ToStr()
@@ -536,7 +624,7 @@ end sub
 sub showGenreFilterRow()
     options = m.pageState.filterCache.genreOptions
     if options = invalid then options = []
-    if m.pageState.selectedGenre = "" then m.pageState.selectedGenre = getFirstGenreFilterValue(options)
+    if filterOptionsContainValue(options, m.pageState.selectedGenre) <> true then m.pageState.selectedGenre = getFirstGenreFilterValue(options)
     m.filterButtonRow.filterType = "Genre"
     m.filterButtonRow.items = options
     m.filterButtonRow.selectedValue = m.pageState.selectedGenre
@@ -604,7 +692,19 @@ sub onFilterButtonRowSelected()
 
     m.filterButtonRow.setFocus(true)
     renderCurrentVideoLibraryItems()
+    persistVideoLibraryViewState()
 end sub
+
+'-------------------------------------------------------------------------------
+' filterOptionsContainValue
+'-------------------------------------------------------------------------------
+function filterOptionsContainValue(options as object, value as string) as boolean
+    if options = invalid or value = "" then return false
+    for each option in options
+        if SafeString(option.value, "") = value then return true
+    end for
+    return false
+end function
 
 '-------------------------------------------------------------------------------
 ' onFilterButtonRowFocusExitUp
@@ -1104,6 +1204,7 @@ function applySortSelection(selection as object) as boolean
         m.browseByButton.selectedSort = m.pageState.selectedSort
         m.sortButton.selectedSort = m.pageState.selectedSort
         m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+        persistVideoLibraryViewState()
         reloadVideoLibraryForSort()
         return false
     end if
@@ -1117,6 +1218,7 @@ function applySortSelection(selection as object) as boolean
         m.browseByButton.selectedSort = selection
         m.sortButton.selectedSort = selection
         m.sortButton.sortEnabled = canUseSortOrder(selection)
+        persistVideoLibraryViewState()
         reloadVideoLibraryForSort()
         return false
     end if
@@ -1144,6 +1246,7 @@ function applySortSelection(selection as object) as boolean
         m.sortButton.sortEnabled = false
         closeLetterGrid(false)
         showDecadeFilterRow()
+        persistVideoLibraryViewState()
         return false
     end if
 
@@ -1168,6 +1271,7 @@ function applySortSelection(selection as object) as boolean
         m.sortButton.sortEnabled = false
         closeLetterGrid(false)
         showGenreFilterRow()
+        persistVideoLibraryViewState()
         return false
     end if
 
@@ -1190,6 +1294,7 @@ function applySortSelection(selection as object) as boolean
         m.sortButton.selectedSort = m.pageState.selectedSort
         m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
         renderCurrentVideoLibraryItems()
+        persistVideoLibraryViewState()
         return false
     end if
 
@@ -1199,6 +1304,7 @@ function applySortSelection(selection as object) as boolean
     m.sortButton.selectedSort = selection
     m.sortButton.sortEnabled = canUseSortOrder(selection)
     renderCurrentVideoLibraryItems()
+    persistVideoLibraryViewState()
     return false
 end function
 
@@ -1218,6 +1324,7 @@ function applySortOrderSelection(selection as object) as boolean
     m.sortButton.selectedSort = m.pageState.selectedSort
     m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
     renderCurrentVideoLibraryItems()
+    persistVideoLibraryViewState()
     return false
 end function
 

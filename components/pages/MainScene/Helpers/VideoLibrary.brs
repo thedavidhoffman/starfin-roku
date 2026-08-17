@@ -42,6 +42,7 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
         server: m.session.server
         token: m.session.token
         userId: m.session.userId
+        accountKey: m.session.accountKey
         libraryId: selection.libraryId
         collectionType: SafeString(selection.collectionType, "")
         includeItemTypes: getVideoLibraryIncludeItemTypes(SafeString(selection.collectionType, ""))
