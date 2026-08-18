@@ -106,11 +106,11 @@ sub loadThemeSong(item as dynamic)
     request = m.state.request
     if request = invalid then return
     if isThemeMusicEnabled() <> true then
-        m.log.write("Theme music playback is disabled")
+        m.log.writeDisplaySafe("Theme music playback is disabled")
         return
     end if
 
-    m.log.write("Theme music playback is enabled")
+    m.log.writeDisplaySafe("Theme music playback is enabled")
 
     itemId = SafeString(FirstNonEmpty([item.Id, request.itemId], ""), "")
     if itemId = "" then return
@@ -142,7 +142,7 @@ sub onThemeSongsResponse()
     themeSong = response.payload
     if Array_IsAssocArray(themeSong) = false then
         m.state.themeLookupActive = false
-        m.log.write("Theme music enabled, but no theme song was found")
+        m.log.writeDisplaySafe("Theme music enabled, but no theme song was found")
         return
     end if
 
@@ -157,7 +157,7 @@ sub onThemeSongsResponse()
         return
     end if
 
-    m.log.write("Theme song found itemId=" + themeSongId)
+    m.log.writeDisplaySafe("Theme song found itemId=" + themeSongId)
     m.top.themeRequested = {
         server: request.server
         token: request.token
@@ -329,7 +329,7 @@ sub onVideoToolbarPlaySelected()
     selection = buildPlaySelection(invalid)
     if selection = invalid then return
 
-    m.log.write("Play selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
+    m.log.writeDisplaySafe("Play selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
     m.top.playSelected = selection
 end sub
 
@@ -340,7 +340,7 @@ sub onVideoToolbarRestartSelected()
     selection = buildPlaySelection(0)
     if selection = invalid then return
 
-    m.log.write("Restart selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
+    m.log.writeDisplaySafe("Restart selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
     m.top.playSelected = selection
 end sub
 
@@ -449,11 +449,11 @@ sub onSubtitleOptionSelected()
     if selection.isOff = true then
         m.state.selectedStreams.subtitle = invalid
         m.state.selectedStreams.subtitleOff = true
-        m.log.write("Subtitle option selected: Off")
+        m.log.writeDisplaySafe("Subtitle option selected: Off")
     else
         m.state.selectedStreams.subtitle = selection
         m.state.selectedStreams.subtitleOff = false
-        m.log.write("Subtitle option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
+        m.log.writeDisplaySafe("Subtitle option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
     end if
 end sub
 
@@ -480,7 +480,7 @@ sub onAudioOptionSelected()
     if selection = invalid then return
 
     m.state.selectedStreams.audio = selection
-    m.log.write("Audio option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
+    m.log.writeDisplaySafe("Audio option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -597,7 +597,7 @@ sub onChapterOptionSelected()
     if playSelection = invalid then return
 
     m.state.selectedChapterKey = SafeString(selection.startPositionTicks, "")
-    m.log.write("Chapter option selected startPositionTicks=" + SafeString(selection.startPositionTicks, "") + " label=" + SafeString(selection.label, ""))
+    m.log.writeDisplaySafe("Chapter option selected startPositionTicks=" + SafeString(selection.startPositionTicks, "") + " label=" + SafeString(selection.label, ""))
     m.top.playSelected = playSelection
 end sub
 
@@ -641,7 +641,7 @@ sub onVideoModeSelected()
     if selection = invalid then return
 
     applyPlaybackVideoMode(selection.key)
-    m.log.write("Video mode selected: " + m.state.videoMode)
+    m.log.writeDisplaySafe("Video mode selected: " + m.state.videoMode)
 end sub
 
 '-------------------------------------------------------------------------------

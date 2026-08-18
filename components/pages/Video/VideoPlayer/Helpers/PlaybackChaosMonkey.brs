@@ -60,7 +60,7 @@ sub beginPlaybackChaosMonkeyRequest(request as dynamic, isRecoveryRestart as boo
     m.chaosMonkey.scheduledSeconds = 0
     m.chaosMonkey.scheduled = false
     m.chaosMonkey.indicator.visible = true
-    m.log.write("Playback Chaos Monkey enabled itemId=" + SafeString(request.itemId, ""))
+    m.log.writeDisplaySafe("Playback Chaos Monkey enabled itemId=" + SafeString(request.itemId, ""))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -90,7 +90,7 @@ sub schedulePlaybackChaosMonkey()
     m.chaosMonkey.timer.duration = delaySeconds
     m.chaosMonkey.timer.control = "stop"
     m.chaosMonkey.timer.control = "start"
-    m.log.write("Playback Chaos Monkey scheduled itemId=" + m.recovery.itemId + " delaySeconds=" + SafeString(delaySeconds, "") + " position=" + SafeString(m.recovery.lastSafePosition, ""))
+    m.log.writeDisplaySafe("Playback Chaos Monkey scheduled itemId=" + m.recovery.itemId + " delaySeconds=" + SafeString(delaySeconds, "") + " position=" + SafeString(m.recovery.lastSafePosition, ""))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -133,7 +133,7 @@ sub onPlaybackChaosMonkeyTimerFire()
     m.chaosMonkey.incidentDetail = failure.detail
     followupLimit = getPlaybackChaosMonkeyFollowupLimit()
     m.chaosMonkey.remainingFailures = Rnd(followupLimit + 1) - 1
-    m.log.write("Playback Chaos Monkey injecting itemId=" + m.recovery.itemId + " injection=" + SafeString(m.chaosMonkey.injectionCount, "") + " reason=" + failure.reason + " followupFailures=" + SafeString(m.chaosMonkey.remainingFailures, "") + " effectiveMode=" + m.recovery.effectiveMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
+    m.log.writeDisplaySafe("Playback Chaos Monkey injecting itemId=" + m.recovery.itemId + " injection=" + SafeString(m.chaosMonkey.injectionCount, "") + " reason=" + failure.reason + " followupFailures=" + SafeString(m.chaosMonkey.remainingFailures, "") + " effectiveMode=" + m.recovery.effectiveMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
 
     reportPlaystateStop()
     if handlePlaybackRecoveryFailure(failure.reason, failure.detail) then return
@@ -162,7 +162,7 @@ function consumePlaybackChaosMonkeyStartupFailure() as boolean
     m.chaosMonkey.remainingFailures = m.chaosMonkey.remainingFailures - 1
     reason = m.chaosMonkey.incidentReason
     detail = m.chaosMonkey.incidentDetail
-    m.log.write("Playback Chaos Monkey continuing incident itemId=" + m.recovery.itemId + " reason=" + reason + " remainingFailures=" + SafeString(m.chaosMonkey.remainingFailures, "") + " effectiveMode=" + m.recovery.effectiveMode)
+    m.log.writeDisplaySafe("Playback Chaos Monkey continuing incident itemId=" + m.recovery.itemId + " reason=" + reason + " remainingFailures=" + SafeString(m.chaosMonkey.remainingFailures, "") + " effectiveMode=" + m.recovery.effectiveMode)
     if handlePlaybackRecoveryFailure(reason, detail) then return true
 
     finalizePlaybackRecoveryFailure("Unable to continue playback after recovery attempts.")
@@ -176,7 +176,7 @@ sub onPlaybackChaosMonkeyRecoveryStarted(reason as string)
     if m.chaosMonkey.enabled <> true then return
     stopPlaybackChaosMonkeyTimer()
     m.chaosMonkey.awaitingRecovery = true
-    m.log.write("Playback Chaos Monkey observing recovery itemId=" + m.recovery.itemId + " reason=" + reason)
+    m.log.writeDisplaySafe("Playback Chaos Monkey observing recovery itemId=" + m.recovery.itemId + " reason=" + reason)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -185,7 +185,7 @@ end sub
 sub onPlaybackChaosMonkeyRecoveryStabilized()
     if m.chaosMonkey.enabled <> true then return
     if m.chaosMonkey.awaitingRecovery then
-        m.log.write("Playback Chaos Monkey recovery stabilized itemId=" + m.recovery.itemId + " effectiveMode=" + m.recovery.effectiveMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
+        m.log.writeDisplaySafe("Playback Chaos Monkey recovery stabilized itemId=" + m.recovery.itemId + " effectiveMode=" + m.recovery.effectiveMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
     end if
     m.chaosMonkey.awaitingRecovery = false
     m.chaosMonkey.incidentReason = ""

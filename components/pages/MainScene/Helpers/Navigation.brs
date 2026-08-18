@@ -111,6 +111,11 @@ sub navHandleOverlayClosed()
         return
     end if
 
+    if request <> invalid and request.id = "logs" and m.header <> invalid and m.header.visible = true then
+        m.header.callFunc("focusUserMenuButton")
+        return
+    end if
+
     focusActiveSurface()
 end sub
 

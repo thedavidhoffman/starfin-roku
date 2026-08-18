@@ -207,7 +207,7 @@ sub onPlaybackRecoveryStableTimerFire()
     if LCase(SafeString(m.videoPlayer.state, "")) <> "playing" then return
     m.recovery.isStable = true
     m.recovery.sameModeRetryUsed = false
-    m.log.write("Playback recovery stabilized itemId=" + m.recovery.itemId + " effectiveMode=" + m.recovery.effectiveMode)
+    m.log.writeDisplaySafe("Playback stable for 30 seconds; recovery retry state reset")
 #if playbackChaosMonkey
     onPlaybackChaosMonkeyRecoveryStabilized()
 #endif
@@ -253,7 +253,7 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
 
     failurePhase = "startup"
     if m.recovery.hasEverPlayed then failurePhase = "runtime"
-    m.log.write("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
+    m.log.writeDisplaySafe("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
     restartRequest = buildStreamRestartPlayRequest()
     if restartRequest = invalid then return false
 

@@ -33,7 +33,12 @@ sub initReferences()
     }
     m.clock = m.top.findNode("clock")
     m.accountDropdownMenu = m.top.findNode("accountDropdownMenu")
+    m.diagnosticGestureTimer = m.top.findNode("diagnosticGestureTimer")
     m.focusableHeaderButtons = []
+    m.diagnosticGestureState = {
+        upCount: 0
+        acceptsUpPress: true
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -56,6 +61,7 @@ sub initHandlers()
     m.settingsButton.observeField("buttonSelected", "onSettingsPressed")
     m.userMenuButton.observeField("buttonSelected", "onUserMenuPressed")
     m.accountDropdownMenu.observeField("selectedItem", "onAccountDropdownItemSelected")
+    m.diagnosticGestureTimer.observeField("fire", "onDiagnosticGestureTimerFire")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -112,13 +118,20 @@ end function
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
-
+    if key = "up" and press = false then
+        m.diagnosticGestureState.acceptsUpPress = true
+        return m.diagnosticGestureState.upCount > 0
+    end if
     if press = false then return false
 
     if m.top.menuOpen = true then
+        resetDiagnosticGesture()
         if key = "up" then return m.accountDropdownMenu.callFunc("focusByOffset", -1)
         if key = "down" then return m.accountDropdownMenu.callFunc("focusByOffset", 1)
     end if
+
+    if key = "up" and m.userMenuButton.isInFocusChain() then return handleDiagnosticUpPress()
+    resetDiagnosticGesture()
 
     if key = "left" then
         return focusHeaderButtonByOffset(-1)
@@ -141,6 +154,39 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     return false
 end function
+
+'-------------------------------------------------------------------------------
+' handleDiagnosticUpPress
+'-------------------------------------------------------------------------------
+function handleDiagnosticUpPress() as boolean
+    if m.diagnosticGestureState.acceptsUpPress = false then return true
+
+    m.diagnosticGestureState.acceptsUpPress = false
+    m.diagnosticGestureState.upCount = m.diagnosticGestureState.upCount + 1
+    m.diagnosticGestureTimer.control = "stop"
+    m.diagnosticGestureTimer.control = "start"
+    if m.diagnosticGestureState.upCount < 4 then return true
+
+    resetDiagnosticGesture()
+    m.diagnosticGestureState.acceptsUpPress = true
+    requestLogsOverlay()
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onDiagnosticGestureTimerFire
+'-------------------------------------------------------------------------------
+sub onDiagnosticGestureTimerFire()
+    resetDiagnosticGesture()
+end sub
+
+'-------------------------------------------------------------------------------
+' resetDiagnosticGesture
+'-------------------------------------------------------------------------------
+sub resetDiagnosticGesture()
+    m.diagnosticGestureTimer.control = "stop"
+    m.diagnosticGestureState.upCount = 0
+end sub
 
 '-------------------------------------------------------------------------------
 ' focusHeaderButtonByOffset
@@ -312,6 +358,18 @@ sub requestSystemInformationOverlay()
         componentName: "SystemInformationDialog"
         closeField: "closeRequested"
         openFunction: "openSystemInformation"
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' requestLogsOverlay
+'-------------------------------------------------------------------------------
+sub requestLogsOverlay()
+    m.top.overlayRequested = {
+        id: "logs"
+        componentName: "LogDialog"
+        closeField: "closeRequested"
+        openFunction: "openLogs"
     }
 end sub
 

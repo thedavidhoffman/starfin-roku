@@ -1,19 +1,19 @@
 '-------------------------------------------------------------------------------
 ' HttpClient_Request
 '-------------------------------------------------------------------------------
-function HttpClient_Request(url as String, method as String, token as Dynamic, body as Dynamic, headers = invalid as Dynamic) as Object
+function HttpClient_Request(url as String, method as String, token as Dynamic, body as Dynamic, headers = invalid as Dynamic, displayRequest = true as Boolean) as Object
 
     log = CreateLogger("HttpClient_Request")
 
     if url = invalid or url = "" then
         message = "Invalid http request: url is invalid."
-        log.error(message)
+        log.errorDisplaySafe(message)
         return { ok: false, errorMessage: message }
     end if
 
     if method = invalid or method = "" then
         message = "Invalid http request: method is invalid."
-        log.error(message)
+        log.errorDisplaySafe(message)
         return { ok: false, errorMessage: message }
     end if
 
@@ -47,7 +47,11 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
     responseText = ""
     status = 0
     logUrl = __HttpClient_MaskUrl(url)
-    log.write("[" + normalizedMethod + "] " + logUrl)
+    if displayRequest then
+        log.writeDisplaySafe("[" + normalizedMethod + "] " + logUrl)
+    else
+        log.writeConsoleOnly("[" + normalizedMethod + "] " + logUrl)
+    end if
     if normalizedMethod = "POST" then
         transfer.AddHeader("Content-Type", "application/json")
         requestStarted = transfer.AsyncPostFromString(__InvalidToEmpty(body))
@@ -58,7 +62,7 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
 
     if requestStarted <> true then
         message = "Unable to start the server request."
-        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=0 message=" + message)
+        __HttpClient_LogFailure(log, normalizedMethod, logUrl, 0, message)
         return { ok: false, status: 0, errorMessage: message }
     end if
 
@@ -66,13 +70,13 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
     if msg = invalid then
         transfer.AsyncCancel()
         message = "The server request timed out."
-        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=0 message=" + message)
+        __HttpClient_LogFailure(log, normalizedMethod, logUrl, 0, message)
         return { ok: false, status: 0, errorMessage: message }
     end if
 
     if type(msg) <> "roUrlEvent" then
         message = "Unexpected server response."
-        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=0 message=" + message)
+        __HttpClient_LogFailure(log, normalizedMethod, logUrl, 0, message)
         return { ok: false, status: 0, errorMessage: message }
     end if
 
@@ -83,14 +87,14 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
 
     if status = 0 then
         message = "Unable to reach the server."
-        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=" + status.ToStr() + " message=" + message)
+        __HttpClient_LogFailure(log, normalizedMethod, logUrl, status, message)
         return { ok: false, status: status, errorMessage: message }
     end if
 
     hasAuthenticatedRequest = (token <> invalid and token <> "") or __AuthorizationHeaderHasToken(headers)
     if status = 401 and hasAuthenticatedRequest then
         message = "Your session has expired. Please sign in again."
-        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=" + status.ToStr() + " message=" + message)
+        __HttpClient_LogFailure(log, normalizedMethod, logUrl, status, message)
         return { ok: false, status: status, authExpired: true, errorMessage: message }
     end if
 
@@ -109,12 +113,21 @@ function HttpClient_Request(url as String, method as String, token as Dynamic, b
         else if msg.GetFailureReason() <> invalid and String_Trim(msg.GetFailureReason()) <> "" then
             message = String_Trim(msg.GetFailureReason())
         end if
-        log.error("HTTP request failed [" + normalizedMethod + "] " + logUrl + " status=" + status.ToStr() + " message=" + message)
+        __HttpClient_LogFailure(log, normalizedMethod, logUrl, status, message)
         return { ok: false, status: status, errorMessage: message, responseText: responseText }
     end if
 
     return { ok: true, status: status, data: data, responseText: responseText }
 end function
+
+'-------------------------------------------------------------------------------
+' __HttpClient_LogFailure
+'-------------------------------------------------------------------------------
+sub __HttpClient_LogFailure(log as object, method as string, url as string, status as integer, message as string)
+    prefix = "HTTP request failed [" + method + "] " + url + " status=" + status.ToStr()
+    log.errorDisplaySafe(prefix)
+    log.error(prefix + " message=" + message)
+end sub
 
 '-------------------------------------------------------------------------------
 ' MaskUrl
@@ -123,12 +136,34 @@ function __HttpClient_MaskUrl(url as Dynamic) as String
     text = SafeString(url, "")
     if text = "" then return ""
 
+    text = __HttpClient_MaskUrlCredentials(text)
     text = __HttpClient_MaskQueryValue(text, "api_key")
     text = __HttpClient_MaskQueryValue(text, "token")
     text = __HttpClient_MaskQueryValue(text, "ApiKey")
     text = __HttpClient_MaskQueryValue(text, "X-Emby-Token")
+    text = __HttpClient_MaskQueryValue(text, "access_token")
+    text = __HttpClient_MaskQueryValue(text, "auth_token")
+    text = __HttpClient_MaskQueryValue(text, "authorization")
+    text = __HttpClient_MaskQueryValue(text, "password")
+    text = __HttpClient_MaskQueryValue(text, "signature")
 
     return text
+end function
+
+'-------------------------------------------------------------------------------
+' __HttpClient_MaskUrlCredentials
+'-------------------------------------------------------------------------------
+function __HttpClient_MaskUrlCredentials(url as string) as string
+    schemeEnd = Instr(1, url, "://")
+    if schemeEnd = 0 then return url
+
+    authorityStart = schemeEnd + 3
+    authorityEnd = Instr(authorityStart, url, "/")
+    if authorityEnd = 0 then authorityEnd = Len(url) + 1
+    credentialsEnd = Instr(authorityStart, url, "@")
+    if credentialsEnd = 0 or credentialsEnd >= authorityEnd then return url
+
+    return Left(url, authorityStart - 1) + "[redacted]@" + Mid(url, credentialsEnd + 1)
 end function
 
 '-------------------------------------------------------------------------------

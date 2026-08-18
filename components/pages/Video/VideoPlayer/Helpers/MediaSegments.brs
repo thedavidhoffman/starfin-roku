@@ -32,7 +32,7 @@ sub loadMediaSegments(playbackResponse as dynamic)
     if hasMediaSegments(playbackResponse.payload) <> true then return
 
     m.mediaSegments.itemId = m.session.itemId
-    m.log.write("Loading media segments itemId=" + m.session.itemId)
+    m.log.writeDisplaySafe("Loading media segments itemId=" + m.session.itemId)
     m.mediaSegmentsTask.request = {
         server: m.session.server
         token: m.session.token
@@ -77,7 +77,7 @@ sub onMediaSegmentsResponse()
 
     m.mediaSegments.intros = intros
     m.mediaSegments.loaded = true
-    m.log.write("Media segments loaded itemId=" + m.session.itemId + " introCount=" + intros.Count().ToStr())
+    m.log.writeDisplaySafe("Media segments loaded itemId=" + m.session.itemId + " introCount=" + intros.Count().ToStr())
     updateSkipIntroButton(m.playback.position)
 end sub
 
@@ -97,7 +97,7 @@ sub updateSkipIntroButton(position as dynamic)
     m.skipIntroButton.visible = true
     m.skipIntroButton.hasFocusVisual = true
     m.top.setFocus(true)
-    m.log.write("Skip Intro available itemId=" + m.session.itemId + " position=" + SafeString(position, "") + " end=" + SafeString(activeIntro.endSeconds, ""))
+    m.log.writeDisplaySafe("Skip Intro available itemId=" + m.session.itemId + " position=" + SafeString(position, "") + " end=" + SafeString(activeIntro.endSeconds, ""))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -155,7 +155,7 @@ sub onSkipIntroSelected()
     targetPosition = m.mediaSegments.activeEndSeconds
     if targetPosition < 0 then return
 
-    m.log.write("Skipping intro itemId=" + m.session.itemId + " position=" + SafeString(m.playback.position, "") + " target=" + SafeString(targetPosition, ""))
+    m.log.writeDisplaySafe("Skipping intro itemId=" + m.session.itemId + " position=" + SafeString(m.playback.position, "") + " target=" + SafeString(targetPosition, ""))
     m.mediaSegments.dismissedEndSeconds = targetPosition
     hideSkipIntroButton()
     stopSeekTimers()

@@ -31,7 +31,7 @@ sub onPlaybackInfoResponse()
     if response = invalid then return
     responseRequestId = Number_ToInteger(response.requestId, -1)
     if responseRequestId <> m.playback.requestId then
-        m.log.write("Ignoring stale playback info response responseRequestId=" + SafeString(responseRequestId, "") + " currentRequestId=" + SafeString(m.playback.requestId, ""))
+        m.log.writeDisplaySafe("Ignoring stale playback info response responseRequestId=" + SafeString(responseRequestId, "") + " currentRequestId=" + SafeString(m.playback.requestId, ""))
         return
     end if
 
@@ -301,7 +301,6 @@ sub startVideoContent(content as object, response as object, startPositionSecond
     m.top.setFocus(true)
     disableScreenSaver()
     updateBufferingSpinner("buffering")
-    m.log.write("Starting video playback itemId=" + m.session.itemId)
     m.videoPlayer.control = "play"
     Status_ClearMessage()
 end sub
@@ -425,21 +424,21 @@ end function
 '-------------------------------------------------------------------------------
 function requestUpNextAutoPlay() as boolean
     if isPlaylistPlaybackQueue() then
-        m.log.write("Skipping up-next overlay for playlist playback queue")
+        m.log.writeDisplaySafe("Skipping up-next overlay for playlist playback queue")
         return false
     end if
     if m.queue = invalid then
-        m.log.write("Skipping up-next autoplay: queue is invalid")
+        m.log.writeDisplaySafe("Skipping up-next autoplay: queue is invalid")
         return false
     end if
     if m.queue.items = invalid then
-        m.log.write("Skipping up-next autoplay: queue items are invalid")
+        m.log.writeDisplaySafe("Skipping up-next autoplay: queue items are invalid")
         return false
     end if
 
     nextIndex = m.queue.index + 1
     if nextIndex < 0 or nextIndex >= m.queue.items.Count() then
-        m.log.write("Skipping up-next autoplay: no next item queueIndex=" + SafeString(m.queue.index, "") + " queueCount=" + SafeString(m.queue.items.Count(), ""))
+        m.log.writeDisplaySafe("Skipping up-next autoplay: no next item queueIndex=" + SafeString(m.queue.index, "") + " queueCount=" + SafeString(m.queue.items.Count(), ""))
         return false
     end if
 
@@ -448,11 +447,11 @@ function requestUpNextAutoPlay() as boolean
 
     nextItem = m.queue.items[nextIndex]
     if nextItem = invalid or SafeString(nextItem.itemId, "") = "" then
-        m.log.write("Skipping up-next autoplay: next item is invalid nextIndex=" + SafeString(nextIndex, ""))
+        m.log.writeDisplaySafe("Skipping up-next autoplay: next item is invalid nextIndex=" + SafeString(nextIndex, ""))
         return false
     end if
 
-    m.log.write("Requesting up-next autoplay currentIndex=" + SafeString(m.queue.index, "") + " nextIndex=" + SafeString(nextIndex, "") + " nextItemId=" + SafeString(nextItem.itemId, ""))
+    m.log.writeDisplaySafe("Requesting up-next autoplay currentIndex=" + SafeString(m.queue.index, "") + " nextIndex=" + SafeString(nextIndex, "") + " nextItemId=" + SafeString(nextItem.itemId, ""))
     m.top.upNextRequested = {
         finishedItem: currentItem
         nextItem: nextItem
@@ -614,7 +613,7 @@ sub reportPlaystate(status as string)
 
     position = getCurrentPlaybackPosition()
     isPaused = LCase(SafeString(m.videoPlayer.state, "")) = "paused"
-    m.log.write("Playstate " + status + " itemId=" + m.session.itemId + " position=" + SafeString(position, "") + " paused=" + boolToText(isPaused))
+    m.log.writeDisplaySafe("Playstate " + status + " itemId=" + m.session.itemId + " position=" + SafeString(position, "") + " paused=" + boolToText(isPaused))
 
     m.playstateTask.request = {
         server: m.session.server

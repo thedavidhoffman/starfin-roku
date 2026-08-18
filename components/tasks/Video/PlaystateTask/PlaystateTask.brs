@@ -25,15 +25,12 @@ sub executeRequest()
 
     url = request.server + endpoint
     body = buildPlaystateBody(request)
-    m.log.write("Posting " + SafeString(request.status, "") + " itemId=" + SafeString(request.itemId, "") + " positionTicks=" + SafeString(getPositionTicks(request.position), "") + " endpoint=" + endpoint)
-    result = HttpClient_Request(url, "POST", invalid, body, JellyfinAuth_BuildTokenHeaders(request.token))
+    result = HttpClient_Request(url, "POST", invalid, body, JellyfinAuth_BuildTokenHeaders(request.token), false)
     result.AddReplace("action", "playstate")
     result.AddReplace("statusName", SafeString(request.status, ""))
 
     if result.ok <> true then
         m.log.error("Playstate " + SafeString(request.status, "") + " failed: " + SafeString(result.errorMessage, ""))
-    else
-        m.log.write("Playstate " + SafeString(request.status, "") + " synced status=" + SafeString(result.status, ""))
     end if
 
     m.top.response = result

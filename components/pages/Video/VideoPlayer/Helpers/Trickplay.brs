@@ -157,49 +157,49 @@ end function
 function buildTrickplayState(item as dynamic, itemId as string) as dynamic
     trickplay = getItemTrickplay(item)
     if itemId = "" then
-        m.log.write("Trickplay unavailable: missing itemId.")
+        m.log.writeDisplaySafe("Trickplay unavailable: missing itemId.")
         return invalid
     end if
     if trickplay = invalid then
-        m.log.write("Trickplay unavailable itemId=" + itemId + ": item has no Trickplay metadata.")
+        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": item has no Trickplay metadata.")
         return invalid
     end if
 
     itemTrickplay = trickplay.LookupCI(itemId)
     if itemTrickplay = invalid or itemTrickplay.Keys().Count() = 0 then
-        m.log.write("Trickplay unavailable itemId=" + itemId + ": no trickplay entry matched the item id.")
+        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": no trickplay entry matched the item id.")
         return invalid
     end if
 
     widthKeys = itemTrickplay.Keys()
     data = itemTrickplay[widthKeys[0]]
     if data = invalid then
-        m.log.write("Trickplay unavailable itemId=" + itemId + ": selected trickplay width has no data.")
+        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": selected trickplay width has no data.")
         return invalid
     end if
     if data.Width = invalid or data.Height = invalid then
-        m.log.write("Trickplay unavailable itemId=" + itemId + ": missing thumbnail dimensions.")
+        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": missing thumbnail dimensions.")
         return invalid
     end if
     if data.TileWidth = invalid or data.TileHeight = invalid then
-        m.log.write("Trickplay unavailable itemId=" + itemId + ": missing tile grid dimensions.")
+        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": missing tile grid dimensions.")
         return invalid
     end if
     if data.Interval = invalid or data.Interval <= 0 then
-        m.log.write("Trickplay unavailable itemId=" + itemId + ": invalid thumbnail interval.")
+        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": invalid thumbnail interval.")
         return invalid
     end if
 
     thumbnailCount = 0
     if data.ThumbnailCount <> invalid then thumbnailCount = data.ThumbnailCount
     if thumbnailCount <= 0 then
-        m.log.write("Trickplay unavailable itemId=" + itemId + ": thumbnail count is zero.")
+        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": thumbnail count is zero.")
         return invalid
     end if
 
     tilesPerSheet = data.TileHeight * data.TileWidth
     tileCount = Fix((thumbnailCount - 1) / tilesPerSheet) + 1
-    m.log.write("Trickplay available itemId=" + itemId + " widthKey=" + SafeString(widthKeys[0], "") + " thumbnailCount=" + SafeString(thumbnailCount, "") + " tileCount=" + SafeString(tileCount, ""))
+    m.log.writeDisplaySafe("Trickplay available itemId=" + itemId + " widthKey=" + SafeString(widthKeys[0], "") + " thumbnailCount=" + SafeString(thumbnailCount, "") + " tileCount=" + SafeString(tileCount, ""))
 
     return {
         tileWidth: data.Width

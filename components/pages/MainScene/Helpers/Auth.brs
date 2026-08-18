@@ -119,6 +119,7 @@ sub authHandleAccountPickerClosed(closed as object)
     end if
     if source = "login" and overlay.accountsUpdated = true then authRefreshLoginSavedAccounts()
     if overlay.signInSelected = true then
+        clearApplicationLog()
         server = m.login.serverValue
         if m.session <> invalid then server = SafeString(m.session.server, server)
         m.login.serverValue = server
@@ -141,6 +142,7 @@ sub authHandleAccountPickerClosed(closed as object)
     end if
 
     themeAudioStop()
+    clearApplicationLog()
     resetDynamicPages()
     Status_SetMessage("Switching account...")
     authBeginBlockingRequest()
@@ -237,6 +239,7 @@ end function
 '-------------------------------------------------------------------------------
 sub authHandleLogoutPressed()
     themeAudioStop()
+    clearApplicationLog()
     resetDynamicPages()
 
     request = {
@@ -258,6 +261,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub authHandleResetStarfinConfirmed()
     themeAudioStop()
+    clearApplicationLog()
     resetDynamicPages()
     if m.authController <> invalid then m.authController.resetStarfinRequested = true
 
@@ -269,6 +273,13 @@ sub authHandleResetStarfinConfirmed()
 end sub
 
 '-------------------------------------------------------------------------------
+' clearApplicationLog
+'-------------------------------------------------------------------------------
+sub clearApplicationLog()
+    if m.global.logCollector <> invalid then m.global.logCollector.callFunc("clear")
+end sub
+
+'-------------------------------------------------------------------------------
 ' authHandleAuthenticatedSession
 '-------------------------------------------------------------------------------
 sub authHandleAuthenticatedSession()
@@ -276,6 +287,7 @@ sub authHandleAuthenticatedSession()
     session = m.authController.authenticatedSession
     if session = invalid then return
 
+    clearApplicationLog()
     m.session = session
     Status_ClearMessage()
     syncHeaderUserIdentity()
@@ -290,6 +302,7 @@ sub authHandleLoginRequired()
     request = m.authController.loginRequired
     if request = invalid then return
 
+    clearApplicationLog()
     authShowLogin(request.message)
     server = SafeString(m.authController.savedSession.server, "")
     accounts = m.authController.callFunc("getAccountsForServer", server)
@@ -333,6 +346,7 @@ sub authHandleSessionExpired()
     response = m.authController.sessionExpired
     if response = invalid then return
 
+    clearApplicationLog()
     if SafeString(response.server, "") <> "" then m.login.serverValue = response.server
     if SafeString(response.username, "") <> "" then m.login.usernameValue = response.username
     authHandleExpiredSession(response.message, response.clearRuntimeSession = true)

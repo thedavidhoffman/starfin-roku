@@ -2,7 +2,10 @@ sub Main()
     screen = CreateObject("roSGScreen")
     port = CreateObject("roMessagePort")
     screen.SetMessagePort(port)
-    screen.GetGlobalNode().AddFields({ resolutionProfile: ResolutionProfile_Create() })
+    globalNode = screen.GetGlobalNode()
+    globalNode.AddFields({ resolutionProfile: ResolutionProfile_Create() })
+    globalNode.AddField("logCollector", "node", false)
+    globalNode.logCollector = CreateObject("roSGNode", "LogCollector")
     
     ' required for Roku app certification
     memoryMonitor = CreateObject("roAppMemoryMonitor")

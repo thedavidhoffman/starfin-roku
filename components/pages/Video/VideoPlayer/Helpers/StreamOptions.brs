@@ -236,7 +236,7 @@ sub onVideoModeApplyTimerFire()
     if restartRequest = invalid then return
 
     restartRequest.AddReplace("videoMode", videoMode)
-    m.log.write("Restarting playback with video mode=" + videoMode)
+    m.log.writeDisplaySafe("Restarting playback with video mode=" + videoMode)
     m.top.playRequest = restartRequest
 end sub
 
@@ -313,7 +313,7 @@ sub restartPlaybackWithStreamOptions()
     request = buildStreamRestartPlayRequest()
     if request = invalid then return
 
-    m.log.write("Restarting playback with stream options audioStreamIndex=" + SafeString(request.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(request.subtitleStreamIndex, ""))
+    m.log.writeDisplaySafe("Restarting playback with stream options audioStreamIndex=" + SafeString(request.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(request.subtitleStreamIndex, ""))
     m.top.playRequest = request
 end sub
 

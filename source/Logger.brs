@@ -1,9 +1,9 @@
 '-------------------------------------------------------------------------------
 ' Logger
 '-------------------------------------------------------------------------------
-' Creates a small logger object with buffered and unbuffered write paths.
-' Unbuffered logging writes each line immediately when log.write(message) is
-' called. Buffered logging stores lines until log.flush() writes the full buffer.
+' Creates a small logger object with buffered and unbuffered console paths.
+' Only explicitly display-safe methods copy messages to the in-app log viewer.
+' Buffered logging stores lines until log.flush() writes the full console buffer.
 ' The buffer exists for work that executes on its own task/thread, so related log
 ' statements can be grouped together instead of interleaved with other output.
 
@@ -15,10 +15,16 @@ function CreateLogger(label = "" as string) as object
     log = {
         label: label
         buffered: false
+        collector: __Logger_GetCollector()
         write: __Logger_Write
+        writeDisplaySafe: __Logger_WriteDisplaySafe
+        writeConsoleOnly: __Logger_WriteConsoleOnly
         writeBracketed: __Logger_WriteBracketed
         writeJson: __Logger_WriteJson
+        writeJsonDisplaySafe: __Logger_WriteJsonDisplaySafe
+        writeJsonConsoleOnly: __Logger_WriteJsonConsoleOnly
         error: __Logger_Error
+        errorDisplaySafe: __Logger_ErrorDisplaySafe
     }
 
     return log
@@ -34,10 +40,16 @@ function CreateBufferedLogger(label = "" as string) as object
         label: label
         buffered: true
         buffer: []
+        collector: __Logger_GetCollector()
         write: __Logger_Write
+        writeDisplaySafe: __Logger_WriteDisplaySafe
+        writeConsoleOnly: __Logger_WriteConsoleOnly
         writeBracketed: __Logger_WriteBracketed
         writeJson: __Logger_WriteJson
+        writeJsonDisplaySafe: __Logger_WriteJsonDisplaySafe
+        writeJsonConsoleOnly: __Logger_WriteJsonConsoleOnly
         error: __Logger_Error
+        errorDisplaySafe: __Logger_ErrorDisplaySafe
         flush: __Logger_Flush
     }
 
@@ -60,6 +72,24 @@ function __Logger_Write(message as dynamic) as object
 
     return m
 
+end function
+
+'-------------------------------------------------------------------------------
+' __Logger_WriteDisplaySafe
+'-------------------------------------------------------------------------------
+function __Logger_WriteDisplaySafe(message as dynamic) as object
+    line = __Logger_Format(message, m.label)
+    ? line
+    __Logger_CollectLine(m.collector, line)
+    return m
+end function
+
+'-------------------------------------------------------------------------------
+' __Logger_WriteConsoleOnly
+'-------------------------------------------------------------------------------
+function __Logger_WriteConsoleOnly(message as dynamic) as object
+    ? __Logger_Format(message, m.label)
+    return m
 end function
 
 '-------------------------------------------------------------------------------
@@ -94,6 +124,44 @@ function __Logger_WriteJson(jsonText as dynamic, indent = 0 as integer) as objec
 end function
 
 '-------------------------------------------------------------------------------
+' __Logger_WriteJsonDisplaySafe
+'-------------------------------------------------------------------------------
+function __Logger_WriteJsonDisplaySafe(jsonText as dynamic, indent = 0 as integer, heading = "" as string) as object
+    lines = __Logger_FormatJsonText(jsonText)
+    prefix = __Logger_Indent(indent)
+    displayEntry = ""
+    if heading <> "" then
+        m.writeConsoleOnly(heading)
+        displayEntry = __Logger_Format(heading, m.label)
+    end if
+    for i = 0 to lines.Count() - 1
+        line = prefix + lines[i]
+        m.writeConsoleOnly(line)
+        if displayEntry = "" then
+            displayEntry = __Logger_Format(line, m.label)
+        else
+            displayEntry = displayEntry + Chr(10) + line
+        end if
+    end for
+    if displayEntry <> "" then __Logger_CollectLine(m.collector, displayEntry)
+    return m
+end function
+
+'-------------------------------------------------------------------------------
+' __Logger_WriteJsonConsoleOnly
+'-------------------------------------------------------------------------------
+function __Logger_WriteJsonConsoleOnly(jsonText as dynamic, indent = 0 as integer) as object
+    lines = __Logger_FormatJsonText(jsonText)
+    prefix = __Logger_Indent(indent)
+
+    for each line in lines
+        m.writeConsoleOnly(prefix + line)
+    end for
+
+    return m
+end function
+
+'-------------------------------------------------------------------------------
 ' __Logger_Error
 '-------------------------------------------------------------------------------
 function __Logger_Error(message as dynamic) as object
@@ -121,6 +189,29 @@ sub __Logger_Flush()
     ' print once so buffered task logs stay grouped
     if output <> "" then ? output;
     m.buffer = []
+end sub
+
+'-------------------------------------------------------------------------------
+' __Logger_GetCollector
+'-------------------------------------------------------------------------------
+function __Logger_GetCollector() as dynamic
+    if m = invalid or m.global = invalid then return invalid
+    return m.global.logCollector
+end function
+
+'-------------------------------------------------------------------------------
+' __Logger_ErrorDisplaySafe
+'-------------------------------------------------------------------------------
+function __Logger_ErrorDisplaySafe(message as dynamic) as object
+    return m.writeDisplaySafe("ERROR: " + message)
+end function
+
+'-------------------------------------------------------------------------------
+' __Logger_CollectLine
+'-------------------------------------------------------------------------------
+sub __Logger_CollectLine(collector as dynamic, line as string)
+    if collector = invalid then return
+    collector.appendRequested = line
 end sub
 
 '-------------------------------------------------------------------------------
@@ -248,7 +339,7 @@ function __Logger_TimestampPrefix() as string
     dateTime = CreateObject("roDateTime")
     dateTime.ToLocalTime()
 
-    return __Logger_Pad2(dateTime.GetMonth()) + "-" + __Logger_Pad2(dateTime.GetDayOfMonth()) + " " + __Logger_Pad2(dateTime.GetHours()) + ":" + __Logger_Pad2(dateTime.GetMinutes()) + ":" + __Logger_Pad2(dateTime.GetSeconds()) + "." + __Logger_Pad3(dateTime.GetMilliseconds()) + " "
+    return __Logger_Pad2(dateTime.GetMonth()) + "/" + __Logger_Pad2(dateTime.GetDayOfMonth()) + " " + __Logger_Pad2(dateTime.GetHours()) + ":" + __Logger_Pad2(dateTime.GetMinutes()) + ":" + __Logger_Pad2(dateTime.GetSeconds()) + " "
 end function
 
 '-------------------------------------------------------------------------------

@@ -47,9 +47,9 @@ sub executeRequest()
 
     if (playbackMode = modes.automatic or playbackMode = modes.automaticNoRemux) and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
     if (playbackMode = modes.automatic or playbackMode = modes.automaticNoRemux) and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
-    m.log.write("Device profile display cap width=" + SafeString(displaySize.width, "") + " height=" + SafeString(displaySize.height, "") + " source=" + SafeString(displaySize.source, ""))
-    m.log.write("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
-    m.log.write("Requested video mode=" + playbackMode)
+    m.log.writeDisplaySafe("Device profile display cap width=" + SafeString(displaySize.width, "") + " height=" + SafeString(displaySize.height, "") + " source=" + SafeString(displaySize.source, ""))
+    m.log.writeDisplaySafe("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
+    m.log.writeDisplaySafe("Requested video mode=" + playbackMode)
     if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
     if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex
     if requestedSubtitleStreamIndex >= -1 then params.SubtitleStreamIndex = requestedSubtitleStreamIndex
@@ -77,8 +77,7 @@ sub executeRequest()
         return
     end if
 
-    m.log.write("Selected stream format: " + streamInfo.streamFormat)
-    m.log.write("Selected stream URL: " + maskUrl(streamInfo.streamUrl))
+    m.log.writeConsoleOnly("Selected stream URL: " + maskUrl(streamInfo.streamUrl))
 
     m.top.response = {
         ok: true
@@ -305,21 +304,22 @@ sub logPlaybackRequest(request as object, body as string)
     itemName = ""
     if request.item <> invalid then itemName = FirstNonEmpty([request.item.Name], "")
 
-    m.log.write("PlaybackInfo request itemId=" + SafeString(request.itemId, "") + " title=" + itemName)
-    m.log.write("PlaybackInfo request body:")
-    m.log.writeJson(body, 2)
+    m.log.writeDisplaySafe("PlaybackInfo request itemId=" + SafeString(request.itemId, "") + " title=" + itemName)
+    m.log.writeJsonDisplaySafe(body, 2, "PlaybackInfo request body:")
 end sub
 
 '-------------------------------------------------------------------------------
 ' logPlaybackError
 '-------------------------------------------------------------------------------
 sub logPlaybackError(result as object)
-    m.log.error("PlaybackInfo failed status=" + SafeString(result.status, "") + " message=" + SafeString(result.errorMessage, ""))
+    status = SafeString(result.status, "")
+    m.log.errorDisplaySafe("PlaybackInfo failed status=" + status)
+    m.log.writeConsoleOnly("PlaybackInfo failure detail status=" + status + " message=" + SafeString(result.errorMessage, ""))
 
     responseText = SafeString(result.responseText, "")
     if responseText <> "" then
-        m.log.write("PlaybackInfo error response:")
-        m.log.writeJson(responseText, 2)
+        m.log.writeConsoleOnly("PlaybackInfo error response:")
+        m.log.writeJsonConsoleOnly(responseText, 2)
     end if
 end sub
 
@@ -328,28 +328,28 @@ end sub
 '-------------------------------------------------------------------------------
 sub logPlaybackResponse(playbackInfo as dynamic)
     if playbackInfo = invalid then
-        m.log.write("PlaybackInfo response parsed as invalid.")
+        m.log.writeDisplaySafe("PlaybackInfo response parsed as invalid.")
         return
     end if
 
     mediaSource = firstMediaSource(playbackInfo)
-    m.log.write("PlaybackInfo response PlaySessionId=" + SafeString(playbackInfo.PlaySessionId, ""))
+    m.log.writeDisplaySafe("PlaybackInfo response PlaySessionId=" + SafeString(playbackInfo.PlaySessionId, ""))
 
     if mediaSource = invalid then
-        m.log.write("PlaybackInfo response has no media source.")
+        m.log.writeDisplaySafe("PlaybackInfo response has no media source.")
         return
     end if
 
-    m.log.write("PlaybackInfo media source Id=" + SafeString(mediaSource.Id, "") + " Protocol=" + SafeString(mediaSource.Protocol, "") + " Container=" + SafeString(mediaSource.Container, ""))
+    m.log.writeDisplaySafe("PlaybackInfo media source Id=" + SafeString(mediaSource.Id, "") + " Protocol=" + SafeString(mediaSource.Protocol, "") + " Container=" + SafeString(mediaSource.Container, ""))
     m.log.write("PlaybackInfo media source Path=" + maskUrl(SafeString(mediaSource.Path, "")))
-    m.log.write("PlaybackInfo SupportsDirectPlay=" + boolToText(mediaSource.SupportsDirectPlay) + " SupportsDirectStream=" + boolToText(mediaSource.SupportsDirectStream) + " SupportsTranscoding=" + boolToText(mediaSource.SupportsTranscoding))
-    m.log.write("PlaybackInfo TranscodingUrl=" + maskUrl(SafeString(mediaSource.TranscodingUrl, "")))
+    m.log.writeDisplaySafe("PlaybackInfo SupportsDirectPlay=" + boolToText(mediaSource.SupportsDirectPlay) + " SupportsDirectStream=" + boolToText(mediaSource.SupportsDirectStream) + " SupportsTranscoding=" + boolToText(mediaSource.SupportsTranscoding))
+    m.log.writeConsoleOnly("PlaybackInfo TranscodingUrl=" + maskUrl(SafeString(mediaSource.TranscodingUrl, "")))
 
     if mediaSource.MediaStreams <> invalid then
         for each mediaStream in mediaSource.MediaStreams
             streamType = SafeString(mediaStream.Type, "")
             if LCase(streamType) = "audio" or LCase(streamType) = "video" then
-                m.log.write("PlaybackInfo stream Type=" + streamType + " Index=" + SafeString(mediaStream.Index, "") + " Codec=" + SafeString(mediaStream.Codec, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Default=" + boolToText(mediaStream.IsDefault))
+                m.log.writeDisplaySafe("PlaybackInfo stream Type=" + streamType + " Index=" + SafeString(mediaStream.Index, "") + " Codec=" + SafeString(mediaStream.Codec, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Default=" + boolToText(mediaStream.IsDefault))
             end if
         end for
     end if
@@ -402,13 +402,16 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
             streamUrl = request.server + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
         end if
         playbackMethod = "DirectPlay"
-        m.log.write("Playback selection chose DirectPlay because the request allows direct play and Jellyfin reported SupportsDirectPlay=true alternativeHlsAvailable=" + boolToText(transcodingUrl <> ""))
+        m.log.writeDisplaySafe("Playback selection chose DirectPlay because the request allows direct play and Jellyfin reported SupportsDirectPlay=true alternativeHlsAvailable=" + boolToText(transcodingUrl <> ""))
     else if transcodingAllowed and transcodingUrl <> "" then
         streamUrl = buildServerUrl(request.server, transcodingUrl)
         if requestedSubtitleStreamIndex >= -1 then streamUrl = Url_SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
         streamFormat = "hls"
         playbackMethod = getTranscodingPlaybackMethod(mediaSource)
-        m.log.write("Playback selection chose HLS directPlayAllowed=" + boolToText(directPlayAllowed) + " supportsDirectPlay=" + boolToText(directPlaySupported) + " playbackMethod=" + playbackMethod)
+        reasons = getPlaybackMethodReasons(mediaSource)
+        reasonText = reasons.Join(", ")
+        if reasonText = "" then reasonText = "not reported"
+        m.log.writeDisplaySafe("Playback selection chose HLS method=" + playbackMethod + " reasons=" + reasonText)
     else
         mode = getPlaybackMode(request)
         if directPlayAllowed and directPlaySupported <> true then
@@ -608,14 +611,14 @@ end function
 ' logForcedTranscodeReason
 '-------------------------------------------------------------------------------
 sub logForcedTranscodeReason(mediaStream as dynamic)
-    m.log.write("Forcing transcode because selected multichannel AAC audio is not device-decodable. Index=" + SafeString(mediaStream.arrayIndex, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+    m.log.writeDisplaySafe("Forcing transcode because selected multichannel AAC audio is not device-decodable. Index=" + SafeString(mediaStream.arrayIndex, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
 end sub
 
 '-------------------------------------------------------------------------------
 ' logForcedStreamSelection
 '-------------------------------------------------------------------------------
 sub logForcedStreamSelection(mediaStream as dynamic)
-    m.log.write("Disabling direct play because a non-default audio stream was selected. Index=" + SafeString(mediaStream.Index, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+    m.log.writeDisplaySafe("Disabling direct play because a non-default audio stream was selected. Index=" + SafeString(mediaStream.Index, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
 end sub
 
 '-------------------------------------------------------------------------------

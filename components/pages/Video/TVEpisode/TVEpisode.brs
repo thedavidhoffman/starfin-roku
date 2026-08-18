@@ -813,7 +813,7 @@ end sub
 sub onVideoToolbarPlaySelected()
     if m.state.playSelection = invalid then return
     applySelectedStreamsToPlaySelection(m.state.playSelection)
-    m.log.write("Play selected audioStreamIndex=" + SafeString(m.state.playSelection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(m.state.playSelection.subtitleStreamIndex, ""))
+    m.log.writeDisplaySafe("Play selected audioStreamIndex=" + SafeString(m.state.playSelection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(m.state.playSelection.subtitleStreamIndex, ""))
     m.top.selectedEpisode = m.state.playSelection
 end sub
 
@@ -825,7 +825,7 @@ sub onVideoToolbarRestartSelected()
 
     selection = buildRestartSelection(m.state.playSelection)
     applySelectedStreamsToPlaySelection(selection)
-    m.log.write("Restart selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
+    m.log.writeDisplaySafe("Restart selected audioStreamIndex=" + SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(selection.subtitleStreamIndex, ""))
     m.top.selectedEpisode = selection
 end sub
 
@@ -927,11 +927,11 @@ sub onSubtitleOptionSelected()
     if selection.isOff = true then
         m.state.selectedStreams.subtitle = invalid
         m.state.selectedStreams.subtitleOff = true
-        m.log.write("Subtitle option selected: Off")
+        m.log.writeDisplaySafe("Subtitle option selected: Off")
     else
         m.state.selectedStreams.subtitle = selection
         m.state.selectedStreams.subtitleOff = false
-        m.log.write("Subtitle option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
+        m.log.writeDisplaySafe("Subtitle option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
     end if
 
     applySelectedStreamsToPlaySelection(m.state.playSelection)
@@ -972,7 +972,7 @@ sub onVideoModeSelected()
 
     applyPlaybackVideoMode(selection.key)
     applySelectedStreamsToPlaySelection(m.state.playSelection)
-    m.log.write("Video mode selected: " + m.state.videoMode)
+    m.log.writeDisplaySafe("Video mode selected: " + m.state.videoMode)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1036,7 +1036,7 @@ sub onChapterOptionSelected()
     playSelection.startPositionTicks = selection.startPositionTicks
     applySelectedStreamsToPlaySelection(playSelection)
     m.state.selectedChapterKey = SafeString(selection.startPositionTicks, "")
-    m.log.write("Chapter option selected startPositionTicks=" + SafeString(selection.startPositionTicks, "") + " label=" + SafeString(selection.label, ""))
+    m.log.writeDisplaySafe("Chapter option selected startPositionTicks=" + SafeString(selection.startPositionTicks, "") + " label=" + SafeString(selection.label, ""))
     m.top.selectedEpisode = playSelection
 end sub
 
@@ -1068,7 +1068,7 @@ sub onAudioOptionSelected()
     if selection = invalid then return
 
     m.state.selectedStreams.audio = selection
-    m.log.write("Audio option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
+    m.log.writeDisplaySafe("Audio option selected streamIndex=" + SafeString(selection.streamIndex, "") + " label=" + SafeString(selection.label, ""))
     applySelectedStreamsToPlaySelection(m.state.playSelection)
 end sub
 
