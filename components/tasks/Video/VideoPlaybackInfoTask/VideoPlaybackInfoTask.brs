@@ -31,13 +31,14 @@ sub executeRequest()
     playbackMode = getPlaybackMode(request)
     modes = PlaybackMode_Values()
     playbackFlags = getPlaybackFlags(playbackMode, forceTranscode, forceStreamSelection, forceSubtitleSelection)
+    bitrateLimits = DeviceCapabilities_GetBitrateLimits()
     params = {
         UserId: SafeString(request.userId, "")
         StartTimeTicks: getStartPositionTicks(request)
         IsPlayback: true
         AutoOpenLiveStream: true
-        MaxStreamingBitrate: "120000000"
-        MaxStaticBitrate: "100000000"
+        MaxStreamingBitrate: bitrateLimits.maxStreaming
+        MaxStaticBitrate: bitrateLimits.maxStatic
         EnableDirectPlay: playbackFlags.enableDirectPlay
         EnableDirectStream: playbackFlags.enableDirectStream
         EnableTranscoding: playbackFlags.enableTranscoding

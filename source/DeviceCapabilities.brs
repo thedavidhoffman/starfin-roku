@@ -3,17 +3,29 @@
 '-------------------------------------------------------------------------------
 function DeviceCapabilities_BuildDeviceProfileJson() as string
     displaySize = DeviceCapabilities_GetDisplaySize()
+    bitrateLimits = DeviceCapabilities_GetBitrateLimits()
     return Json_Object([
         Json_Pair("Name", "Starfin Roku")
-        Json_NumberPair("MaxStreamingBitrate", 120000000)
-        Json_NumberPair("MaxStaticBitrate", 100000000)
-        Json_NumberPair("MusicStreamingTranscodingBitrate", 192000)
+        Json_NumberPair("MaxStreamingBitrate", bitrateLimits.maxStreaming)
+        Json_NumberPair("MaxStaticBitrate", bitrateLimits.maxStatic)
+        Json_NumberPair("MusicStreamingTranscodingBitrate", bitrateLimits.musicTranscoding)
         Json_String("DirectPlayProfiles") + ":[" + Json_JoinParts(__DeviceCapabilities_DirectPlayProfiles()) + "]"
         Json_String("TranscodingProfiles") + ":[" + Json_JoinParts(__DeviceCapabilities_TranscodingProfiles()) + "]"
         Json_String("ContainerProfiles") + ":[]"
         Json_String("CodecProfiles") + ":[" + Json_JoinParts(__DeviceCapabilities_CodecProfiles(displaySize)) + "]"
         Json_String("SubtitleProfiles") + ":[" + Json_JoinParts(__DeviceCapabilities_SubtitleProfiles()) + "]"
     ])
+end function
+
+'-------------------------------------------------------------------------------
+' DeviceCapabilities_GetBitrateLimits
+'-------------------------------------------------------------------------------
+function DeviceCapabilities_GetBitrateLimits() as object
+    return {
+        maxStreaming: 40000000
+        maxStatic: 40000000
+        musicTranscoding: 256000
+    }
 end function
 
 '-------------------------------------------------------------------------------
