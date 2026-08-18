@@ -9,6 +9,7 @@ sub init()
     m.filterButtonRow = m.top.findNode("filterButtonRow")
     m.emptyFilterLabel = m.top.findNode("emptyFilterLabel")
     m.filterFocusTimer = m.top.findNode("filterFocusTimer")
+    m.loadWatchdogTimer = m.top.findNode("loadWatchdogTimer")
     m.albumsGrid = m.top.findNode("albumsGrid")
     m.artistsGrid = m.top.findNode("artistsGrid")
     m.musicLibraryTask = m.top.findNode("musicLibraryTask")
@@ -23,6 +24,7 @@ sub init()
     m.filterButtonRow.observeField("focusExitUp", "onFilterButtonRowFocusExitUp")
     m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
     m.filterFocusTimer.observeField("fire", "onFilterFocusTimerFired")
+    m.loadWatchdogTimer.observeField("fire", "onLoadWatchdogTimerFired")
     m.albumsGrid.observeField("itemSelected", "onAlbumSelected")
     m.artistsGrid.observeField("itemSelected", "onArtistSelected")
     m.state = {
@@ -37,6 +39,16 @@ sub init()
         selectedGenre: ""
         filterCache: createEmptyFilterCache()
         sortCache: createEmptySortCache()
+        foregroundLoad: {
+            kind: ""
+            startedAt: invalid
+        }
+        albumLoad: {
+            status: "idle"
+        }
+        artistLoad: {
+            status: "idle"
+        }
         lifecycle: AsyncLifecycle_Create()
     }
     syncSortControls()
@@ -53,6 +65,8 @@ sub onLoadRequestChanged()
     m.state.allAlbums = []
     m.state.albums = []
     m.state.artists = []
+    m.state.albumLoad.status = "loading"
+    m.state.artistLoad.status = "idle"
     savedState = LibraryViewStateStore_Load(SafeString(request.accountKey, ""), SafeString(request.libraryId, ""))
     if savedState <> invalid then
         applySavedMusicLibraryViewState(request, savedState)
@@ -77,13 +91,10 @@ sub onLoadRequestChanged()
     updateTitleLabel(0)
     renderAlbums([])
     Spinner_Show(0)
-
+    startForegroundLoad("albums")
+    m.log.write("Album load started libraryId=" + SafeString(request.libraryId, ""))
     m.musicLibraryTask.request = request
     m.musicLibraryTask.control = "run"
-    if request.favoriteOnly <> true then
-        m.musicArtistsTask.request = request
-        m.musicArtistsTask.control = "run"
-    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -93,19 +104,24 @@ sub onMusicArtistsResponse()
     response = m.musicArtistsTask.response
     if response = invalid then return
     if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
+    finishForegroundLoad("artists")
     if response.ok <> true then
-        if isArtistBrowseMode() then
-            Spinner_Hide()
-            Status_SetMessage(SafeString(response.errorMessage, "Unable to load music artists."))
-        end if
+        m.state.artistLoad.status = "failed"
+        m.log.error("Artist load failed libraryId=" + getLibraryId() + " message=" + SafeString(response.errorMessage, "Unable to load music artists."))
+        if isArtistBrowseMode() then Status_SetMessage(SafeString(response.errorMessage, "Unable to load music artists."))
         return
     end if
 
     m.state.artists = getItemsFromPayload(response.payload)
+    m.state.artistLoad.status = "loaded"
+    m.log.write("Artist response accepted libraryId=" + getLibraryId() + " count=" + m.state.artists.Count().ToStr())
     if isArtistBrowseMode() then
-        renderArtists()
         Status_ClearMessage()
-        Spinner_Hide()
+        renderTimer = CreateObject("roTimespan")
+        renderTimer.Mark()
+        m.log.write("Artist render started libraryId=" + getLibraryId() + " count=" + m.state.artists.Count().ToStr())
+        renderArtists()
+        m.log.write("Artist render completed libraryId=" + getLibraryId() + " elapsedMs=" + renderTimer.TotalMilliseconds().ToStr())
         focusAlbums()
     end if
 end sub
@@ -117,18 +133,28 @@ sub onMusicLibraryResponse()
     response = m.musicLibraryTask.response
     if response = invalid then return
     if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicLibrary") <> true then return
+    finishForegroundLoad("albums")
 
     if response.ok <> true then
-        if isArtistBrowseMode() then return
-        Spinner_Hide()
+        m.state.albumLoad.status = "failed"
+        m.log.error("Album load failed libraryId=" + getLibraryId() + " message=" + SafeString(response.errorMessage, "Unable to load music library."))
         Status_SetMessage(SafeString(response.errorMessage, "Unable to load music library."))
         return
     end if
 
     m.state.allAlbums = getItemsFromPayload(response.payload)
+    m.state.albumLoad.status = "loaded"
     m.state.filterCache = createFilterCacheFromOptions(response.filterOptions)
     m.state.sortCache = createEmptySortCache()
-    if isArtistBrowseMode() then return
+    m.log.write("Album response accepted libraryId=" + getLibraryId() + " count=" + m.state.allAlbums.Count().ToStr())
+    Status_ClearMessage()
+    if isArtistBrowseMode() then
+        ensureArtistsLoaded()
+        return
+    end if
+    renderTimer = CreateObject("roTimespan")
+    renderTimer.Mark()
+    m.log.write("Album render started libraryId=" + getLibraryId() + " count=" + m.state.allAlbums.Count().ToStr())
     if isDecadeFilterActive() then
         showDecadeFilterRow()
     else if isGenreFilterActive() then
@@ -137,8 +163,7 @@ sub onMusicLibraryResponse()
         renderCurrentAlbums()
     end if
     updateTitleLabel(m.state.albums.Count())
-    Status_ClearMessage()
-    Spinner_Hide()
+    m.log.write("Album render completed libraryId=" + getLibraryId() + " elapsedMs=" + renderTimer.TotalMilliseconds().ToStr())
     focusAlbums()
 end sub
 
@@ -154,7 +179,10 @@ sub renderAlbums(albums as object)
     request = m.state.request
 
     for each album in albums
-        if Array_IsAssocArray(album) = false then continue for
+        if Array_IsAssocArray(album) = false then
+            m.log.error("Skipping malformed album libraryId=" + getLibraryId())
+            continue for
+        end if
 
         albumName = getDisplayText(FirstNonEmpty([album.Name], "Untitled Album"))
         artistName = getDisplayText(getAlbumArtistName(album))
@@ -197,7 +225,11 @@ end function
 sub renderCurrentAlbums()
     if isArtistBrowseMode() then
         m.emptyFilterLabel.visible = false
-        renderArtists()
+        if m.state.artistLoad.status = "loaded" then
+            renderArtists()
+        else
+            ensureArtistsLoaded()
+        end if
         return
     end if
 
@@ -213,7 +245,14 @@ end sub
 ' renderArtists
 '-------------------------------------------------------------------------------
 sub renderArtists()
-    artists = copyAlbums(m.state.artists)
+    artists = []
+    for each artist in m.state.artists
+        if Array_IsAssocArray(artist) then
+            artists.Push(artist)
+        else
+            m.log.error("Skipping malformed artist libraryId=" + getLibraryId())
+        end if
+    end for
     artists.SortBy("SortName")
     if SafeString(m.state.selectedSort.sortOrder, "Ascending") = "Descending" then reverseAlbums(artists)
 
@@ -352,7 +391,7 @@ end function
 '-------------------------------------------------------------------------------
 function getAlbumGenres(album as dynamic) as object
     if Array_IsAssocArray(album) = false then return []
-    if album.Genres = invalid then return []
+    if Type(album.Genres) <> "roArray" then return []
 
     return album.Genres
 end function
@@ -564,10 +603,13 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if Array_IsAssocArray(payload) = false then return []
-    if payload.Items <> invalid then return payload.Items
-    if payload.items <> invalid then return payload.items
+    if Array_IsAssocArray(payload) = false then
+        m.log.error("Unexpected music payload type=" + Type(payload))
+        return []
+    end if
+    if Type(payload.Items) = "roArray" then return payload.Items
 
+    m.log.error("Music payload Items is not an array")
     return []
 end function
 
@@ -769,6 +811,7 @@ function applySortSelection(selection as object) as boolean
 
     optionKey = SafeString(selection.optionKey, "")
     if optionKey = "" then return false
+    if optionKey <> "Artist" then cancelPendingArtistLoad()
     if optionKey = "Favorites" then
         if isFavoriteBrowseActive() then return false
 
@@ -868,6 +911,24 @@ function applySortSelection(selection as object) as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' cancelPendingArtistLoad
+'-------------------------------------------------------------------------------
+sub cancelPendingArtistLoad()
+    if m.state.artistLoad.status <> "loading" then return
+
+    m.log.write("Artist load cancelled libraryId=" + getLibraryId())
+    m.musicArtistsTask.control = "stop"
+    m.state.artistLoad.status = "idle"
+    if m.state.foregroundLoad.kind = "artists" then
+        stopLoadWatchdog()
+        m.state.foregroundLoad.kind = ""
+        m.state.foregroundLoad.startedAt = invalid
+        Spinner_Hide()
+    end if
+    AsyncLifecycle_Deactivate(m.state.lifecycle)
+end sub
+
+'-------------------------------------------------------------------------------
 ' reloadMusicLibrary
 '-------------------------------------------------------------------------------
 sub reloadMusicLibrary()
@@ -877,6 +938,8 @@ sub reloadMusicLibrary()
     m.state.allAlbums = []
     m.state.albums = []
     m.state.artists = []
+    m.state.albumLoad.status = "loading"
+    m.state.artistLoad.status = "idle"
     m.state.filterCache = createEmptyFilterCache()
     m.state.sortCache = createEmptySortCache()
     m.albumsGrid.visible = true
@@ -885,14 +948,12 @@ sub reloadMusicLibrary()
     updateTitleLabel(0)
     renderAlbums([])
     Spinner_Show(0)
+    startForegroundLoad("albums")
+    m.log.write("Album reload started libraryId=" + SafeString(request.libraryId, ""))
     m.musicLibraryTask.control = "stop"
     m.musicLibraryTask.request = request
     m.musicLibraryTask.control = "run"
     m.musicArtistsTask.control = "stop"
-    if request.favoriteOnly <> true then
-        m.musicArtistsTask.request = request
-        m.musicArtistsTask.control = "run"
-    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1096,10 +1157,97 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    stopLoadWatchdog()
+    m.state.foregroundLoad.kind = ""
+    m.state.foregroundLoad.startedAt = invalid
     AsyncLifecycle_Deactivate(m.state.lifecycle)
     m.musicLibraryTask.control = "stop"
     m.musicArtistsTask.control = "stop"
 end sub
+
+'-------------------------------------------------------------------------------
+' ensureArtistsLoaded
+'-------------------------------------------------------------------------------
+sub ensureArtistsLoaded()
+    if m.state.artistLoad.status = "loaded" or m.state.artistLoad.status = "loading" then return
+    if m.state.albumLoad.status <> "loaded" then return
+    request = m.state.request
+    if request = invalid or request.favoriteOnly = true then return
+
+    m.state.artistLoad.status = "loading"
+    AsyncLifecycle_Begin(m.state.lifecycle, request.libraryId)
+    Status_ClearMessage()
+    Spinner_Show(0)
+    startForegroundLoad("artists")
+    m.log.write("Artist load started libraryId=" + SafeString(request.libraryId, ""))
+    m.musicArtistsTask.control = "stop"
+    m.musicArtistsTask.request = request
+    m.musicArtistsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' startForegroundLoad
+'-------------------------------------------------------------------------------
+sub startForegroundLoad(kind as string)
+    startedAt = CreateObject("roTimespan")
+    startedAt.Mark()
+    m.state.foregroundLoad.kind = kind
+    m.state.foregroundLoad.startedAt = startedAt
+    m.loadWatchdogTimer.control = "stop"
+    m.loadWatchdogTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' finishForegroundLoad
+'-------------------------------------------------------------------------------
+sub finishForegroundLoad(kind as string)
+    if m.state.foregroundLoad.kind <> kind then return
+
+    elapsedMs = 0
+    if m.state.foregroundLoad.startedAt <> invalid then elapsedMs = m.state.foregroundLoad.startedAt.TotalMilliseconds()
+    m.log.write("Foreground load completed kind=" + kind + " libraryId=" + getLibraryId() + " elapsedMs=" + elapsedMs.ToStr())
+    stopLoadWatchdog()
+    m.state.foregroundLoad.kind = ""
+    m.state.foregroundLoad.startedAt = invalid
+    Spinner_Hide()
+end sub
+
+'-------------------------------------------------------------------------------
+' stopLoadWatchdog
+'-------------------------------------------------------------------------------
+sub stopLoadWatchdog()
+    m.loadWatchdogTimer.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' onLoadWatchdogTimerFired
+'-------------------------------------------------------------------------------
+sub onLoadWatchdogTimerFired()
+    kind = SafeString(m.state.foregroundLoad.kind, "")
+    if kind = "" then return
+
+    m.log.error("Foreground load timed out kind=" + kind + " libraryId=" + getLibraryId() + " elapsedMs=45000")
+    if kind = "artists" then
+        m.state.artistLoad.status = "failed"
+        m.musicArtistsTask.control = "stop"
+    else
+        m.state.albumLoad.status = "failed"
+        m.musicLibraryTask.control = "stop"
+    end if
+    m.state.foregroundLoad.kind = ""
+    m.state.foregroundLoad.startedAt = invalid
+    AsyncLifecycle_Deactivate(m.state.lifecycle)
+    Spinner_Hide()
+    Status_SetMessage("Music took too long to load. Please leave this page and try again.")
+end sub
+
+'-------------------------------------------------------------------------------
+' getLibraryId
+'-------------------------------------------------------------------------------
+function getLibraryId() as string
+    if m.state.request = invalid then return ""
+    return SafeString(m.state.request.libraryId, "")
+end function
 
 '-------------------------------------------------------------------------------
 ' onAlbumSelected
@@ -1157,6 +1305,7 @@ function getAlbumsForArtist(artist as object) as object
     artistName = LCase(String_Trim(SafeString(artist.Name, "")))
 
     for each album in m.state.allAlbums
+        if Array_IsAssocArray(album) = false then continue for
         if albumMatchesArtist(album, artistId, artistName) then albums.Push(album)
     end for
     sortAlbumsByYearThenTitle(albums)
@@ -1167,15 +1316,16 @@ end function
 ' albumMatchesArtist
 '-------------------------------------------------------------------------------
 function albumMatchesArtist(album as object, artistId as string, artistName as string) as boolean
-    if album.ArtistItems <> invalid then
+    if Type(album.ArtistItems) = "roArray" then
         for each artistItem in album.ArtistItems
+            if Array_IsAssocArray(artistItem) = false then continue for
             if artistId <> "" and SafeString(artistItem.Id, "") = artistId then return true
             if artistName <> "" and LCase(String_Trim(SafeString(artistItem.Name, ""))) = artistName then return true
         end for
     end if
 
     if artistName <> "" and LCase(String_Trim(SafeString(album.AlbumArtist, ""))) = artistName then return true
-    if album.Artists <> invalid then
+    if Type(album.Artists) = "roArray" then
         for each name in album.Artists
             if LCase(String_Trim(SafeString(name, ""))) = artistName then return true
         end for

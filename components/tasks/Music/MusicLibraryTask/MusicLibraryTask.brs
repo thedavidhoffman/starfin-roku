@@ -11,6 +11,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
+    requestTimer = CreateObject("roTimespan")
+    requestTimer.Mark()
     validationError = validateRequest(request)
     if validationError <> invalid then
         if request <> invalid then validationError.AddReplace("libraryId", SafeString(request.libraryId, ""))
@@ -34,19 +36,27 @@ sub executeRequest()
 
     url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
     response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+    m.log.write("HTTP completed libraryId=" + SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
     if response.ok <> true then
+        m.log.error("Album request failed libraryId=" + SafeString(request.libraryId, "") + " message=" + SafeString(response.errorMessage, ""))
         response.AddReplace("action", "musicLibrary")
         response.AddReplace("libraryId", SafeString(request.libraryId, ""))
         m.top.response = response
         return
     end if
 
+    albums = getItemsFromPayload(response.data)
+    processingTimer = CreateObject("roTimespan")
+    processingTimer.Mark()
+    m.log.write("Album processing started libraryId=" + SafeString(request.libraryId, "") + " count=" + albums.Count().ToStr())
+    filterOptions = buildFilterOptions(albums)
+    m.log.write("Album processing completed libraryId=" + SafeString(request.libraryId, "") + " elapsedMs=" + processingTimer.TotalMilliseconds().ToStr())
     m.top.response = {
         ok: true
         action: "musicLibrary"
         libraryId: SafeString(request.libraryId, "")
         payload: response.data
-        filterOptions: buildFilterOptions(getItemsFromPayload(response.data))
+        filterOptions: filterOptions
     }
 end sub
 
@@ -66,6 +76,10 @@ function buildFilterOptions(albums as object) as object
     genreLabelByKey = {}
 
     for each album in albums
+        if Array_IsAssocArray(album) = false then
+            m.log.error("Skipping malformed album while building filters")
+            continue for
+        end if
         year = getAlbumYear(album)
         if year > 0 then
             decade = Number_ToInteger(Fix(year / 10) * 10, 0)
@@ -114,10 +128,13 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if Array_IsAssocArray(payload) = false then return []
-    if payload.Items <> invalid then return payload.Items
-    if payload.items <> invalid then return payload.items
+    if Array_IsAssocArray(payload) = false then
+        m.log.error("Unexpected album payload type=" + Type(payload))
+        return []
+    end if
+    if Type(payload.Items) = "roArray" then return payload.Items
 
+    m.log.error("Album payload Items is not an array")
     return []
 end function
 
@@ -141,7 +158,7 @@ end function
 '-------------------------------------------------------------------------------
 function getAlbumGenres(album as dynamic) as object
     if Array_IsAssocArray(album) = false then return []
-    if album.Genres = invalid then return []
+    if Type(album.Genres) <> "roArray" then return []
 
     return album.Genres
 end function
