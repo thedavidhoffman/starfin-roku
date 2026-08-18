@@ -75,6 +75,32 @@ sub onLogoutRequestChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onResetStarfinRequested
+'-------------------------------------------------------------------------------
+sub onResetStarfinRequested()
+    m.log.write("onResetStarfinRequested")
+
+    if m.savedSession <> invalid then
+        server = SafeString(m.savedSession.server, "")
+        token = SafeString(m.savedSession.token, "")
+        if server <> "" and token <> "" then
+            runLogoutApiRequest({
+                action: "logout"
+                server: server
+                token: token
+            })
+        end if
+    end if
+
+    ApplicationStore_ClearAll()
+    m.savedSession = AuthStore_Load()
+    m.authState.isResumingSession = false
+    m.authState.pendingSwitch = invalid
+    m.top.savedSession = m.savedSession
+    publishLoginRequired("Starfin was reset. Sign in to continue.", false)
+end sub
+
+'-------------------------------------------------------------------------------
 ' onExpireActiveSessionRequested
 '-------------------------------------------------------------------------------
 sub onExpireActiveSessionRequested()

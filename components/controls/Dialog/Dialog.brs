@@ -304,7 +304,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return false
     end if
 
-    if key = "OK" or key = "select" then
+    if (key = "OK" or key = "select") and m.top.closeOnContentSelected = true then
         closeDialog()
         return true
     end if

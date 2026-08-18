@@ -254,6 +254,21 @@ sub authHandleLogoutPressed()
 end sub
 
 '-------------------------------------------------------------------------------
+' authHandleResetStarfinConfirmed
+'-------------------------------------------------------------------------------
+sub authHandleResetStarfinConfirmed()
+    themeAudioStop()
+    resetDynamicPages()
+    if m.authController <> invalid then m.authController.resetStarfinRequested = true
+
+    m.session = invalid
+    m.login.serverValue = ""
+    m.login.usernameValue = ""
+    m.login.passwordValue = ""
+    m.settings = SettingsStore_Load("")
+end sub
+
+'-------------------------------------------------------------------------------
 ' authHandleAuthenticatedSession
 '-------------------------------------------------------------------------------
 sub authHandleAuthenticatedSession()

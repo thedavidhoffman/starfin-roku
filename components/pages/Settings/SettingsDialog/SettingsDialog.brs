@@ -6,11 +6,13 @@ sub openSettings()
     m.top.title = "Settings"
     m.top.dialogWidth = 1560
     m.top.dialogHeight = 900
+    m.top.closeOnContentSelected = false
     m.top.contentComponentName = "SettingsContent"
 
     content = getSettingsContent()
     if content <> invalid then
         content.accountKey = m.top.accountKey
+        content.observeField("resetStarfinConfirmed", "onResetStarfinConfirmed")
         content.callFunc("loadSettingsValues")
         m.originalSettings = content.callFunc("getSettingsValues")
     end if
@@ -24,6 +26,14 @@ end sub
 function getSettingsContent() as object
     return m.top.callFunc("getContentComponent")
 end function
+
+'-------------------------------------------------------------------------------
+' onResetStarfinConfirmed
+'-------------------------------------------------------------------------------
+sub onResetStarfinConfirmed()
+    m.top.resetStarfinConfirmed = true
+    m.top.callFunc("closeDialog")
+end sub
 
 '-------------------------------------------------------------------------------
 ' saveSettings

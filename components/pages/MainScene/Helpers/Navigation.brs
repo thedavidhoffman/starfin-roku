@@ -102,6 +102,10 @@ sub navHandleOverlayClosed()
     end if
 
     if request <> invalid and request.id = "settings" and m.header <> invalid and m.header.visible = true then
+        if closed.overlay <> invalid and closed.overlay.resetStarfinConfirmed = true then
+            authHandleResetStarfinConfirmed()
+            return
+        end if
         applySettingsFromOverlay(closed.overlay)
         m.header.callFunc("focusHeader")
         return

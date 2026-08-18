@@ -13,6 +13,7 @@ sub init()
         m.top.findNode("videoPanel")
         m.top.findNode("collectionsPanel")
         m.top.findNode("playlistsPanel")
+        m.top.findNode("advancedPanel")
     ]
     m.settingsControls = {
         displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
@@ -26,6 +27,14 @@ sub init()
         collectionItemsImageTypeOptions: m.top.findNode("collectionItemsImageTypeOptions")
         playlistImageTypeOptions: m.top.findNode("playlistImageTypeOptions")
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
+        resetStarfinButton: m.top.findNode("resetStarfinButton")
+        abortResetButton: m.top.findNode("abortResetButton")
+        eraseAllDataButton: m.top.findNode("eraseAllDataButton")
+    }
+    m.resetStarfinState = {
+        confirmationVisible: false
+        description: m.top.findNode("resetStarfinDescription")
+        confirmationGroup: m.top.findNode("resetConfirmation")
     }
     m.categoryControls = [
         [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
@@ -35,6 +44,7 @@ sub init()
         [m.settingsControls.videoStreamingModeOptions]
         [m.settingsControls.collectionCardsImageTypeOptions, m.settingsControls.collectionItemsImageTypeOptions]
         [m.settingsControls.playlistImageTypeOptions]
+        [m.settingsControls.resetStarfinButton]
     ]
     m.focusState = {
         categoryIndex: 0
@@ -70,6 +80,9 @@ sub init()
     m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemFocused", "onVideoStreamingModeFocused")
+    m.settingsControls.resetStarfinButton.observeField("buttonSelected", "onResetStarfinSelected")
+    m.settingsControls.abortResetButton.observeField("buttonSelected", "onAbortResetSelected")
+    m.settingsControls.eraseAllDataButton.observeField("buttonSelected", "onEraseAllDataSelected")
 
     loadSettingsValues()
     showCategory(0)
@@ -80,7 +93,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initCategoryList()
     content = CreateObject("roSGNode", "ContentNode")
-    for each title in ["Global", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists"]
+    for each title in ["Global", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Advanced"]
         item = content.createChild("ContentNode")
         item.title = title
     end for
@@ -179,6 +192,7 @@ end sub
 ' focusFirstField
 '-------------------------------------------------------------------------------
 sub focusFirstField()
+    clearResetStarfinButtonFocus()
     m.categoryList.jumpToItem = m.focusState.categoryIndex
     m.categoryList.setFocus(true)
     updateTextInputFocusVisual()
@@ -221,6 +235,7 @@ sub showCategory(index as integer)
 
     m.focusState.categoryIndex = index
     m.focusState.controlIndex = 0
+    if index <> 7 and m.resetStarfinState.confirmationVisible then showResetStarfinState()
     for i = 0 to m.categoryPanels.Count() - 1
         m.categoryPanels[i].visible = (i = index)
     end for
@@ -234,7 +249,13 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if m.categoryList.isInFocusChain() then
         if key = "right" then return focusCategoryControl(0, 0)
+        if key = "OK" or key = "select" then return true
         return false
+    end if
+
+    if m.resetStarfinState.confirmationVisible then
+        if key = "right" and m.settingsControls.abortResetButton.isInFocusChain() then return focusCategoryControl(1, invalid)
+        if key = "left" and m.settingsControls.eraseAllDataButton.isInFocusChain() then return focusCategoryControl(0, invalid)
     end if
 
     if key = "left" then
@@ -262,6 +283,44 @@ function onKeyEvent(key as string, press as boolean) as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' onResetStarfinSelected
+'-------------------------------------------------------------------------------
+sub onResetStarfinSelected()
+    m.resetStarfinState.confirmationVisible = true
+    m.settingsControls.resetStarfinButton.visible = false
+    m.resetStarfinState.description.visible = false
+    m.resetStarfinState.confirmationGroup.visible = true
+    m.categoryControls[7] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
+    focusCategoryControl(0, invalid)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAbortResetSelected
+'-------------------------------------------------------------------------------
+sub onAbortResetSelected()
+    showResetStarfinState()
+    focusCategoryControl(0, invalid)
+end sub
+
+'-------------------------------------------------------------------------------
+' onEraseAllDataSelected
+'-------------------------------------------------------------------------------
+sub onEraseAllDataSelected()
+    m.top.resetStarfinConfirmed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' showResetStarfinState
+'-------------------------------------------------------------------------------
+sub showResetStarfinState()
+    m.resetStarfinState.confirmationVisible = false
+    m.settingsControls.resetStarfinButton.visible = true
+    m.resetStarfinState.description.visible = true
+    m.resetStarfinState.confirmationGroup.visible = false
+    m.categoryControls[7] = [m.settingsControls.resetStarfinButton]
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusCategoryControl
 '-------------------------------------------------------------------------------
 function focusCategoryControl(index as integer, itemIndex as dynamic) as boolean
@@ -271,6 +330,8 @@ function focusCategoryControl(index as integer, itemIndex as dynamic) as boolean
     node = controls[index]
     m.focusState.controlIndex = index
     if itemIndex <> invalid and node.subtype() = "RadioButtonList" then node.jumpToItem = itemIndex
+    clearResetStarfinButtonFocus()
+    if node.subtype() = "PrimaryButton" then node.hasFocusVisual = true
     node.setFocus(true)
     updateTextInputFocusVisual()
     return true
@@ -481,6 +542,15 @@ function getVideoStreamingModeForIndex(index as integer) as string
     if index = 3 then return modes.transcodeNoRemux
     return modes.automatic
 end function
+
+'-------------------------------------------------------------------------------
+' clearResetStarfinButtonFocus
+'-------------------------------------------------------------------------------
+sub clearResetStarfinButtonFocus()
+    m.settingsControls.resetStarfinButton.hasFocusVisual = false
+    m.settingsControls.abortResetButton.hasFocusVisual = false
+    m.settingsControls.eraseAllDataButton.hasFocusVisual = false
+end sub
 
 '-------------------------------------------------------------------------------
 ' openKeyboardDialog
