@@ -60,6 +60,48 @@ changes.
 Use `npm run validate` for routine checks when you do not want to increment the
 checked-in manifest version.
 
+## Unit Tests
+
+Starfin uses [Rooibos](https://github.com/rokucommunity/rooibos) for unit
+testing. Rooibos runs as a BrighterScript compiler plugin: application code can
+remain in standard `.brs` files, while test suites use BrighterScript `.bs`
+files for annotations such as `@suite` and `@it`.
+
+The tests execute on a physical Roku device. The test command builds a dedicated
+test channel, deploys it to a Roku in developer mode, and streams the results to
+the terminal. Little or no test UI may be visible on the television; the
+terminal report is authoritative.
+
+Compile the test channel without deploying it:
+
+```text
+npm run test:build
+```
+
+The generated channel is written to `out/starfin-roku-tests.zip`. To deploy and
+run the tests, provide the Roku's IP address and developer password:
+
+```text
+npm test -- --host 192.168.1.123 --password "developer-password"
+```
+
+A successful run ends with a summary similar to:
+
+```text
+Total: 13
+Passed: 13
+Crashed: 0
+Failed: 0
+RESULT: Success
+[Rooibos Result]: PASS
+```
+
+Rooibos framework warnings about unused variables under `pkg:/source/rooibos/`
+come from the injected test framework and do not indicate failures in Starfin.
+Test source files live under `tests/`; `bsconfig-test.json` maps them into the
+test channel's executable source scope without including them in production
+packages.
+
 ## Debugging and Logs
 
 The `Starfin` VS Code launch configuration deploys and debugs the channel. It

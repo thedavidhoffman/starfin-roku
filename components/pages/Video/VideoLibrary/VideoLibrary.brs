@@ -730,8 +730,6 @@ function createEmptyFilterCache() as object
         genreOptions: []
         decadeItemsByValue: {}
         genreItemsByValue: {}
-        sortedDecadeValues: {}
-        sortedGenreValues: {}
     }
 end function
 
@@ -759,13 +757,8 @@ function getCachedFilterItems(filterType as string, filterValue as string) as ob
         filterKey = SafeString(filterValue, "")
         items = cache.decadeItemsByValue[filterKey]
         if items = invalid then
-            items = getItemsForDecade(filterKey)
+            items = VideoLibraryFilter_ByDecade(m.pageState.allItems, Number_ToInteger(filterKey, -1))
             cache.decadeItemsByValue[filterKey] = items
-        end if
-        if cache.sortedDecadeValues[filterKey] <> true then
-            items = getItemsSortedByVideoLibraryYear(items)
-            cache.decadeItemsByValue[filterKey] = items
-            cache.sortedDecadeValues[filterKey] = true
         end if
         if items <> invalid then return items
         return []
@@ -775,64 +768,14 @@ function getCachedFilterItems(filterType as string, filterValue as string) as ob
         filterKey = SafeString(filterValue, "")
         items = cache.genreItemsByValue[filterKey]
         if items = invalid then
-            items = getItemsForGenre(filterKey)
+            items = VideoLibraryFilter_ByGenre(m.pageState.allItems, filterKey)
             cache.genreItemsByValue[filterKey] = items
-        end if
-        if cache.sortedGenreValues[filterKey] <> true then
-            items = getItemsSortedBySortName(items)
-            cache.genreItemsByValue[filterKey] = items
-            cache.sortedGenreValues[filterKey] = true
         end if
         if items <> invalid then return items
         return []
     end if
 
     return []
-end function
-
-'-------------------------------------------------------------------------------
-' getItemsForDecade
-'-------------------------------------------------------------------------------
-function getItemsForDecade(decadeKey as string) as object
-    items = []
-    targetDecade = Number_ToInteger(decadeKey, -1)
-    if targetDecade < 0 then return items
-
-    for each item in m.pageState.allItems
-        year = getItemVideoLibraryYear(item)
-        if year > 0 and Number_ToInteger(Fix(year / 10) * 10, 0) = targetDecade then items.Push(item)
-    end for
-
-    return items
-end function
-
-'-------------------------------------------------------------------------------
-' getItemsForGenre
-'-------------------------------------------------------------------------------
-function getItemsForGenre(genreLabel as string) as object
-    items = []
-    targetGenre = LCase(String_Trim(genreLabel))
-    if targetGenre = "" then return items
-
-    for each item in m.pageState.allItems
-        if itemHasGenre(item, targetGenre) then items.Push(item)
-    end for
-
-    return items
-end function
-
-'-------------------------------------------------------------------------------
-' itemHasGenre
-'-------------------------------------------------------------------------------
-function itemHasGenre(item as dynamic, targetGenre as string) as boolean
-    if Array_IsAssocArray(item) = false then return false
-    if item.Genres = invalid then return false
-
-    for each genre in item.Genres
-        if LCase(String_Trim(SafeString(genre, ""))) = targetGenre then return true
-    end for
-
-    return false
 end function
 
 '-------------------------------------------------------------------------------
@@ -848,23 +791,22 @@ function getSortedVideoLibraryItems(items as object) as object
     sortKey = SafeString(selection.sortKey, "SortName")
     if sortKey = "" then return sortedItems
 
-    if sortKey = "Random" then return shuffleVideoLibraryItems(sortedItems)
+    if sortKey = "Random" then return VideoLibrarySort_Shuffle(sortedItems)
+
+    sortOrder = getSortOrderFromSelection(selection)
+    if sortKey = "SortName" then return VideoLibrarySort_ByTitle(sortedItems, sortOrder)
+
+    if sortKey = "PremiereDate" then
+        return VideoLibrarySort_ByReleaseDate(sortedItems, sortOrder)
+    end if
+    if sortKey = "DateCreated" then
+        return VideoLibrarySort_ByDateAdded(sortedItems, sortOrder)
+    end if
 
     sortedItems.SortBy(sortKey)
 
     if getSortOrderFromSelection(selection) = "Descending" then reverseVideoLibraryItems(sortedItems)
 
-    return sortedItems
-end function
-
-'-------------------------------------------------------------------------------
-' getItemsSortedBySortName
-'-------------------------------------------------------------------------------
-function getItemsSortedBySortName(items as object) as object
-    sortedItems = copyVideoLibraryItems(items)
-    if sortedItems.Count() < 2 then return sortedItems
-
-    sortedItems.SortBy("SortName")
     return sortedItems
 end function
 
@@ -898,79 +840,6 @@ sub reverseVideoLibraryItems(items as object)
         rightIndex = rightIndex - 1
     end while
 end sub
-
-'-------------------------------------------------------------------------------
-' shuffleVideoLibraryItems
-'-------------------------------------------------------------------------------
-function shuffleVideoLibraryItems(items as object) as object
-    if items = invalid or items.Count() < 2 then return items
-
-    for i = items.Count() - 1 to 1 step -1
-        swapIndex = Number_ToInteger(Rnd(0) * (i + 1))
-        if swapIndex < 0 then swapIndex = 0
-        if swapIndex > i then swapIndex = i
-
-        temp = items[i]
-        items[i] = items[swapIndex]
-        items[swapIndex] = temp
-    end for
-
-    return items
-end function
-
-'-------------------------------------------------------------------------------
-' getItemsSortedByVideoLibraryYear
-'-------------------------------------------------------------------------------
-function getItemsSortedByVideoLibraryYear(items as object) as object
-    sortedItems = copyVideoLibraryItems(items)
-    if sortedItems.Count() < 2 then return sortedItems
-
-    for i = 1 to sortedItems.Count() - 1
-        currentItem = sortedItems[i]
-        currentYear = getItemVideoLibraryYear(currentItem)
-        currentTitle = getItemAlphabetTitle(currentItem)
-        insertIndex = i - 1
-
-        while insertIndex >= 0 and shouldYearSortedItemMoveRight(sortedItems[insertIndex], currentYear, currentTitle)
-            sortedItems[insertIndex + 1] = sortedItems[insertIndex]
-            insertIndex = insertIndex - 1
-        end while
-
-        sortedItems[insertIndex + 1] = currentItem
-    end for
-
-    return sortedItems
-end function
-
-'-------------------------------------------------------------------------------
-' shouldYearSortedItemMoveRight
-'-------------------------------------------------------------------------------
-function shouldYearSortedItemMoveRight(item as dynamic, targetYear as integer, targetTitle as string) as boolean
-    itemYear = getItemVideoLibraryYear(item)
-    if itemYear > targetYear then return true
-    if itemYear < targetYear then return false
-
-    return LCase(getItemAlphabetTitle(item)) > LCase(targetTitle)
-end function
-
-'-------------------------------------------------------------------------------
-' getItemVideoLibraryYear
-'-------------------------------------------------------------------------------
-function getItemVideoLibraryYear(item as dynamic) as integer
-    if Array_IsAssocArray(item) = false then return 0
-
-    productionYear = Number_ToInteger(item.ProductionYear, 0)
-    if productionYear > 0 then return productionYear
-
-    premiereDate = SafeString(item.PremiereDate, "")
-    if Len(premiereDate) < 4 then return 0
-
-    yearText = Left(premiereDate, 4)
-    year = Number_ToInteger(yearText, 0)
-    if year <= 0 then return 0
-
-    return Number_ToInteger(year, 0)
-end function
 
 '-------------------------------------------------------------------------------
 ' onItemFocused
