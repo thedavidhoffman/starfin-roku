@@ -313,14 +313,6 @@ sub stopPlayback(preserveRecovery = false as boolean)
 end sub
 
 '-------------------------------------------------------------------------------
-' getItemTitle
-'-------------------------------------------------------------------------------
-function getItemTitle(item as dynamic) as string
-    if item = invalid then return "Video"
-    return FirstNonEmpty([item.Name], "Video")
-end function
-
-'-------------------------------------------------------------------------------
 ' updatePlaybackControlsMetadata
 '-------------------------------------------------------------------------------
 sub updatePlaybackControlsMetadata(request as object, item as dynamic)
@@ -333,124 +325,14 @@ sub updatePlaybackControlsMetadata(request as object, item as dynamic)
         return
     end if
 
-    if isTVEpisodePlayback(request, item) then
-        m.playbackControls.title = getSeriesTitle(request, item)
-        m.playbackControls.subtitle = getEpisodePlaybackMetadata(item)
+    if VideoPlayerMetadata_IsEpisode(request, item) then
+        m.playbackControls.title = VideoPlayerMetadata_GetSeriesTitle(request, item)
+        m.playbackControls.subtitle = VideoPlayerMetadata_GetEpisodeText(item)
     else
-        m.playbackControls.title = getItemTitle(item)
-        m.playbackControls.subtitle = getMoviePlaybackMetadata(item)
+        m.playbackControls.title = VideoPlayerMetadata_GetItemTitle(item)
+        m.playbackControls.subtitle = VideoPlayerMetadata_GetMovieText(item)
     end if
 end sub
-
-'-------------------------------------------------------------------------------
-' isTVEpisodePlayback
-'-------------------------------------------------------------------------------
-function isTVEpisodePlayback(request as object, item as dynamic) as boolean
-    if request <> invalid and request.series <> invalid then return true
-    if item = invalid then return false
-
-    itemType = LCase(FirstNonEmpty([item.Type], ""))
-    return itemType = "episode"
-end function
-
-'-------------------------------------------------------------------------------
-' getSeriesTitle
-'-------------------------------------------------------------------------------
-function getSeriesTitle(request as object, item as dynamic) as string
-    if request <> invalid and request.series <> invalid then
-        identity = SeriesIdentity_FromItem(SafeString(request.server, ""), request.series)
-        if identity <> invalid then
-            title = FirstNonEmpty([identity.Name], "")
-            if title <> "" then return title
-        end if
-    end if
-
-    return FirstNonEmpty([item.SeriesName, item.Series], getItemTitle(item))
-end function
-
-'-------------------------------------------------------------------------------
-' getMoviePlaybackMetadata
-'-------------------------------------------------------------------------------
-function getMoviePlaybackMetadata(item as dynamic) as string
-    year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = DateTime_ToYear(item.PremiereDate)
-
-    return year
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodePlaybackMetadata
-'-------------------------------------------------------------------------------
-function getEpisodePlaybackMetadata(item as dynamic) as string
-    parts = []
-
-    episodeNumberText = getEpisodePlaybackNumberText(item)
-    if episodeNumberText <> "" then parts.Push(episodeNumberText)
-
-    title = FirstNonEmpty([item.Name], "")
-    if title <> "" then parts.Push(title)
-
-    dateText = DateTime_ToShortDate(getEpisodeAiredDateText(item))
-    if dateText <> "" then parts.Push(dateText)
-
-    runtimeText = MediaMetadata_FormatRuntime(item.RunTimeTicks)
-    if runtimeText <> "" then parts.Push(runtimeText)
-
-    return joinPlaybackMetadata(parts)
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodePlaybackNumberText
-'-------------------------------------------------------------------------------
-function getEpisodePlaybackNumberText(item as dynamic) as string
-    seasonNumber = FirstNonEmpty([item.ParentIndexNumber, item.SeasonNumber], "")
-    episodeNumber = FirstNonEmpty([item.IndexNumber, item.EpisodeNumber], "")
-
-    if seasonNumber <> "" and episodeNumber <> "" then return "S" + seasonNumber + MediaMetadata_BulletSeparator() + "E" + episodeNumber
-    if seasonNumber <> "" then return "S" + seasonNumber
-    if episodeNumber <> "" then return "E" + episodeNumber
-    return ""
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeAiredDateText
-'-------------------------------------------------------------------------------
-function getEpisodeAiredDateText(item as dynamic) as string
-    airedDate = FirstNonEmpty([item.PremiereDate, item.AirDate, item.DateCreated], "")
-    if Len(airedDate) >= 10 then return Left(airedDate, 10)
-    return airedDate
-end function
-
-'-------------------------------------------------------------------------------
-' joinPlaybackMetadata
-'-------------------------------------------------------------------------------
-function joinPlaybackMetadata(values as dynamic) as string
-    if values = invalid then return ""
-
-    result = ""
-    for each value in values
-        text = SafeString(value, "")
-        if text = "" then continue for
-
-        if result <> "" then result = result + MediaMetadata_BulletSeparator()
-        result = result + text
-    end for
-
-    return result
-end function
-
-'-------------------------------------------------------------------------------
-' getRuntimeSeconds
-'-------------------------------------------------------------------------------
-function getRuntimeSeconds(item as dynamic) as float
-    if item = invalid then return 0
-
-    runtimeTicks = 0
-    if item.RunTimeTicks <> invalid then runtimeTicks = item.RunTimeTicks
-    if runtimeTicks = 0 then return 0
-
-    return runtimeTicks / 10000000
-end function
 
 '-------------------------------------------------------------------------------
 ' showControls
@@ -550,16 +432,6 @@ sub finishControlsHide()
     m.playbackControls.opacity = 1.0
     m.clock.opacity = 1.0
 end sub
-
-'-------------------------------------------------------------------------------
-' clampSeconds
-'-------------------------------------------------------------------------------
-function clampSeconds(value as float, minimum as float, maximum as float) as float
-    if value < minimum then return minimum
-    if value > maximum then return maximum
-
-    return value
-end function
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

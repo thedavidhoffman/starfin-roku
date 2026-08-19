@@ -99,22 +99,11 @@ end sub
 ' updatePlaybackSkipAvailability
 '-------------------------------------------------------------------------------
 sub updatePlaybackSkipAvailability(request as object, item as dynamic)
-    isEpisode = isTVEpisodePlayback(request, item)
-    isMovie = isMoviePlayback(request, item)
+    isEpisode = VideoPlayerMetadata_IsEpisode(request, item)
+    isMovie = VideoPlayerMetadata_IsMovie(request, item)
     m.playbackControls.skipBackEnabled = isEpisode or isMovie
     m.playbackControls.skipForwardEnabled = (isEpisode or isMovie) and hasQueueItemAtOffset(1)
 end sub
-
-'-------------------------------------------------------------------------------
-' isMoviePlayback
-'-------------------------------------------------------------------------------
-function isMoviePlayback(request as dynamic, item as dynamic) as boolean
-    if isTVEpisodePlayback(request, item) = true then return false
-    if item = invalid then return false
-
-    itemType = LCase(FirstNonEmpty([item.Type], ""))
-    return itemType = "movie" or itemType = "video"
-end function
 
 '-------------------------------------------------------------------------------
 ' hasQueueItemAtOffset
@@ -142,9 +131,9 @@ end function
 sub onSkipBackPressed()
     request = m.top.playRequest
     item = getCurrentPlaybackItem(request)
-    if isTVEpisodePlayback(request, item) <> true and isMoviePlayback(request, item) <> true then return
+    if VideoPlayerMetadata_IsEpisode(request, item) <> true and VideoPlayerMetadata_IsMovie(request, item) <> true then return
 
-    if (isTVEpisodePlayback(request, item) = true or isMoviePlayback(request, item) = true) and getCurrentPlaybackPosition() < 15 then
+    if (VideoPlayerMetadata_IsEpisode(request, item) = true or VideoPlayerMetadata_IsMovie(request, item) = true) and getCurrentPlaybackPosition() < 15 then
         if startQueueItemAtOffset(-1) = true then return
     end if
 
@@ -158,7 +147,7 @@ sub onSkipForwardPressed()
     request = m.top.playRequest
     item = getCurrentPlaybackItem(request)
 
-    if isTVEpisodePlayback(request, item) <> true and isMoviePlayback(request, item) <> true then return
+    if VideoPlayerMetadata_IsEpisode(request, item) <> true and VideoPlayerMetadata_IsMovie(request, item) <> true then return
     startQueueItemAtOffset(1)
 end sub
 
@@ -258,7 +247,7 @@ function buildVideoContent(response as object, request as object, item as dynami
     content = CreateObject("roSGNode", "ContentNode")
     content.url = response.streamUrl
     content.streamFormat = response.streamFormat
-    content.title = getItemTitle(item)
+    content.title = VideoPlayerMetadata_GetItemTitle(item)
     content.PlayStart = startPositionSeconds
     content.AddHeader("Authorization", JellyfinAuth_BuildAuthorizationHeader(request.token, request.userId))
 
@@ -269,7 +258,7 @@ end function
 ' resetPlaybackForStart
 '-------------------------------------------------------------------------------
 sub resetPlaybackForStart(item as dynamic, startPositionSeconds as integer)
-    m.playback.duration = getRuntimeSeconds(item)
+    m.playback.duration = VideoPlayerMetadata_GetRuntimeSeconds(item)
     m.playback.hasEmittedFinalProgress = false
     m.playback.position = startPositionSeconds
     m.playback.waitingForStartPosition = startPositionSeconds > 0
@@ -472,7 +461,7 @@ function beginNextSeasonPlaybackRequest() as boolean
     if m.nextSeasonPlayback.pending = true then return true
     if m.queue.mode <> "sequential" then return false
     if isPlaylistPlaybackQueue() then return false
-    if isTVEpisodePlayback(m.top.playRequest, m.context.item) <> true then return false
+    if VideoPlayerMetadata_IsEpisode(m.top.playRequest, m.context.item) <> true then return false
     if m.context.item = invalid then return false
 
     seriesId = SafeString(FirstNonEmpty([m.context.item.SeriesId], ""), "")

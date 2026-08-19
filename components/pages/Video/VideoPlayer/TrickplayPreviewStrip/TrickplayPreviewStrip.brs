@@ -139,70 +139,28 @@ end sub
 ' getThumbnailLayout
 '-------------------------------------------------------------------------------
 function getThumbnailLayout(data as object) as object
-    layoutWidth = data.layoutWidth
-    if layoutWidth = invalid or layoutWidth <= 0 then layoutWidth = 1713
-
-    gap = data.gap
-    if gap = invalid then gap = 15
-
-    tileWidth = data.tileWidth
-    if tileWidth = invalid or tileWidth <= 0 then tileWidth = 384
-
-    tileHeight = data.tileHeight
-    if tileHeight = invalid or tileHeight <= 0 then tileHeight = 216
-
-    largeScale = data.largeScale
-    if largeScale = invalid or largeScale <= 0 then largeScale = 1.2
-
-    smallScale = data.smallScale
-    if smallScale = invalid or smallScale <= 0 then smallScale = 0.7
-
-    return {
-        layoutWidth: layoutWidth
-        gap: gap
-        tileWidth: tileWidth
-        tileHeight: tileHeight
-        largeScale: largeScale
-        smallScale: smallScale
-    }
+    return VideoPlayerTrickplay_GetLayout(data)
 end function
 
 '-------------------------------------------------------------------------------
 ' getThumbnailSlotScale
 '-------------------------------------------------------------------------------
 function getThumbnailSlotScale(slotIndex as integer, layout as object) as float
-    if slotIndex = 2 then return layout.largeScale
-    return layout.smallScale
+    return VideoPlayerTrickplay_GetSlotScale(slotIndex, layout)
 end function
 
 '-------------------------------------------------------------------------------
 ' getThumbnailSlotTranslation
 '-------------------------------------------------------------------------------
 function getThumbnailSlotTranslation(slotIndex as integer, tileHeight as float, layout as object) as object
-    largeWidth = snapFhdMeasurement(layout.tileWidth * layout.largeScale)
-    smallWidth = snapFhdMeasurement(layout.tileWidth * layout.smallScale)
-    largeHeight = snapFhdMeasurement(layout.tileHeight * layout.largeScale)
-    totalWidth = largeWidth + (smallWidth * 4) + (layout.gap * 4)
-    x = (layout.layoutWidth - totalWidth) / 2
-
-    for i = 0 to slotIndex - 1
-        x = x + snapFhdMeasurement(layout.tileWidth * getThumbnailSlotScale(i, layout)) + layout.gap
-    end for
-
-    y = 0
-    if slotIndex <> 2 then y = (largeHeight - tileHeight) / 2
-
-    return [snapFhdMeasurement(x), snapFhdMeasurement(y)]
+    return VideoPlayerTrickplay_GetSlotTranslation(slotIndex, tileHeight, layout)
 end function
 
 '-------------------------------------------------------------------------------
 ' snapFhdMeasurement
 '-------------------------------------------------------------------------------
 function snapFhdMeasurement(value as float) as integer
-    snapped = Number_ToInteger((value / 3) + 0.5, 1) * 3
-    if snapped < 3 then return 3
-
-    return snapped
+    return VideoPlayerTrickplay_SnapMeasurement(value)
 end function
 
 '-------------------------------------------------------------------------------

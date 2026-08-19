@@ -1,0 +1,58 @@
+namespace tests
+    @suite("Playback information formatting")
+    class PlaybackInfoFormatTests extends rooibos.BaseTestSuite
+        @describe("playback information labels")
+
+        @it("formats every playback mode")
+        function _()
+            modes = PlaybackMode_Values()
+            m.assertEqual(PlaybackInfoFormat_ModeText(modes.automatic), "Automatic")
+            m.assertEqual(PlaybackInfoFormat_ModeText(modes.automaticNoRemux), "Automatic — Remux Disabled")
+            m.assertEqual(PlaybackInfoFormat_ModeText(modes.transcodeAllowRemux), "Force Transcode — Remux Allowed")
+            m.assertEqual(PlaybackInfoFormat_ModeText(modes.transcodeNoRemux), "Force Transcode — Remux Disabled")
+            m.assertEqual(PlaybackInfoFormat_ModeText("unknown"), "Not available")
+        end function
+
+        @it("formats missing and present values")
+        function _()
+            m.assertEqual(PlaybackInfoFormat_DisplayValue(invalid), "Not available")
+            m.assertEqual(PlaybackInfoFormat_DisplayValue(""), "Not available")
+            m.assertEqual(PlaybackInfoFormat_DisplayValue("value"), "value")
+        end function
+
+        @it("formats valid resolutions")
+        function _()
+            m.assertEqual(PlaybackInfoFormat_ResolutionText({ width: 1920, height: 1080 }), "1920 × 1080")
+            m.assertEqual(PlaybackInfoFormat_ResolutionText({ width: 0, height: 1080 }), "Not available")
+            m.assertEqual(PlaybackInfoFormat_ResolutionText({}), "Not available")
+        end function
+
+        @it("formats bitrate boundaries")
+        function _()
+            m.assertEqual(PlaybackInfoFormat_BitrateText(0), "")
+            m.assertEqual(PlaybackInfoFormat_BitrateText(999999), "999 Kbps")
+            m.assertEqual(PlaybackInfoFormat_BitrateText(1000000), "1 Mbps")
+            m.assertEqual(PlaybackInfoFormat_BitrateText(5500000), "5 Mbps")
+        end function
+
+        @it("formats codec and audio details")
+        function _()
+            m.assertEqual(PlaybackInfoFormat_StreamText("h264", 5000000), "H264  •  5 Mbps")
+            m.assertEqual(PlaybackInfoFormat_AudioText({ audioCodec: "aac", audioBitrate: 192000, audioChannels: 6 }), "AAC  •  192 Kbps  •  6 channels")
+        end function
+
+        @it("formats stream indices with fallback")
+        function _()
+            m.assertEqual(PlaybackInfoFormat_IndexText(0, "Default"), "0")
+            m.assertEqual(PlaybackInfoFormat_IndexText(-1, "Off"), "Off")
+            m.assertEqual(PlaybackInfoFormat_IndexText(invalid, "Default"), "Default")
+        end function
+
+        @it("prefers stream titles over indices")
+        function _()
+            m.assertEqual(PlaybackInfoFormat_StreamTitleText("English", 2, "Default"), "English")
+            m.assertEqual(PlaybackInfoFormat_StreamTitleText("", 2, "Default"), "2")
+            m.assertEqual(PlaybackInfoFormat_StreamTitleText(invalid, invalid, "Default"), "Default")
+        end function
+    end class
+end namespace

@@ -1,0 +1,49 @@
+namespace tests
+    @suite("VideoPlayer stream selection")
+    class VideoPlayerStreamSelectionTests extends rooibos.BaseTestSuite
+        @describe("stream filtering and selection")
+
+        @it("filters mixed streams case-insensitively")
+        function _()
+            item = { MediaStreams: [{ Index: 1, Type: "Audio" }, invalid, { Index: 2, Type: "SUBTITLE" }, { Index: 3, Type: "Video" }] }
+            audio = VideoPlayerStreamSelection_GetAudioStreams(item)
+            subtitles = VideoPlayerStreamSelection_GetSubtitleStreams(item)
+            m.assertEqual(audio.Count(), 1)
+            m.assertEqual(audio[0].Index, 1)
+            m.assertEqual(subtitles.Count(), 1)
+            m.assertEqual(subtitles[0].Index, 2)
+        end function
+
+        @it("handles missing media streams")
+        function _()
+            m.assertEqual(VideoPlayerStreamSelection_GetAudioStreams(invalid), [])
+            m.assertEqual(VideoPlayerStreamSelection_GetSubtitleStreams({}), [])
+        end function
+
+        @it("uses explicit requested subtitle and audio indices")
+        function _()
+            request = { subtitleStreamIndex: 4, audioStreamIndex: 7 }
+            m.assertEqual(VideoPlayerStreamSelection_GetSubtitleIndex(request), 4)
+            m.assertEqual(VideoPlayerStreamSelection_GetAudioIndex(request, []), 7)
+        end function
+
+        @it("defaults subtitles to off")
+        function _()
+            m.assertEqual(VideoPlayerStreamSelection_GetSubtitleIndex(invalid), -1)
+            m.assertEqual(VideoPlayerStreamSelection_GetSubtitleIndex({}), -1)
+        end function
+
+        @it("selects the default audio stream")
+        function _()
+            streams = [{ Index: 2 }, { sourceIndex: 9, IsDefault: true }, { Index: 4 }]
+            m.assertEqual(VideoPlayerStreamSelection_GetAudioIndex({}, streams), 9)
+        end function
+
+        @it("falls back to the first audio stream or no selection")
+        function _()
+            m.assertEqual(VideoPlayerStreamSelection_GetAudioIndex({}, [{ sourceIndex: 6 }, { Index: 7 }]), 6)
+            m.assertEqual(VideoPlayerStreamSelection_GetAudioIndex({}, []), -1)
+            m.assertEqual(VideoPlayerStreamSelection_GetAudioIndex({}, invalid), -1)
+        end function
+    end class
+end namespace

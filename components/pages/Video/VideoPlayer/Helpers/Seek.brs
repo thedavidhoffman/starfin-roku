@@ -119,7 +119,7 @@ end sub
 sub applySeekDelta(deltaSeconds as integer)
     if m.playback.duration <= 0 then return
 
-    m.playback.previewPosition = clampSeconds(m.playback.previewPosition + deltaSeconds, 0, m.playback.duration)
+    m.playback.previewPosition = VideoPlayerMetadata_ClampSeconds(m.playback.previewPosition + deltaSeconds, 0, m.playback.duration)
     m.playbackControls.previewPosition = m.playback.previewPosition
     updateTrickplayPreview(m.playback.previewPosition)
 end sub
@@ -370,7 +370,7 @@ sub skipPlayback(offsetSeconds as integer)
     if m.playback.duration <= 0 then return
 
     stopSeekTimers()
-    targetPosition = clampSeconds(m.videoPlayer.position + offsetSeconds, 0, m.playback.duration)
+    targetPosition = VideoPlayerMetadata_ClampSeconds(m.videoPlayer.position + offsetSeconds, 0, m.playback.duration)
     logPlaybackSeekRequest("skipPlayback:" + SafeString(offsetSeconds, ""), targetPosition)
     m.playback.isSeeking = false
     m.playback.previewPosition = targetPosition

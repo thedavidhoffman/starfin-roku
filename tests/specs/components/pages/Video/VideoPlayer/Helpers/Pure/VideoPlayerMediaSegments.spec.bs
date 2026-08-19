@@ -1,0 +1,57 @@
+namespace tests
+    @suite("VideoPlayer media segments")
+    class VideoPlayerMediaSegmentsTests extends rooibos.BaseTestSuite
+        @describe("segment detection and intro evaluation")
+
+        @it("detects segment availability")
+        function _()
+            m.assertTrue(VideoPlayerMediaSegments_HasSegments({ MediaSources: [{ HasSegments: true }] }))
+            m.assertFalse(VideoPlayerMediaSegments_HasSegments({ MediaSources: [{ HasSegments: false }] }))
+            m.assertFalse(VideoPlayerMediaSegments_HasSegments({ MediaSources: [] }))
+            m.assertFalse(VideoPlayerMediaSegments_HasSegments(invalid))
+        end function
+
+        @it("builds only valid intro ranges")
+        function _()
+            segments = [
+                { Type: "Intro", StartTicks: 100000000, EndTicks: 300000000 }
+                { Type: "Credits", StartTicks: 300000000, EndTicks: 400000000 }
+                { Type: "Intro", StartTicks: 500000000, EndTicks: 400000000 }
+                invalid
+            ]
+            intros = VideoPlayerMediaSegments_BuildIntros(segments)
+            m.assertEqual(intros.Count(), 1)
+            m.assertTrue(intros[0].startSeconds = 10)
+            m.assertTrue(intros[0].endSeconds = 30)
+        end function
+
+        @it("handles missing segment collections")
+        function _()
+            m.assertEqual(VideoPlayerMediaSegments_BuildIntros(invalid), [])
+        end function
+
+        @it("selects an intro only during its actionable range")
+        function _()
+            intros = [{ startSeconds: 10.0, endSeconds: 30.0 }]
+            m.assertInvalid(VideoPlayerMediaSegments_EvaluateIntro(intros, 9, -1).activeIntro)
+            m.assertNotInvalid(VideoPlayerMediaSegments_EvaluateIntro(intros, 10, -1).activeIntro)
+            m.assertNotInvalid(VideoPlayerMediaSegments_EvaluateIntro(intros, 24.9, -1).activeIntro)
+            m.assertInvalid(VideoPlayerMediaSegments_EvaluateIntro(intros, 25, -1).activeIntro)
+        end function
+
+        @it("honors dismissed intros")
+        function _()
+            intros = [{ startSeconds: 10.0, endSeconds: 30.0 }]
+            result = VideoPlayerMediaSegments_EvaluateIntro(intros, 15, 30)
+            m.assertInvalid(result.activeIntro)
+            m.assertTrue(result.dismissedEndSeconds = 30)
+        end function
+
+        @it("resets dismissal after the intro end")
+        function _()
+            result = VideoPlayerMediaSegments_EvaluateIntro([{ startSeconds: 10.0, endSeconds: 30.0 }], 30, 30)
+            m.assertInvalid(result.activeIntro)
+            m.assertTrue(result.dismissedEndSeconds = -1)
+        end function
+    end class
+end namespace

@@ -8,7 +8,7 @@ sub updateTrickplayPreview(position as float)
     end if
 
     tileBuffer = 15
-    baseScale = getFiveImageTrickplayScale(m.trickplay.tileWidth, tileBuffer)
+    baseScale = VideoPlayerTrickplay_GetFiveImageScale(m.trickplay.tileWidth, tileBuffer)
     largeScale = baseScale * 1.2
     smallScale = baseScale * 0.7
     deltaSeconds = getTrickplayPreviewDelta()
@@ -48,44 +48,15 @@ function getTrickplayPreviewDelta() as integer
 end function
 
 '-------------------------------------------------------------------------------
-' getFiveImageTrickplayScale
-'-------------------------------------------------------------------------------
-function getFiveImageTrickplayScale(tileWidth as dynamic, tileBuffer as integer) as float
-    if tileWidth = invalid or tileWidth <= 0 then return 1.0
-
-    progressBarWidth = 1713
-    availableWidth = progressBarWidth - (tileBuffer * 4)
-    if availableWidth <= 0 then return 1.0
-
-    return availableWidth / (tileWidth * 4)
-end function
-
-'-------------------------------------------------------------------------------
 ' buildTrickplayPreviewImage
 '-------------------------------------------------------------------------------
 function buildTrickplayPreviewImage(position as float) as object
-    iconIndex = Fix(position / m.trickplay.interval)
-    if iconIndex < 0 then iconIndex = 0
-    if iconIndex >= m.trickplay.thumbnailCount then iconIndex = m.trickplay.thumbnailCount - 1
-
-    tilesPerSheet = m.trickplay.tileRows * m.trickplay.tileColumns
-    tileIndex = Fix(iconIndex / tilesPerSheet)
-    tileIconIndex = iconIndex - (tileIndex * tilesPerSheet)
-    row = Fix(tileIconIndex / m.trickplay.tileColumns)
-    column = tileIconIndex mod m.trickplay.tileColumns
-
-    uri = getLocalTrickplayUri(tileIndex)
+    result = VideoPlayerTrickplay_BuildPreviewImage(position, m.trickplay, "")
+    if result.Count() = 0 then return {}
+    uri = getLocalTrickplayUri(result.tileIndex)
     if uri = "" then return {}
-
-    return {
-        uri: uri
-        tileIndex: tileIndex
-        sheetColumns: m.trickplay.tileColumns
-        sheetRows: m.trickplay.tileRows
-        column: column
-        row: row
-        canUseFastReplace: m.trickplay.canUseFastReplace
-    }
+    result.uri = uri
+    return result
 end function
 
 '-------------------------------------------------------------------------------
@@ -155,72 +126,11 @@ end function
 ' buildTrickplayState
 '-------------------------------------------------------------------------------
 function buildTrickplayState(item as dynamic, itemId as string) as dynamic
-    trickplay = getItemTrickplay(item)
-    if itemId = "" then
-        m.log.writeDisplaySafe("Trickplay unavailable: missing itemId.")
+    result = VideoPlayerTrickplay_BuildStateResult(item, itemId)
+    if result.ok <> true then
+        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": " + result.reason + ".")
         return invalid
     end if
-    if trickplay = invalid then
-        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": item has no Trickplay metadata.")
-        return invalid
-    end if
-
-    itemTrickplay = trickplay.LookupCI(itemId)
-    if itemTrickplay = invalid or itemTrickplay.Keys().Count() = 0 then
-        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": no trickplay entry matched the item id.")
-        return invalid
-    end if
-
-    widthKeys = itemTrickplay.Keys()
-    data = itemTrickplay[widthKeys[0]]
-    if data = invalid then
-        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": selected trickplay width has no data.")
-        return invalid
-    end if
-    if data.Width = invalid or data.Height = invalid then
-        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": missing thumbnail dimensions.")
-        return invalid
-    end if
-    if data.TileWidth = invalid or data.TileHeight = invalid then
-        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": missing tile grid dimensions.")
-        return invalid
-    end if
-    if data.Interval = invalid or data.Interval <= 0 then
-        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": invalid thumbnail interval.")
-        return invalid
-    end if
-
-    thumbnailCount = 0
-    if data.ThumbnailCount <> invalid then thumbnailCount = data.ThumbnailCount
-    if thumbnailCount <= 0 then
-        m.log.writeDisplaySafe("Trickplay unavailable itemId=" + itemId + ": thumbnail count is zero.")
-        return invalid
-    end if
-
-    tilesPerSheet = data.TileHeight * data.TileWidth
-    tileCount = Fix((thumbnailCount - 1) / tilesPerSheet) + 1
-    m.log.writeDisplaySafe("Trickplay available itemId=" + itemId + " widthKey=" + SafeString(widthKeys[0], "") + " thumbnailCount=" + SafeString(thumbnailCount, "") + " tileCount=" + SafeString(tileCount, ""))
-
-    return {
-        tileWidth: data.Width
-        tileHeight: data.Height
-        tileColumns: data.TileWidth
-        tileRows: data.TileHeight
-        interval: data.Interval / 1000
-        thumbnailCount: thumbnailCount
-        tileCount: tileCount
-        canUseFastReplace: (data.TileHeight * data.Height) * (data.TileWidth * data.Width) < 2000000
-        loadedTiles: {}
-    }
-end function
-
-'-------------------------------------------------------------------------------
-' getItemTrickplay
-'-------------------------------------------------------------------------------
-function getItemTrickplay(item as dynamic) as dynamic
-    if item = invalid then return invalid
-    if item.Trickplay <> invalid then return item.Trickplay
-    if item.trickplay <> invalid then return item.trickplay
-
-    return invalid
+    m.log.writeDisplaySafe("Trickplay available itemId=" + itemId + " widthKey=" + result.widthKey + " thumbnailCount=" + SafeString(result.state.thumbnailCount, "") + " tileCount=" + SafeString(result.state.tileCount, ""))
+    return result.state
 end function

@@ -1,0 +1,79 @@
+'-------------------------------------------------------------------------------
+' PlaybackInfoFormat_ModeText
+'-------------------------------------------------------------------------------
+function PlaybackInfoFormat_ModeText(value as dynamic) as string
+    mode = LCase(SafeString(value, ""))
+    modes = PlaybackMode_Values()
+    if mode = LCase(modes.automatic) then return "Automatic"
+    if mode = LCase(modes.automaticNoRemux) then return "Automatic — Remux Disabled"
+    if mode = LCase(modes.transcodeAllowRemux) then return "Force Transcode — Remux Allowed"
+    if mode = LCase(modes.transcodeNoRemux) then return "Force Transcode — Remux Disabled"
+    return "Not available"
+end function
+
+'-------------------------------------------------------------------------------
+' PlaybackInfoFormat_DisplayValue
+'-------------------------------------------------------------------------------
+function PlaybackInfoFormat_DisplayValue(value as dynamic) as string
+    text = SafeString(value, "")
+    if text = "" then return "Not available"
+    return text
+end function
+
+'-------------------------------------------------------------------------------
+' PlaybackInfoFormat_ResolutionText
+'-------------------------------------------------------------------------------
+function PlaybackInfoFormat_ResolutionText(info as object) as string
+    width = Number_ToInteger(info.width, 0)
+    height = Number_ToInteger(info.height, 0)
+    if width <= 0 or height <= 0 then return "Not available"
+    return width.ToStr() + " × " + height.ToStr()
+end function
+
+'-------------------------------------------------------------------------------
+' PlaybackInfoFormat_BitrateText
+'-------------------------------------------------------------------------------
+function PlaybackInfoFormat_BitrateText(value as dynamic) as string
+    bitrate = Number_ToInteger(value, 0)
+    if bitrate <= 0 then return ""
+    if bitrate >= 1000000 then return Number_ToInteger(bitrate / 1000000, 0).ToStr() + " Mbps"
+    return Number_ToInteger(bitrate / 1000, 0).ToStr() + " Kbps"
+end function
+
+'-------------------------------------------------------------------------------
+' PlaybackInfoFormat_StreamText
+'-------------------------------------------------------------------------------
+function PlaybackInfoFormat_StreamText(codec as dynamic, bitrate as dynamic) as string
+    text = UCase(PlaybackInfoFormat_DisplayValue(codec))
+    bitrateText = PlaybackInfoFormat_BitrateText(bitrate)
+    if bitrateText <> "" then text = text + "  •  " + bitrateText
+    return text
+end function
+
+'-------------------------------------------------------------------------------
+' PlaybackInfoFormat_AudioText
+'-------------------------------------------------------------------------------
+function PlaybackInfoFormat_AudioText(info as object) as string
+    text = PlaybackInfoFormat_StreamText(info.audioCodec, info.audioBitrate)
+    channels = Number_ToInteger(info.audioChannels, 0)
+    if channels > 0 then text = text + "  •  " + channels.ToStr() + " channels"
+    return text
+end function
+
+'-------------------------------------------------------------------------------
+' PlaybackInfoFormat_IndexText
+'-------------------------------------------------------------------------------
+function PlaybackInfoFormat_IndexText(value as dynamic, fallback as string) as string
+    index = Number_ToInteger(value, -1)
+    if index < 0 then return fallback
+    return index.ToStr()
+end function
+
+'-------------------------------------------------------------------------------
+' PlaybackInfoFormat_StreamTitleText
+'-------------------------------------------------------------------------------
+function PlaybackInfoFormat_StreamTitleText(title as dynamic, index as dynamic, fallback as string) as string
+    text = SafeString(title, "")
+    if text <> "" then return text
+    return PlaybackInfoFormat_IndexText(index, fallback)
+end function

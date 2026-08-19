@@ -88,8 +88,8 @@ npm test -- --host 192.168.1.123 --password "developer-password"
 A successful run ends with a summary similar to:
 
 ```text
-Total: 131
-Passed: 131
+Total: 175
+Passed: 175
 Crashed: 0
 Failed: 0
 RESULT: Success
@@ -98,9 +98,12 @@ RESULT: Success
 
 Rooibos framework warnings about unused variables under `pkg:/source/rooibos/`
 come from the injected test framework and do not indicate failures in Starfin.
-Test source files live under `tests/`; `bsconfig-test.json` maps them into the
-test channel's executable source scope without including them in production
-packages.
+Test specifications live under `tests/specs/` and mirror the corresponding
+production paths. `bsconfig-test.json` maps them into the test channel's
+executable source scope without including them in production packages.
+Feature-owned pure helpers remain beside their owning component in the
+repository and are mapped into an executable package source directory by the
+production and test build configurations.
 
 ## Debugging and Logs
 

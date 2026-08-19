@@ -1,0 +1,117 @@
+namespace tests
+    @suite("VideoPlayer trickplay")
+    class VideoPlayerTrickplayTests extends rooibos.BaseTestSuite
+        @describe("metadata validation and preview calculations")
+
+        @it("rejects missing item identifiers and metadata")
+        function _()
+            m.assertFalse(VideoPlayerTrickplay_BuildStateResult({}, "").ok)
+            m.assertEqual(VideoPlayerTrickplay_BuildStateResult({}, "item-1").reason, "item has no Trickplay metadata")
+        end function
+
+        @it("matches item identifiers case-insensitively")
+        function _()
+            result = VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("ITEM-1", 13, 200, 100, 4, 2), "item-1")
+            m.assertTrue(result.ok)
+            m.assertEqual(result.state.thumbnailCount, 13)
+            m.assertEqual(result.state.tileCount, 2)
+            m.assertTrue(result.state.interval = 10)
+        end function
+
+        @it("rounds tile counts up")
+        function _()
+            exact = VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("item-1", 8, 200, 100, 4, 2), "item-1")
+            extra = VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("item-1", 9, 200, 100, 4, 2), "item-1")
+            m.assertEqual(exact.state.tileCount, 1)
+            m.assertEqual(extra.state.tileCount, 2)
+        end function
+
+        @it("enables fast replacement only below the image-area threshold")
+        function _()
+            below = VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("i", 1, 499, 500, 4, 2), "i")
+            boundary = VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("i", 1, 500, 500, 4, 2), "i")
+            m.assertTrue(below.state.canUseFastReplace)
+            m.assertFalse(boundary.state.canUseFastReplace)
+        end function
+
+        @it("rejects invalid dimensions, grids, intervals, and counts")
+        function _()
+            m.assertFalse(VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("i", 1, 0, 100, 4, 2), "i").ok)
+            m.assertFalse(VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("i", 1, 200, 100, 0, 2), "i").ok)
+            item = __TrickplayItem("i", 1, 200, 100, 4, 2)
+            item.Trickplay.i["200"].Interval = 0
+            m.assertFalse(VideoPlayerTrickplay_BuildStateResult(item, "i").ok)
+            m.assertFalse(VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("i", 0, 200, 100, 4, 2), "i").ok)
+        end function
+
+        @it("calculates preview sheet coordinates and clamps positions")
+        function _()
+            state = VideoPlayerTrickplay_BuildStateResult(__TrickplayItem("i", 13, 200, 100, 4, 2), "i").state
+            first = VideoPlayerTrickplay_BuildPreviewImage(-10, state, "uri")
+            secondSheet = VideoPlayerTrickplay_BuildPreviewImage(80, state, "uri")
+            final = VideoPlayerTrickplay_BuildPreviewImage(999, state, "uri")
+            m.assertEqual(first.tileIndex, 0)
+            m.assertEqual(first.row, 0)
+            m.assertEqual(first.column, 0)
+            m.assertEqual(secondSheet.tileIndex, 1)
+            m.assertEqual(secondSheet.row, 0)
+            m.assertEqual(secondSheet.column, 0)
+            m.assertEqual(final.tileIndex, 1)
+            m.assertEqual(final.row, 1)
+            m.assertEqual(final.column, 0)
+        end function
+
+        @it("returns no preview for invalid state")
+        function _()
+            m.assertEqual(VideoPlayerTrickplay_BuildPreviewImage(0, invalid, "uri"), {})
+        end function
+
+        @it("calculates five-image scaling with fallbacks")
+        function _()
+            m.assertTrue(Abs(VideoPlayerTrickplay_GetFiveImageScale(400, 15) - 1.033125) < 0.0001)
+            m.assertTrue(VideoPlayerTrickplay_GetFiveImageScale(0, 15) = 1.0)
+            m.assertTrue(VideoPlayerTrickplay_GetFiveImageScale(400, 500) = 1.0)
+        end function
+
+        @it("detects tall thumbnails")
+        function _()
+            m.assertTrue(VideoPlayerTrickplay_IsTallThumbnail({ tileWidth: 100, tileHeight: 100 }))
+            m.assertFalse(VideoPlayerTrickplay_IsTallThumbnail({ tileWidth: 160, tileHeight: 90 }))
+            m.assertFalse(VideoPlayerTrickplay_IsTallThumbnail({ tileWidth: 0, tileHeight: 90 }))
+        end function
+
+        @it("applies preview layout defaults")
+        function _()
+            layout = VideoPlayerTrickplay_GetLayout({})
+            m.assertEqual(layout.layoutWidth, 1713)
+            m.assertEqual(layout.gap, 15)
+            m.assertEqual(layout.tileWidth, 384)
+            m.assertEqual(layout.tileHeight, 216)
+            m.assertTrue(layout.largeScale = 1.2)
+            m.assertTrue(layout.smallScale = 0.7)
+        end function
+
+        @it("lays out all five slots around the large center slot")
+        function _()
+            layout = VideoPlayerTrickplay_GetLayout({})
+            positions = []
+            for i = 0 to 4
+                positions.Push(VideoPlayerTrickplay_GetSlotTranslation(i, layout.tileHeight * VideoPlayerTrickplay_GetSlotScale(i, layout), layout))
+            end for
+            m.assertTrue(positions[0][0] < positions[1][0])
+            m.assertTrue(positions[1][0] < positions[2][0])
+            m.assertTrue(positions[2][0] < positions[3][0])
+            m.assertTrue(positions[3][0] < positions[4][0])
+            m.assertEqual(positions[2][1], 3)
+            m.assertEqual(VideoPlayerTrickplay_SnapMeasurement(0), 3)
+        end function
+    end class
+
+    function __TrickplayItem(itemId as string, count as integer, width as integer, height as integer, columns as integer, rows as integer) as object
+        widths = {}
+        widths["200"] = { Width: width, Height: height, TileWidth: columns, TileHeight: rows, Interval: 10000, ThumbnailCount: count }
+        trickplay = {}
+        trickplay[itemId] = widths
+        return { Trickplay: trickplay }
+    end function
+end namespace

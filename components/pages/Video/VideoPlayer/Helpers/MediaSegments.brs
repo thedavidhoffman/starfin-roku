@@ -29,7 +29,7 @@ sub loadMediaSegments(playbackResponse as dynamic)
     if m.mediaSegments.itemId = m.session.itemId and m.mediaSegments.loaded = true then return
 
     if m.mediaSegments.itemId <> m.session.itemId then resetMediaSegments()
-    if hasMediaSegments(playbackResponse.payload) <> true then return
+    if VideoPlayerMediaSegments_HasSegments(playbackResponse.payload) <> true then return
 
     m.mediaSegments.itemId = m.session.itemId
     m.log.writeDisplaySafe("Loading media segments itemId=" + m.session.itemId)
@@ -40,16 +40,6 @@ sub loadMediaSegments(playbackResponse as dynamic)
     }
     m.mediaSegmentsTask.control = "run"
 end sub
-
-'-------------------------------------------------------------------------------
-' hasMediaSegments
-'-------------------------------------------------------------------------------
-function hasMediaSegments(playbackInfo as dynamic) as boolean
-    if playbackInfo = invalid or playbackInfo.MediaSources = invalid then return false
-    if playbackInfo.MediaSources.Count() = 0 then return false
-
-    return playbackInfo.MediaSources[0].HasSegments = true
-end function
 
 '-------------------------------------------------------------------------------
 ' onMediaSegmentsResponse
@@ -64,20 +54,9 @@ sub onMediaSegmentsResponse()
         return
     end if
 
-    intros = []
-    for each segment in response.segments
-        if segment <> invalid and LCase(SafeString(segment.Type, "")) = "intro" then
-            startSeconds = Number_ToFloat(segment.StartTicks, 0) / 10000000
-            endSeconds = Number_ToFloat(segment.EndTicks, 0) / 10000000
-            if endSeconds > startSeconds then
-                intros.Push({ startSeconds: startSeconds, endSeconds: endSeconds })
-            end if
-        end if
-    end for
-
-    m.mediaSegments.intros = intros
+    m.mediaSegments.intros = VideoPlayerMediaSegments_BuildIntros(response.segments)
     m.mediaSegments.loaded = true
-    m.log.writeDisplaySafe("Media segments loaded itemId=" + m.session.itemId + " introCount=" + intros.Count().ToStr())
+    m.log.writeDisplaySafe("Media segments loaded itemId=" + m.session.itemId + " introCount=" + m.mediaSegments.intros.Count().ToStr())
     updateSkipIntroButton(m.playback.position)
 end sub
 
@@ -105,17 +84,9 @@ end sub
 '-------------------------------------------------------------------------------
 function getActiveIntroSegment(position as float) as dynamic
     if m.mediaSegments = invalid then return invalid
-
-    for each intro in m.mediaSegments.intros
-        if position >= intro.startSeconds and position < intro.endSeconds - 5 then
-            if intro.endSeconds <> m.mediaSegments.dismissedEndSeconds then return intro
-        end if
-    end for
-
-    if m.mediaSegments.dismissedEndSeconds >= 0 and position >= m.mediaSegments.dismissedEndSeconds then
-        m.mediaSegments.dismissedEndSeconds = -1
-    end if
-    return invalid
+    result = VideoPlayerMediaSegments_EvaluateIntro(m.mediaSegments.intros, position, m.mediaSegments.dismissedEndSeconds)
+    m.mediaSegments.dismissedEndSeconds = result.dismissedEndSeconds
+    return result.activeIntro
 end function
 
 '-------------------------------------------------------------------------------

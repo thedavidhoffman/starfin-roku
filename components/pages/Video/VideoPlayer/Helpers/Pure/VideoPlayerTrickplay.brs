@@ -1,0 +1,138 @@
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_GetFiveImageScale
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_GetFiveImageScale(tileWidth as dynamic, tileBuffer as integer) as float
+    if tileWidth = invalid or tileWidth <= 0 then return 1.0
+    availableWidth = 1713 - (tileBuffer * 4)
+    if availableWidth <= 0 then return 1.0
+    return availableWidth / (tileWidth * 4)
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_GetItemMetadata
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_GetItemMetadata(item as dynamic) as dynamic
+    if item = invalid then return invalid
+    if item.Trickplay <> invalid then return item.Trickplay
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_BuildStateResult
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_BuildStateResult(item as dynamic, itemId as string) as object
+    if itemId = "" then return { ok: false, reason: "missing itemId", state: invalid }
+    trickplay = VideoPlayerTrickplay_GetItemMetadata(item)
+    if trickplay = invalid then return { ok: false, reason: "item has no Trickplay metadata", state: invalid }
+
+    itemTrickplay = trickplay.LookupCI(itemId)
+    if itemTrickplay = invalid or itemTrickplay.Keys().Count() = 0 then return { ok: false, reason: "no trickplay entry matched the item id", state: invalid }
+    widthKeys = itemTrickplay.Keys()
+    data = itemTrickplay[widthKeys[0]]
+    if data = invalid then return { ok: false, reason: "selected trickplay width has no data", state: invalid }
+    if data.Width = invalid or data.Height = invalid then return { ok: false, reason: "missing thumbnail dimensions", state: invalid }
+    if data.Width <= 0 or data.Height <= 0 then return { ok: false, reason: "invalid thumbnail dimensions", state: invalid }
+    if data.TileWidth = invalid or data.TileHeight = invalid then return { ok: false, reason: "missing tile grid dimensions", state: invalid }
+    if data.TileWidth <= 0 or data.TileHeight <= 0 then return { ok: false, reason: "invalid tile grid dimensions", state: invalid }
+    if data.Interval = invalid or data.Interval <= 0 then return { ok: false, reason: "invalid thumbnail interval", state: invalid }
+
+    thumbnailCount = Number_ToInteger(data.ThumbnailCount, 0)
+    if thumbnailCount <= 0 then return { ok: false, reason: "thumbnail count is zero", state: invalid }
+    tilesPerSheet = data.TileHeight * data.TileWidth
+    tileCount = Fix((thumbnailCount - 1) / tilesPerSheet) + 1
+    state = {
+        tileWidth: data.Width
+        tileHeight: data.Height
+        tileColumns: data.TileWidth
+        tileRows: data.TileHeight
+        interval: data.Interval / 1000
+        thumbnailCount: thumbnailCount
+        tileCount: tileCount
+        canUseFastReplace: (data.TileHeight * data.Height) * (data.TileWidth * data.Width) < 2000000
+        loadedTiles: {}
+    }
+    return { ok: true, reason: "", state: state, widthKey: SafeString(widthKeys[0], "") }
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_BuildPreviewImage
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_BuildPreviewImage(position as float, state as dynamic, uri as string) as object
+    if state = invalid or state.thumbnailCount <= 0 or state.interval <= 0 then return {}
+    iconIndex = Fix(position / state.interval)
+    if iconIndex < 0 then iconIndex = 0
+    if iconIndex >= state.thumbnailCount then iconIndex = state.thumbnailCount - 1
+    tilesPerSheet = state.tileRows * state.tileColumns
+    tileIndex = Fix(iconIndex / tilesPerSheet)
+    tileIconIndex = iconIndex - (tileIndex * tilesPerSheet)
+    return {
+        uri: uri
+        tileIndex: tileIndex
+        sheetColumns: state.tileColumns
+        sheetRows: state.tileRows
+        column: tileIconIndex mod state.tileColumns
+        row: Fix(tileIconIndex / state.tileColumns)
+        canUseFastReplace: state.canUseFastReplace
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_IsTallThumbnail
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_IsTallThumbnail(data as dynamic) as boolean
+    if data = invalid or data.tileWidth = invalid or data.tileWidth <= 0 then return false
+    if data.tileHeight = invalid or data.tileHeight <= 0 then return false
+    return (data.tileHeight / data.tileWidth) > (9 / 16)
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_GetLayout
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_GetLayout(data as object) as object
+    layoutWidth = Number_ToInteger(data.layoutWidth, 1713)
+    if layoutWidth <= 0 then layoutWidth = 1713
+    gap = Number_ToInteger(data.gap, 15)
+    tileWidth = Number_ToInteger(data.tileWidth, 384)
+    if tileWidth <= 0 then tileWidth = 384
+    tileHeight = Number_ToInteger(data.tileHeight, 216)
+    if tileHeight <= 0 then tileHeight = 216
+    largeScale = Number_ToFloat(data.largeScale, 1.2)
+    if largeScale <= 0 then largeScale = 1.2
+    smallScale = Number_ToFloat(data.smallScale, 0.7)
+    if smallScale <= 0 then smallScale = 0.7
+    return { layoutWidth: layoutWidth, gap: gap, tileWidth: tileWidth, tileHeight: tileHeight, largeScale: largeScale, smallScale: smallScale }
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_GetSlotScale
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_GetSlotScale(slotIndex as integer, layout as object) as float
+    if slotIndex = 2 then return layout.largeScale
+    return layout.smallScale
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_SnapMeasurement
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_SnapMeasurement(value as float) as integer
+    snapped = Number_ToInteger((value / 3) + 0.5, 1) * 3
+    if snapped < 3 then return 3
+    return snapped
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerTrickplay_GetSlotTranslation
+'-------------------------------------------------------------------------------
+function VideoPlayerTrickplay_GetSlotTranslation(slotIndex as integer, tileHeight as float, layout as object) as object
+    largeWidth = VideoPlayerTrickplay_SnapMeasurement(layout.tileWidth * layout.largeScale)
+    smallWidth = VideoPlayerTrickplay_SnapMeasurement(layout.tileWidth * layout.smallScale)
+    largeHeight = VideoPlayerTrickplay_SnapMeasurement(layout.tileHeight * layout.largeScale)
+    totalWidth = largeWidth + (smallWidth * 4) + (layout.gap * 4)
+    x = (layout.layoutWidth - totalWidth) / 2
+    for i = 0 to slotIndex - 1
+        x = x + VideoPlayerTrickplay_SnapMeasurement(layout.tileWidth * VideoPlayerTrickplay_GetSlotScale(i, layout)) + layout.gap
+    end for
+    y = 0
+    if slotIndex <> 2 then y = (largeHeight - tileHeight) / 2
+    return [VideoPlayerTrickplay_SnapMeasurement(x), VideoPlayerTrickplay_SnapMeasurement(y)]
+end function

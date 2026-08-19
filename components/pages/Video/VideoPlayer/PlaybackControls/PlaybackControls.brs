@@ -313,7 +313,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub resetFocus()
     rebuildButtonList(false)
-    m.controlState.focusedIndex = getDefaultButtonIndex(m.controlState.buttons)
+    m.controlState.focusedIndex = PlaybackControlsLogic_GetDefaultButtonIndex(m.controlState.buttons)
     m.controlState.focusArea = "buttons"
 end sub
 
@@ -399,20 +399,9 @@ sub rebuildButtonList(preserveFocusedButton = true as boolean)
         end for
     end if
 
-    if focusedIndex < 0 then focusedIndex = getDefaultButtonIndex(buttons)
+    if focusedIndex < 0 then focusedIndex = PlaybackControlsLogic_GetDefaultButtonIndex(buttons)
     m.controlState.focusedIndex = focusedIndex
 end sub
-
-'-------------------------------------------------------------------------------
-' getDefaultButtonIndex
-'-------------------------------------------------------------------------------
-function getDefaultButtonIndex(buttons as object) as integer
-    for i = 0 to buttons.Count() - 1
-        if SafeString(buttons[i].id, "") = "playPauseButton" then return i
-    end for
-
-    return 0
-end function
 
 '-------------------------------------------------------------------------------
 ' updateButtonFocus
@@ -448,7 +437,7 @@ end sub
 ' updateTrickplayPreviewPosition
 '-------------------------------------------------------------------------------
 sub updateTrickplayPreviewPosition(data as dynamic)
-    if isTallTrickplayThumbnail(data) then
+    if VideoPlayerTrickplay_IsTallThumbnail(data) then
         m.trickplayPreview.translation = m.trickplayPositions.tall
     else
         m.trickplayPreview.translation = m.trickplayPositions.default
@@ -456,29 +445,11 @@ sub updateTrickplayPreviewPosition(data as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' isTallTrickplayThumbnail
-'-------------------------------------------------------------------------------
-function isTallTrickplayThumbnail(data as dynamic) as boolean
-    if data = invalid then return false
-    if data.tileWidth = invalid or data.tileWidth <= 0 then return false
-    if data.tileHeight = invalid or data.tileHeight <= 0 then return false
-
-    return (data.tileHeight / data.tileWidth) > (9 / 16)
-end function
-
-'-------------------------------------------------------------------------------
 ' updateProgress
 '-------------------------------------------------------------------------------
 sub updateProgress(position as dynamic, showPreview as boolean)
-    duration = m.top.duration
-    if duration = invalid or duration <= 0 then duration = 1
-
-    clampedPosition = position
-    if clampedPosition = invalid then clampedPosition = 0
-    if clampedPosition < 0 then clampedPosition = 0
-    if clampedPosition > duration then clampedPosition = duration
-
-    progressWidth = m.progressBarBackground.width * (clampedPosition / duration)
+    progress = PlaybackControlsLogic_GetProgress(position, m.top.duration)
+    progressWidth = m.progressBarBackground.width * progress.fraction
     if showPreview = true then
         m.previewBar.width = progressWidth
     else
@@ -486,35 +457,9 @@ sub updateProgress(position as dynamic, showPreview as boolean)
     end if
 
     m.scrubber.translation = [progressWidth - 10, -7]
-    m.positionLabel.text = formatPlaybackTime(clampedPosition)
-    m.remainingLabel.text = "-" + formatPlaybackTime(duration - clampedPosition)
+    m.positionLabel.text = PlaybackControlsLogic_FormatTime(progress.position)
+    m.remainingLabel.text = "-" + PlaybackControlsLogic_FormatTime(progress.duration - progress.position)
 end sub
-
-'-------------------------------------------------------------------------------
-' formatPlaybackTime
-'-------------------------------------------------------------------------------
-function formatPlaybackTime(totalSeconds as dynamic) as string
-    seconds = Fix(totalSeconds)
-    if seconds < 0 then seconds = 0
-
-    hours = Fix(seconds / 3600)
-    minutes = Fix((seconds mod 3600) / 60)
-    seconds = seconds mod 60
-
-    if hours > 0 then
-        return hours.ToStr() + ":" + twoDigits(minutes) + ":" + twoDigits(seconds)
-    end if
-
-    return minutes.ToStr() + ":" + twoDigits(seconds)
-end function
-
-'-------------------------------------------------------------------------------
-' twoDigits
-'-------------------------------------------------------------------------------
-function twoDigits(value as integer) as string
-    if value < 10 then return "0" + value.ToStr()
-    return value.ToStr()
-end function
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent

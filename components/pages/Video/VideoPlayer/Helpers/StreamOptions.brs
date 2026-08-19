@@ -2,15 +2,15 @@
 ' updatePlaybackControlsOptions
 '-------------------------------------------------------------------------------
 sub updatePlaybackControlsOptions(item as dynamic)
-    subtitleStreams = getSubtitleStreams(item)
-    audioStreams = getAudioStreams(item)
+    subtitleStreams = VideoPlayerStreamSelection_GetSubtitleStreams(item)
+    audioStreams = VideoPlayerStreamSelection_GetAudioStreams(item)
     chapters = getChapters(item)
     m.streamOptions.subtitleStreams = subtitleStreams
     m.streamOptions.audioStreams = audioStreams
     m.streamOptions.chapters = chapters
     m.streamOptions.selectedChapterKey = ""
-    m.streamOptions.selectedSubtitleStreamIndex = getSelectedSubtitleStreamIndex(m.top.playRequest)
-    m.streamOptions.selectedAudioStreamIndex = getSelectedAudioStreamIndex(m.top.playRequest, audioStreams)
+    m.streamOptions.selectedSubtitleStreamIndex = VideoPlayerStreamSelection_GetSubtitleIndex(m.top.playRequest)
+    m.streamOptions.selectedAudioStreamIndex = VideoPlayerStreamSelection_GetAudioIndex(m.top.playRequest, audioStreams)
     m.playbackControls.hasSubtitleOptions = subtitleStreams.Count() > 0
     m.playbackControls.hasAudioOptions = audioStreams.Count() > 1
     m.playbackControls.hasChapterOptions = chapters.Count() > 0
@@ -18,73 +18,10 @@ sub updatePlaybackControlsOptions(item as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' getSubtitleStreams
-'-------------------------------------------------------------------------------
-function getSubtitleStreams(item as dynamic) as object
-    if item = invalid or item.MediaStreams = invalid then return []
-
-    subtitleStreams = []
-    for each stream in item.MediaStreams
-        if stream <> invalid and LCase(SafeString(stream.Type, "")) = "subtitle" then subtitleStreams.Push(stream)
-    end for
-
-    return subtitleStreams
-end function
-
-'-------------------------------------------------------------------------------
-' getAudioStreams
-'-------------------------------------------------------------------------------
-function getAudioStreams(item as dynamic) as object
-    if item = invalid or item.MediaStreams = invalid then return []
-
-    audioStreams = []
-    for each stream in item.MediaStreams
-        if stream <> invalid and LCase(SafeString(stream.Type, "")) = "audio" then audioStreams.Push(stream)
-    end for
-
-    return audioStreams
-end function
-
-'-------------------------------------------------------------------------------
 ' getChapters
 '-------------------------------------------------------------------------------
 function getChapters(item as dynamic) as object
     return MediaOptions_GetChapters(item)
-end function
-
-'-------------------------------------------------------------------------------
-' getSelectedSubtitleStreamIndex
-'-------------------------------------------------------------------------------
-function getSelectedSubtitleStreamIndex(request as dynamic) as integer
-    if request <> invalid and request.subtitleStreamIndex <> invalid then return int(request.subtitleStreamIndex)
-
-    return -1
-end function
-
-'-------------------------------------------------------------------------------
-' getSelectedAudioStreamIndex
-'-------------------------------------------------------------------------------
-function getSelectedAudioStreamIndex(request as dynamic, audioStreams as object) as integer
-    if request <> invalid and request.audioStreamIndex <> invalid then return int(request.audioStreamIndex)
-
-    for i = 0 to audioStreams.Count() - 1
-        stream = audioStreams[i]
-        if stream = invalid then continue for
-        streamIndex = getStreamIndex(stream, i)
-        if stream.IsDefault = true then return streamIndex
-    end for
-
-    if audioStreams.Count() = 0 then return -1
-    return getStreamIndex(audioStreams[0], 0)
-end function
-
-'-------------------------------------------------------------------------------
-' getStreamIndex
-'-------------------------------------------------------------------------------
-function getStreamIndex(stream as dynamic, fallback as integer) as integer
-    if stream <> invalid and stream.Index <> invalid then return int(stream.Index)
-    if stream <> invalid and stream.sourceIndex <> invalid then return int(stream.sourceIndex)
-    return fallback
 end function
 
 '-------------------------------------------------------------------------------
@@ -285,7 +222,7 @@ sub applyChapterSelection(selection as dynamic)
     m.streamOptions.selectedChapterKey = SafeString(selection.startPositionTicks, "")
     targetPosition = selection.startPositionSeconds
     if m.playback.duration <> invalid and m.playback.duration > 0 then
-        targetPosition = clampSeconds(targetPosition, 0, m.playback.duration)
+        targetPosition = VideoPlayerMetadata_ClampSeconds(targetPosition, 0, m.playback.duration)
     end if
 
     stopSeekTimers()

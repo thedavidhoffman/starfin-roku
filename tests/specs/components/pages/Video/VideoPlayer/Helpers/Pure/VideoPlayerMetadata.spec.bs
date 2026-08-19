@@ -1,0 +1,71 @@
+namespace tests
+    @suite("VideoPlayer metadata")
+    class VideoPlayerMetadataTests extends rooibos.BaseTestSuite
+        @describe("classification and display metadata")
+
+        @it("classifies episodes, movies, and videos")
+        function _()
+            m.assertTrue(VideoPlayerMetadata_IsEpisode({}, { Type: "Episode" }))
+            m.assertTrue(VideoPlayerMetadata_IsEpisode({ series: { Name: "Series" } }, { Type: "Movie" }))
+            m.assertTrue(VideoPlayerMetadata_IsMovie({}, { Type: "Movie" }))
+            m.assertTrue(VideoPlayerMetadata_IsMovie({}, { Type: "Video" }))
+            m.assertFalse(VideoPlayerMetadata_IsMovie({}, { Type: "Episode" }))
+            m.assertFalse(VideoPlayerMetadata_IsEpisode({}, invalid))
+        end function
+
+        @it("uses request series title before item fallbacks")
+        function _()
+            request = { server: "server.local", series: { Id: "s1", Name: "Request Series" } }
+            item = { Name: "Episode", SeriesName: "Item Series" }
+            m.assertEqual(VideoPlayerMetadata_GetSeriesTitle(request, item), "Request Series")
+            m.assertEqual(VideoPlayerMetadata_GetSeriesTitle({}, item), "Item Series")
+            m.assertEqual(VideoPlayerMetadata_GetItemTitle(invalid), "Video")
+        end function
+
+        @it("formats movie year with premiere-date fallback")
+        function _()
+            m.assertEqual(VideoPlayerMetadata_GetMovieText({ ProductionYear: 2025, PremiereDate: "2024-01-01" }), "2025")
+            m.assertEqual(VideoPlayerMetadata_GetMovieText({ PremiereDate: "2024-01-01" }), "2024")
+            m.assertEqual(VideoPlayerMetadata_GetMovieText(invalid), "")
+        end function
+
+        @it("formats complete episode metadata")
+        function _()
+            item = { ParentIndexNumber: 2, IndexNumber: 3, Name: "An Episode", PremiereDate: "2026-08-19T00:00:00Z", RunTimeTicks: 18000000000& }
+            separator = MediaMetadata_BulletSeparator()
+            expected = "S2" + separator + "E3" + separator + "An Episode" + separator + "Aug 19, 2026" + separator + "30m"
+            m.assertEqual(VideoPlayerMetadata_GetEpisodeText(item), expected)
+        end function
+
+        @it("uses alternate episode-number fields and partial numbers")
+        function _()
+            m.assertEqual(VideoPlayerMetadata_GetEpisodeNumberText({ SeasonNumber: 4, EpisodeNumber: 5 }), "S4" + MediaMetadata_BulletSeparator() + "E5")
+            m.assertEqual(VideoPlayerMetadata_GetEpisodeNumberText({ SeasonNumber: 4 }), "S4")
+            m.assertEqual(VideoPlayerMetadata_GetEpisodeNumberText({ EpisodeNumber: 5 }), "E5")
+            m.assertEqual(VideoPlayerMetadata_GetEpisodeNumberText({}), "")
+        end function
+
+        @it("selects and truncates aired-date fallbacks")
+        function _()
+            m.assertEqual(VideoPlayerMetadata_GetAiredDateText({ PremiereDate: "2026-08-19T12:00:00Z", AirDate: "2025-01-01" }), "2026-08-19")
+            m.assertEqual(VideoPlayerMetadata_GetAiredDateText({ AirDate: "2025-01-01" }), "2025-01-01")
+            m.assertEqual(VideoPlayerMetadata_GetAiredDateText({ DateCreated: "short" }), "short")
+        end function
+
+        @it("joins only non-empty metadata values")
+        function _()
+            separator = MediaMetadata_BulletSeparator()
+            m.assertEqual(VideoPlayerMetadata_Join(["one", "", invalid, "two"]), "one" + separator + "two")
+            m.assertEqual(VideoPlayerMetadata_Join(invalid), "")
+        end function
+
+        @it("converts runtime and clamps seconds")
+        function _()
+            m.assertTrue(VideoPlayerMetadata_GetRuntimeSeconds({ RunTimeTicks: 900000000& }) = 90)
+            m.assertTrue(VideoPlayerMetadata_GetRuntimeSeconds({}) = 0)
+            m.assertTrue(VideoPlayerMetadata_ClampSeconds(-1, 0, 100) = 0)
+            m.assertTrue(VideoPlayerMetadata_ClampSeconds(50, 0, 100) = 50)
+            m.assertTrue(VideoPlayerMetadata_ClampSeconds(101, 0, 100) = 100)
+        end function
+    end class
+end namespace

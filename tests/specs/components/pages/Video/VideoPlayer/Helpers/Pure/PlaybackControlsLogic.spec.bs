@@ -1,0 +1,50 @@
+namespace tests
+    @suite("Playback controls logic")
+    class PlaybackControlsLogicTests extends rooibos.BaseTestSuite
+        @describe("time, focus, and progress calculations")
+
+        @it("formats negative, zero, and fractional seconds")
+        function _()
+            m.assertEqual(PlaybackControlsLogic_FormatTime(-1), "0:00")
+            m.assertEqual(PlaybackControlsLogic_FormatTime(0), "0:00")
+            m.assertEqual(PlaybackControlsLogic_FormatTime(59.9), "0:59")
+        end function
+
+        @it("formats minute and hour boundaries")
+        function _()
+            m.assertEqual(PlaybackControlsLogic_FormatTime(60), "1:00")
+            m.assertEqual(PlaybackControlsLogic_FormatTime(3599), "59:59")
+            m.assertEqual(PlaybackControlsLogic_FormatTime(3600), "1:00:00")
+            m.assertEqual(PlaybackControlsLogic_FormatTime(3661), "1:01:01")
+        end function
+
+        @it("finds the play-pause button")
+        function _()
+            buttons = [{ id: "back" }, { id: "playPauseButton" }, { id: "forward" }]
+            m.assertEqual(PlaybackControlsLogic_GetDefaultButtonIndex(buttons), 1)
+        end function
+
+        @it("falls back to the first button")
+        function _()
+            m.assertEqual(PlaybackControlsLogic_GetDefaultButtonIndex([{ id: "back" }]), 0)
+            m.assertEqual(PlaybackControlsLogic_GetDefaultButtonIndex([]), 0)
+            m.assertEqual(PlaybackControlsLogic_GetDefaultButtonIndex(invalid), 0)
+        end function
+
+        @it("clamps progress below and above duration")
+        function _()
+            below = PlaybackControlsLogic_GetProgress(-1, 100)
+            above = PlaybackControlsLogic_GetProgress(101, 100)
+            m.assertTrue(below.position = 0 and below.fraction = 0)
+            m.assertTrue(above.position = 100 and above.fraction = 1)
+        end function
+
+        @it("normalizes invalid duration and position")
+        function _()
+            progress = PlaybackControlsLogic_GetProgress(invalid, invalid)
+            m.assertTrue(progress.position = 0)
+            m.assertTrue(progress.duration = 1)
+            m.assertTrue(progress.fraction = 0)
+        end function
+    end class
+end namespace
