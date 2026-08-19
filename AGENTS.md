@@ -24,6 +24,12 @@
 - For helpers under `/source` that are internal to a single file, use a leading `__` prefix instead of the public module prefix, such as `__GetCollapseSeriesQueryValue`.
 - Do not use module-style prefixes for component-local functions in `components/`; name those functions by their local behavior, such as `initStyle`, `onKeyEvent`, or `colorString`.
 
+## Unit tests
+
+- When changing a file with an existing corresponding unit-test suite, update that suite to cover the changed behavior.
+- Run the relevant unit tests after making the change.
+- If no test change is necessary, verify that the existing tests still cover the behavior and mention that in the final response.
+
 ## SceneGraph architecture
 
 - Keep `MainScene` focused on app-shell orchestration: top-level visibility, routing between major surfaces, global focus recovery, and app exit handling.
