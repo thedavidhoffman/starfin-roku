@@ -88,8 +88,8 @@ npm test -- --host 192.168.1.123 --password "developer-password"
 A successful run ends with a summary similar to:
 
 ```text
-Total: 50
-Passed: 50
+Total: 131
+Passed: 131
 Crashed: 0
 Failed: 0
 RESULT: Success

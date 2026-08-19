@@ -1,0 +1,49 @@
+namespace tests
+
+    @suite("Media state helpers")
+    class MediaStateTests extends rooibos.BaseTestSuite
+
+        @describe("MediaState_ApplyToItem")
+
+        @it("marks items watched and clears playback progress")
+        function _()
+            item = { UserData: { Played: false, PlayedPercentage: 40, PlaybackPositionTicks: 40000000 } }
+            result = MediaState_ApplyToItem(item, { action: "watched", value: true })
+
+            m.assertTrue(result)
+            m.assertTrue(item.UserData.Played)
+            m.assertEqual(item.UserData.PlayedPercentage, 0)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 0)
+        end function
+
+        @it("marks items unwatched without clearing their position")
+        function _()
+            item = { UserData: { Played: true, PlayedPercentage: 100, PlaybackPositionTicks: 40000000 } }
+            result = MediaState_ApplyToItem(item, { action: "watched", value: false })
+
+            m.assertTrue(result)
+            m.assertFalse(item.UserData.Played)
+            m.assertEqual(item.UserData.PlayedPercentage, 0)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 40000000)
+        end function
+
+        @it("updates favorite state")
+        function _()
+            item = {}
+            m.assertTrue(MediaState_ApplyToItem(item, { action: "favorite", value: true }))
+            m.assertTrue(item.UserData.IsFavorite)
+
+            m.assertTrue(MediaState_ApplyToItem(item, { action: "favorite", value: false }))
+            m.assertFalse(item.UserData.IsFavorite)
+        end function
+
+        @it("rejects unsupported actions without creating user data")
+        function _()
+            item = {}
+            m.assertFalse(MediaState_ApplyToItem(item, { action: "unsupported", value: true }))
+            m.assertInvalid(item.UserData)
+        end function
+
+    end class
+
+end namespace

@@ -16,7 +16,7 @@ end function
 function MediaMetadata_FormatRuntime(runTimeTicks as dynamic) as string
     if runTimeTicks = invalid then return ""
 
-    minutes = int(val(runTimeTicks.ToStr()) / 600000000)
+    minutes = int(runTimeTicks / 600000000)
     if minutes <= 0 then return ""
 
     hours = int(minutes / 60)

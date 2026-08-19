@@ -1,0 +1,73 @@
+namespace tests
+
+    @suite("Series identity helpers")
+    class SeriesIdentityTests extends rooibos.BaseTestSuite
+
+        @describe("series identity construction and images")
+
+        @it("returns an empty identity for invalid items")
+        function _()
+            identity = SeriesIdentity_FromItem("https://server.local", invalid)
+            m.assertEqual(identity.Id, "")
+            m.assertEqual(identity.Name, "")
+            m.assertEqual(identity.logoUrl, "")
+            m.assertEqual(identity.thumbUrl, "")
+            m.assertEqual(identity.backdropUrl, "")
+            m.assertEqual(identity.detailBackdropUrl, "")
+        end function
+
+        @it("builds identity fields and generated image URLs")
+        function _()
+            item = {
+                Id: "series-1"
+                Name: "Series"
+                ImageTags: { Logo: "logo-tag", Thumb: "thumb-tag" }
+                BackdropImageTags: ["backdrop-tag"]
+            }
+            identity = SeriesIdentity_FromItem("https://server.local", item)
+
+            m.assertEqual(identity.Id, "series-1")
+            m.assertEqual(identity.Name, "Series")
+            m.assertEqual(identity.logoUrl, "https://server.local/Items/series-1/Images/Logo?tag=logo-tag&maxWidth=600&maxHeight=300&quality=90&format=Png")
+            m.assertEqual(identity.thumbUrl, "https://server.local/Items/series-1/Images/Thumb?tag=thumb-tag&maxWidth=531&maxHeight=300&quality=90")
+            m.assertEqual(identity.backdropUrl, "https://server.local/Items/series-1/Images/Backdrop?tag=backdrop-tag&maxWidth=531&maxHeight=300&quality=90")
+            m.assertEqual(identity.detailBackdropUrl, "https://server.local/Items/series-1/Images/Backdrop?tag=backdrop-tag&maxWidth=1920&maxHeight=1080&quality=90")
+        end function
+
+        @it("uses series-name and series-id fallbacks")
+        function _()
+            item = { SeriesId: "series-2", SeriesName: "Fallback Series", ImageTags: { Logo: "logo-tag" } }
+            identity = SeriesIdentity_FromItem("server.local", item)
+
+            m.assertEqual(identity.Id, "")
+            m.assertEqual(identity.Name, "Fallback Series")
+            m.assertEqual(identity.logoUrl, "http://server.local/Items/series-2/Images/Logo?tag=logo-tag&maxWidth=600&maxHeight=300&quality=90&format=Png")
+        end function
+
+        @it("prefers cached image URLs")
+        function _()
+            item = {
+                Id: "series-1"
+                logoUrl: "cached-logo"
+                thumbUrl: "cached-thumb"
+                backdropUrl: "cached-backdrop"
+                detailBackdropUrl: "cached-detail"
+            }
+
+            m.assertEqual(SeriesIdentity_GetLogoUrl("server.local", item), "cached-logo")
+            m.assertEqual(SeriesIdentity_GetImageUrl("server.local", item, "Thumb", 100, 100), "cached-thumb")
+            m.assertEqual(SeriesIdentity_GetImageUrl("server.local", item, "Backdrop", 100, 100), "cached-backdrop")
+            m.assertEqual(SeriesIdentity_GetDetailBackdropUrl("server.local", item), "cached-detail")
+        end function
+
+        @it("returns empty URLs when identifiers or image tags are missing")
+        function _()
+            m.assertEqual(SeriesIdentity_GetLogoUrl("server.local", {}), "")
+            m.assertEqual(SeriesIdentity_GetLogoUrl("server.local", { Id: "series-1" }), "")
+            m.assertEqual(SeriesIdentity_GetImageUrl("server.local", { Id: "series-1" }, "Thumb", 100, 100), "")
+            m.assertEqual(SeriesIdentity_GetDetailBackdropUrl("server.local", { Id: "series-1" }), "")
+        end function
+
+    end class
+
+end namespace

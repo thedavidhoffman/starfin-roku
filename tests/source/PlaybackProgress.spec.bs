@@ -1,0 +1,83 @@
+namespace tests
+
+    @suite("Playback progress helpers")
+    class PlaybackProgressTests extends rooibos.BaseTestSuite
+
+        @describe("progress extraction")
+
+        @it("prefers ticks directly on a selection")
+        function _()
+            selection = { startPositionTicks: 30000000, item: { UserData: { PlaybackPositionTicks: 10000000 } } }
+            m.assertEqual(PlaybackProgress_GetTicksFromSelection(selection), 30000000&)
+        end function
+
+        @it("falls back to item progress and handles invalid selections")
+        function _()
+            selection = { item: { UserData: { PlaybackPositionTicks: 20000000 } } }
+            m.assertEqual(PlaybackProgress_GetTicksFromSelection(selection), 20000000&)
+            m.assertEqual(PlaybackProgress_GetTicksFromSelection(invalid), 0&)
+        end function
+
+        @it("extracts item progress and handles missing user data")
+        function _()
+            m.assertEqual(PlaybackProgress_GetTicksFromItem({ UserData: { PlaybackPositionTicks: 40000000 } }), 40000000&)
+            m.assertEqual(PlaybackProgress_GetTicksFromItem({}), 0&)
+            m.assertEqual(PlaybackProgress_GetTicksFromItem(invalid), 0&)
+        end function
+
+        @describe("PlaybackProgress_TicksToSeconds")
+
+        @it("converts ticks to whole seconds and clamps non-positive values")
+        function _()
+            m.assertEqual(PlaybackProgress_TicksToSeconds(25999999), 2)
+            m.assertEqual(PlaybackProgress_TicksToSeconds(0), 0)
+            m.assertEqual(PlaybackProgress_TicksToSeconds(-1), 0)
+            m.assertEqual(PlaybackProgress_TicksToSeconds(invalid), 0)
+        end function
+
+        @describe("PlaybackProgress_ApplyChangeToItem")
+
+        @it("marks completed items played and clears their progress")
+        function _()
+            item = { UserData: { Played: false, PlayedPercentage: 50, PlaybackPositionTicks: 50000000 } }
+            result = PlaybackProgress_ApplyChangeToItem(item, { isFinished: true })
+
+            m.assertTrue(result)
+            m.assertTrue(item.UserData.Played)
+            m.assertEqual(item.UserData.PlayedPercentage, 0)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 0)
+        end function
+
+        @it("updates active progress using runtime ticks")
+        function _()
+            item = { RunTimeTicks: 100000000 }
+            result = PlaybackProgress_ApplyChangeToItem(item, { isFinished: false, positionTicks: 25000000 })
+
+            m.assertTrue(result)
+            m.assertFalse(item.UserData.Played)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 25000000&)
+            m.assertEqual(item.UserData.PlayedPercentage, 25.0)
+        end function
+
+        @it("uses duration fallback and caps progress at one hundred percent")
+        function _()
+            item = {}
+            PlaybackProgress_ApplyChangeToItem(item, { isFinished: false, positionTicks: 120000000, durationTicks: 100000000 })
+
+            m.assertEqual(item.UserData.PlayedPercentage, 100.0)
+        end function
+
+        @it("rejects invalid input and clamps missing progress")
+        function _()
+            m.assertFalse(PlaybackProgress_ApplyChangeToItem(invalid, { isFinished: false }))
+            m.assertFalse(PlaybackProgress_ApplyChangeToItem({}, invalid))
+
+            item = { RunTimeTicks: 100000000 }
+            m.assertTrue(PlaybackProgress_ApplyChangeToItem(item, { isFinished: false }))
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 0&)
+            m.assertEqual(item.UserData.PlayedPercentage, 0.0)
+        end function
+
+    end class
+
+end namespace

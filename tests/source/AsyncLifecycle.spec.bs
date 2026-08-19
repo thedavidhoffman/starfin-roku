@@ -1,0 +1,66 @@
+namespace tests
+
+    @suite("Async lifecycle helpers")
+    class AsyncLifecycleTests extends rooibos.BaseTestSuite
+
+        @describe("lifecycle state and response correlation")
+
+        @it("creates inactive lifecycle state")
+        function _()
+            state = AsyncLifecycle_Create()
+            m.assertFalse(state.isActive)
+            m.assertEqual(state.activeRequestKey, "")
+        end function
+
+        @it("begins and deactivates requests")
+        function _()
+            state = AsyncLifecycle_Create()
+            AsyncLifecycle_Begin(state, "request-1")
+            m.assertTrue(state.isActive)
+            m.assertEqual(state.activeRequestKey, "request-1")
+
+            AsyncLifecycle_Deactivate(state)
+            m.assertFalse(state.isActive)
+            m.assertEqual(state.activeRequestKey, "")
+        end function
+
+        @it("begins requests from named source fields")
+        function _()
+            state = AsyncLifecycle_Create()
+            AsyncLifecycle_BeginFromField(state, { itemId: "item-1" }, "itemId")
+            m.assertTrue(state.isActive)
+            m.assertEqual(state.activeRequestKey, "item-1")
+        end function
+
+        @it("ignores unusable begin-from-field requests")
+        function _()
+            state = AsyncLifecycle_Create()
+            AsyncLifecycle_BeginFromField(state, invalid, "itemId")
+            AsyncLifecycle_BeginFromField(state, {}, "itemId")
+            AsyncLifecycle_BeginFromField(state, { itemId: "item-1" }, "")
+            m.assertFalse(state.isActive)
+        end function
+
+        @it("accepts only the current active response and expected action")
+        function _()
+            state = AsyncLifecycle_Create()
+            AsyncLifecycle_Begin(state, "item-1")
+
+            m.assertTrue(AsyncLifecycle_IsCurrentResponse(state, { itemId: "item-1", action: "load" }, "itemId", "load"))
+            m.assertFalse(AsyncLifecycle_IsCurrentResponse(state, { itemId: "item-2", action: "load" }, "itemId", "load"))
+            m.assertFalse(AsyncLifecycle_IsCurrentResponse(state, { itemId: "item-1", action: "other" }, "itemId", "load"))
+
+            AsyncLifecycle_Deactivate(state)
+            m.assertFalse(AsyncLifecycle_IsCurrentResponse(state, { itemId: "item-1", action: "load" }, "itemId", "load"))
+        end function
+
+        @it("builds stable composite keys")
+        function _()
+            m.assertEqual(AsyncLifecycle_BuildKey(["one", 2, invalid, "four"]), "one|2||four")
+            m.assertEqual(AsyncLifecycle_BuildKey([]), "")
+            m.assertEqual(AsyncLifecycle_BuildKey(invalid), "")
+        end function
+
+    end class
+
+end namespace
