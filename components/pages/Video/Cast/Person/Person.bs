@@ -1,0 +1,936 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = CreateLogger("Person")
+    MaskAssets_Apply(m.top.findNode("personImageMask"), "person-mask.png", [399, 600], [266, 400])
+    m.bioGroup = m.top.findNode("bioGroup")
+    m.personImage = m.top.findNode("personImage")
+    m.nameLabel = m.top.findNode("nameLabel")
+    m.lifeLabel = m.top.findNode("lifeLabel")
+    m.birthPlaceLabel = m.top.findNode("birthPlaceLabel")
+    m.overviewLabel = m.top.findNode("overviewLabel")
+    m.readMoreButton = m.top.findNode("readMoreButton")
+    m.filmographyButton = m.top.findNode("filmographyButton")
+    m.relatedGroup = m.top.findNode("relatedGroup")
+    m.relatedItemsGroup = m.top.findNode("relatedItemsGroup")
+    m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
+    m.relatedRows = m.top.findNode("relatedRows")
+    m.relatedRows.focusBitmapUri = HomepageAssets_GetUri("home-page-poster-focus.png")
+    m.relatedEpisodesGroup = m.top.findNode("relatedEpisodesGroup")
+    m.relatedEpisodesTitleLabel = m.top.findNode("relatedEpisodesTitleLabel")
+    m.relatedEpisodeRows = m.top.findNode("relatedEpisodeRows")
+    m.relatedEpisodeRows.focusBitmapUri = HomepageAssets_GetUri("person-episode-focus.png")
+    m.layoutAnimation = m.top.findNode("layoutAnimation")
+    m.bioTranslation = m.top.findNode("bioTranslation")
+    m.relatedRowsTranslation = m.top.findNode("relatedRowsTranslation")
+    m.personTask = m.top.findNode("personTask")
+
+    m.personTask.observeField("response", "onPersonResponse")
+    m.readMoreButton.observeField("buttonSelected", "onReadMoreButtonSelected")
+    m.filmographyButton.observeField("buttonSelected", "onFilmographyButtonSelected")
+    m.relatedRows.observeField("rowItemSelected", "onRelatedItemSelected")
+    m.relatedEpisodeRows.observeField("rowItemSelected", "onRelatedEpisodeSelected")
+
+    m.pageState = {
+        request: invalid
+        person: invalid
+        filmography: invalid
+        focusArea: "person"
+        lifecycle: AsyncLifecycle_Create()
+    }
+    m.layout = {
+        mode: "bio"
+        bioDefault: [0, 0]
+        bioRelatedFocused: [0, -258]
+        bioEpisodesFocused: [0, -680]
+        rowsDefault: [76, 750]
+        rowsRelatedFocused: [76, 492]
+        rowsEpisodesFocused: [76, 50]
+        overviewDefaultTranslation: [536, 266]
+        overviewNoMetadataTranslation: [536, 175]
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onLoadRequestChanged
+'-------------------------------------------------------------------------------
+sub onLoadRequestChanged()
+    request = m.top.loadRequest
+    if request = invalid then return
+
+    m.pageState.request = request
+    AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
+    m.pageState.person = request.item
+    m.pageState.filmography = invalid
+    m.pageState.focusArea = "person"
+    setLayoutMode("bio", false)
+    m.readMoreButton.visible = false
+    clearRelated()
+    Spinner_Show()
+    renderPerson(request.item)
+    m.overviewLabel.text = ""
+
+    m.personTask.request = request
+    m.personTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onPersonResponse
+'-------------------------------------------------------------------------------
+sub onPersonResponse()
+    response = m.personTask.response
+    if response = invalid then return
+    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "person") <> true then return
+
+    if response.ok <> true then
+        Spinner_Hide()
+        Status_SetMessage(SafeString(response.errorMessage, "Unable to load this person."))
+        return
+    end if
+
+    person = response.payload.person
+    m.pageState.person = person
+    renderPerson(person)
+    renderOverview(person)
+    renderRelated(getItemsFromPayload(response.payload.items), getItemsFromPayload(response.payload.episodeItems))
+    Spinner_Hide()
+    Status_ClearMessage()
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    m.personTask.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' renderPerson
+'-------------------------------------------------------------------------------
+sub renderPerson(person as dynamic)
+    if Array_IsAssocArray(person) = false then return
+
+    m.nameLabel.text = getPersonName(person)
+    m.lifeLabel.text = getLifeText(person)
+    renderBirthPlace(person)
+    updateOverviewPosition()
+
+    imageUrl = getPersonImageUrl(person, 399, 600)
+    posterUrl = imageUrl
+    if posterUrl = "" then posterUrl = "pkg:/images/cast/person-placeholder-399x600.png"
+    m.personImage.visible = true
+    m.personImage.uri = posterUrl
+
+    updateFilmographyButton(person, imageUrl)
+    updateFocusVisual()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    person = m.pageState.person
+    if Array_IsAssocArray(person) = false then return
+
+    updateFilmographyButton(person, getPersonImageUrl(person, 399, 600))
+    updateReadMoreButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateFilmographyButton
+'-------------------------------------------------------------------------------
+sub updateFilmographyButton(person as dynamic, imageUrl as string)
+    m.pageState.filmography = buildFilmographySelection(person, imageUrl)
+    m.filmographyButton.visible = m.pageState.filmography <> invalid
+    updateFocusVisual()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderOverview
+'-------------------------------------------------------------------------------
+sub renderOverview(person as dynamic)
+    overview = FirstNonEmpty([person.Overview], "")
+    if overview = "" then overview = "Biographical information for this person is not currently available."
+
+    m.overviewLabel.text = overview
+    updateReadMoreButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateReadMoreButton
+'-------------------------------------------------------------------------------
+sub updateReadMoreButton()
+    m.readMoreButton.visible = isOverviewLabelTruncated()
+    if m.readMoreButton.visible = true then
+        m.filmographyButton.translation = [812, 628]
+    else
+        m.filmographyButton.translation = [536, 628]
+    end if
+
+    updateFocusVisual()
+    if m.pageState.focusArea <> "related" then focusDefaultBioAction()
+end sub
+
+'-------------------------------------------------------------------------------
+' isOverviewLabelTruncated
+'-------------------------------------------------------------------------------
+function isOverviewLabelTruncated() as boolean
+    return isOverviewTextTruncated(SafeString(m.overviewLabel.text, ""))
+end function
+
+'-------------------------------------------------------------------------------
+' isOverviewTextTruncated
+'-------------------------------------------------------------------------------
+function isOverviewTextTruncated(text as string) as boolean
+    if text = "" then return false
+
+    maxLines = 12
+    maxCharsPerLine = 44
+    lineCount = 1
+    currentLineLength = 0
+    normalizedText = String_Replace(text, Chr(13), "")
+    paragraphs = normalizedText.Split(Chr(10))
+
+    for each paragraph in paragraphs
+        words = String_Trim(paragraph).Split(" ")
+
+        for each word in words
+            wordLength = Len(SafeString(word, ""))
+            if wordLength = 0 then continue for
+
+            separatorLength = 0
+            if currentLineLength > 0 then separatorLength = 1
+
+            if currentLineLength > 0 and currentLineLength + separatorLength + wordLength > maxCharsPerLine then
+                lineCount = lineCount + 1
+                currentLineLength = wordLength
+            else
+                currentLineLength = currentLineLength + separatorLength + wordLength
+            end if
+
+            if lineCount > maxLines then return true
+        end for
+
+        if paragraph <> paragraphs[paragraphs.Count() - 1] then
+            lineCount = lineCount + 1
+            currentLineLength = 0
+            if lineCount > maxLines then return true
+        end if
+    end for
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' openPersonOverview
+'-------------------------------------------------------------------------------
+sub openPersonOverview()
+    overview = SafeString(m.overviewLabel.text, "")
+    if overview = "" then return
+
+    m.top.overlayRequested = {
+        id: "personOverview"
+        componentName: "PersonOverviewDialog"
+        openFunction: "openOverview"
+        closeField: "closeRequested"
+        personName: getPersonName(m.pageState.person)
+        overviewText: overview
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onReadMoreButtonSelected
+'-------------------------------------------------------------------------------
+sub onReadMoreButtonSelected()
+    openPersonOverview()
+end sub
+
+'-------------------------------------------------------------------------------
+' handlePersonOverviewOverlayClosed
+'-------------------------------------------------------------------------------
+sub handlePersonOverviewOverlayClosed()
+    focusReadMoreButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderBirthPlace
+'-------------------------------------------------------------------------------
+sub renderBirthPlace(person as dynamic)
+    birthPlace = getBirthPlace(person)
+    m.birthPlaceLabel.visible = birthPlace <> ""
+    m.birthPlaceLabel.text = "Place of birth: " + birthPlace
+end sub
+
+'-------------------------------------------------------------------------------
+' updateOverviewPosition
+'-------------------------------------------------------------------------------
+sub updateOverviewPosition()
+    if m.lifeLabel.text = "" and m.birthPlaceLabel.visible <> true then
+        m.overviewLabel.translation = m.layout.overviewNoMetadataTranslation
+    else
+        m.overviewLabel.translation = m.layout.overviewDefaultTranslation
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getBirthPlace
+'-------------------------------------------------------------------------------
+function getBirthPlace(person as dynamic) as string
+    if Array_IsAssocArray(person) = false then return ""
+    if person.ProductionLocations = invalid then return ""
+    if person.ProductionLocations.Count() = 0 then return ""
+
+    return SafeString(person.ProductionLocations[0], "")
+end function
+
+'-------------------------------------------------------------------------------
+' renderRelated
+'-------------------------------------------------------------------------------
+sub renderRelated(items as object, episodeItems as object)
+    hasItems = renderRelatedItems(items)
+    hasEpisodeItems = renderRelatedEpisodes(episodeItems)
+    updateRelatedEpisodesLayout(hasItems)
+
+    m.relatedGroup.visible = hasItems or hasEpisodeItems
+end sub
+
+'-------------------------------------------------------------------------------
+' updateRelatedEpisodesLayout
+'-------------------------------------------------------------------------------
+sub updateRelatedEpisodesLayout(hasRelatedItems as boolean)
+    if hasRelatedItems then
+        m.relatedEpisodesGroup.translation = [0, 560]
+    else
+        m.relatedEpisodesGroup.translation = [0, 0]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderRelatedItems
+'-------------------------------------------------------------------------------
+function renderRelatedItems(items as object) as boolean
+    content = CreateObject("roSGNode", "ContentNode")
+    row = content.createChild("ContentNode")
+    m.relatedTitleLabel.text = "Movies/Shows with " + getPersonName(m.pageState.person)
+    sortedItems = sortRelatedItems(items)
+
+    for each item in sortedItems
+        addRelatedItemNode(row, item, "poster")
+    end for
+
+    m.relatedRows.content = content
+    hasItems = row.getChildCount() > 0
+    m.relatedItemsGroup.visible = hasItems
+    m.relatedRows.visible = hasItems
+    return hasItems
+end function
+
+'-------------------------------------------------------------------------------
+' renderRelatedEpisodes
+'-------------------------------------------------------------------------------
+function renderRelatedEpisodes(items as object) as boolean
+    content = CreateObject("roSGNode", "ContentNode")
+    row = content.createChild("ContentNode")
+    m.relatedEpisodesTitleLabel.text = "TV Episodes with " + getPersonName(m.pageState.person)
+    sortedItems = EpisodeSort_BySeriesSeasonEpisode(items)
+
+    for each item in sortedItems
+        addRelatedItemNode(row, item, "wide")
+    end for
+
+    m.relatedEpisodeRows.content = content
+    hasItems = row.getChildCount() > 0
+    m.relatedEpisodesGroup.visible = hasItems
+    m.relatedEpisodeRows.visible = hasItems
+    return hasItems
+end function
+
+'-------------------------------------------------------------------------------
+' addRelatedItemNode
+'-------------------------------------------------------------------------------
+sub addRelatedItemNode(row as object, item as dynamic, imageAspect as string)
+    if Array_IsAssocArray(item) = false then return
+
+    itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
+    if itemId = "" then return
+
+    child = row.createChild("ContentNode")
+    child.HDPosterUrl = getItemImageUrl(item, imageAspect)
+    child.AddFields({
+        imageAspect: imageAspect
+        raw: item
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' sortRelatedItems
+'-------------------------------------------------------------------------------
+function sortRelatedItems(items as object) as object
+    if items = invalid then return []
+
+    sortedItems = []
+    for each item in items
+        sortedItems.Push(item)
+    end for
+
+    if sortedItems.Count() < 2 then return sortedItems
+
+    for i = 0 to sortedItems.Count() - 2
+        for j = i + 1 to sortedItems.Count() - 1
+            if relatedItemComesBefore(sortedItems[j], sortedItems[i]) then
+                temp = sortedItems[i]
+                sortedItems[i] = sortedItems[j]
+                sortedItems[j] = temp
+            end if
+        end for
+    end for
+
+    return sortedItems
+end function
+
+'-------------------------------------------------------------------------------
+' relatedItemComesBefore
+'-------------------------------------------------------------------------------
+function relatedItemComesBefore(candidate as dynamic, current as dynamic) as boolean
+    candidateDate = getRelatedItemDateKey(candidate)
+    currentDate = getRelatedItemDateKey(current)
+
+    if candidateDate <> currentDate then return candidateDate > currentDate
+
+    candidateTitle = getRelatedItemTitleKey(candidate)
+    currentTitle = getRelatedItemTitleKey(current)
+    return candidateTitle < currentTitle
+end function
+
+'-------------------------------------------------------------------------------
+' getRelatedItemDateKey
+'-------------------------------------------------------------------------------
+function getRelatedItemDateKey(item as dynamic) as string
+    if Array_IsAssocArray(item) = false then return ""
+
+    premiereDate = SafeString(FirstNonEmpty([item.PremiereDate], ""), "")
+    if Len(premiereDate) >= 10 then return Left(premiereDate, 10)
+
+    year = FirstNonEmpty([item.ProductionYear], "")
+    productionYear = Number.ToInteger(year, 0)
+    if productionYear <= 0 then return ""
+
+    return productionYear.ToStr() + "-00-00"
+end function
+
+'-------------------------------------------------------------------------------
+' getRelatedItemTitleKey
+'-------------------------------------------------------------------------------
+function getRelatedItemTitleKey(item as dynamic) as string
+    if Array_IsAssocArray(item) = false then return ""
+
+    return LCase(SafeString(FirstNonEmpty([item.SortName, item.Name], ""), ""))
+end function
+
+'-------------------------------------------------------------------------------
+' clearRelated
+'-------------------------------------------------------------------------------
+sub clearRelated()
+    m.relatedRows.content = CreateObject("roSGNode", "ContentNode")
+    m.relatedEpisodeRows.content = CreateObject("roSGNode", "ContentNode")
+    m.relatedGroup.visible = false
+    m.relatedItemsGroup.visible = false
+    m.relatedRows.visible = false
+    m.relatedEpisodesGroup.visible = false
+    m.relatedEpisodeRows.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
+    if m.relatedRows.visible = true and m.pageState.focusArea = "related" then
+        setLayoutMode("related", false)
+        m.relatedRows.setFocus(true)
+    else if m.relatedEpisodeRows.visible = true and m.pageState.focusArea = "relatedEpisodes" then
+        setLayoutMode(getRelatedEpisodesLayoutMode(), false)
+        m.relatedEpisodeRows.setFocus(true)
+    else
+        focusDefaultBioAction()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' focusDefaultBioAction
+'-------------------------------------------------------------------------------
+sub focusDefaultBioAction()
+    if m.readMoreButton.visible = true then
+        focusReadMoreButton()
+    else if m.filmographyButton.visible = true then
+        focusFilmographyButton()
+    else
+        m.pageState.focusArea = "person"
+        setLayoutMode("bio", true)
+        updateFocusVisual()
+        m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' focusFilmographyButton
+'-------------------------------------------------------------------------------
+sub focusFilmographyButton()
+    if m.filmographyButton.visible <> true then return
+
+    m.pageState.focusArea = "filmography"
+    setLayoutMode("bio", true)
+    updateFocusVisual()
+    m.filmographyButton.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusReadMoreButton
+'-------------------------------------------------------------------------------
+sub focusReadMoreButton()
+    if m.readMoreButton.visible <> true then return
+
+    m.pageState.focusArea = "readMore"
+    setLayoutMode("bio", true)
+    updateFocusVisual()
+    m.readMoreButton.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusRelated
+'-------------------------------------------------------------------------------
+sub focusRelated()
+    if m.relatedRows.visible <> true then
+        focusRelatedEpisodes()
+        return
+    end if
+
+    m.pageState.focusArea = "related"
+    setLayoutMode("related", true)
+    updateFocusVisual()
+    m.relatedRows.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusRelatedEpisodes
+'-------------------------------------------------------------------------------
+sub focusRelatedEpisodes()
+    if m.relatedEpisodeRows.visible <> true then return
+
+    m.pageState.focusArea = "relatedEpisodes"
+    setLayoutMode(getRelatedEpisodesLayoutMode(), true)
+    updateFocusVisual()
+    m.relatedEpisodeRows.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' getRelatedEpisodesLayoutMode
+'-------------------------------------------------------------------------------
+function getRelatedEpisodesLayoutMode() as string
+    if m.relatedRows.visible = true then return "relatedEpisodes"
+    return "related"
+end function
+
+'-------------------------------------------------------------------------------
+' focusPerson
+'-------------------------------------------------------------------------------
+sub focusPerson()
+    focusDefaultBioAction()
+end sub
+
+'-------------------------------------------------------------------------------
+' setLayoutMode
+'-------------------------------------------------------------------------------
+sub setLayoutMode(mode as string, animated as boolean)
+    if mode <> "related" and mode <> "relatedEpisodes" then mode = "bio"
+    if m.layout.mode = mode and animated = true then return
+
+    m.layout.mode = mode
+    bioTarget = m.layout.bioDefault
+    rowsTarget = m.layout.rowsDefault
+    if mode = "related" then
+        bioTarget = m.layout.bioRelatedFocused
+        rowsTarget = m.layout.rowsRelatedFocused
+    else if mode = "relatedEpisodes" then
+        bioTarget = m.layout.bioEpisodesFocused
+        rowsTarget = m.layout.rowsEpisodesFocused
+    end if
+
+    if animated = true then
+        m.bioTranslation.keyValue = [m.bioGroup.translation, bioTarget]
+        m.relatedRowsTranslation.keyValue = [m.relatedGroup.translation, rowsTarget]
+        m.layoutAnimation.control = "start"
+    else
+        m.layoutAnimation.control = "stop"
+        m.bioGroup.translation = bioTarget
+        m.relatedGroup.translation = rowsTarget
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' selectFilmography
+'-------------------------------------------------------------------------------
+sub selectFilmography()
+    if m.pageState.filmography = invalid then return
+    m.top.selectedFilmography = m.pageState.filmography
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilmographyButtonSelected
+'-------------------------------------------------------------------------------
+sub onFilmographyButtonSelected()
+    selectFilmography()
+end sub
+
+'-------------------------------------------------------------------------------
+' onRelatedItemSelected
+'-------------------------------------------------------------------------------
+sub onRelatedItemSelected()
+    selected = m.relatedRows.rowItemSelected
+    handleRelatedSelection(m.relatedRows, selected)
+end sub
+
+'-------------------------------------------------------------------------------
+' onRelatedEpisodeSelected
+'-------------------------------------------------------------------------------
+sub onRelatedEpisodeSelected()
+    selected = m.relatedEpisodeRows.rowItemSelected
+    handleRelatedSelection(m.relatedEpisodeRows, selected)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleRelatedSelection
+'-------------------------------------------------------------------------------
+sub handleRelatedSelection(rowList as object, selected as dynamic)
+    if selected = invalid or selected.Count() < 2 then return
+    if rowList.content = invalid then return
+
+    row = rowList.content.getChild(selected[0])
+    if row = invalid then return
+
+    itemNode = row.getChild(selected[1])
+    if itemNode = invalid then return
+
+    item = itemNode.raw
+    selection = {
+        itemId: SafeString(FirstNonEmpty([item.Id], ""), "")
+        item: item
+    }
+    if selection.itemId = "" then return
+
+    itemType = LCase(SafeString(FirstNonEmpty([item.Type], ""), ""))
+    if itemType = "movie" or itemType = "video" then
+        m.top.selectedMovie = selection
+    else if itemType = "series" then
+        m.top.selectedSeries = selection
+    else if itemType = "episode" then
+        m.top.selectedEpisode = selection
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getPersonName
+'-------------------------------------------------------------------------------
+function getPersonName(person as dynamic) as string
+    if Array_IsAssocArray(person) = false then return "Person"
+    return FirstNonEmpty([person.Name], "Person")
+end function
+
+'-------------------------------------------------------------------------------
+' buildFilmographySelection
+'-------------------------------------------------------------------------------
+function buildFilmographySelection(person as dynamic, imageUrl as string) as dynamic
+    tmdbApiKey = getTmdbApiKey()
+    if tmdbApiKey = "" then return invalid
+
+    tmdbId = getTmdbPersonId(person)
+    if tmdbId = "" then return invalid
+
+    return {
+        personId: tmdbId
+        name: getPersonName(person)
+        imageUrl: imageUrl
+        apiKey: tmdbApiKey
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' hasTmdbApiKey
+'-------------------------------------------------------------------------------
+function hasTmdbApiKey() as boolean
+    return getTmdbApiKey() <> ""
+end function
+
+'-------------------------------------------------------------------------------
+' getTmdbApiKey
+'-------------------------------------------------------------------------------
+function getTmdbApiKey() as string
+    keys = SettingsStore_Keys()
+    apiKey = SettingsStore_GetSettingValue(m.top.settings, keys.tmdbApiKey)
+    if apiKey <> "" then return apiKey
+
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    apiKey = SettingsStore_GetSettingValue(request.settings, keys.tmdbApiKey)
+    if apiKey <> "" then return apiKey
+
+    return SettingsStore_LoadIntegration(keys.tmdbApiKey)
+end function
+
+'-------------------------------------------------------------------------------
+' getTmdbPersonId
+'-------------------------------------------------------------------------------
+function getTmdbPersonId(person as dynamic) as string
+    if Array_IsAssocArray(person) = false then return ""
+    externalUrls = person.ExternalUrls
+    if externalUrls = invalid then return ""
+
+    for each externalUrl in externalUrls
+        if Array_IsAssocArray(externalUrl) = false then continue for
+
+        name = LCase(FirstNonEmpty([externalUrl.Name], ""))
+        if name = "tmdb" then
+            url = FirstNonEmpty([externalUrl.Url], "")
+            return getTrailingUrlSegment(url)
+        end if
+    end for
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getTrailingUrlSegment
+'-------------------------------------------------------------------------------
+function getTrailingUrlSegment(url as string) as string
+    if url = "" then return ""
+
+    while Right(url, 1) = "/"
+        url = Left(url, Len(url) - 1)
+    end while
+
+    slashIndex = 0
+    for i = Len(url) to 1 step -1
+        if Mid(url, i, 1) = "/" then
+            slashIndex = i
+            exit for
+        end if
+    end for
+
+    if slashIndex = 0 then return url
+    return Mid(url, slashIndex + 1)
+end function
+
+'-------------------------------------------------------------------------------
+' getLifeText
+'-------------------------------------------------------------------------------
+function getLifeText(person as dynamic) as string
+    parts = []
+    birthDate = FirstNonEmpty([person.PremiereDate, person.BirthDate], "")
+    deathDate = FirstNonEmpty([person.EndDate, person.DeathDate], "")
+    birthText = DateTime_ToLongDate(birthDate)
+    deathText = DateTime_ToLongDate(deathDate)
+    ageText = getAgeText(birthDate, deathDate)
+
+    if birthText <> "" then parts.Push("Born " + birthText)
+    if deathText <> "" then parts.Push("Died " + deathText)
+    if ageText <> "" then parts.Push(ageText)
+
+    return joinText(parts, MediaMetadata_BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getAgeText
+'-------------------------------------------------------------------------------
+function getAgeText(birthDate as string, deathDate as string) as string
+    age = getAge(birthDate, deathDate)
+    if age < 0 then return ""
+
+    return "Age " + age.ToStr()
+end function
+
+'-------------------------------------------------------------------------------
+' getAge
+'-------------------------------------------------------------------------------
+function getAge(birthDate as string, deathDate as string) as integer
+    if Len(birthDate) < 10 then return -1
+
+    birthYear = val(Left(birthDate, 4))
+    birthMonth = val(Mid(birthDate, 6, 2))
+    birthDay = val(Mid(birthDate, 9, 2))
+    if birthYear <= 0 or birthMonth <= 0 or birthDay <= 0 then return -1
+
+    endYear = 0
+    endMonth = 0
+    endDay = 0
+    if Len(deathDate) >= 10 then
+        endYear = val(Left(deathDate, 4))
+        endMonth = val(Mid(deathDate, 6, 2))
+        endDay = val(Mid(deathDate, 9, 2))
+    else
+        today = CreateObject("roDateTime")
+        today.Mark()
+        endYear = today.GetYear()
+        endMonth = today.GetMonth()
+        endDay = today.GetDayOfMonth()
+    end if
+
+    if endYear <= 0 or endMonth <= 0 or endDay <= 0 then return -1
+
+    age = endYear - birthYear
+    if endMonth < birthMonth or (endMonth = birthMonth and endDay < birthDay) then age = age - 1
+    if age < 0 then return -1
+
+    return age
+end function
+
+' getItemsFromPayload
+'-------------------------------------------------------------------------------
+function getItemsFromPayload(payload as dynamic) as object
+    if payload = invalid then return []
+    if Type(payload) = "roArray" then return payload
+    if Array_IsAssocArray(payload) = false then return []
+    if payload.Items <> invalid then return payload.Items
+
+    return []
+end function
+
+'-------------------------------------------------------------------------------
+' getPersonImageUrl
+'-------------------------------------------------------------------------------
+function getPersonImageUrl(person as dynamic, width as integer, height as integer) as string
+    if Array_IsAssocArray(person) = false then return ""
+
+    directUrl = FirstNonEmpty([person.ImageURL, person.ImageUrl, person.PrimaryImageUrl], "")
+    if directUrl <> "" then return directUrl
+
+    itemId = FirstNonEmpty([person.Id], "")
+    tag = FirstNonEmpty([person.PrimaryImageTag], "")
+    if tag = "" and person.ImageTags <> invalid and person.ImageTags.Primary <> invalid then tag = person.ImageTags.Primary
+    if itemId = "" then return ""
+    if tag = "" then return ""
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    return Url_BuildImageUrl(request.server, itemId, "Primary", tag, width, height)
+end function
+
+'-------------------------------------------------------------------------------
+' getItemImageUrl
+'-------------------------------------------------------------------------------
+function getItemImageUrl(item as dynamic, imageAspect as string) as string
+    if Array_IsAssocArray(item) = false then return ""
+
+    itemId = FirstNonEmpty([item.Id], "")
+    primaryTag = ""
+    if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
+    request = m.pageState.request
+    if request = invalid then return ""
+    if itemId = "" or primaryTag = "" then return ""
+
+    if imageAspect = "wide" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 440, 248)
+    return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 250, 375)
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' joinText
+'-------------------------------------------------------------------------------
+function joinText(values as dynamic, separator as string) as string
+    if values = invalid then return ""
+
+    text = ""
+    for each value in values
+        part = String_Trim(SafeString(value, ""))
+        if part <> "" then
+            if text <> "" then text = text + separator
+            text = text + part
+        end if
+    end for
+
+    return text
+end function
+
+'-------------------------------------------------------------------------------
+' updateFocusVisual
+'-------------------------------------------------------------------------------
+sub updateFocusVisual()
+    m.readMoreButton.hasFocusVisual = m.readMoreButton.visible = true and m.pageState.focusArea = "readMore"
+    m.filmographyButton.hasFocusVisual = m.filmographyButton.visible = true and m.pageState.focusArea = "filmography"
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+
+    if key = "back" then
+        m.top.closeRequested = true
+        return true
+    end if
+
+    if key = "OK" and m.pageState.focusArea = "filmography" then
+        selectFilmography()
+        return true
+    end if
+
+    if key = "OK" and m.pageState.focusArea = "readMore" then
+        openPersonOverview()
+        return true
+    end if
+
+    if key = "right" and m.pageState.focusArea = "readMore" and m.filmographyButton.visible = true then
+        focusFilmographyButton()
+        return true
+    end if
+
+    if key = "left" and m.pageState.focusArea = "filmography" and m.readMoreButton.visible = true then
+        focusReadMoreButton()
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "person" and m.readMoreButton.visible = true then
+        focusReadMoreButton()
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "person" and m.filmographyButton.visible = true then
+        focusFilmographyButton()
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "person" then
+        focusRelated()
+        return true
+    end if
+
+    if key = "down" and (m.pageState.focusArea = "readMore" or m.pageState.focusArea = "filmography") then
+        focusRelated()
+        return true
+    end if
+
+    if key = "up" and m.relatedRows.isInFocusChain() then
+        focusPerson()
+        return true
+    end if
+
+    if key = "down" and m.relatedRows.isInFocusChain() and m.relatedEpisodeRows.visible = true then
+        focusRelatedEpisodes()
+        return true
+    end if
+
+    if key = "up" and m.relatedEpisodeRows.isInFocusChain() then
+        if m.relatedRows.visible = true then
+            focusRelated()
+        else
+            focusPerson()
+        end if
+        return true
+    end if
+
+    return false
+end function

@@ -5,15 +5,7 @@ import rokuDeploy from 'roku-deploy';
 const rootDir = process.cwd();
 const configPath = path.join(rootDir, 'rokudeploy.json');
 const outDir = path.join(rootDir, 'out');
-const outFile = 'starfin';
-const stagingDir = path.join(rootDir, 'build', 'staging');
-
-const files = [
-  'components/**/*',
-  'images/**/*',
-  'source/**/*',
-  'manifest'
-];
+const outFile = 'starfin-roku.zip';
 
 let rawConfig;
 try {
@@ -30,13 +22,10 @@ if (!config.host || !config.password) {
   process.exit(1);
 }
 
-await rokuDeploy.deploy({
+await rokuDeploy.publish({
   ...config,
-  rootDir,
   outDir,
-  outFile,
-  stagingDir,
-  files
+  outFile
 });
 
 console.log(`Deployed ${outFile} to Roku device at ${config.host}`);
