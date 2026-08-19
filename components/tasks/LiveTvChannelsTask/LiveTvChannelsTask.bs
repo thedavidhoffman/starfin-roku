@@ -1,0 +1,60 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = Logger.Create("LiveTvChannelsTask")
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    validationError = validateRequest(request)
+    if validationError <> invalid then
+        if request <> invalid then validationError.AddReplace("userId", Format.SafeString(request.userId, ""))
+        m.top.response = validationError
+        return
+    end if
+
+    params = {
+        IncludeItemTypes: "LiveTvChannel"
+        SortBy: "SortName"
+        SortOrder: "Ascending"
+        UserId: Format.SafeString(request.userId, "")
+        EnableFavoriteSorting: true
+        EnableUserData: false
+        AddCurrentProgram: false
+        Recursive: true
+        ImageTypeLimit: 1
+        EnableImageTypes: "Primary"
+    }
+
+    requestUrl = request.server + "/Items" + Url.BuildQueryString(params)
+    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    if response.ok <> true then
+        response.AddReplace("action", "liveTvChannels")
+        response.AddReplace("userId", Format.SafeString(request.userId, ""))
+        m.top.response = response
+        return
+    end if
+
+    m.top.response = {
+        ok: true
+        action: "liveTvChannels"
+        userId: Format.SafeString(request.userId, "")
+        payload: response.data
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' validateRequest
+'-------------------------------------------------------------------------------
+function validateRequest(request as dynamic) as dynamic
+    if request = invalid then return { ok: false, action: "liveTvChannels", errorMessage: "Invalid Live TV request." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "liveTvChannels", errorMessage: "Invalid Live TV server." }
+    if request.token = invalid or request.token = "" then return { ok: false, action: "liveTvChannels", errorMessage: "Invalid Live TV token." }
+
+    return invalid
+end function

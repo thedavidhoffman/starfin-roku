@@ -39,10 +39,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub updateSystemInformation()
     sections = [getAppInfoSection(), getDeviceInfoSection(), getGlobalRegistrySection()]
-    keys = SettingsStore_Keys()
-    accounts = AuthStore_ListAllAccounts(true)
+    accounts = AuthStore.ListAllAccounts(true)
     for each account in accounts
-        sections.Push(getAccountRegistrySection(account, keys))
+        sections.Push(getAccountRegistrySection(account))
     end for
     renderSections(sections)
 end sub
@@ -87,9 +86,9 @@ end function
 function connectionInfoText(connectionInfo as dynamic) as string
     if connectionInfo = invalid or GetInterface(connectionInfo, "ifAssociativeArray") = invalid then return "(not set)"
 
-    connectionType = SafeString(connectionInfo.type, "")
-    quality = LCase(SafeString(connectionInfo.quality, ""))
-    ipAddress = SafeString(connectionInfo.ip, "")
+    connectionType = Format.SafeString(connectionInfo.type, "")
+    quality = LCase(Format.SafeString(connectionInfo.quality, ""))
+    ipAddress = Format.SafeString(connectionInfo.ip, "")
     text = connectionType
     if quality <> "" then
         if text = "" then
@@ -111,10 +110,10 @@ end function
 '-------------------------------------------------------------------------------
 function osVersionText(osVersion as dynamic) as string
     if osVersion = invalid or GetInterface(osVersion, "ifAssociativeArray") = invalid then return "(not set)"
-    text = SafeString(osVersion.major, "")
-    minor = SafeString(osVersion.minor, "")
-    revision = SafeString(osVersion.revision, "")
-    build = SafeString(osVersion.build, "")
+    text = Format.SafeString(osVersion.major, "")
+    minor = Format.SafeString(osVersion.minor, "")
+    revision = Format.SafeString(osVersion.revision, "")
+    build = Format.SafeString(osVersion.build, "")
     if minor <> "" then text = text + "." + minor
     if revision <> "" then text = text + "." + revision
     if build <> "" then text = text + " build " + build
@@ -127,9 +126,9 @@ end function
 '-------------------------------------------------------------------------------
 function uiResolutionText(uiResolution as dynamic) as string
     if uiResolution = invalid or GetInterface(uiResolution, "ifAssociativeArray") = invalid then return "(not set)"
-    name = SafeString(uiResolution.name, "")
-    width = SafeString(uiResolution.width, "")
-    height = SafeString(uiResolution.height, "")
+    name = Format.SafeString(uiResolution.name, "")
+    width = Format.SafeString(uiResolution.width, "")
+    height = Format.SafeString(uiResolution.height, "")
     dimensions = ""
     if width <> "" and height <> "" then dimensions = width + " x " + height
     if name <> "" and dimensions <> "" then return UCase(name) + " (" + dimensions + ")"
@@ -142,14 +141,13 @@ end function
 ' getGlobalRegistrySection
 '-------------------------------------------------------------------------------
 function getGlobalRegistrySection() as object
-    keys = SettingsStore_Keys()
     return {
         title: "Global Application Registry"
         entries: [
-            { key: "active-account-key", value: AuthStore_GetActiveAccountKey() }
-            { key: "last-server", value: AuthStore_GetLastServer() }
-            { key: keys.displayAccountBadge, value: SettingsStore_LoadGlobal(keys.displayAccountBadge) }
-            { key: keys.tmdbApiKey, value: truncateText(SettingsStore_LoadIntegration(keys.tmdbApiKey), 40) }
+            { key: "active-account-key", value: AuthStore.GetActiveAccountKey() }
+            { key: "last-server", value: AuthStore.GetLastServer() }
+            { key: SettingsStore.Key.DisplayAccountBadge, value: SettingsStore.LoadGlobal(SettingsStore.Key.DisplayAccountBadge) }
+            { key: SettingsStore.Key.TmdbApiKey, value: truncateText(SettingsStore.LoadIntegration(SettingsStore.Key.TmdbApiKey), 40) }
         ]
     }
 end function
@@ -157,8 +155,8 @@ end function
 '-------------------------------------------------------------------------------
 ' getAccountRegistrySection
 '-------------------------------------------------------------------------------
-function getAccountRegistrySection(account as object, keys as object) as object
-    settings = SettingsStore_Load(account.accountKey)
+function getAccountRegistrySection(account as object) as object
+    settings = SettingsStore.Load(account.accountKey)
     title = "Account: " + account.username
     if account.isActive then title = title + " (active)"
     entries = [
@@ -168,17 +166,17 @@ function getAccountRegistrySection(account as object, keys as object) as object
         { key: "userId", value: account.userId }
         { key: "primary-image-tag", value: account.primaryImageTag }
         { key: "token", value: truncateWithEllipsis(account.token, 10) }
-        { key: keys.tvLibraryDisplay, value: settings[keys.tvLibraryDisplay] }
-        { key: keys.movieLibraryDisplay, value: settings[keys.movieLibraryDisplay] }
-        { key: keys.collectionCardsImageType, value: settings[keys.collectionCardsImageType] }
-        { key: keys.collectionItemsImageType, value: settings[keys.collectionItemsImageType] }
-        { key: keys.playlistImageType, value: settings[keys.playlistImageType] }
-        { key: keys.tvEpisodeListDisplay, value: settings[keys.tvEpisodeListDisplay] }
-        { key: keys.mediaShellBackground, value: settings[keys.mediaShellBackground] }
-        { key: keys.themeMusic, value: settings[keys.themeMusic] }
-        { key: keys.videoStreamingMode, value: settings[keys.videoStreamingMode] }
+        { key: SettingsStore.Key.TvLibraryDisplay, value: settings[SettingsStore.Key.TvLibraryDisplay] }
+        { key: SettingsStore.Key.MovieLibraryDisplay, value: settings[SettingsStore.Key.MovieLibraryDisplay] }
+        { key: SettingsStore.Key.CollectionCardsImageType, value: settings[SettingsStore.Key.CollectionCardsImageType] }
+        { key: SettingsStore.Key.CollectionItemsImageType, value: settings[SettingsStore.Key.CollectionItemsImageType] }
+        { key: SettingsStore.Key.PlaylistImageType, value: settings[SettingsStore.Key.PlaylistImageType] }
+        { key: SettingsStore.Key.TvEpisodeListDisplay, value: settings[SettingsStore.Key.TvEpisodeListDisplay] }
+        { key: SettingsStore.Key.MediaShellBackground, value: settings[SettingsStore.Key.MediaShellBackground] }
+        { key: SettingsStore.Key.ThemeMusic, value: settings[SettingsStore.Key.ThemeMusic] }
+        { key: SettingsStore.Key.VideoStreamingMode, value: settings[SettingsStore.Key.VideoStreamingMode] }
     ]
-    for each state in LibraryViewStateStore_List(account.accountKey)
+    for each state in LibraryViewStateStore.List(account.accountKey)
         entries.Push(getLibraryViewStateEntry(state))
     end for
     return {
@@ -191,25 +189,25 @@ end function
 ' getLibraryViewStateEntry
 '-------------------------------------------------------------------------------
 function getLibraryViewStateEntry(state as object) as object
-    libraryId = SafeString(state.libraryId, "")
-    libraryTitle = SafeString(state.libraryTitle, "")
+    libraryId = Format.SafeString(state.libraryId, "")
+    libraryTitle = Format.SafeString(state.libraryTitle, "")
     if libraryTitle = "" then libraryTitle = libraryId
     key = "library-view: " + libraryTitle
     if libraryId <> "" then key = key + Chr(10) + "library id: " + libraryId
 
-    optionKey = SafeString(state.optionKey, "")
+    optionKey = Format.SafeString(state.optionKey, "")
     value = "browse=" + optionKey
-    collectionType = SafeString(state.collectionType, "")
+    collectionType = Format.SafeString(state.collectionType, "")
     if collectionType <> "" then value = collectionType + "; " + value
     detail = ""
-    sortKey = SafeString(state.sortKey, "")
-    sortOrder = SafeString(state.sortOrder, "")
+    sortKey = Format.SafeString(state.sortKey, "")
+    sortOrder = Format.SafeString(state.sortOrder, "")
     if sortKey <> "" then
         detail = "sort=" + sortKey
         if sortOrder <> "" then detail = detail + " " + sortOrder
     end if
-    if optionKey = "Decade" then detail = detail + "; decade=" + SafeString(state.selectedDecade, "")
-    if optionKey = "Genre" then detail = detail + "; genre=" + SafeString(state.selectedGenre, "")
+    if optionKey = "Decade" then detail = detail + "; decade=" + Format.SafeString(state.selectedDecade, "")
+    if optionKey = "Genre" then detail = detail + "; genre=" + Format.SafeString(state.selectedGenre, "")
     if Left(detail, 2) = "; " then detail = Mid(detail, 3)
     if detail <> "" then value = value + Chr(10) + detail
     return { key: key, value: value }
@@ -274,7 +272,7 @@ function addPropertyRow(keyText as string, valueText as string, y as integer) as
     keyLabel.width = m.layoutState.keyWidth
     keyLabel.height = rowHeight - 1
     keyLabel.text = UCase(keyText)
-    keyLabel.color = Color().text.light.secondary
+    keyLabel.color = Theme.Get().text.light.secondary
     keyLabel.font = "font:SmallerBoldSystemFont"
     keyLabel.vertAlign = "center"
     keyLabel.wrap = keyLineCount > 1

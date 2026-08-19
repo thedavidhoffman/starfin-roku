@@ -1,0 +1,96 @@
+namespace tests
+
+    @suite("Settings store")
+    class SettingsStoreTests extends rooibos.BaseTestSuite
+
+        @describe("SettingsStore.Key")
+
+        @it("provides the persisted registry key values")
+        function _()
+            m.assertEqual(SettingsStore.Key.TvLibraryDisplay, "tv-library-image-type")
+            m.assertEqual(SettingsStore.Key.MovieLibraryDisplay, "movie-library-image-type")
+            m.assertEqual(SettingsStore.Key.CollectionCardsImageType, "collection-cards-image-type")
+            m.assertEqual(SettingsStore.Key.CollectionItemsImageType, "collection-items-image-type")
+            m.assertEqual(SettingsStore.Key.PlaylistImageType, "playlist-image-type")
+            m.assertEqual(SettingsStore.Key.TvEpisodeListDisplay, "tv-ep-list-scroll")
+            m.assertEqual(SettingsStore.Key.MediaShellBackground, "media-shell-background")
+            m.assertEqual(SettingsStore.Key.ThemeMusic, "theme-music")
+            m.assertEqual(SettingsStore.Key.VideoStreamingMode, "video-streaming-mode")
+            m.assertEqual(SettingsStore.Key.DisplayAccountBadge, "display-account-badge")
+            m.assertEqual(SettingsStore.Key.TmdbApiKey, "tmdb-api-key")
+        end function
+
+        @describe("SettingsStore.Defaults")
+
+        @it("indexes every default by its enum value")
+        function _()
+            defaults = SettingsStore.Defaults()
+
+            m.assertEqual(defaults.Count(), 11)
+            m.assertEqual(defaults[SettingsStore.Key.TvLibraryDisplay], "poster")
+            m.assertEqual(defaults[SettingsStore.Key.MovieLibraryDisplay], "poster")
+            m.assertEqual(defaults[SettingsStore.Key.CollectionCardsImageType], "poster")
+            m.assertEqual(defaults[SettingsStore.Key.CollectionItemsImageType], "poster")
+            m.assertEqual(defaults[SettingsStore.Key.PlaylistImageType], "thumbnail")
+            m.assertEqual(defaults[SettingsStore.Key.TvEpisodeListDisplay], "vertical")
+            m.assertEqual(defaults[SettingsStore.Key.MediaShellBackground], "full-screen")
+            m.assertEqual(defaults[SettingsStore.Key.ThemeMusic], "off")
+            m.assertEqual(defaults[SettingsStore.Key.VideoStreamingMode], PlaybackMode.Mode.Automatic)
+            m.assertEqual(defaults[SettingsStore.Key.DisplayAccountBadge], "off")
+            m.assertEqual(defaults[SettingsStore.Key.TmdbApiKey], "")
+        end function
+
+        @describe("SettingsStore.AccountKeys")
+
+        @it("contains only account-scoped setting keys")
+        function _()
+            m.assertEqual(SettingsStore.AccountKeys(), [
+                SettingsStore.Key.TvLibraryDisplay
+                SettingsStore.Key.MovieLibraryDisplay
+                SettingsStore.Key.CollectionCardsImageType
+                SettingsStore.Key.CollectionItemsImageType
+                SettingsStore.Key.PlaylistImageType
+                SettingsStore.Key.TvEpisodeListDisplay
+                SettingsStore.Key.MediaShellBackground
+                SettingsStore.Key.ThemeMusic
+                SettingsStore.Key.VideoStreamingMode
+            ])
+        end function
+
+        @describe("SettingsStore value helpers")
+
+        @it("reads associative-array values and applies fallbacks")
+        function _()
+            values = { present: "value", empty: "" }
+            m.assertEqual(SettingsStore.GetValue(values, "present", "fallback"), "value")
+            m.assertEqual(SettingsStore.GetValue(values, "missing", "fallback"), "fallback")
+            m.assertEqual(SettingsStore.GetValue(values, "empty", "fallback"), "fallback")
+            m.assertEqual(SettingsStore.GetValue(invalid, "present", "fallback"), "fallback")
+        end function
+
+        @it("uses enum-indexed defaults for missing settings")
+        function _()
+            settings = {}
+            settings[SettingsStore.Key.ThemeMusic] = "on"
+
+            m.assertEqual(SettingsStore.GetSettingValue(settings, SettingsStore.Key.ThemeMusic), "on")
+            m.assertEqual(SettingsStore.GetSettingValue(settings, SettingsStore.Key.VideoStreamingMode), PlaybackMode.Mode.Automatic)
+            m.assertEqual(SettingsStore.GetSettingValue(invalid, SettingsStore.Key.TvLibraryDisplay), "poster")
+            m.assertEqual(SettingsStore.GetSettingValue({}, "unknown-key"), "")
+        end function
+
+        @it("compares effective setting values")
+        function _()
+            left = SettingsStore.Defaults()
+            right = SettingsStore.Defaults()
+            m.assertTrue(SettingsStore.AreEqual(left, right))
+
+            right[SettingsStore.Key.ThemeMusic] = "on"
+            m.assertFalse(SettingsStore.AreEqual(left, right))
+            m.assertFalse(SettingsStore.AreEqual(invalid, right))
+            m.assertFalse(SettingsStore.AreEqual(left, invalid))
+        end function
+
+    end class
+
+end namespace

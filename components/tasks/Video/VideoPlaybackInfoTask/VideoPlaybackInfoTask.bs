@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("VideoPlaybackInfoTask")
+    m.log = Logger.Create("VideoPlaybackInfoTask")
     m.top.functionName = "executeRequest"
 end sub
 
@@ -21,19 +21,18 @@ sub executeRequest()
 
     requestedAudioStreamIndex = getPlaybackRequestAudioStreamIndex(request)
     requestedSubtitleStreamIndex = getPlaybackRequestSubtitleStreamIndex(request)
-    displaySize = DeviceCapabilities_GetDisplaySize()
+    displaySize = DeviceCapabilities.GetDisplaySize()
     requestedMediaSourceId = getPlaybackRequestMediaSourceId(request)
     requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
     requestedMediaSource = getPlaybackRequestMediaSource(request)
     forceTranscode = shouldForceTranscodeAudio(requestedAudioStream, requestedMediaSource)
     forceStreamSelection = shouldForceStreamSelection(request, requestedMediaSource, requestedAudioStreamIndex)
     forceSubtitleSelection = requestedSubtitleStreamIndex >= 0
-    playbackMode = getPlaybackMode(request)
-    modes = PlaybackMode_Values()
-    playbackFlags = getPlaybackFlags(playbackMode, forceTranscode, forceStreamSelection, forceSubtitleSelection)
-    bitrateLimits = DeviceCapabilities_GetBitrateLimits()
+    selectedPlaybackMode = getPlaybackMode(request)
+    playbackFlags = getPlaybackFlags(selectedPlaybackMode, forceTranscode, forceStreamSelection, forceSubtitleSelection)
+    bitrateLimits = DeviceCapabilities.GetBitrateLimits()
     params = {
-        UserId: SafeString(request.userId, "")
+        UserId: Format.SafeString(request.userId, "")
         StartTimeTicks: getStartPositionTicks(request)
         IsPlayback: true
         AutoOpenLiveStream: true
@@ -42,24 +41,24 @@ sub executeRequest()
         EnableDirectPlay: playbackFlags.enableDirectPlay
         EnableDirectStream: playbackFlags.enableDirectStream
         EnableTranscoding: playbackFlags.enableTranscoding
-        AllowVideoStreamCopy: playbackMode <> modes.automaticNoRemux and playbackMode <> modes.transcodeNoRemux
+        AllowVideoStreamCopy: selectedPlaybackMode <> PlaybackMode.Mode.AutomaticNoRemux and selectedPlaybackMode <> PlaybackMode.Mode.TranscodeNoRemux
         AllowAudioStreamCopy: true
     }
 
-    if (playbackMode = modes.automatic or playbackMode = modes.automaticNoRemux) and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
-    if (playbackMode = modes.automatic or playbackMode = modes.automaticNoRemux) and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
-    m.log.writeDisplaySafe("Device profile display cap width=" + SafeString(displaySize.width, "") + " height=" + SafeString(displaySize.height, "") + " source=" + SafeString(displaySize.source, ""))
-    m.log.writeDisplaySafe("Requested streams audioStreamIndex=" + SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + SafeString(requestedSubtitleStreamIndex, ""))
-    m.log.writeDisplaySafe("Requested video mode=" + playbackMode)
+    if (selectedPlaybackMode = PlaybackMode.Mode.Automatic or selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux) and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    if (selectedPlaybackMode = PlaybackMode.Mode.Automatic or selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux) and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
+    m.log.writeDisplaySafe("Device profile display cap width=" + Format.SafeString(displaySize.width, "") + " height=" + Format.SafeString(displaySize.height, "") + " source=" + Format.SafeString(displaySize.source, ""))
+    m.log.writeDisplaySafe("Requested streams audioStreamIndex=" + Format.SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(requestedSubtitleStreamIndex, ""))
+    m.log.writeDisplaySafe("Requested video mode=" + selectedPlaybackMode)
     if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
     if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex
     if requestedSubtitleStreamIndex >= -1 then params.SubtitleStreamIndex = requestedSubtitleStreamIndex
 
-    url = request.server + "/Items/" + request.itemId + "/PlaybackInfo" + Url_BuildQueryString(params)
+    requestUrl = request.server + "/Items/" + request.itemId + "/PlaybackInfo" + Url.BuildQueryString(params)
     body = buildPlaybackInfoBody()
     logPlaybackRequest(request, body)
 
-    result = HttpClient_Request(url, "POST", invalid, body, JellyfinAuth_BuildTokenHeaders(request.token))
+    result = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token))
     if result.ok <> true then
         logPlaybackError(result)
         result.AddReplace("action", "playbackInfo")
@@ -114,7 +113,7 @@ function buildPlaybackIdentity(request as object, streamInfo as object, mediaSou
     if subtitleStream = invalid then subtitleStream = {}
 
     return {
-        itemId: SafeString(request.itemId, "")
+        itemId: Format.SafeString(request.itemId, "")
         title: getPlaybackItemTitle(request.item)
         playSessionId: streamInfo.playSessionId
         mediaSourceId: streamInfo.mediaSourceId
@@ -124,15 +123,15 @@ function buildPlaybackIdentity(request as object, streamInfo as object, mediaSou
         canSeek: getCanSeek(request, mediaSource)
         transcodeReason: getTranscodeReason(mediaSource, streamInfo.playbackMethod)
         streamFormat: streamInfo.streamFormat
-        container: SafeString(mediaSource.Container, "")
+        container: Format.SafeString(mediaSource.Container, "")
         videoStreamIndex: streamInfo.videoStreamIndex
         audioStreamIndex: streamInfo.audioStreamIndex
         subtitleStreamIndex: streamInfo.subtitleStreamIndex
-        videoStreamTitle: FirstNonEmpty([videoStream.DisplayTitle, videoStream.Title], "")
-        audioStreamTitle: FirstNonEmpty([audioStream.DisplayTitle, audioStream.Title], "")
-        subtitleStreamTitle: FirstNonEmpty([subtitleStream.DisplayTitle, subtitleStream.Title], "")
-        videoCodec: SafeString(videoStream.Codec, "")
-        audioCodec: SafeString(audioStream.Codec, "")
+        videoStreamTitle: Format.FirstNonEmpty([videoStream.DisplayTitle, videoStream.Title], "")
+        audioStreamTitle: Format.FirstNonEmpty([audioStream.DisplayTitle, audioStream.Title], "")
+        subtitleStreamTitle: Format.FirstNonEmpty([subtitleStream.DisplayTitle, subtitleStream.Title], "")
+        videoCodec: Format.SafeString(videoStream.Codec, "")
+        audioCodec: Format.SafeString(audioStream.Codec, "")
         width: Number.ToInteger(videoStream.Width, 0)
         height: Number.ToInteger(videoStream.Height, 0)
         videoBitrate: Number.ToInteger(videoStream.BitRate, 0)
@@ -150,13 +149,13 @@ function getTranscodeReason(mediaSource as dynamic, playbackMethod as string) as
     if mediaSource = invalid then return "Not reported by Jellyfin"
 
     if mediaSource.TranscodingReasons <> invalid then
-        reasons = String_GetJoinedText(mediaSource.TranscodingReasons)
+        reasons = Strings.GetJoinedText(mediaSource.TranscodingReasons)
         if reasons <> "" then return reasons
     end if
 
-    reason = getUrlQueryValue(SafeString(mediaSource.TranscodingUrl, ""), "TranscodeReasons")
+    reason = getUrlQueryValue(Format.SafeString(mediaSource.TranscodingUrl, ""), "TranscodeReasons")
     if reason = "" then return "Not reported by Jellyfin"
-    return String_Replace(reason, ",", ", ")
+    return Strings.Replace(reason, ",", ", ")
 end function
 
 '-------------------------------------------------------------------------------
@@ -178,22 +177,22 @@ end function
 '-------------------------------------------------------------------------------
 ' getUrlQueryValue
 '-------------------------------------------------------------------------------
-function getUrlQueryValue(url as string, name as string) as string
-    queryStart = Instr(1, url, "?")
+function getUrlQueryValue(requestUrl as string, name as string) as string
+    queryStart = Instr(1, requestUrl, "?")
     if queryStart = 0 then return ""
 
-    lowerUrl = LCase(url)
+    lowerUrl = LCase(requestUrl)
     lowerName = LCase(name)
     valueStart = Instr(queryStart + 1, lowerUrl, lowerName + "=")
     while valueStart > 0
-        if valueStart = queryStart + 1 or Mid(url, valueStart - 1, 1) = "&" then
+        if valueStart = queryStart + 1 or Mid(requestUrl, valueStart - 1, 1) = "&" then
             valueStart = valueStart + Len(name) + 1
-            valueEnd = Instr(valueStart, url, "&")
-            if valueEnd = 0 then valueEnd = Len(url) + 1
+            valueEnd = Instr(valueStart, requestUrl, "&")
+            if valueEnd = 0 then valueEnd = Len(requestUrl) + 1
 
-            value = Mid(url, valueStart, valueEnd - valueStart)
-            value = String_Replace(value, "%2C", ",")
-            value = String_Replace(value, "%2c", ",")
+            value = Mid(requestUrl, valueStart, valueEnd - valueStart)
+            value = Strings.Replace(value, "%2C", ",")
+            value = Strings.Replace(value, "%2c", ",")
             return value
         end if
 
@@ -208,7 +207,7 @@ end function
 '-------------------------------------------------------------------------------
 function getPlaybackItemTitle(item as dynamic) as string
     if item = invalid then return ""
-    return SafeString(item.Name, "")
+    return Format.SafeString(item.Name, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -220,7 +219,7 @@ function getMediaStreamByIndex(mediaSource as dynamic, streamType as string, str
     for i = 0 to mediaSource.MediaStreams.Count() - 1
         mediaStream = mediaSource.MediaStreams[i]
         if mediaStream = invalid then continue for
-        if LCase(SafeString(mediaStream.Type, "")) <> streamType then continue for
+        if LCase(Format.SafeString(mediaStream.Type, "")) <> streamType then continue for
         if getMediaStreamIndex(mediaStream, i) = streamIndex then return mediaStream
     end for
 
@@ -231,16 +230,15 @@ end function
 ' getPlaybackMode
 '-------------------------------------------------------------------------------
 function getPlaybackMode(request as dynamic) as string
-    if request = invalid then return PlaybackMode_Values().automatic
-    return PlaybackMode_Normalize(request.videoMode)
+    if request = invalid then return PlaybackMode.Mode.Automatic
+    return PlaybackMode.Normalize(request.videoMode)
 end function
 
 '-------------------------------------------------------------------------------
 ' getPlaybackFlags
 '-------------------------------------------------------------------------------
-function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, forceStreamSelection as boolean, forceSubtitleSelection as boolean) as object
-    modes = PlaybackMode_Values()
-    if playbackMode = modes.transcodeNoRemux then
+function getPlaybackFlags(selectedPlaybackMode as string, forceTranscode as boolean, forceStreamSelection as boolean, forceSubtitleSelection as boolean) as object
+    if selectedPlaybackMode = PlaybackMode.Mode.TranscodeNoRemux then
         return {
             enableDirectPlay: false
             enableDirectStream: false
@@ -248,7 +246,7 @@ function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, for
         }
     end if
 
-    if playbackMode = modes.automaticNoRemux then
+    if selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux then
         return {
             enableDirectPlay: forceTranscode <> true and forceStreamSelection <> true
             enableDirectStream: false
@@ -256,9 +254,9 @@ function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, for
         }
     end if
 
-    if playbackMode = modes.transcodeAllowRemux or (playbackMode = modes.automatic and (forceTranscode = true or forceStreamSelection = true)) then
+    if selectedPlaybackMode = PlaybackMode.Mode.TranscodeAllowRemux or (selectedPlaybackMode = PlaybackMode.Mode.Automatic and (forceTranscode = true or forceStreamSelection = true)) then
         enableDirectStream = true
-        if playbackMode = modes.automatic and forceTranscode = true then enableDirectStream = false
+        if selectedPlaybackMode = PlaybackMode.Mode.Automatic and forceTranscode = true then enableDirectStream = false
 
         return {
             enableDirectPlay: false
@@ -267,7 +265,7 @@ function getPlaybackFlags(playbackMode as string, forceTranscode as boolean, for
         }
     end if
 
-    if playbackMode = modes.automatic then
+    if selectedPlaybackMode = PlaybackMode.Mode.Automatic then
         return {
             enableDirectPlay: true
             enableDirectStream: true
@@ -303,9 +301,9 @@ end function
 '-------------------------------------------------------------------------------
 sub logPlaybackRequest(request as object, body as string)
     itemName = ""
-    if request.item <> invalid then itemName = FirstNonEmpty([request.item.Name], "")
+    if request.item <> invalid then itemName = Format.FirstNonEmpty([request.item.Name], "")
 
-    m.log.writeDisplaySafe("PlaybackInfo request itemId=" + SafeString(request.itemId, "") + " title=" + itemName)
+    m.log.writeDisplaySafe("PlaybackInfo request itemId=" + Format.SafeString(request.itemId, "") + " title=" + itemName)
     m.log.writeJsonDisplaySafe(body, 2, "PlaybackInfo request body:")
 end sub
 
@@ -313,11 +311,11 @@ end sub
 ' logPlaybackError
 '-------------------------------------------------------------------------------
 sub logPlaybackError(result as object)
-    status = SafeString(result.status, "")
+    status = Format.SafeString(result.status, "")
     m.log.errorDisplaySafe("PlaybackInfo failed status=" + status)
-    m.log.writeConsoleOnly("PlaybackInfo failure detail status=" + status + " message=" + SafeString(result.errorMessage, ""))
+    m.log.writeConsoleOnly("PlaybackInfo failure detail status=" + status + " message=" + Format.SafeString(result.errorMessage, ""))
 
-    responseText = SafeString(result.responseText, "")
+    responseText = Format.SafeString(result.responseText, "")
     if responseText <> "" then
         m.log.writeConsoleOnly("PlaybackInfo error response:")
         m.log.writeJsonConsoleOnly(responseText, 2)
@@ -334,23 +332,23 @@ sub logPlaybackResponse(playbackInfo as dynamic)
     end if
 
     mediaSource = firstMediaSource(playbackInfo)
-    m.log.writeDisplaySafe("PlaybackInfo response PlaySessionId=" + SafeString(playbackInfo.PlaySessionId, ""))
+    m.log.writeDisplaySafe("PlaybackInfo response PlaySessionId=" + Format.SafeString(playbackInfo.PlaySessionId, ""))
 
     if mediaSource = invalid then
         m.log.writeDisplaySafe("PlaybackInfo response has no media source.")
         return
     end if
 
-    m.log.writeDisplaySafe("PlaybackInfo media source Id=" + SafeString(mediaSource.Id, "") + " Protocol=" + SafeString(mediaSource.Protocol, "") + " Container=" + SafeString(mediaSource.Container, ""))
-    m.log.write("PlaybackInfo media source Path=" + maskUrl(SafeString(mediaSource.Path, "")))
+    m.log.writeDisplaySafe("PlaybackInfo media source Id=" + Format.SafeString(mediaSource.Id, "") + " Protocol=" + Format.SafeString(mediaSource.Protocol, "") + " Container=" + Format.SafeString(mediaSource.Container, ""))
+    m.log.write("PlaybackInfo media source Path=" + maskUrl(Format.SafeString(mediaSource.Path, "")))
     m.log.writeDisplaySafe("PlaybackInfo SupportsDirectPlay=" + boolToText(mediaSource.SupportsDirectPlay) + " SupportsDirectStream=" + boolToText(mediaSource.SupportsDirectStream) + " SupportsTranscoding=" + boolToText(mediaSource.SupportsTranscoding))
-    m.log.writeConsoleOnly("PlaybackInfo TranscodingUrl=" + maskUrl(SafeString(mediaSource.TranscodingUrl, "")))
+    m.log.writeConsoleOnly("PlaybackInfo TranscodingUrl=" + maskUrl(Format.SafeString(mediaSource.TranscodingUrl, "")))
 
     if mediaSource.MediaStreams <> invalid then
         for each mediaStream in mediaSource.MediaStreams
-            streamType = SafeString(mediaStream.Type, "")
+            streamType = Format.SafeString(mediaStream.Type, "")
             if LCase(streamType) = "audio" or LCase(streamType) = "video" then
-                m.log.writeDisplaySafe("PlaybackInfo stream Type=" + streamType + " Index=" + SafeString(mediaStream.Index, "") + " Codec=" + SafeString(mediaStream.Codec, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Default=" + boolToText(mediaStream.IsDefault))
+                m.log.writeDisplaySafe("PlaybackInfo stream Type=" + streamType + " Index=" + Format.SafeString(mediaStream.Index, "") + " Codec=" + Format.SafeString(mediaStream.Codec, "") + " Channels=" + Format.SafeString(mediaStream.Channels, "") + " Default=" + boolToText(mediaStream.IsDefault))
             end if
         end for
     end if
@@ -377,10 +375,10 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         return { ok: false, action: "playbackInfo", errorMessage: "The selected item has no playable media source." }
     end if
 
-    mediaSourceId = SafeString(mediaSource.Id, "")
-    container = SafeString(mediaSource.Container, "")
-    playSessionId = SafeString(playbackInfo.PlaySessionId, "")
-    transcodingUrl = SafeString(mediaSource.TranscodingUrl, "")
+    mediaSourceId = Format.SafeString(mediaSource.Id, "")
+    container = Format.SafeString(mediaSource.Container, "")
+    playSessionId = Format.SafeString(playbackInfo.PlaySessionId, "")
+    transcodingUrl = Format.SafeString(mediaSource.TranscodingUrl, "")
     audioStreamIndex = getResolvedAudioStreamIndex(mediaSource, requestedAudioStreamIndex)
     directPlaySupported = mediaSource.SupportsDirectPlay = true
     directPlayAllowed = playbackFlags.enableDirectPlay = true
@@ -400,13 +398,13 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
             if isLiveTvPlaybackRequest(request) <> true and mediaSourceId <> "" then streamParams.MediaSourceId = mediaSourceId
             if audioStreamIndex >= 0 then streamParams.AudioStreamIndex = audioStreamIndex
             if requestedSubtitleStreamIndex >= -1 then streamParams.SubtitleStreamIndex = requestedSubtitleStreamIndex
-            streamUrl = request.server + "/Videos/" + request.itemId + "/stream" + Url_BuildQueryString(streamParams)
+            streamUrl = request.server + "/Videos/" + request.itemId + "/stream" + Url.BuildQueryString(streamParams)
         end if
         playbackMethod = "DirectPlay"
         m.log.writeDisplaySafe("Playback selection chose DirectPlay because the request allows direct play and Jellyfin reported SupportsDirectPlay=true alternativeHlsAvailable=" + boolToText(transcodingUrl <> ""))
     else if transcodingAllowed and transcodingUrl <> "" then
         streamUrl = buildServerUrl(request.server, transcodingUrl)
-        if requestedSubtitleStreamIndex >= -1 then streamUrl = Url_SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
+        if requestedSubtitleStreamIndex >= -1 then streamUrl = Url.SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
         streamFormat = "hls"
         playbackMethod = getTranscodingPlaybackMethod(mediaSource)
         reasons = getPlaybackMethodReasons(mediaSource)
@@ -431,7 +429,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         playSessionId: playSessionId
         playbackMethod: playbackMethod
         mediaSourceId: mediaSourceId
-        liveStreamId: SafeString(mediaSource.LiveStreamId, "")
+        liveStreamId: Format.SafeString(mediaSource.LiveStreamId, "")
         videoStreamIndex: getDefaultVideoStreamIndex(mediaSource)
         audioStreamIndex: audioStreamIndex
         subtitleStreamIndex: requestedSubtitleStreamIndex
@@ -456,13 +454,13 @@ end function
 ' isDirectStreamReason
 '-------------------------------------------------------------------------------
 function isDirectStreamReason(reason as dynamic, mediaSource as dynamic) as boolean
-    normalized = LCase(SafeString(reason, ""))
+    normalized = LCase(Format.SafeString(reason, ""))
     if normalized = "containernotsupported" then return true
     if Left(normalized, 5) = "audio" then return true
     if normalized = "secondaryaudionotsupported" then return true
 
     if normalized = "subtitlecodecnotsupported" then
-        subtitleMethod = LCase(getUrlQueryValue(SafeString(mediaSource.TranscodingUrl, ""), "SubtitleMethod"))
+        subtitleMethod = LCase(getUrlQueryValue(Format.SafeString(mediaSource.TranscodingUrl, ""), "SubtitleMethod"))
         return subtitleMethod = "embed" or subtitleMethod = "external"
     end if
 
@@ -478,13 +476,13 @@ function getPlaybackMethodReasons(mediaSource as dynamic) as object
 
     if mediaSource.TranscodingReasons <> invalid then
         for each reason in mediaSource.TranscodingReasons
-            reasonText = SafeString(reason, "")
+            reasonText = Format.SafeString(reason, "")
             if reasonText <> "" then reasons.Push(reasonText)
         end for
     end if
     if reasons.Count() > 0 then return reasons
 
-    reasonText = getUrlQueryValue(SafeString(mediaSource.TranscodingUrl, ""), "TranscodeReasons")
+    reasonText = getUrlQueryValue(Format.SafeString(mediaSource.TranscodingUrl, ""), "TranscodeReasons")
     if reasonText = "" then return reasons
 
     for each reason in reasonText.Split(",")
@@ -499,12 +497,12 @@ end function
 '-------------------------------------------------------------------------------
 function getPlaybackRequestMediaSourceId(request as dynamic) as string
     if request = invalid then return ""
-    if request.mediaSourceId <> invalid then return SafeString(request.mediaSourceId, "")
+    if request.mediaSourceId <> invalid then return Format.SafeString(request.mediaSourceId, "")
 
     mediaSource = getPlaybackRequestMediaSource(request)
     if mediaSource = invalid then return ""
 
-    return SafeString(mediaSource.Id, "")
+    return Format.SafeString(mediaSource.Id, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -579,16 +577,16 @@ end function
 '-------------------------------------------------------------------------------
 function shouldForceTranscodeAudio(mediaStream as dynamic, mediaSource as dynamic) as boolean
     if mediaStream = invalid then return false
-    if LCase(SafeString(mediaStream.Type, "")) <> "audio" then return false
-    if LCase(SafeString(mediaStream.Codec, "")) <> "aac" then return false
+    if LCase(Format.SafeString(mediaStream.Type, "")) <> "audio" then return false
+    if LCase(Format.SafeString(mediaStream.Codec, "")) <> "aac" then return false
     if mediaStream.Channels = invalid then return false
     if int(mediaStream.Channels) <= 2 then return false
 
     deviceInfo = CreateObject("roDeviceInfo")
     container = ""
-    if mediaSource <> invalid then container = SafeString(mediaSource.Container, "")
+    if mediaSource <> invalid then container = Format.SafeString(mediaSource.Container, "")
     decodeInfo = {
-        Codec: SafeString(mediaStream.Codec, "")
+        Codec: Format.SafeString(mediaStream.Codec, "")
         ChCnt: int(mediaStream.Channels)
     }
     if container <> "" then decodeInfo.Container = container
@@ -612,14 +610,14 @@ end function
 ' logForcedTranscodeReason
 '-------------------------------------------------------------------------------
 sub logForcedTranscodeReason(mediaStream as dynamic)
-    m.log.writeDisplaySafe("Forcing transcode because selected multichannel AAC audio is not device-decodable. Index=" + SafeString(mediaStream.arrayIndex, "") + " Channels=" + SafeString(mediaStream.Channels, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+    m.log.writeDisplaySafe("Forcing transcode because selected multichannel AAC audio is not device-decodable. Index=" + Format.SafeString(mediaStream.arrayIndex, "") + " Channels=" + Format.SafeString(mediaStream.Channels, "") + " Title=" + Format.FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
 end sub
 
 '-------------------------------------------------------------------------------
 ' logForcedStreamSelection
 '-------------------------------------------------------------------------------
 sub logForcedStreamSelection(mediaStream as dynamic)
-    m.log.writeDisplaySafe("Disabling direct play because a non-default audio stream was selected. Index=" + SafeString(mediaStream.Index, "") + " Title=" + FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+    m.log.writeDisplaySafe("Disabling direct play because a non-default audio stream was selected. Index=" + Format.SafeString(mediaStream.Index, "") + " Title=" + Format.FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -632,7 +630,7 @@ function getDefaultAudioStreamIndexFromStreams(mediaStreams as dynamic) as integ
     for i = 0 to mediaStreams.Count() - 1
         mediaStream = mediaStreams[i]
         if mediaStream = invalid then continue for
-        if LCase(SafeString(mediaStream.Type, "")) = "audio" then
+        if LCase(Format.SafeString(mediaStream.Type, "")) = "audio" then
             streamIndex = getMediaStreamIndex(mediaStream, i)
             if firstAudioIndex = -1 then firstAudioIndex = streamIndex
             if mediaStream.IsDefault = true then return streamIndex
@@ -646,8 +644,8 @@ end function
 ' buildPlaybackInfoBody
 '-------------------------------------------------------------------------------
 function buildPlaybackInfoBody() as string
-    return Json_Object([
-        Json_String("DeviceProfile") + ":" + DeviceCapabilities_BuildDeviceProfileJson()
+    return Json.Object([
+        Json.String("DeviceProfile") + ":" + DeviceCapabilities.BuildDeviceProfileJson()
     ])
 end function
 
@@ -671,7 +669,7 @@ function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
     for i = 0 to mediaSource.MediaStreams.Count() - 1
         mediaStream = mediaSource.MediaStreams[i]
         if mediaStream = invalid then continue for
-        if LCase(SafeString(mediaStream.Type, "")) = "audio" then
+        if LCase(Format.SafeString(mediaStream.Type, "")) = "audio" then
             streamIndex = getMediaStreamIndex(mediaStream, i)
             if firstAudioIndex = -1 then firstAudioIndex = streamIndex
             if mediaStream.IsDefault = true then return streamIndex
@@ -687,7 +685,7 @@ end function
 function isLiveTvPlaybackRequest(request as dynamic) as boolean
     if request = invalid or request.item = invalid then return false
 
-    itemType = LCase(SafeString(request.item.Type, ""))
+    itemType = LCase(Format.SafeString(request.item.Type, ""))
     return itemType = "tvchannel" or itemType = "livetvchannel"
 end function
 
@@ -696,38 +694,38 @@ end function
 '-------------------------------------------------------------------------------
 function isHttpDirectMediaSource(mediaSource as dynamic) as boolean
     if mediaSource = invalid then return false
-    if LCase(SafeString(mediaSource.Protocol, "")) <> "http" then return false
+    if LCase(Format.SafeString(mediaSource.Protocol, "")) <> "http" then return false
 
-    return SafeString(mediaSource.Path, "") <> ""
+    return Format.SafeString(mediaSource.Path, "") <> ""
 end function
 
 '-------------------------------------------------------------------------------
 ' buildHttpDirectStreamUrl
 '-------------------------------------------------------------------------------
 function buildHttpDirectStreamUrl(server as string, path as dynamic) as string
-    url = SafeString(path, "")
-    if url = "" then return ""
+    requestUrl = Format.SafeString(path, "")
+    if requestUrl = "" then return ""
 
-    lowerUrl = LCase(url)
+    lowerUrl = LCase(requestUrl)
     if Instr(1, lowerUrl, "http://localhost") = 1 or Instr(1, lowerUrl, "https://localhost") = 1 or Instr(1, lowerUrl, "http://127.0.0.1") = 1 or Instr(1, lowerUrl, "https://127.0.0.1") = 1 then
-        routePath = getAbsoluteUrlRoutePath(url)
+        routePath = getAbsoluteUrlRoutePath(requestUrl)
         if routePath <> "" then return buildServerUrl(server, routePath)
     end if
 
-    return buildServerUrl(server, url)
+    return buildServerUrl(server, requestUrl)
 end function
 
 '-------------------------------------------------------------------------------
 ' getAbsoluteUrlRoutePath
 '-------------------------------------------------------------------------------
-function getAbsoluteUrlRoutePath(url as string) as string
-    schemeEnd = Instr(1, url, "://")
-    if schemeEnd = 0 then return url
+function getAbsoluteUrlRoutePath(requestUrl as string) as string
+    schemeEnd = Instr(1, requestUrl, "://")
+    if schemeEnd = 0 then return requestUrl
 
-    pathStart = Instr(schemeEnd + 3, url, "/")
+    pathStart = Instr(schemeEnd + 3, requestUrl, "/")
     if pathStart = 0 then return ""
 
-    return Mid(url, pathStart)
+    return Mid(requestUrl, pathStart)
 end function
 
 '-------------------------------------------------------------------------------
@@ -748,7 +746,7 @@ function getDefaultVideoStreamIndex(mediaSource as dynamic) as integer
     for i = 0 to mediaSource.MediaStreams.Count() - 1
         mediaStream = mediaSource.MediaStreams[i]
         if mediaStream = invalid then continue for
-        if LCase(SafeString(mediaStream.Type, "")) = "video" then
+        if LCase(Format.SafeString(mediaStream.Type, "")) = "video" then
             return getMediaStreamIndex(mediaStream, i)
         end if
     end for
@@ -773,7 +771,7 @@ function getStartPositionTicks(request as dynamic) as longinteger
     if request.startPositionTicks <> invalid then return request.startPositionTicks
     if request.StartPositionTicks <> invalid then return request.StartPositionTicks
 
-    return PlaybackProgress_GetTicksFromItem(request.item)
+    return PlaybackProgress.GetTicksFromItem(request.item)
 end function
 
 '-------------------------------------------------------------------------------
@@ -810,8 +808,8 @@ end function
 '-------------------------------------------------------------------------------
 ' maskUrl
 '-------------------------------------------------------------------------------
-function maskUrl(url as dynamic) as string
-    text = SafeString(url, "")
+function maskUrl(requestUrl as dynamic) as string
+    text = Format.SafeString(requestUrl, "")
     if text = "" then return ""
 
     text = maskQueryValue(text, "api_key")
@@ -825,11 +823,11 @@ end function
 '-------------------------------------------------------------------------------
 ' maskQueryValue
 '-------------------------------------------------------------------------------
-function maskQueryValue(url as string, name as string) as string
-    queryStart = Instr(1, url, "?")
-    if queryStart = 0 then return url
+function maskQueryValue(requestUrl as string, name as string) as string
+    queryStart = Instr(1, requestUrl, "?")
+    if queryStart = 0 then return requestUrl
 
-    lowerUrl = LCase(url)
+    lowerUrl = LCase(requestUrl)
     lowerName = LCase(name)
     searchStart = queryStart + 1
 
@@ -837,19 +835,19 @@ function maskQueryValue(url as string, name as string) as string
         keyStart = Instr(searchStart, lowerUrl, lowerName + "=")
         if keyStart = 0 then exit while
 
-        isQueryKey = keyStart = queryStart + 1 or Mid(url, keyStart - 1, 1) = "&"
+        isQueryKey = keyStart = queryStart + 1 or Mid(requestUrl, keyStart - 1, 1) = "&"
         if isQueryKey = true then
             valueStart = keyStart + Len(name) + 1
-            valueEnd = Instr(valueStart, url, "&")
-            if valueEnd = 0 then valueEnd = Len(url) + 1
+            valueEnd = Instr(valueStart, requestUrl, "&")
+            if valueEnd = 0 then valueEnd = Len(requestUrl) + 1
 
-            url = Left(url, valueStart - 1) + "[redacted]" + Mid(url, valueEnd)
-            lowerUrl = LCase(url)
+            requestUrl = Left(requestUrl, valueStart - 1) + "[redacted]" + Mid(requestUrl, valueEnd)
+            lowerUrl = LCase(requestUrl)
             searchStart = valueStart + Len("[redacted]")
         else
             searchStart = keyStart + Len(name) + 1
         end if
     end while
 
-    return url
+    return requestUrl
 end function

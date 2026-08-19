@@ -1,0 +1,124 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.optionList = m.top.findNode("optionList")
+    m.optionTitle = m.top.findNode("optionTitle")
+    m.optionDescription = m.top.findNode("optionDescription")
+    m.options = buildOptions()
+    m.optionList.observeField("itemFocused", "onOptionFocused")
+    m.optionList.observeField("itemSelected", "onOptionSelected")
+    renderOptions()
+end sub
+
+'-------------------------------------------------------------------------------
+' buildOptions
+'-------------------------------------------------------------------------------
+function buildOptions() as object
+    return [
+        {
+            key: PlaybackMode.Mode.Automatic
+            label: "Automatic"
+            description: "Allows Jellyfin to choose Direct Play, remuxing, or transcoding based on the file, selected audio and subtitle tracks, device capabilities, and network limits. This is the normal playback mode and balances original quality, compatibility, and server processing."
+        }
+        {
+            key: PlaybackMode.Mode.AutomaticNoRemux
+            label: "Automatic (Remux Disabled)"
+            description: "Prefers Direct Play. When Direct Play is unavailable, Jellyfin fully converts the video instead of copying it into a new stream. Compatible audio may still be copied. This can resolve playback, timing, keyframe, and seeking problems caused by video remuxing."
+        }
+        {
+            key: PlaybackMode.Mode.TranscodeAllowRemux
+            label: "Force Transcode (Allow Remux)"
+            description: "Disables Direct Play. Jellyfin may repackage compatible video or audio without converting it, while transcoding anything the device cannot play. This can improve compatibility while preserving quality where possible."
+        }
+        {
+            key: PlaybackMode.Mode.TranscodeNoRemux
+            label: "Force Transcode (Remux Disabled)"
+            description: "Disables Direct Play and forces Jellyfin to convert the video to a supported format, usually H.264. This uses more server processing and may reduce quality, but can resolve playback, timing, keyframe, and seeking problems."
+        }
+    ]
+end function
+
+'-------------------------------------------------------------------------------
+' renderOptions
+'-------------------------------------------------------------------------------
+sub renderOptions()
+    content = CreateObject("roSGNode", "ContentNode")
+    for each optionValue in m.options
+        item = content.createChild("ContentNode")
+        item.title = optionValue.label
+    end for
+
+    m.optionList.content = content
+    applySelectedKey()
+    renderFocusedOption()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSelectedKeyChanged
+'-------------------------------------------------------------------------------
+sub onSelectedKeyChanged()
+    applySelectedKey()
+    renderFocusedOption()
+end sub
+
+'-------------------------------------------------------------------------------
+' applySelectedKey
+'-------------------------------------------------------------------------------
+sub applySelectedKey()
+    selectedIndex = getOptionIndex(Format.SafeString(m.top.selectedKey, PlaybackMode.Mode.Automatic))
+    focusedIndex = selectedIndex
+    if focusedIndex < 0 then focusedIndex = 0
+
+    m.optionList.checkedItem = selectedIndex
+    m.optionList.jumpToItem = focusedIndex
+    m.optionList.itemFocused = focusedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' getOptionIndex
+'-------------------------------------------------------------------------------
+function getOptionIndex(key as string) as integer
+    for i = 0 to m.options.Count() - 1
+        if m.options[i].key = key then return i
+    end for
+
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' onOptionFocused
+'-------------------------------------------------------------------------------
+sub onOptionFocused()
+    renderFocusedOption()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderFocusedOption
+'-------------------------------------------------------------------------------
+sub renderFocusedOption()
+    index = m.optionList.itemFocused
+    if index < 0 or index >= m.options.Count() then index = 0
+
+    optionValue = m.options[index]
+    m.optionTitle.text = optionValue.label
+    m.optionDescription.text = optionValue.description
+end sub
+
+'-------------------------------------------------------------------------------
+' onOptionSelected
+'-------------------------------------------------------------------------------
+sub onOptionSelected()
+    index = m.optionList.itemSelected
+    if index < 0 or index >= m.options.Count() then return
+
+    m.optionList.checkedItem = index
+    m.top.optionSelected = m.options[index]
+end sub
+
+'-------------------------------------------------------------------------------
+' focusOptions
+'-------------------------------------------------------------------------------
+sub focusOptions()
+    m.optionList.setFocus(true)
+end sub

@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("TVNextSeasonPlaybackTask")
+    m.log = Logger.Create("TVNextSeasonPlaybackTask")
     m.top.functionName = "executeRequest"
 end sub
 
@@ -41,7 +41,7 @@ function buildResponse(request as dynamic) as object
         }
     end if
 
-    nextSeasonId = SafeString(FirstNonEmpty([nextSeason.Id], ""), "")
+    nextSeasonId = Format.SafeString(Format.FirstNonEmpty([nextSeason.Id], ""), "")
     episodesResult = loadEpisodes(request, nextSeasonId)
     if episodesResult = invalid or episodesResult.ok <> true then
         return {
@@ -69,8 +69,8 @@ function loadSeasons(request as object) as object
         userId: request.userId
         enableTotalRecordCount: false
     }
-    url = request.server + "/Shows/" + request.seriesId + "/Seasons" + Url_BuildQueryString(params)
-    return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+    requestUrl = request.server + "/Shows/" + request.seriesId + "/Seasons" + Url.BuildQueryString(params)
+    return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
 end function
 
 '-------------------------------------------------------------------------------
@@ -84,8 +84,8 @@ function loadEpisodes(request as object, seasonId as string) as object
         sortBy: "ParentIndexNumber,IndexNumber"
         sortOrder: "Ascending"
     }
-    url = request.server + "/Shows/" + request.seriesId + "/Episodes" + Url_BuildQueryString(params)
-    return HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+    requestUrl = request.server + "/Shows/" + request.seriesId + "/Episodes" + Url.BuildQueryString(params)
+    return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
 end function
 
 '-------------------------------------------------------------------------------
@@ -95,11 +95,11 @@ function getNextSeason(seasons as object, currentSeasonId as string) as dynamic
     for i = 0 to seasons.Count() - 1
         season = seasons[i]
         if season = invalid then continue for
-        if SafeString(FirstNonEmpty([season.Id], ""), "") <> currentSeasonId then continue for
+        if Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "") <> currentSeasonId then continue for
 
         for nextIndex = i + 1 to seasons.Count() - 1
             nextSeason = seasons[nextIndex]
-            if nextSeason <> invalid and SafeString(FirstNonEmpty([nextSeason.Id], ""), "") <> "" then return nextSeason
+            if nextSeason <> invalid and Format.SafeString(Format.FirstNonEmpty([nextSeason.Id], ""), "") <> "" then return nextSeason
         end for
         return invalid
     end for
@@ -114,14 +114,14 @@ function buildPlaybackQueue(episodes as object, season as object) as object
     queue = []
     for each episode in episodes
         if episode = invalid then continue for
-        episodeId = SafeString(FirstNonEmpty([episode.Id], ""), "")
+        episodeId = Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
         if episodeId = "" then continue for
 
         queue.Push({
             itemId: episodeId
             item: episode
             season: season
-            startPositionTicks: PlaybackProgress_GetTicksFromItem(episode)
+            startPositionTicks: PlaybackProgress.GetTicksFromItem(episode)
         })
     end for
     return queue

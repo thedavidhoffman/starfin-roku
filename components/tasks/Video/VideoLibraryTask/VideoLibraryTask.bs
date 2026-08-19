@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("VideoLibraryTask")
+    m.log = Logger.Create("VideoLibraryTask")
     m.top.functionName = "executeRequest"
 end sub
 
@@ -13,16 +13,16 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
-        if request <> invalid then validationError.AddReplace("libraryId", SafeString(request.libraryId, ""))
+        if request <> invalid then validationError.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
         m.top.response = validationError
         return
     end if
 
     params = {
-        userId: SafeString(request.userId, "")
-        parentId: SafeString(request.libraryId, "")
-        recursive: LCase(SafeString(request.collectionType, "")) <> "playlists"
-        includeItemTypes: SafeString(request.includeItemTypes, "")
+        userId: Format.SafeString(request.userId, "")
+        parentId: Format.SafeString(request.libraryId, "")
+        recursive: LCase(Format.SafeString(request.collectionType, "")) <> "playlists"
+        includeItemTypes: Format.SafeString(request.includeItemTypes, "")
         fields: "SortName,ProductionYear,PremiereDate,DateCreated,Genres"
         enableImageTypes: "Primary,Backdrop,Thumb,Logo"
         imageTypeLimit: 1
@@ -32,21 +32,21 @@ sub executeRequest()
     }
     if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
 
-    if LCase(SafeString(request.collectionType, "")) = "playlist" then
+    if LCase(Format.SafeString(request.collectionType, "")) = "playlist" then
         playlistParams = {
-            userId: SafeString(request.userId, "")
+            userId: Format.SafeString(request.userId, "")
             fields: "SortName,ProductionYear,PremiereDate,DateCreated,Genres"
             enableImageTypes: "Primary,Backdrop,Thumb,Logo"
             imageTypeLimit: 1
         }
-        url = request.server + "/Playlists/" + SafeString(request.libraryId, "") + "/Items" + Url_BuildQueryString(playlistParams)
+        requestUrl = request.server + "/Playlists/" + Format.SafeString(request.libraryId, "") + "/Items" + Url.BuildQueryString(playlistParams)
     else
-        url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
+        requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
     end if
-    response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
+    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
     if response.ok <> true then
         response.AddReplace("action", "videoLibrary")
-        response.AddReplace("libraryId", SafeString(request.libraryId, ""))
+        response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
         m.top.response = response
         return
     end if
@@ -54,7 +54,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "videoLibrary"
-        libraryId: SafeString(request.libraryId, "")
+        libraryId: Format.SafeString(request.libraryId, "")
         payload: response.data
         filterOptions: buildFilterOptions(getItemsFromPayload(response.data))
     }
@@ -87,7 +87,7 @@ function buildFilterOptions(items as object) as object
         end if
 
         for each genre in getItemGenres(item)
-            genreLabel = String_Trim(SafeString(genre, ""))
+            genreLabel = Strings.Trim(Format.SafeString(genre, ""))
             if genreLabel = "" then continue for
 
             genreKey = LCase(genreLabel)
@@ -124,7 +124,7 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if Array_IsAssocArray(payload) = false then return []
+    if Arrays.IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
     return []
 end function
@@ -133,7 +133,7 @@ end function
 ' getItemGenres
 '-------------------------------------------------------------------------------
 function getItemGenres(item as dynamic) as object
-    if Array_IsAssocArray(item) = false then return []
+    if Arrays.IsAssocArray(item) = false then return []
     if item.Genres = invalid then return []
 
     return item.Genres
@@ -143,12 +143,12 @@ end function
 ' getItemVideoLibraryYear
 '-------------------------------------------------------------------------------
 function getItemVideoLibraryYear(item as dynamic) as integer
-    if Array_IsAssocArray(item) = false then return 0
+    if Arrays.IsAssocArray(item) = false then return 0
 
     productionYear = Number.ToInteger(item.ProductionYear, 0)
     if productionYear > 0 then return productionYear
 
-    premiereDate = SafeString(item.PremiereDate, "")
+    premiereDate = Format.SafeString(item.PremiereDate, "")
     if Len(premiereDate) < 4 then return 0
 
     yearText = Left(premiereDate, 4)
@@ -175,7 +175,7 @@ end function
 ' getSortBy
 '-------------------------------------------------------------------------------
 function getSortBy(request as dynamic) as string
-    sortBy = SafeString(request.sortBy, "")
+    sortBy = Format.SafeString(request.sortBy, "")
     if sortBy <> "" then return sortBy
 
     return "SortName"
@@ -185,9 +185,9 @@ end function
 ' getSortOrder
 '-------------------------------------------------------------------------------
 function getSortOrder(request as dynamic) as string
-    if SafeString(request.sortBy, "") = "Random" then return ""
+    if Format.SafeString(request.sortBy, "") = "Random" then return ""
 
-    sortOrder = SafeString(request.sortOrder, "")
+    sortOrder = Format.SafeString(request.sortOrder, "")
     if sortOrder = "Descending" then return "Descending"
 
     return "Ascending"

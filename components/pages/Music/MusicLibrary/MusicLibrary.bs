@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("MusicLibrary")
+    m.log = Logger.Create("MusicLibrary")
     m.titleLabel = m.top.findNode("titleLabel")
     m.browseByButton = m.top.findNode("browseByButton")
     m.sortButton = m.top.findNode("sortButton")
@@ -49,7 +49,7 @@ sub init()
         artistLoad: {
             status: "idle"
         }
-        lifecycle: AsyncLifecycle_Create()
+        lifecycle: AsyncLifecycle.Create()
     }
     syncSortControls()
 end sub
@@ -67,7 +67,7 @@ sub onLoadRequestChanged()
     m.state.artists = []
     m.state.albumLoad.status = "loading"
     m.state.artistLoad.status = "idle"
-    savedState = LibraryViewStateStore_Load(SafeString(request.accountKey, ""), SafeString(request.libraryId, ""))
+    savedState = LibraryViewStateStore.Load(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""))
     if savedState <> invalid then
         applySavedMusicLibraryViewState(request, savedState)
     else if request.favoriteOnly = true then
@@ -87,12 +87,12 @@ sub onLoadRequestChanged()
     m.state.sortCache = createEmptySortCache()
     syncSortControls()
     hideFilterButtonRow()
-    AsyncLifecycle_Begin(m.state.lifecycle, request.libraryId)
+    AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
     updateTitleLabel(0)
     renderAlbums([])
-    Spinner_Show(0)
+    Spinner.Show(0)
     startForegroundLoad("albums")
-    m.log.write("Album load started libraryId=" + SafeString(request.libraryId, ""))
+    m.log.write("Album load started libraryId=" + Format.SafeString(request.libraryId, ""))
     m.musicLibraryTask.request = request
     m.musicLibraryTask.control = "run"
 end sub
@@ -103,12 +103,12 @@ end sub
 sub onMusicArtistsResponse()
     response = m.musicArtistsTask.response
     if response = invalid then return
-    if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
+    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
     finishForegroundLoad("artists")
     if response.ok <> true then
         m.state.artistLoad.status = "failed"
-        m.log.error("Artist load failed libraryId=" + getLibraryId() + " message=" + SafeString(response.errorMessage, "Unable to load music artists."))
-        if isArtistBrowseMode() then Status_SetMessage(SafeString(response.errorMessage, "Unable to load music artists."))
+        m.log.error("Artist load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music artists."))
+        if isArtistBrowseMode() then AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music artists."))
         return
     end if
 
@@ -116,7 +116,7 @@ sub onMusicArtistsResponse()
     m.state.artistLoad.status = "loaded"
     m.log.write("Artist response accepted libraryId=" + getLibraryId() + " count=" + m.state.artists.Count().ToStr())
     if isArtistBrowseMode() then
-        Status_ClearMessage()
+        AppStatus.ClearMessage()
         renderTimer = CreateObject("roTimespan")
         renderTimer.Mark()
         m.log.write("Artist render started libraryId=" + getLibraryId() + " count=" + m.state.artists.Count().ToStr())
@@ -132,13 +132,13 @@ end sub
 sub onMusicLibraryResponse()
     response = m.musicLibraryTask.response
     if response = invalid then return
-    if AsyncLifecycle_IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicLibrary") <> true then return
+    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicLibrary") <> true then return
     finishForegroundLoad("albums")
 
     if response.ok <> true then
         m.state.albumLoad.status = "failed"
-        m.log.error("Album load failed libraryId=" + getLibraryId() + " message=" + SafeString(response.errorMessage, "Unable to load music library."))
-        Status_SetMessage(SafeString(response.errorMessage, "Unable to load music library."))
+        m.log.error("Album load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music library."))
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music library."))
         return
     end if
 
@@ -147,7 +147,7 @@ sub onMusicLibraryResponse()
     m.state.filterCache = createFilterCacheFromOptions(response.filterOptions)
     m.state.sortCache = createEmptySortCache()
     m.log.write("Album response accepted libraryId=" + getLibraryId() + " count=" + m.state.allAlbums.Count().ToStr())
-    Status_ClearMessage()
+    AppStatus.ClearMessage()
     if isArtistBrowseMode() then
         ensureArtistsLoaded()
         return
@@ -179,12 +179,12 @@ sub renderAlbums(albums as object)
     request = m.state.request
 
     for each album in albums
-        if Array_IsAssocArray(album) = false then
+        if Arrays.IsAssocArray(album) = false then
             m.log.error("Skipping malformed album libraryId=" + getLibraryId())
             continue for
         end if
 
-        albumName = getDisplayText(FirstNonEmpty([album.Name], "Untitled Album"))
+        albumName = getDisplayText(Format.FirstNonEmpty([album.Name], "Untitled Album"))
         artistName = getDisplayText(getAlbumArtistName(album))
 
         child = content.createChild("ContentNode")
@@ -216,7 +216,7 @@ end function
 ' isAlbumBrowseMode
 '-------------------------------------------------------------------------------
 function isAlbumBrowseMode() as boolean
-    return SafeString(m.state.selectedSortKey, "Album") = "Album"
+    return Format.SafeString(m.state.selectedSortKey, "Album") = "Album"
 end function
 
 '-------------------------------------------------------------------------------
@@ -247,21 +247,21 @@ end sub
 sub renderArtists()
     artists = []
     for each artist in m.state.artists
-        if Array_IsAssocArray(artist) then
+        if Arrays.IsAssocArray(artist) then
             artists.Push(artist)
         else
             m.log.error("Skipping malformed artist libraryId=" + getLibraryId())
         end if
     end for
     artists.SortBy("SortName")
-    if SafeString(m.state.selectedSort.sortOrder, "Ascending") = "Descending" then reverseAlbums(artists)
+    if Format.SafeString(m.state.selectedSort.sortOrder, "Ascending") = "Descending" then reverseAlbums(artists)
 
     content = CreateObject("roSGNode", "ContentNode")
     request = m.state.request
     for each artist in artists
         child = content.createChild("ContentNode")
-        artistId = SafeString(artist.Id, "")
-        child.title = FirstNonEmpty([artist.Name], "Unknown Artist")
+        artistId = Format.SafeString(artist.Id, "")
+        child.title = Format.FirstNonEmpty([artist.Name], "Unknown Artist")
         child.HDPosterUrl = getArtistImageUrl(artist, request, "Primary", 342, 342)
         child.AddFields({ raw: artist, itemId: artistId })
     end for
@@ -278,20 +278,20 @@ end sub
 ' getArtistImageUrl
 '-------------------------------------------------------------------------------
 function getArtistImageUrl(artist as object, request as object, imageType as string, width as integer, height as integer) as string
-    itemId = SafeString(artist.Id, "")
+    itemId = Format.SafeString(artist.Id, "")
     tag = ""
-    if imageType = "Primary" and artist.ImageTags <> invalid then tag = SafeString(artist.ImageTags.Primary, "")
-    if imageType = "Logo" and artist.ImageTags <> invalid then tag = SafeString(artist.ImageTags.Logo, "")
-    if imageType = "Backdrop" and artist.BackdropImageTags <> invalid and artist.BackdropImageTags.Count() > 0 then tag = SafeString(artist.BackdropImageTags[0], "")
+    if imageType = "Primary" and artist.ImageTags <> invalid then tag = Format.SafeString(artist.ImageTags.Primary, "")
+    if imageType = "Logo" and artist.ImageTags <> invalid then tag = Format.SafeString(artist.ImageTags.Logo, "")
+    if imageType = "Backdrop" and artist.BackdropImageTags <> invalid and artist.BackdropImageTags.Count() > 0 then tag = Format.SafeString(artist.BackdropImageTags[0], "")
     if itemId = "" or tag = "" then return ""
-    return Url_BuildImageUrl(request.server, itemId, imageType, tag, width, height)
+    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height)
 end function
 
 '-------------------------------------------------------------------------------
 ' isArtistBrowseMode
 '-------------------------------------------------------------------------------
 function isArtistBrowseMode() as boolean
-    return SafeString(m.state.selectedSortKey, "Album") = "Artist"
+    return Format.SafeString(m.state.selectedSortKey, "Album") = "Artist"
 end function
 
 '-------------------------------------------------------------------------------
@@ -308,35 +308,35 @@ end function
 ' getAlbumArtworkUrl
 '-------------------------------------------------------------------------------
 function getAlbumArtworkUrl(album as dynamic, request as dynamic) as string
-    if Array_IsAssocArray(album) = false then return ""
+    if Arrays.IsAssocArray(album) = false then return ""
     if request = invalid then return ""
 
-    directUrl = FirstNonEmpty([album.ImageURL, album.ImageUrl, album.PrimaryImageUrl], "")
+    directUrl = Format.FirstNonEmpty([album.ImageURL, album.ImageUrl, album.PrimaryImageUrl], "")
     if directUrl <> "" then return directUrl
 
-    itemId = SafeString(FirstNonEmpty([album.Id], ""), "")
+    itemId = Format.SafeString(Format.FirstNonEmpty([album.Id], ""), "")
     if itemId = "" then return ""
 
     primaryTag = ""
     if album.ImageTags <> invalid and album.ImageTags.Primary <> invalid then primaryTag = album.ImageTags.Primary
     if primaryTag = "" then return ""
 
-    return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 342, 342)
+    return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, 342, 342)
 end function
 
 '-------------------------------------------------------------------------------
 ' getAlbumArtistName
 '-------------------------------------------------------------------------------
 function getAlbumArtistName(album as dynamic) as string
-    if Array_IsAssocArray(album) = false then return "Unknown Artist"
+    if Arrays.IsAssocArray(album) = false then return "Unknown Artist"
 
-    artist = FirstNonEmpty([album.AlbumArtist, album.Artist], "")
+    artist = Format.FirstNonEmpty([album.AlbumArtist, album.Artist], "")
     if artist <> "" then return artist
 
-    artist = String_GetJoinedText(album.AlbumArtists)
+    artist = Strings.GetJoinedText(album.AlbumArtists)
     if artist <> "" then return artist
 
-    artist = String_GetJoinedText(album.Artists)
+    artist = Strings.GetJoinedText(album.Artists)
     if artist <> "" then return artist
 
     return "Unknown Artist"
@@ -346,12 +346,12 @@ end function
 ' getAlbumYear
 '-------------------------------------------------------------------------------
 function getAlbumYear(album as dynamic) as integer
-    if Array_IsAssocArray(album) = false then return 0
+    if Arrays.IsAssocArray(album) = false then return 0
 
     year = Number.ToInteger(album.ProductionYear, 0)
     if year > 0 then return year
 
-    premiereDate = SafeString(album.PremiereDate, "")
+    premiereDate = Format.SafeString(album.PremiereDate, "")
     if Len(premiereDate) < 4 then return 0
 
     return Number.ToInteger(Left(premiereDate, 4), 0)
@@ -361,16 +361,16 @@ end function
 ' getAlbumTitle
 '-------------------------------------------------------------------------------
 function getAlbumTitle(album as dynamic) as string
-    if Array_IsAssocArray(album) = false then return ""
+    if Arrays.IsAssocArray(album) = false then return ""
 
-    return FirstNonEmpty([album.SortName, album.Name], "")
+    return Format.FirstNonEmpty([album.SortName, album.Name], "")
 end function
 
 '-------------------------------------------------------------------------------
 ' getSortText
 '-------------------------------------------------------------------------------
 function getSortText(text as string) as string
-    normalizedText = String_Trim(text)
+    normalizedText = Strings.Trim(text)
     if LCase(Left(normalizedText, 4)) = "the " then return Mid(normalizedText, 5)
 
     return normalizedText
@@ -380,7 +380,7 @@ end function
 ' getDisplayText
 '-------------------------------------------------------------------------------
 function getDisplayText(text as string) as string
-    normalizedText = String_Trim(text)
+    normalizedText = Strings.Trim(text)
     if LCase(Left(normalizedText, 4)) = "the " then return Mid(normalizedText, 5) + ", The"
 
     return normalizedText
@@ -390,7 +390,7 @@ end function
 ' getAlbumGenres
 '-------------------------------------------------------------------------------
 function getAlbumGenres(album as dynamic) as object
-    if Array_IsAssocArray(album) = false then return []
+    if Arrays.IsAssocArray(album) = false then return []
     if Type(album.Genres) <> "roArray" then return []
 
     return album.Genres
@@ -403,7 +403,7 @@ function getSortedAlbums(albums as object) as object
     selection = m.state.selectedSort
     if selection = invalid then selection = getDefaultSortSelection()
 
-    optionKey = SafeString(selection.optionKey, "Album")
+    optionKey = Format.SafeString(selection.optionKey, "Album")
     if optionKey = "Random" then return shuffleAlbums(copyAlbums(albums))
 
     if optionKey = "ArtistAlbum" then
@@ -420,7 +420,7 @@ function getSortedAlbums(albums as object) as object
         sortedAlbums = copyAlbums(m.state.sortCache.album)
     end if
 
-    if SafeString(selection.sortOrder, "Ascending") = "Descending" then reverseAlbums(sortedAlbums)
+    if Format.SafeString(selection.sortOrder, "Ascending") = "Descending" then reverseAlbums(sortedAlbums)
     return sortedAlbums
 end function
 
@@ -517,24 +517,24 @@ end function
 '-------------------------------------------------------------------------------
 function compareAlbumSortEntries(left as object, right as object, mode as string) as integer
     if mode = "artistYearTitle" then
-        comparison = String_NaturalCompare(left.artist, right.artist)
+        comparison = Strings.NaturalCompare(left.artist, right.artist)
         if comparison <> 0 then return comparison
         if left.year < right.year then return -1
         if left.year > right.year then return 1
-        return String_NaturalCompare(left.title, right.title)
+        return Strings.NaturalCompare(left.title, right.title)
     end if
 
     if mode = "yearTitleArtist" then
         if left.year < right.year then return -1
         if left.year > right.year then return 1
-        comparison = String_NaturalCompare(left.title, right.title)
+        comparison = Strings.NaturalCompare(left.title, right.title)
         if comparison <> 0 then return comparison
-        return String_NaturalCompare(left.artist, right.artist)
+        return Strings.NaturalCompare(left.artist, right.artist)
     end if
 
-    comparison = String_NaturalCompare(left.title, right.title)
+    comparison = Strings.NaturalCompare(left.title, right.title)
     if comparison <> 0 then return comparison
-    return String_NaturalCompare(left.artist, right.artist)
+    return Strings.NaturalCompare(left.artist, right.artist)
 end function
 
 '-------------------------------------------------------------------------------
@@ -603,7 +603,7 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if Array_IsAssocArray(payload) = false then
+    if Arrays.IsAssocArray(payload) = false then
         m.log.error("Unexpected music payload type=" + Type(payload))
         return []
     end if
@@ -628,7 +628,7 @@ end function
 '-------------------------------------------------------------------------------
 function createFilterCacheFromOptions(filterOptions as dynamic) as object
     cache = createEmptyFilterCache()
-    if Array_IsAssocArray(filterOptions) = false then return cache
+    if Arrays.IsAssocArray(filterOptions) = false then return cache
 
     if filterOptions.decadeOptions <> invalid then cache.decadeOptions = filterOptions.decadeOptions
     if filterOptions.genreOptions <> invalid then cache.genreOptions = filterOptions.genreOptions
@@ -640,14 +640,14 @@ end function
 ' isDecadeFilterActive
 '-------------------------------------------------------------------------------
 function isDecadeFilterActive() as boolean
-    return SafeString(m.state.activeFilterType, "") = "Decade"
+    return Format.SafeString(m.state.activeFilterType, "") = "Decade"
 end function
 
 '-------------------------------------------------------------------------------
 ' isGenreFilterActive
 '-------------------------------------------------------------------------------
 function isGenreFilterActive() as boolean
-    return SafeString(m.state.activeFilterType, "") = "Genre"
+    return Format.SafeString(m.state.activeFilterType, "") = "Genre"
 end function
 
 ' getSortedDecadeAlbums
@@ -671,7 +671,7 @@ end function
 '-------------------------------------------------------------------------------
 function getSortedGenreAlbums(genreLabel as string) as object
     albums = []
-    targetGenre = LCase(String_Trim(genreLabel))
+    targetGenre = LCase(Strings.Trim(genreLabel))
     if targetGenre = "" then return albums
 
     for each album in m.state.allAlbums
@@ -687,7 +687,7 @@ end function
 '-------------------------------------------------------------------------------
 function albumHasGenre(album as dynamic, targetGenre as string) as boolean
     for each genre in getAlbumGenres(album)
-        if LCase(String_Trim(SafeString(genre, ""))) = targetGenre then return true
+        if LCase(Strings.Trim(Format.SafeString(genre, ""))) = targetGenre then return true
     end for
 
     return false
@@ -698,7 +698,7 @@ end function
 '-------------------------------------------------------------------------------
 sub updateTitleLabel(albumCount = invalid as dynamic)
     title = "Music"
-    if m.state <> invalid and m.state.request <> invalid then title = SafeString(m.state.request.title, "Music")
+    if m.state <> invalid and m.state.request <> invalid then title = Format.SafeString(m.state.request.title, "Music")
     if albumCount <> invalid and albumCount > 0 then title = title + " (" + albumCount.ToStr() + ")"
 
     m.titleLabel.text = title
@@ -765,10 +765,10 @@ end sub
 function canUseSortOrder(selection as object) as boolean
     if selection = invalid then return false
 
-    optionKey = SafeString(selection.optionKey, "")
+    optionKey = Format.SafeString(selection.optionKey, "")
     if optionKey = "Decade" or optionKey = "Genre" or optionKey = "Random" then return false
 
-    sortKey = SafeString(selection.sortKey, "")
+    sortKey = Format.SafeString(selection.sortKey, "")
     return sortKey = "Album" or sortKey = "ArtistAlbum" or sortKey = "Artist"
 end function
 
@@ -793,9 +793,9 @@ sub onSortOrderChanged()
     if selection = invalid then return
     if canUseSortOrder(m.state.selectedSort) <> true then return
 
-    sortOrder = SafeString(selection.sortOrder, "Ascending")
+    sortOrder = Format.SafeString(selection.sortOrder, "Ascending")
     if sortOrder <> "Descending" then sortOrder = "Ascending"
-    if SafeString(m.state.selectedSort.sortOrder, "Ascending") = sortOrder then return
+    if Format.SafeString(m.state.selectedSort.sortOrder, "Ascending") = sortOrder then return
 
     m.state.selectedSort.sortOrder = sortOrder
     syncSortControls()
@@ -809,7 +809,7 @@ end sub
 function applySortSelection(selection as object) as boolean
     if selection = invalid then return false
 
-    optionKey = SafeString(selection.optionKey, "")
+    optionKey = Format.SafeString(selection.optionKey, "")
     if optionKey = "" then return false
     if optionKey <> "Artist" then cancelPendingArtistLoad()
     if optionKey = "Favorites" then
@@ -898,7 +898,7 @@ function applySortSelection(selection as object) as boolean
         m.state.selectedSort = getDefaultSortSelection()
     end if
 
-    m.state.selectedSortKey = SafeString(m.state.selectedSort.optionKey, "Album")
+    m.state.selectedSortKey = Format.SafeString(m.state.selectedSort.optionKey, "Album")
     syncSortControls()
     if wasFavoriteBrowse then
         persistMusicLibraryViewState()
@@ -923,9 +923,9 @@ sub cancelPendingArtistLoad()
         stopLoadWatchdog()
         m.state.foregroundLoad.kind = ""
         m.state.foregroundLoad.startedAt = invalid
-        Spinner_Hide()
+        Spinner.Hide()
     end if
-    AsyncLifecycle_Deactivate(m.state.lifecycle)
+    AsyncLifecycle.Deactivate(m.state.lifecycle)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -944,12 +944,12 @@ sub reloadMusicLibrary()
     m.state.sortCache = createEmptySortCache()
     m.albumsGrid.visible = true
     m.artistsGrid.visible = false
-    AsyncLifecycle_Begin(m.state.lifecycle, request.libraryId)
+    AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
     updateTitleLabel(0)
     renderAlbums([])
-    Spinner_Show(0)
+    Spinner.Show(0)
     startForegroundLoad("albums")
-    m.log.write("Album reload started libraryId=" + SafeString(request.libraryId, ""))
+    m.log.write("Album reload started libraryId=" + Format.SafeString(request.libraryId, ""))
     m.musicLibraryTask.control = "stop"
     m.musicLibraryTask.request = request
     m.musicLibraryTask.control = "run"
@@ -1023,7 +1023,7 @@ end function
 function getFirstGenreFilterValue(options as object) as string
     if options = invalid or options.Count() = 0 then return ""
 
-    return SafeString(options[0].value, "")
+    return Format.SafeString(options[0].value, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -1033,12 +1033,12 @@ sub onFilterButtonRowSelected()
     selected = m.filterButtonRow.filterSelected
     if selected = invalid then return
 
-    filterType = SafeString(selected.type, "")
+    filterType = Format.SafeString(selected.type, "")
     if filterType = "Decade" then
         m.state.selectedDecade = Number.ToInteger(selected.value, -1)
         m.filterButtonRow.selectedValue = m.state.selectedDecade.ToStr()
     else if filterType = "Genre" then
-        m.state.selectedGenre = SafeString(selected.value, "")
+        m.state.selectedGenre = Format.SafeString(selected.value, "")
         m.filterButtonRow.selectedValue = m.state.selectedGenre
     else
         return
@@ -1149,7 +1149,7 @@ end function
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    AsyncLifecycle_BeginFromField(m.state.lifecycle, m.state.request, "libraryId")
+    AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.request, "libraryId")
     focusAlbums()
 end sub
 
@@ -1160,7 +1160,7 @@ sub deactivate()
     stopLoadWatchdog()
     m.state.foregroundLoad.kind = ""
     m.state.foregroundLoad.startedAt = invalid
-    AsyncLifecycle_Deactivate(m.state.lifecycle)
+    AsyncLifecycle.Deactivate(m.state.lifecycle)
     m.musicLibraryTask.control = "stop"
     m.musicArtistsTask.control = "stop"
 end sub
@@ -1175,11 +1175,11 @@ sub ensureArtistsLoaded()
     if request = invalid or request.favoriteOnly = true then return
 
     m.state.artistLoad.status = "loading"
-    AsyncLifecycle_Begin(m.state.lifecycle, request.libraryId)
-    Status_ClearMessage()
-    Spinner_Show(0)
+    AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
+    AppStatus.ClearMessage()
+    Spinner.Show(0)
     startForegroundLoad("artists")
-    m.log.write("Artist load started libraryId=" + SafeString(request.libraryId, ""))
+    m.log.write("Artist load started libraryId=" + Format.SafeString(request.libraryId, ""))
     m.musicArtistsTask.control = "stop"
     m.musicArtistsTask.request = request
     m.musicArtistsTask.control = "run"
@@ -1209,7 +1209,7 @@ sub finishForegroundLoad(kind as string)
     stopLoadWatchdog()
     m.state.foregroundLoad.kind = ""
     m.state.foregroundLoad.startedAt = invalid
-    Spinner_Hide()
+    Spinner.Hide()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1223,7 +1223,7 @@ end sub
 ' onLoadWatchdogTimerFired
 '-------------------------------------------------------------------------------
 sub onLoadWatchdogTimerFired()
-    kind = SafeString(m.state.foregroundLoad.kind, "")
+    kind = Format.SafeString(m.state.foregroundLoad.kind, "")
     if kind = "" then return
 
     m.log.error("Foreground load timed out kind=" + kind + " libraryId=" + getLibraryId() + " elapsedMs=45000")
@@ -1236,9 +1236,9 @@ sub onLoadWatchdogTimerFired()
     end if
     m.state.foregroundLoad.kind = ""
     m.state.foregroundLoad.startedAt = invalid
-    AsyncLifecycle_Deactivate(m.state.lifecycle)
-    Spinner_Hide()
-    Status_SetMessage("Music took too long to load. Please leave this page and try again.")
+    AsyncLifecycle.Deactivate(m.state.lifecycle)
+    Spinner.Hide()
+    AppStatus.SetMessage("Music took too long to load. Please leave this page and try again.")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1246,7 +1246,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getLibraryId() as string
     if m.state.request = invalid then return ""
-    return SafeString(m.state.request.libraryId, "")
+    return Format.SafeString(m.state.request.libraryId, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -1263,7 +1263,7 @@ sub onAlbumSelected()
 
     raw = albumNode.raw
     itemId = ""
-    if raw <> invalid then itemId = SafeString(FirstNonEmpty([raw.Id], ""), "")
+    if raw <> invalid then itemId = Format.SafeString(Format.FirstNonEmpty([raw.Id], ""), "")
     if itemId = "" then return
 
     m.top.selectedAlbum = {
@@ -1285,9 +1285,9 @@ sub onArtistSelected()
     if raw = invalid then return
 
     musicBrainzArtistId = ""
-    if raw.ProviderIds <> invalid then musicBrainzArtistId = SafeString(raw.ProviderIds.MusicBrainzArtist, "")
+    if raw.ProviderIds <> invalid then musicBrainzArtistId = Format.SafeString(raw.ProviderIds.MusicBrainzArtist, "")
     m.top.selectedArtist = {
-        itemId: SafeString(raw.Id, "")
+        itemId: Format.SafeString(raw.Id, "")
         musicBrainzArtistId: musicBrainzArtistId
         item: raw
         albums: getAlbumsForArtist(raw)
@@ -1301,11 +1301,11 @@ end sub
 '-------------------------------------------------------------------------------
 function getAlbumsForArtist(artist as object) as object
     albums = []
-    artistId = SafeString(artist.Id, "")
-    artistName = LCase(String_Trim(SafeString(artist.Name, "")))
+    artistId = Format.SafeString(artist.Id, "")
+    artistName = LCase(Strings.Trim(Format.SafeString(artist.Name, "")))
 
     for each album in m.state.allAlbums
-        if Array_IsAssocArray(album) = false then continue for
+        if Arrays.IsAssocArray(album) = false then continue for
         if albumMatchesArtist(album, artistId, artistName) then albums.Push(album)
     end for
     sortAlbumsByYearThenTitle(albums)
@@ -1318,16 +1318,16 @@ end function
 function albumMatchesArtist(album as object, artistId as string, artistName as string) as boolean
     if Type(album.ArtistItems) = "roArray" then
         for each artistItem in album.ArtistItems
-            if Array_IsAssocArray(artistItem) = false then continue for
-            if artistId <> "" and SafeString(artistItem.Id, "") = artistId then return true
-            if artistName <> "" and LCase(String_Trim(SafeString(artistItem.Name, ""))) = artistName then return true
+            if Arrays.IsAssocArray(artistItem) = false then continue for
+            if artistId <> "" and Format.SafeString(artistItem.Id, "") = artistId then return true
+            if artistName <> "" and LCase(Strings.Trim(Format.SafeString(artistItem.Name, ""))) = artistName then return true
         end for
     end if
 
-    if artistName <> "" and LCase(String_Trim(SafeString(album.AlbumArtist, ""))) = artistName then return true
+    if artistName <> "" and LCase(Strings.Trim(Format.SafeString(album.AlbumArtist, ""))) = artistName then return true
     if Type(album.Artists) = "roArray" then
         for each name in album.Artists
-            if LCase(String_Trim(SafeString(name, ""))) = artistName then return true
+            if LCase(Strings.Trim(Format.SafeString(name, ""))) = artistName then return true
         end for
     end if
     return false
@@ -1430,8 +1430,8 @@ sub applyMediaStateChange(change as object)
     applyItemsMediaStateChange(m.state.allAlbums, change)
     applyItemsMediaStateChange(m.state.albums, change)
     applyItemsMediaStateChange(m.state.artists, change)
-    if isFavoriteBrowseActive() and SafeString(change.action, "") = "favorite" and change.value <> true then
-        itemId = SafeString(change.itemId, "")
+    if isFavoriteBrowseActive() and Format.SafeString(change.action, "") = "favorite" and change.value <> true then
+        itemId = Format.SafeString(change.itemId, "")
         m.state.allAlbums = withoutMusicLibraryItem(m.state.allAlbums, itemId)
         m.state.albums = withoutMusicLibraryItem(m.state.albums, itemId)
         m.state.artists = withoutMusicLibraryItem(m.state.artists, itemId)
@@ -1449,7 +1449,7 @@ end sub
 function filterOptionsContainValue(options as object, value as string) as boolean
     if options = invalid or value = "" then return false
     for each option in options
-        if SafeString(option.value, "") = value then return true
+        if Format.SafeString(option.value, "") = value then return true
     end for
     return false
 end function
@@ -1458,8 +1458,8 @@ end function
 ' applySavedMusicLibraryViewState
 '-------------------------------------------------------------------------------
 sub applySavedMusicLibraryViewState(request as object, state as object)
-    optionKey = SafeString(state.optionKey, "")
-    sortOrder = getNormalizedMusicSortOrder(SafeString(state.sortOrder, "Ascending"))
+    optionKey = Format.SafeString(state.optionKey, "")
+    sortOrder = getNormalizedMusicSortOrder(Format.SafeString(state.sortOrder, "Ascending"))
     request.favoriteOnly = false
     m.state.activeFilterType = ""
     m.state.selectedDecade = -1
@@ -1473,7 +1473,7 @@ sub applySavedMusicLibraryViewState(request as object, state as object)
         m.state.selectedSort = { optionKey: optionKey, sortKey: "Album", sortOrder: "Ascending", label: optionKey }
         m.state.activeFilterType = optionKey
         m.state.selectedDecade = Number.ToInteger(state.selectedDecade, -1)
-        m.state.selectedGenre = SafeString(state.selectedGenre, "")
+        m.state.selectedGenre = Format.SafeString(state.selectedGenre, "")
     else if optionKey = "Random" then
         m.state.selectedSort = { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
     else if optionKey = "ArtistAlbum" then
@@ -1484,7 +1484,7 @@ sub applySavedMusicLibraryViewState(request as object, state as object)
         m.state.selectedSort = getDefaultSortSelection()
         m.state.selectedSort.sortOrder = sortOrder
     end if
-    m.state.selectedSortKey = SafeString(m.state.selectedSort.optionKey, "Album")
+    m.state.selectedSortKey = Format.SafeString(m.state.selectedSort.optionKey, "Album")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1503,14 +1503,14 @@ sub persistMusicLibraryViewState()
     selection = m.state.selectedSort
     if request = invalid or selection = invalid then return
 
-    LibraryViewStateStore_Save(SafeString(request.accountKey, ""), SafeString(request.libraryId, ""), {
-        optionKey: SafeString(m.state.selectedSortKey, "Album")
-        sortKey: SafeString(selection.sortKey, "Album")
-        sortOrder: SafeString(selection.sortOrder, "Ascending")
+    LibraryViewStateStore.Save(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""), {
+        optionKey: Format.SafeString(m.state.selectedSortKey, "Album")
+        sortKey: Format.SafeString(selection.sortKey, "Album")
+        sortOrder: Format.SafeString(selection.sortOrder, "Ascending")
         selectedDecade: m.state.selectedDecade
         selectedGenre: m.state.selectedGenre
-        libraryTitle: SafeString(request.title, "")
-        collectionType: SafeString(request.collectionType, "")
+        libraryTitle: Format.SafeString(request.title, "")
+        collectionType: Format.SafeString(request.collectionType, "")
     })
 end sub
 
@@ -1520,7 +1520,7 @@ end sub
 function withoutMusicLibraryItem(items as object, itemId as string) as object
     remaining = []
     for each item in items
-        if SafeString(item.Id, "") <> itemId then remaining.Push(item)
+        if Format.SafeString(item.Id, "") <> itemId then remaining.Push(item)
     end for
     return remaining
 end function
@@ -1530,8 +1530,8 @@ end function
 '-------------------------------------------------------------------------------
 sub applyItemsMediaStateChange(items as object, change as object)
     for each item in items
-        if SafeString(item.Id, "") = SafeString(change.itemId, "") then
-            MediaState_ApplyToItem(item, change)
+        if Format.SafeString(item.Id, "") = Format.SafeString(change.itemId, "") then
+            MediaState.ApplyToItem(item, change)
         end if
     end for
 end sub
@@ -1545,9 +1545,9 @@ sub applyGridMediaStateChange(grid as object, change as object)
     for i = 0 to grid.content.getChildCount() - 1
         itemNode = grid.content.getChild(i)
         item = itemNode.raw
-        if item <> invalid and SafeString(item.Id, "") = SafeString(change.itemId, "") then
+        if item <> invalid and Format.SafeString(item.Id, "") = Format.SafeString(change.itemId, "") then
             updatedItem = cloneMusicLibraryItem(item)
-            if MediaState_ApplyToItem(updatedItem, change) <> true then return
+            if MediaState.ApplyToItem(updatedItem, change) <> true then return
             itemNode.raw = updatedItem
             return
         end if

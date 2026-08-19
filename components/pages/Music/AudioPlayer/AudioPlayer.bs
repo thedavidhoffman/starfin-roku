@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    MaskAssets_Apply(m.top.findNode("albumArtworkMask"), "audio-player-album-mask.png", [651, 651], [434, 434])
+    MaskAssets.Apply(m.top.findNode("albumArtworkMask"), "audio-player-album-mask.png", [651, 651], [434, 434])
     m.albumArtwork = m.top.findNode("albumArtwork")
     m.backdrop = m.top.findNode("backdrop")
     m.albumTitle = m.top.findNode("albumTitle")
@@ -65,7 +65,7 @@ sub onLoadRequestChanged()
     m.playerState.tracks = []
     m.playerState.currentIndex = -1
     album = request.item
-    m.albumHeading.text = FirstNonEmpty([album.Name], "Untitled Album")
+    m.albumHeading.text = Format.FirstNonEmpty([album.Name], "Untitled Album")
     m.albumTitle.text = ""
     m.artistName.text = getAlbumArtist(album)
     artworkUrl = getAlbumArtworkUrl(album, request)
@@ -90,7 +90,7 @@ sub onTracksResponse()
     response = m.tracksTask.response
     request = m.playerState.request
     if response = invalid or request = invalid then return
-    if SafeString(response.albumId, "") <> SafeString(request.albumId, "") then return
+    if Format.SafeString(response.albumId, "") <> Format.SafeString(request.albumId, "") then return
     if response.ok <> true or response.data = invalid or response.data.Items = invalid then return
 
     album = response.album
@@ -110,7 +110,7 @@ sub renderTracks()
     for i = 0 to m.playerState.tracks.Count() - 1
         track = m.playerState.tracks[i]
         node = content.createChild("ContentNode")
-        node.title = FirstNonEmpty([track.Name], "Untitled Track")
+        node.title = Format.FirstNonEmpty([track.Name], "Untitled Track")
         node.AddFields({
             trackNumber: getTrackNumber(track, i)
             durationText: formatTime(getTrackDuration(track))
@@ -140,14 +140,14 @@ sub playTrack(index as integer)
     renderTracks()
     m.trackList.jumpToItem = index
     track = m.playerState.tracks[index]
-    m.albumTitle.text = FirstNonEmpty([track.Name], "Untitled Track")
+    m.albumTitle.text = Format.FirstNonEmpty([track.Name], "Untitled Track")
     request = m.playerState.request
     m.playbackInfoTask.request = {
         server: request.server
         token: request.token
         userId: request.userId
-        itemId: SafeString(track.Id, "")
-        title: FirstNonEmpty([track.Name], "Untitled Track")
+        itemId: Format.SafeString(track.Id, "")
+        title: Format.FirstNonEmpty([track.Name], "Untitled Track")
     }
     m.playbackInfoTask.control = "run"
 end sub
@@ -159,12 +159,12 @@ sub onPlaybackInfoResponse()
     response = m.playbackInfoTask.response
     track = getCurrentTrack()
     if response = invalid or track = invalid or response.ok <> true then return
-    if SafeString(response.itemId, "") <> SafeString(track.Id, "") then return
+    if Format.SafeString(response.itemId, "") <> Format.SafeString(track.Id, "") then return
 
     content = CreateObject("roSGNode", "ContentNode")
-    content.url = SafeString(response.streamUrl, "")
-    content.streamFormat = SafeString(response.streamFormat, "")
-    content.title = FirstNonEmpty([track.Name], "Untitled Track")
+    content.url = Format.SafeString(response.streamUrl, "")
+    content.streamFormat = Format.SafeString(response.streamFormat, "")
+    content.title = Format.FirstNonEmpty([track.Name], "Untitled Track")
     if content.url = "" then return
     m.audio.content = content
     m.audio.control = "play"
@@ -175,7 +175,7 @@ end sub
 ' onAudioStateChanged
 '-------------------------------------------------------------------------------
 sub onAudioStateChanged()
-    state = LCase(SafeString(m.audio.state, ""))
+    state = LCase(Format.SafeString(m.audio.state, ""))
     updatePlayPauseIcon()
     if state = "finished" then playNext()
 end sub
@@ -184,7 +184,7 @@ end sub
 ' togglePlayback
 '-------------------------------------------------------------------------------
 sub togglePlayback()
-    state = LCase(SafeString(m.audio.state, ""))
+    state = LCase(Format.SafeString(m.audio.state, ""))
     if state = "playing" then
         m.audio.control = "pause"
     else
@@ -198,7 +198,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub updatePlayPauseIcon()
     if m.playPauseButton = invalid then return
-    if LCase(SafeString(m.audio.state, "")) = "playing" then
+    if LCase(Format.SafeString(m.audio.state, "")) = "playing" then
         m.playPauseButton.icon = "pkg:/images/icons/playback-controls/pause-unfocused.png"
         m.playPauseButton.focusedIcon = "pkg:/images/icons/playback-controls/pause-focused.png"
     else
@@ -297,9 +297,9 @@ end function
 function getAlbumArtworkUrl(album as dynamic, request as object) as string
     if album = invalid then return "pkg:/images/music/album-placeholder-342x342.png"
     tag = ""
-    if album.ImageTags <> invalid then tag = SafeString(album.ImageTags.Primary, "")
+    if album.ImageTags <> invalid then tag = Format.SafeString(album.ImageTags.Primary, "")
     if tag = "" then return "pkg:/images/music/album-placeholder-342x342.png"
-    return Url_BuildImageUrl(request.server, request.albumId, "Primary", tag, 650, 650)
+    return Url.BuildImageUrl(request.server, request.albumId, "Primary", tag, 650, 650)
 end function
 
 '-------------------------------------------------------------------------------
@@ -309,17 +309,17 @@ function getAlbumBackgroundUrl(album as dynamic, request as object, fallbackUrl 
     if album = invalid then return fallbackUrl
 
     if album.BackdropImageTags <> invalid and album.BackdropImageTags.Count() > 0 then
-        tag = SafeString(album.BackdropImageTags[0], "")
-        if tag <> "" then return Url_BuildImageUrl(request.server, request.albumId, "Backdrop", tag, 1920, 1080)
+        tag = Format.SafeString(album.BackdropImageTags[0], "")
+        if tag <> "" then return Url.BuildImageUrl(request.server, request.albumId, "Backdrop", tag, 1920, 1080)
     end if
 
     if album.ParentBackdropImageTags = invalid or album.ParentBackdropImageTags.Count() = 0 then return fallbackUrl
 
-    itemId = SafeString(album.ParentBackdropItemId, "")
-    tag = SafeString(album.ParentBackdropImageTags[0], "")
+    itemId = Format.SafeString(album.ParentBackdropItemId, "")
+    tag = Format.SafeString(album.ParentBackdropImageTags[0], "")
     if itemId = "" or tag = "" then return fallbackUrl
 
-    return Url_BuildImageUrl(request.server, itemId, "Backdrop", tag, 1920, 1080)
+    return Url.BuildImageUrl(request.server, itemId, "Backdrop", tag, 1920, 1080)
 end function
 
 '-------------------------------------------------------------------------------
@@ -327,8 +327,8 @@ end function
 '-------------------------------------------------------------------------------
 function getAlbumArtist(album as dynamic) as string
     if album = invalid then return ""
-    if album.AlbumArtist <> invalid then return SafeString(album.AlbumArtist, "")
-    if album.Artists <> invalid and album.Artists.Count() > 0 then return SafeString(album.Artists[0], "")
+    if album.AlbumArtist <> invalid then return Format.SafeString(album.AlbumArtist, "")
+    if album.Artists <> invalid and album.Artists.Count() > 0 then return Format.SafeString(album.Artists[0], "")
     return ""
 end function
 

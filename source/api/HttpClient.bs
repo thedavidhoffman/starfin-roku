@@ -1,0 +1,269 @@
+namespace HttpClient
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.Request
+    '---------------------------------------------------------------------------
+    function Request(requestUrl as String, method as String, token as Dynamic, body as Dynamic, headers = invalid as Dynamic, displayRequest = true as Boolean) as Object
+
+        log = Logger.Create("HttpClient.Request")
+
+        if requestUrl = invalid or requestUrl = "" then
+            message = "Invalid http request: url is invalid."
+            log.errorDisplaySafe(message)
+            return { ok: false, errorMessage: message }
+        end if
+
+        if method = invalid or method = "" then
+            message = "Invalid http request: method is invalid."
+            log.errorDisplaySafe(message)
+            return { ok: false, errorMessage: message }
+        end if
+
+        normalizedMethod = UCase(method)
+
+        ' IMPORTANT...
+        ' do NOT check for invalid token here login requests don't have
+        ' a token, so it's valid in that scenario for the token to be null
+
+        transfer = CreateObject("roUrlTransfer")
+        port = CreateObject("roMessagePort")
+
+        transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        transfer.InitClientCertificates()
+        transfer.EnableEncodings(true)
+        transfer.SetMessagePort(port)
+        transfer.SetUrl(requestUrl)
+        transfer.AddHeader("Accept", "application/json")
+
+        if headers <> invalid then
+            for each headerName in headers
+                headerValue = headers[headerName]
+                if headerValue <> invalid then transfer.AddHeader(headerName, headerValue.ToStr())
+            end for
+        end if
+
+        if token <> invalid and token <> "" and HttpClient.__HeadersInclude(headers, "Authorization") <> true then
+            transfer.AddHeader("Authorization", "Bearer " + token)
+        end if
+
+        responseText = ""
+        status = 0
+        logUrl = HttpClient.__MaskUrl(requestUrl)
+        if displayRequest then
+            log.writeDisplaySafe("[" + normalizedMethod + "] " + logUrl)
+        else
+            log.writeConsoleOnly("[" + normalizedMethod + "] " + logUrl)
+        end if
+        if normalizedMethod = "POST" then
+            transfer.AddHeader("Content-Type", "application/json")
+            requestStarted = transfer.AsyncPostFromString(HttpClient.__InvalidToEmpty(body))
+        else
+            transfer.SetRequest(normalizedMethod)
+            requestStarted = transfer.AsyncGetToString()
+        end if
+
+        if requestStarted <> true then
+            message = "Unable to start the server request."
+            HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+            return { ok: false, status: 0, errorMessage: message }
+        end if
+
+        msg = wait(30000, port)
+        if msg = invalid then
+            transfer.AsyncCancel()
+            message = "The server request timed out."
+            HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+            return { ok: false, status: 0, errorMessage: message }
+        end if
+
+        if type(msg) <> "roUrlEvent" then
+            message = "Unexpected server response."
+            HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+            return { ok: false, status: 0, errorMessage: message }
+        end if
+
+        status = msg.GetResponseCode()
+        responseText = msg.GetString()
+        responseHeaders = msg.GetResponseHeaders()
+        contentType = HttpClient.__GetResponseHeader(responseHeaders, "content-type")
+
+        if status = 0 then
+            message = "Unable to reach the server."
+            HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+            return { ok: false, status: status, errorMessage: message }
+        end if
+
+        hasAuthenticatedRequest = (token <> invalid and token <> "") or HttpClient.__AuthorizationHeaderHasToken(headers)
+        if status = 401 and hasAuthenticatedRequest then
+            message = "Your session has expired. Please sign in again."
+            HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+            return { ok: false, status: status, authExpired: true, errorMessage: message }
+        end if
+
+        data = invalid
+        if HttpClient.__IsJsonContentType(contentType) and responseText <> invalid and responseText <> "" then
+            data = ParseJson(responseText)
+        end if
+
+        if status < 200 or status >= 300 then
+            message = "Request failed."
+            if data <> invalid then
+                if data.error <> invalid then message = Format.SafeString(data.error, message)
+                if data.message <> invalid then message = Format.SafeString(data.message, message)
+            else if responseText <> invalid and Strings.Trim(responseText) <> "" then
+                message = Strings.Trim(responseText)
+            else if msg.GetFailureReason() <> invalid and Strings.Trim(msg.GetFailureReason()) <> "" then
+                message = Strings.Trim(msg.GetFailureReason())
+            end if
+            HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+            return { ok: false, status: status, errorMessage: message, responseText: responseText }
+        end if
+
+        return { ok: true, status: status, data: data, responseText: responseText }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__LogFailure
+    '---------------------------------------------------------------------------
+    sub __LogFailure(log as object, method as string, requestUrl as string, status as integer, message as string)
+        prefix = "HTTP request failed [" + method + "] " + requestUrl + " status=" + status.ToStr()
+        log.errorDisplaySafe(prefix)
+        log.error(prefix + " message=" + message)
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__MaskUrl
+    '---------------------------------------------------------------------------
+    function __MaskUrl(requestUrl as Dynamic) as String
+        text = Format.SafeString(requestUrl, "")
+        if text = "" then return ""
+
+        text = HttpClient.__MaskUrlCredentials(text)
+        text = HttpClient.__MaskQueryValue(text, "api_key")
+        text = HttpClient.__MaskQueryValue(text, "token")
+        text = HttpClient.__MaskQueryValue(text, "ApiKey")
+        text = HttpClient.__MaskQueryValue(text, "X-Emby-Token")
+        text = HttpClient.__MaskQueryValue(text, "access_token")
+        text = HttpClient.__MaskQueryValue(text, "auth_token")
+        text = HttpClient.__MaskQueryValue(text, "authorization")
+        text = HttpClient.__MaskQueryValue(text, "password")
+        text = HttpClient.__MaskQueryValue(text, "signature")
+
+        return text
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__MaskUrlCredentials
+    '---------------------------------------------------------------------------
+    function __MaskUrlCredentials(requestUrl as string) as string
+        schemeEnd = Instr(1, requestUrl, "://")
+        if schemeEnd = 0 then return requestUrl
+
+        authorityStart = schemeEnd + 3
+        authorityEnd = Instr(authorityStart, requestUrl, "/")
+        if authorityEnd = 0 then authorityEnd = Len(requestUrl) + 1
+        credentialsEnd = Instr(authorityStart, requestUrl, "@")
+        if credentialsEnd = 0 or credentialsEnd >= authorityEnd then return requestUrl
+
+        return Left(requestUrl, authorityStart - 1) + "[redacted]@" + Mid(requestUrl, credentialsEnd + 1)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__MaskQueryValue
+    '---------------------------------------------------------------------------
+    function __MaskQueryValue(requestUrl as String, name as String) as String
+        queryStart = Instr(1, requestUrl, "?")
+        if queryStart = 0 then return requestUrl
+
+        lowerUrl = LCase(requestUrl)
+        lowerName = LCase(name)
+        searchStart = queryStart + 1
+
+        while true
+            keyStart = Instr(searchStart, lowerUrl, lowerName + "=")
+            if keyStart = 0 then exit while
+
+            isQueryKey = keyStart = queryStart + 1 or Mid(requestUrl, keyStart - 1, 1) = "&"
+            if isQueryKey = true then
+                valueStart = keyStart + Len(name) + 1
+                valueEnd = Instr(valueStart, requestUrl, "&")
+                if valueEnd = 0 then valueEnd = Len(requestUrl) + 1
+
+                requestUrl = Left(requestUrl, valueStart - 1) + "[redacted]" + Mid(requestUrl, valueEnd)
+                lowerUrl = LCase(requestUrl)
+                searchStart = valueStart + Len("[redacted]")
+            else
+                searchStart = keyStart + Len(name) + 1
+            end if
+        end while
+
+        return requestUrl
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__HeadersInclude
+    '---------------------------------------------------------------------------
+    function __HeadersInclude(headers as Dynamic, name as String) as Boolean
+        if headers = invalid then return false
+
+        lowerName = LCase(name)
+        for each key in headers
+            if LCase(key.ToStr()) = lowerName then return true
+        end for
+
+        return false
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__AuthorizationHeaderHasToken
+    '---------------------------------------------------------------------------
+    function __AuthorizationHeaderHasToken(headers as Dynamic) as Boolean
+        if headers = invalid then return false
+
+        for each key in headers
+            if LCase(key.ToStr()) = "authorization" then
+                value = LCase(Format.SafeString(headers[key], ""))
+                return Instr(1, value, "token=") > 0
+            end if
+        end for
+
+        return false
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__GetResponseHeader
+    '---------------------------------------------------------------------------
+    function __GetResponseHeader(headers as Dynamic, name as String) as String
+        if headers = invalid then return ""
+
+        value = headers[name]
+        if value <> invalid then return value.ToStr()
+
+        lowerName = LCase(name)
+        for each key in headers
+            if LCase(key.ToStr()) = lowerName then
+                value = headers[key]
+                if value <> invalid then return value.ToStr()
+            end if
+        end for
+
+        return ""
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__IsJsonContentType
+    '---------------------------------------------------------------------------
+    function __IsJsonContentType(contentType as Dynamic) as Boolean
+        normalized = LCase(Format.SafeString(contentType, ""))
+        return Instr(1, normalized, "application/json") > 0 or Instr(1, normalized, "+json") > 0
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HttpClient.__InvalidToEmpty
+    '---------------------------------------------------------------------------
+    function __InvalidToEmpty(value as Dynamic) as String
+        if value = invalid then return ""
+        return value
+    end function
+
+end namespace

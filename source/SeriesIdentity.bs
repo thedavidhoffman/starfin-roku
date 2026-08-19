@@ -1,0 +1,95 @@
+namespace SeriesIdentity
+
+    '---------------------------------------------------------------------------
+    ' SeriesIdentity
+    '---------------------------------------------------------------------------
+    ' Normalizes TV series context passed between pages and playback flows, keeping
+    ' stable series names and image URLs available even when later handoffs only have
+    ' partial series data.
+
+    '---------------------------------------------------------------------------
+    ' SeriesIdentity.FromItem
+    '---------------------------------------------------------------------------
+    function FromItem(server as string, item as dynamic) as object
+        if item = invalid then
+            return {
+                Id: ""
+                Name: ""
+                logoUrl: ""
+                thumbUrl: ""
+                backdropUrl: ""
+                detailBackdropUrl: ""
+            }
+        end if
+
+        return {
+            Id: Format.FirstNonEmpty([item.Id], "")
+            Name: Format.FirstNonEmpty([item.Name, item.SeriesName], "")
+            logoUrl: SeriesIdentity.GetLogoUrl(server, item)
+            thumbUrl: SeriesIdentity.GetImageUrl(server, item, "Thumb", 531, 300)
+            backdropUrl: SeriesIdentity.GetImageUrl(server, item, "Backdrop", 531, 300)
+            detailBackdropUrl: SeriesIdentity.GetDetailBackdropUrl(server, item)
+        }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SeriesIdentity.GetLogoUrl
+    '---------------------------------------------------------------------------
+    function GetLogoUrl(server as string, item as dynamic) as string
+        if item = invalid then return ""
+
+        logoUrl = Format.FirstNonEmpty([item.logoUrl], "")
+        if logoUrl <> "" then return logoUrl
+
+        itemId = Format.FirstNonEmpty([item.Id, item.SeriesId], "")
+        if itemId = "" then return ""
+
+        tag = ""
+        if item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
+        if tag = "" then return ""
+
+        return Url.BuildImageUrl(server, itemId, "Logo", tag, 600, 300, { format: "Png" })
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SeriesIdentity.GetImageUrl
+    '---------------------------------------------------------------------------
+    function GetImageUrl(server as string, item as dynamic, imageType as string, width as integer, height as integer) as string
+        if item = invalid then return ""
+
+        cachedUrl = ""
+        if imageType = "Thumb" then cachedUrl = Format.FirstNonEmpty([item.thumbUrl], "")
+        if imageType = "Backdrop" then cachedUrl = Format.FirstNonEmpty([item.backdropUrl], "")
+        if cachedUrl <> "" then return cachedUrl
+
+        itemId = Format.FirstNonEmpty([item.Id, item.SeriesId], "")
+        if itemId = "" then return ""
+
+        tag = ""
+        if imageType = "Thumb" and item.ImageTags <> invalid and item.ImageTags.Thumb <> invalid then tag = item.ImageTags.Thumb
+        if imageType = "Backdrop" and item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
+        if tag = "" then return ""
+
+        return Url.BuildImageUrl(server, itemId, imageType, tag, width, height, invalid)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SeriesIdentity.GetDetailBackdropUrl
+    '---------------------------------------------------------------------------
+    function GetDetailBackdropUrl(server as string, item as dynamic) as string
+        if item = invalid then return ""
+
+        detailBackdropUrl = Format.FirstNonEmpty([item.detailBackdropUrl], "")
+        if detailBackdropUrl <> "" then return detailBackdropUrl
+
+        itemId = Format.FirstNonEmpty([item.Id, item.SeriesId], "")
+        if itemId = "" then return ""
+
+        tag = ""
+        if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
+        if tag = "" then return ""
+
+        return Url.BuildImageUrl(server, itemId, "Backdrop", tag, 1920, 1080, invalid)
+    end function
+
+end namespace

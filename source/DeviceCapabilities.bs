@@ -1,0 +1,320 @@
+namespace DeviceCapabilities
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.BuildDeviceProfileJson
+    '---------------------------------------------------------------------------
+    function BuildDeviceProfileJson() as string
+        displaySize = DeviceCapabilities.GetDisplaySize()
+        bitrateLimits = DeviceCapabilities.GetBitrateLimits()
+        return Json.Object([
+            Json.Pair("Name", "Starfin Roku")
+            Json.NumberPair("MaxStreamingBitrate", bitrateLimits.maxStreaming)
+            Json.NumberPair("MaxStaticBitrate", bitrateLimits.maxStatic)
+            Json.NumberPair("MusicStreamingTranscodingBitrate", bitrateLimits.musicTranscoding)
+            Json.String("DirectPlayProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__DirectPlayProfiles()) + "]"
+            Json.String("TranscodingProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__TranscodingProfiles()) + "]"
+            Json.String("ContainerProfiles") + ":[]"
+            Json.String("CodecProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__CodecProfiles(displaySize)) + "]"
+            Json.String("SubtitleProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__SubtitleProfiles()) + "]"
+        ])
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.GetBitrateLimits
+    '---------------------------------------------------------------------------
+    function GetBitrateLimits() as object
+        return {
+            maxStreaming: 40000000
+            maxStatic: 40000000
+            musicTranscoding: 256000
+        }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.GetDisplaySize
+    '---------------------------------------------------------------------------
+    function GetDisplaySize() as object
+        fallback = { width: 1920, height: 1080, source: "fallback" }
+        deviceInfo = CreateObject("roDeviceInfo")
+        if deviceInfo = invalid then return fallback
+
+        displayMode = Format.SafeString(deviceInfo.GetDisplayMode(), "")
+        displaySize = DeviceCapabilities.__DisplaySizeFromText(displayMode)
+        if DeviceCapabilities.__IsValidDisplaySize(displaySize) then
+            displaySize.source = "displayMode"
+            return displaySize
+        end if
+
+        return fallback
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.GetMaxScreenImageSize
+    '---------------------------------------------------------------------------
+    function GetMaxScreenImageSize() as object
+        return DeviceCapabilities.GetDisplaySize()
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__DirectPlayProfiles
+    '---------------------------------------------------------------------------
+    function __DirectPlayProfiles() as object
+        deviceInfo = CreateObject("roDeviceInfo")
+        profiles = []
+        containers = ["mp4", "hls", "mkv", "ts"]
+        videoCodecs = ["h264", "mpeg4 avc", "hevc", "vp9", "mpeg2", "av1"]
+        audioCodecs = ["aac", "mp3", "ac3", "eac3", "dts", "flac", "alac", "vorbis", "wma", "pcm"]
+        passthroughCodecs = ["ac3", "eac3", "dts"]
+        isSurround = deviceInfo.GetAudioOutputChannel() = "5.1 surround"
+
+        for each container in containers
+            supportedVideoCodecs = []
+            supportedAudioCodecs = []
+
+            for each videoCodec in videoCodecs
+                if DeviceCapabilities.__CanDecodeVideo(deviceInfo, videoCodec, container) then
+                    DeviceCapabilities.__AddVideoCodec(supportedVideoCodecs, videoCodec)
+                end if
+            end for
+
+            for each audioCodec in audioCodecs
+                if DeviceCapabilities.__CanDecodeAudio(deviceInfo, audioCodec, container) or (isSurround and DeviceCapabilities.__Contains(passthroughCodecs, audioCodec)) then
+                    DeviceCapabilities.__AddUnique(supportedAudioCodecs, audioCodec)
+                end if
+            end for
+
+            if supportedVideoCodecs.Count() > 0 then
+                profiles.Push(DeviceCapabilities.__ProfileJson(DeviceCapabilities.__ContainerAliases(container), supportedVideoCodecs.Join(","), supportedAudioCodecs.Join(",")))
+            end if
+        end for
+
+        return profiles
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__TranscodingProfiles
+    '---------------------------------------------------------------------------
+    function __TranscodingProfiles() as object
+        deviceInfo = CreateObject("roDeviceInfo")
+        maxAudioChannels = "2"
+        if deviceInfo.GetAudioOutputChannel() = "5.1 surround" then maxAudioChannels = "6"
+
+        tsAudioCodecs = DeviceCapabilities.__TranscodingAudioCodecs(deviceInfo)
+        tsVideoCodecs = DeviceCapabilities.__TranscodingVideoCodecs(deviceInfo, "ts")
+        mp4AudioCodecs = DeviceCapabilities.__TranscodingAudioCodecs(deviceInfo)
+        mp4VideoCodecs = DeviceCapabilities.__TranscodingVideoCodecs(deviceInfo, "mp4")
+
+        return [
+            Json.Object([
+                Json.Pair("Container", "ts")
+                Json.Pair("Context", "Streaming")
+                Json.Pair("Protocol", "hls")
+                Json.Pair("Type", "Video")
+                Json.Pair("AudioCodec", tsAudioCodecs)
+                Json.Pair("VideoCodec", tsVideoCodecs)
+                Json.Pair("MaxAudioChannels", maxAudioChannels)
+                Json.NumberPair("MinSegments", 1)
+                Json.NumberPair("SegmentLength", 6)
+                Json.BooleanPair("BreakOnNonKeyFrames", false)
+            ])
+            Json.Object([
+                Json.Pair("Container", "mp4")
+                Json.Pair("Context", "Streaming")
+                Json.Pair("Protocol", "hls")
+                Json.Pair("Type", "Video")
+                Json.Pair("AudioCodec", mp4AudioCodecs)
+                Json.Pair("VideoCodec", mp4VideoCodecs)
+                Json.Pair("MaxAudioChannels", maxAudioChannels)
+                Json.NumberPair("MinSegments", 1)
+                Json.NumberPair("SegmentLength", 6)
+                Json.BooleanPair("BreakOnNonKeyFrames", false)
+            ])
+        ]
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__CodecProfiles
+    '---------------------------------------------------------------------------
+    function __CodecProfiles(displaySize as object) as object
+        if displaySize = invalid then displaySize = { width: 1920, height: 1080 }
+
+        return [
+            Json.Object([
+                Json.Pair("Type", "Video")
+                Json.String("Conditions") + ":[" + Json.JoinParts([
+                    DeviceCapabilities.__ProfileConditionJson("LessThanEqual", "Width", displaySize.width.ToStr())
+                    DeviceCapabilities.__ProfileConditionJson("LessThanEqual", "Height", displaySize.height.ToStr())
+                ]) + "]"
+                Json.String("ApplyConditions") + ":[]"
+            ])
+        ]
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__ProfileConditionJson
+    '---------------------------------------------------------------------------
+    function __ProfileConditionJson(conditionType as string, condition as string, value as string) as string
+        return Json.Object([
+            Json.Pair("Condition", conditionType)
+            Json.Pair("Property", condition)
+            Json.Pair("Value", value)
+            Json.BooleanPair("IsRequired", true)
+        ])
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__SubtitleProfiles
+    '---------------------------------------------------------------------------
+    function __SubtitleProfiles() as object
+        return [
+            DeviceCapabilities.__SubtitleProfileJson("srt", "External")
+            DeviceCapabilities.__SubtitleProfileJson("vtt", "External")
+            DeviceCapabilities.__SubtitleProfileJson("ass", "Encode")
+            DeviceCapabilities.__SubtitleProfileJson("ssa", "Encode")
+            DeviceCapabilities.__SubtitleProfileJson("pgs", "Encode")
+            DeviceCapabilities.__SubtitleProfileJson("dvdsub", "Encode")
+            DeviceCapabilities.__SubtitleProfileJson("subrip", "Encode")
+        ]
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__SubtitleProfileJson
+    '---------------------------------------------------------------------------
+    function __SubtitleProfileJson(subtitleFormat as string, method as string) as string
+        return Json.Object([
+            Json.Pair("Format", subtitleFormat)
+            Json.Pair("Method", method)
+        ])
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__TranscodingAudioCodecs
+    '---------------------------------------------------------------------------
+    function __TranscodingAudioCodecs(deviceInfo as object) as string
+        codecs = []
+        candidates = ["ac3", "eac3", "aac", "mp3", "vorbis", "opus", "flac", "alac", "dts"]
+
+        for each codec in candidates
+            if DeviceCapabilities.__CanDecodeAudio(deviceInfo, codec, "ts") or DeviceCapabilities.__CanDecodeAudio(deviceInfo, codec, "mp4") then
+                DeviceCapabilities.__AddUnique(codecs, codec)
+            end if
+        end for
+
+        if codecs.Count() = 0 then codecs.Push("aac")
+
+        return codecs.Join(",")
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__TranscodingVideoCodecs
+    '---------------------------------------------------------------------------
+    function __TranscodingVideoCodecs(deviceInfo as object, container as string) as string
+        codecs = ["h264"]
+        candidates = ["mpeg4 avc", "hevc", "vp9", "mpeg2", "av1"]
+
+        for each codec in candidates
+            if DeviceCapabilities.__CanDecodeVideo(deviceInfo, codec, container) then
+                DeviceCapabilities.__AddVideoCodec(codecs, codec)
+            end if
+        end for
+
+        return codecs.Join(",")
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__ProfileJson
+    '---------------------------------------------------------------------------
+    function __ProfileJson(container as string, videoCodec as string, audioCodec as string) as string
+        return Json.Object([
+            Json.Pair("Container", container)
+            Json.Pair("Type", "Video")
+            Json.Pair("VideoCodec", videoCodec)
+            Json.Pair("AudioCodec", audioCodec)
+        ])
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__ContainerAliases
+    '---------------------------------------------------------------------------
+    function __ContainerAliases(container as string) as string
+        if container = "mp4" then return "mp4,mov,m4v"
+        if container = "mkv" then return "mkv,webm"
+        return container
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__CanDecodeVideo
+    '---------------------------------------------------------------------------
+    function __CanDecodeVideo(deviceInfo as object, codec as string, container as string) as boolean
+        result = deviceInfo.CanDecodeVideo({ Codec: codec, Container: container })
+        return result <> invalid and result.Result = true
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__CanDecodeAudio
+    '---------------------------------------------------------------------------
+    function __CanDecodeAudio(deviceInfo as object, codec as string, container as string) as boolean
+        result = deviceInfo.CanDecodeAudio({ Codec: codec, Container: container })
+        return result <> invalid and result.Result = true
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__DisplaySizeFromText
+    '---------------------------------------------------------------------------
+    function __DisplaySizeFromText(value as string) as object
+        text = LCase(Format.SafeString(value, ""))
+        if text = "" then return invalid
+
+        if Instr(1, text, "2160") > 0 or Instr(1, text, "4k") > 0 or Instr(1, text, "uhd") > 0 then return { width: 3840, height: 2160 }
+        if Instr(1, text, "1080") > 0 or Instr(1, text, "fhd") > 0 then return { width: 1920, height: 1080 }
+        if Instr(1, text, "720") > 0 or Instr(1, text, "hd") > 0 then return { width: 1280, height: 720 }
+        if Instr(1, text, "480") > 0 or Instr(1, text, "sd") > 0 then return { width: 720, height: 480 }
+
+        return invalid
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__IsValidDisplaySize
+    '---------------------------------------------------------------------------
+    function __IsValidDisplaySize(displaySize as dynamic) as boolean
+        if displaySize = invalid then return false
+        if displaySize.width = invalid or displaySize.height = invalid then return false
+        if displaySize.width < 640 or displaySize.height < 360 then return false
+
+        return true
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__AddVideoCodec
+    '---------------------------------------------------------------------------
+    sub __AddVideoCodec(values as object, codec as string)
+        if codec = "hevc" then
+            DeviceCapabilities.__AddUnique(values, "hevc")
+            DeviceCapabilities.__AddUnique(values, "h265")
+        else if codec = "mpeg2" then
+            DeviceCapabilities.__AddUnique(values, "mpeg2video")
+        else
+            DeviceCapabilities.__AddUnique(values, codec)
+        end if
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__AddUnique
+    '---------------------------------------------------------------------------
+    sub __AddUnique(values as object, value as string)
+        if DeviceCapabilities.__Contains(values, value) then return
+        values.Push(value)
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__Contains
+    '---------------------------------------------------------------------------
+    function __Contains(values as object, value as string) as boolean
+        for each currentValue in values
+            if currentValue = value then return true
+        end for
+
+        return false
+    end function
+
+end namespace

@@ -2,8 +2,8 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("Person")
-    MaskAssets_Apply(m.top.findNode("personImageMask"), "person-mask.png", [399, 600], [266, 400])
+    m.log = Logger.Create("Person")
+    MaskAssets.Apply(m.top.findNode("personImageMask"), "person-mask.png", [399, 600], [266, 400])
     m.bioGroup = m.top.findNode("bioGroup")
     m.personImage = m.top.findNode("personImage")
     m.nameLabel = m.top.findNode("nameLabel")
@@ -16,11 +16,11 @@ sub init()
     m.relatedItemsGroup = m.top.findNode("relatedItemsGroup")
     m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
     m.relatedRows = m.top.findNode("relatedRows")
-    m.relatedRows.focusBitmapUri = HomepageAssets_GetUri("home-page-poster-focus.png")
+    m.relatedRows.focusBitmapUri = ResolutionAssets.GetHomepageImageUri("home-page-poster-focus.png")
     m.relatedEpisodesGroup = m.top.findNode("relatedEpisodesGroup")
     m.relatedEpisodesTitleLabel = m.top.findNode("relatedEpisodesTitleLabel")
     m.relatedEpisodeRows = m.top.findNode("relatedEpisodeRows")
-    m.relatedEpisodeRows.focusBitmapUri = HomepageAssets_GetUri("person-episode-focus.png")
+    m.relatedEpisodeRows.focusBitmapUri = ResolutionAssets.GetHomepageImageUri("person-episode-focus.png")
     m.layoutAnimation = m.top.findNode("layoutAnimation")
     m.bioTranslation = m.top.findNode("bioTranslation")
     m.relatedRowsTranslation = m.top.findNode("relatedRowsTranslation")
@@ -37,7 +37,7 @@ sub init()
         person: invalid
         filmography: invalid
         focusArea: "person"
-        lifecycle: AsyncLifecycle_Create()
+        lifecycle: AsyncLifecycle.Create()
     }
     m.layout = {
         mode: "bio"
@@ -60,14 +60,14 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
-    AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
+    AsyncLifecycle.Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.person = request.item
     m.pageState.filmography = invalid
     m.pageState.focusArea = "person"
     setLayoutMode("bio", false)
     m.readMoreButton.visible = false
     clearRelated()
-    Spinner_Show()
+    Spinner.Show()
     renderPerson(request.item)
     m.overviewLabel.text = ""
 
@@ -81,11 +81,11 @@ end sub
 sub onPersonResponse()
     response = m.personTask.response
     if response = invalid then return
-    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "person") <> true then return
+    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "person") <> true then return
 
     if response.ok <> true then
-        Spinner_Hide()
-        Status_SetMessage(SafeString(response.errorMessage, "Unable to load this person."))
+        Spinner.Hide()
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load this person."))
         return
     end if
 
@@ -94,15 +94,15 @@ sub onPersonResponse()
     renderPerson(person)
     renderOverview(person)
     renderRelated(getItemsFromPayload(response.payload.items), getItemsFromPayload(response.payload.episodeItems))
-    Spinner_Hide()
-    Status_ClearMessage()
+    Spinner.Hide()
+    AppStatus.ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
-    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    AsyncLifecycle.Deactivate(m.pageState.lifecycle)
     m.personTask.control = "stop"
 end sub
 
@@ -110,7 +110,7 @@ end sub
 ' renderPerson
 '-------------------------------------------------------------------------------
 sub renderPerson(person as dynamic)
-    if Array_IsAssocArray(person) = false then return
+    if Arrays.IsAssocArray(person) = false then return
 
     m.nameLabel.text = getPersonName(person)
     m.lifeLabel.text = getLifeText(person)
@@ -132,7 +132,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
     person = m.pageState.person
-    if Array_IsAssocArray(person) = false then return
+    if Arrays.IsAssocArray(person) = false then return
 
     updateFilmographyButton(person, getPersonImageUrl(person, 399, 600))
     updateReadMoreButton()
@@ -151,7 +151,7 @@ end sub
 ' renderOverview
 '-------------------------------------------------------------------------------
 sub renderOverview(person as dynamic)
-    overview = FirstNonEmpty([person.Overview], "")
+    overview = Format.FirstNonEmpty([person.Overview], "")
     if overview = "" then overview = "Biographical information for this person is not currently available."
 
     m.overviewLabel.text = overview
@@ -177,7 +177,7 @@ end sub
 ' isOverviewLabelTruncated
 '-------------------------------------------------------------------------------
 function isOverviewLabelTruncated() as boolean
-    return isOverviewTextTruncated(SafeString(m.overviewLabel.text, ""))
+    return isOverviewTextTruncated(Format.SafeString(m.overviewLabel.text, ""))
 end function
 
 '-------------------------------------------------------------------------------
@@ -190,14 +190,14 @@ function isOverviewTextTruncated(text as string) as boolean
     maxCharsPerLine = 44
     lineCount = 1
     currentLineLength = 0
-    normalizedText = String_Replace(text, Chr(13), "")
+    normalizedText = Strings.Replace(text, Chr(13), "")
     paragraphs = normalizedText.Split(Chr(10))
 
     for each paragraph in paragraphs
-        words = String_Trim(paragraph).Split(" ")
+        words = Strings.Trim(paragraph).Split(" ")
 
         for each word in words
-            wordLength = Len(SafeString(word, ""))
+            wordLength = Len(Format.SafeString(word, ""))
             if wordLength = 0 then continue for
 
             separatorLength = 0
@@ -227,7 +227,7 @@ end function
 ' openPersonOverview
 '-------------------------------------------------------------------------------
 sub openPersonOverview()
-    overview = SafeString(m.overviewLabel.text, "")
+    overview = Format.SafeString(m.overviewLabel.text, "")
     if overview = "" then return
 
     m.top.overlayRequested = {
@@ -278,11 +278,11 @@ end sub
 ' getBirthPlace
 '-------------------------------------------------------------------------------
 function getBirthPlace(person as dynamic) as string
-    if Array_IsAssocArray(person) = false then return ""
+    if Arrays.IsAssocArray(person) = false then return ""
     if person.ProductionLocations = invalid then return ""
     if person.ProductionLocations.Count() = 0 then return ""
 
-    return SafeString(person.ProductionLocations[0], "")
+    return Format.SafeString(person.ProductionLocations[0], "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -334,7 +334,7 @@ function renderRelatedEpisodes(items as object) as boolean
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
     m.relatedEpisodesTitleLabel.text = "TV Episodes with " + getPersonName(m.pageState.person)
-    sortedItems = EpisodeSort_BySeriesSeasonEpisode(items)
+    sortedItems = EpisodeSort.BySeriesSeasonEpisode(items)
 
     for each item in sortedItems
         addRelatedItemNode(row, item, "wide")
@@ -351,9 +351,9 @@ end function
 ' addRelatedItemNode
 '-------------------------------------------------------------------------------
 sub addRelatedItemNode(row as object, item as dynamic, imageAspect as string)
-    if Array_IsAssocArray(item) = false then return
+    if Arrays.IsAssocArray(item) = false then return
 
-    itemId = SafeString(FirstNonEmpty([item.Id], ""), "")
+    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
     if itemId = "" then return
 
     child = row.createChild("ContentNode")
@@ -408,12 +408,12 @@ end function
 ' getRelatedItemDateKey
 '-------------------------------------------------------------------------------
 function getRelatedItemDateKey(item as dynamic) as string
-    if Array_IsAssocArray(item) = false then return ""
+    if Arrays.IsAssocArray(item) = false then return ""
 
-    premiereDate = SafeString(FirstNonEmpty([item.PremiereDate], ""), "")
+    premiereDate = Format.SafeString(Format.FirstNonEmpty([item.PremiereDate], ""), "")
     if Len(premiereDate) >= 10 then return Left(premiereDate, 10)
 
-    year = FirstNonEmpty([item.ProductionYear], "")
+    year = Format.FirstNonEmpty([item.ProductionYear], "")
     productionYear = Number.ToInteger(year, 0)
     if productionYear <= 0 then return ""
 
@@ -424,9 +424,9 @@ end function
 ' getRelatedItemTitleKey
 '-------------------------------------------------------------------------------
 function getRelatedItemTitleKey(item as dynamic) as string
-    if Array_IsAssocArray(item) = false then return ""
+    if Arrays.IsAssocArray(item) = false then return ""
 
-    return LCase(SafeString(FirstNonEmpty([item.SortName, item.Name], ""), ""))
+    return LCase(Format.SafeString(Format.FirstNonEmpty([item.SortName, item.Name], ""), ""))
 end function
 
 '-------------------------------------------------------------------------------
@@ -446,7 +446,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
+    AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
     if m.relatedRows.visible = true and m.pageState.focusArea = "related" then
         setLayoutMode("related", false)
         m.relatedRows.setFocus(true)
@@ -615,12 +615,12 @@ sub handleRelatedSelection(rowList as object, selected as dynamic)
 
     item = itemNode.raw
     selection = {
-        itemId: SafeString(FirstNonEmpty([item.Id], ""), "")
+        itemId: Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
         item: item
     }
     if selection.itemId = "" then return
 
-    itemType = LCase(SafeString(FirstNonEmpty([item.Type], ""), ""))
+    itemType = LCase(Format.SafeString(Format.FirstNonEmpty([item.Type], ""), ""))
     if itemType = "movie" or itemType = "video" then
         m.top.selectedMovie = selection
     else if itemType = "series" then
@@ -634,8 +634,8 @@ end sub
 ' getPersonName
 '-------------------------------------------------------------------------------
 function getPersonName(person as dynamic) as string
-    if Array_IsAssocArray(person) = false then return "Person"
-    return FirstNonEmpty([person.Name], "Person")
+    if Arrays.IsAssocArray(person) = false then return "Person"
+    return Format.FirstNonEmpty([person.Name], "Person")
 end function
 
 '-------------------------------------------------------------------------------
@@ -667,34 +667,33 @@ end function
 ' getTmdbApiKey
 '-------------------------------------------------------------------------------
 function getTmdbApiKey() as string
-    keys = SettingsStore_Keys()
-    apiKey = SettingsStore_GetSettingValue(m.top.settings, keys.tmdbApiKey)
+    apiKey = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.TmdbApiKey)
     if apiKey <> "" then return apiKey
 
     request = m.pageState.request
     if request = invalid then return ""
 
-    apiKey = SettingsStore_GetSettingValue(request.settings, keys.tmdbApiKey)
+    apiKey = SettingsStore.GetSettingValue(request.settings, SettingsStore.Key.TmdbApiKey)
     if apiKey <> "" then return apiKey
 
-    return SettingsStore_LoadIntegration(keys.tmdbApiKey)
+    return SettingsStore.LoadIntegration(SettingsStore.Key.TmdbApiKey)
 end function
 
 '-------------------------------------------------------------------------------
 ' getTmdbPersonId
 '-------------------------------------------------------------------------------
 function getTmdbPersonId(person as dynamic) as string
-    if Array_IsAssocArray(person) = false then return ""
+    if Arrays.IsAssocArray(person) = false then return ""
     externalUrls = person.ExternalUrls
     if externalUrls = invalid then return ""
 
     for each externalUrl in externalUrls
-        if Array_IsAssocArray(externalUrl) = false then continue for
+        if Arrays.IsAssocArray(externalUrl) = false then continue for
 
-        name = LCase(FirstNonEmpty([externalUrl.Name], ""))
+        name = LCase(Format.FirstNonEmpty([externalUrl.Name], ""))
         if name = "tmdb" then
-            url = FirstNonEmpty([externalUrl.Url], "")
-            return getTrailingUrlSegment(url)
+            externalUrlValue = Format.FirstNonEmpty([externalUrl.Url], "")
+            return getTrailingUrlSegment(externalUrlValue)
         end if
     end for
 
@@ -704,23 +703,23 @@ end function
 '-------------------------------------------------------------------------------
 ' getTrailingUrlSegment
 '-------------------------------------------------------------------------------
-function getTrailingUrlSegment(url as string) as string
-    if url = "" then return ""
+function getTrailingUrlSegment(urlValue as string) as string
+    if urlValue = "" then return ""
 
-    while Right(url, 1) = "/"
-        url = Left(url, Len(url) - 1)
+    while Right(urlValue, 1) = "/"
+        urlValue = Left(urlValue, Len(urlValue) - 1)
     end while
 
     slashIndex = 0
-    for i = Len(url) to 1 step -1
-        if Mid(url, i, 1) = "/" then
+    for i = Len(urlValue) to 1 step -1
+        if Mid(urlValue, i, 1) = "/" then
             slashIndex = i
             exit for
         end if
     end for
 
-    if slashIndex = 0 then return url
-    return Mid(url, slashIndex + 1)
+    if slashIndex = 0 then return urlValue
+    return Mid(urlValue, slashIndex + 1)
 end function
 
 '-------------------------------------------------------------------------------
@@ -728,17 +727,17 @@ end function
 '-------------------------------------------------------------------------------
 function getLifeText(person as dynamic) as string
     parts = []
-    birthDate = FirstNonEmpty([person.PremiereDate, person.BirthDate], "")
-    deathDate = FirstNonEmpty([person.EndDate, person.DeathDate], "")
-    birthText = DateTime_ToLongDate(birthDate)
-    deathText = DateTime_ToLongDate(deathDate)
+    birthDate = Format.FirstNonEmpty([person.PremiereDate, person.BirthDate], "")
+    deathDate = Format.FirstNonEmpty([person.EndDate, person.DeathDate], "")
+    birthText = DateTime.ToLongDate(birthDate)
+    deathText = DateTime.ToLongDate(deathDate)
     ageText = getAgeText(birthDate, deathDate)
 
     if birthText <> "" then parts.Push("Born " + birthText)
     if deathText <> "" then parts.Push("Died " + deathText)
     if ageText <> "" then parts.Push(ageText)
 
-    return joinText(parts, MediaMetadata_BulletSeparator())
+    return joinText(parts, MediaMetadata.BulletSeparator())
 end function
 
 '-------------------------------------------------------------------------------
@@ -791,7 +790,7 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if Array_IsAssocArray(payload) = false then return []
+    if Arrays.IsAssocArray(payload) = false then return []
     if payload.Items <> invalid then return payload.Items
 
     return []
@@ -801,37 +800,37 @@ end function
 ' getPersonImageUrl
 '-------------------------------------------------------------------------------
 function getPersonImageUrl(person as dynamic, width as integer, height as integer) as string
-    if Array_IsAssocArray(person) = false then return ""
+    if Arrays.IsAssocArray(person) = false then return ""
 
-    directUrl = FirstNonEmpty([person.ImageURL, person.ImageUrl, person.PrimaryImageUrl], "")
+    directUrl = Format.FirstNonEmpty([person.ImageURL, person.ImageUrl, person.PrimaryImageUrl], "")
     if directUrl <> "" then return directUrl
 
-    itemId = FirstNonEmpty([person.Id], "")
-    tag = FirstNonEmpty([person.PrimaryImageTag], "")
+    itemId = Format.FirstNonEmpty([person.Id], "")
+    tag = Format.FirstNonEmpty([person.PrimaryImageTag], "")
     if tag = "" and person.ImageTags <> invalid and person.ImageTags.Primary <> invalid then tag = person.ImageTags.Primary
     if itemId = "" then return ""
     if tag = "" then return ""
     request = m.pageState.request
     if request = invalid then return ""
 
-    return Url_BuildImageUrl(request.server, itemId, "Primary", tag, width, height)
+    return Url.BuildImageUrl(request.server, itemId, "Primary", tag, width, height)
 end function
 
 '-------------------------------------------------------------------------------
 ' getItemImageUrl
 '-------------------------------------------------------------------------------
 function getItemImageUrl(item as dynamic, imageAspect as string) as string
-    if Array_IsAssocArray(item) = false then return ""
+    if Arrays.IsAssocArray(item) = false then return ""
 
-    itemId = FirstNonEmpty([item.Id], "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     primaryTag = ""
     if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
     request = m.pageState.request
     if request = invalid then return ""
     if itemId = "" or primaryTag = "" then return ""
 
-    if imageAspect = "wide" then return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 440, 248)
-    return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 250, 375)
+    if imageAspect = "wide" then return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, 440, 248)
+    return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, 250, 375)
 
     return ""
 end function
@@ -844,7 +843,7 @@ function joinText(values as dynamic, separator as string) as string
 
     text = ""
     for each value in values
-        part = String_Trim(SafeString(value, ""))
+        part = Strings.Trim(Format.SafeString(value, ""))
         if part <> "" then
             if text <> "" then text = text + separator
             text = text + part

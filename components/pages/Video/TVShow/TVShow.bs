@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("TVShow")
+    m.log = Logger.Create("TVShow")
     m.contentGroup = m.top.findNode("contentGroup")
     m.mediaShell = m.top.findNode("mediaShell")
     m.videoToolbar = m.top.findNode("videoToolbar")
@@ -37,7 +37,7 @@ sub init()
         seriesLoaded: false
         focusArea: "videoToolbar"
         themeLookupActive: false
-        lifecycle: AsyncLifecycle_Create()
+        lifecycle: AsyncLifecycle.Create()
     }
     m.layout = {
         contentDefault: [96, 0]
@@ -56,13 +56,13 @@ sub onVideoToolbarAllEpisodesSelected()
 
     firstSeason = getFirstValidSeason()
     if firstSeason = invalid then return
-    seasonId = SafeString(FirstNonEmpty([firstSeason.Id], ""), "")
+    seasonId = Format.SafeString(Format.FirstNonEmpty([firstSeason.Id], ""), "")
     if seasonId = "" then return
 
     m.top.selectedAllEpisodes = {
-        seriesId: SafeString(request.itemId, "")
+        seriesId: Format.SafeString(request.itemId, "")
         seasonId: seasonId
-        series: SeriesIdentity_FromItem(request.server, m.pageState.series)
+        series: SeriesIdentity.FromItem(request.server, m.pageState.series)
         season: firstSeason
         seasons: m.pageState.seasons
         allEpisodes: true
@@ -83,7 +83,7 @@ sub onVideoToolbarRandomPlaySelected()
     if request = invalid then return
 
     m.pageState.randomQueueLoading = true
-    Spinner_Show()
+    Spinner.Show()
     m.randomPlaybackTask.request = {
         server: request.server
         token: request.token
@@ -99,17 +99,17 @@ end sub
 sub onRandomPlaybackResponse()
     response = m.randomPlaybackTask.response
     if response = invalid then return
-    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "tvShowRandomPlayback") <> true then return
+    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "tvShowRandomPlayback") <> true then return
 
     m.pageState.randomQueueLoading = false
-    Spinner_Hide()
+    Spinner.Hide()
     if response.ok <> true then
-        Status_SetMessage(SafeString(response.errorMessage, "Unable to load random playback."))
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load random playback."))
         return
     end if
 
     m.pageState.randomPlaybackQueue = response.playbackQueue
-    Status_ClearMessage()
+    AppStatus.ClearMessage()
     startRandomPlayback()
 end sub
 
@@ -124,7 +124,7 @@ sub startRandomPlayback()
     m.top.selectedEpisode = {
         itemId: queueItem.itemId
         item: queueItem.item
-        series: SeriesIdentity_FromItem(SafeString(m.pageState.request.server, ""), m.pageState.series)
+        series: SeriesIdentity.FromItem(Format.SafeString(m.pageState.request.server, ""), m.pageState.series)
         season: queueItem.season
         startPositionTicks: 0
         playbackQueue: queue
@@ -172,21 +172,21 @@ end sub
 ' emitEpisodeSelection
 '-------------------------------------------------------------------------------
 sub emitEpisodeSelection(item as dynamic, shouldResume as boolean)
-    if Array_IsAssocArray(item) = false then return
+    if Arrays.IsAssocArray(item) = false then return
 
-    itemId = SafeString(item.Id, "")
+    itemId = Format.SafeString(item.Id, "")
     if itemId = "" then return
 
     startPositionTicks = 0
-    if shouldResume then startPositionTicks = PlaybackProgress_GetTicksFromItem(item)
+    if shouldResume then startPositionTicks = PlaybackProgress.GetTicksFromItem(item)
 
     m.top.selectedEpisode = {
         itemId: itemId
         item: item
-        series: SeriesIdentity_FromItem(SafeString(m.pageState.request.server, ""), m.pageState.series)
+        series: SeriesIdentity.FromItem(Format.SafeString(m.pageState.request.server, ""), m.pageState.series)
         season: {
-            Id: SafeString(item.SeasonId, "")
-            Name: SafeString(item.SeasonName, "")
+            Id: Format.SafeString(item.SeasonId, "")
+            Name: Format.SafeString(item.SeasonName, "")
         }
         startPositionTicks: startPositionTicks
         playbackQueue: m.pageState.playbackQueue
@@ -231,7 +231,7 @@ sub onSeasonSelected()
     if seasonNode = invalid then return
 
     season = seasonNode.raw
-    seasonId = SafeString(FirstNonEmpty([season.Id, seasonNode.itemId], ""), "")
+    seasonId = Format.SafeString(Format.FirstNonEmpty([season.Id, seasonNode.itemId], ""), "")
     if seasonId = "" then return
 
     nextSeason = getNextSeason(selected)
@@ -239,9 +239,9 @@ sub onSeasonSelected()
     if request = invalid then return
 
     m.top.selectedSeason = {
-        seriesId: SafeString(FirstNonEmpty([request.itemId], ""), "")
+        seriesId: Format.SafeString(Format.FirstNonEmpty([request.itemId], ""), "")
         seasonId: seasonId
-        series: SeriesIdentity_FromItem(request.server, m.pageState.series)
+        series: SeriesIdentity.FromItem(request.server, m.pageState.series)
         season: season
         seasons: m.pageState.seasons
         nextSeason: nextSeason
@@ -279,7 +279,7 @@ sub onLoadRequestChanged()
     m.pageState.seriesLoaded = false
     m.randomPlaybackTask.control = "stop"
     m.pageState.themeLookupActive = false
-    AsyncLifecycle_Begin(m.pageState.lifecycle, request.itemId)
+    AsyncLifecycle.Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.focusArea = "videoToolbar"
     m.contentGroup.translation = m.layout.contentDefault
     m.videoToolbar.translation = m.layout.toolbarDefault
@@ -289,7 +289,7 @@ sub onLoadRequestChanged()
     updateFocusChevron()
     m.cast.server = request.server
     m.cast.people = []
-    Spinner_Show(0)
+    Spinner.Show(0)
     renderSeries(request.item, true)
     renderSeasons([])
     m.videoToolbar.resumeItem = invalid
@@ -314,8 +314,7 @@ end sub
 ' applyMediaShellBackgroundSetting
 '-------------------------------------------------------------------------------
 sub applyMediaShellBackgroundSetting(settings as dynamic)
-    keys = SettingsStore_Keys()
-    m.mediaShell.backgroundDisplay = SettingsStore_GetSettingValue(settings, keys.mediaShellBackground)
+    m.mediaShell.backgroundDisplay = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -324,22 +323,22 @@ end sub
 sub onTVShowResponse()
     response = m.tvShowTask.response
     if response = invalid then return
-    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "tvShow") <> true then return
+    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "tvShow") <> true then return
 
     if response.ok <> true then
         m.videoToolbar.visible = false
-        Spinner_Hide()
+        Spinner.Hide()
         renderSeries(m.pageState.series, false)
-        Status_SetMessage(SafeString(response.errorMessage, "Unable to load this series."))
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load this series."))
         return
     end if
 
     payload = response.payload
     if payload = invalid then
         m.videoToolbar.visible = false
-        Spinner_Hide()
+        Spinner.Hide()
         renderSeries(m.pageState.series, false)
-        Status_SetMessage("Unable to load this series.")
+        AppStatus.SetMessage("Unable to load this series.")
         return
     end if
 
@@ -355,8 +354,8 @@ sub onTVShowResponse()
     m.videoToolbar.visible = true
     renderSeries(payload.series, false)
     renderSeasons(m.pageState.seasons)
-    Spinner_Hide()
-    Status_ClearMessage()
+    Spinner.Hide()
+    AppStatus.ClearMessage()
     if m.pageState.focusArea = "videoToolbar" then
         focusVideoToolbar()
     else
@@ -377,7 +376,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getFirstValidSeason() as dynamic
     for each season in m.pageState.seasons
-        if Array_IsAssocArray(season) and SafeString(season.Id, "") <> "" then return season
+        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") <> "" then return season
     end for
 
     return invalid
@@ -387,14 +386,14 @@ end function
 ' preserveRequestedSeriesImages
 '-------------------------------------------------------------------------------
 sub preserveRequestedSeriesImages(series as dynamic)
-    if Array_IsAssocArray(series) = false then return
+    if Arrays.IsAssocArray(series) = false then return
 
     requestedSeries = m.pageState.series
-    if Array_IsAssocArray(requestedSeries) = false then return
+    if Arrays.IsAssocArray(requestedSeries) = false then return
 
-    if SafeString(series.thumbUrl, "") = "" then series.thumbUrl = SafeString(requestedSeries.thumbUrl, "")
-    if SafeString(series.backdropUrl, "") = "" then series.backdropUrl = SafeString(requestedSeries.backdropUrl, "")
-    if SafeString(series.detailBackdropUrl, "") = "" then series.detailBackdropUrl = SafeString(requestedSeries.detailBackdropUrl, "")
+    if Format.SafeString(series.thumbUrl, "") = "" then series.thumbUrl = Format.SafeString(requestedSeries.thumbUrl, "")
+    if Format.SafeString(series.backdropUrl, "") = "" then series.backdropUrl = Format.SafeString(requestedSeries.backdropUrl, "")
+    if Format.SafeString(series.detailBackdropUrl, "") = "" then series.detailBackdropUrl = Format.SafeString(requestedSeries.detailBackdropUrl, "")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -411,7 +410,7 @@ sub onPlaybackProgressChange()
     if currentIndex < 0 or currentIndex >= queue.Count() then return
 
     currentItem = queue[currentIndex]
-    if SafeString(currentItem.itemId, "") <> SafeString(change.itemId, "") then return
+    if Format.SafeString(currentItem.itemId, "") <> Format.SafeString(change.itemId, "") then return
 
     nextIndex = currentIndex + 1
     if nextIndex >= queue.Count() then return
@@ -437,7 +436,7 @@ sub loadThemeSong(item as dynamic)
 
     m.log.write("Theme music playback is enabled")
 
-    itemId = SafeString(FirstNonEmpty([item.Id, request.itemId], ""), "")
+    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id, request.itemId], ""), "")
     if itemId = "" then return
 
     m.pageState.themeLookupActive = true
@@ -460,12 +459,12 @@ sub onThemeSongsResponse()
     if m.pageState.lifecycle.isActive <> true then return
     if m.pageState.themeLookupActive <> true then return
     if response.ok <> true then
-        m.log.write("Theme song lookup failed: " + SafeString(response.errorMessage, "Unknown error."))
+        m.log.write("Theme song lookup failed: " + Format.SafeString(response.errorMessage, "Unknown error."))
         return
     end if
 
     themeSong = response.payload
-    if Array_IsAssocArray(themeSong) = false then
+    if Arrays.IsAssocArray(themeSong) = false then
         m.pageState.themeLookupActive = false
         m.log.write("Theme music enabled, but no theme song was found")
         return
@@ -473,10 +472,10 @@ sub onThemeSongsResponse()
 
     request = m.pageState.request
     if request = invalid then return
-    if SafeString(response.itemId, "") <> SafeString(request.itemId, "") then return
+    if Format.SafeString(response.itemId, "") <> Format.SafeString(request.itemId, "") then return
 
     m.pageState.themeLookupActive = false
-    themeSongId = SafeString(themeSong.Id, "")
+    themeSongId = Format.SafeString(themeSong.Id, "")
     if themeSongId = "" then
         m.pageState.themeLookupActive = false
         return
@@ -488,8 +487,8 @@ sub onThemeSongsResponse()
         token: request.token
         userId: request.userId
         itemId: themeSongId
-        title: FirstNonEmpty([themeSong.Name, m.pageState.series.Name], "Theme Music")
-        sourceItemId: SafeString(request.itemId, "")
+        title: Format.FirstNonEmpty([themeSong.Name, m.pageState.series.Name], "Theme Music")
+        sourceItemId: Format.SafeString(request.itemId, "")
     }
 end sub
 
@@ -497,7 +496,7 @@ end sub
 ' renderSeries
 '-------------------------------------------------------------------------------
 sub renderSeries(item as dynamic, logoPending = false as boolean)
-    if Array_IsAssocArray(item) = false then return
+    if Arrays.IsAssocArray(item) = false then return
 
     seriesMetadataText = getMetaText(item)
     genreText = getGenreText(item)
@@ -508,7 +507,7 @@ sub renderSeries(item as dynamic, logoPending = false as boolean)
         title: getItemTitle(item)
         primaryInfoText: seriesMetadataText
         secondaryInfoText: genreText
-        overview: FirstNonEmpty([item.Overview], "")
+        overview: Format.FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)
 end sub
@@ -520,16 +519,16 @@ sub renderSeasons(seasons as object)
     content = CreateObject("roSGNode", "ContentNode")
 
     for each season in seasons
-        if Array_IsAssocArray(season) = false then continue for
+        if Arrays.IsAssocArray(season) = false then continue for
 
         child = content.createChild("ContentNode")
         child.title = getItemTitle(season)
         child.HDPosterUrl = getSeasonPosterUrl(season)
         child.AddFields({
-            itemId: SafeString(FirstNonEmpty([season.Id], ""), "")
-            itemType: SafeString(FirstNonEmpty([season.Type], ""), "")
+            itemId: Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
+            itemType: Format.SafeString(Format.FirstNonEmpty([season.Type], ""), "")
             seasonYear: getSeasonYearText(season)
-            episodeCount: FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
+            episodeCount: Format.FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
             raw: season
         })
     end for
@@ -563,7 +562,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
+    AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "itemId")
     if m.pageState.seriesLoaded <> true then
         m.top.setFocus(true)
         return
@@ -581,11 +580,11 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
-    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    AsyncLifecycle.Deactivate(m.pageState.lifecycle)
     m.pageState.themeLookupActive = false
     m.tvShowTask.control = "stop"
     m.randomPlaybackTask.control = "stop"
-    if m.pageState.randomQueueLoading then Spinner_Hide()
+    if m.pageState.randomQueueLoading then Spinner.Hide()
     m.pageState.randomQueueLoading = false
     m.themeSongsTask.control = "stop"
     m.videoToolbar.callFunc("deactivate")
@@ -701,7 +700,7 @@ sub onCastPersonSelected()
     if selection.itemId = invalid or selection.itemId = "" then return
 
     selection.sourceItemType = "series"
-    selection.sourceSeriesId = SafeString(m.pageState.request.itemId, "")
+    selection.sourceSeriesId = Format.SafeString(m.pageState.request.itemId, "")
     m.top.selectedPerson = selection
 end sub
 
@@ -712,7 +711,7 @@ sub onSeasonWatchedStateChange()
     change = m.top.seasonWatchedStateChange
     if change = invalid then return
 
-    seasonId = SafeString(change.seasonId, "")
+    seasonId = Format.SafeString(change.seasonId, "")
     if seasonId = "" then return
 
     updateSeasonWatchedState(m.pageState.seasons, seasonId, change)
@@ -726,8 +725,8 @@ sub updateSeasonWatchedState(seasons as dynamic, seasonId as string, change as o
     if seasons = invalid then return
 
     for each season in seasons
-        if Array_IsAssocArray(season) = false then continue for
-        if SafeString(FirstNonEmpty([season.Id], ""), "") <> seasonId then continue for
+        if Arrays.IsAssocArray(season) = false then continue for
+        if Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "") <> seasonId then continue for
 
         applySeasonWatchedState(season, change)
         return
@@ -743,10 +742,10 @@ sub updateSeasonCardWatchedState(seasonId as string, change as object)
     for i = 0 to m.seasonsGrid.content.getChildCount() - 1
         child = m.seasonsGrid.content.getChild(i)
         if child = invalid then continue for
-        if SafeString(child.itemId, "") <> seasonId then continue for
+        if Format.SafeString(child.itemId, "") <> seasonId then continue for
 
         raw = child.raw
-        if Array_IsAssocArray(raw) then
+        if Arrays.IsAssocArray(raw) then
             applySeasonWatchedState(raw, change)
             child.raw = raw
         end if
@@ -773,8 +772,8 @@ end sub
 ' getItemTitle
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
-    if Array_IsAssocArray(item) = false then return "Series"
-    return FirstNonEmpty([item.Name], "Series")
+    if Arrays.IsAssocArray(item) = false then return "Series"
+    return Format.FirstNonEmpty([item.Name], "Series")
 end function
 
 '-------------------------------------------------------------------------------
@@ -783,33 +782,33 @@ end function
 function getMetaText(item as dynamic) as string
     parts = []
 
-    year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = DateTime_ToYear(item.PremiereDate)
+    year = Format.FirstNonEmpty([item.ProductionYear], "")
+    if year = "" then year = DateTime.ToYear(item.PremiereDate)
     if year <> "" then parts.Push(year)
 
-    episodeCount = FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
-    if episodeCount <> "" then parts.Push(SafeString(episodeCount, "") + " episodes")
+    episodeCount = Format.FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
+    if episodeCount <> "" then parts.Push(Format.SafeString(episodeCount, "") + " episodes")
 
-    status = FirstNonEmpty([item.Status], "")
+    status = Format.FirstNonEmpty([item.Status], "")
     if status <> "" then parts.Push(status)
 
-    rating = FirstNonEmpty([item.OfficialRating], "")
+    rating = Format.FirstNonEmpty([item.OfficialRating], "")
     if rating <> "" then parts.Push(rating)
 
-    communityRating = MediaMetadata_FormatRating(FirstNonEmpty([item.CommunityRating], ""))
+    communityRating = MediaMetadata.FormatRating(Format.FirstNonEmpty([item.CommunityRating], ""))
     if communityRating <> "" then parts.Push("Rating " + communityRating)
 
-    return joinText(parts, MediaMetadata_BulletSeparator())
+    return joinText(parts, MediaMetadata.BulletSeparator())
 end function
 
 '-------------------------------------------------------------------------------
 ' getSeasonYearText
 '-------------------------------------------------------------------------------
 function getSeasonYearText(item as dynamic) as string
-    year = FirstNonEmpty([item.ProductionYear], "")
-    if year = "" then year = DateTime_ToYear(item.PremiereDate)
+    year = Format.FirstNonEmpty([item.ProductionYear], "")
+    if year = "" then year = DateTime.ToYear(item.PremiereDate)
 
-    return SafeString(year, "")
+    return Format.SafeString(year, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -834,18 +833,18 @@ end function
 function getBackdropUrl(item as dynamic) as string
     if item = invalid then return ""
 
-    imageSize = DeviceCapabilities_GetMaxScreenImageSize()
+    imageSize = DeviceCapabilities.GetMaxScreenImageSize()
     if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
-        itemId = FirstNonEmpty([item.Id], "")
+        itemId = Format.FirstNonEmpty([item.Id], "")
         request = m.pageState.request
         if request = invalid then return ""
-        return Url_BuildImageUrl(request.server, itemId, "Backdrop", item.BackdropImageTags[0], imageSize.width, imageSize.height)
+        return Url.BuildImageUrl(request.server, itemId, "Backdrop", item.BackdropImageTags[0], imageSize.width, imageSize.height)
     end if
 
     imageUrl = getImageUrl(item, "Primary", imageSize.width, imageSize.height)
     if imageUrl <> "" then return imageUrl
 
-    return SafeString(item.backdropUrl, "")
+    return Format.SafeString(item.backdropUrl, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -854,7 +853,7 @@ end function
 function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
     if item = invalid then return ""
 
-    itemId = FirstNonEmpty([item.Id], "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
 
     tag = ""
@@ -867,7 +866,7 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
 
     options = invalid
     if imageType = "Logo" then options = { format: "Png" }
-    return Url_BuildImageUrl(request.server, itemId, imageType, tag, width, height, options)
+    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height, options)
 end function
 
 '-------------------------------------------------------------------------------
@@ -878,7 +877,7 @@ function getItemsFromPayload(payload as dynamic) as object
 
     payloadType = Type(payload)
     if payloadType = "roArray" then return payload
-    if Array_IsAssocArray(payload) = false then return []
+    if Arrays.IsAssocArray(payload) = false then return []
 
     if payload.Items <> invalid then return payload.Items
     if payload.items <> invalid then return payload.items
@@ -894,7 +893,7 @@ function joinText(values as dynamic, separator as string) as string
 
     text = ""
     for each value in values
-        part = String_Trim(SafeString(value, ""))
+        part = Strings.Trim(Format.SafeString(value, ""))
         if part <> "" then
             if text <> "" then text = text + separator
             text = text + part
@@ -915,8 +914,7 @@ end function
 ' isThemeMusicSettingEnabled
 '-------------------------------------------------------------------------------
 function isThemeMusicSettingEnabled(settings as dynamic) as boolean
-    keys = SettingsStore_Keys()
-    return LCase(SettingsStore_GetSettingValue(settings, keys.themeMusic)) = "on"
+    return LCase(SettingsStore.GetSettingValue(settings, SettingsStore.Key.ThemeMusic)) = "on"
 end function
 
 '-------------------------------------------------------------------------------

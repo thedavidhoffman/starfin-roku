@@ -3,30 +3,64 @@ namespace tests
     @suite("Grid focus helpers")
     class GridFocusTests extends rooibos.BaseTestSuite
 
-        @describe("GridFocus_GetDownTarget")
+        @describe("GridFocus.GetDownTarget")
 
         @it("moves down by one complete row")
         function _()
-            m.assertEqual(GridFocus_GetDownTarget(1, 9, 3), 4)
-            m.assertEqual(GridFocus_GetDownTarget(5, 9, 3), 8)
+            m.assertEqual(GridFocus.GetDownTarget(1, 9, 3), 4)
+            m.assertEqual(GridFocus.GetDownTarget(5, 9, 3), 8)
         end function
 
         @it("moves to the final item when the last row is incomplete")
         function _()
-            m.assertEqual(GridFocus_GetDownTarget(5, 8, 3), 7)
+            m.assertEqual(GridFocus.GetDownTarget(5, 8, 3), 7)
         end function
 
         @it("returns no target when already on the final row")
         function _()
-            m.assertEqual(GridFocus_GetDownTarget(6, 8, 3), -1)
-            m.assertEqual(GridFocus_GetDownTarget(7, 8, 3), -1)
+            m.assertEqual(GridFocus.GetDownTarget(6, 8, 3), -1)
+            m.assertEqual(GridFocus.GetDownTarget(7, 8, 3), -1)
         end function
 
         @it("rejects invalid grid dimensions and focus indices")
         function _()
-            m.assertEqual(GridFocus_GetDownTarget(-1, 8, 3), -1)
-            m.assertEqual(GridFocus_GetDownTarget(0, 0, 3), -1)
-            m.assertEqual(GridFocus_GetDownTarget(0, 8, 0), -1)
+            m.assertEqual(GridFocus.GetDownTarget(-1, 8, 3), -1)
+            m.assertEqual(GridFocus.GetDownTarget(0, 0, 3), -1)
+            m.assertEqual(GridFocus.GetDownTarget(0, 8, 0), -1)
+        end function
+
+        @describe("GridFocus.HandleDown")
+
+        @it("ignores releases, other keys, and grids without content")
+        function _()
+            grid = { content: invalid, itemFocused: 0, numColumns: 3 }
+            m.assertFalse(GridFocus.HandleDown(grid, "down", false))
+            m.assertFalse(GridFocus.HandleDown(grid, "up", true))
+            m.assertFalse(GridFocus.HandleDown(grid, "down", true))
+        end function
+
+        @it("leaves complete-row movement to the grid")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            for i = 0 to 5
+                content.CreateChild("ContentNode")
+            end for
+            grid = { content: content, itemFocused: 0, numColumns: 3, animateToItem: invalid }
+
+            m.assertFalse(GridFocus.HandleDown(grid, "down", true))
+            m.assertInvalid(grid.animateToItem)
+        end function
+
+        @it("moves to the final item in an incomplete final row")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            for i = 0 to 4
+                content.CreateChild("ContentNode")
+            end for
+            grid = { content: content, itemFocused: 2, numColumns: 3, animateToItem: invalid }
+
+            m.assertTrue(GridFocus.HandleDown(grid, "down", true))
+            m.assertEqual(grid.animateToItem, 4)
         end function
 
     end class

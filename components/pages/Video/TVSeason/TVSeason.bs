@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("TVSeason")
+    m.log = Logger.Create("TVSeason")
     initReferences()
     initHandlers()
     m.layout = {
@@ -21,7 +21,7 @@ sub init()
         allEpisodes: false
         focusedEpisodeGridIndex: -1
         focusArea: "episodes"
-        lifecycle: AsyncLifecycle_Create()
+        lifecycle: AsyncLifecycle.Create()
     }
 end sub
 
@@ -102,7 +102,7 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
-    AsyncLifecycle_Begin(m.pageState.lifecycle, request.seasonId)
+    AsyncLifecycle.Begin(m.pageState.lifecycle, request.seasonId)
     m.pageState.season = request.season
     m.pageState.seasons = getSeasonsFromRequest(request)
     m.pageState.previousSeason = invalid
@@ -115,7 +115,7 @@ sub onLoadRequestChanged()
     m.pageState.focusArea = "episodes"
     if request.keepSeasonNavFocus = true then m.pageState.focusArea = "seasonNav"
     clearEpisodes()
-    Spinner_Show(0)
+    Spinner.Show(0)
     updateAdjacentSeasons()
     renderSeason(request.season, request.seriesMetadataPending <> true, false)
     m.seasonNav.visible = m.pageState.allEpisodes <> true
@@ -146,16 +146,16 @@ sub onTVSeasonResponse()
     response = m.tvSeasonTask.response
     if response = invalid then return
 
-    if SafeString(response.action, "") = "tvSeasonSeries" then
-        if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeries") <> true then return
+    if Format.SafeString(response.action, "") = "tvSeasonSeries" then
+        if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeries") <> true then return
         m.pageState.request.seriesMetadataPending = false
         if response.ok = true and response.payload <> invalid then m.pageState.request.series = response.payload
         renderSeason(m.pageState.season, true, m.pageState.episodesLoaded)
         updateSeasonSummaryArtwork()
         return
     end if
-    if SafeString(response.action, "") = "tvSeasonSeasons" then
-        if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeasons") <> true then return
+    if Format.SafeString(response.action, "") = "tvSeasonSeasons" then
+        if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeasons") <> true then return
         if response.ok = true and response.payload <> invalid then
             m.pageState.seasons = getItemsFromPayload(response.payload)
             updateAdjacentSeasons()
@@ -163,18 +163,18 @@ sub onTVSeasonResponse()
         end if
         return
     end if
-    if AsyncLifecycle_IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeason") <> true then return
+    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeason") <> true then return
 
     if response.ok <> true then
-        Spinner_Hide()
-        Status_SetMessage(SafeString(response.errorMessage, "Unable to load tv season."))
+        Spinner.Hide()
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load tv season."))
         return
     end if
 
     payload = response.payload
     if payload = invalid then
-        Spinner_Hide()
-        Status_SetMessage("Unable to load tv season.")
+        Spinner.Hide()
+        AppStatus.SetMessage("Unable to load tv season.")
         return
     end if
 
@@ -185,8 +185,8 @@ sub onTVSeasonResponse()
     m.pageState.episodesLoaded = true
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
-    Spinner_Hide()
-    Status_ClearMessage()
+    Spinner.Hide()
+    AppStatus.ClearMessage()
     updateChevrons()
     if m.pageState.focusArea = "seasonNav" then
         focusSeasonNav()
@@ -199,7 +199,7 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
-    AsyncLifecycle_Deactivate(m.pageState.lifecycle)
+    AsyncLifecycle.Deactivate(m.pageState.lifecycle)
     m.tvSeasonTask.control = "stop"
 end sub
 
@@ -221,7 +221,7 @@ end sub
 function redirectSpacerFocus() as boolean
     index = m.episodesGrid.itemFocused
     node = getGridEpisodeNodeAtPosition(index)
-    if node = invalid or SafeString(node.itemType, "") <> "LayoutSpacer" then return false
+    if node = invalid or Format.SafeString(node.itemType, "") <> "LayoutSpacer" then return false
 
     stepValue = 1
     if m.pageState.focusedEpisodeGridIndex > index then stepValue = -1
@@ -229,7 +229,7 @@ function redirectSpacerFocus() as boolean
     while targetIndex >= 0 and targetIndex < m.episodesGrid.content.getChildCount()
         targetIndex = targetIndex + stepValue
         target = getGridEpisodeNodeAtPosition(targetIndex)
-        if target <> invalid and SafeString(target.itemType, "") <> "LayoutSpacer" then
+        if target <> invalid and Format.SafeString(target.itemType, "") <> "LayoutSpacer" then
             m.episodesGrid.jumpToItem = targetIndex
             return true
         end if
@@ -245,7 +245,7 @@ sub onWatchedStateChange()
     change = m.top.watchedStateChange
     if change = invalid then return
 
-    itemId = SafeString(change.itemId, "")
+    itemId = Format.SafeString(change.itemId, "")
     if itemId = "" then return
 
     isWatched = change.isWatched = true
@@ -264,7 +264,7 @@ sub onPlaybackProgressChange()
     change = m.top.playbackProgressChange
     if change = invalid then return
 
-    itemId = SafeString(change.itemId, "")
+    itemId = Format.SafeString(change.itemId, "")
     if itemId = "" then return
 
     affectedSeason = updateEpisodePlaybackProgress(itemId, change)
@@ -279,14 +279,14 @@ end sub
 ' renderSeason
 '-------------------------------------------------------------------------------
 sub renderSeason(item as dynamic, renderSeriesIdentity = true as boolean, renderSeasonLabel = true as boolean)
-    if Array_IsAssocArray(item) = false then return
+    if Arrays.IsAssocArray(item) = false then return
 
     request = m.pageState.request
     series = invalid
     if request <> invalid then series = request.series
 
     if renderSeriesIdentity then
-        m.logoBanner.title = FirstNonEmpty([series.Name, item.SeriesName], "")
+        m.logoBanner.title = Format.FirstNonEmpty([series.Name, item.SeriesName], "")
         m.logoBanner.logoUrl = getSeriesLogoUrl()
     else
         m.logoBanner.title = ""
@@ -411,9 +411,9 @@ end function
 ' getSeasonId
 '-------------------------------------------------------------------------------
 function getSeasonId(season as dynamic) as string
-    if Array_IsAssocArray(season) = false then return ""
+    if Arrays.IsAssocArray(season) = false then return ""
 
-    return SafeString(FirstNonEmpty([season.Id], ""), "")
+    return Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -423,7 +423,7 @@ function getSeriesLogoUrl() as string
     request = m.pageState.request
     if request = invalid then return ""
 
-    identity = SeriesIdentity_FromItem(SafeString(request.server, ""), request.series)
+    identity = SeriesIdentity.FromItem(Format.SafeString(request.server, ""), request.series)
     return identity.logoUrl
 end function
 
@@ -448,17 +448,17 @@ sub updateAllEpisodesSeasonLabel()
     node = getFocusedEpisodeNode()
     if node = invalid or node.raw = invalid then return
 
-    seasonId = SafeString(node.raw.SeasonId, "")
+    seasonId = Format.SafeString(node.raw.SeasonId, "")
     for each season in m.pageState.seasons
-        if Array_IsAssocArray(season) and SafeString(season.Id, "") = seasonId then
+        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") = seasonId then
             m.pageState.season = season
             m.seasonLabel.text = getItemTitle(season)
             return
         end if
     end for
 
-    seasonName = SafeString(node.raw.SeasonName, "")
-    if seasonName = "" and node.raw.ParentIndexNumber <> invalid then seasonName = "Season " + SafeString(node.raw.ParentIndexNumber, "")
+    seasonName = Format.SafeString(node.raw.SeasonName, "")
+    if seasonName = "" and node.raw.ParentIndexNumber <> invalid then seasonName = "Season " + Format.SafeString(node.raw.ParentIndexNumber, "")
     m.seasonLabel.text = seasonName
 end sub
 
@@ -472,7 +472,7 @@ sub renderEpisodesList(episodes as object)
     if m.pageState.allEpisodes <> true then appendSeasonSummaryItem(row)
 
     for each episode in episodes
-        if Array_IsAssocArray(episode) = false then continue for
+        if Arrays.IsAssocArray(episode) = false then continue for
 
         appendEpisodeItem(row, episode)
     end for
@@ -491,7 +491,7 @@ sub renderEpisodesGrid(episodes as object)
 
     currentSeasonKey = ""
     for each episode in episodes
-        if Array_IsAssocArray(episode) = false then continue for
+        if Arrays.IsAssocArray(episode) = false then continue for
 
         if m.pageState.allEpisodes then
             seasonKey = getEpisodeSeasonKey(episode)
@@ -513,9 +513,9 @@ end sub
 ' getEpisodeSeasonKey
 '-------------------------------------------------------------------------------
 function getEpisodeSeasonKey(episode as object) as string
-    seasonId = SafeString(episode.SeasonId, "")
+    seasonId = Format.SafeString(episode.SeasonId, "")
     if seasonId <> "" then return seasonId
-    return "season-" + SafeString(episode.ParentIndexNumber, "")
+    return "season-" + Format.SafeString(episode.ParentIndexNumber, "")
 end function
 
 '-------------------------------------------------------------------------------
@@ -545,15 +545,15 @@ end sub
 sub appendEpisodeItem(parent as object, episode as object)
     child = parent.createChild("ContentNode")
     child.title = getItemTitle(episode)
-    child.description = FirstNonEmpty([episode.Overview], "")
+    child.description = Format.FirstNonEmpty([episode.Overview], "")
     child.HDPosterUrl = getImageUrl(episode, "Primary", 531, 300)
     child.AddFields({
-        itemId: SafeString(FirstNonEmpty([episode.Id], ""), "")
-        itemType: SafeString(FirstNonEmpty([episode.Type], ""), "")
-        episodeIndexNumber: FirstNonEmpty([episode.IndexNumber], "")
-        premiereDate: FirstNonEmpty([episode.PremiereDate], "")
-        airDate: FirstNonEmpty([episode.AirDate], "")
-        dateCreated: FirstNonEmpty([episode.DateCreated], "")
+        itemId: Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
+        itemType: Format.SafeString(Format.FirstNonEmpty([episode.Type], ""), "")
+        episodeIndexNumber: Format.FirstNonEmpty([episode.IndexNumber], "")
+        premiereDate: Format.FirstNonEmpty([episode.PremiereDate], "")
+        airDate: Format.FirstNonEmpty([episode.AirDate], "")
+        dateCreated: Format.FirstNonEmpty([episode.DateCreated], "")
         progressPercent: getProgressPercent(episode)
         progressWidth: getProgressWidth(episode)
         raw: episode
@@ -605,7 +605,7 @@ end function
 '-------------------------------------------------------------------------------
 function getEpisodeSeasonId(item as dynamic, fallbackSeasonId as string) as string
     if item <> invalid then
-        seasonId = SafeString(item.SeasonId, "")
+        seasonId = Format.SafeString(item.SeasonId, "")
         if seasonId <> "" then return seasonId
     end if
     return fallbackSeasonId
@@ -615,13 +615,13 @@ end function
 ' buildEpisodeSeasonIdentity
 '-------------------------------------------------------------------------------
 function buildEpisodeSeasonIdentity(item as dynamic, request as object) as object
-    seasonId = getEpisodeSeasonId(item, SafeString(request.seasonId, ""))
+    seasonId = getEpisodeSeasonId(item, Format.SafeString(request.seasonId, ""))
     for each season in m.pageState.seasons
-        if Array_IsAssocArray(season) and SafeString(season.Id, "") = seasonId then return season
+        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") = seasonId then return season
     end for
 
     seasonName = ""
-    if item <> invalid then seasonName = SafeString(item.SeasonName, "")
+    if item <> invalid then seasonName = Format.SafeString(item.SeasonName, "")
     return { Id: seasonId, Name: seasonName }
 end function
 
@@ -629,26 +629,26 @@ end function
 ' getEpisodeDetailBackdropUrl
 '-------------------------------------------------------------------------------
 function getEpisodeDetailBackdropUrl(node as dynamic) as string
-    if SafeString(node.itemType, "") = "SeasonSummary" then
-        detailBackdropUrl = SafeString(node.detailBackdropUrl, "")
+    if Format.SafeString(node.itemType, "") = "SeasonSummary" then
+        detailBackdropUrl = Format.SafeString(node.detailBackdropUrl, "")
         if detailBackdropUrl <> "" then return detailBackdropUrl
     end if
 
-    return SafeString(node.HDPosterUrl, "")
+    return Format.SafeString(node.HDPosterUrl, "")
 end function
 
 '-------------------------------------------------------------------------------
 ' buildSeriesIdentity
 '-------------------------------------------------------------------------------
 function buildSeriesIdentity(request as object, item as dynamic) as object
-    identity = SeriesIdentity_FromItem(SafeString(request.server, ""), request.series)
+    identity = SeriesIdentity.FromItem(Format.SafeString(request.server, ""), request.series)
     seriesId = ""
     if item <> invalid then
-        seriesId = FirstNonEmpty([item.SeriesId], "")
-        if identity.Name = "" then identity.Name = FirstNonEmpty([item.SeriesName], "")
+        seriesId = Format.FirstNonEmpty([item.SeriesId], "")
+        if identity.Name = "" then identity.Name = Format.FirstNonEmpty([item.SeriesName], "")
     end if
 
-    identity.Id = FirstNonEmpty([identity.Id, request.seriesId, seriesId], "")
+    identity.Id = Format.FirstNonEmpty([identity.Id, request.seriesId, seriesId], "")
     if identity.logoUrl = "" then identity.logoUrl = getSeriesLogoUrl()
 
     return identity
@@ -659,10 +659,10 @@ end function
 '-------------------------------------------------------------------------------
 function buildSeasonIdentity(request as object) as object
     seasonName = ""
-    if request.season <> invalid then seasonName = FirstNonEmpty([request.season.Name], "")
+    if request.season <> invalid then seasonName = Format.FirstNonEmpty([request.season.Name], "")
 
     return {
-        Id: FirstNonEmpty([request.seasonId], "")
+        Id: Format.FirstNonEmpty([request.seasonId], "")
         Name: seasonName
     }
 end function
@@ -676,7 +676,7 @@ function getEpisodeNodeById(itemId as string) as dynamic
 
         for i = 0 to m.episodesGrid.content.getChildCount() - 1
             child = m.episodesGrid.content.getChild(i)
-            if child <> invalid and SafeString(child.itemId, "") = itemId then return child
+            if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return child
         end for
 
         return invalid
@@ -689,7 +689,7 @@ function getEpisodeNodeById(itemId as string) as dynamic
 
     for i = 0 to row.getChildCount() - 1
         child = row.getChild(i)
-        if child <> invalid and SafeString(child.itemId, "") = itemId then return child
+        if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return child
     end for
 
     return invalid
@@ -700,16 +700,16 @@ end function
 '-------------------------------------------------------------------------------
 sub appendSeasonSummaryItem(row as object)
     season = m.pageState.season
-    if row = invalid or Array_IsAssocArray(season) = false then return
+    if row = invalid or Arrays.IsAssocArray(season) = false then return
 
     child = row.createChild("ContentNode")
     child.title = getItemTitle(season)
     child.description = getSeasonSummaryDescription(season)
     child.HDPosterUrl = getSeasonBackgroundUrl()
     child.AddFields({
-        itemId: SafeString(FirstNonEmpty([season.Id], ""), "")
+        itemId: Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
         itemType: "SeasonSummary"
-        episodeCount: FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
+        episodeCount: Format.FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
         seasonYear: getSeasonYearText(season)
         detailBackdropUrl: getSeasonDetailBackdropUrl()
         raw: season
@@ -729,7 +729,7 @@ sub updateSeasonSummaryArtwork()
 
     for i = 0 to content.getChildCount() - 1
         child = content.getChild(i)
-        if child <> invalid and SafeString(child.itemType, "") = "SeasonSummary" then
+        if child <> invalid and Format.SafeString(child.itemType, "") = "SeasonSummary" then
             child.HDPosterUrl = getSeasonBackgroundUrl()
             child.detailBackdropUrl = getSeasonDetailBackdropUrl()
             return
@@ -780,8 +780,7 @@ end function
 ' getTVEpisodeListScrollSetting
 '-------------------------------------------------------------------------------
 function getTVEpisodeListScrollSetting() as string
-    keys = SettingsStore_Keys()
-    value = m.top.settings[keys.tvEpisodeListDisplay]
+    value = m.top.settings[SettingsStore.Key.TvEpisodeListDisplay]
 
     if LCase(value) = "vertical" then return "vertical"
     return "horizontal"
@@ -791,33 +790,33 @@ end function
 ' getSeasonSummaryDescription
 '-------------------------------------------------------------------------------
 function getSeasonSummaryDescription(season as dynamic) as string
-    description = FirstNonEmpty([season.Overview], "")
+    description = Format.FirstNonEmpty([season.Overview], "")
     if description <> "" then return description
 
     request = m.pageState.request
     if request = invalid then return ""
 
     series = request.series
-    if Array_IsAssocArray(series) = false then return ""
+    if Arrays.IsAssocArray(series) = false then return ""
 
-    return FirstNonEmpty([series.Overview], "")
+    return Format.FirstNonEmpty([series.Overview], "")
 end function
 
 '-------------------------------------------------------------------------------
 ' getSeasonYearText
 '-------------------------------------------------------------------------------
 function getSeasonYearText(season as dynamic) as string
-    year = FirstNonEmpty([season.ProductionYear], "")
-    if year <> "" then return SafeString(year, "")
+    year = Format.FirstNonEmpty([season.ProductionYear], "")
+    if year <> "" then return Format.SafeString(year, "")
 
-    return DateTime_ToYear(season.PremiereDate)
+    return DateTime.ToYear(season.PremiereDate)
 end function
 
 '-------------------------------------------------------------------------------
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    AsyncLifecycle_BeginFromField(m.pageState.lifecycle, m.pageState.request, "seasonId")
+    AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "seasonId")
     m.top.setFocus(true)
     refreshPlaybackProgressChange()
     focusEpisodesIfActive()
@@ -934,15 +933,15 @@ end function
 ' getItemTitle
 '-------------------------------------------------------------------------------
 function getItemTitle(item as dynamic) as string
-    if Array_IsAssocArray(item) = false then return ""
-    return FirstNonEmpty([item.Name], "")
+    if Arrays.IsAssocArray(item) = false then return ""
+    return Format.FirstNonEmpty([item.Name], "")
 end function
 
 '-------------------------------------------------------------------------------
 ' getProgressPercent
 '-------------------------------------------------------------------------------
 function getProgressPercent(item as dynamic) as float
-    if Array_IsAssocArray(item) = false then return 0
+    if Arrays.IsAssocArray(item) = false then return 0
     if item.UserData <> invalid and item.UserData.Played = true then return 0
 
     if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
@@ -953,7 +952,7 @@ function getProgressPercent(item as dynamic) as float
 
     if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
 
-    progressTicks = PlaybackProgress_GetTicksFromItem(item)
+    progressTicks = PlaybackProgress.GetTicksFromItem(item)
     if progressTicks <= 0 then return 0
 
     progressPercent = (progressTicks * 100.0) / item.RunTimeTicks
@@ -980,15 +979,15 @@ end function
 ' updateEpisodeWatchedState
 '-------------------------------------------------------------------------------
 function updateEpisodeWatchedState(itemId as string, isWatched as boolean) as dynamic
-    if Array_IsAssocArray(m.pageState.season) and SafeString(FirstNonEmpty([m.pageState.season.Id], ""), "") = itemId then
+    if Arrays.IsAssocArray(m.pageState.season) and Format.SafeString(Format.FirstNonEmpty([m.pageState.season.Id], ""), "") = itemId then
         updateItemWatchedState(m.pageState.season, isWatched)
         updateSeasonEpisodesWatchedState(isWatched)
         return m.pageState.season
     end if
 
     for each episode in m.pageState.episodes
-        if Array_IsAssocArray(episode) = false then continue for
-        if SafeString(FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
+        if Arrays.IsAssocArray(episode) = false then continue for
+        if Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
 
         wasWatched = isItemWatched(episode)
         updateItemWatchedState(episode, isWatched)
@@ -1006,7 +1005,7 @@ sub updateSeasonEpisodesWatchedState(isWatched as boolean)
         updateItemWatchedState(episode, isWatched)
     end for
 
-    if Array_IsAssocArray(m.pageState.season) = false then return
+    if Arrays.IsAssocArray(m.pageState.season) = false then return
     if m.pageState.season.UserData = invalid then m.pageState.season.UserData = {}
 
     if isWatched then
@@ -1021,12 +1020,12 @@ end sub
 '-------------------------------------------------------------------------------
 function updateSeasonUnplayedCount(episode as object, wasWatched as boolean, isWatched as boolean) as dynamic
     season = getSeasonForEpisode(episode)
-    if Array_IsAssocArray(season) = false then return invalid
+    if Arrays.IsAssocArray(season) = false then return invalid
     if season.UserData = invalid then season.UserData = {}
 
     current = season.UserData.UnplayedItemCount
     if current = invalid then
-        current = countUnplayedEpisodes(SafeString(season.Id, ""))
+        current = countUnplayedEpisodes(Format.SafeString(season.Id, ""))
     else
         current = Number.ToInteger(current, 0)
         if isWatched then
@@ -1045,15 +1044,15 @@ end function
 ' getSeasonForEpisode
 '-------------------------------------------------------------------------------
 function getSeasonForEpisode(episode as object) as dynamic
-    seasonId = SafeString(episode.SeasonId, "")
+    seasonId = Format.SafeString(episode.SeasonId, "")
     currentSeason = m.pageState.season
-    if Array_IsAssocArray(currentSeason) and SafeString(currentSeason.Id, "") = seasonId then return currentSeason
+    if Arrays.IsAssocArray(currentSeason) and Format.SafeString(currentSeason.Id, "") = seasonId then return currentSeason
 
     for each season in m.pageState.seasons
-        if Array_IsAssocArray(season) and SafeString(season.Id, "") = seasonId then return season
+        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") = seasonId then return season
     end for
 
-    if m.pageState.allEpisodes <> true and Array_IsAssocArray(currentSeason) then return currentSeason
+    if m.pageState.allEpisodes <> true and Arrays.IsAssocArray(currentSeason) then return currentSeason
     return invalid
 end function
 
@@ -1061,9 +1060,9 @@ end function
 ' notifySeasonWatchedStateChanged
 '-------------------------------------------------------------------------------
 sub notifySeasonWatchedStateChanged(season as dynamic)
-    if Array_IsAssocArray(season) = false then return
+    if Arrays.IsAssocArray(season) = false then return
 
-    seasonId = SafeString(FirstNonEmpty([season.Id], ""), "")
+    seasonId = Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
     if seasonId = "" then return
 
     unplayedItemCount = 0
@@ -1084,8 +1083,8 @@ end sub
 function countUnplayedEpisodes(seasonId = "" as string) as integer
     count = 0
     for each episode in m.pageState.episodes
-        if Array_IsAssocArray(episode) = false then continue for
-        if seasonId <> "" and SafeString(episode.SeasonId, "") <> seasonId then continue for
+        if Arrays.IsAssocArray(episode) = false then continue for
+        if seasonId <> "" and Format.SafeString(episode.SeasonId, "") <> seasonId then continue for
         if isItemWatched(episode) <> true then count = count + 1
     end for
 
@@ -1104,7 +1103,7 @@ end function
 ' isItemWatched
 '-------------------------------------------------------------------------------
 function isItemWatched(item as dynamic) as boolean
-    if Array_IsAssocArray(item) = false then return false
+    if Arrays.IsAssocArray(item) = false then return false
     if item.UserData = invalid then return false
 
     return item.UserData.Played = true
@@ -1114,7 +1113,7 @@ end function
 ' updateItemWatchedState
 '-------------------------------------------------------------------------------
 sub updateItemWatchedState(item as dynamic, isWatched as boolean)
-    if Array_IsAssocArray(item) = false then return
+    if Arrays.IsAssocArray(item) = false then return
     if item.UserData = invalid then item.UserData = {}
 
     item.UserData.Played = isWatched
@@ -1131,8 +1130,8 @@ end sub
 '-------------------------------------------------------------------------------
 function updateEpisodePlaybackProgress(itemId as string, change as object) as dynamic
     for each episode in m.pageState.episodes
-        if Array_IsAssocArray(episode) = false then continue for
-        if SafeString(FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
+        if Arrays.IsAssocArray(episode) = false then continue for
+        if Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
 
         wasWatched = isItemWatched(episode)
         updateItemPlaybackProgress(episode, change)
@@ -1146,7 +1145,7 @@ end function
 ' updateItemPlaybackProgress
 '-------------------------------------------------------------------------------
 sub updateItemPlaybackProgress(item as dynamic, change as object)
-    if Array_IsAssocArray(item) = false then return
+    if Arrays.IsAssocArray(item) = false then return
     if item.UserData = invalid then item.UserData = {}
 
     if change.isFinished = true then
@@ -1209,7 +1208,7 @@ function getEpisodeContentIndex(itemId as string) as integer
 
         for i = 0 to m.episodesGrid.content.getChildCount() - 1
             child = m.episodesGrid.content.getChild(i)
-            if child <> invalid and SafeString(child.itemId, "") = itemId then return i
+            if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return i
         end for
 
         return -1
@@ -1222,7 +1221,7 @@ function getEpisodeContentIndex(itemId as string) as integer
 
     for i = 0 to row.getChildCount() - 1
         child = row.getChild(i)
-        if child <> invalid and SafeString(child.itemId, "") = itemId then return i
+        if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return i
     end for
 
     return -1
@@ -1234,7 +1233,7 @@ end function
 function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
     if item = invalid then return ""
 
-    itemId = FirstNonEmpty([item.Id], "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId = "" then return ""
 
     tag = ""
@@ -1248,7 +1247,7 @@ function getImageUrl(item as dynamic, imageType as string, width as integer, hei
 
     options = invalid
     if imageType = "Logo" then options = { format: "Png" }
-    return Url_BuildImageUrl(request.server, itemId, imageType, tag, width, height, options)
+    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height, options)
 end function
 
 '-------------------------------------------------------------------------------
@@ -1257,13 +1256,13 @@ end function
 function getSeasonBackgroundUrl() as string
     request = m.pageState.request
     if request <> invalid then
-        imageUrl = FirstNonEmpty([request.series.thumbUrl], "")
+        imageUrl = Format.FirstNonEmpty([request.series.thumbUrl], "")
         if imageUrl <> "" then return imageUrl
 
         imageUrl = getImageUrl(request.series, "Thumb", 531, 300)
         if imageUrl <> "" then return imageUrl
 
-        imageUrl = FirstNonEmpty([request.series.backdropUrl], "")
+        imageUrl = Format.FirstNonEmpty([request.series.backdropUrl], "")
         if imageUrl <> "" then return imageUrl
 
         imageUrl = getImageUrl(request.series, "Backdrop", 531, 300)
@@ -1280,10 +1279,10 @@ function getSeasonDetailBackdropUrl() as string
     request = m.pageState.request
     if request = invalid then return ""
 
-    imageUrl = FirstNonEmpty([request.series.detailBackdropUrl], "")
+    imageUrl = Format.FirstNonEmpty([request.series.detailBackdropUrl], "")
     if imageUrl <> "" then return imageUrl
 
-    imageUrl = FirstNonEmpty([request.series.backdropUrl], "")
+    imageUrl = Format.FirstNonEmpty([request.series.backdropUrl], "")
     if imageUrl <> "" then return imageUrl
 
     return getImageUrl(request.series, "Backdrop", 1920, 1080)
@@ -1297,7 +1296,7 @@ function getItemsFromPayload(payload as dynamic) as object
 
     payloadType = Type(payload)
     if payloadType = "roArray" then return payload
-    if Array_IsAssocArray(payload) = false then return []
+    if Arrays.IsAssocArray(payload) = false then return []
 
     if payload.Items <> invalid then return payload.Items
     return []
@@ -1309,11 +1308,11 @@ end function
 function buildEpisodePlaySelection(node as dynamic) as dynamic
     if node = invalid then return invalid
 
-    itemId = SafeString(node.itemId, "")
+    itemId = Format.SafeString(node.itemId, "")
     if itemId = "" then return invalid
 
     item = node.raw
-    if Array_IsAssocArray(item) = false then return invalid
+    if Arrays.IsAssocArray(item) = false then return invalid
 
     playbackQueue = buildPlaybackQueue(m.pageState.episodes)
     playbackQueueIndex = getPlaybackQueueIndex(playbackQueue, itemId)
@@ -1321,7 +1320,7 @@ function buildEpisodePlaySelection(node as dynamic) as dynamic
     return {
         itemId: itemId
         item: item
-        startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
+        startPositionTicks: PlaybackProgress.GetTicksFromItem(item)
         playbackQueue: playbackQueue
         playbackQueueIndex: playbackQueueIndex
     }
@@ -1344,9 +1343,9 @@ sub appendEpisodesToPlaybackQueue(queue as object, episodes as dynamic, season a
     if episodes = invalid then return
 
     for each episode in episodes
-        if Array_IsAssocArray(episode) = false then continue for
+        if Arrays.IsAssocArray(episode) = false then continue for
 
-        episodeId = SafeString(FirstNonEmpty([episode.Id], ""), "")
+        episodeId = Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
         if episodeId = "" then continue for
 
         queueSeason = season
@@ -1355,7 +1354,7 @@ sub appendEpisodesToPlaybackQueue(queue as object, episodes as dynamic, season a
             itemId: episodeId
             item: episode
             season: queueSeason
-            startPositionTicks: PlaybackProgress_GetTicksFromItem(episode)
+            startPositionTicks: PlaybackProgress.GetTicksFromItem(episode)
         })
     end for
 end sub
@@ -1368,7 +1367,7 @@ function getPlaybackQueueIndex(playbackQueue as object, itemId as string) as int
 
     for i = 0 to playbackQueue.Count() - 1
         item = playbackQueue[i]
-        if item <> invalid and SafeString(item.itemId, "") = itemId then return i
+        if item <> invalid and Format.SafeString(item.itemId, "") = itemId then return i
     end for
 
     return 0
@@ -1382,7 +1381,7 @@ function joinText(values as dynamic, separator as string) as string
 
     text = ""
     for each value in values
-        part = String_Trim(SafeString(value, ""))
+        part = Strings.Trim(Format.SafeString(value, ""))
         if part <> "" then
             if text <> "" then text = text + separator
             text = text + part
@@ -1399,7 +1398,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
     if key = "back" then
-        Status_ClearMessage()
+        AppStatus.ClearMessage()
         m.top.closeRequested = true
         return true
     end if

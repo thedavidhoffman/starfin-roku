@@ -2,11 +2,10 @@
 ' initPlaybackRecovery
 '-------------------------------------------------------------------------------
 sub initPlaybackRecovery()
-    modes = PlaybackMode_Values()
     m.recovery = {
         itemId: ""
-        originalMode: modes.automatic
-        effectiveMode: modes.automatic
+        originalMode: PlaybackMode.Mode.Automatic
+        effectiveMode: PlaybackMode.Mode.Automatic
         internalRestartPending: false
         restartInProgress: false
         sameModeRetryUsed: false
@@ -43,13 +42,13 @@ end function
 '-------------------------------------------------------------------------------
 sub resetPlaybackRecovery(request = invalid as dynamic)
     stopPlaybackRecoveryTimers()
-    mode = PlaybackMode_Values().automatic
+    mode = PlaybackMode.Mode.Automatic
     itemId = ""
     startPosition = 0
     if request <> invalid then
         mode = getRecoveryRequestMode(request)
-        itemId = SafeString(request.itemId, "")
-        startPosition = PlaybackProgress_TicksToSeconds(request.startPositionTicks)
+        itemId = Format.SafeString(request.itemId, "")
+        startPosition = PlaybackProgress.TicksToSeconds(request.startPositionTicks)
     end if
 
     m.recovery.itemId = itemId
@@ -68,16 +67,16 @@ end sub
 ' getRecoveryRequestMode
 '-------------------------------------------------------------------------------
 function getRecoveryRequestMode(request as dynamic) as string
-    if request = invalid then return PlaybackMode_Values().automatic
-    return PlaybackMode_Normalize(request.videoMode)
+    if request = invalid then return PlaybackMode.Mode.Automatic
+    return PlaybackMode.Normalize(request.videoMode)
 end function
 
 '-------------------------------------------------------------------------------
 ' getOriginalPlaybackMode
 '-------------------------------------------------------------------------------
 function getOriginalPlaybackMode() as string
-    if m.recovery = invalid then return PlaybackMode_Values().automatic
-    return PlaybackMode_Normalize(m.recovery.originalMode)
+    if m.recovery = invalid then return PlaybackMode.Mode.Automatic
+    return PlaybackMode.Normalize(m.recovery.originalMode)
 end function
 
 '-------------------------------------------------------------------------------
@@ -85,7 +84,7 @@ end function
 '-------------------------------------------------------------------------------
 sub recordPlaybackRecoveryPosition(position as dynamic)
     if position = invalid then return
-    state = LCase(SafeString(m.videoPlayer.state, ""))
+    state = LCase(Format.SafeString(m.videoPlayer.state, ""))
     if state <> "playing" and state <> "paused" then return
 
     value = Number.ToFloat(position, 0)
@@ -154,7 +153,7 @@ end sub
 ' onPlaybackRecoveryBufferTimerFire
 '-------------------------------------------------------------------------------
 sub onPlaybackRecoveryBufferTimerFire()
-    if LCase(SafeString(m.videoPlayer.state, "")) <> "buffering" then
+    if LCase(Format.SafeString(m.videoPlayer.state, "")) <> "buffering" then
         stopPlaybackRecoveryBufferMonitor()
         return
     end if
@@ -204,7 +203,7 @@ end function
 ' onPlaybackRecoveryStableTimerFire
 '-------------------------------------------------------------------------------
 sub onPlaybackRecoveryStableTimerFire()
-    if LCase(SafeString(m.videoPlayer.state, "")) <> "playing" then return
+    if LCase(Format.SafeString(m.videoPlayer.state, "")) <> "playing" then return
     m.recovery.isStable = true
     m.recovery.sameModeRetryUsed = false
     m.log.writeDisplaySafe("Playback stable for 30 seconds; recovery retry state reset")
@@ -218,27 +217,26 @@ end sub
 '-------------------------------------------------------------------------------
 function handlePlaybackRecoveryFailure(reason as string, detail as string) as boolean
     request = m.top.playRequest
-    if request = invalid or SafeString(request.itemId, "") = "" then return false
+    if request = invalid or Format.SafeString(request.itemId, "") = "" then return false
 
     nextMode = ""
     attemptKind = ""
     playMethod = ""
     if reason <> "playbackInfo" then playMethod = getRecoveryPlayMethod(request)
     shouldForceNoRemux = playMethod = "" or playMethod = "directplay"
-    modes = PlaybackMode_Values()
-    if m.recovery.originalMode = modes.automaticNoRemux and m.recovery.effectiveMode = modes.automaticNoRemux and shouldForceNoRemux then
-        nextMode = modes.transcodeNoRemux
+    if m.recovery.originalMode = PlaybackMode.Mode.AutomaticNoRemux and m.recovery.effectiveMode = PlaybackMode.Mode.AutomaticNoRemux and shouldForceNoRemux then
+        nextMode = PlaybackMode.Mode.TranscodeNoRemux
         attemptKind = "fullTranscode"
     else if m.recovery.sameModeRetryUsed <> true then
         nextMode = m.recovery.effectiveMode
         attemptKind = "sameMode"
         m.recovery.sameModeRetryUsed = true
-    else if m.recovery.originalMode = modes.automatic then
-        if m.recovery.effectiveMode = modes.automatic then
-            nextMode = modes.transcodeAllowRemux
+    else if m.recovery.originalMode = PlaybackMode.Mode.Automatic then
+        if m.recovery.effectiveMode = PlaybackMode.Mode.Automatic then
+            nextMode = PlaybackMode.Mode.TranscodeAllowRemux
             attemptKind = "allowRemux"
-        else if m.recovery.effectiveMode = modes.transcodeAllowRemux then
-            nextMode = modes.transcodeNoRemux
+        else if m.recovery.effectiveMode = PlaybackMode.Mode.TranscodeAllowRemux then
+            nextMode = PlaybackMode.Mode.TranscodeNoRemux
             attemptKind = "fullTranscode"
         end if
     end if
@@ -253,7 +251,7 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
 
     failurePhase = "startup"
     if m.recovery.hasEverPlayed then failurePhase = "runtime"
-    m.log.writeDisplaySafe("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + SafeString(m.recovery.lastSafePosition, ""))
+    m.log.writeDisplaySafe("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + Format.SafeString(m.recovery.lastSafePosition, ""))
     restartRequest = buildStreamRestartPlayRequest()
     if restartRequest = invalid then return false
 
@@ -267,7 +265,7 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
     onPlaybackChaosMonkeyRecoveryStarted(reason)
 #endif
     stopPlaybackRecoveryTimers()
-    Spinner_Show(0)
+    Spinner.Show(0)
     m.top.playRequest = restartRequest
     return true
 end function
@@ -277,8 +275,8 @@ end function
 '-------------------------------------------------------------------------------
 function getRecoveryPlayMethod(request as object) as string
     if m.session = invalid or m.session.playbackIdentity = invalid then return ""
-    if SafeString(m.session.itemId, "") <> SafeString(request.itemId, "") then return ""
-    return LCase(SafeString(m.session.playbackIdentity.playMethod, ""))
+    if Format.SafeString(m.session.itemId, "") <> Format.SafeString(request.itemId, "") then return ""
+    return LCase(Format.SafeString(m.session.playbackIdentity.playMethod, ""))
 end function
 
 '-------------------------------------------------------------------------------
@@ -291,7 +289,7 @@ sub finalizePlaybackRecoveryFailure(message as string)
     stopPlaybackRecoveryTimers()
     stopPlayback()
     enableScreenSaver()
-    Status_SetMessage(message)
+    AppStatus.SetMessage(message)
 end sub
 
 '-------------------------------------------------------------------------------

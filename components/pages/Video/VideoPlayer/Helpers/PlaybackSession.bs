@@ -17,7 +17,7 @@ sub onPlayRequestChanged()
     beginPlaybackChaosMonkeyRequest(request, isRecoveryRestart)
 #endif
     m.playback.startupPending = true
-    Spinner_Show(0)
+    Spinner.Show(0)
 
     m.playbackInfoTask.request = request
     m.playbackInfoTask.control = "run"
@@ -31,7 +31,7 @@ sub onPlaybackInfoResponse()
     if response = invalid then return
     responseRequestId = Number.ToInteger(response.requestId, -1)
     if responseRequestId <> m.playback.requestId then
-        m.log.writeDisplaySafe("Ignoring stale playback info response responseRequestId=" + SafeString(responseRequestId, "") + " currentRequestId=" + SafeString(m.playback.requestId, ""))
+        m.log.writeDisplaySafe("Ignoring stale playback info response responseRequestId=" + Format.SafeString(responseRequestId, "") + " currentRequestId=" + Format.SafeString(m.playback.requestId, ""))
         return
     end if
 
@@ -41,9 +41,9 @@ sub onPlaybackInfoResponse()
 
     if response.ok <> true then
         m.playback.startupPending = false
-        errorMessage = SafeString(response.errorMessage, "Unable to play this item.")
+        errorMessage = Format.SafeString(response.errorMessage, "Unable to play this item.")
         if handlePlaybackRecoveryFailure("playbackInfo", errorMessage) then return
-        Spinner_Hide()
+        Spinner.Hide()
         finalizePlaybackRecoveryFailure("Unable to play this item after recovery attempts.")
         return
     end if
@@ -58,7 +58,7 @@ sub applyPlaybackResponse(response as object, request as object)
     if response = invalid or request = invalid then return
 
     item = response.item
-    startPositionSeconds = PlaybackProgress_TicksToSeconds(response.startPositionTicks)
+    startPositionSeconds = PlaybackProgress.TicksToSeconds(response.startPositionTicks)
 
     applyPlaybackSessionState(response, request, item)
     loadMediaSegments(response)
@@ -73,17 +73,17 @@ end sub
 '-------------------------------------------------------------------------------
 sub applyPlaybackSessionState(response as object, request as object, item as dynamic)
     m.session = {
-        server: SafeString(request.server, "")
-        token: SafeString(request.token, "")
-        userId: SafeString(request.userId, "")
-        itemId: SafeString(request.itemId, "")
-        playSessionId: SafeString(response.playSessionId, "")
+        server: Format.SafeString(request.server, "")
+        token: Format.SafeString(request.token, "")
+        userId: Format.SafeString(request.userId, "")
+        itemId: Format.SafeString(request.itemId, "")
+        playSessionId: Format.SafeString(response.playSessionId, "")
         playbackIdentity: response.playbackIdentity
     }
     m.queue = {
         items: getPlaybackQueue(request.playbackQueue)
         index: getPlaybackQueueIndex(request.playbackQueueIndex)
-        mode: SafeString(request.playbackQueueMode, "sequential")
+        mode: Format.SafeString(request.playbackQueueMode, "sequential")
     }
     m.context = {
         item: item
@@ -191,7 +191,7 @@ end sub
 function startQueueItemAtOffset(offset as integer) as boolean
     queueItem = getQueueItemAtOffset(offset)
     if queueItem = invalid then return false
-    if SafeString(queueItem.itemId, "") = "" then return false
+    if Format.SafeString(queueItem.itemId, "") = "" then return false
 
     emitPlaybackProgress(false)
     m.top.playRequest = buildQueuePlaybackRequest(queueItem, m.queue.index + offset)
@@ -216,7 +216,7 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         server: m.session.server
         token: m.session.token
         userId: m.session.userId
-        itemId: SafeString(queueItem.itemId, "")
+        itemId: Format.SafeString(queueItem.itemId, "")
         item: queueItem.item
         series: series
         season: season
@@ -249,7 +249,7 @@ function buildVideoContent(response as object, request as object, item as dynami
     content.streamFormat = response.streamFormat
     content.title = VideoPlayerMetadata_GetItemTitle(item)
     content.PlayStart = startPositionSeconds
-    content.AddHeader("Authorization", JellyfinAuth_BuildAuthorizationHeader(request.token, request.userId))
+    content.AddHeader("Authorization", JellyfinAuth.BuildAuthorizationHeader(request.token, request.userId))
 
     return content
 end function
@@ -291,7 +291,7 @@ sub startVideoContent(content as object, response as object, startPositionSecond
     disableScreenSaver()
     updateBufferingSpinner("buffering")
     m.videoPlayer.control = "play"
-    Status_ClearMessage()
+    AppStatus.ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -307,7 +307,7 @@ end sub
 sub onPlaystateResponse()
     response = m.playstateTask.response
     if response = invalid then return
-    if SafeString(response.statusName, "") <> "stop" then return
+    if Format.SafeString(response.statusName, "") <> "stop" then return
     if m.playback.closeAfterStopReport <> true then return
 
     emitPlaybackProgress(false)
@@ -333,7 +333,7 @@ sub emitPlaybackProgress(isFinished as boolean)
         positionTicks: secondsToTicks(position)
         durationTicks: secondsToTicks(duration)
         isFinished: isFinished
-        isPaused: LCase(SafeString(m.videoPlayer.state, "")) = "paused"
+        isPaused: LCase(Format.SafeString(m.videoPlayer.state, "")) = "paused"
     }
     applyPlaybackProgressChange(change)
     m.top.playbackProgressChanged = change
@@ -356,9 +356,9 @@ sub applyPlaybackProgressChangeToCurrentItem(change as object)
     if m.context = invalid then return
     item = m.context.item
     if item = invalid then return
-    if SafeString(FirstNonEmpty([item.Id], ""), "") <> SafeString(change.itemId, "") then return
+    if Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "") <> Format.SafeString(change.itemId, "") then return
 
-    PlaybackProgress_ApplyChangeToItem(item, change)
+    PlaybackProgress.ApplyChangeToItem(item, change)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -371,9 +371,9 @@ sub applyPlaybackProgressChangeToCurrentQueueItem(change as object)
 
     queueItem = m.queue.items[m.queue.index]
     if queueItem = invalid then return
-    if SafeString(queueItem.itemId, "") <> SafeString(change.itemId, "") then return
+    if Format.SafeString(queueItem.itemId, "") <> Format.SafeString(change.itemId, "") then return
 
-    PlaybackProgress_ApplyChangeToItem(queueItem.item, change)
+    PlaybackProgress.ApplyChangeToItem(queueItem.item, change)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -382,9 +382,9 @@ end sub
 sub applyPlaybackProgressChangeToPlayRequest(change as object)
     request = m.top.playRequest
     if request = invalid then return
-    if SafeString(request.itemId, "") <> SafeString(change.itemId, "") then return
+    if Format.SafeString(request.itemId, "") <> Format.SafeString(change.itemId, "") then return
 
-    PlaybackProgress_ApplyChangeToItem(request.item, change)
+    PlaybackProgress.ApplyChangeToItem(request.item, change)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -427,7 +427,7 @@ function requestUpNextAutoPlay() as boolean
 
     nextIndex = m.queue.index + 1
     if nextIndex < 0 or nextIndex >= m.queue.items.Count() then
-        m.log.writeDisplaySafe("Skipping up-next autoplay: no next item queueIndex=" + SafeString(m.queue.index, "") + " queueCount=" + SafeString(m.queue.items.Count(), ""))
+        m.log.writeDisplaySafe("Skipping up-next autoplay: no next item queueIndex=" + Format.SafeString(m.queue.index, "") + " queueCount=" + Format.SafeString(m.queue.items.Count(), ""))
         return false
     end if
 
@@ -435,12 +435,12 @@ function requestUpNextAutoPlay() as boolean
     if m.queue.index >= 0 and m.queue.index < m.queue.items.Count() then currentItem = m.queue.items[m.queue.index]
 
     nextItem = m.queue.items[nextIndex]
-    if nextItem = invalid or SafeString(nextItem.itemId, "") = "" then
-        m.log.writeDisplaySafe("Skipping up-next autoplay: next item is invalid nextIndex=" + SafeString(nextIndex, ""))
+    if nextItem = invalid or Format.SafeString(nextItem.itemId, "") = "" then
+        m.log.writeDisplaySafe("Skipping up-next autoplay: next item is invalid nextIndex=" + Format.SafeString(nextIndex, ""))
         return false
     end if
 
-    m.log.writeDisplaySafe("Requesting up-next autoplay currentIndex=" + SafeString(m.queue.index, "") + " nextIndex=" + SafeString(nextIndex, "") + " nextItemId=" + SafeString(nextItem.itemId, ""))
+    m.log.writeDisplaySafe("Requesting up-next autoplay currentIndex=" + Format.SafeString(m.queue.index, "") + " nextIndex=" + Format.SafeString(nextIndex, "") + " nextItemId=" + Format.SafeString(nextItem.itemId, ""))
     m.top.upNextRequested = {
         finishedItem: currentItem
         nextItem: nextItem
@@ -464,16 +464,16 @@ function beginNextSeasonPlaybackRequest() as boolean
     if VideoPlayerMetadata_IsEpisode(m.top.playRequest, m.context.item) <> true then return false
     if m.context.item = invalid then return false
 
-    seriesId = SafeString(FirstNonEmpty([m.context.item.SeriesId], ""), "")
-    if seriesId = "" and m.context.series <> invalid then seriesId = SafeString(FirstNonEmpty([m.context.series.Id], ""), "")
+    seriesId = Format.SafeString(Format.FirstNonEmpty([m.context.item.SeriesId], ""), "")
+    if seriesId = "" and m.context.series <> invalid then seriesId = Format.SafeString(Format.FirstNonEmpty([m.context.series.Id], ""), "")
 
-    seasonId = SafeString(FirstNonEmpty([m.context.item.SeasonId, m.context.item.ParentId], ""), "")
-    if seasonId = "" and m.context.season <> invalid then seasonId = SafeString(FirstNonEmpty([m.context.season.Id], ""), "")
+    seasonId = Format.SafeString(Format.FirstNonEmpty([m.context.item.SeasonId, m.context.item.ParentId], ""), "")
+    if seasonId = "" and m.context.season <> invalid then seasonId = Format.SafeString(Format.FirstNonEmpty([m.context.season.Id], ""), "")
     if seriesId = "" or seasonId = "" then return false
 
     m.nextSeasonPlayback.pending = true
     m.nextSeasonPlayback.requestId = m.playback.requestId
-    Spinner_Show(0)
+    Spinner.Show(0)
     m.nextSeasonPlaybackTask.request = {
         requestId: m.playback.requestId
         server: m.session.server
@@ -498,7 +498,7 @@ sub onNextSeasonPlaybackResponse()
 
     m.nextSeasonPlayback.pending = false
     m.nextSeasonPlayback.requestId = -1
-    Spinner_Hide()
+    Spinner.Hide()
 
     if response.ok = true and response.payload <> invalid then
         appendNextSeasonQueueItems(response.payload.items)
@@ -507,7 +507,7 @@ sub onNextSeasonPlaybackResponse()
             return
         end if
     else if response.ok <> true then
-        m.log.write("Unable to extend episode playback queue: " + SafeString(response.errorMessage, "unknown error"))
+        m.log.write("Unable to extend episode playback queue: " + Format.SafeString(response.errorMessage, "unknown error"))
     end if
 
     finishEpisodePlayback()
@@ -523,14 +523,14 @@ sub appendNextSeasonQueueItems(items as dynamic)
     existingIds = {}
     for each queueItem in m.queue.items
         if queueItem <> invalid then
-            itemId = SafeString(queueItem.itemId, "")
+            itemId = Format.SafeString(queueItem.itemId, "")
             if itemId <> "" then existingIds[itemId] = true
         end if
     end for
 
     for each queueItem in items
         if queueItem = invalid then continue for
-        itemId = SafeString(queueItem.itemId, "")
+        itemId = Format.SafeString(queueItem.itemId, "")
         if itemId = "" or existingIds.DoesExist(itemId) then continue for
         m.queue.items.Push(queueItem)
         existingIds[itemId] = true
@@ -601,17 +601,17 @@ sub reportPlaystate(status as string)
     if m.session.server = "" or m.session.token = "" or m.session.itemId = "" then return
 
     position = getCurrentPlaybackPosition()
-    isPaused = LCase(SafeString(m.videoPlayer.state, "")) = "paused"
-    m.log.writeDisplaySafe("Playstate " + status + " itemId=" + m.session.itemId + " position=" + SafeString(position, "") + " paused=" + boolToText(isPaused))
+    isPaused = LCase(Format.SafeString(m.videoPlayer.state, "")) = "paused"
+    m.log.writeDisplaySafe("Playstate " + status + " itemId=" + m.session.itemId + " position=" + Format.SafeString(position, "") + " paused=" + boolToText(isPaused))
 
     m.playstateTask.request = {
         server: m.session.server
         token: m.session.token
         itemId: m.session.itemId
         playSessionId: m.session.playSessionId
-        mediaSourceId: SafeString(m.session.playbackIdentity.mediaSourceId, "")
-        liveStreamId: SafeString(m.session.playbackIdentity.liveStreamId, "")
-        playMethod: SafeString(m.session.playbackIdentity.playMethod, "DirectPlay")
+        mediaSourceId: Format.SafeString(m.session.playbackIdentity.mediaSourceId, "")
+        liveStreamId: Format.SafeString(m.session.playbackIdentity.liveStreamId, "")
+        playMethod: Format.SafeString(m.session.playbackIdentity.playMethod, "DirectPlay")
         canSeek: m.session.playbackIdentity.canSeek = true
         status: status
         position: position

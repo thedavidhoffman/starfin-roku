@@ -1,0 +1,86 @@
+namespace EpisodeSort
+
+    '---------------------------------------------------------------------------
+    ' EpisodeSort.BySeriesSeasonEpisode
+    '---------------------------------------------------------------------------
+    function BySeriesSeasonEpisode(items as object) as object
+        if items = invalid then return []
+
+        sortedItems = []
+        for each item in items
+            sortedItems.Push(item)
+        end for
+
+        if sortedItems.Count() < 2 then return sortedItems
+
+        for i = 0 to sortedItems.Count() - 2
+            for j = i + 1 to sortedItems.Count() - 1
+                if EpisodeSort.__ShouldEpisodeSortBefore(sortedItems[j], sortedItems[i]) then
+                    temp = sortedItems[i]
+                    sortedItems[i] = sortedItems[j]
+                    sortedItems[j] = temp
+                end if
+            end for
+        end for
+
+        return sortedItems
+    end function
+
+    '---------------------------------------------------------------------------
+    ' EpisodeSort.__ShouldEpisodeSortBefore
+    '---------------------------------------------------------------------------
+    function __ShouldEpisodeSortBefore(left as dynamic, right as dynamic) as boolean
+        titleComparison = Strings.NaturalCompare(EpisodeSort.__GetSeriesSortTitle(left), EpisodeSort.__GetSeriesSortTitle(right))
+        if titleComparison < 0 then return true
+        if titleComparison > 0 then return false
+
+        leftSeason = EpisodeSort.__GetSeasonSortNumber(left)
+        rightSeason = EpisodeSort.__GetSeasonSortNumber(right)
+        if leftSeason < rightSeason then return true
+        if leftSeason > rightSeason then return false
+
+        leftEpisode = EpisodeSort.__GetIndexSortNumber(left)
+        rightEpisode = EpisodeSort.__GetIndexSortNumber(right)
+        if leftEpisode < rightEpisode then return true
+        if leftEpisode > rightEpisode then return false
+
+        return Strings.NaturalCompare(EpisodeSort.__GetNameSortTitle(left), EpisodeSort.__GetNameSortTitle(right)) < 0
+    end function
+
+    '---------------------------------------------------------------------------
+    ' EpisodeSort.__GetSeriesSortTitle
+    '---------------------------------------------------------------------------
+    function __GetSeriesSortTitle(item as dynamic) as string
+        if Arrays.IsAssocArray(item) = false then return ""
+
+        return Strings.Trim(Format.FirstNonEmpty([item.SeriesName, item.Series, item.ParentTitle, item.Album], ""))
+    end function
+
+    '---------------------------------------------------------------------------
+    ' EpisodeSort.__GetNameSortTitle
+    '---------------------------------------------------------------------------
+    function __GetNameSortTitle(item as dynamic) as string
+        if Arrays.IsAssocArray(item) = false then return ""
+
+        return Strings.Trim(Format.FirstNonEmpty([item.Name], ""))
+    end function
+
+    '---------------------------------------------------------------------------
+    ' EpisodeSort.__GetSeasonSortNumber
+    '---------------------------------------------------------------------------
+    function __GetSeasonSortNumber(item as dynamic) as integer
+        if Arrays.IsAssocArray(item) = false then return 999999
+
+        return Number.ToInteger(Format.FirstNonEmpty([item.ParentIndexNumber, item.SeasonNumber], "999999"))
+    end function
+
+    '---------------------------------------------------------------------------
+    ' EpisodeSort.__GetIndexSortNumber
+    '---------------------------------------------------------------------------
+    function __GetIndexSortNumber(item as dynamic) as integer
+        if Arrays.IsAssocArray(item) = false then return 999999
+
+        return Number.ToInteger(Format.FirstNonEmpty([item.IndexNumber, item.EpisodeNumber], "999999"))
+    end function
+
+end namespace

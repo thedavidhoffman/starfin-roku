@@ -1,0 +1,40 @@
+namespace tests
+
+    @suite("Device capability helpers")
+    class DeviceCapabilitiesTests extends rooibos.BaseTestSuite
+
+        @describe("DeviceCapabilities pure helpers")
+
+        @it("parses common display-size descriptions")
+        function _()
+            m.assertEqual(DeviceCapabilities.__DisplaySizeFromText("4K UHD"), { width: 3840, height: 2160 })
+            m.assertEqual(DeviceCapabilities.__DisplaySizeFromText("1080p FHD"), { width: 1920, height: 1080 })
+            m.assertEqual(DeviceCapabilities.__DisplaySizeFromText("720p HD"), { width: 1280, height: 720 })
+            m.assertEqual(DeviceCapabilities.__DisplaySizeFromText("480p SD"), { width: 720, height: 480 })
+            m.assertInvalid(DeviceCapabilities.__DisplaySizeFromText("unknown"))
+        end function
+
+        @it("validates usable display dimensions")
+        function _()
+            m.assertTrue(DeviceCapabilities.__IsValidDisplaySize({ width: 1920, height: 1080 }))
+            m.assertFalse(DeviceCapabilities.__IsValidDisplaySize({ width: 320, height: 240 }))
+            m.assertFalse(DeviceCapabilities.__IsValidDisplaySize({ width: 1280 }))
+            m.assertFalse(DeviceCapabilities.__IsValidDisplaySize(invalid))
+        end function
+
+        @it("normalizes containers and video codec aliases without duplicates")
+        function _()
+            m.assertEqual(DeviceCapabilities.__ContainerAliases("mp4"), "mp4,mov,m4v")
+            m.assertEqual(DeviceCapabilities.__ContainerAliases("mkv"), "mkv,webm")
+            m.assertEqual(DeviceCapabilities.__ContainerAliases("ts"), "ts")
+
+            codecs = []
+            DeviceCapabilities.__AddVideoCodec(codecs, "hevc")
+            DeviceCapabilities.__AddVideoCodec(codecs, "hevc")
+            DeviceCapabilities.__AddVideoCodec(codecs, "mpeg2")
+            m.assertEqual(codecs, ["hevc", "h265", "mpeg2video"])
+        end function
+
+    end class
+
+end namespace

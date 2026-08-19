@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("MusicLibraryTask")
+    m.log = Logger.Create("MusicLibraryTask")
     m.top.functionName = "executeRequest"
 end sub
 
@@ -15,14 +15,14 @@ sub executeRequest()
     requestTimer.Mark()
     validationError = validateRequest(request)
     if validationError <> invalid then
-        if request <> invalid then validationError.AddReplace("libraryId", SafeString(request.libraryId, ""))
+        if request <> invalid then validationError.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
         m.top.response = validationError
         return
     end if
 
     params = {
-        userId: SafeString(request.userId, "")
-        parentId: SafeString(request.libraryId, "")
+        userId: Format.SafeString(request.userId, "")
+        parentId: Format.SafeString(request.libraryId, "")
         recursive: true
         includeItemTypes: "MusicAlbum"
         fields: "SortName,AlbumArtist,Artists,ArtistItems,ProductionYear,PremiereDate,Genres"
@@ -34,13 +34,13 @@ sub executeRequest()
     }
     if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
 
-    url = request.server + "/Users/" + SafeString(request.userId, "") + "/Items" + Url_BuildQueryString(params)
-    response = HttpClient_Request(url, "GET", invalid, invalid, JellyfinAuth_BuildTokenHeaders(request.token))
-    m.log.write("HTTP completed libraryId=" + SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
+    requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    m.log.write("HTTP completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
     if response.ok <> true then
-        m.log.error("Album request failed libraryId=" + SafeString(request.libraryId, "") + " message=" + SafeString(response.errorMessage, ""))
+        m.log.error("Album request failed libraryId=" + Format.SafeString(request.libraryId, "") + " message=" + Format.SafeString(response.errorMessage, ""))
         response.AddReplace("action", "musicLibrary")
-        response.AddReplace("libraryId", SafeString(request.libraryId, ""))
+        response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
         m.top.response = response
         return
     end if
@@ -48,13 +48,13 @@ sub executeRequest()
     albums = getItemsFromPayload(response.data)
     processingTimer = CreateObject("roTimespan")
     processingTimer.Mark()
-    m.log.write("Album processing started libraryId=" + SafeString(request.libraryId, "") + " count=" + albums.Count().ToStr())
+    m.log.write("Album processing started libraryId=" + Format.SafeString(request.libraryId, "") + " count=" + albums.Count().ToStr())
     filterOptions = buildFilterOptions(albums)
-    m.log.write("Album processing completed libraryId=" + SafeString(request.libraryId, "") + " elapsedMs=" + processingTimer.TotalMilliseconds().ToStr())
+    m.log.write("Album processing completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + processingTimer.TotalMilliseconds().ToStr())
     m.top.response = {
         ok: true
         action: "musicLibrary"
-        libraryId: SafeString(request.libraryId, "")
+        libraryId: Format.SafeString(request.libraryId, "")
         payload: response.data
         filterOptions: filterOptions
     }
@@ -76,7 +76,7 @@ function buildFilterOptions(albums as object) as object
     genreLabelByKey = {}
 
     for each album in albums
-        if Array_IsAssocArray(album) = false then
+        if Arrays.IsAssocArray(album) = false then
             m.log.error("Skipping malformed album while building filters")
             continue for
         end if
@@ -91,7 +91,7 @@ function buildFilterOptions(albums as object) as object
         end if
 
         for each genre in getAlbumGenres(album)
-            genreLabel = String_Trim(SafeString(genre, ""))
+            genreLabel = Strings.Trim(Format.SafeString(genre, ""))
             if genreLabel = "" then continue for
 
             genreKey = LCase(genreLabel)
@@ -128,7 +128,7 @@ end function
 function getItemsFromPayload(payload as dynamic) as object
     if payload = invalid then return []
     if Type(payload) = "roArray" then return payload
-    if Array_IsAssocArray(payload) = false then
+    if Arrays.IsAssocArray(payload) = false then
         m.log.error("Unexpected album payload type=" + Type(payload))
         return []
     end if
@@ -142,12 +142,12 @@ end function
 ' getAlbumYear
 '-------------------------------------------------------------------------------
 function getAlbumYear(album as dynamic) as integer
-    if Array_IsAssocArray(album) = false then return 0
+    if Arrays.IsAssocArray(album) = false then return 0
 
     year = Number.ToInteger(album.ProductionYear, 0)
     if year > 0 then return year
 
-    premiereDate = SafeString(album.PremiereDate, "")
+    premiereDate = Format.SafeString(album.PremiereDate, "")
     if Len(premiereDate) < 4 then return 0
 
     return Number.ToInteger(Left(premiereDate, 4), 0)
@@ -157,7 +157,7 @@ end function
 ' getAlbumGenres
 '-------------------------------------------------------------------------------
 function getAlbumGenres(album as dynamic) as object
-    if Array_IsAssocArray(album) = false then return []
+    if Arrays.IsAssocArray(album) = false then return []
     if Type(album.Genres) <> "roArray" then return []
 
     return album.Genres

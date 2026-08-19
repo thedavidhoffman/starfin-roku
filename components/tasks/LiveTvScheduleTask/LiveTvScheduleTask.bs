@@ -1,0 +1,71 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = Logger.Create("LiveTvScheduleTask")
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    validationError = validateRequest(request)
+    if validationError <> invalid then
+        if request <> invalid then
+            validationError.AddReplace("channelIds", Format.SafeString(request.channelIds, ""))
+            validationError.AddReplace("startTime", Format.SafeString(request.startTime, ""))
+            validationError.AddReplace("endTime", Format.SafeString(request.endTime, ""))
+        end if
+        m.top.response = validationError
+        return
+    end if
+
+    body = Json.Object([
+        Json.Pair("UserId", Format.SafeString(request.userId, ""))
+        Json.Pair("ChannelIds", Format.SafeString(request.channelIds, ""))
+        Json.Pair("MinEndDate", Format.SafeString(request.startTime, ""))
+        Json.Pair("MaxStartDate", Format.SafeString(request.endTime, ""))
+        Json.Pair("SortBy", "StartDate")
+        Json.Pair("Fields", "Genres")
+        Json.BooleanPair("EnableImages", true)
+        Json.NumberPair("ImageTypeLimit", 1)
+        Json.Pair("EnableImageTypes", "Primary,Backdrop,Thumb")
+        Json.BooleanPair("EnableTotalRecordCount", false)
+        Json.BooleanPair("EnableUserData", false)
+    ])
+
+    requestUrl = request.server + "/LiveTv/Programs"
+    response = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token))
+    if response.ok <> true then
+        response.AddReplace("action", "liveTvSchedule")
+        response.AddReplace("channelIds", Format.SafeString(request.channelIds, ""))
+        response.AddReplace("startTime", Format.SafeString(request.startTime, ""))
+        response.AddReplace("endTime", Format.SafeString(request.endTime, ""))
+        m.top.response = response
+        return
+    end if
+
+    m.top.response = {
+        ok: true
+        action: "liveTvSchedule"
+        channelIds: Format.SafeString(request.channelIds, "")
+        startTime: Format.SafeString(request.startTime, "")
+        endTime: Format.SafeString(request.endTime, "")
+        payload: response.data
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' validateRequest
+'-------------------------------------------------------------------------------
+function validateRequest(request as dynamic) as dynamic
+    if request = invalid then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV schedule request." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV server." }
+    if request.token = invalid or request.token = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV token." }
+    if Format.SafeString(request.channelIds, "") = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "No Live TV channels were found." }
+    if Format.SafeString(request.startTime, "") = "" or Format.SafeString(request.endTime, "") = "" then return { ok: false, action: "liveTvSchedule", errorMessage: "Invalid Live TV guide window." }
+
+    return invalid
+end function

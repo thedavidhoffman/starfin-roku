@@ -1,0 +1,152 @@
+namespace SettingsStore
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.Key
+    '---------------------------------------------------------------------------
+    enum Key
+        TvLibraryDisplay = "tv-library-image-type"
+        MovieLibraryDisplay = "movie-library-image-type"
+        CollectionCardsImageType = "collection-cards-image-type"
+        CollectionItemsImageType = "collection-items-image-type"
+        PlaylistImageType = "playlist-image-type"
+        TvEpisodeListDisplay = "tv-ep-list-scroll"
+        MediaShellBackground = "media-shell-background"
+        ThemeMusic = "theme-music"
+        VideoStreamingMode = "video-streaming-mode"
+        DisplayAccountBadge = "display-account-badge"
+        TmdbApiKey = "tmdb-api-key"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.Defaults
+    '---------------------------------------------------------------------------
+    function Defaults() as object
+        defaultSettings = {}
+        defaultSettings[Key.TvLibraryDisplay] = "poster"
+        defaultSettings[Key.MovieLibraryDisplay] = "poster"
+        defaultSettings[Key.CollectionCardsImageType] = "poster"
+        defaultSettings[Key.CollectionItemsImageType] = "poster"
+        defaultSettings[Key.PlaylistImageType] = "thumbnail"
+        defaultSettings[Key.TvEpisodeListDisplay] = "vertical"
+        defaultSettings[Key.MediaShellBackground] = "full-screen"
+        defaultSettings[Key.ThemeMusic] = "off"
+        defaultSettings[Key.VideoStreamingMode] = PlaybackMode.Mode.Automatic
+        defaultSettings[Key.DisplayAccountBadge] = "off"
+        defaultSettings[Key.TmdbApiKey] = ""
+        return defaultSettings
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.AccountKeys
+    '---------------------------------------------------------------------------
+    function AccountKeys() as object
+        return [Key.TvLibraryDisplay, Key.MovieLibraryDisplay, Key.CollectionCardsImageType, Key.CollectionItemsImageType, Key.PlaylistImageType, Key.TvEpisodeListDisplay, Key.MediaShellBackground, Key.ThemeMusic, Key.VideoStreamingMode]
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.Load
+    '---------------------------------------------------------------------------
+    function Load(accountKey as string) as object
+        defaultSettings = SettingsStore.Defaults()
+        settings = {}
+        values = {}
+        if accountKey <> "" then
+            accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
+            values = accountStore.ReadMulti(SettingsStore.AccountKeys())
+            if values = invalid then values = {}
+        end if
+
+        for each key in SettingsStore.AccountKeys()
+            settings[key] = SettingsStore.GetValue(values, key, defaultSettings[key])
+        end for
+        settings[Key.DisplayAccountBadge] = SettingsStore.LoadGlobal(Key.DisplayAccountBadge)
+        settings[Key.TmdbApiKey] = SettingsStore.LoadIntegration(Key.TmdbApiKey)
+        return settings
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.Save
+    '---------------------------------------------------------------------------
+    sub Save(accountKey as string, settings as object)
+        if accountKey <> "" then
+            accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
+            for each key in SettingsStore.AccountKeys()
+                accountStore.Write(key, SettingsStore.GetSettingValue(settings, key))
+            end for
+            accountStore.Flush()
+        end if
+        SettingsStore.SaveGlobal(Key.DisplayAccountBadge, SettingsStore.GetSettingValue(settings, Key.DisplayAccountBadge))
+        SettingsStore.SaveIntegration(Key.TmdbApiKey, SettingsStore.GetSettingValue(settings, Key.TmdbApiKey))
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.LoadGlobal
+    '---------------------------------------------------------------------------
+    function LoadGlobal(key as string) as string
+        defaultSettings = SettingsStore.Defaults()
+        return SettingsStore.GetValue(CreateObject("roRegistrySection", "STARFIN_ROKU"), key, defaultSettings[key])
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.SaveGlobal
+    '---------------------------------------------------------------------------
+    sub SaveGlobal(key as string, value as string)
+        globalStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
+        globalStore.Write(key, value)
+        globalStore.Flush()
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.LoadIntegration
+    '---------------------------------------------------------------------------
+    function LoadIntegration(key as string) as string
+        return SettingsStore.LoadGlobal(key)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.SaveIntegration
+    '---------------------------------------------------------------------------
+    sub SaveIntegration(key as string, value as string)
+        SettingsStore.SaveGlobal(key, value)
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.GetValue
+    '---------------------------------------------------------------------------
+    function GetValue(values as dynamic, key as string, defaultValue as string) as string
+        value = invalid
+        if values <> invalid then
+            if GetInterface(values, "ifAssociativeArray") <> invalid then
+                value = values[key]
+            else
+                value = values.Read(key)
+            end if
+        end if
+        if value = invalid or value = "" then return defaultValue
+        return value
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.GetSettingValue
+    '---------------------------------------------------------------------------
+    function GetSettingValue(settings as dynamic, key as string) as string
+        defaultSettings = SettingsStore.Defaults()
+        defaultValue = ""
+        if defaultSettings[key] <> invalid then defaultValue = defaultSettings[key]
+        if settings = invalid then return defaultValue
+        if settings[key] = invalid or settings[key] = "" then return defaultValue
+        return settings[key].ToStr()
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.AreEqual
+    '---------------------------------------------------------------------------
+    function AreEqual(left as dynamic, right as dynamic) as boolean
+        if left = invalid or right = invalid then return false
+        for each key in SettingsStore.Defaults()
+            if SettingsStore.GetSettingValue(left, key) <> SettingsStore.GetSettingValue(right, key) then return false
+        end for
+        return true
+    end function
+
+end namespace

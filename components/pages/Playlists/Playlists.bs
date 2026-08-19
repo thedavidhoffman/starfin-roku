@@ -38,10 +38,10 @@ end sub
 function specializationItemsLoaded() as boolean
     if isPlaylistLibraryRequest() and m.pageState.allItems.Count() = 1 then
         playlist = m.pageState.allItems[0]
-        if SafeString(playlist.Id, "") <> "" then
+        if Format.SafeString(playlist.Id, "") <> "" then
             m.browseByButton.visible = false
             m.sortButton.visible = false
-            Status_ClearMessage()
+            AppStatus.ClearMessage()
             m.playlistState.pendingAutomaticPlaylist = playlist
             m.singlePlaylistOpenTimer.control = "start"
             return true
@@ -54,7 +54,7 @@ end function
 ' specializationHandleItemSelected
 '-------------------------------------------------------------------------------
 function specializationHandleItemSelected(selectedIndex as integer, item as object) as boolean
-    itemId = SafeString(item.Id, "")
+    itemId = Format.SafeString(item.Id, "")
     if itemId = "" then return true
     if isPlaylist(item) then
         openPlaylist(item)
@@ -175,9 +175,9 @@ end sub
 ' specializationCacheKey
 '-------------------------------------------------------------------------------
 function specializationCacheKey(item as dynamic, occurrenceIndex = invalid as dynamic) as string
-    itemId = SafeString(item.Id, "")
+    itemId = Format.SafeString(item.Id, "")
     if isPlaylistContentRequest() <> true then return itemId
-    playlistItemId = SafeString(item.PlaylistItemId, "")
+    playlistItemId = Format.SafeString(item.PlaylistItemId, "")
     if playlistItemId <> "" then return "playlist:" + playlistItemId
     if itemId = "" or occurrenceIndex = invalid then return ""
     return "playlist:" + itemId + ":" + occurrenceIndex.ToStr()
@@ -187,7 +187,7 @@ end function
 ' specializationImageUrl
 '-------------------------------------------------------------------------------
 function specializationImageUrl(item as object, imageAspect as string) as string
-    itemId = SafeString(item.Id, "")
+    itemId = Format.SafeString(item.Id, "")
     if isTVEpisode(item) then return getPlaylistEpisodeImageUrl(item, imageAspect)
     if imageAspect = "wide" then return getImageUrlForType(itemId, item, "Thumb", 441, 249)
     return getImageUrlForType(itemId, item, "Primary", 252, 378)
@@ -197,8 +197,7 @@ end function
 ' specializationImageAspect
 '-------------------------------------------------------------------------------
 function specializationImageAspect() as string
-    keys = SettingsStore_Keys()
-    if LCase(m.top.settings[keys.playlistImageType]) = "thumbnail" then return "wide"
+    if LCase(m.top.settings[SettingsStore.Key.PlaylistImageType]) = "thumbnail" then return "wide"
     return "poster"
 end function
 
@@ -273,7 +272,7 @@ end function
 ' isPlaylistItemPlayed
 '-------------------------------------------------------------------------------
 function isPlaylistItemPlayed(item as dynamic) as boolean
-    if Array_IsAssocArray(item) = false or item.UserData = invalid then return false
+    if Arrays.IsAssocArray(item) = false or item.UserData = invalid then return false
     return item.UserData.Played = true
 end function
 
@@ -284,7 +283,7 @@ function shouldShowPlaylistResume() as boolean
     for each item in m.pageState.items
         if isPlayableMovie(item) = false and isTVEpisode(item) = false then continue for
         if isPlaylistItemPlayed(item) <> true then return true
-        if PlaybackProgress_GetTicksFromItem(item) > 0 then return true
+        if PlaybackProgress.GetTicksFromItem(item) > 0 then return true
     end for
     return false
 end function
@@ -402,17 +401,17 @@ end sub
 '-------------------------------------------------------------------------------
 function buildPlaylistPlaybackQueueItem(item as object, playlistItemIndex as integer) as object
     queueItem = {
-        itemId: SafeString(item.Id, "")
+        itemId: Format.SafeString(item.Id, "")
         item: item
         playlistItemIndex: playlistItemIndex
-        startPositionTicks: PlaybackProgress_GetTicksFromItem(item)
+        startPositionTicks: PlaybackProgress.GetTicksFromItem(item)
         hasPlaybackIdentity: true
         series: invalid
         season: invalid
     }
     if isTVEpisode(item) then
-        queueItem.series = { Id: SafeString(item.SeriesId, ""), Name: SafeString(item.SeriesName, "") }
-        queueItem.season = { Id: SafeString(item.SeasonId, ""), Name: SafeString(item.SeasonName, "") }
+        queueItem.series = { Id: Format.SafeString(item.SeriesId, ""), Name: Format.SafeString(item.SeriesName, "") }
+        queueItem.season = { Id: Format.SafeString(item.SeasonId, ""), Name: Format.SafeString(item.SeasonName, "") }
     end if
     return queueItem
 end function
@@ -431,7 +430,7 @@ sub onSinglePlaylistOpenTimerFire()
     playlist = m.playlistState.pendingAutomaticPlaylist
     m.playlistState.pendingAutomaticPlaylist = invalid
     if playlist = invalid then
-        Spinner_Hide()
+        Spinner.Hide()
         return
     end if
     openPlaylist(playlist, false)
@@ -450,10 +449,10 @@ sub openPlaylist(item as object, addToNavigationStack = true as boolean)
         server: request.server
         token: request.token
         userId: request.userId
-        libraryId: SafeString(item.Id, "")
+        libraryId: Format.SafeString(item.Id, "")
         collectionType: "playlist"
         includeItemTypes: "Movie,Series,Episode,Video"
-        title: SafeString(item.Name, "Playlist")
+        title: Format.SafeString(item.Name, "Playlist")
         item: item
         fromCollections: false
     }
@@ -464,7 +463,7 @@ end sub
 '-------------------------------------------------------------------------------
 function isPlaylistContentRequest() as boolean
     request = m.pageState.request
-    return request <> invalid and LCase(SafeString(request.collectionType, "")) = "playlist"
+    return request <> invalid and LCase(Format.SafeString(request.collectionType, "")) = "playlist"
 end function
 
 '-------------------------------------------------------------------------------
@@ -472,14 +471,14 @@ end function
 '-------------------------------------------------------------------------------
 function isPlaylistLibraryRequest() as boolean
     request = m.pageState.request
-    return request <> invalid and LCase(SafeString(request.collectionType, "")) = "playlists"
+    return request <> invalid and LCase(Format.SafeString(request.collectionType, "")) = "playlists"
 end function
 
 '-------------------------------------------------------------------------------
 ' isPlaylist
 '-------------------------------------------------------------------------------
 function isPlaylist(item as dynamic) as boolean
-    return Array_IsAssocArray(item) and LCase(FirstNonEmpty([item.Type], "")) = "playlist"
+    return Arrays.IsAssocArray(item) and LCase(Format.FirstNonEmpty([item.Type], "")) = "playlist"
 end function
 
 '-------------------------------------------------------------------------------
@@ -489,15 +488,15 @@ function getPlaylistEpisodeImageUrl(item as object, imageAspect as string) as st
     request = m.pageState.request
     if request = invalid then return ""
     if imageAspect = "wide" then
-        itemId = SafeString(item.Id, "")
+        itemId = Format.SafeString(item.Id, "")
         primaryTag = getImageTag(item, "Primary")
         if itemId = "" or primaryTag = "" then return ""
-        return Url_BuildImageUrl(request.server, itemId, "Primary", primaryTag, 441, 249)
+        return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, 441, 249)
     end if
-    seriesId = SafeString(item.SeriesId, "")
-    seriesPrimaryTag = SafeString(item.SeriesPrimaryImageTag, "")
+    seriesId = Format.SafeString(item.SeriesId, "")
+    seriesPrimaryTag = Format.SafeString(item.SeriesPrimaryImageTag, "")
     if seriesId = "" or seriesPrimaryTag = "" then return ""
-    return Url_BuildImageUrl(request.server, seriesId, "Primary", seriesPrimaryTag, 252, 378)
+    return Url.BuildImageUrl(request.server, seriesId, "Primary", seriesPrimaryTag, 252, 378)
 end function
 
 '-------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = CreateLogger("FilmographyTask")
+    m.log = Logger.Create("FilmographyTask")
     m.top.functionName = "executeRequest"
 end sub
 
@@ -13,19 +13,19 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
-        if request <> invalid then validationError.AddReplace("personId", SafeString(request.personId, ""))
+        if request <> invalid then validationError.AddReplace("personId", Format.SafeString(request.personId, ""))
         m.top.response = validationError
         return
     end if
 
-    url = "https://api.themoviedb.org/3/person/" + request.personId + "/combined_credits" + Url_BuildQueryString({
+    requestUrl = "https://api.themoviedb.org/3/person/" + request.personId + "/combined_credits" + Url.BuildQueryString({
         api_key: request.apiKey
     })
 
-    result = HttpClient_Request(url, "GET", invalid, invalid)
+    result = HttpClient.Request(requestUrl, "GET", invalid, invalid)
     if result.ok <> true then
         result.AddReplace("action", "filmography")
-        result.AddReplace("personId", SafeString(request.personId, ""))
+        result.AddReplace("personId", Format.SafeString(request.personId, ""))
         m.top.response = result
         return
     end if
@@ -33,7 +33,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "filmography"
-        personId: SafeString(request.personId, "")
+        personId: Format.SafeString(request.personId, "")
         payload: buildFilmographyItems(result.data)
     }
 end sub
@@ -46,20 +46,20 @@ function buildFilmographyItems(payload as dynamic) as object
     if payload = invalid or payload.cast = invalid then return items
 
     for each credit in payload.cast
-        if Array_IsAssocArray(credit) = false then continue for
+        if Arrays.IsAssocArray(credit) = false then continue for
 
-        title = FirstNonEmpty([credit.title, credit.name], "")
+        title = Format.FirstNonEmpty([credit.title, credit.name], "")
         if title = "" then continue for
         releaseDate = getCreditDate(credit)
         if releaseDate = "" then continue for
 
         items.Push({
             sort_date: releaseDate
-            release_date: DateTime_ToYear(releaseDate)
+            release_date: DateTime.ToYear(releaseDate)
             title: title
-            character: FirstNonEmpty([credit.character], "")
-            poster_path: FirstNonEmpty([credit.poster_path], "")
-            overview: FirstNonEmpty([credit.overview], "")
+            character: Format.FirstNonEmpty([credit.character], "")
+            poster_path: Format.FirstNonEmpty([credit.poster_path], "")
+            overview: Format.FirstNonEmpty([credit.overview], "")
             vote_average: Number.ToFloat(credit.vote_average)
             raw: credit
         })
@@ -73,8 +73,8 @@ end function
 ' getCreditDate
 '-------------------------------------------------------------------------------
 function getCreditDate(credit as object) as string
-    originalDate = FirstNonEmpty([credit.release_date, credit.first_air_date], "")
-    return FirstNonEmpty([credit.first_credit_air_date, originalDate], "")
+    originalDate = Format.FirstNonEmpty([credit.release_date, credit.first_air_date], "")
+    return Format.FirstNonEmpty([credit.first_credit_air_date, originalDate], "")
 end function
 
 ' validateRequest
