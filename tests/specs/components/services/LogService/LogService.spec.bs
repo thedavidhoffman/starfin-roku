@@ -1,0 +1,97 @@
+namespace tests
+
+    @SGNode("LogService")
+    @suite("LogService component")
+    class LogServiceTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.node.logState = {
+                entries: []
+                characterCount: 0
+                maximumEntries: 300
+                maximumCharacters: 250000
+                maximumEntryLength: 8000
+            }
+        end function
+
+        @describe("LogService behavior")
+
+        @it("initializes an empty bounded log buffer")
+        function _()
+            m.assertEqual(m.node.logState.entries, [])
+            m.assertEqual(m.node.logState.characterCount, 0)
+            m.assertEqual(m.node.logState.maximumEntries, 300)
+            m.assertEqual(m.node.logState.maximumCharacters, 250000)
+            m.assertEqual(m.node.logState.maximumEntryLength, 8000)
+        end function
+
+        @it("normalizes control characters and truncates long entries")
+        function _()
+            m.node.logState.maximumEntryLength = 8
+            'bs:disable-next-line 1140
+            m.assertEqual(normalizeEntry(invalid), "")
+            'bs:disable-next-line 1140
+            m.assertEqual(normalizeEntry("ab" + Chr(0) + "cd" + Chr(13) + "efghij"), "abcde...")
+        end function
+
+        @it("appends requested entries through the interface callback")
+        function _()
+            m.top.appendRequested = "from-field"
+            m.node.logState.entries = []
+            m.node.logState.characterCount = 0
+
+            'bs:disable-next-line 1140
+            onAppendRequested()
+            m.assertEqual(m.node.logState.entries, ["from-field"])
+            m.assertEqual(m.node.logState.characterCount, 10)
+        end function
+
+        @it("evicts oldest entries at entry and character limits")
+        function _()
+            m.node.logState.entries = []
+            m.node.logState.characterCount = 0
+            m.node.logState.maximumEntries = 2
+            m.node.logState.maximumCharacters = 100
+            'bs:disable-next-line 1140
+            appendEntry("one")
+            'bs:disable-next-line 1140
+            appendEntry("two")
+            'bs:disable-next-line 1140
+            appendEntry("three")
+            m.assertEqual(m.node.logState.entries, ["two", "three"])
+            m.assertEqual(m.node.logState.characterCount, 8)
+
+            m.node.logState.entries = []
+            m.node.logState.characterCount = 0
+            m.node.logState.maximumEntries = 10
+            m.node.logState.maximumCharacters = 7
+            'bs:disable-next-line 1140
+            appendEntry("1234")
+            'bs:disable-next-line 1140
+            appendEntry("5678")
+            m.assertEqual(m.node.logState.entries, ["5678"])
+            m.assertEqual(m.node.logState.characterCount, 4)
+        end function
+
+        @it("returns snapshot copies and clears retained entries")
+        function _()
+            m.node.logState.entries = []
+            m.node.logState.characterCount = 0
+            'bs:disable-next-line 1140
+            appendEntry("first")
+            'bs:disable-next-line 1140
+            appendEntry("second")
+            'bs:disable-next-line 1140
+            snapshot = getSnapshot()
+            snapshot[0] = "changed"
+            m.assertEqual(m.node.logState.entries, ["first", "second"])
+
+            'bs:disable-next-line 1140
+            clear()
+            m.assertEqual(m.node.logState.entries, [])
+            m.assertEqual(m.node.logState.characterCount, 0)
+        end function
+
+    end class
+
+end namespace

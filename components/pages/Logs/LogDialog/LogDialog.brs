@@ -12,7 +12,7 @@ sub openLogs()
 
     content = m.top.callFunc("getContentComponent")
     entries = []
-    if m.global.logCollector <> invalid then entries = m.global.logCollector.callFunc("getSnapshot")
+    if m.global.logService <> invalid then entries = m.global.logService.callFunc("getSnapshot")
     content.callFunc("loadEntries", entries)
     m.top.callFunc("openDialog")
     content.callFunc("focusLog")
