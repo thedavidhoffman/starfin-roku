@@ -1,0 +1,49 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = Logger.Create("MusicArtistsTask")
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    requestTimer = CreateObject("roTimespan")
+    requestTimer.Mark()
+    libraryId = ""
+    if request <> invalid then libraryId = Format.SafeString(request.libraryId, "")
+    if request = invalid or Format.SafeString(request.server, "") = "" or Format.SafeString(request.token, "") = "" or Format.SafeString(request.userId, "") = "" or libraryId = "" then
+        m.log.error("Invalid artist request libraryId=" + libraryId)
+        m.top.response = { ok: false, action: "musicArtists", libraryId: libraryId, errorMessage: "Invalid music artists request." }
+        return
+    end if
+
+    params = {
+        userId: Format.SafeString(request.userId, "")
+        parentId: Format.SafeString(request.libraryId, "")
+        fields: "SortName,ProviderIds"
+        enableImageTypes: "Primary,Backdrop,Logo"
+        imageTypeLimit: 1
+        enableTotalRecordCount: false
+    }
+    requestUrl = request.server + "/Artists" + Url.BuildQueryString(params)
+    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    m.log.write("HTTP completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
+    if response.ok <> true then
+        m.log.error("Artist request failed libraryId=" + Format.SafeString(request.libraryId, "") + " message=" + Format.SafeString(response.errorMessage, ""))
+        response.AddReplace("action", "musicArtists")
+        response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        m.top.response = response
+        return
+    end if
+
+    m.top.response = {
+        ok: true
+        action: "musicArtists"
+        libraryId: Format.SafeString(request.libraryId, "")
+        payload: response.data
+    }
+end sub

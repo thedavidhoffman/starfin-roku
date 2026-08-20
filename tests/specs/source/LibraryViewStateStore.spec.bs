@@ -1,0 +1,40 @@
+namespace tests
+
+    @suite("Library view-state store helpers")
+    class LibraryViewStateStoreTests extends rooibos.BaseTestSuite
+
+        @describe("LibraryViewStateStore pure helpers")
+
+        @it("checks index membership and serializes deterministically")
+        function _()
+            ids = ["library-b", "library-a"]
+            m.assertTrue(LibraryViewStateStore.__IndexContains(ids, "library-a"))
+            m.assertFalse(LibraryViewStateStore.__IndexContains(ids, "library-c"))
+            m.assertEqual(LibraryViewStateStore.__SerializeIndex(ids), "[" + Json.String("library-b") + "," + Json.String("library-a") + "]")
+        end function
+
+        @it("accepts supported string and numeric fields")
+        function _()
+            optionState = ParseJson("{" + Json.Pair("optionKey", "all") + "}")
+            decadeState = ParseJson("{" + Json.NumberPair("selectedDecade", 1990) + "}")
+            floatDecadeState = ParseJson("{" + Json.NumberPair("selectedDecade", 1990.5) + "}")
+            libraryState = ParseJson("{" + Json.Pair("libraryTitle", "Movies") + "," + Json.Pair("collectionType", "movies") + "}")
+
+            m.assertTrue(LibraryViewStateStore.__IsValidState(optionState))
+            m.assertTrue(LibraryViewStateStore.__IsValidState(decadeState))
+            m.assertTrue(LibraryViewStateStore.__IsValidState(floatDecadeState))
+            m.assertTrue(LibraryViewStateStore.__IsValidState(libraryState))
+        end function
+
+        @it("rejects invalid field types and unknown-only objects")
+        function _()
+            m.assertFalse(LibraryViewStateStore.__IsValidState(invalid))
+            m.assertFalse(LibraryViewStateStore.__IsValidState({}))
+            m.assertFalse(LibraryViewStateStore.__IsValidState({ unknown: "value" }))
+            m.assertFalse(LibraryViewStateStore.__IsValidState({ optionKey: 1 }))
+            m.assertFalse(LibraryViewStateStore.__IsValidState({ selectedDecade: "1990" }))
+        end function
+
+    end class
+
+end namespace

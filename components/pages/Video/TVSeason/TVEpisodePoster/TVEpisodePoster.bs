@@ -1,0 +1,189 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.posterMask = m.top.findNode("posterMask")
+    m.poster = m.top.findNode("poster")
+    m.progressBar = m.top.findNode("progressBar")
+    m.watchedIndicator = m.top.findNode("watchedIndicator")
+    m.layout = {
+        defaultWidth: 531
+        defaultHeight: 300
+        progressMarginX: 9
+        progressBottom: 9
+        progressHeight: 15
+        watchedSize: 57
+        watchedTop: 9
+        watchedRight: 12
+    }
+    applyPosterLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' onPosterSizeChanged
+'-------------------------------------------------------------------------------
+sub onPosterSizeChanged()
+    applyPosterLayout()
+    refresh()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPosterLayout
+'-------------------------------------------------------------------------------
+sub applyPosterLayout()
+    width = getPosterWidth()
+    height = getPosterHeight()
+    progressWidth = getProgressTrackWidth(width)
+    progressY = height - m.layout.progressBottom - m.layout.progressHeight
+
+    hdWidth = Number.ToInteger((width * 2) / 3, width)
+    hdHeight = Number.ToInteger((height * 2) / 3, height)
+    MaskAssets.Apply(m.posterMask, "episode-thumbnail-mask.png", [width, height], [hdWidth, hdHeight])
+    m.poster.width = width
+    m.poster.height = height
+
+    m.progressBar.translation = [m.layout.progressMarginX, progressY]
+    m.progressBar.barWidth = progressWidth
+    m.progressBar.barHeight = m.layout.progressHeight
+
+    m.watchedIndicator.width = m.layout.watchedSize
+    m.watchedIndicator.height = m.layout.watchedSize
+    m.watchedIndicator.translation = [width - m.layout.watchedRight - m.layout.watchedSize, m.layout.watchedTop]
+end sub
+
+'-------------------------------------------------------------------------------
+' getPosterWidth
+'-------------------------------------------------------------------------------
+function getPosterWidth() as integer
+    width = m.top.posterWidth
+    if width = invalid or width <= 0 then return m.layout.defaultWidth
+
+    return width
+end function
+
+'-------------------------------------------------------------------------------
+' getPosterHeight
+'-------------------------------------------------------------------------------
+function getPosterHeight() as integer
+    height = m.top.posterHeight
+    if height = invalid or height <= 0 then return m.layout.defaultHeight
+
+    return height
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressTrackWidth
+'-------------------------------------------------------------------------------
+function getProgressTrackWidth(posterWidth as integer) as integer
+    width = posterWidth - (m.layout.progressMarginX * 2)
+    if width < 0 then return 0
+
+    return width
+end function
+
+'-------------------------------------------------------------------------------
+' onItemContentChanged
+'-------------------------------------------------------------------------------
+sub onItemContentChanged()
+    item = m.top.itemContent
+    if item = invalid then
+        renderImage("")
+        updateProgress(invalid, false)
+        updateWatchedIndicator(invalid)
+        return
+    end if
+
+    isSeasonSummary = Format.SafeString(item.itemType, "") = "SeasonSummary"
+    renderImage(Format.SafeString(item.HDPosterUrl, ""))
+    updateProgress(item, isSeasonSummary)
+    updateWatchedIndicator(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' onImageUrlChanged
+'-------------------------------------------------------------------------------
+sub onImageUrlChanged()
+    renderImage(Format.SafeString(m.top.imageUrl, ""))
+end sub
+
+'-------------------------------------------------------------------------------
+' refresh
+'-------------------------------------------------------------------------------
+sub refresh()
+    onItemContentChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderImage
+'-------------------------------------------------------------------------------
+sub renderImage(imageUrl as string)
+    m.poster.visible = true
+    m.poster.uri = getPosterImageUrl(imageUrl)
+end sub
+
+'-------------------------------------------------------------------------------
+' getPosterImageUrl
+'-------------------------------------------------------------------------------
+function getPosterImageUrl(imageUrl as string) as string
+    if imageUrl <> "" then return imageUrl
+
+    return "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
+end function
+
+'-------------------------------------------------------------------------------
+' updateProgress
+'-------------------------------------------------------------------------------
+sub updateProgress(item as dynamic, isSeasonSummary as boolean)
+    trackWidth = getProgressTrackWidth(getPosterWidth())
+    if isItemPlayed(item) then
+        m.progressBar.visible = false
+        m.progressBar.progressWidth = 0
+        return
+    end if
+
+    progressWidth = 0
+    if item <> invalid then
+        if item.progressWidth <> invalid then progressWidth = int(item.progressWidth)
+        if progressWidth = 0 and item.progressPercent <> invalid then
+            progress = item.progressPercent
+            if progress > 100 then progress = 100
+            if progress > 0 then progressWidth = int(trackWidth * (progress / 100))
+        end if
+    end if
+
+    visible = isSeasonSummary <> true and progressWidth > 0
+    m.progressBar.visible = visible
+    if visible <> true then
+        m.progressBar.progressWidth = 0
+        return
+    end if
+
+    if progressWidth > trackWidth then progressWidth = trackWidth
+    m.progressBar.progressWidth = progressWidth
+end sub
+
+'-------------------------------------------------------------------------------
+' updateWatchedIndicator
+'-------------------------------------------------------------------------------
+sub updateWatchedIndicator(item as dynamic)
+    if item = invalid then
+        m.watchedIndicator.visible = false
+        return
+    end if
+
+    m.watchedIndicator.visible = isItemPlayed(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' isItemPlayed
+'-------------------------------------------------------------------------------
+function isItemPlayed(item as dynamic) as boolean
+    if item = invalid then return false
+
+    raw = item.raw
+    if Format.SafeString(item.itemType, "") = "SeasonSummary" then
+        return raw <> invalid and raw.UserData <> invalid and raw.UserData.UnplayedItemCount = 0
+    end if
+
+    return raw <> invalid and raw.UserData <> invalid and raw.UserData.Played = true
+end function

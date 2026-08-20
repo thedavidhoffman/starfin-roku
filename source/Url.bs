@@ -1,0 +1,131 @@
+namespace Url
+
+    '---------------------------------------------------------------------------
+    ' Url.NormalizeServer
+    '---------------------------------------------------------------------------
+    ' Example: " jellyfin.example.com/// " returns "http://jellyfin.example.com".
+    '---------------------------------------------------------------------------
+    function NormalizeServer(server as string) as string
+
+        if server = invalid then return ""
+
+        normalized = Strings.Trim(server)
+
+        if normalized = "" then return ""
+
+        if Instr(1, LCase(normalized), "http://") <> 1 and Instr(1, LCase(normalized), "https://") <> 1 then
+            normalized = "http://" + normalized
+        end if
+
+        while Right(normalized, 1) = "/"
+            normalized = Left(normalized, Len(normalized) - 1)
+        end while
+
+        return normalized
+
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Url.BuildQueryString
+    '---------------------------------------------------------------------------
+    ' Example: { enabled: true } returns "?enabled=true".
+    '---------------------------------------------------------------------------
+    function BuildQueryString(params as object) as string
+        if params = invalid or params.Count() = 0 then return ""
+
+        query = ""
+        for each key in params
+            textValue = Url.__QueryValue(params[key])
+            if textValue <> "" then
+                if query <> "" then query = query + "&"
+                query = query + Encode.Url(key.ToStr()) + "=" + Encode.Url(textValue)
+            end if
+        end for
+
+        if query = "" then return ""
+        return "?" + query
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Url.BuildImageUrl
+    '---------------------------------------------------------------------------
+    ' Example: ("server", "id", "Primary", "", 300, 200) returns "http://server/Items/id/Images/Primary?maxWidth=300&maxHeight=200&quality=90".
+    '---------------------------------------------------------------------------
+    function BuildImageUrl(server as string, itemId as string, imageType as string, tag as string, width as integer, height as integer, options = invalid as dynamic) as string
+        serverUrl = Url.NormalizeServer(server)
+        if serverUrl = "" then return ""
+        if itemId = "" or imageType = "" then return ""
+
+        query = "?maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+        if tag <> "" then query = "?tag=" + tag + "&maxWidth=" + width.ToStr() + "&maxHeight=" + height.ToStr() + "&quality=90"
+
+        if options <> invalid then
+            for each key in options
+                value = Url.__QueryValue(options[key])
+                if value <> "" then query = query + "&" + key.ToStr() + "=" + value
+            end for
+        end if
+
+        return serverUrl + "/Items/" + itemId + "/Images/" + imageType + query
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Url.SetQueryParam
+    '---------------------------------------------------------------------------
+    ' Example: ("https://server/items", "start", "20") returns "https://server/items?start=20".
+    '---------------------------------------------------------------------------
+    function SetQueryParam(urlValue as string, name as string, value as string) as string
+
+        ' Replaces an existing query parameter by name, or appends it when absent.
+
+        queryStart = Instr(1, urlValue, "?")
+        if queryStart = 0 then return Url.__AddQueryParam(urlValue, name, value)
+
+        lowerUrl = LCase(urlValue)
+        lowerName = LCase(name)
+        searchStart = queryStart + 1
+
+        while true
+            keyStart = Instr(searchStart, lowerUrl, lowerName + "=")
+            if keyStart = 0 then return Url.__AddQueryParam(urlValue, name, value)
+            if keyStart = queryStart + 1 or Mid(urlValue, keyStart - 1, 1) = "&" then
+                valueStart = keyStart + Len(name) + 1
+                valueEnd = Instr(valueStart, urlValue, "&")
+                if valueEnd = 0 then valueEnd = Len(urlValue) + 1
+
+                return Left(urlValue, valueStart - 1) + Encode.Url(value) + Mid(urlValue, valueEnd)
+            end if
+
+            searchStart = keyStart + Len(name) + 1
+        end while
+
+        return Url.__AddQueryParam(urlValue, name, value)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Url.__AddQueryParam
+    '---------------------------------------------------------------------------
+    ' Example: ("https://server/items", "start", "20") returns "https://server/items?start=20".
+    '---------------------------------------------------------------------------
+    function __AddQueryParam(urlValue as string, name as string, value as string) as string
+        separator = "?"
+        if Instr(1, urlValue, "?") > 0 then separator = "&"
+
+        return urlValue + separator + Encode.Url(name) + "=" + Encode.Url(value)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Url.__QueryValue
+    '---------------------------------------------------------------------------
+    ' Example: false returns "false".
+    '---------------------------------------------------------------------------
+    function __QueryValue(value as dynamic) as string
+        if Type(value) = "roBoolean" or Type(value) = "Boolean" then
+            if value then return "true"
+            return "false"
+        end if
+
+        return Format.SafeString(value, "")
+    end function
+
+end namespace

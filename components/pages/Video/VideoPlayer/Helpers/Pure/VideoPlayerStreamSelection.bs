@@ -1,0 +1,50 @@
+'-------------------------------------------------------------------------------
+' VideoPlayerStreamSelection_GetStreams
+'-------------------------------------------------------------------------------
+function VideoPlayerStreamSelection_GetStreams(item as dynamic, streamType as string) as object
+    if item = invalid or item.MediaStreams = invalid then return []
+    streams = []
+    targetType = LCase(streamType)
+    for each stream in item.MediaStreams
+        if stream <> invalid and LCase(Format.SafeString(stream.Type, "")) = targetType then streams.Push(stream)
+    end for
+    return streams
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerStreamSelection_GetSubtitleStreams
+'-------------------------------------------------------------------------------
+function VideoPlayerStreamSelection_GetSubtitleStreams(item as dynamic) as object
+    return VideoPlayerStreamSelection_GetStreams(item, "subtitle")
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerStreamSelection_GetAudioStreams
+'-------------------------------------------------------------------------------
+function VideoPlayerStreamSelection_GetAudioStreams(item as dynamic) as object
+    return VideoPlayerStreamSelection_GetStreams(item, "audio")
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerStreamSelection_GetSubtitleIndex
+'-------------------------------------------------------------------------------
+function VideoPlayerStreamSelection_GetSubtitleIndex(request as dynamic) as integer
+    if request <> invalid and request.subtitleStreamIndex <> invalid then return Number.ToInteger(request.subtitleStreamIndex, -1)
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerStreamSelection_GetAudioIndex
+'-------------------------------------------------------------------------------
+function VideoPlayerStreamSelection_GetAudioIndex(request as dynamic, audioStreams as object) as integer
+    if request <> invalid and request.audioStreamIndex <> invalid then return Number.ToInteger(request.audioStreamIndex, -1)
+    if audioStreams = invalid then return -1
+
+    for i = 0 to audioStreams.Count() - 1
+        stream = audioStreams[i]
+        if stream <> invalid and stream.IsDefault = true then return MediaOptions.GetStreamIndex(stream, i)
+    end for
+
+    if audioStreams.Count() = 0 then return -1
+    return MediaOptions.GetStreamIndex(audioStreams[0], 0)
+end function

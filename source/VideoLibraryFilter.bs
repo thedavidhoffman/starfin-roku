@@ -1,0 +1,105 @@
+namespace VideoLibraryFilter
+
+    '---------------------------------------------------------------------------
+    ' VideoLibraryFilter.ByDecade
+    '---------------------------------------------------------------------------
+    function ByDecade(items as object, decade as integer) as object
+        filteredItems = []
+        if items = invalid or decade < 0 then return filteredItems
+
+        for each item in items
+            year = VideoLibraryFilter.__GetYear(item)
+            if year > 0 and Number.ToInteger(Fix(year / 10) * 10, 0) = decade then filteredItems.Push(item)
+        end for
+
+        return VideoLibraryFilter.__SortItemsByYear(filteredItems)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' VideoLibraryFilter.ByGenre
+    '---------------------------------------------------------------------------
+    function ByGenre(items as object, genre as string) as object
+        filteredItems = []
+        targetGenre = LCase(Strings.Trim(genre))
+        if items = invalid or targetGenre = "" then return filteredItems
+
+        for each item in items
+            if VideoLibraryFilter.__ItemHasGenre(item, targetGenre) then filteredItems.Push(item)
+        end for
+
+        return VideoLibrarySort.ByTitle(filteredItems, "Ascending")
+    end function
+
+    '---------------------------------------------------------------------------
+    ' VideoLibraryFilter.__GetYear
+    '---------------------------------------------------------------------------
+    function __GetYear(item as object) as integer
+        productionYear = Number.ToInteger(item.ProductionYear, 0)
+        if productionYear > 0 then return productionYear
+
+        premiereDate = Format.SafeString(item.PremiereDate, "")
+        if Len(premiereDate) < 4 then return 0
+
+        return Number.ToInteger(Left(premiereDate, 4), 0)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' VideoLibraryFilter.__ItemHasGenre
+    '---------------------------------------------------------------------------
+    function __ItemHasGenre(item as object, targetGenre as string) as boolean
+        if item.Genres = invalid then return false
+
+        for each genre in item.Genres
+            if LCase(Strings.Trim(Format.SafeString(genre, ""))) = targetGenre then return true
+        end for
+
+        return false
+    end function
+
+    '---------------------------------------------------------------------------
+    ' VideoLibraryFilter.__SortItemsByYear
+    '---------------------------------------------------------------------------
+    function __SortItemsByYear(items as object) as object
+        sortedItems = []
+        for each item in items
+            sortedItems.Push(item)
+        end for
+
+        for i = 1 to sortedItems.Count() - 1
+            currentItem = sortedItems[i]
+            currentYear = VideoLibraryFilter.__GetYear(currentItem)
+            currentTitle = VideoLibraryFilter.__GetTitle(currentItem)
+            insertIndex = i - 1
+
+            while insertIndex >= 0 and VideoLibraryFilter.__ShouldItemMoveRight(sortedItems[insertIndex], currentYear, currentTitle)
+                sortedItems[insertIndex + 1] = sortedItems[insertIndex]
+                insertIndex = insertIndex - 1
+            end while
+
+            sortedItems[insertIndex + 1] = currentItem
+        end for
+
+        return sortedItems
+    end function
+
+    '---------------------------------------------------------------------------
+    ' VideoLibraryFilter.__GetTitle
+    '---------------------------------------------------------------------------
+    function __GetTitle(item as object) as string
+        title = Strings.Trim(Format.SafeString(item.SortName, ""))
+        if title = "" then title = Strings.Trim(Format.SafeString(item.Name, ""))
+        return LCase(title)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' VideoLibraryFilter.__ShouldItemMoveRight
+    '---------------------------------------------------------------------------
+    function __ShouldItemMoveRight(item as object, targetYear as integer, targetTitle as string) as boolean
+        itemYear = VideoLibraryFilter.__GetYear(item)
+        if itemYear > targetYear then return true
+        if itemYear < targetYear then return false
+
+        return VideoLibraryFilter.__GetTitle(item) > targetTitle
+    end function
+
+end namespace

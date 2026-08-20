@@ -3,74 +3,106 @@ namespace tests
     @suite("Date and time helpers")
     class DateTimeTests extends rooibos.BaseTestSuite
 
-        @describe("DateTime_ToYear")
+        @describe("DateTime.ToYear")
 
         @it("extracts a four-digit year")
         function _()
-            m.assertEqual(DateTime_ToYear("2026-08-19T12:00:00Z"), "2026")
+            m.assertEqual(DateTime.ToYear("2026-08-19T12:00:00Z"), "2026")
         end function
 
         @it("handles invalid and short values")
         function _()
-            m.assertEqual(DateTime_ToYear(invalid), "")
-            m.assertEqual(DateTime_ToYear("123"), "")
+            m.assertEqual(DateTime.ToYear(invalid), "")
+            m.assertEqual(DateTime.ToYear("123"), "")
         end function
 
-        @describe("DateTime_ToShortDate")
+        @describe("DateTime.ToShortDate")
 
         @it("formats ISO dates with abbreviated month names")
         function _()
-            m.assertEqual(DateTime_ToShortDate("2026-08-09T12:00:00Z"), "Aug 9, 2026")
+            m.assertEqual(DateTime.ToShortDate("2026-08-09T12:00:00Z"), "Aug 9, 2026")
         end function
 
         @it("preserves short or structurally invalid date text")
         function _()
-            m.assertEqual(DateTime_ToShortDate("unknown"), "unknown")
-            m.assertEqual(DateTime_ToShortDate("2026-13-01"), "2026-13-01")
-            m.assertEqual(DateTime_ToShortDate(invalid), "")
+            m.assertEqual(DateTime.ToShortDate("unknown"), "unknown")
+            m.assertEqual(DateTime.ToShortDate("2026-13-01"), "2026-13-01")
+            m.assertEqual(DateTime.ToShortDate(invalid), "")
         end function
 
         @describe("ISO date parsing")
 
         @it("formats a long date")
         function _()
-            m.assertEqual(DateTime_ToLongDate("2026-08-19T12:00:00Z"), "August 19, 2026")
-            m.assertEqual(DateTime_ToLongDate(invalid), "")
+            m.assertEqual(DateTime.ToLongDate("2026-08-19T12:00:00Z"), "August 19, 2026")
+            m.assertEqual(DateTime.ToLongDate(invalid), "")
         end function
 
         @it("converts ISO timestamps to seconds consistently")
         function _()
-            first = DateTime_FromIsoSeconds("2026-08-19T12:00:00Z")
-            second = DateTime_FromIsoSeconds("2026-08-19T12:01:00Z")
+            first = DateTime.FromIsoSeconds("2026-08-19T12:00:00Z")
+            second = DateTime.FromIsoSeconds("2026-08-19T12:01:00Z")
             m.assertEqual(second - first, 60)
-            m.assertEqual(DateTime_FromIsoSeconds(invalid), 0)
-            m.assertEqual(DateTime_FromIsoSeconds(""), 0)
+            m.assertEqual(DateTime.FromIsoSeconds(invalid), 0)
+            m.assertEqual(DateTime.FromIsoSeconds(""), 0)
+        end function
+
+        @it("applies an offset to the current ISO timestamp")
+        function _()
+            before = CreateObject("roDateTime")
+            before.Mark()
+
+            actual = DateTime.FromIsoSeconds(DateTime.ToIsoOffset(3600))
+
+            after = CreateObject("roDateTime")
+            after.Mark()
+            m.assertTrue(actual >= before.AsSeconds() + 3600)
+            m.assertTrue(actual <= after.AsSeconds() + 3600)
+        end function
+
+        @it("formats an ISO timestamp in the device local timezone")
+        function _()
+            value = "2026-08-19T12:05:00Z"
+            date = CreateObject("roDateTime")
+            date.FromISO8601String(value)
+            date.ToLocalTime()
+
+            hour = date.GetHours()
+            suffix = "AM"
+            if hour >= 12 then suffix = "PM"
+            displayHour = hour mod 12
+            if displayHour = 0 then displayHour = 12
+            minuteText = date.GetMinutes().ToStr()
+            if date.GetMinutes() < 10 then minuteText = "0" + minuteText
+
+            expected = displayHour.ToStr() + ":" + minuteText + " " + suffix
+            m.assertEqual(DateTime.ToLocalShortTime(value), expected)
         end function
 
         @describe("duration formatting")
 
         @it("formats durations in minutes and hours")
         function _()
-            m.assertEqual(DateTime_FormatDurationSeconds(3599), "59m")
-            m.assertEqual(DateTime_FormatDurationSeconds(3600), "1h 0m")
-            m.assertEqual(DateTime_FormatDurationSeconds(7500), "2h 5m")
+            m.assertEqual(DateTime.FormatDurationSeconds(3599), "59m")
+            m.assertEqual(DateTime.FormatDurationSeconds(3600), "1h 0m")
+            m.assertEqual(DateTime.FormatDurationSeconds(7500), "2h 5m")
         end function
 
         @it("omits invalid and sub-minute durations")
         function _()
-            m.assertEqual(DateTime_FormatDurationSeconds(invalid), "")
-            m.assertEqual(DateTime_FormatDurationSeconds(59), "")
-            m.assertEqual(DateTime_FormatDurationSeconds(-60), "")
+            m.assertEqual(DateTime.FormatDurationSeconds(invalid), "")
+            m.assertEqual(DateTime.FormatDurationSeconds(59), "")
+            m.assertEqual(DateTime.FormatDurationSeconds(-60), "")
         end function
 
         @describe("position formatting")
 
         @it("formats positions and clamps negative values")
         function _()
-            m.assertEqual(DateTime_FormatPositionSeconds(3599), "59m")
-            m.assertEqual(DateTime_FormatPositionSeconds(3660), "1h 1m")
-            m.assertEqual(DateTime_FormatPositionSeconds(-1), "0m")
-            m.assertEqual(DateTime_FormatPositionSeconds(invalid), "")
+            m.assertEqual(DateTime.FormatPositionSeconds(3599), "59m")
+            m.assertEqual(DateTime.FormatPositionSeconds(3660), "1h 1m")
+            m.assertEqual(DateTime.FormatPositionSeconds(-1), "0m")
+            m.assertEqual(DateTime.FormatPositionSeconds(invalid), "")
         end function
 
     end class

@@ -1,0 +1,103 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.albumMask = m.top.findNode("albumMask")
+    m.artwork = m.top.findNode("albumArtwork")
+    if m.artwork.width = 300 then
+        MaskAssets.Apply(m.albumMask, "album-mask-300.png", [300, 300], [200, 200])
+    else
+        MaskAssets.Apply(m.albumMask, "album-mask-342.png", [342, 342], [228, 228])
+    end if
+    m.artistLabel = m.top.findNode("artistLabel")
+    m.albumLabel = m.top.findNode("albumLabel")
+    m.yearLabel = m.top.findNode("yearLabel")
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemContentChanged
+'-------------------------------------------------------------------------------
+sub onItemContentChanged()
+    item = m.top.itemContent
+    if item = invalid then return
+
+    m.artwork.uri = getArtworkUrl(item)
+    m.artistLabel.text = getPrimaryLabel(item)
+    m.albumLabel.text = getSecondaryLabel(item)
+    syncYearLabel(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' getArtworkUrl
+'-------------------------------------------------------------------------------
+function getArtworkUrl(item as object) as string
+    imageUrl = Format.SafeString(item.HDPosterUrl, "")
+    if imageUrl <> "" then return imageUrl
+
+    return "pkg:/images/music/album-placeholder-342x342.png"
+end function
+
+'-------------------------------------------------------------------------------
+' getPrimaryLabel
+'-------------------------------------------------------------------------------
+function getPrimaryLabel(item as object) as string
+    primaryLabel = Format.FirstNonEmpty([item.primaryLabel], "")
+    if primaryLabel <> "" then return primaryLabel
+
+    return getArtistName(item)
+end function
+
+'-------------------------------------------------------------------------------
+' getSecondaryLabel
+'-------------------------------------------------------------------------------
+function getSecondaryLabel(item as object) as string
+    secondaryLabel = Format.FirstNonEmpty([item.secondaryLabel], "")
+    if secondaryLabel <> "" then return secondaryLabel
+
+    return getAlbumName(item)
+end function
+
+'-------------------------------------------------------------------------------
+' syncYearLabel
+'-------------------------------------------------------------------------------
+sub syncYearLabel(item as object)
+    releaseYear = getReleaseYear(item)
+    m.yearLabel.text = releaseYear
+    m.yearLabel.visible = releaseYear <> ""
+end sub
+
+'-------------------------------------------------------------------------------
+' getReleaseYear
+'-------------------------------------------------------------------------------
+function getReleaseYear(item as object) as string
+    releaseYear = Format.SafeString(item.releaseYear, "")
+    if Len(releaseYear) = 4 then return releaseYear
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getArtistName
+'-------------------------------------------------------------------------------
+function getArtistName(item as object) as string
+    artistName = Format.FirstNonEmpty([item.artistName], "")
+    if artistName <> "" then return artistName
+
+    raw = item.raw
+    if raw <> invalid then return Format.FirstNonEmpty([raw.AlbumArtist, raw.Artist], "Unknown Artist")
+
+    return "Unknown Artist"
+end function
+
+'-------------------------------------------------------------------------------
+' getAlbumName
+'-------------------------------------------------------------------------------
+function getAlbumName(item as object) as string
+    albumName = Format.FirstNonEmpty([item.title], "")
+    if albumName <> "" then return albumName
+
+    raw = item.raw
+    if raw <> invalid then return Format.FirstNonEmpty([raw.Name], "Untitled Album")
+
+    return "Untitled Album"
+end function

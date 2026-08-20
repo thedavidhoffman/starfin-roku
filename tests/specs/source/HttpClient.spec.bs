@@ -1,0 +1,42 @@
+namespace tests
+
+    @suite("HTTP client helpers")
+    class HttpClientTests extends rooibos.BaseTestSuite
+
+        @describe("HttpClient pure helpers")
+
+        @it("redacts URL credentials and sensitive query values")
+        function _()
+            value = "https://user:password@server/Items?Api_Key=secret&name=visible&ACCESS_TOKEN=token"
+            masked = HttpClient.__MaskUrl(value)
+            m.assertEqual(masked, "https://[redacted]@server/Items?Api_Key=[redacted]&name=visible&ACCESS_TOKEN=[redacted]")
+        end function
+
+        @it("does not redact partial query-key matches")
+        function _()
+            value = "https://server/Items?mytoken=visible&token=secret"
+            m.assertEqual(HttpClient.__MaskUrl(value), "https://server/Items?mytoken=visible&token=[redacted]")
+        end function
+
+        @it("matches request and response headers case-insensitively")
+        function _()
+            headers = { Authorization: "MediaBrowser Token=" + Chr(34) + "abc" + Chr(34), "Content-Type": "application/json" }
+            m.assertTrue(HttpClient.__HeadersInclude(headers, "authorization"))
+            m.assertFalse(HttpClient.__HeadersInclude(headers, "missing"))
+            m.assertTrue(HttpClient.__AuthorizationHeaderHasToken(headers))
+            m.assertEqual(HttpClient.__GetResponseHeader(headers, "content-type"), "application/json")
+            m.assertEqual(HttpClient.__GetResponseHeader(headers, "missing"), "")
+        end function
+
+        @it("recognizes JSON content types and normalizes invalid values")
+        function _()
+            m.assertTrue(HttpClient.__IsJsonContentType("application/json; charset=utf-8"))
+            m.assertTrue(HttpClient.__IsJsonContentType("application/problem+json"))
+            m.assertFalse(HttpClient.__IsJsonContentType("text/plain"))
+            m.assertEqual(HttpClient.__InvalidToEmpty(invalid), "")
+            m.assertEqual(HttpClient.__InvalidToEmpty("value"), "value")
+        end function
+
+    end class
+
+end namespace

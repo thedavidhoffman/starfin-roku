@@ -1,18 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import rokuDeploy from 'roku-deploy';
 
 const rootDir = process.cwd();
 const outDir = path.join(rootDir, 'out');
-const stagingDir = path.join(rootDir, 'build', 'staging');
 const manifestPath = path.join(rootDir, 'manifest');
-
-const files = [
-  'components/**/*',
-  'images/**/*',
-  'source/**/*',
-  'manifest'
-];
+const compilerPackagePath = path.join(outDir, 'starfin-roku.zip');
 
 function getManifestValue(manifest, key) {
   const match = manifest.match(new RegExp(`^${key}=(\\d+)$`, 'm'));
@@ -28,19 +20,9 @@ const majorVersion = getManifestValue(manifest, 'major_version');
 const minorVersion = getManifestValue(manifest, 'minor_version');
 const buildVersion = getManifestValue(manifest, 'build_version');
 const outFile = `starfin.${majorVersion}.${minorVersion}.${buildVersion}`;
+const packagePath = path.join(outDir, `${outFile}.zip`);
 
 await fs.mkdir(outDir, { recursive: true });
+await fs.copyFile(compilerPackagePath, packagePath);
 
-await rokuDeploy.prepublishToStaging({
-  rootDir,
-  stagingDir,
-  files
-});
-
-await rokuDeploy.zipPackage({
-  stagingDir,
-  outDir,
-  outFile
-});
-
-console.log(`Created package: ${path.join(outDir, `${outFile}.zip`)}`);
+console.log(`Created package: ${packagePath}`);

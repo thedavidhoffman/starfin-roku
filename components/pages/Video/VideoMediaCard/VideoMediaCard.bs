@@ -1,0 +1,264 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.contentGroup = m.top.findNode("contentGroup")
+    m.posterMask = m.top.findNode("posterMask")
+    m.poster = m.top.findNode("poster")
+    m.progressBar = m.top.findNode("progressBar")
+    m.watchedIndicator = m.top.findNode("watchedIndicator")
+    m.title = m.top.findNode("title")
+    m.subtitle = m.top.findNode("subtitle")
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemContentChanged
+'-------------------------------------------------------------------------------
+sub onItemContentChanged()
+    item = m.top.itemContent
+    if item = invalid then return
+
+    showSubtitle = item.showSubtitle <> false
+    imageAspect = Format.SafeString(item.imageAspect, "poster")
+    applyImageLayout(imageAspect, showSubtitle)
+    m.title.text = getDisplayTitle(item)
+    m.subtitle.text = getDisplaySubtitle(item)
+    m.subtitle.visible = showSubtitle
+    m.poster.visible = true
+    renderPoster(item, imageAspect)
+    updateProgress(item, imageAspect)
+    updateWatchedIndicator(item, imageAspect)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateWatchedIndicator
+'-------------------------------------------------------------------------------
+sub updateWatchedIndicator(item as object, imageAspect as string)
+    if imageAspect = "wide" then
+        indicatorSize = 57
+        posterWidth = 441
+    else
+        indicatorSize = 42
+        posterWidth = 252
+    end if
+
+    m.watchedIndicator.width = indicatorSize
+    m.watchedIndicator.height = indicatorSize
+    m.watchedIndicator.translation = [posterWidth - indicatorSize - 9, 9]
+
+    raw = getRawItem(item)
+    m.watchedIndicator.visible = raw <> invalid and raw.UserData <> invalid and raw.UserData.Played = true
+end sub
+
+'-------------------------------------------------------------------------------
+' renderPoster
+'-------------------------------------------------------------------------------
+sub renderPoster(item as object, imageAspect as string)
+    m.poster.uri = getImageUrl(item, imageAspect)
+end sub
+
+'-------------------------------------------------------------------------------
+' getDisplayTitle
+'-------------------------------------------------------------------------------
+function getDisplayTitle(item as object) as string
+    raw = getRawItem(item)
+    if raw = invalid then return Format.FirstNonEmpty([item.title], "Untitled")
+
+    mediaType = LCase(Format.SafeString(raw.Type, ""))
+
+    if mediaType = "episode" then
+        return Format.FirstNonEmpty([raw.SeriesName, raw.Name], "Untitled")
+    end if
+
+    return Format.FirstNonEmpty([raw.Name], "Untitled")
+end function
+
+'-------------------------------------------------------------------------------
+' getDisplaySubtitle
+'-------------------------------------------------------------------------------
+function getDisplaySubtitle(item as object) as string
+    raw = getRawItem(item)
+    if raw = invalid then return Format.FirstNonEmpty([item.description], "")
+
+    mediaType = LCase(Format.SafeString(raw.Type, ""))
+
+    if mediaType = "movie" or mediaType = "video" then
+        return Format.SafeString(raw.ProductionYear, "")
+    end if
+
+    if mediaType = "series" then
+        return getSeriesYearRange(raw)
+    end if
+
+    if mediaType = "episode" then
+        return getEpisodeSubtitle(raw)
+    end if
+
+    return Format.FirstNonEmpty([raw.SeriesName, raw.AlbumArtist, raw.Album, raw.CollectionType, raw.Type], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getSeriesYearRange
+'-------------------------------------------------------------------------------
+function getSeriesYearRange(item as object) as string
+    productionYear = Format.SafeString(item.ProductionYear, "")
+    if productionYear = "" then return ""
+
+    status = LCase(Format.SafeString(item.Status, ""))
+    if status = "continuing" then return productionYear + " - Present"
+
+    if status = "ended" then
+        endYear = DateTime.ToYear(item.EndDate)
+        if endYear = productionYear then return productionYear
+        if endYear <> "" then return productionYear + " - " + endYear
+    end if
+
+    return productionYear
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeSubtitle
+'-------------------------------------------------------------------------------
+function getEpisodeSubtitle(item as object) as string
+    episodeTitle = Format.SafeString(item.Name, "")
+    seasonNumber = Format.SafeString(item.ParentIndexNumber, "")
+    episodeNumber = Format.SafeString(item.IndexNumber, "")
+
+    if seasonNumber = "" or episodeNumber = "" then return episodeTitle
+
+    return "S" + seasonNumber + MediaMetadata.BulletSeparator() + "E" + episodeNumber + " - " + episodeTitle
+end function
+
+'-------------------------------------------------------------------------------
+' getRawItem
+'-------------------------------------------------------------------------------
+function getRawItem(item as object) as dynamic
+    if item = invalid then return invalid
+    return item.raw
+end function
+
+'-------------------------------------------------------------------------------
+' getImageUrl
+'-------------------------------------------------------------------------------
+function getImageUrl(item as object, imageAspect as string) as string
+    imageUrl = Format.SafeString(item.HDPosterUrl, "")
+    if imageUrl <> "" then return imageUrl
+
+    if imageAspect = "wide" then return "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
+    return "pkg:/images/media-card/poster-placeholder-252x378.png"
+end function
+
+'-------------------------------------------------------------------------------
+' applyImageLayout
+'-------------------------------------------------------------------------------
+sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
+    if imageAspect = "wide" then
+        MaskAssets.Apply(m.posterMask, "media-card-thumbnail-mask.png", [441, 249], [294, 166])
+        m.poster.width = 441
+        m.poster.height = 249
+        applyProgressLayout(441, 249)
+        m.title.width = 441
+        m.title.translation = [0, 261]
+        m.subtitle.width = 441
+        m.subtitle.translation = [0, 297]
+
+        if showSubtitle = true then
+            m.title.height = 34
+            m.title.numLines = 1
+        else
+            m.title.height = 48
+            m.title.numLines = 2
+        end if
+    else
+        MaskAssets.Apply(m.posterMask, "media-card-poster-mask.png", [252, 378], [168, 252])
+        m.poster.width = 252
+        m.poster.height = 378
+        applyProgressLayout(252, 378)
+        m.title.width = 252
+        m.title.translation = [0, 390]
+        m.title.height = 48
+        m.title.numLines = 2
+        m.subtitle.width = 252
+        m.subtitle.translation = [0, 429]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' applyProgressLayout
+'-------------------------------------------------------------------------------
+sub applyProgressLayout(width as integer, height as integer)
+    marginX = 9
+    progressHeight = 9
+    progressBottom = 9
+    progressWidth = width - (marginX * 2)
+    progressY = height - progressBottom - progressHeight
+
+    m.progressBar.translation = [marginX, progressY]
+    m.progressBar.barWidth = progressWidth
+    m.progressBar.barHeight = progressHeight
+end sub
+
+'-------------------------------------------------------------------------------
+' updateProgress
+'-------------------------------------------------------------------------------
+sub updateProgress(item as object, imageAspect as string)
+    trackWidth = getProgressTrackWidth(imageAspect)
+    progressWidth = getProgressWidth(getRawItem(item), trackWidth)
+    visible = progressWidth > 0
+
+    m.progressBar.visible = visible
+
+    if visible <> true then
+        m.progressBar.progressWidth = 0
+        return
+    end if
+
+    m.progressBar.progressWidth = progressWidth
+end sub
+
+'-------------------------------------------------------------------------------
+' getProgressTrackWidth
+'-------------------------------------------------------------------------------
+function getProgressTrackWidth(imageAspect as string) as integer
+    if imageAspect = "wide" then return 423
+    return 234
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressWidth
+'-------------------------------------------------------------------------------
+function getProgressWidth(item as dynamic, trackWidth as integer) as integer
+    progressPercent = getProgressPercent(item)
+    if progressPercent <= 0 then return 0
+
+    progressWidth = int(trackWidth * (progressPercent / 100))
+    if progressWidth < 1 then return 1
+    if progressWidth > trackWidth then return trackWidth
+
+    return progressWidth
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressPercent
+'-------------------------------------------------------------------------------
+function getProgressPercent(item as dynamic) as float
+    if item = invalid then return 0
+    if item.UserData <> invalid and item.UserData.Played = true then return 0
+
+    if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
+        playedPercentage = item.UserData.PlayedPercentage
+        if playedPercentage <= 0 then return 0
+        if playedPercentage > 100 then return 100
+        return playedPercentage
+    end if
+
+    if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
+
+    progressTicks = PlaybackProgress.GetTicksFromItem(item)
+    if progressTicks <= 0 then return 0
+
+    progressPercent = (progressTicks / item.RunTimeTicks) * 100
+    if progressPercent > 100 then return 100
+
+    return progressPercent
+end function

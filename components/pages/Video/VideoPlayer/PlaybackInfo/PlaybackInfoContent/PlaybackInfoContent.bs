@@ -1,0 +1,128 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.propertySheet = m.top.findNode("propertySheet")
+end sub
+
+'-------------------------------------------------------------------------------
+' focusInformation
+'-------------------------------------------------------------------------------
+sub focusInformation()
+    m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' render
+'-------------------------------------------------------------------------------
+sub render()
+    info = m.top.playbackInfo
+    if info = invalid then info = {}
+
+    childCount = m.propertySheet.getChildCount()
+    if childCount > 0 then m.propertySheet.removeChildrenIndex(0, childCount)
+
+    hasLiveStream = Format.SafeString(info.liveStreamId, "") <> ""
+    sectionGap = 50
+    if hasLiveStream then sectionGap = 28
+    transcodeReason = PlaybackInfoFormat_DisplayValue(info.transcodeReason)
+
+    y = 0
+    y = addSectionHeader("Transcoding Information", y)
+    y = addPropertyRow("Playback mode", PlaybackInfoFormat_ModeText(info.playbackMode), y)
+    y = addPropertyRow("Play method", playMethodText(info.playMethod), y)
+    y = addPropertyRow("Reason", transcodeReason, y)
+    y = addPropertyRow("Delivery format", UCase(PlaybackInfoFormat_DisplayValue(info.streamFormat)), y)
+
+    y = y + sectionGap
+    y = addSectionHeader("Stream Information", y)
+    y = addPropertyRow("Container", UCase(PlaybackInfoFormat_DisplayValue(info.container)), y)
+    y = addPropertyRow("Resolution", PlaybackInfoFormat_ResolutionText(info), y)
+    y = addPropertyRow("Video", PlaybackInfoFormat_StreamText(info.videoCodec, info.videoBitrate), y)
+    y = addPropertyRow("Audio", PlaybackInfoFormat_AudioText(info), y)
+    y = addPropertyRow("Video stream", PlaybackInfoFormat_StreamTitleText(info.videoStreamTitle, info.videoStreamIndex, "Default"), y)
+    y = addPropertyRow("Audio stream", PlaybackInfoFormat_StreamTitleText(info.audioStreamTitle, info.audioStreamIndex, "Default"), y)
+    y = addPropertyRow("Subtitle stream", PlaybackInfoFormat_StreamTitleText(info.subtitleStreamTitle, info.subtitleStreamIndex, "Off"), y)
+
+    y = y + sectionGap
+    y = addSectionHeader("Session Identity", y)
+    y = addPropertyRow("Item ID", PlaybackInfoFormat_DisplayValue(info.itemId), y)
+    y = addPropertyRow("Play session ID", PlaybackInfoFormat_DisplayValue(info.playSessionId), y)
+    y = addPropertyRow("Media source ID", PlaybackInfoFormat_DisplayValue(info.mediaSourceId), y)
+    if hasLiveStream then
+        addPropertyRow("Live stream ID", PlaybackInfoFormat_DisplayValue(info.liveStreamId), y)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' playMethodText
+'-------------------------------------------------------------------------------
+function playMethodText(value as dynamic) as string
+    method = LCase(Format.SafeString(value, ""))
+    if method = "directplay" then return "Direct Play"
+    if method = "directstream" then return "Direct Stream"
+    if method = "transcode" then return "Transcode"
+    return PlaybackInfoFormat_DisplayValue(value)
+end function
+
+'-------------------------------------------------------------------------------
+' addSectionHeader
+'-------------------------------------------------------------------------------
+function addSectionHeader(title as string, y as integer) as integer
+    accentColor = &hF2C27FFF
+    heading = CreateObject("roSGNode", "Label")
+    heading.translation = [0, y]
+    heading.width = 1032
+    heading.height = 32
+    heading.text = UCase(title)
+    heading.color = accentColor
+    heading.font = "font:SmallerBoldSystemFont"
+    m.propertySheet.appendChild(heading)
+
+    rule = CreateObject("roSGNode", "Rectangle")
+    rule.translation = [0, y + 34]
+    rule.width = 1032
+    rule.height = 2
+    rule.color = accentColor
+    m.propertySheet.appendChild(rule)
+
+    return y + 42
+end function
+
+'-------------------------------------------------------------------------------
+' addPropertyRow
+'-------------------------------------------------------------------------------
+function addPropertyRow(keyText as string, valueText as string, y as integer) as integer
+    rowHeight = 36
+
+    keyLabel = CreateObject("roSGNode", "Label")
+    keyLabel.translation = [0, y]
+    keyLabel.width = 280
+    keyLabel.height = rowHeight - 1
+    keyLabel.text = UCase(keyText)
+    keyLabel.color = Theme.Get().text.light.secondary
+    keyLabel.font = "font:SmallerBoldSystemFont"
+    keyLabel.vertAlign = "center"
+    m.propertySheet.appendChild(keyLabel)
+
+    valueLabel = CreateObject("roSGNode", "Label")
+    valueLabel.translation = [304, y]
+    valueLabel.width = 728
+    valueLabel.height = rowHeight - 1
+    valueLabel.text = valueText
+    valueLabel.color = &hD7DFEAFF
+    valueLabel.font = "font:SmallerSystemFont"
+    valueLabel.vertAlign = "center"
+    valueLabel.wrap = false
+    valueLabel.numLines = 1
+    m.propertySheet.appendChild(valueLabel)
+
+    separator = CreateObject("roSGNode", "Rectangle")
+    separator.translation = [0, y + rowHeight - 1]
+    separator.width = 1032
+    separator.height = 1
+    separator.color = &hF3F7FB1F
+    m.propertySheet.appendChild(separator)
+
+    return y + rowHeight
+end function

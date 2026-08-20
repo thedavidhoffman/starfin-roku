@@ -1,0 +1,507 @@
+'-------------------------------------------------------------------------------
+' specializationInitialize
+'-------------------------------------------------------------------------------
+sub specializationInitialize()
+    m.playlistState = {
+        navigationStack: []
+        pendingAutomaticPlaylist: invalid
+        actionFocusId: ""
+        restoreItemIndex: -1
+    }
+    m.playlistChrome = CreateObject("roSGNode", "PlaylistPlaybackControls")
+    m.top.appendChild(m.playlistChrome)
+    m.playlistPlaybackButtons = m.playlistChrome.findNode("playlistPlaybackButtons")
+    m.playlistResumeButton = m.playlistChrome.findNode("playlistResumeButton")
+    m.playlistPlayButton = m.playlistChrome.findNode("playlistPlayButton")
+    m.playlistRandomButton = m.playlistChrome.findNode("playlistRandomButton")
+    m.singlePlaylistOpenTimer = m.playlistChrome.findNode("singlePlaylistOpenTimer")
+    m.browseByButton.visible = false
+    m.sortButton.visible = false
+    m.letterGutterButton.visible = false
+    m.singlePlaylistOpenTimer.observeField("fire", "onSinglePlaylistOpenTimerFire")
+    m.playlistResumeButton.observeField("buttonSelected", "onPlaylistResumeSelected")
+    m.playlistPlayButton.observeField("buttonSelected", "onPlaylistPlaySelected")
+    m.playlistRandomButton.observeField("buttonSelected", "onPlaylistRandomSelected")
+end sub
+
+'-------------------------------------------------------------------------------
+' specializationReset
+'-------------------------------------------------------------------------------
+sub specializationReset()
+    syncPlaylistPlaybackControls()
+    m.letterGutterButton.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' specializationItemsLoaded
+'-------------------------------------------------------------------------------
+function specializationItemsLoaded() as boolean
+    if isPlaylistLibraryRequest() and m.pageState.allItems.Count() = 1 then
+        playlist = m.pageState.allItems[0]
+        if Format.SafeString(playlist.Id, "") <> "" then
+            m.browseByButton.visible = false
+            m.sortButton.visible = false
+            AppStatus.ClearMessage()
+            m.playlistState.pendingAutomaticPlaylist = playlist
+            m.singlePlaylistOpenTimer.control = "start"
+            return true
+        end if
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' specializationHandleItemSelected
+'-------------------------------------------------------------------------------
+function specializationHandleItemSelected(selectedIndex as integer, item as object) as boolean
+    itemId = Format.SafeString(item.Id, "")
+    if itemId = "" then return true
+    if isPlaylist(item) then
+        openPlaylist(item)
+        return true
+    end if
+
+    playbackContext = buildPlaylistPlaybackContext(selectedIndex)
+    if playbackContext = invalid then return true
+
+    queueItem = playbackContext.queue[playbackContext.index]
+    m.playlistState.restoreItemIndex = selectedIndex
+    m.top.playbackSelected = {
+        itemId: queueItem.itemId
+        item: queueItem.item
+        series: queueItem.series
+        season: queueItem.season
+        startPositionTicks: queueItem.startPositionTicks
+        playbackQueue: playbackContext.queue
+        playbackQueueIndex: playbackContext.index
+    }
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' specializationSyncState
+'-------------------------------------------------------------------------------
+sub specializationSyncState()
+    syncPlaylistPlaybackControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' specializationActivate
+'-------------------------------------------------------------------------------
+function specializationActivate() as boolean
+    if m.playlistState.restoreItemIndex >= 0 then
+        restoreItemIndex = m.playlistState.restoreItemIndex
+        m.playlistState.restoreItemIndex = -1
+        focusVideoLibraryItem(restoreItemIndex)
+        return true
+    end if
+    if m.playlistState.actionFocusId <> "" then
+        button = m.top.findNode(m.playlistState.actionFocusId)
+        if focusPlaylistPlaybackButton(button) then return true
+        if focusDefaultPlaylistPlaybackButton() then return true
+    end if
+    if isPlaylistContentRequest() and m.playlistPlaybackButtons.visible then return focusDefaultPlaylistPlaybackButton()
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' specializationDeactivate
+'-------------------------------------------------------------------------------
+sub specializationDeactivate()
+    m.playlistState.pendingAutomaticPlaylist = invalid
+    m.singlePlaylistOpenTimer.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' specializationHandleKey
+'-------------------------------------------------------------------------------
+function specializationHandleKey(key as string) as boolean
+    if key = "up" and isPlaylistPlaybackButtonFocused() then
+        clearPlaylistPlaybackButtonFocusVisuals()
+        return requestHeaderFocus()
+    end if
+    if key = "down" and isPlaylistPlaybackButtonFocused() then
+        clearPlaylistPlaybackButtonFocusVisuals()
+        focusItemsIfActive()
+        return true
+    end if
+    if key = "left" and m.playlistPlayButton.isInFocusChain() then
+        if m.playlistResumeButton.visible then return focusPlaylistPlaybackButton(m.playlistResumeButton)
+        return true
+    end if
+    if key = "left" and m.playlistRandomButton.isInFocusChain() then return focusPlaylistPlaybackButton(m.playlistPlayButton)
+    if key = "right" and m.playlistResumeButton.isInFocusChain() then return focusPlaylistPlaybackButton(m.playlistPlayButton)
+    if key = "right" and m.playlistPlayButton.isInFocusChain() then return focusPlaylistPlaybackButton(m.playlistRandomButton)
+    if key = "left" and m.playlistResumeButton.isInFocusChain() then return true
+    if key = "right" and m.playlistRandomButton.isInFocusChain() then return true
+    if key = "left" and isItemsGridAtFirstColumn() then return true
+    if key = "up" and isItemsGridAtFirstRow() and isPlaylistLibraryRequest() then
+        stopVideoLibraryProgressHold("up")
+        return focusBrowseByButton()
+    end if
+    if key = "up" and isItemsGridAtFirstRow() and isPlaylistContentRequest() then
+        stopVideoLibraryProgressHold("up")
+        if m.playlistPlaybackButtons.visible then return focusDefaultPlaylistPlaybackButton()
+        return requestHeaderFocus()
+    end if
+    if key = "back" and m.playlistState.navigationStack.Count() > 0 and isFirstVideoLibraryItemFocused() then
+        lastIndex = m.playlistState.navigationStack.Count() - 1
+        previousRequest = m.playlistState.navigationStack[lastIndex]
+        m.playlistState.navigationStack.Delete(lastIndex)
+        m.top.loadRequest = previousRequest
+        return true
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' specializationShowsSortControls
+'-------------------------------------------------------------------------------
+function specializationShowsSortControls() as boolean
+    return isPlaylistLibraryRequest() and m.pageState.isLoading <> true
+end function
+
+'-------------------------------------------------------------------------------
+' specializationApplyLayout
+'-------------------------------------------------------------------------------
+sub specializationApplyLayout(imageAspect as string)
+    rightEdge = 1864
+    if imageAspect = "wide" then rightEdge = 1880
+    groupX = rightEdge - 474
+    m.playlistPlaybackButtons.translation = [groupX, 120]
+end sub
+
+'-------------------------------------------------------------------------------
+' specializationCacheKey
+'-------------------------------------------------------------------------------
+function specializationCacheKey(item as dynamic, occurrenceIndex = invalid as dynamic) as string
+    itemId = Format.SafeString(item.Id, "")
+    if isPlaylistContentRequest() <> true then return itemId
+    playlistItemId = Format.SafeString(item.PlaylistItemId, "")
+    if playlistItemId <> "" then return "playlist:" + playlistItemId
+    if itemId = "" or occurrenceIndex = invalid then return ""
+    return "playlist:" + itemId + ":" + occurrenceIndex.ToStr()
+end function
+
+'-------------------------------------------------------------------------------
+' specializationImageUrl
+'-------------------------------------------------------------------------------
+function specializationImageUrl(item as object, imageAspect as string) as string
+    itemId = Format.SafeString(item.Id, "")
+    if isTVEpisode(item) then return getPlaylistEpisodeImageUrl(item, imageAspect)
+    if imageAspect = "wide" then return getImageUrlForType(itemId, item, "Thumb", 441, 249)
+    return getImageUrlForType(itemId, item, "Primary", 252, 378)
+end function
+
+'-------------------------------------------------------------------------------
+' specializationImageAspect
+'-------------------------------------------------------------------------------
+function specializationImageAspect() as string
+    if LCase(m.top.settings[SettingsStore.Key.PlaylistImageType]) = "thumbnail" then return "wide"
+    return "poster"
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaylistPlaybackContext
+'-------------------------------------------------------------------------------
+function buildPlaylistPlaybackContext(selectedIndex as integer) as dynamic
+    if isPlaylistContentRequest() <> true then return invalid
+    queue = []
+    queueIndex = -1
+    for i = 0 to m.pageState.items.Count() - 1
+        item = m.pageState.items[i]
+        if isPlayableMovie(item) <> true and isTVEpisode(item) <> true then continue for
+        if i = selectedIndex then queueIndex = queue.Count()
+        queue.Push(buildPlaylistPlaybackQueueItem(item, i))
+    end for
+    if queueIndex < 0 then return invalid
+    return { queue: queue, index: queueIndex }
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaylistPlaybackQueue
+'-------------------------------------------------------------------------------
+function getPlaylistPlaybackQueue() as object
+    queue = []
+    for i = 0 to m.pageState.items.Count() - 1
+        item = m.pageState.items[i]
+        if isPlayableMovie(item) or isTVEpisode(item) then queue.Push(buildPlaylistPlaybackQueueItem(item, i))
+    end for
+    return queue
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaylistPlayableIndex
+'-------------------------------------------------------------------------------
+function getPlaylistPlayableIndex(itemIndex as integer) as integer
+    queueIndex = 0
+    for i = 0 to m.pageState.items.Count() - 1
+        item = m.pageState.items[i]
+        if isPlayableMovie(item) <> true and isTVEpisode(item) <> true then continue for
+        if i = itemIndex then return queueIndex
+        queueIndex++
+    end for
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getFirstPlaylistPlayableItemIndex
+'-------------------------------------------------------------------------------
+function getFirstPlaylistPlayableItemIndex() as integer
+    for i = 0 to m.pageState.items.Count() - 1
+        item = m.pageState.items[i]
+        if isPlayableMovie(item) or isTVEpisode(item) then return i
+    end for
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getFirstPlaylistResumeItemIndex
+'-------------------------------------------------------------------------------
+function getFirstPlaylistResumeItemIndex() as integer
+    firstPlayableIndex = getFirstPlaylistPlayableItemIndex()
+    for i = 0 to m.pageState.items.Count() - 1
+        item = m.pageState.items[i]
+        if isPlayableMovie(item) <> true and isTVEpisode(item) <> true then continue for
+        if isPlaylistItemPlayed(item) <> true then return i
+    end for
+    return firstPlayableIndex
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylistItemPlayed
+'-------------------------------------------------------------------------------
+function isPlaylistItemPlayed(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false or item.UserData = invalid then return false
+    return item.UserData.Played = true
+end function
+
+'-------------------------------------------------------------------------------
+' shouldShowPlaylistResume
+'-------------------------------------------------------------------------------
+function shouldShowPlaylistResume() as boolean
+    for each item in m.pageState.items
+        if isPlayableMovie(item) = false and isTVEpisode(item) = false then continue for
+        if isPlaylistItemPlayed(item) <> true then return true
+        if PlaybackProgress.GetTicksFromItem(item) > 0 then return true
+    end for
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' syncPlaylistPlaybackControls
+'-------------------------------------------------------------------------------
+sub syncPlaylistPlaybackControls()
+    visible = isPlaylistContentRequest() and getPlaylistPlaybackQueue().Count() > 0
+    m.playlistPlaybackButtons.visible = visible
+    m.playlistResumeButton.visible = visible and shouldShowPlaylistResume()
+    m.playlistPlayButton.visible = visible
+    m.playlistRandomButton.visible = visible
+    if visible <> true then clearPlaylistPlaybackButtonFocusVisuals()
+    if m.playlistResumeButton.visible <> true then m.playlistResumeButton.hasFocusVisual = false
+end sub
+
+'-------------------------------------------------------------------------------
+' focusDefaultPlaylistPlaybackButton
+'-------------------------------------------------------------------------------
+function focusDefaultPlaylistPlaybackButton() as boolean
+    if m.playlistPlaybackButtons.visible <> true then return false
+    if m.playlistResumeButton.visible then return focusPlaylistPlaybackButton(m.playlistResumeButton)
+    return focusPlaylistPlaybackButton(m.playlistPlayButton)
+end function
+
+'-------------------------------------------------------------------------------
+' focusPlaylistPlaybackButton
+'-------------------------------------------------------------------------------
+function focusPlaylistPlaybackButton(button as dynamic) as boolean
+    if button = invalid or button.visible <> true then return false
+    clearPlaylistPlaybackButtonFocusVisuals()
+    m.top.setFocus(true)
+    button.setFocus(true)
+    button.hasFocusVisual = true
+    m.playlistState.actionFocusId = button.id
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' clearPlaylistPlaybackButtonFocusVisuals
+'-------------------------------------------------------------------------------
+sub clearPlaylistPlaybackButtonFocusVisuals()
+    m.playlistResumeButton.hasFocusVisual = false
+    m.playlistPlayButton.hasFocusVisual = false
+    m.playlistRandomButton.hasFocusVisual = false
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaylistResumeSelected
+'-------------------------------------------------------------------------------
+sub onPlaylistResumeSelected()
+    startPlaylistPlayback(getFirstPlaylistResumeItemIndex(), false, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaylistPlaySelected
+'-------------------------------------------------------------------------------
+sub onPlaylistPlaySelected()
+    startPlaylistPlayback(getFirstPlaylistPlayableItemIndex(), true, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaylistRandomSelected
+'-------------------------------------------------------------------------------
+sub onPlaylistRandomSelected()
+    startPlaylistPlayback(0, false, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' startPlaylistPlayback
+'-------------------------------------------------------------------------------
+sub startPlaylistPlayback(itemIndex as integer, startFromBeginning as boolean, randomize as boolean)
+    queue = getPlaylistPlaybackQueue()
+    if queue.Count() = 0 then return
+    queueIndex = getPlaylistPlayableIndex(itemIndex)
+    if queueIndex < 0 then queueIndex = 0
+    if randomize then
+        shufflePlaylistPlaybackQueue(queue)
+        queueIndex = 0
+    end if
+    queueItem = queue[queueIndex]
+    startPositionTicks = queueItem.startPositionTicks
+    if startFromBeginning then
+        startPositionTicks = 0
+        queueItem.startPositionTicks = 0
+    end if
+    m.top.playbackSelected = {
+        itemId: queueItem.itemId
+        item: queueItem.item
+        series: queueItem.series
+        season: queueItem.season
+        startPositionTicks: startPositionTicks
+        playbackQueue: queue
+        playbackQueueIndex: queueIndex
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' shufflePlaylistPlaybackQueue
+'-------------------------------------------------------------------------------
+sub shufflePlaylistPlaybackQueue(queue as object)
+    for i = queue.Count() - 1 to 1 step -1
+        swapIndex = Number.ToInteger(Rnd(0) * (i + 1), 0)
+        if swapIndex < 0 then swapIndex = 0
+        if swapIndex > i then swapIndex = i
+        item = queue[i]
+        queue[i] = queue[swapIndex]
+        queue[swapIndex] = item
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' buildPlaylistPlaybackQueueItem
+'-------------------------------------------------------------------------------
+function buildPlaylistPlaybackQueueItem(item as object, playlistItemIndex as integer) as object
+    queueItem = {
+        itemId: Format.SafeString(item.Id, "")
+        item: item
+        playlistItemIndex: playlistItemIndex
+        startPositionTicks: PlaybackProgress.GetTicksFromItem(item)
+        hasPlaybackIdentity: true
+        series: invalid
+        season: invalid
+    }
+    if isTVEpisode(item) then
+        queueItem.series = { Id: Format.SafeString(item.SeriesId, ""), Name: Format.SafeString(item.SeriesName, "") }
+        queueItem.season = { Id: Format.SafeString(item.SeasonId, ""), Name: Format.SafeString(item.SeasonName, "") }
+    end if
+    return queueItem
+end function
+
+'-------------------------------------------------------------------------------
+' restorePlaylistPlaybackFocus
+'-------------------------------------------------------------------------------
+sub restorePlaylistPlaybackFocus(playlistItemIndex as integer)
+    m.playlistState.restoreItemIndex = playlistItemIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' onSinglePlaylistOpenTimerFire
+'-------------------------------------------------------------------------------
+sub onSinglePlaylistOpenTimerFire()
+    playlist = m.playlistState.pendingAutomaticPlaylist
+    m.playlistState.pendingAutomaticPlaylist = invalid
+    if playlist = invalid then
+        Spinner.Hide()
+        return
+    end if
+    openPlaylist(playlist, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' openPlaylist
+'-------------------------------------------------------------------------------
+sub openPlaylist(item as object, addToNavigationStack = true as boolean)
+    request = m.pageState.request
+    if request = invalid then return
+    if addToNavigationStack then m.playlistState.navigationStack.Push(request)
+    m.browseByButton.visible = false
+    m.sortButton.visible = false
+    m.top.loadRequest = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        libraryId: Format.SafeString(item.Id, "")
+        collectionType: "playlist"
+        includeItemTypes: "Movie,Series,Episode,Video"
+        title: Format.SafeString(item.Name, "Playlist")
+        item: item
+        fromCollections: false
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' isPlaylistContentRequest
+'-------------------------------------------------------------------------------
+function isPlaylistContentRequest() as boolean
+    request = m.pageState.request
+    return request <> invalid and LCase(Format.SafeString(request.collectionType, "")) = "playlist"
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylistLibraryRequest
+'-------------------------------------------------------------------------------
+function isPlaylistLibraryRequest() as boolean
+    request = m.pageState.request
+    return request <> invalid and LCase(Format.SafeString(request.collectionType, "")) = "playlists"
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylist
+'-------------------------------------------------------------------------------
+function isPlaylist(item as dynamic) as boolean
+    return Arrays.IsAssocArray(item) and LCase(Format.FirstNonEmpty([item.Type], "")) = "playlist"
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaylistEpisodeImageUrl
+'-------------------------------------------------------------------------------
+function getPlaylistEpisodeImageUrl(item as object, imageAspect as string) as string
+    request = m.pageState.request
+    if request = invalid then return ""
+    if imageAspect = "wide" then
+        itemId = Format.SafeString(item.Id, "")
+        primaryTag = getImageTag(item, "Primary")
+        if itemId = "" or primaryTag = "" then return ""
+        return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, 441, 249)
+    end if
+    seriesId = Format.SafeString(item.SeriesId, "")
+    seriesPrimaryTag = Format.SafeString(item.SeriesPrimaryImageTag, "")
+    if seriesId = "" or seriesPrimaryTag = "" then return ""
+    return Url.BuildImageUrl(request.server, seriesId, "Primary", seriesPrimaryTag, 252, 378)
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylistPlaybackButtonFocused
+'-------------------------------------------------------------------------------
+function isPlaylistPlaybackButtonFocused() as boolean
+    return m.playlistPlaybackButtons.visible and m.playlistPlaybackButtons.isInFocusChain()
+end function

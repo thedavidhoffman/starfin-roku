@@ -1,0 +1,34 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    if request = invalid or Format.SafeString(request.server, "") = "" or Format.SafeString(request.token, "") = "" or Format.SafeString(request.albumId, "") = "" then
+        m.top.response = { ok: false, action: "albumTracks", errorMessage: "Invalid album tracks request." }
+        return
+    end if
+
+    userItemsUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items/"
+    albumResult = HttpClient.Request(userItemsUrl + request.albumId, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+
+    requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString({
+        ParentId: request.albumId
+        IncludeItemTypes: "Audio"
+        Recursive: true
+        Fields: "Album,AlbumArtist,Artists,IndexNumber,ParentIndexNumber,RunTimeTicks"
+        SortBy: "ParentIndexNumber,IndexNumber,SortName"
+        SortOrder: "Ascending"
+    })
+    result = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    result.AddReplace("action", "albumTracks")
+    result.AddReplace("albumId", request.albumId)
+    if albumResult.ok = true then result.AddReplace("album", albumResult.data)
+    m.top.response = result
+end sub

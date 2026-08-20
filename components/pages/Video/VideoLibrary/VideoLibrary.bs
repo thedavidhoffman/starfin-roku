@@ -1,0 +1,2016 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    if hasLibrarySpecialization() then
+        m.browseByButton.visible = false
+        m.sortButton.visible = false
+    end if
+    initHandlers()
+    m.specializationInitialized = false
+    m.pageState = {
+        request: invalid
+        allItems: []
+        items: []
+        imageAspect: "poster"
+        letterGridOpen: false
+        letterGridPanel: {
+            x: 72
+            y: 208
+        }
+        isThumbnailLayout: false
+        availableLetters: {}
+        selectedSortKey: "SortName"
+        selectedSort: invalid
+        activeFilterType: ""
+        selectedDecade: -1
+        selectedGenre: ""
+        renderDecadeFilterOnApply: false
+        filterCache: createEmptyFilterCache()
+        itemNodeCache: {}
+        itemNodeCacheAspect: ""
+        progressFocusedIndex: 0
+        progressHoldKey: ""
+        pendingFocusTarget: ""
+        refocusBrowseByButtonAfterLoad: false
+        refocusSortButtonAfterLoad: false
+        isLoading: false
+        lifecycle: AsyncLifecycle.Create()
+    }
+    m.browseByButton.selectedSort = getDefaultSortSelection()
+    m.sortButton.selectedSort = getDefaultSortSelection()
+    m.sortButton.sortEnabled = canUseSortOrder(getDefaultSortSelection())
+    m.pageState.selectedSort = getDefaultSortSelection()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.log = Logger.Create("VideoLibrary")
+    m.titleLabel = m.top.findNode("titleLabel")
+    m.browseByButton = m.top.findNode("browseByButton")
+    m.sortButton = m.top.findNode("sortButton")
+    m.letterGutterButton = m.top.findNode("letterGutterButton")
+    m.filterButtonRow = m.top.findNode("filterButtonRow")
+    m.emptyFavoritesLabel = m.top.findNode("emptyFavoritesLabel")
+    m.itemsGrid = m.top.findNode("itemsGrid")
+    m.videoLibraryTask = m.top.findNode("videoLibraryTask")
+    m.videoLibraryProgressIndicator = m.top.findNode("videoLibraryProgressIndicator")
+    m.videoLibraryProgressHoldTimer = m.top.findNode("videoLibraryProgressHoldTimer")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.videoLibraryTask.observeField("response", "onVideoLibraryResponse")
+    m.videoLibraryProgressHoldTimer.observeField("fire", "onVideoLibraryProgressHoldTimerFire")
+    m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
+    m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
+    m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
+    m.sortButton.observeField("focusExitDown", "onSortButtonFocusExitDown")
+    m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
+    m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
+    m.filterButtonRow.observeField("focusExitUp", "onFilterButtonRowFocusExitUp")
+    m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
+    m.filterButtonRow.observeField("filterSelected", "onFilterButtonRowSelected")
+    m.itemsGrid.observeField("itemSelected", "onItemSelected")
+    m.itemsGrid.observeField("itemFocused", "onItemFocused")
+    m.itemsGrid.observeField("navigationKeyPressed", "onItemsGridNavigationKeyPressed")
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    ensureLibrarySpecializationInitialized()
+    imageAspect = getVideoLibraryImageAspect()
+    if imageAspect <> m.pageState.imageAspect then
+        m.pageState.imageAspect = imageAspect
+        rebuildVideoLibraryItemNodeCache()
+    end if
+    applyGridLayout(m.pageState.imageAspect)
+    renderItems(getVisibleVideoLibraryItems())
+end sub
+
+'-------------------------------------------------------------------------------
+' onLoadRequestChanged
+'-------------------------------------------------------------------------------
+sub onLoadRequestChanged()
+    request = m.top.loadRequest
+    if request = invalid then return
+
+    ensureLibrarySpecializationInitialized()
+    prepareLoadRequest(request)
+    resetVideoLibraryForLoad()
+    runVideoLibraryTask(request)
+end sub
+
+'-------------------------------------------------------------------------------
+' prepareLoadRequest
+'-------------------------------------------------------------------------------
+sub prepareLoadRequest(request as object)
+    m.pageState.request = request
+    AsyncLifecycle.Begin(m.pageState.lifecycle, request.libraryId)
+    m.pageState.imageAspect = getVideoLibraryImageAspect()
+    restoredState = loadSavedVideoLibraryViewState(request)
+    if restoredState <> invalid then
+        applySavedVideoLibraryViewState(request, restoredState)
+    else
+        normalizeLoadRequestSort(request)
+    end if
+    if request.favoriteOnly = true then
+        m.pageState.selectedSort = getFavoritesSortSelection()
+        if restoredState <> invalid then m.pageState.selectedSort.sortOrder = getNormalizedSortOrder(Format.SafeString(restoredState.sortOrder, "Ascending"))
+    else if restoredState = invalid then
+        m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
+    end if
+    m.pageState.selectedSortKey = m.pageState.selectedSort.optionKey
+    request.sortBy = Format.SafeString(m.pageState.selectedSort.sortKey, "SortName")
+    request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
+end sub
+
+'-------------------------------------------------------------------------------
+' normalizeLoadRequestSort
+'-------------------------------------------------------------------------------
+sub normalizeLoadRequestSort(request as object)
+    if request.sortBy = invalid then request.sortBy = "SortName"
+    if request.sortOrder = invalid then request.sortOrder = "Ascending"
+end sub
+
+'-------------------------------------------------------------------------------
+' resetVideoLibraryForLoad
+'-------------------------------------------------------------------------------
+sub resetVideoLibraryForLoad()
+    m.pageState.isLoading = true
+    resetFilterState()
+    resetVideoLibraryItemsState()
+    resetLoadFocusState()
+    syncSortControls()
+    if hasLibrarySpecialization() then m.top.callFunc("specializationReset")
+    updateTitleLabel()
+    hideFilterButtonRow()
+    Spinner.Show(0)
+    closeLetterGrid(false)
+    renderItems([])
+end sub
+
+'-------------------------------------------------------------------------------
+' resetFilterState
+'-------------------------------------------------------------------------------
+sub resetFilterState()
+    optionKey = Format.SafeString(m.pageState.selectedSort.optionKey, "")
+    if optionKey = "Decade" or optionKey = "Genre" then
+        m.pageState.activeFilterType = optionKey
+        if optionKey = "Decade" then m.pageState.selectedGenre = ""
+        if optionKey = "Genre" then m.pageState.selectedDecade = -1
+        m.pageState.renderDecadeFilterOnApply = false
+        m.pageState.filterCache = createEmptyFilterCache()
+        return
+    end if
+
+    m.pageState.activeFilterType = ""
+    m.pageState.selectedDecade = -1
+    m.pageState.selectedGenre = ""
+    m.pageState.renderDecadeFilterOnApply = false
+    m.pageState.filterCache = createEmptyFilterCache()
+end sub
+
+'-------------------------------------------------------------------------------
+' resetVideoLibraryItemsState
+'-------------------------------------------------------------------------------
+sub resetVideoLibraryItemsState()
+    m.pageState.allItems = []
+    m.pageState.items = []
+    clearVideoLibraryItemNodeCache()
+end sub
+
+'-------------------------------------------------------------------------------
+' resetLoadFocusState
+'-------------------------------------------------------------------------------
+sub resetLoadFocusState()
+    m.pageState.pendingFocusTarget = ""
+    m.pageState.refocusBrowseByButtonAfterLoad = false
+    m.pageState.refocusSortButtonAfterLoad = false
+end sub
+
+'-------------------------------------------------------------------------------
+' syncSortControls
+'-------------------------------------------------------------------------------
+sub syncSortControls()
+    sortControlsVisible = true
+    if hasLibrarySpecialization() then sortControlsVisible = m.top.callFunc("specializationShowsSortControls")
+    m.browseByButton.visible = sortControlsVisible
+    m.sortButton.visible = sortControlsVisible
+    m.browseByButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+end sub
+
+'-------------------------------------------------------------------------------
+' runVideoLibraryTask
+'-------------------------------------------------------------------------------
+sub runVideoLibraryTask(request as object)
+    m.videoLibraryTask.request = request
+    m.videoLibraryTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoLibraryResponse
+'-------------------------------------------------------------------------------
+sub onVideoLibraryResponse()
+    response = m.videoLibraryTask.response
+    if response = invalid then return
+    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "videoLibrary") <> true then return
+
+    if response.ok <> true then
+        m.pageState.isLoading = false
+        Spinner.Hide()
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load library."))
+        return
+    end if
+
+    m.pageState.isLoading = false
+    m.pageState.allItems = getItemsFromPayload(response.payload)
+    m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
+    rebuildVideoLibraryItemNodeCache()
+    if hasLibrarySpecialization() and m.top.callFunc("specializationItemsLoaded") then return
+    if hasLibrarySpecialization() then syncSortControls()
+    if isDecadeFilterActive() then
+        showDecadeFilterRow()
+    else if isGenreFilterActive() then
+        showGenreFilterRow()
+    else
+        renderItems(m.pageState.allItems)
+    end if
+    if hasLibrarySpecialization() then m.top.callFunc("specializationSyncState")
+    updateTitleLabel(m.pageState.items.Count())
+    AppStatus.ClearMessage()
+    if m.pageState.refocusBrowseByButtonAfterLoad = true then
+        m.pageState.refocusBrowseByButtonAfterLoad = false
+        focusBrowseByButton()
+    else if m.pageState.refocusSortButtonAfterLoad = true then
+        m.pageState.refocusSortButtonAfterLoad = false
+        focusSortButton()
+    else
+        if hasLibrarySpecialization() = false or m.top.callFunc("specializationActivate") <> true then focusItemsIfActive()
+    end if
+    Spinner.Hide()
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemSelected
+'-------------------------------------------------------------------------------
+sub onItemSelected()
+    selected = m.itemsGrid.itemSelected
+    if selected = invalid then return
+    if m.itemsGrid.content = invalid then return
+
+    node = m.itemsGrid.content.getChild(selected)
+    if node = invalid then return
+
+    item = node.raw
+    if hasLibrarySpecialization() and m.top.callFunc("specializationHandleItemSelected", selected, item) then return
+    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+    if itemId = "" then return
+
+    selection = { itemId: itemId, item: item }
+    if isPlayableMovie(item) then
+        m.top.selectedMovie = selection
+    else if isTVSeries(item) then
+        m.top.selectedSeries = selection
+    else if isTVEpisode(item) then
+        m.top.selectedEpisode = selection
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' loadSavedVideoLibraryViewState
+'-------------------------------------------------------------------------------
+function loadSavedVideoLibraryViewState(request as object) as dynamic
+    if canPersistVideoLibraryViewState(request) <> true then return invalid
+    return LibraryViewStateStore.Load(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""))
+end function
+
+'-------------------------------------------------------------------------------
+' canPersistVideoLibraryViewState
+'-------------------------------------------------------------------------------
+function canPersistVideoLibraryViewState(request as dynamic) as boolean
+    if request = invalid then return false
+    collectionType = LCase(Format.SafeString(request.collectionType, ""))
+    return collectionType = "movies" or collectionType = "tvshows"
+end function
+
+'-------------------------------------------------------------------------------
+' persistVideoLibraryViewState
+'-------------------------------------------------------------------------------
+sub persistVideoLibraryViewState()
+    request = m.pageState.request
+    if canPersistVideoLibraryViewState(request) <> true then return
+    selection = m.pageState.selectedSort
+    if selection = invalid then return
+
+    LibraryViewStateStore.Save(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""), {
+        optionKey: Format.SafeString(m.pageState.selectedSortKey, "SortName")
+        sortKey: Format.SafeString(selection.sortKey, "SortName")
+        sortOrder: getSortOrderFromSelection(selection)
+        selectedDecade: m.pageState.selectedDecade
+        selectedGenre: m.pageState.selectedGenre
+        libraryTitle: Format.SafeString(request.title, "")
+        collectionType: Format.SafeString(request.collectionType, "")
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' applySavedVideoLibraryViewState
+'-------------------------------------------------------------------------------
+sub applySavedVideoLibraryViewState(request as object, state as object)
+    optionKey = Format.SafeString(state.optionKey, "")
+    request.favoriteOnly = false
+
+    if optionKey = "Favorites" then
+        request.favoriteOnly = true
+        request.sortBy = "SortName"
+        request.sortOrder = getNormalizedSortOrder(Format.SafeString(state.sortOrder, "Ascending"))
+        m.pageState.selectedSort = getFavoritesSortSelection()
+        m.pageState.selectedSort.sortOrder = request.sortOrder
+    else if optionKey = "Decade" or optionKey = "Genre" then
+        request.sortBy = "SortName"
+        request.sortOrder = "Ascending"
+        m.pageState.selectedSort = { optionKey: optionKey, sortKey: "SortName", sortOrder: "Ascending", label: optionKey }
+        m.pageState.activeFilterType = optionKey
+        m.pageState.selectedDecade = Number.ToInteger(state.selectedDecade, -1)
+        m.pageState.selectedGenre = Format.SafeString(state.selectedGenre, "")
+    else if optionKey = "Random" then
+        request.sortBy = "Random"
+        request.sortOrder = ""
+        m.pageState.selectedSort = buildSortSelection("Random", "")
+    else if optionKey = "PremiereDate" or optionKey = "DateCreated" or optionKey = "SortName" then
+        request.sortBy = optionKey
+        request.sortOrder = getNormalizedSortOrder(Format.SafeString(state.sortOrder, "Ascending"))
+        m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
+    else
+        request.sortBy = "SortName"
+        request.sortOrder = "Ascending"
+        m.pageState.selectedSort = getDefaultSortSelection()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderItems
+'-------------------------------------------------------------------------------
+sub renderItems(items as object)
+    if items = invalid then items = []
+    m.pageState.items = items
+    detachVideoLibraryGridContent()
+    content = buildVideoLibraryContent(items)
+    m.itemsGrid.content = content
+    m.itemsGrid.visible = content.getChildCount() > 0
+    m.emptyFavoritesLabel.visible = isFavoriteBrowseActive() and m.pageState.isLoading <> true and content.getChildCount() = 0
+    updateAvailableLetters(items)
+    updateVideoLibraryProgressItemCount(content.getChildCount())
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaStateChange
+'-------------------------------------------------------------------------------
+sub onMediaStateChange()
+    change = m.top.mediaStateChange
+    if change = invalid then return
+
+    itemId = Format.SafeString(change.itemId, "")
+    if itemId = "" then return
+    action = Format.SafeString(change.action, "")
+    if applyMediaStateChangeToMatchingItems(itemId, change) <> true then return
+
+    if isFavoriteBrowseActive() and action = "favorite" and change.value <> true then
+        m.pageState.allItems = getItemsExcludingId(m.pageState.allItems, itemId)
+        renderItems(m.pageState.allItems)
+        updateTitleLabel(m.pageState.allItems.Count())
+        return
+    end if
+
+    notifyVideoLibraryItemsChanged(itemId)
+    if hasLibrarySpecialization() then m.top.callFunc("specializationSyncState")
+end sub
+
+'-------------------------------------------------------------------------------
+' applyMediaStateChangeToMatchingItems
+'-------------------------------------------------------------------------------
+function applyMediaStateChangeToMatchingItems(itemId as string, change as object) as boolean
+    didApply = false
+    for each item in m.pageState.allItems
+        if Format.SafeString(item.Id, "") = itemId then
+            if MediaState.ApplyToItem(item, change) then didApply = true
+        end if
+    end for
+    return didApply
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsExcludingId
+'-------------------------------------------------------------------------------
+function getItemsExcludingId(items as object, itemId as string) as object
+    remaining = []
+    for each item in items
+        if Format.SafeString(item.Id, "") <> itemId then remaining.Push(item)
+    end for
+    return remaining
+end function
+
+'-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    if change = invalid then return
+
+    itemId = Format.SafeString(change.itemId, "")
+    if itemId = "" then return
+    if applyPlaybackProgressChangeToMatchingItems(itemId, change) <> true then return
+
+    notifyVideoLibraryItemsChanged(itemId)
+    if hasLibrarySpecialization() then m.top.callFunc("specializationSyncState")
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackProgressChangeToMatchingItems
+'-------------------------------------------------------------------------------
+function applyPlaybackProgressChangeToMatchingItems(itemId as string, change as object) as boolean
+    didApply = false
+    for each item in m.pageState.allItems
+        if Format.SafeString(item.Id, "") = itemId then
+            if PlaybackProgress.ApplyChangeToItem(item, change) then didApply = true
+        end if
+    end for
+    return didApply
+end function
+
+'-------------------------------------------------------------------------------
+' notifyVideoLibraryItemsChanged
+'-------------------------------------------------------------------------------
+sub notifyVideoLibraryItemsChanged(itemId as string)
+    for i = 0 to m.pageState.allItems.Count() - 1
+        item = m.pageState.allItems[i]
+        if Format.SafeString(item.Id, "") = itemId then notifyVideoLibraryItemChanged(item, i)
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' notifyVideoLibraryItemChanged
+'-------------------------------------------------------------------------------
+sub notifyVideoLibraryItemChanged(item as object, occurrenceIndex = invalid as dynamic)
+    cacheKey = getVideoLibraryItemCacheKey(item, occurrenceIndex)
+    if cacheKey = "" then return
+
+    node = m.pageState.itemNodeCache[cacheKey]
+    if node = invalid then return
+
+    node.raw = invalid
+    node.raw = item
+end sub
+
+'-------------------------------------------------------------------------------
+' detachVideoLibraryGridContent
+'-------------------------------------------------------------------------------
+sub detachVideoLibraryGridContent()
+    if m.itemsGrid = invalid then return
+    if m.itemsGrid.content = invalid then return
+
+    childCount = m.itemsGrid.content.getChildCount()
+    if childCount > 0 then m.itemsGrid.content.removeChildrenIndex(childCount, 0)
+end sub
+
+'-------------------------------------------------------------------------------
+' buildVideoLibraryContent
+'-------------------------------------------------------------------------------
+function buildVideoLibraryContent(items as object) as object
+    content = CreateObject("roSGNode", "ContentNode")
+    if items = invalid then return content
+
+    ensureVideoLibraryItemNodeCache()
+    for i = 0 to items.Count() - 1
+        item = items[i]
+        node = getCachedVideoLibraryItemNode(item, i)
+        if node <> invalid then content.appendChild(node)
+    end for
+
+    return content
+end function
+
+'-------------------------------------------------------------------------------
+' clearVideoLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub clearVideoLibraryItemNodeCache()
+    m.pageState.itemNodeCache = {}
+    m.pageState.itemNodeCacheAspect = ""
+end sub
+
+'-------------------------------------------------------------------------------
+' rebuildVideoLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub rebuildVideoLibraryItemNodeCache()
+    clearVideoLibraryItemNodeCache()
+    ensureVideoLibraryItemNodeCache()
+end sub
+
+'-------------------------------------------------------------------------------
+' ensureVideoLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub ensureVideoLibraryItemNodeCache()
+    if m.pageState.itemNodeCacheAspect = m.pageState.imageAspect then return
+
+    m.pageState.itemNodeCache = {}
+    m.pageState.itemNodeCacheAspect = m.pageState.imageAspect
+end sub
+
+'-------------------------------------------------------------------------------
+' getCachedVideoLibraryItemNode
+'-------------------------------------------------------------------------------
+function getCachedVideoLibraryItemNode(item as dynamic, occurrenceIndex = invalid as dynamic) as dynamic
+    cacheKey = getVideoLibraryItemCacheKey(item, occurrenceIndex)
+    if cacheKey = "" then return createVideoLibraryItemNode(item)
+
+    ensureVideoLibraryItemNodeCache()
+    node = m.pageState.itemNodeCache[cacheKey]
+    if node = invalid then
+        node = createVideoLibraryItemNode(item)
+        m.pageState.itemNodeCache[cacheKey] = node
+    end if
+
+    return node
+end function
+
+'-------------------------------------------------------------------------------
+' createVideoLibraryItemNode
+'-------------------------------------------------------------------------------
+function createVideoLibraryItemNode(item as dynamic) as dynamic
+    if Arrays.IsAssocArray(item) = false then return invalid
+
+    imageAspect = m.pageState.imageAspect
+    node = CreateObject("roSGNode", "ContentNode")
+    node.HDPosterUrl = getItemImageUrl(item, imageAspect)
+    node.AddFields({
+        imageAspect: imageAspect
+        raw: item
+    })
+    return node
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryItemCacheKey
+'-------------------------------------------------------------------------------
+function getVideoLibraryItemCacheKey(item as dynamic, occurrenceIndex = invalid as dynamic) as string
+    if Arrays.IsAssocArray(item) = false then return ""
+    if hasLibrarySpecialization() then return m.top.callFunc("specializationCacheKey", item, occurrenceIndex)
+    return Format.SafeString(item.Id, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getVisibleVideoLibraryItems
+'-------------------------------------------------------------------------------
+function getVisibleVideoLibraryItems() as object
+    if isDecadeFilterActive() then return getCachedFilterItems("Decade", m.pageState.selectedDecade.ToStr())
+    if isGenreFilterActive() then return getCachedFilterItems("Genre", m.pageState.selectedGenre)
+
+    return getSortedVideoLibraryItems(m.pageState.allItems)
+end function
+
+'-------------------------------------------------------------------------------
+' renderCurrentVideoLibraryItems
+'-------------------------------------------------------------------------------
+sub renderCurrentVideoLibraryItems()
+    renderItems(getVisibleVideoLibraryItems())
+    updateTitleLabel(m.pageState.items.Count())
+    m.itemsGrid.jumpToItem = 0
+    m.itemsGrid.itemFocused = 0
+end sub
+
+'-------------------------------------------------------------------------------
+' isDecadeFilterActive
+'-------------------------------------------------------------------------------
+function isDecadeFilterActive() as boolean
+    return Format.SafeString(m.pageState.activeFilterType, "") = "Decade"
+end function
+
+'-------------------------------------------------------------------------------
+' isGenreFilterActive
+'-------------------------------------------------------------------------------
+function isGenreFilterActive() as boolean
+    return Format.SafeString(m.pageState.activeFilterType, "") = "Genre"
+end function
+
+'-------------------------------------------------------------------------------
+' showDecadeFilterRow
+'-------------------------------------------------------------------------------
+sub showDecadeFilterRow()
+    options = m.pageState.filterCache.decadeOptions
+    if options = invalid then options = []
+    if filterOptionsContainValue(options, m.pageState.selectedDecade.ToStr()) <> true then m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
+    m.filterButtonRow.filterType = "Decade"
+    m.filterButtonRow.items = options
+    m.filterButtonRow.selectedValue = m.pageState.selectedDecade.ToStr()
+    m.filterButtonRow.visible = options.Count() > 0
+    applyGridLayout(m.pageState.imageAspect)
+    if m.pageState.selectedDecade >= 0 or m.pageState.renderDecadeFilterOnApply = true then renderItems(getVisibleVideoLibraryItems())
+    m.pageState.renderDecadeFilterOnApply = false
+end sub
+
+'-------------------------------------------------------------------------------
+' showGenreFilterRow
+'-------------------------------------------------------------------------------
+sub showGenreFilterRow()
+    options = m.pageState.filterCache.genreOptions
+    if options = invalid then options = []
+    if filterOptionsContainValue(options, m.pageState.selectedGenre) <> true then m.pageState.selectedGenre = getFirstGenreFilterValue(options)
+    m.filterButtonRow.filterType = "Genre"
+    m.filterButtonRow.items = options
+    m.filterButtonRow.selectedValue = m.pageState.selectedGenre
+    m.filterButtonRow.visible = options.Count() > 0
+    applyGridLayout(m.pageState.imageAspect)
+    if m.pageState.selectedGenre <> "" then renderItems(getVisibleVideoLibraryItems())
+end sub
+
+'-------------------------------------------------------------------------------
+' getFirstGenreFilterValue
+'-------------------------------------------------------------------------------
+function getFirstGenreFilterValue(options as object) as string
+    if options = invalid or options.Count() = 0 then return ""
+
+    return Format.SafeString(options[0].value, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getFirstDecadeFilterValue
+'-------------------------------------------------------------------------------
+function getFirstDecadeFilterValue(options as object) as integer
+    if options = invalid or options.Count() = 0 then return -1
+
+    return Number.ToInteger(options[0].value, -1)
+end function
+
+'-------------------------------------------------------------------------------
+' hideFilterButtonRow
+'-------------------------------------------------------------------------------
+sub hideFilterButtonRow()
+    m.filterButtonRow.visible = false
+    m.filterButtonRow.items = []
+    m.filterButtonRow.selectedValue = ""
+    applyGridLayout(m.pageState.imageAspect)
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilterButtonRowSelected
+'-------------------------------------------------------------------------------
+sub onFilterButtonRowSelected()
+    selected = m.filterButtonRow.filterSelected
+    if selected = invalid then return
+    filterType = Format.SafeString(selected.type, "")
+    if filterType = "Decade" then
+        selectedDecade = Number.ToInteger(selected.value, -1)
+        if selectedDecade = m.pageState.selectedDecade then
+            m.filterButtonRow.setFocus(true)
+            return
+        end if
+
+        m.pageState.selectedDecade = selectedDecade
+        m.filterButtonRow.selectedValue = m.pageState.selectedDecade.ToStr()
+    else if filterType = "Genre" then
+        selectedGenre = Format.SafeString(selected.value, "")
+        if selectedGenre = m.pageState.selectedGenre then
+            m.filterButtonRow.setFocus(true)
+            return
+        end if
+
+        m.pageState.selectedGenre = selectedGenre
+        m.filterButtonRow.selectedValue = m.pageState.selectedGenre
+    else
+        return
+    end if
+
+    m.filterButtonRow.setFocus(true)
+    renderCurrentVideoLibraryItems()
+    persistVideoLibraryViewState()
+end sub
+
+'-------------------------------------------------------------------------------
+' filterOptionsContainValue
+'-------------------------------------------------------------------------------
+function filterOptionsContainValue(options as object, value as string) as boolean
+    if options = invalid or value = "" then return false
+    for each option in options
+        if Format.SafeString(option.value, "") = value then return true
+    end for
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' onFilterButtonRowFocusExitUp
+'-------------------------------------------------------------------------------
+sub onFilterButtonRowFocusExitUp()
+    focusBrowseByButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilterButtonRowFocusExitDown
+'-------------------------------------------------------------------------------
+sub onFilterButtonRowFocusExitDown()
+    m.pageState.pendingFocusTarget = ""
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' createEmptyFilterCache
+'-------------------------------------------------------------------------------
+function createEmptyFilterCache() as object
+    return {
+        decadeOptions: []
+        genreOptions: []
+        decadeItemsByValue: {}
+        genreItemsByValue: {}
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' createFilterCacheFromOptions
+'-------------------------------------------------------------------------------
+function createFilterCacheFromOptions(filterOptions as dynamic) as object
+    cache = createEmptyFilterCache()
+    if Arrays.IsAssocArray(filterOptions) = false then return cache
+
+    if filterOptions.decadeOptions <> invalid then cache.decadeOptions = filterOptions.decadeOptions
+    if filterOptions.genreOptions <> invalid then cache.genreOptions = filterOptions.genreOptions
+
+    return cache
+end function
+
+'-------------------------------------------------------------------------------
+' getCachedFilterItems
+'-------------------------------------------------------------------------------
+function getCachedFilterItems(filterType as string, filterValue as string) as object
+    cache = m.pageState.filterCache
+    if cache = invalid then return []
+
+    if filterType = "Decade" then
+        filterKey = Format.SafeString(filterValue, "")
+        items = cache.decadeItemsByValue[filterKey]
+        if items = invalid then
+            items = VideoLibraryFilter.ByDecade(m.pageState.allItems, Number.ToInteger(filterKey, -1))
+            cache.decadeItemsByValue[filterKey] = items
+        end if
+        if items <> invalid then return items
+        return []
+    end if
+
+    if filterType = "Genre" then
+        filterKey = Format.SafeString(filterValue, "")
+        items = cache.genreItemsByValue[filterKey]
+        if items = invalid then
+            items = VideoLibraryFilter.ByGenre(m.pageState.allItems, filterKey)
+            cache.genreItemsByValue[filterKey] = items
+        end if
+        if items <> invalid then return items
+        return []
+    end if
+
+    return []
+end function
+
+'-------------------------------------------------------------------------------
+' getSortedVideoLibraryItems
+'-------------------------------------------------------------------------------
+function getSortedVideoLibraryItems(items as object) as object
+    sortedItems = copyVideoLibraryItems(items)
+    if sortedItems.Count() < 2 then return sortedItems
+    if hasLibrarySpecialization() then return sortedItems
+
+    selection = m.pageState.selectedSort
+    if selection = invalid then selection = getDefaultSortSelection()
+    sortKey = Format.SafeString(selection.sortKey, "SortName")
+    if sortKey = "" then return sortedItems
+
+    if sortKey = "Random" then return VideoLibrarySort.Shuffle(sortedItems)
+
+    sortOrder = getSortOrderFromSelection(selection)
+    if sortKey = "SortName" then return VideoLibrarySort.ByTitle(sortedItems, sortOrder)
+
+    if sortKey = "PremiereDate" then
+        return VideoLibrarySort.ByReleaseDate(sortedItems, sortOrder)
+    end if
+    if sortKey = "DateCreated" then
+        return VideoLibrarySort.ByDateAdded(sortedItems, sortOrder)
+    end if
+
+    sortedItems.SortBy(sortKey)
+
+    if getSortOrderFromSelection(selection) = "Descending" then reverseVideoLibraryItems(sortedItems)
+
+    return sortedItems
+end function
+
+'-------------------------------------------------------------------------------
+' copyVideoLibraryItems
+'-------------------------------------------------------------------------------
+function copyVideoLibraryItems(items as object) as object
+    copiedItems = []
+    if items = invalid then return copiedItems
+
+    for each item in items
+        copiedItems.Push(item)
+    end for
+
+    return copiedItems
+end function
+
+'-------------------------------------------------------------------------------
+' reverseVideoLibraryItems
+'-------------------------------------------------------------------------------
+sub reverseVideoLibraryItems(items as object)
+    if items = invalid or items.Count() < 2 then return
+
+    leftIndex = 0
+    rightIndex = items.Count() - 1
+    while leftIndex < rightIndex
+        temp = items[leftIndex]
+        items[leftIndex] = items[rightIndex]
+        items[rightIndex] = temp
+        leftIndex = leftIndex + 1
+        rightIndex = rightIndex - 1
+    end while
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemFocused
+'-------------------------------------------------------------------------------
+sub onItemFocused()
+    updateVideoLibraryProgressFocusedIndex()
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemsGridNavigationKeyPressed
+'-------------------------------------------------------------------------------
+sub onItemsGridNavigationKeyPressed()
+    event = m.itemsGrid.navigationKeyPressed
+    if event = invalid then return
+    if m.pageState.imageAspect <> "poster" then return
+
+    key = Format.SafeString(event.key, "")
+    if key <> "down" and key <> "up" then return
+
+    if event.press = false then
+        stopVideoLibraryProgressHold(key)
+        return
+    end if
+
+    startVideoLibraryProgressHold(key)
+    advanceVideoLibraryProgressForKey(key)
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoLibraryProgressHoldTimerFire
+'-------------------------------------------------------------------------------
+sub onVideoLibraryProgressHoldTimerFire()
+    advanceVideoLibraryProgressForKey(m.pageState.progressHoldKey)
+end sub
+
+'-------------------------------------------------------------------------------
+' startVideoLibraryProgressHold
+'-------------------------------------------------------------------------------
+sub startVideoLibraryProgressHold(key as string)
+    m.pageState.progressHoldKey = key
+    m.videoLibraryProgressHoldTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' stopVideoLibraryProgressHold
+'-------------------------------------------------------------------------------
+sub stopVideoLibraryProgressHold(key = invalid as dynamic)
+    if key <> invalid and key <> "" and key <> m.pageState.progressHoldKey then return
+
+    m.pageState.progressHoldKey = ""
+    m.videoLibraryProgressHoldTimer.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' advanceVideoLibraryProgressForKey
+'-------------------------------------------------------------------------------
+sub advanceVideoLibraryProgressForKey(key as string)
+    if key <> "down" and key <> "up" then return
+    if m.pageState.imageAspect <> "poster" then
+        stopVideoLibraryProgressHold()
+        return
+    end if
+
+    itemCount = getVideoLibraryItemCount()
+    if itemCount <= 0 then
+        stopVideoLibraryProgressHold()
+        return
+    end if
+
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then columns = 1
+
+    focusedIndex = m.pageState.progressFocusedIndex
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = getCurrentVideoLibraryFocusedIndex()
+
+    if key = "down" then
+        focusedIndex = focusedIndex + columns
+    else if key = "up" then
+        focusedIndex = focusedIndex - columns
+    end if
+
+    if focusedIndex < 0 then focusedIndex = 0
+    if focusedIndex >= itemCount then focusedIndex = itemCount - 1
+
+    m.pageState.progressFocusedIndex = focusedIndex
+    m.videoLibraryProgressIndicator.focusedIndex = focusedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' updateTitleLabel
+'-------------------------------------------------------------------------------
+sub updateTitleLabel(itemCount = invalid as dynamic)
+    request = m.pageState.request
+    title = "Library"
+    if request <> invalid then title = Format.SafeString(request.title, "Library")
+
+    if itemCount <> invalid then title = title + MediaMetadata.BulletSeparator() + Number.FormatWithThousandsSeparator(itemCount) + " items"
+
+    m.titleLabel.text = title
+end sub
+
+'-------------------------------------------------------------------------------
+' updateAvailableLetters
+'-------------------------------------------------------------------------------
+sub updateAvailableLetters(items as object)
+    availableLetters = {}
+
+    for each item in items
+        letter = getItemSortLetter(item)
+        if letter <> "" then availableLetters[letter] = true
+    end for
+
+    m.pageState.availableLetters = availableLetters
+end sub
+
+'-------------------------------------------------------------------------------
+' onLetterGutterButtonFocused
+'-------------------------------------------------------------------------------
+sub onLetterGutterButtonFocused()
+    if m.letterGutterButton.focused <> true then return
+
+    openLetterGrid()
+end sub
+
+'-------------------------------------------------------------------------------
+' onLetterGutterButtonSelected
+'-------------------------------------------------------------------------------
+sub onLetterGutterButtonSelected()
+    openLetterGrid()
+end sub
+
+'-------------------------------------------------------------------------------
+' openLetterGrid
+'-------------------------------------------------------------------------------
+function openLetterGrid() as boolean
+    if canUseLetterNavigation() <> true then return false
+    m.pageState.letterGridOpen = true
+    m.top.letterGridRequested = {
+        id: "letterGrid"
+        componentName: "LetterGridDialog"
+        openFunction: "openGrid"
+        closeFields: ["closeRequested", "letterSelected"]
+        availableLetters: m.pageState.availableLetters
+        panelX: m.pageState.letterGridPanel.x
+        panelY: m.pageState.letterGridPanel.y
+    }
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' closeLetterGrid
+'-------------------------------------------------------------------------------
+sub closeLetterGrid(focusItems as boolean)
+    wasOpen = m.pageState <> invalid and m.pageState.letterGridOpen = true
+    if m.pageState <> invalid then m.pageState.letterGridOpen = false
+
+    if wasOpen then
+        m.top.letterGridRequested = {
+            id: "letterGrid"
+            action: "close"
+        }
+    end if
+
+    if focusItems = true then focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' selectLetter
+'-------------------------------------------------------------------------------
+sub selectLetter(letter as string)
+    if letter = "" then return
+
+    index = findFirstItemIndexForLetter(letter)
+    if index < 0 then return
+
+    closeLetterGrid(false)
+    focusVideoLibraryItem(index)
+end sub
+
+'-------------------------------------------------------------------------------
+' onSortOverlayRequested
+'-------------------------------------------------------------------------------
+sub onSortOverlayRequested()
+    request = m.browseByButton.overlayRequested
+    if request = invalid then return
+
+    request.selectedSortKey = m.pageState.selectedSortKey
+    request.sortOptions = getVideoSortOptions()
+    m.top.overlayRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' getVideoSortOptions
+'-------------------------------------------------------------------------------
+function getVideoSortOptions() as object
+    return [
+        { optionKey: "SortName", sortKey: "SortName", sortOrder: "", label: "Title" }
+        { optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "", label: "Release Date" }
+        { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "", label: "Date Added" }
+        { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
+        { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
+        { optionKey: "Favorites", sortKey: "SortName", sortOrder: "", label: "Favorites" }
+        { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
+    ]
+end function
+
+'-------------------------------------------------------------------------------
+' onSortOrderChanged
+'-------------------------------------------------------------------------------
+sub onSortOrderChanged()
+    applySortOrderSelection(m.sortButton.sortOrderChanged)
+end sub
+
+'-------------------------------------------------------------------------------
+' applySortSelection
+'-------------------------------------------------------------------------------
+function applySortSelection(selection as object) as boolean
+    if selection = invalid then return false
+
+    selection = resetSortOrder(selection)
+    selectedSortKey = getSelectionOptionKey(selection)
+    if selectedSortKey = "" then return false
+    if selectedSortKey = "Favorites" then
+        if isFavoriteBrowseActive() then return false
+
+        resetFilterState()
+        hideFilterButtonRow()
+        m.pageState.selectedSortKey = selectedSortKey
+        m.pageState.selectedSort = getFavoritesSortSelection()
+        m.pageState.request.favoriteOnly = true
+        m.browseByButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+        persistVideoLibraryViewState()
+        reloadVideoLibraryForSort()
+        return false
+    end if
+
+    if isFavoriteBrowseActive() then
+        m.pageState.request.favoriteOnly = false
+        if selectedSortKey = "Decade" or selectedSortKey = "Genre" then selection = getDefaultSortSelection()
+
+        m.pageState.selectedSortKey = getSelectionOptionKey(selection)
+        m.pageState.selectedSort = selection
+        m.browseByButton.selectedSort = selection
+        m.sortButton.selectedSort = selection
+        m.sortButton.sortEnabled = canUseSortOrder(selection)
+        persistVideoLibraryViewState()
+        reloadVideoLibraryForSort()
+        return false
+    end if
+
+    if selectedSortKey = "Decade" then
+        if Format.SafeString(m.pageState.selectedSortKey, "") = "Decade" then
+            m.pageState.pendingFocusTarget = "filterButtonRow"
+            return false
+        end if
+
+        shouldRenderVideoLibrary = isShowingUnfilteredTitleAscendingMasterList() <> true
+        m.pageState.selectedSortKey = selectedSortKey
+        m.pageState.selectedSort = {
+            optionKey: "Decade"
+            sortKey: "SortName"
+            sortOrder: "Ascending"
+            label: Format.SafeString(selection.label, "Decade")
+        }
+        m.pageState.activeFilterType = "Decade"
+        m.pageState.selectedDecade = getFirstDecadeFilterValue(m.pageState.filterCache.decadeOptions)
+        m.pageState.renderDecadeFilterOnApply = shouldRenderVideoLibrary
+        m.pageState.pendingFocusTarget = "filterButtonRow"
+        m.browseByButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.sortEnabled = false
+        closeLetterGrid(false)
+        showDecadeFilterRow()
+        persistVideoLibraryViewState()
+        return false
+    end if
+
+    if selectedSortKey = "Genre" then
+        if Format.SafeString(m.pageState.selectedSortKey, "") = "Genre" then
+            m.pageState.pendingFocusTarget = "filterButtonRow"
+            return false
+        end if
+
+        m.pageState.selectedSortKey = selectedSortKey
+        m.pageState.selectedSort = {
+            optionKey: "Genre"
+            sortKey: "SortName"
+            sortOrder: "Ascending"
+            label: Format.SafeString(selection.label, "Genre")
+        }
+        m.pageState.activeFilterType = "Genre"
+        m.pageState.selectedGenre = getFirstGenreFilterValue(m.pageState.filterCache.genreOptions)
+        m.pageState.pendingFocusTarget = "filterButtonRow"
+        m.browseByButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.sortEnabled = false
+        closeLetterGrid(false)
+        showGenreFilterRow()
+        persistVideoLibraryViewState()
+        return false
+    end if
+
+    if isDecadeFilterActive() or isGenreFilterActive() then
+        m.pageState.activeFilterType = ""
+        m.pageState.selectedDecade = -1
+        m.pageState.selectedGenre = ""
+        m.pageState.renderDecadeFilterOnApply = false
+        m.pageState.pendingFocusTarget = ""
+        hideFilterButtonRow()
+    end if
+
+    if selectedSortKey = m.pageState.selectedSortKey then
+        if canUseSortOrder(selection) <> true then return false
+        if m.pageState.selectedSort = invalid then return false
+        if Format.SafeString(m.pageState.selectedSort.sortOrder, "Ascending") <> "Descending" then return false
+
+        m.pageState.selectedSort.sortOrder = "Ascending"
+        m.browseByButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.selectedSort = m.pageState.selectedSort
+        m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+        renderCurrentVideoLibraryItems()
+        persistVideoLibraryViewState()
+        return false
+    end if
+
+    m.pageState.selectedSortKey = selectedSortKey
+    m.pageState.selectedSort = selection
+    m.browseByButton.selectedSort = selection
+    m.sortButton.selectedSort = selection
+    m.sortButton.sortEnabled = canUseSortOrder(selection)
+    renderCurrentVideoLibraryItems()
+    persistVideoLibraryViewState()
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' applySortOrderSelection
+'-------------------------------------------------------------------------------
+function applySortOrderSelection(selection as object) as boolean
+    if selection = invalid then return false
+    if m.pageState.selectedSort = invalid then return false
+
+    sortOrder = Format.SafeString(selection.sortOrder, "Ascending")
+    if sortOrder <> "Descending" then sortOrder = "Ascending"
+    if Format.SafeString(m.pageState.selectedSort.sortOrder, "Ascending") = sortOrder then return false
+
+    m.pageState.selectedSort.sortOrder = sortOrder
+    m.browseByButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.selectedSort = m.pageState.selectedSort
+    m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+    renderCurrentVideoLibraryItems()
+    persistVideoLibraryViewState()
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' isShowingUnfilteredTitleAscendingMasterList
+'-------------------------------------------------------------------------------
+function isShowingUnfilteredTitleAscendingMasterList() as boolean
+    if isDecadeFilterActive() then return false
+    if Format.SafeString(m.pageState.selectedSortKey, "SortName") <> "SortName" then return false
+    if m.pageState.selectedSort <> invalid and Format.SafeString(m.pageState.selectedSort.sortOrder, "Ascending") = "Descending" then return false
+
+    items = m.pageState.items
+    allItems = m.pageState.allItems
+    if items = invalid or allItems = invalid then return false
+    if items.Count() <> allItems.Count() then return false
+
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' canUseSortOrder
+'-------------------------------------------------------------------------------
+function canUseSortOrder(selection as object) as boolean
+    if selection = invalid then return false
+
+    sortKey = Format.SafeString(selection.sortKey, "")
+    return sortKey <> "" and sortKey <> "Random"
+end function
+
+'-------------------------------------------------------------------------------
+' resetSortOrder
+'-------------------------------------------------------------------------------
+function resetSortOrder(selection as object) as object
+    if selection = invalid then return selection
+    if Format.SafeString(selection.sortKey, "") = "Random" then return selection
+    if Format.SafeString(selection.sortKey, "") = "" then return selection
+
+    selection.sortOrder = "Ascending"
+    return selection
+end function
+
+'-------------------------------------------------------------------------------
+' getSelectionOptionKey
+'-------------------------------------------------------------------------------
+function getSelectionOptionKey(selection as object) as string
+    optionKey = Format.SafeString(selection.optionKey, "")
+    if optionKey <> "" then return optionKey
+
+    sortKey = Format.SafeString(selection.sortKey, "")
+    if sortKey = "" then return ""
+    if sortKey = "Random" then return "Random"
+
+    return sortKey + ":" + getSortOrderFromSelection(selection)
+end function
+
+'-------------------------------------------------------------------------------
+' reloadVideoLibraryForSort
+'-------------------------------------------------------------------------------
+sub reloadVideoLibraryForSort(refocusTarget = invalid as dynamic)
+    request = m.pageState.request
+    if request = invalid then return
+    if m.pageState.selectedSort = invalid then return
+    if Format.SafeString(m.pageState.selectedSort.sortKey, "") = "" then return
+
+    request.sortBy = Format.SafeString(m.pageState.selectedSort.sortKey, "SortName")
+    request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
+    m.pageState.request = request
+    AsyncLifecycle.Begin(m.pageState.lifecycle, request.libraryId)
+    m.pageState.refocusBrowseByButtonAfterLoad = refocusTarget <> "sort"
+    m.pageState.refocusSortButtonAfterLoad = refocusTarget = "sort"
+    m.pageState.isLoading = true
+    Spinner.Show(0)
+    renderItems([])
+    m.itemsGrid.jumpToItem = 0
+    m.itemsGrid.itemFocused = 0
+
+    m.videoLibraryTask.request = request
+    m.videoLibraryTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' getSortOrderFromSelection
+'-------------------------------------------------------------------------------
+function getSortOrderFromSelection(selection as object) as string
+    if selection <> invalid and Format.SafeString(selection.sortKey, "") = "Random" then return ""
+    if selection <> invalid and Format.SafeString(selection.sortOrder, "") = "Descending" then return "Descending"
+
+    return "Ascending"
+end function
+
+'-------------------------------------------------------------------------------
+' getDefaultSortSelection
+'-------------------------------------------------------------------------------
+function getDefaultSortSelection() as object
+    return {
+        optionKey: "SortName"
+        sortKey: "SortName"
+        sortOrder: "Ascending"
+        label: "Title"
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getFavoritesSortSelection
+'-------------------------------------------------------------------------------
+function getFavoritesSortSelection() as object
+    return {
+        optionKey: "Favorites"
+        sortKey: "SortName"
+        sortOrder: "Ascending"
+        label: "Favorites"
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' isFavoriteBrowseActive
+'-------------------------------------------------------------------------------
+function isFavoriteBrowseActive() as boolean
+    return m.pageState.request <> invalid and m.pageState.request.favoriteOnly = true
+end function
+
+'-------------------------------------------------------------------------------
+' buildSortSelection
+'-------------------------------------------------------------------------------
+function buildSortSelection(sortKey as string, sortOrder as string) as object
+    normalizedSortKey = Format.SafeString(sortKey, "SortName")
+    if normalizedSortKey = "Random" then
+        return {
+            optionKey: "Random"
+            sortKey: "Random"
+            sortOrder: ""
+            label: "Random"
+        }
+    end if
+
+    return {
+        optionKey: normalizedSortKey
+        sortKey: normalizedSortKey
+        sortOrder: getNormalizedSortOrder(sortOrder)
+        label: getSortSelectionLabel(normalizedSortKey)
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getNormalizedSortOrder
+'-------------------------------------------------------------------------------
+function getNormalizedSortOrder(sortOrder as string) as string
+    if sortOrder = "Descending" then return "Descending"
+    return "Ascending"
+end function
+
+'-------------------------------------------------------------------------------
+' getSortSelectionLabel
+'-------------------------------------------------------------------------------
+function getSortSelectionLabel(sortKey as string) as string
+    if sortKey = "Random" then return "Random"
+    if sortKey = "PremiereDate" then return "Release Date"
+    if sortKey = "DateCreated" then return "Date Added"
+    return "Title"
+end function
+
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
+    m.top.thumbnailLayoutActive = m.pageState.isThumbnailLayout
+    m.top.setFocus(true)
+    if focusPendingTarget() then return
+
+    if hasLibrarySpecialization() and m.top.callFunc("specializationActivate") then return
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusPendingTarget
+'-------------------------------------------------------------------------------
+function focusPendingTarget() as boolean
+    target = Format.SafeString(m.pageState.pendingFocusTarget, "")
+    if target = "" then return false
+
+    m.pageState.pendingFocusTarget = ""
+    if target = "filterButtonRow" then return focusFilterButtonRow()
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle.Deactivate(m.pageState.lifecycle)
+    m.top.thumbnailLayoutActive = false
+    if hasLibrarySpecialization() then m.top.callFunc("specializationDeactivate")
+    stopVideoLibraryProgressHold()
+    closeLetterGrid(false)
+    m.videoLibraryTask.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' focusItemsIfActive
+'-------------------------------------------------------------------------------
+sub focusItemsIfActive()
+    if m.itemsGrid.visible <> true then return
+    if m.itemsGrid.content = invalid then return
+    if m.itemsGrid.content.getChildCount() = 0 then return
+
+    m.itemsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusVideoLibraryItem
+'-------------------------------------------------------------------------------
+sub focusVideoLibraryItem(index as integer)
+    if m.itemsGrid = invalid then return
+    if m.itemsGrid.content = invalid then return
+    if index < 0 or index >= m.itemsGrid.content.getChildCount() then return
+
+    m.itemsGrid.jumpToItem = index
+    m.itemsGrid.itemFocused = index
+    m.itemsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusBrowseByButton
+'-------------------------------------------------------------------------------
+function focusBrowseByButton() as boolean
+    if canFocusBrowseByButton() <> true then return false
+
+    m.top.setFocus(true)
+    m.browseByButton.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' focusSortButton
+'-------------------------------------------------------------------------------
+function focusSortButton() as boolean
+    if canFocusSortButton() <> true then return false
+
+    m.top.setFocus(true)
+    m.sortButton.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' canFocusBrowseByButton
+'-------------------------------------------------------------------------------
+function canFocusBrowseByButton() as boolean
+    return m.browseByButton <> invalid and m.browseByButton.visible = true
+end function
+
+'-------------------------------------------------------------------------------
+' canFocusSortButton
+'-------------------------------------------------------------------------------
+function canFocusSortButton() as boolean
+    return m.sortButton <> invalid and m.sortButton.visible = true and m.sortButton.sortEnabled = true
+end function
+
+'-------------------------------------------------------------------------------
+' requestHeaderFocus
+'-------------------------------------------------------------------------------
+function requestHeaderFocus() as boolean
+    m.top.focusExitUp = true
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onBrowseByButtonFocusExitDown
+'-------------------------------------------------------------------------------
+sub onBrowseByButtonFocusExitDown()
+    if canFocusFilterButtonRow() then
+        focusFilterButtonRow()
+        return
+    end if
+
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSortButtonFocusExitDown
+'-------------------------------------------------------------------------------
+sub onSortButtonFocusExitDown()
+    if canFocusFilterButtonRow() then
+        focusFilterButtonRow()
+        return
+    end if
+
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusFilterButtonRow
+'-------------------------------------------------------------------------------
+function focusFilterButtonRow() as boolean
+    if canFocusFilterButtonRow() <> true then return false
+
+    m.top.setFocus(true)
+    m.filterButtonRow.callFunc("focusFirstButton")
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' canFocusFilterButtonRow
+'-------------------------------------------------------------------------------
+function canFocusFilterButtonRow() as boolean
+    if m.filterButtonRow = invalid then return false
+    if m.filterButtonRow.visible <> true then return false
+    items = m.filterButtonRow.items
+    if items = invalid then return false
+
+    return items.Count() > 0
+end function
+
+'-------------------------------------------------------------------------------
+' focusFirstVideoLibraryItem
+'-------------------------------------------------------------------------------
+sub focusFirstVideoLibraryItem()
+    focusVideoLibraryItem(0)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusLetterGutterButton
+'-------------------------------------------------------------------------------
+function focusLetterGutterButton() as boolean
+    if m.letterGutterButton = invalid then return false
+    if canUseLetterNavigation() <> true then return false
+    if m.itemsGrid.visible <> true then return false
+
+    m.letterGutterButton.setFocus(true)
+    return openLetterGrid()
+end function
+
+'-------------------------------------------------------------------------------
+' getItemImageUrl
+'-------------------------------------------------------------------------------
+function getItemImageUrl(item as dynamic, imageAspect as string) as string
+    if Arrays.IsAssocArray(item) = false then return ""
+    if hasLibrarySpecialization() then return m.top.callFunc("specializationImageUrl", item, imageAspect)
+
+    itemId = Format.FirstNonEmpty([item.Id], "")
+    if itemId = "" then return ""
+
+    if imageAspect = "wide" then
+        imageUrl = getImageUrlForType(itemId, item, "Thumb", 441, 249)
+        if imageUrl <> "" then return imageUrl
+
+        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 441, 249)
+        if imageUrl <> "" then return imageUrl
+
+        return getImageUrlForType(itemId, item, "Primary", 441, 249)
+    end if
+
+    return getImageUrlForType(itemId, item, "Primary", 252, 378)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageUrlForType
+'-------------------------------------------------------------------------------
+function getImageUrlForType(itemId as string, item as dynamic, imageType as string, width as integer, height as integer) as string
+    tag = getImageTag(item, imageType)
+    if tag = "" then return ""
+
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageTag
+'-------------------------------------------------------------------------------
+function getImageTag(item as dynamic, imageType as string) as string
+    if item = invalid then return ""
+
+    if imageType = "Backdrop" then
+        if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then return item.BackdropImageTags[0]
+        return ""
+    end if
+
+    if item.ImageTags = invalid then return ""
+    if imageType = "Primary" and item.ImageTags.Primary <> invalid then return item.ImageTags.Primary
+    if imageType = "Thumb" and item.ImageTags.Thumb <> invalid then return item.ImageTags.Thumb
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryImageAspect
+'-------------------------------------------------------------------------------
+function getVideoLibraryImageAspect() as string
+    if hasLibrarySpecialization() then return m.top.callFunc("specializationImageAspect")
+    settings = m.top.settings
+    settingKey = SettingsStore.Key.MovieLibraryDisplay
+
+    request = m.pageState.request
+    collectionType = ""
+    if request <> invalid then collectionType = Format.SafeString(request.collectionType, "")
+
+    if collectionType = "tvshows" then
+        settingKey = SettingsStore.Key.TvLibraryDisplay
+    else if collectionType = "collection" then
+        settingKey = SettingsStore.Key.CollectionItemsImageType
+    end if
+
+    if LCase(settings[settingKey]) = "thumbnail" then return "wide"
+    return "poster"
+end function
+
+'-------------------------------------------------------------------------------
+' findFirstItemIndexForLetter
+'-------------------------------------------------------------------------------
+function findFirstItemIndexForLetter(letter as string) as integer
+    targetLetter = UCase(Left(letter, 1))
+    if targetLetter = "" then return -1
+
+    if m.itemsGrid <> invalid and m.itemsGrid.content <> invalid then
+        for i = 0 to m.itemsGrid.content.getChildCount() - 1
+            node = m.itemsGrid.content.getChild(i)
+            if node <> invalid and getItemSortLetter(node.raw) = targetLetter then return i
+        end for
+    end if
+
+    items = m.pageState.items
+    if items = invalid then return -1
+
+    for i = 0 to items.Count() - 1
+        if getItemSortLetter(items[i]) = targetLetter then return i
+    end for
+
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getItemSortLetter
+'-------------------------------------------------------------------------------
+function getItemSortLetter(item as dynamic) as string
+    if Arrays.IsAssocArray(item) = false then return ""
+
+    title = getItemAlphabetTitle(item)
+    if title = "" then return ""
+
+    firstLetter = UCase(Left(title, 1))
+    if firstLetter >= "A" and firstLetter <= "Z" then return firstLetter
+
+    return "#"
+end function
+
+'-------------------------------------------------------------------------------
+' getItemAlphabetTitle
+'-------------------------------------------------------------------------------
+function getItemAlphabetTitle(item as object) as string
+    sortName = Strings.Trim(Format.SafeString(item.SortName, ""))
+    if sortName <> "" then return sortName
+
+    title = Strings.Trim(Format.SafeString(item.Name, ""))
+    if title = "" then return ""
+
+    return stripLeadingSortArticle(title)
+end function
+
+'-------------------------------------------------------------------------------
+' stripLeadingSortArticle
+'-------------------------------------------------------------------------------
+function stripLeadingSortArticle(title as string) as string
+    normalized = LCase(title)
+
+    if Left(normalized, 4) = "the " then return Strings.Trim(Mid(title, 5))
+    if Left(normalized, 3) = "an " then return Strings.Trim(Mid(title, 4))
+    if Left(normalized, 2) = "a " then return Strings.Trim(Mid(title, 3))
+
+    return title
+end function
+
+'-------------------------------------------------------------------------------
+' isItemsGridAtFirstColumn
+'-------------------------------------------------------------------------------
+function isItemsGridAtFirstColumn() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then return false
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = 0
+
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then columns = 1
+
+    return focusedIndex mod columns = 0
+end function
+
+'-------------------------------------------------------------------------------
+' isItemsGridAtFirstRow
+'-------------------------------------------------------------------------------
+function isItemsGridAtFirstRow() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then return false
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = 0
+
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then columns = 1
+
+    return focusedIndex < columns
+end function
+
+'-------------------------------------------------------------------------------
+' isItemsGridAtLastColumn
+'-------------------------------------------------------------------------------
+function isItemsGridAtLastColumn() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then return false
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = 0
+
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then columns = 1
+
+    itemCount = 0
+    if m.itemsGrid.content <> invalid then itemCount = m.itemsGrid.content.getChildCount()
+    if itemCount > 0 and focusedIndex = itemCount - 1 then return true
+
+    return focusedIndex mod columns = columns - 1
+end function
+
+'-------------------------------------------------------------------------------
+' isFirstVideoLibraryItemFocused
+'-------------------------------------------------------------------------------
+function isFirstVideoLibraryItemFocused() as boolean
+    if m.itemsGrid = invalid then return true
+    if m.itemsGrid.content = invalid then return true
+    if m.itemsGrid.content.getChildCount() = 0 then return true
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then focusedIndex = 0
+
+    return focusedIndex = 0
+end function
+
+'-------------------------------------------------------------------------------
+' applyGridLayout
+'-------------------------------------------------------------------------------
+sub applyGridLayout(imageAspect as string)
+    filterRowOffset = getFilterButtonRowOffset()
+
+    if imageAspect = "wide" then
+        m.pageState.isThumbnailLayout = true
+        m.top.thumbnailLayoutActive = true
+        m.titleLabel.translation = [480, 120]
+        m.browseByButton.translation = [1634, 120]
+        m.sortButton.translation = [1832, 120]
+        if hasLibrarySpecialization() then m.top.callFunc("specializationApplyLayout", "wide")
+        m.filterButtonRow.translation = [264, 208]
+        m.itemsGrid.translation = [24, 207 + filterRowOffset]
+        applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+        applyLetterGridLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+        m.itemsGrid.itemSize = [465, 348]
+        m.itemsGrid.itemSpacing = [0, 12]
+        m.itemsGrid.numColumns = 4
+        m.itemsGrid.numRows = 3
+        m.itemsGrid.focusBitmapUri = "pkg:/images/library/thumbnail-focus-465x348.png"
+        updateVideoLibraryProgressLayout(imageAspect)
+        return
+    end if
+
+    m.pageState.isThumbnailLayout = false
+    m.top.thumbnailLayoutActive = false
+    m.titleLabel.translation = [480, 120]
+    m.browseByButton.translation = [1618, 120]
+    m.sortButton.translation = [1816, 120]
+    if hasLibrarySpecialization() then m.top.callFunc("specializationApplyLayout", "poster")
+    m.filterButtonRow.translation = [264, 208]
+    m.itemsGrid.translation = [96, 207 + filterRowOffset]
+    applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+    applyLetterGridLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+    m.itemsGrid.itemSize = [297, 465]
+    m.itemsGrid.itemSpacing = [-12, 27]
+    m.itemsGrid.numColumns = 6
+    m.itemsGrid.numRows = 2
+    m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-297x465.png"
+    updateVideoLibraryProgressLayout(imageAspect)
+end sub
+
+'-------------------------------------------------------------------------------
+' getFilterButtonRowOffset
+'-------------------------------------------------------------------------------
+function getFilterButtonRowOffset() as integer
+    if canShowFilterButtonRowLayout() <> true then return 0
+
+    return 84
+end function
+
+'-------------------------------------------------------------------------------
+' canShowFilterButtonRowLayout
+'-------------------------------------------------------------------------------
+function canShowFilterButtonRowLayout() as boolean
+    return m.filterButtonRow <> invalid and m.filterButtonRow.visible = true
+end function
+
+'-------------------------------------------------------------------------------
+' updateVideoLibraryProgressLayout
+'-------------------------------------------------------------------------------
+sub updateVideoLibraryProgressLayout(imageAspect as string)
+    if imageAspect <> "poster" then stopVideoLibraryProgressHold()
+
+    m.videoLibraryProgressIndicator.layoutMode = imageAspect
+    m.videoLibraryProgressIndicator.gridLeft = Number.ToInteger(m.itemsGrid.translation[0])
+    m.videoLibraryProgressIndicator.gridTop = Number.ToInteger(m.itemsGrid.translation[1])
+    m.videoLibraryProgressIndicator.itemWidth = Number.ToInteger(m.itemsGrid.itemSize[0])
+    m.videoLibraryProgressIndicator.itemSpacingX = Number.ToInteger(m.itemsGrid.itemSpacing[0])
+    m.videoLibraryProgressIndicator.numColumns = Number.ToInteger(m.itemsGrid.numColumns)
+    m.videoLibraryProgressIndicator.numRows = Number.ToInteger(m.itemsGrid.numRows)
+    updateVideoLibraryProgressItemCount()
+    updateVideoLibraryProgressFocusedIndex()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateVideoLibraryProgressItemCount
+'-------------------------------------------------------------------------------
+sub updateVideoLibraryProgressItemCount(itemCount = invalid as dynamic)
+    resolvedItemCount = 0
+    if itemCount <> invalid then
+        resolvedItemCount = Number.ToInteger(itemCount)
+    else if m.itemsGrid.content <> invalid then
+        resolvedItemCount = m.itemsGrid.content.getChildCount()
+    end if
+
+    m.videoLibraryProgressIndicator.itemCount = resolvedItemCount
+end sub
+
+'-------------------------------------------------------------------------------
+' updateVideoLibraryProgressFocusedIndex
+'-------------------------------------------------------------------------------
+sub updateVideoLibraryProgressFocusedIndex()
+    focusedIndex = getCurrentVideoLibraryFocusedIndex()
+
+    m.pageState.progressFocusedIndex = focusedIndex
+    m.videoLibraryProgressIndicator.focusedIndex = focusedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' getCurrentVideoLibraryFocusedIndex
+'-------------------------------------------------------------------------------
+function getCurrentVideoLibraryFocusedIndex() as integer
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then return 0
+
+    return focusedIndex
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryItemCount
+'-------------------------------------------------------------------------------
+function getVideoLibraryItemCount() as integer
+    if m.itemsGrid.content = invalid then return 0
+
+    return m.itemsGrid.content.getChildCount()
+end function
+
+'-------------------------------------------------------------------------------
+' applyLetterGutterButtonLayout
+'-------------------------------------------------------------------------------
+sub applyLetterGutterButtonLayout(isThumbnailLayout as boolean, gridLeft as integer, gridTop as integer)
+    if isThumbnailLayout = true then
+        thumbnailVisualOffset = 20
+        m.letterGutterButton.layoutMode = "horizontal"
+        m.letterGutterButton.translation = [gridLeft + thumbnailVisualOffset, 156]
+        return
+    end if
+
+    m.letterGutterButton.layoutMode = "vertical"
+    m.letterGutterButton.translation = [24, gridTop]
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLetterGridLayout
+'-------------------------------------------------------------------------------
+sub applyLetterGridLayout(isThumbnailLayout as boolean, gridLeft as integer, gridTop as integer)
+    if isThumbnailLayout = true then
+        thumbnailVisualOffset = 20
+        m.pageState.letterGridPanel = {
+            x: gridLeft + thumbnailVisualOffset
+            y: gridTop
+        }
+        return
+    end if
+
+    m.pageState.letterGridPanel = {
+        x: 72
+        y: gridTop
+    }
+end sub
+
+' getItemsFromPayload
+'-------------------------------------------------------------------------------
+function getItemsFromPayload(payload as dynamic) as object
+    if payload = invalid then return []
+    if Type(payload) = "roArray" then return payload
+    if Arrays.IsAssocArray(payload) = false then return []
+    if payload.Items <> invalid then return payload.Items
+    if payload.items <> invalid then return payload.items
+    return []
+end function
+
+'-------------------------------------------------------------------------------
+' isPlayableMovie
+'-------------------------------------------------------------------------------
+function isPlayableMovie(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false then return false
+    itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
+    return itemType = "movie" or itemType = "video"
+end function
+
+'-------------------------------------------------------------------------------
+' isTVSeries
+'-------------------------------------------------------------------------------
+function isTVSeries(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false then return false
+    return LCase(Format.FirstNonEmpty([item.Type], "")) = "series"
+end function
+
+'-------------------------------------------------------------------------------
+' isTVEpisode
+'-------------------------------------------------------------------------------
+function isTVEpisode(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false then return false
+    return LCase(Format.FirstNonEmpty([item.Type], "")) = "episode"
+end function
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+    if key = "options" and m.itemsGrid.isInFocusChain() then return openMediaActions()
+    if hasLibrarySpecialization() and m.top.callFunc("specializationHandleKey", key) then return true
+    if key = "up" and m.browseByButton.isInFocusChain() then return requestHeaderFocus()
+    if key = "up" and m.sortButton.isInFocusChain() then return requestHeaderFocus()
+    if key = "right" and m.browseByButton.isInFocusChain() then
+        if canFocusSortButton() then return focusSortButton()
+        return true
+    end if
+    if key = "left" and m.sortButton.isInFocusChain() then return focusBrowseByButton()
+    if key = "up" and m.letterGutterButton.isInFocusChain() then return requestHeaderFocus()
+    if key = "left" and isItemsGridAtFirstColumn() and canUseLetterNavigation() then return openLetterGrid()
+    if key = "up" and isItemsGridAtFirstRow() and canFocusFilterButtonRow() then
+        stopVideoLibraryProgressHold("up")
+        return focusFilterButtonRow()
+    end if
+    if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() and canFocusBrowseByButton() <> true then return requestHeaderFocus()
+    if key = "up" and isItemsGridAtFirstRow() then
+        stopVideoLibraryProgressHold("up")
+        if canFocusBrowseByButton() <> true then return requestHeaderFocus()
+        return focusBrowseByButton()
+    end if
+    if key = "right" and isItemsGridAtLastColumn() then return true
+    if key = "back" then
+        if m.pageState.letterGridOpen = true then
+            closeLetterGrid(true)
+            return true
+        end if
+        if isFirstVideoLibraryItemFocused() <> true then
+            focusFirstVideoLibraryItem()
+            return true
+        end if
+        m.top.closeRequested = true
+        return true
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' hasLibrarySpecialization
+'-------------------------------------------------------------------------------
+function hasLibrarySpecialization() as boolean
+    return m.top.isSubtype("Playlists")
+end function
+
+'-------------------------------------------------------------------------------
+' ensureLibrarySpecializationInitialized
+'-------------------------------------------------------------------------------
+sub ensureLibrarySpecializationInitialized()
+    if hasLibrarySpecialization() <> true then return
+    if m.specializationInitialized then return
+
+    m.top.callFunc("specializationInitialize")
+    m.specializationInitialized = true
+end sub
+
+'-------------------------------------------------------------------------------
+' canUseLetterNavigation
+'-------------------------------------------------------------------------------
+function canUseLetterNavigation() as boolean
+    if hasLibrarySpecialization() then return false
+    return m.letterGutterButton <> invalid and m.letterGutterButton.visible = true
+end function
+
+'-------------------------------------------------------------------------------
+' openMediaActions
+'-------------------------------------------------------------------------------
+function openMediaActions() as boolean
+    if m.itemsGrid.content = invalid then return false
+
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then return false
+
+    focusedNode = m.itemsGrid.content.getChild(focusedIndex)
+    if focusedNode = invalid or focusedNode.raw = invalid then return false
+
+    m.top.overlayRequested = {
+        id: "mediaActions"
+        sourcePage: "videoLibrary"
+        componentName: "MediaActionsDialog"
+        openFunction: "openMediaActions"
+        closeField: "closeRequested"
+        item: focusedNode.raw
+        server: m.pageState.request.server
+        token: m.pageState.request.token
+        userId: m.pageState.request.userId
+    }
+    return true
+end function

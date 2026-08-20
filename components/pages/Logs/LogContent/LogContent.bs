@@ -1,0 +1,359 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.nodes = {
+        sheet: m.top.findNode("logSheet")
+        track: m.top.findNode("scrollTrack")
+        thumb: m.top.findNode("scrollThumb")
+        holdTimer: m.top.findNode("scrollHoldDelayTimer")
+        repeatTimer: m.top.findNode("scrollRepeatTimer")
+    }
+    m.logViewState = {
+        lines: []
+        rows: []
+        firstLine: 0
+        visibleCount: 19
+        rowHeight: 42
+        wrapLength: 76
+        maximumDetailLines: 4
+        heldKey: ""
+    }
+    m.layoutState = {
+        viewportHeight: 800
+        contentWidth: 1688
+        timestampWidth: 260
+        entryX: 280
+        entryWidth: 1390
+        minimumThumbHeight: 60
+    }
+    createRows()
+    m.nodes.holdTimer.observeField("fire", "onScrollHoldDelayTimerFire")
+    m.nodes.repeatTimer.observeField("fire", "onScrollRepeatTimerFire")
+end sub
+
+'-------------------------------------------------------------------------------
+' createRows
+'-------------------------------------------------------------------------------
+sub createRows()
+    for i = 0 to m.logViewState.visibleCount - 1
+        group = CreateObject("roSGNode", "Group")
+        group.translation = [0, i * m.logViewState.rowHeight]
+
+        timestamp = createLabel(0, m.layoutState.timestampWidth, "font:SmallSystemFont")
+        timestamp.color = &hA8B5C4FF
+        group.appendChild(timestamp)
+
+        source = createLabel(m.layoutState.entryX, m.layoutState.entryWidth, "font:SmallerBoldSystemFont")
+        source.color = &h79B8FFFF
+        group.appendChild(source)
+
+        message = createLabel(m.layoutState.entryX, m.layoutState.entryWidth, "font:SmallerSystemFont")
+        message.color = &hF3F7FBFF
+        group.appendChild(message)
+
+        separator = CreateObject("roSGNode", "Rectangle")
+        separator.translation = [0, 20]
+        separator.width = m.layoutState.contentWidth
+        separator.height = 1
+        separator.color = &hF3F7FB26
+        separator.visible = false
+        group.appendChild(separator)
+
+        m.nodes.sheet.appendChild(group)
+        m.logViewState.rows.Push({ group: group, timestamp: timestamp, source: source, message: message, separator: separator })
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' createLabel
+'-------------------------------------------------------------------------------
+function createLabel(x as integer, width as integer, font as string) as object
+    label = CreateObject("roSGNode", "Label")
+    label.translation = [x, 0]
+    label.width = width
+    label.height = m.logViewState.rowHeight
+    label.font = font
+    label.vertAlign = "center"
+    label.wrap = false
+    label.numLines = 1
+    return label
+end function
+
+'-------------------------------------------------------------------------------
+' loadEntries
+'-------------------------------------------------------------------------------
+sub loadEntries(entries as dynamic)
+    m.logViewState.lines = []
+    if entries <> invalid then
+        for each entry in entries
+            appendEntryLines(entry)
+        end for
+    end if
+    if m.logViewState.lines.Count() = 0 then
+        m.logViewState.lines.Push({ kind: "header", timestamp: "", text: "Application", severity: "normal" })
+        m.logViewState.lines.Push({ kind: "message", timestamp: "", text: "No display-safe log entries have been collected.", severity: "normal" })
+    end if
+    m.logViewState.firstLine = getMaximumFirstLine()
+    renderRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' appendEntryLines
+'-------------------------------------------------------------------------------
+sub appendEntryLines(value as dynamic)
+    parsed = parseEntry(value)
+    m.logViewState.lines.Push({ kind: "header", timestamp: parsed.timestamp, text: parsed.source, severity: parsed.severity })
+    isMultilineEntry = Instr(1, parsed.message, Chr(10)) > 0
+    displayMessage = parsed.message
+    if isMultilineEntry = false then displayMessage = shortenUrlOrigin(displayMessage)
+    messageLines = wrapMessage(displayMessage)
+    detailLineCount = messageLines.Count()
+    if isMultilineEntry = false and detailLineCount > m.logViewState.maximumDetailLines then detailLineCount = m.logViewState.maximumDetailLines
+    for i = 0 to detailLineCount - 1
+        line = messageLines[i]
+        if isMultilineEntry = false and i = m.logViewState.maximumDetailLines - 1 and messageLines.Count() > m.logViewState.maximumDetailLines then
+            if Len(line) > m.logViewState.wrapLength - 3 then line = Left(line, m.logViewState.wrapLength - 3)
+            line = line + "..."
+        end if
+        m.logViewState.lines.Push({ kind: "message", timestamp: "", text: line, severity: parsed.severity })
+    end for
+    m.logViewState.lines.Push({ kind: "separator", timestamp: "", text: "", severity: parsed.severity })
+end sub
+
+'-------------------------------------------------------------------------------
+' parseEntry
+'-------------------------------------------------------------------------------
+function parseEntry(value as dynamic) as object
+    text = ""
+    if value <> invalid then text = value.ToStr()
+    result = { timestamp: "", source: "Application", message: text, severity: "normal" }
+    if Len(text) >= 15 and Mid(text, 3, 1) = "/" and Mid(text, 6, 1) = " " then
+        result.timestamp = Left(text, 14)
+        result.message = trimLeadingSpaces(Mid(text, 15))
+    end if
+    if Left(result.message, 1) = "[" then
+        sourceEnd = Instr(2, result.message, "]")
+        if sourceEnd > 2 then
+            result.source = Mid(result.message, 2, sourceEnd - 2)
+            result.message = trimLeadingSpaces(Mid(result.message, sourceEnd + 1))
+        end if
+    end if
+    upperMessage = UCase(result.message)
+    if Instr(1, upperMessage, "ERROR:") > 0 then
+        result.severity = "error"
+        result.message = result.message.Replace("ERROR: ", "")
+    else if Instr(1, upperMessage, "WARNING:") > 0 then
+        result.severity = "warning"
+        result.message = result.message.Replace("WARNING: ", "")
+    end if
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' wrapMessage
+'-------------------------------------------------------------------------------
+function wrapMessage(message as string) as object
+    lines = []
+    sourceLines = message.Tokenize(Chr(10))
+    if sourceLines.Count() = 0 then sourceLines.Push("")
+    for each sourceLine in sourceLines
+        appendWrappedMessageLine(lines, sourceLine)
+    end for
+    return lines
+end function
+
+'-------------------------------------------------------------------------------
+' appendWrappedMessageLine
+'-------------------------------------------------------------------------------
+sub appendWrappedMessageLine(lines as object, sourceLine as string)
+    remaining = sourceLine
+    if remaining = "" then
+        lines.Push("")
+        return
+    end if
+    while Len(remaining) > m.logViewState.wrapLength
+        breakAt = findWrapPosition(remaining, m.logViewState.wrapLength)
+        lines.Push(Left(remaining, breakAt))
+        remaining = trimLeadingSpaces(Mid(remaining, breakAt + 1))
+    end while
+    lines.Push(remaining)
+end sub
+
+'-------------------------------------------------------------------------------
+' findWrapPosition
+'-------------------------------------------------------------------------------
+function findWrapPosition(text as string, maximumLength as integer) as integer
+    minimumUsefulBreak = Number.ToInteger(maximumLength * 0.6, 1)
+    for i = maximumLength to minimumUsefulBreak step -1
+        if Mid(text, i, 1) = " " then return i
+    end for
+    return maximumLength
+end function
+
+'-------------------------------------------------------------------------------
+' shortenUrlOrigin
+'-------------------------------------------------------------------------------
+function shortenUrlOrigin(text as string) as string
+    schemeEnd = Instr(1, text, "://")
+    if schemeEnd = 0 then return text
+    urlStart = schemeEnd
+    while urlStart > 1 and Mid(text, urlStart - 1, 1) <> " "
+        urlStart = urlStart - 1
+    end while
+    authorityStart = schemeEnd + 3
+    pathStart = Instr(authorityStart, text, "/")
+    if pathStart > 0 then return Left(text, urlStart - 1) + Mid(text, pathStart)
+    authorityEnd = Instr(authorityStart, text, " ")
+    if authorityEnd = 0 then return Left(text, urlStart - 1) + "/"
+    return Left(text, urlStart - 1) + "/" + Mid(text, authorityEnd)
+end function
+
+'-------------------------------------------------------------------------------
+' trimLeadingSpaces
+'-------------------------------------------------------------------------------
+function trimLeadingSpaces(text as string) as string
+    while Len(text) > 0 and Left(text, 1) = " "
+        text = Mid(text, 2)
+    end while
+    return text
+end function
+
+'-------------------------------------------------------------------------------
+' renderRows
+'-------------------------------------------------------------------------------
+sub renderRows()
+    for i = 0 to m.logViewState.rows.Count() - 1
+        lineIndex = m.logViewState.firstLine + i
+        row = m.logViewState.rows[i]
+        if lineIndex < m.logViewState.lines.Count() then
+            renderRow(row, m.logViewState.lines[lineIndex])
+        else
+            row.group.visible = false
+        end if
+    end for
+    updateScrollBar()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderRow
+'-------------------------------------------------------------------------------
+sub renderRow(row as object, line as object)
+    row.group.visible = true
+    row.timestamp.visible = line.kind = "header"
+    row.source.visible = line.kind = "header"
+    row.message.visible = line.kind = "message"
+    row.separator.visible = line.kind = "separator"
+    row.timestamp.text = line.timestamp
+    row.source.text = line.text
+    row.message.text = line.text
+
+    row.source.color = &h79B8FFFF
+    row.message.color = &hF3F7FBFF
+    if line.severity = "warning" then
+        row.source.color = &hFFD180FF
+        row.message.color = &hFFE0B2FF
+    else if line.severity = "error" then
+        row.source.color = &hFF8A80FF
+        row.message.color = &hFFCDD2FF
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getMaximumFirstLine
+'-------------------------------------------------------------------------------
+function getMaximumFirstLine() as integer
+    maximum = m.logViewState.lines.Count() - m.logViewState.visibleCount
+    if maximum < 0 then return 0
+    return maximum
+end function
+
+'-------------------------------------------------------------------------------
+' updateScrollBar
+'-------------------------------------------------------------------------------
+sub updateScrollBar()
+    maximum = getMaximumFirstLine()
+    visible = maximum > 0
+    m.nodes.track.visible = visible
+    m.nodes.thumb.visible = visible
+    if visible = false then return
+    thumbHeight = Number.ToInteger((m.layoutState.viewportHeight * m.logViewState.visibleCount) / m.logViewState.lines.Count(), m.layoutState.minimumThumbHeight)
+    if thumbHeight < m.layoutState.minimumThumbHeight then thumbHeight = m.layoutState.minimumThumbHeight
+    thumbTravel = m.layoutState.viewportHeight - thumbHeight
+    thumbY = Number.ToInteger((m.logViewState.firstLine * thumbTravel) / maximum, 0)
+    m.nodes.thumb.height = thumbHeight
+    m.nodes.thumb.translation = [1706, thumbY]
+end sub
+
+'-------------------------------------------------------------------------------
+' focusLog
+'-------------------------------------------------------------------------------
+sub focusLog()
+    m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' scrollForKey
+'-------------------------------------------------------------------------------
+sub scrollForKey(key as string)
+    if key = "up" then
+        m.logViewState.firstLine = m.logViewState.firstLine - 3
+    else if key = "down" then
+        m.logViewState.firstLine = m.logViewState.firstLine + 3
+    else
+        return
+    end if
+    maximum = getMaximumFirstLine()
+    if m.logViewState.firstLine < 0 then m.logViewState.firstLine = 0
+    if m.logViewState.firstLine > maximum then m.logViewState.firstLine = maximum
+    renderRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' startScrollHold
+'-------------------------------------------------------------------------------
+sub startScrollHold(key as string)
+    stopScrollHold()
+    m.logViewState.heldKey = key
+    m.nodes.holdTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' stopScrollHold
+'-------------------------------------------------------------------------------
+sub stopScrollHold()
+    m.nodes.holdTimer.control = "stop"
+    m.nodes.repeatTimer.control = "stop"
+    m.logViewState.heldKey = ""
+end sub
+
+'-------------------------------------------------------------------------------
+' onScrollHoldDelayTimerFire
+'-------------------------------------------------------------------------------
+sub onScrollHoldDelayTimerFire()
+    if m.logViewState.heldKey <> "" then m.nodes.repeatTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' onScrollRepeatTimerFire
+'-------------------------------------------------------------------------------
+sub onScrollRepeatTimerFire()
+    scrollForKey(m.logViewState.heldKey)
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if key = "down" or key = "up" then
+        if press = false then
+            if m.logViewState.heldKey = key then stopScrollHold()
+            return true
+        end if
+        scrollForKey(key)
+        startScrollHold(key)
+        return true
+    end if
+    if press = false then return false
+    return false
+end function
