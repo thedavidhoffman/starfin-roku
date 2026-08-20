@@ -1,0 +1,87 @@
+namespace tests
+
+    @SGNode("AuthController")
+    @suite("AuthController component")
+    class AuthControllerTests extends rooibos.BaseTestSuite
+
+        @describe("AuthController behavior")
+
+        @it("initializes its required task and request state")
+        function _()
+            m.assertNotInvalid(m.node.authApiTask)
+            m.assertFalse(m.node.authState.isResumingSession)
+            m.assertInvalid(m.node.authState.pendingSwitch)
+            m.assertEqual(m.node.authState.logoutTasks, [])
+            m.assertEqual(m.top.savedSession, m.node.savedSession)
+        end function
+
+        @it("recognizes only complete saved sessions")
+        function _()
+            m.node.savedSession = invalid
+            'bs:disable-next-line 1140
+            m.assertFalse(hasSavedSession())
+
+            m.node.savedSession = { server: "https://server", token: "token", userId: "user" }
+            'bs:disable-next-line 1140
+            m.assertTrue(hasSavedSession())
+
+            m.node.savedSession.token = ""
+            'bs:disable-next-line 1140
+            m.assertFalse(hasSavedSession())
+        end function
+
+        @it("builds authenticated sessions from Jellyfin responses")
+        function _()
+            response = {
+                server: "https://Server.Example/"
+                token: "response-token"
+                payload: {
+                    AccessToken: "payload-token"
+                    User: {
+                        Id: "user-id"
+                        Name: "River"
+                        PrimaryImageTag: "image-tag"
+                    }
+                }
+            }
+
+            'bs:disable-next-line 1140
+            session = buildAuthenticatedSession(response)
+            m.assertEqual(session.accountKey, "server.example/user-id")
+            m.assertEqual(session.server, "https://Server.Example/")
+            m.assertEqual(session.username, "River")
+            m.assertEqual(session.token, "payload-token")
+            m.assertEqual(session.userId, "user-id")
+            m.assertEqual(session.primaryImageTag, "image-tag")
+        end function
+
+        @it("resolves response actions from the response or current request")
+        function _()
+            m.node.authApiTask.request = { action: "authorize" }
+            'bs:disable-next-line 1140
+            m.assertEqual(getAuthResponseAction({ action: "login" }), "login")
+            'bs:disable-next-line 1140
+            m.assertEqual(getAuthResponseAction({}), "authorize")
+            m.node.authApiTask.request = invalid
+            'bs:disable-next-line 1140
+            m.assertEqual(getAuthResponseAction({}), "")
+        end function
+
+        @it("publishes login-required and contextual login-failed events")
+        function _()
+            'bs:disable-next-line 1140
+            publishLoginRequired("Sign in.", true)
+            m.assertEqual(m.top.loginRequired, { message: "Sign in.", openSavedAccounts: true })
+
+            'bs:disable-next-line 1140
+            publishLoginFailed("Unable to sign in.", { accountKey: "server/user", source: "header" })
+            m.assertEqual(m.top.loginFailed, {
+                message: "Unable to sign in."
+                accountKey: "server/user"
+                source: "header"
+            })
+        end function
+
+    end class
+
+end namespace

@@ -1,0 +1,106 @@
+namespace tests
+
+    @SGNode("ThemeAudioController")
+    @suite("ThemeAudioController component")
+    class ThemeAudioControllerTests extends rooibos.BaseTestSuite
+
+        @describe("ThemeAudioController behavior")
+
+        @it("initializes required playback nodes and inactive state")
+        function _()
+            m.assertNotInvalid(m.node.audio)
+            m.assertNotInvalid(m.node.playbackInfoTask)
+            m.assertInvalid(m.node.themeAudioState.request)
+            m.assertFalse(m.node.themeAudioState.isActive)
+        end function
+
+        @it("ignores invalid requests and starts valid resolution requests")
+        function _()
+            m.node.audio = { control: "", content: "existing" }
+            m.node.playbackInfoTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            playTheme({ itemId: "" })
+            m.assertEqual(m.node.audio.control, "")
+            m.assertEqual(m.node.playbackInfoTask.control, "")
+
+            request = { itemId: "item-1", server: "https://server", token: "token" }
+            'bs:disable-next-line 1140
+            playTheme(request)
+            m.assertEqual(m.node.themeAudioState.request, request)
+            m.assertFalse(m.node.themeAudioState.isActive)
+            m.assertEqual(m.node.playbackInfoTask.request, request)
+            m.assertEqual(m.node.playbackInfoTask.control, "run")
+            m.assertEqual(m.node.audio.control, "stop")
+            m.assertInvalid(m.node.audio.content)
+        end function
+
+        @it("stops playback and clears controller state")
+        function _()
+            m.node.audio = { control: "play", content: { url: "https://stream" } }
+            m.node.playbackInfoTask = { control: "run" }
+            m.node.themeAudioState = { request: { itemId: "item-1" }, isActive: true }
+
+            'bs:disable-next-line 1140
+            stopTheme()
+            m.assertInvalid(m.node.themeAudioState.request)
+            m.assertFalse(m.node.themeAudioState.isActive)
+            m.assertEqual(m.node.playbackInfoTask.control, "stop")
+            m.assertEqual(m.node.audio.control, "stop")
+            m.assertInvalid(m.node.audio.content)
+        end function
+
+        @it("builds audio content for a matching successful response")
+        function _()
+            m.node.audio = { control: "", content: invalid }
+            m.node.playbackInfoTask = {
+                response: {
+                    ok: true
+                    itemId: "item-1"
+                    streamUrl: "https://server/Audio/item-1"
+                    streamFormat: "mp3"
+                    title: "Theme Song"
+                }
+            }
+            m.node.themeAudioState = { request: { itemId: "item-1" }, isActive: false }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+            m.assertTrue(m.node.themeAudioState.isActive)
+            m.assertEqual(m.node.audio.control, "play")
+            m.assertNotInvalid(m.node.audio.content)
+            m.assertEqual(m.node.audio.content.url, "https://server/Audio/item-1")
+            m.assertEqual(m.node.audio.content.streamFormat, "mp3")
+            m.assertEqual(m.node.audio.content.title, "Theme Song")
+        end function
+
+        @it("ignores stale responses and stops finished playback")
+        function _()
+            m.node.audio = { state: "", control: "", content: invalid }
+            m.node.playbackInfoTask = {
+                control: ""
+                response: { ok: true, itemId: "stale-item", streamUrl: "https://stream" }
+            }
+            request = { itemId: "current-item" }
+            m.node.themeAudioState = { request: request, isActive: false }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+            m.assertEqual(m.node.themeAudioState.request, request)
+            m.assertEqual(m.node.audio.control, "")
+
+            m.node.audio.state = "finished"
+            m.node.audio.content = { url: "https://stream" }
+            m.node.themeAudioState.isActive = true
+            'bs:disable-next-line 1140
+            onAudioStateChanged()
+            m.assertInvalid(m.node.themeAudioState.request)
+            m.assertFalse(m.node.themeAudioState.isActive)
+            m.assertEqual(m.node.playbackInfoTask.control, "stop")
+            m.assertEqual(m.node.audio.control, "stop")
+            m.assertInvalid(m.node.audio.content)
+        end function
+
+    end class
+
+end namespace
