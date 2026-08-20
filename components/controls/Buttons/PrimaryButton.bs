@@ -1,12 +1,14 @@
+import "pkg:/source/Number.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/ResolutionProfile.bs"
+
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.bg = m.top.findNode("bg")
-    m.icon = m.top.findNode("icon")
+    m.background = m.top.findNode("bg")
+    m.iconPoster = m.top.findNode("icon")
     m.textLabel = m.top.findNode("textLabel")
-    if m.top.buttonWidth = invalid or m.top.buttonWidth <= 0 then m.top.buttonWidth = 300
-    if m.top.buttonHeight = invalid or m.top.buttonHeight <= 0 then m.top.buttonHeight = 56
     onDimensionsChanged()
     onTextFontChanged()
     onTextChanged()
@@ -18,7 +20,7 @@ end sub
 ' onTextChanged
 '-------------------------------------------------------------------------------
 sub onTextChanged()
-    if m.textLabel <> invalid then m.textLabel.text = m.top.text
+    m.textLabel.text = m.top.text
     updateContentLayout()
 end sub
 
@@ -27,12 +29,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub onIconUriChanged()
     hasIcon = m.top.iconUri <> invalid and m.top.iconUri <> ""
-    if m.icon <> invalid then
-        iconUri = m.top.iconUri
-        if m.top.hasFocusVisual and m.top.focusedIconUri <> invalid and m.top.focusedIconUri <> "" then iconUri = m.top.focusedIconUri
-        m.icon.uri = iconUri
-        m.icon.visible = hasIcon
-    end if
+    iconUri = m.top.iconUri
+    if m.top.hasFocusVisual and m.top.focusedIconUri <> invalid and m.top.focusedIconUri <> "" then iconUri = m.top.focusedIconUri
+    m.iconPoster.uri = iconUri
+    m.iconPoster.visible = hasIcon
     updateContentLayout()
 end sub
 
@@ -43,10 +43,8 @@ sub onDimensionsChanged()
     width = getButtonWidth()
     height = getButtonHeight()
 
-    if m.bg <> invalid then
-        m.bg.width = width
-        m.bg.height = height
-    end if
+    m.background.width = width
+    m.background.height = height
 
     updateContentLayout()
 end sub
@@ -55,14 +53,12 @@ end sub
 ' onFocusVisualChanged
 '-------------------------------------------------------------------------------
 sub onFocusVisualChanged()
-    if m.bg = invalid then return
-
     if m.top.hasFocusVisual = true then
-        m.bg.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
-        if m.textLabel <> invalid then m.textLabel.color = &h0F1A2AFF
+        m.background.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
+        m.textLabel.color = &h0F1A2AFF
     else
-        m.bg.uri = ResolutionAssets.GetButtonImageUri("primary-unfocused.9.png")
-        if m.textLabel <> invalid then m.textLabel.color = &hFFFFFFFF
+        m.background.uri = ResolutionAssets.GetButtonImageUri("primary-unfocused.9.png")
+        m.textLabel.color = &hFFFFFFFF
     end if
     onIconUriChanged()
 end sub
@@ -71,7 +67,6 @@ end sub
 ' onTextFontChanged
 '-------------------------------------------------------------------------------
 sub onTextFontChanged()
-    if m.textLabel = invalid then return
     textFont = m.top.textFont
     if textFont = invalid or textFont = "" then textFont = "font:MediumSystemFont"
     m.textLabel.font = textFont
@@ -82,8 +77,6 @@ end sub
 ' updateContentLayout
 '-------------------------------------------------------------------------------
 sub updateContentLayout()
-    if m.textLabel = invalid then return
-
     width = getButtonWidth()
     height = getButtonHeight()
     textHeight = getTextHeight()
@@ -104,7 +97,7 @@ sub layoutTextOnly(width as integer, textY as integer)
     m.textLabel.horizAlign = "center"
     m.textLabel.width = width
     m.textLabel.translation = [0, textY]
-    if m.icon <> invalid then m.icon.visible = false
+    m.iconPoster.visible = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -123,13 +116,11 @@ sub layoutIconAndText(width as integer, height as integer, textY as integer)
     contentX = contentX + Number.ToInteger(m.top.contentOffsetX, 0)
     if contentX < 0 then contentX = 0
 
-    if m.icon <> invalid then
-        m.icon.width = iconSize
-        m.icon.height = iconSize
-        iconY = Number.ToInteger((height - iconSize) / 2, 0)
-        m.icon.translation = [contentX, iconY]
-        m.icon.visible = true
-    end if
+    m.iconPoster.width = iconSize
+    m.iconPoster.height = iconSize
+    iconY = Number.ToInteger((height - iconSize) / 2, 0)
+    m.iconPoster.translation = [contentX, iconY]
+    m.iconPoster.visible = true
 
     m.textLabel.horizAlign = "left"
     m.textLabel.width = textWidth
@@ -188,7 +179,7 @@ function getTextWidth() as integer
 
     textWidth = 0
     if m.fontRegistry = invalid then m.fontRegistry = CreateObject("roFontRegistry")
-    if m.fontRegistry <> invalid and m.textLabel <> invalid and m.textLabel.font <> invalid then
+    if m.fontRegistry <> invalid and m.textLabel.font <> invalid then
         fontSize = Number.ToInteger(m.textLabel.font.size, 0)
         if fontSize > 0 then
             measurementFont = m.fontRegistry.GetDefaultFont(fontSize, false, false)
