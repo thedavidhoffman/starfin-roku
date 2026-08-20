@@ -26,6 +26,7 @@ sub init()
     m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
     onContentTranslationChanged()
     applyBackgroundDisplay()
+    onDetailsVisibleChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -40,6 +41,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub onBackgroundDisplayChanged()
     applyBackgroundDisplay()
+    applyContentLayout(m.logoState.mediaType)
+    onTitleLogoLoadStatusChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' onDetailsVisibleChanged
+'-------------------------------------------------------------------------------
+sub onDetailsVisibleChanged()
+    m.infoGroup.visible = m.top.detailsVisible
 end sub
 
 '-------------------------------------------------------------------------------
@@ -90,6 +100,39 @@ end sub
 ' getContentLayout
 '-------------------------------------------------------------------------------
 function getContentLayout(mediaType as string) as object
+    isCinematic = LCase(Format.SafeString(m.top.backgroundDisplay, "full-screen")) = "cinematic"
+    if isCinematic and (mediaType = "movie" or mediaType = "tv-episode" or mediaType = "tv-season") then
+        if mediaType = "tv-episode" or mediaType = "tv-season" then
+            return {
+                titleTranslation: [0, 527]
+                titleHeight: 52
+                titleFont: "font:MediumBoldSystemFont"
+                infoTranslation: [0, 603]
+                logoMaxWidth: 520
+                logoMaxHeight: 120
+                logoAnchorTop: 527
+                logoGap: 24
+                logoTextTranslation: [0, 34]
+                logoTextHeight: 112
+                logoTextFont: "font:LargestSystemFont"
+            }
+        end if
+
+        return {
+            titleTranslation: [0, 0]
+            titleHeight: 160
+            titleFont: "font:LargeBoldSystemFont"
+            infoTranslation: [0, 603]
+            logoMaxWidth: 600
+            logoMaxHeight: 220
+            logoAnchorTop: 603
+            logoGap: 40
+            logoTextTranslation: [0, 0]
+            logoTextHeight: 184
+            logoTextFont: "font:LargestSystemFont"
+        }
+    end if
+
     if mediaType = "tv-episode" then
         return {
             titleTranslation: [0, 170]
@@ -186,8 +229,9 @@ end sub
 sub renderTitle(title as string, logoUrl as string, logoTitle as string, mediaType as string, logoPending as boolean)
     hasLogo = logoUrl <> ""
     isTVEpisode = mediaType = "tv-episode"
+    isCinematicTVSeason = mediaType = "tv-season" and LCase(Format.SafeString(m.top.backgroundDisplay, "full-screen")) = "cinematic"
     fallbackTitle = getLogoFallbackTitle(title, logoTitle, mediaType)
-    showEpisodeTitle = isTVEpisode
+    showEpisodeTitle = isTVEpisode or isCinematicTVSeason
     showLogoText = hasLogo = false and logoPending = false and fallbackTitle <> ""
 
     m.episodeTitleLabel.visible = showEpisodeTitle

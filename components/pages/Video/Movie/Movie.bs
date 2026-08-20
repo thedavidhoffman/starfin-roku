@@ -7,6 +7,7 @@ sub init()
     m.mediaToolbar = m.top.findNode("mediaToolbar")
     m.streamOptions = m.top.findNode("streamOptions")
     m.cast = m.top.findNode("cast")
+    m.chevronFooter = m.top.findNode("chevronFooter")
     m.movieTask = m.top.findNode("movieTask")
     m.themeSongsTask = m.top.findNode("themeSongsTask")
     m.watchedTask = m.top.findNode("watchedTask")
@@ -33,6 +34,7 @@ sub init()
     m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
+    m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.state = {
         request: invalid
         item: invalid
@@ -44,6 +46,9 @@ sub init()
         selectedChapterKey: ""
         videoMode: PlaybackMode.Mode.Automatic
         focusArea: "toolbar"
+        layout: {
+            isCinematic: false
+        }
         themeLookupActive: false
         lifecycle: AsyncLifecycle.Create()
     }
@@ -177,6 +182,7 @@ sub renderMovie(item as dynamic, logoPending = false as boolean)
     metadataText = getPrimaryMetaText(item)
     genreText = getSecondaryMetaText(item)
     m.mediaShell.mediaContent = {
+        mediaType: "movie"
         backdropUrl: getBackdropUrl(item)
         logoUrl: getImageUrl(item, "Logo", 600, 300)
         logoPending: logoPending
@@ -198,7 +204,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.request, "itemId")
-    if m.state.focusArea = "cast" and m.cast.visible = true and m.cast.hasItems = true then
+    if m.state.focusArea = "cast" and m.cast.hasItems = true then
         focusCast()
     else
         focusVideoToolbar()
@@ -250,7 +256,54 @@ end sub
 ' applyMediaShellBackgroundSetting
 '-------------------------------------------------------------------------------
 sub applyMediaShellBackgroundSetting(settings as dynamic)
-    m.mediaShell.backgroundDisplay = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
+    display = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
+    m.state.layout.isCinematic = LCase(display) = "cinematic"
+    m.mediaShell.backgroundDisplay = display
+    applyCinematicLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyCinematicLayout
+'-------------------------------------------------------------------------------
+sub applyCinematicLayout()
+    if m.state.layout.isCinematic <> true then
+        m.mediaShell.contentTranslation = [96, 108]
+        m.mediaShell.detailsVisible = true
+        m.mediaToolbar.translation = [0, 588]
+        m.mediaToolbar.visible = true
+        m.cast.translation = [0, 699]
+        m.cast.displayEnabled = true
+        m.chevronFooter.direction = ""
+        return
+    end if
+
+    m.mediaShell.contentTranslation = [96, 96]
+    m.mediaToolbar.translation = [0, 948]
+    m.cast.translation = [0, 699]
+    showCast = m.state.focusArea = "cast" and m.cast.hasItems = true
+    m.mediaShell.detailsVisible = showCast <> true
+    m.mediaToolbar.visible = showCast <> true
+    m.cast.displayEnabled = showCast
+
+    if m.cast.hasItems <> true then
+        m.chevronFooter.direction = ""
+    else if showCast then
+        m.chevronFooter.direction = "up"
+    else
+        m.chevronFooter.direction = "down"
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastAvailabilityChanged
+'-------------------------------------------------------------------------------
+sub onCastAvailabilityChanged()
+    if m.cast.hasItems <> true and m.state.focusArea = "cast" then
+        focusVideoToolbar()
+        return
+    end if
+
+    applyCinematicLayout()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -285,6 +338,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusVideoToolbar()
     m.state.focusArea = "toolbar"
+    applyCinematicLayout()
     m.cast.callFunc("deactivate")
     m.top.setFocus(true)
     m.mediaToolbar.callFunc("activate")
@@ -307,9 +361,10 @@ end function
 ' focusCast
 '-------------------------------------------------------------------------------
 sub focusCast()
-    if m.cast.visible <> true or m.cast.hasItems <> true then return
+    if m.cast.hasItems <> true then return
 
     m.state.focusArea = "cast"
+    applyCinematicLayout()
     m.mediaToolbar.callFunc("deactivate")
     m.cast.callFunc("activate")
 end sub
