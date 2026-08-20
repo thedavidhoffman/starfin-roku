@@ -1,39 +1,62 @@
 namespace tests
 
-    @suite("Logger formatting helpers")
+    @suite("Logger class")
     class LoggerTests extends rooibos.BaseTestSuite
 
-        @describe("Logger pure formatting helpers")
+        @describe("public logging behavior")
 
-        @it("formats JSON into indented display lines")
+        @it("collects normal writes and errors but excludes console-only writes")
         function _()
-            lines = Logger.__FormatJsonText("{" + Chr(34) + "Name" + Chr(34) + ":" + Chr(34) + "Starfin" + Chr(34) + "," + Chr(34) + "Values" + Chr(34) + ":[1,2]}")
-            m.assertEqual(lines.Count(), 7)
-            m.assertEqual(lines[0], "{")
-            m.assertEqual(lines[1], "  " + Chr(34) + "Name" + Chr(34) + ": " + Chr(34) + "Starfin" + Chr(34) + ",")
-            m.assertEqual(lines[2], "  " + Chr(34) + "Values" + Chr(34) + ":[")
-            m.assertEqual(lines[3], "    1,")
-            m.assertEqual(lines[4], "    2")
-            m.assertEqual(lines[5], "  ]")
-            m.assertEqual(lines[6], "}")
+            collector = CreateObject("roSGNode", "LogService")
+            log = new Logger("LoggerTest", collector)
+
+            log.write("normal message")
+            log.error("failed message")
+            log.writeConsoleOnly("private message")
+            log.writeJsonConsoleOnly("{" + Chr(34) + "Private" + Chr(34) + ":true}")
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 2)
+            m.assertTrue(Instr(1, entries[0], "[LoggerTest] normal message") > 0)
+            m.assertTrue(Instr(1, entries[1], "[LoggerTest] ERROR: failed message") > 0)
         end function
 
-        @it("preserves escaped JSON string content")
+        @it("collects formatted JSON as one multiline entry with a heading")
         function _()
+            collector = CreateObject("roSGNode", "LogService")
+            log = new Logger("LoggerTest", collector)
             escapedText = "A\" + Chr(34) + "B"
-            jsonText = "{" + Chr(34) + "Text" + Chr(34) + ":" + Chr(34) + escapedText + Chr(34) + "}"
-            lines = Logger.__FormatJsonText(jsonText)
-            m.assertEqual(lines.Count(), 3)
-            m.assertTrue(Instr(1, lines[1], escapedText) > 0)
+            jsonText = "{" + Chr(34) + "Name" + Chr(34) + ":" + Chr(34) + escapedText + Chr(34) + "," + Chr(34) + "Values" + Chr(34) + ":[1,2]}"
+
+            log.writeJson(jsonText, 2, "Request body:")
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "[LoggerTest] Request body:") > 0)
+            m.assertTrue(Instr(1, entries[0], Chr(10) + "    {") > 0)
+            m.assertTrue(Instr(1, entries[0], Chr(10) + "      " + Chr(34) + "Name" + Chr(34) + ": " + Chr(34) + escapedText + Chr(34) + ",") > 0)
+            m.assertTrue(Instr(1, entries[0], Chr(10) + "      " + Chr(34) + "Values" + Chr(34) + ":[") > 0)
+            m.assertTrue(Instr(1, entries[0], Chr(10) + "        1,") > 0)
+            m.assertTrue(Instr(1, entries[0], Chr(10) + "        2") > 0)
         end function
 
-        @it("trims, indents, and pads helper values")
+        @it("writes only to the collector injected into the constructor")
         function _()
-            m.assertEqual(Logger.__Trim(Chr(9) + " value " + Chr(13)), "value")
-            m.assertEqual(Logger.__Indent(3), "      ")
-            m.assertEqual(Logger.__Pad2(7), "07")
-            m.assertEqual(Logger.__Pad2(12), "12")
-            m.assertEqual(Logger.__Pad3(7), "007")
+            injectedCollector = CreateObject("roSGNode", "LogService")
+            unrelatedCollector = CreateObject("roSGNode", "LogService")
+            log = new Logger("InjectedLogger", injectedCollector)
+
+            log.write("injected message")
+
+            m.assertEqual(injectedCollector.callFunc("getSnapshot").Count(), 1)
+            m.assertEqual(unrelatedCollector.callFunc("getSnapshot").Count(), 0)
+        end function
+
+        @it("continues console logging when the injected collector is invalid")
+        function _()
+            log = new Logger("ConsoleLogger", invalid)
+            result = log.write("console message")
+            m.assertNotInvalid(result)
         end function
 
     end class

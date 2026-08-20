@@ -1,255 +1,114 @@
-namespace Logger
+class Logger
+    private label as string
+    private collector as dynamic
 
     '---------------------------------------------------------------------------
-    ' Logger
+    ' new
     '---------------------------------------------------------------------------
-    ' Creates a small logger object with buffered and unbuffered console paths.
-    ' Only explicitly display-safe methods copy messages to the in-app log viewer.
-    ' Buffered logging stores lines until log.flush() writes the full console buffer.
-    ' The buffer exists for work that executes on its own task/thread, so related log
-    ' statements can be grouped together instead of interleaved with other output.
-
-    '---------------------------------------------------------------------------
-    ' Logger.Create
-    '---------------------------------------------------------------------------
-    function Create(label = "" as string) as object
-
-        log = {
-            label: label
-            buffered: false
-            collector: Logger.__GetCollector()
-            write: Logger.__Write
-            writeDisplaySafe: Logger.__WriteDisplaySafe
-            writeConsoleOnly: Logger.__WriteConsoleOnly
-            writeBracketed: Logger.__WriteBracketed
-            writeJson: Logger.__WriteJson
-            writeJsonDisplaySafe: Logger.__WriteJsonDisplaySafe
-            writeJsonConsoleOnly: Logger.__WriteJsonConsoleOnly
-            error: Logger.__Error
-            errorDisplaySafe: Logger.__ErrorDisplaySafe
-        }
-
-        return log
-
-    end function
+    sub new(label as string, collector as dynamic)
+        m.label = label
+        m.collector = collector
+    end sub
 
     '---------------------------------------------------------------------------
-    ' Logger.CreateBuffered
+    ' write
     '---------------------------------------------------------------------------
-    function CreateBuffered(label = "" as string) as object
-
-        log = {
-            label: label
-            buffered: true
-            buffer: []
-            collector: Logger.__GetCollector()
-            write: Logger.__Write
-            writeDisplaySafe: Logger.__WriteDisplaySafe
-            writeConsoleOnly: Logger.__WriteConsoleOnly
-            writeBracketed: Logger.__WriteBracketed
-            writeJson: Logger.__WriteJson
-            writeJsonDisplaySafe: Logger.__WriteJsonDisplaySafe
-            writeJsonConsoleOnly: Logger.__WriteJsonConsoleOnly
-            error: Logger.__Error
-            errorDisplaySafe: Logger.__ErrorDisplaySafe
-            flush: Logger.__Flush
-        }
-
-        return log
-
-    end function
-
-    '---------------------------------------------------------------------------
-    ' Logger.__Write
-    '---------------------------------------------------------------------------
-    function __Write(message as dynamic) as object
-
-        line = Logger.__Format(message, m.label)
-
-        if m.buffered then
-            m.buffer.Push(line)
-        else
-            ? line
-        end if
-
-        return m
-
-    end function
-
-    '---------------------------------------------------------------------------
-    ' Logger.__WriteDisplaySafe
-    '---------------------------------------------------------------------------
-    function __WriteDisplaySafe(message as dynamic) as object
-        line = Logger.__Format(message, m.label)
+    function write(message as dynamic) as object
+        line = m.format(message)
         ? line
-        Logger.__CollectLine(m.collector, line)
+        m.collectLine(line)
         return m
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__WriteConsoleOnly
+    ' writeConsoleOnly
     '---------------------------------------------------------------------------
-    function __WriteConsoleOnly(message as dynamic) as object
-        ? Logger.__Format(message, m.label)
+    function writeConsoleOnly(message as dynamic) as object
+        ? m.format(message)
         return m
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__WriteBracketed
+    ' writeJson
     '---------------------------------------------------------------------------
-    function __WriteBracketed(lines as dynamic) as object
-
-        output = ""
-
-        for each line in lines
-            output = output + "[" + line + "] "
-        end for
-
-        m.write(output)
-
-        return m
-
-    end function
-
-    '---------------------------------------------------------------------------
-    ' Logger.__WriteJson
-    '---------------------------------------------------------------------------
-    function __WriteJson(jsonText as dynamic, indent = 0 as integer) as object
-        lines = Logger.__FormatJsonText(jsonText)
-        prefix = Logger.__Indent(indent)
-
-        for each line in lines
-            m.write(prefix + line)
-        end for
-
-        return m
-    end function
-
-    '---------------------------------------------------------------------------
-    ' Logger.__WriteJsonDisplaySafe
-    '---------------------------------------------------------------------------
-    function __WriteJsonDisplaySafe(jsonText as dynamic, indent = 0 as integer, heading = "" as string) as object
-        lines = Logger.__FormatJsonText(jsonText)
-        prefix = Logger.__Indent(indent)
+    function writeJson(jsonText as dynamic, indent = 0 as integer, heading = "" as string) as object
+        lines = m.formatJsonText(jsonText)
+        prefix = m.indent(indent)
         displayEntry = ""
         if heading <> "" then
-            m.writeConsoleOnly(heading)
-            displayEntry = Logger.__Format(heading, m.label)
+            formattedHeading = m.format(heading)
+            ? formattedHeading
+            displayEntry = formattedHeading
         end if
         for i = 0 to lines.Count() - 1
             line = prefix + lines[i]
-            m.writeConsoleOnly(line)
+            formattedLine = m.format(line)
+            ? formattedLine
             if displayEntry = "" then
-                displayEntry = Logger.__Format(line, m.label)
+                displayEntry = formattedLine
             else
                 displayEntry = displayEntry + Chr(10) + line
             end if
         end for
-        if displayEntry <> "" then Logger.__CollectLine(m.collector, displayEntry)
+        if displayEntry <> "" then m.collectLine(displayEntry)
         return m
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__WriteJsonConsoleOnly
+    ' writeJsonConsoleOnly
     '---------------------------------------------------------------------------
-    function __WriteJsonConsoleOnly(jsonText as dynamic, indent = 0 as integer) as object
-        lines = Logger.__FormatJsonText(jsonText)
-        prefix = Logger.__Indent(indent)
-
+    function writeJsonConsoleOnly(jsonText as dynamic, indent = 0 as integer) as object
+        lines = m.formatJsonText(jsonText)
+        prefix = m.indent(indent)
         for each line in lines
             m.writeConsoleOnly(prefix + line)
         end for
-
         return m
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__Error
+    ' error
     '---------------------------------------------------------------------------
-    function __Error(message as dynamic) as object
-
-        message = "ERROR: " + message
-        return m.write(message)
-
+    function error(message as dynamic) as object
+        return m.write("ERROR: " + message)
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__Flush
+    ' collectLine
     '---------------------------------------------------------------------------
-    sub __Flush()
-        output = ""
-
-        if m.buffer.Count() = 0 then
-            m.buffer = []
-            return
-        end if
-
-        for each line in m.buffer
-            output = output + line + Chr(10)
-        end for
-
-        ' print once so buffered task logs stay grouped
-        if output <> "" then ? output;
-        m.buffer = []
+    private sub collectLine(line as string)
+        if m.collector = invalid then return
+        m.collector.appendRequested = line
     end sub
 
     '---------------------------------------------------------------------------
-    ' Logger.__GetCollector
+    ' format
     '---------------------------------------------------------------------------
-    function __GetCollector() as dynamic
-        if m = invalid or m.global = invalid then return invalid
-        return m.global.logService
-    end function
-
-    '---------------------------------------------------------------------------
-    ' Logger.__ErrorDisplaySafe
-    '---------------------------------------------------------------------------
-    function __ErrorDisplaySafe(message as dynamic) as object
-        return m.writeDisplaySafe("ERROR: " + message)
-    end function
-
-    '---------------------------------------------------------------------------
-    ' Logger.__CollectLine
-    '---------------------------------------------------------------------------
-    sub __CollectLine(collector as dynamic, line as string)
-        if collector = invalid then return
-        collector.appendRequested = line
-    end sub
-
-    '---------------------------------------------------------------------------
-    ' Logger.__Format
-    '---------------------------------------------------------------------------
-    function __Format(message as dynamic, label as dynamic) as string
-
+    private function format(message as dynamic) as string
         text = Format.SafeString(message, "")
-        if label <> invalid and label <> "" then text = "[" + label + "] " + text
-        return Logger.__TimestampPrefix() + text
-
+        if m.label <> "" then text = "[" + m.label + "] " + text
+        return m.timestampPrefix() + text
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__FormatJsonText
+    ' formatJsonText
     '---------------------------------------------------------------------------
-    function __FormatJsonText(jsonText as dynamic) as object
+    private function formatJsonText(jsonText as dynamic) as object
         text = Format.SafeString(jsonText, "")
         lines = []
         if text = "" then
             lines.Push("")
             return lines
         end if
-
         indentLevel = 0
         currentLine = ""
         inString = false
         escapeNext = false
         quote = Chr(34)
-
         for i = 1 to Len(text)
             char = Mid(text, i, 1)
-
             if inString = true then
                 currentLine = currentLine + char
-
                 if escapeNext = true then
                     escapeNext = false
                 else if char = "\" then
@@ -261,108 +120,89 @@ namespace Logger
                 inString = true
                 currentLine = currentLine + char
             else if char = "{" or char = "[" then
-                currentLine = Logger.__TrimRight(currentLine) + char
+                currentLine = m.trimRight(currentLine) + char
                 lines.Push(currentLine)
                 indentLevel = indentLevel + 1
-                currentLine = Logger.__Indent(indentLevel)
+                currentLine = m.indent(indentLevel)
             else if char = "}" or char = "]" then
-                if Logger.__Trim(currentLine) <> "" then lines.Push(Logger.__TrimRight(currentLine))
+                if m.trim(currentLine) <> "" then lines.Push(m.trimRight(currentLine))
                 indentLevel = indentLevel - 1
                 if indentLevel < 0 then indentLevel = 0
-                currentLine = Logger.__Indent(indentLevel) + char
+                currentLine = m.indent(indentLevel) + char
             else if char = "," then
-                currentLine = Logger.__TrimRight(currentLine) + char
+                currentLine = m.trimRight(currentLine) + char
                 lines.Push(currentLine)
-                currentLine = Logger.__Indent(indentLevel)
+                currentLine = m.indent(indentLevel)
             else if char = ":" then
-                currentLine = Logger.__TrimRight(currentLine) + ": "
-            else if Logger.__IsWhitespace(char) <> true then
+                currentLine = m.trimRight(currentLine) + ": "
+            else if m.isWhitespace(char) <> true then
                 currentLine = currentLine + char
             end if
         end for
-
-        if Logger.__Trim(currentLine) <> "" then lines.Push(Logger.__TrimRight(currentLine))
-
+        if m.trim(currentLine) <> "" then lines.Push(m.trimRight(currentLine))
         return lines
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__Indent
+    ' indent
     '---------------------------------------------------------------------------
-    function __Indent(level as integer) as string
+    private function indent(level as integer) as string
         text = ""
         for i = 1 to level
             text = text + "  "
         end for
-
         return text
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__IsWhitespace
+    ' isWhitespace
     '---------------------------------------------------------------------------
-    function __IsWhitespace(char as string) as boolean
+    private function isWhitespace(char as string) as boolean
         return char = " " or char = Chr(9) or char = Chr(10) or char = Chr(13)
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__Trim
+    ' trim
     '---------------------------------------------------------------------------
-    function __Trim(text as string) as string
-        return Logger.__TrimLeft(Logger.__TrimRight(text))
+    private function trim(text as string) as string
+        return m.trimLeft(m.trimRight(text))
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__TrimLeft
+    ' trimLeft
     '---------------------------------------------------------------------------
-    function __TrimLeft(text as string) as string
-        while Len(text) > 0 and Logger.__IsWhitespace(Left(text, 1)) = true
+    private function trimLeft(text as string) as string
+        while Len(text) > 0 and m.isWhitespace(Left(text, 1)) = true
             text = Mid(text, 2)
         end while
-
         return text
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__TrimRight
+    ' trimRight
     '---------------------------------------------------------------------------
-    function __TrimRight(text as string) as string
-        while Len(text) > 0 and Logger.__IsWhitespace(Right(text, 1)) = true
+    private function trimRight(text as string) as string
+        while Len(text) > 0 and m.isWhitespace(Right(text, 1)) = true
             text = Left(text, Len(text) - 1)
         end while
-
         return text
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__TimestampPrefix
+    ' timestampPrefix
     '---------------------------------------------------------------------------
-    function __TimestampPrefix() as string
+    private function timestampPrefix() as string
         timestamp = CreateObject("roDateTime")
         timestamp.ToLocalTime()
-
-        return Logger.__Pad2(timestamp.GetMonth()) + "/" + Logger.__Pad2(timestamp.GetDayOfMonth()) + " " + Logger.__Pad2(timestamp.GetHours()) + ":" + Logger.__Pad2(timestamp.GetMinutes()) + ":" + Logger.__Pad2(timestamp.GetSeconds()) + " "
+        return m.pad2(timestamp.GetMonth()) + "/" + m.pad2(timestamp.GetDayOfMonth()) + " " + m.pad2(timestamp.GetHours()) + ":" + m.pad2(timestamp.GetMinutes()) + ":" + m.pad2(timestamp.GetSeconds()) + " "
     end function
 
     '---------------------------------------------------------------------------
-    ' Logger.__Pad2
+    ' pad2
     '---------------------------------------------------------------------------
-    function __Pad2(value as dynamic) as string
-        text = int(val(value.ToStr())).ToStr()
+    private function pad2(value as integer) as string
+        text = value.ToStr()
         if Len(text) < 2 then return "0" + text
         return text
     end function
-
-    '---------------------------------------------------------------------------
-    ' Logger.__Pad3
-    '---------------------------------------------------------------------------
-    function __Pad3(value as dynamic) as string
-        text = int(val(value.ToStr())).ToStr()
-        while Len(text) < 3
-            text = "0" + text
-        end while
-
-        return text
-    end function
-
-end namespace
+end class
