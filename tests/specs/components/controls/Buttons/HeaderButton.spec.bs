@@ -1,0 +1,107 @@
+namespace tests
+
+    @SGNode("HeaderButton")
+    @suite("HeaderButton component")
+    class HeaderButtonTests extends rooibos.BaseTestSuite
+
+        @describe("HeaderButton behavior")
+
+        @it("initializes XML defaults and required child nodes")
+        function _()
+            m.assertEqual(m.top.buttonWidth, 300.0)
+            m.assertEqual(m.top.buttonHeight, 56.0)
+            m.assertEqual(m.top.textAlign, "center")
+            m.assertEqual(m.top.headerBgColor, &h12112BFF)
+            m.assertNotInvalid(m.node.background)
+            m.assertNotInvalid(m.node.textLabel)
+            m.assertEqual(m.node.background.uri, "pkg:/images/buttons/fhd/header-button-focused.9.png")
+        end function
+
+        @it("updates text and lays it out from component fields")
+        function _()
+            m.top.text = "Browse"
+            m.top.buttonWidth = 220
+            m.top.buttonHeight = 80
+            m.top.textInset = 12
+            m.top.textAlign = "left"
+
+            'bs:disable-next-line 1140
+            onTextChanged()
+            'bs:disable-next-line 1140
+            onDimensionsChanged()
+            'bs:disable-next-line 1140
+            onTextLayoutChanged()
+
+            m.assertEqual(m.node.textLabel.text, "Browse")
+            m.assertEqual(m.node.background.width, 220.0)
+            m.assertEqual(m.node.background.height, 80.0)
+            m.assertEqual(m.node.textLabel.horizAlign, "left")
+            m.assertEqual(m.node.textLabel.width, 196.0)
+            m.assertEqual(m.node.textLabel.translation, [12.0, 26.0])
+        end function
+
+        @it("normalizes unsupported alignment and invalid dimensions")
+        function _()
+            m.top.buttonWidth = 0
+            m.top.buttonHeight = -1
+            m.top.textAlign = "diagonal"
+
+            'bs:disable-next-line 1140
+            onDimensionsChanged()
+            'bs:disable-next-line 1140
+            onTextLayoutChanged()
+
+            m.assertEqual(m.node.background.width, 300.0)
+            m.assertEqual(m.node.background.height, 56.0)
+            m.assertEqual(m.node.textLabel.horizAlign, "center")
+        end function
+
+        @it("renders focused active and inactive visual states")
+        function _()
+            m.top.hasFocusVisual = true
+            m.top.hasActiveVisual = false
+            'bs:disable-next-line 1140
+            onFocusVisualChanged()
+            m.assertTrue(m.node.background.visible)
+            m.assertEqual(m.node.background.opacity, 1.0)
+            m.assertEqual(m.node.textLabel.color, &h12112BFF)
+
+            m.top.hasFocusVisual = false
+            m.top.hasActiveVisual = true
+            'bs:disable-next-line 1140
+            onFocusVisualChanged()
+            m.assertTrue(m.node.background.visible)
+            m.assertEqual(m.node.background.opacity, 0.58)
+            m.assertEqual(m.node.textLabel.color, &h12112BFF)
+
+            m.top.hasActiveVisual = false
+            'bs:disable-next-line 1140
+            onFocusVisualChanged()
+            m.assertFalse(m.node.background.visible)
+            m.assertEqual(m.node.background.opacity, 1.0)
+            m.assertEqual(m.node.textLabel.color, &hFFFFFFFF)
+        end function
+
+        @it("emits selection only for pressed selection keys")
+        function _()
+            m.top.buttonSelected = false
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("OK", false))
+            m.assertFalse(m.top.buttonSelected)
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("left", true))
+            m.assertFalse(m.top.buttonSelected)
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("OK", true))
+            m.assertTrue(m.top.buttonSelected)
+
+            m.top.buttonSelected = false
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("select", true))
+            m.assertTrue(m.top.buttonSelected)
+        end function
+
+    end class
+
+end namespace
