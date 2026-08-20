@@ -9,6 +9,7 @@ sub init()
 
     initStyle()
     updateUserMenuButton()
+    closeSystemMenu()
     closeAccountMenu()
     syncMenuOpen()
 end sub
@@ -21,7 +22,7 @@ sub initReferences()
     m.navGlassBackground = m.top.findNode("navGlassBackground")
     m.homeButton = m.top.findNode("homeButton")
     m.searchButton = m.top.findNode("searchButton")
-    m.settingsButton = m.top.findNode("settingsButton")
+    m.systemButton = m.top.findNode("systemButton")
     m.userMenuButton = m.top.findNode("userMenuButton")
     m.accountBadgeNodes = {
         group: m.top.findNode("accountBadge")
@@ -32,13 +33,9 @@ sub initReferences()
         name: m.top.findNode("accountBadgeName")
     }
     m.clock = m.top.findNode("clock")
+    m.systemDropdownMenu = m.top.findNode("systemDropdownMenu")
     m.accountDropdownMenu = m.top.findNode("accountDropdownMenu")
-    m.diagnosticGestureTimer = m.top.findNode("diagnosticGestureTimer")
     m.focusableHeaderButtons = []
-    m.diagnosticGestureState = {
-        upCount: 0
-        acceptsUpPress: true
-    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -58,10 +55,10 @@ end sub
 sub initHandlers()
     m.homeButton.observeField("buttonSelected", "onHomePressed")
     m.searchButton.observeField("buttonSelected", "onSearchPressed")
-    m.settingsButton.observeField("buttonSelected", "onSettingsPressed")
+    m.systemButton.observeField("buttonSelected", "onSystemPressed")
     m.userMenuButton.observeField("buttonSelected", "onUserMenuPressed")
+    m.systemDropdownMenu.observeField("selectedItem", "onSystemDropdownItemSelected")
     m.accountDropdownMenu.observeField("selectedItem", "onAccountDropdownItemSelected")
-    m.diagnosticGestureTimer.observeField("fire", "onDiagnosticGestureTimerFire")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -73,11 +70,13 @@ sub initStyle()
     headerBgColor = palette.background.header
     m.homeButton.headerBgColor = headerBgColor
     m.searchButton.headerBgColor = headerBgColor
-    m.settingsButton.headerBgColor = headerBgColor
+    m.systemButton.headerBgColor = headerBgColor
     m.userMenuButton.headerBgColor = headerBgColor
+    m.systemDropdownMenu.headerBgColor = headerBgColor
     m.accountDropdownMenu.headerBgColor = headerBgColor
     m.accountBadgeNodes.ring.blendColor = palette.control.accountDropdownBackground
     m.accountBadgeNodes.glass.blendColor = palette.control.headerGlass
+    m.systemDropdownMenu.items = getSystemDropdownItems()
     m.accountDropdownMenu.items = getAccountDropdownItems()
 end sub
 
@@ -95,6 +94,15 @@ function focusHeader() as boolean
     end for
 
     return false
+end function
+
+'-------------------------------------------------------------------------------
+' focusSystemMenuButton
+'-------------------------------------------------------------------------------
+function focusSystemMenuButton() as boolean
+    closeMenu()
+    m.systemButton.setFocus(true)
+    return true
 end function
 
 '-------------------------------------------------------------------------------
@@ -118,20 +126,15 @@ end function
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
-    if key = "up" and press = false then
-        m.diagnosticGestureState.acceptsUpPress = true
-        return m.diagnosticGestureState.upCount > 0
-    end if
     if press = false then return false
 
     if m.top.menuOpen = true then
-        resetDiagnosticGesture()
-        if key = "up" then return m.accountDropdownMenu.callFunc("focusByOffset", -1)
-        if key = "down" then return m.accountDropdownMenu.callFunc("focusByOffset", 1)
+        openMenu = getOpenDropdownMenu()
+        if openMenu <> invalid then
+            if key = "up" then return openMenu.callFunc("focusByOffset", -1)
+            if key = "down" then return openMenu.callFunc("focusByOffset", 1)
+        end if
     end if
-
-    if key = "up" and m.userMenuButton.isInFocusChain() then return handleDiagnosticUpPress()
-    resetDiagnosticGesture()
 
     if key = "left" then
         return focusHeaderButtonByOffset(-1)
@@ -154,39 +157,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     return false
 end function
-
-'-------------------------------------------------------------------------------
-' handleDiagnosticUpPress
-'-------------------------------------------------------------------------------
-function handleDiagnosticUpPress() as boolean
-    if m.diagnosticGestureState.acceptsUpPress = false then return true
-
-    m.diagnosticGestureState.acceptsUpPress = false
-    m.diagnosticGestureState.upCount = m.diagnosticGestureState.upCount + 1
-    m.diagnosticGestureTimer.control = "stop"
-    m.diagnosticGestureTimer.control = "start"
-    if m.diagnosticGestureState.upCount < 4 then return true
-
-    resetDiagnosticGesture()
-    m.diagnosticGestureState.acceptsUpPress = true
-    requestLogsOverlay()
-    return true
-end function
-
-'-------------------------------------------------------------------------------
-' onDiagnosticGestureTimerFire
-'-------------------------------------------------------------------------------
-sub onDiagnosticGestureTimerFire()
-    resetDiagnosticGesture()
-end sub
-
-'-------------------------------------------------------------------------------
-' resetDiagnosticGesture
-'-------------------------------------------------------------------------------
-sub resetDiagnosticGesture()
-    m.diagnosticGestureTimer.control = "stop"
-    m.diagnosticGestureState.upCount = 0
-end sub
 
 '-------------------------------------------------------------------------------
 ' focusHeaderButtonByOffset
@@ -226,7 +196,7 @@ sub rebuildFocusableHeaderButtons()
 
     m.focusableHeaderButtons.Push(m.homeButton)
     m.focusableHeaderButtons.Push(m.searchButton)
-    m.focusableHeaderButtons.Push(m.settingsButton)
+    m.focusableHeaderButtons.Push(m.systemButton)
     m.focusableHeaderButtons.Push(m.userMenuButton)
 end sub
 
@@ -242,7 +212,8 @@ function getFocusedHeaderButtonIndex() as integer
         if button <> invalid and button.isInFocusChain() then return i
     end for
 
-    if isUserMenuInFocusChain() then return headerButtons.Count() - 1
+    if isSystemMenuInFocusChain() then return 2
+    if isUserMenuInFocusChain() then return 3
 
     return -1
 end function
@@ -315,21 +286,38 @@ sub onSearchPressed()
 end sub
 
 '-------------------------------------------------------------------------------
-' onSettingsPressed
+' onSystemPressed
 '-------------------------------------------------------------------------------
-sub onSettingsPressed()
-    closeMenu()
-    requestSettingsOverlay()
+sub onSystemPressed()
+    closeAccountMenu()
+    m.systemDropdownMenu.callFunc("toggleMenu")
+    syncMenuOpen()
 end sub
 
 '-------------------------------------------------------------------------------
 ' onUserMenuPressed
 '-------------------------------------------------------------------------------
 sub onUserMenuPressed()
-    if m.accountDropdownMenu = invalid then return
-
+    closeSystemMenu()
     m.accountDropdownMenu.callFunc("toggleMenu")
     syncMenuOpen()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSystemDropdownItemSelected
+'-------------------------------------------------------------------------------
+sub onSystemDropdownItemSelected()
+    selectedItem = m.systemDropdownMenu.selectedItem
+    if selectedItem = invalid then return
+
+    closeMenu()
+    if selectedItem.id = "settings" then
+        requestSettingsOverlay()
+    else if selectedItem.id = "systemInformation" then
+        requestSystemInformationOverlay()
+    else if selectedItem.id = "logs" then
+        requestLogsOverlay()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -340,9 +328,7 @@ sub onAccountDropdownItemSelected()
     if selectedItem = invalid then return
 
     closeMenu()
-    if selectedItem.id = "systemInformation" then
-        requestSystemInformationOverlay()
-    else if selectedItem.id = "switchAccount" then
+    if selectedItem.id = "switchAccount" then
         m.top.switchAccountSelected = true
     else if selectedItem.id = "logout" then
         m.top.logoutSelected = true
@@ -389,37 +375,62 @@ end sub
 ' closeMenu
 '-------------------------------------------------------------------------------
 sub closeMenu()
-
+    wasSystemMenuOpen = isSystemMenuOpen()
     wasUserMenuOpen = isAccountMenuOpen()
-    
+
+    closeSystemMenu()
     closeAccountMenu()
     syncMenuOpen()
-    
-    if wasUserMenuOpen then
+
+    if wasSystemMenuOpen then
+        m.systemButton.setFocus(true)
+    else if wasUserMenuOpen then
         m.userMenuButton.setFocus(true)
     end if
+end sub
 
+'-------------------------------------------------------------------------------
+' closeSystemMenu
+'-------------------------------------------------------------------------------
+sub closeSystemMenu()
+    m.systemDropdownMenu.callFunc("closeMenu")
 end sub
 
 '-------------------------------------------------------------------------------
 ' closeAccountMenu
 '-------------------------------------------------------------------------------
 sub closeAccountMenu()
-    if m.accountDropdownMenu <> invalid then m.accountDropdownMenu.callFunc("closeMenu")
+    m.accountDropdownMenu.callFunc("closeMenu")
 end sub
 
 '-------------------------------------------------------------------------------
 ' syncMenuOpen
 '-------------------------------------------------------------------------------
 sub syncMenuOpen()
-    m.top.menuOpen = isAccountMenuOpen()
+    m.top.menuOpen = isSystemMenuOpen() or isAccountMenuOpen()
 end sub
+
+'-------------------------------------------------------------------------------
+' getOpenDropdownMenu
+'-------------------------------------------------------------------------------
+function getOpenDropdownMenu() as dynamic
+    if isSystemMenuOpen() then return m.systemDropdownMenu
+    if isAccountMenuOpen() then return m.accountDropdownMenu
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' isSystemMenuOpen
+'-------------------------------------------------------------------------------
+function isSystemMenuOpen() as boolean
+    return m.systemDropdownMenu.isOpen = true
+end function
 
 '-------------------------------------------------------------------------------
 ' isAccountMenuOpen
 '-------------------------------------------------------------------------------
 function isAccountMenuOpen() as boolean
-    return m.accountDropdownMenu <> invalid and m.accountDropdownMenu.isOpen = true
+    return m.accountDropdownMenu.isOpen = true
 end function
 
 '-------------------------------------------------------------------------------
@@ -475,21 +486,36 @@ sub updateAccountBadge()
 end sub
 
 '-------------------------------------------------------------------------------
+' getSystemDropdownItems
+'-------------------------------------------------------------------------------
+function getSystemDropdownItems() as object
+    return [
+        { id: "settings", text: "Settings" }
+        { id: "systemInformation", text: "System Info" }
+        { id: "logs", text: "App Log" }
+    ]
+end function
+
+'-------------------------------------------------------------------------------
 ' getAccountDropdownItems
 '-------------------------------------------------------------------------------
 function getAccountDropdownItems() as object
     return [
-        { id: "systemInformation", text: "System Info" }
         { id: "switchAccount", text: "Switch" }
         { id: "logout", text: "Logout" }
     ]
 end function
 
 '-------------------------------------------------------------------------------
+' isSystemMenuInFocusChain
+'-------------------------------------------------------------------------------
+function isSystemMenuInFocusChain() as boolean
+    return m.systemDropdownMenu.callFunc("isMenuFocused")
+end function
+
+'-------------------------------------------------------------------------------
 ' isUserMenuInFocusChain
 '-------------------------------------------------------------------------------
 function isUserMenuInFocusChain() as boolean
-    if m.accountDropdownMenu = invalid then return false
-
     return m.accountDropdownMenu.callFunc("isMenuFocused")
 end function
