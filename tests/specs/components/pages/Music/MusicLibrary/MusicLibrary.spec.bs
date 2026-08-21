@@ -1,0 +1,105 @@
+namespace tests
+
+    @SGNode("MusicLibrary")
+    @suite("MusicLibrary component")
+    class MusicLibraryTests extends rooibos.BaseTestSuite
+
+        @describe("pagination")
+
+        @it("starts loading five rows from the end")
+        function _()
+            grid = { itemFocused: 24, numColumns: 5 }
+
+            'bs:disable-next-line 1140
+            m.assertFalse(isFocusNearLoadedEnd(grid, 50))
+
+            grid.itemFocused = 25
+            'bs:disable-next-line 1140
+            m.assertTrue(isFocusNearLoadedEnd(grid, 50))
+        end function
+
+        @it("handles partial final rows when finding the paging threshold")
+        function _()
+            grid = { itemFocused: 4, numColumns: 5 }
+
+            'bs:disable-next-line 1140
+            m.assertFalse(isFocusNearLoadedEnd(grid, 31))
+
+            grid.itemFocused = 10
+            'bs:disable-next-line 1140
+            m.assertTrue(isFocusNearLoadedEnd(grid, 31))
+        end function
+
+        @it("requests the next album page near the loaded end")
+        function _()
+            m.configurePaging("albums", 50, 50, 25)
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            requestNextAlbumPageIfNeeded()
+
+            m.assertTrue(m.node.state.content.albums.load.requestInFlight)
+            m.assertEqual(m.node.state.content.albums.load.status, "loading")
+            m.assertEqual(m.node.musicLibraryTask.request.pageStartIndex, 50)
+            m.assertEqual(m.node.musicLibraryTask.control, "run")
+        end function
+
+        @it("does not request album pages before the threshold or during another request")
+        function _()
+            m.configurePaging("albums", 50, 50, 24)
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            requestNextAlbumPageIfNeeded()
+            m.assertInvalid(m.node.musicLibraryTask.request)
+
+            m.node.musicGrid.itemFocused = 25
+            m.node.state.content.albums.load.requestInFlight = true
+            'bs:disable-next-line 1140
+            requestNextAlbumPageIfNeeded()
+            m.assertInvalid(m.node.musicLibraryTask.request)
+        end function
+
+        @it("requests the next artist page near the loaded end")
+        function _()
+            m.configurePaging("artists", 50, 100, 25)
+            m.node.musicArtistsTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            requestNextArtistPageIfNeeded()
+
+            m.assertTrue(m.node.state.content.artists.load.requestInFlight)
+            m.assertEqual(m.node.state.content.artists.load.status, "loading")
+            m.assertEqual(m.node.musicArtistsTask.request.pageStartIndex, 100)
+            m.assertEqual(m.node.musicArtistsTask.control, "run")
+        end function
+
+        @it("does not request more data when the current page is final")
+        function _()
+            m.configurePaging("artists", 50, 100, 25)
+            m.node.state.content.artists.load.hasMore = false
+            m.node.musicArtistsTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            requestNextArtistPageIfNeeded()
+
+            m.assertInvalid(m.node.musicArtistsTask.request)
+        end function
+
+        private sub configurePaging(kind as string, itemCount as integer, nextStartIndex as integer, focusedIndex as integer)
+            items = []
+            for i = 0 to itemCount - 1
+                items.Push({ Id: i.ToStr() })
+            end for
+
+            m.node.state.context = { libraryId: "library-1", server: "http://server", token: "token" }
+            m.node.state.content[kind].items = items
+            m.node.state.content[kind].load.hasMore = true
+            m.node.state.content[kind].load.requestInFlight = false
+            m.node.state.content[kind].load.nextStartIndex = nextStartIndex
+            m.node.musicGrid = { itemFocused: focusedIndex, numColumns: 5 }
+        end sub
+
+    end class
+
+end namespace
