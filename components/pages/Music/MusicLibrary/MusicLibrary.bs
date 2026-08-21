@@ -23,6 +23,7 @@ sub initReferences()
     m.musicLibraryTask = m.top.findNode("musicLibraryTask")
     m.musicArtistsTask = m.top.findNode("musicArtistsTask")
     m.musicFilterOptionsTask = m.top.findNode("musicFilterOptionsTask")
+    m.filteredRefreshTimer = m.top.findNode("filteredRefreshTimer")
 end sub
 
 
@@ -42,6 +43,7 @@ sub initHandlers()
     m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
     m.musicGrid.observeField("itemSelected", "onMusicItemSelected")
     m.musicGrid.observeField("itemFocused", "onMusicGridItemFocused")
+    m.filteredRefreshTimer.observeField("fire", "onFilteredRefreshTimerFired")
 end sub
 
 
@@ -81,6 +83,8 @@ sub initState()
                 restoreFilterVisible: false
             }
             pagingSpinnerVisible: false
+            filteredRefreshPending: false
+            filteredRefreshActive: false
         }
         lifecycle: AsyncLifecycle.Create()
     }
@@ -216,6 +220,12 @@ end sub
 sub deactivate()
     wasLoading = m.state.loadingUi.foreground.kind <> ""
     m.state.loadingUi.foreground.pausedKind = m.state.loadingUi.foreground.kind
+    if m.state.loadingUi.filteredRefreshPending then
+        m.filteredRefreshTimer.control = "stop"
+        m.state.loadingUi.filteredRefreshPending = false
+        m.state.loadingUi.filteredRefreshActive = true
+        m.state.content.albums.load.status = "paused"
+    end if
     hidePagingSpinner()
     m.state.loadingUi.foreground.kind = ""
     m.state.loadingUi.foreground.startedAt = invalid

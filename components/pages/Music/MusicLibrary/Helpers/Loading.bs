@@ -160,6 +160,7 @@ sub onMusicLibraryResponse()
     if Number.ToInteger(response.queryId, -1) <> m.state.content.albums.load.queryId then return
     if response.ok <> true then
         hidePagingSpinner()
+        m.state.loadingUi.filteredRefreshActive = false
         m.state.content.albums.load.requestInFlight = false
         m.state.content.albums.load.status = "failed"
         m.state.content.albums.load.hasMore = false
@@ -173,6 +174,7 @@ sub onMusicLibraryResponse()
     expectedStartIndex = m.state.content.albums.load.nextStartIndex
     if startIndex <> expectedStartIndex then
         hidePagingSpinner()
+        m.state.loadingUi.filteredRefreshActive = false
         m.state.content.albums.load.requestInFlight = false
         m.state.content.albums.load.status = "failed"
         m.state.content.albums.load.hasMore = false
@@ -187,9 +189,14 @@ sub onMusicLibraryResponse()
         if m.state.content.albums.load.totalCount >= 0 then updateTitleLabel(m.state.content.albums.load.totalCount)
     end if
     pageAlbums = getValidMusicItems(response.payload, "album")
-    for each album in pageAlbums
-        m.state.content.albums.items.Push(album)
-    end for
+    isFilteredRefresh = m.state.loadingUi.filteredRefreshActive and startIndex = 0
+    if isFilteredRefresh then
+        m.state.content.albums.items = pageAlbums
+    else
+        for each album in pageAlbums
+            m.state.content.albums.items.Push(album)
+        end for
+    end if
     m.log.write("Album page accepted libraryId=" + getLibraryId() + " startIndex=" + startIndex.ToStr() + " pageCount=" + pageAlbums.Count().ToStr() + " totalLoaded=" + m.state.content.albums.items.Count().ToStr())
     AppStatus.ClearMessage()
 
@@ -198,7 +205,12 @@ sub onMusicLibraryResponse()
     m.state.content.albums.load.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageAlbums.Count())
     m.state.content.albums.load.status = "loaded"
     if m.state.content.albums.load.totalCount < 0 then updateTitleLabel(m.state.content.albums.items.Count())
-    appendAlbumPage(pageAlbums)
+    if isFilteredRefresh then
+        m.state.loadingUi.filteredRefreshActive = false
+        renderAlbums(pageAlbums)
+    else
+        appendAlbumPage(pageAlbums)
+    end if
     blockingEnded = false
     if m.state.loadingUi.foreground.kind = "albums" and (m.state.content.albums.items.Count() > 0 or m.state.content.albums.load.hasMore <> true) then blockingEnded = finishForegroundLoad("albums")
     if blockingEnded and isMusicLibraryControlFocused() = false then focusAlbums()
@@ -292,6 +304,9 @@ sub reloadMusicLibrary()
     if request = invalid then return
 
     hidePagingSpinner()
+    m.filteredRefreshTimer.control = "stop"
+    m.state.loadingUi.filteredRefreshPending = false
+    m.state.loadingUi.filteredRefreshActive = false
     m.state.content.albums.items = []
     m.state.content.artists.items = []
     m.state.content.albums.load.status = "loading"
@@ -308,6 +323,40 @@ sub reloadMusicLibrary()
     m.log.write("Album reload started libraryId=" + Format.SafeString(request.libraryId, ""))
     queueForegroundLoad("albums")
     m.musicArtistsTask.control = "stop"
+end sub
+
+
+'-------------------------------------------------------------------------------
+' scheduleFilteredRefresh
+'-------------------------------------------------------------------------------
+sub scheduleFilteredRefresh()
+    request = m.state.context
+    if request = invalid then return
+
+    m.filteredRefreshTimer.control = "stop"
+    m.musicLibraryTask.control = "stop"
+    m.state.content.albums.load.queryId = m.state.content.albums.load.queryId + 1
+    m.state.content.albums.load.status = "debouncing"
+    m.state.content.albums.load.requestInFlight = false
+    m.state.content.albums.load.hasMore = false
+    m.state.loadingUi.filteredRefreshPending = true
+    m.filteredRefreshTimer.control = "start"
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onFilteredRefreshTimerFired
+'-------------------------------------------------------------------------------
+sub onFilteredRefreshTimerFired()
+    if m.state.loadingUi.filteredRefreshPending <> true then return
+
+    m.state.loadingUi.filteredRefreshPending = false
+    m.state.loadingUi.filteredRefreshActive = true
+    m.state.content.albums.load.status = "loading"
+    m.state.content.albums.load.nextStartIndex = 0
+    m.state.content.albums.load.totalCount = -1
+    AsyncLifecycle.Begin(m.state.lifecycle, m.state.context.libraryId)
+    loadAlbumPage(0)
 end sub
 
 
