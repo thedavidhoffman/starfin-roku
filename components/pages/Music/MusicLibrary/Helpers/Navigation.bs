@@ -1,0 +1,230 @@
+
+'-------------------------------------------------------------------------------
+' isMusicLibraryControlFocused
+'-------------------------------------------------------------------------------
+function isMusicLibraryControlFocused() as boolean
+    if m.browseByButton.isInFocusChain() then return true
+    if m.sortButton.isInFocusChain() then return true
+    return m.filterButtonRow.isInFocusChain()
+end function
+
+
+'-------------------------------------------------------------------------------
+' onMusicGridItemFocused
+'-------------------------------------------------------------------------------
+sub onMusicGridItemFocused()
+    if isArtistBrowseMode() then
+        requestNextArtistPageIfNeeded()
+    else
+        requestNextAlbumPageIfNeeded()
+    end if
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onMusicItemSelected
+'-------------------------------------------------------------------------------
+sub onMusicItemSelected()
+    if isArtistBrowseMode() then
+        onArtistSelected()
+    else
+        onAlbumSelected()
+    end if
+end sub
+
+
+'-------------------------------------------------------------------------------
+' focusBrowseByButton
+'-------------------------------------------------------------------------------
+function focusBrowseByButton() as boolean
+    m.top.setFocus(true)
+    m.browseByButton.setFocus(true)
+    return true
+end function
+
+
+'-------------------------------------------------------------------------------
+' focusFilterButtonRow
+'-------------------------------------------------------------------------------
+function focusFilterButtonRow() as boolean
+    if m.filterButtonRow.visible <> true then return false
+
+    m.top.setFocus(true)
+    m.filterButtonRow.callFunc("focusFirstButton")
+    return true
+end function
+
+
+'-------------------------------------------------------------------------------
+' focusSortButton
+'-------------------------------------------------------------------------------
+function focusSortButton() as boolean
+    if m.sortButton.focusable <> true then return false
+
+    m.top.setFocus(true)
+    m.sortButton.setFocus(true)
+    return true
+end function
+
+
+'-------------------------------------------------------------------------------
+' onBrowseByButtonFocusExitDown
+'-------------------------------------------------------------------------------
+sub onBrowseByButtonFocusExitDown()
+    if focusFilterButtonRow() <> true then focusAlbums()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onSortButtonFocusExitDown
+'-------------------------------------------------------------------------------
+sub onSortButtonFocusExitDown()
+    if focusFilterButtonRow() <> true then focusAlbums()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onFilterButtonRowFocusExitUp
+'-------------------------------------------------------------------------------
+sub onFilterButtonRowFocusExitUp()
+    focusBrowseByButton()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onFilterButtonRowFocusExitDown
+'-------------------------------------------------------------------------------
+sub onFilterButtonRowFocusExitDown()
+    focusAlbums()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' focusAlbums
+'-------------------------------------------------------------------------------
+sub focusAlbums()
+    grid = getActiveGrid()
+    if grid.content = invalid or grid.content.getChildCount() = 0 then
+        m.top.setFocus(true)
+        return
+    end if
+
+    m.top.setFocus(true)
+    grid.setFocus(true)
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onFocusRequested
+'-------------------------------------------------------------------------------
+sub onFocusRequested()
+    if m.top.visible <> true then return
+    focusAlbums()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' getActiveGrid
+'-------------------------------------------------------------------------------
+function getActiveGrid() as object
+    return m.musicGrid
+end function
+
+
+'-------------------------------------------------------------------------------
+' onAlbumSelected
+'-------------------------------------------------------------------------------
+sub onAlbumSelected()
+    selected = m.musicGrid.itemSelected
+    if selected = invalid or selected < 0 then return
+    if m.musicGrid.content = invalid then return
+    if selected >= m.musicGrid.content.getChildCount() then return
+
+    albumNode = m.musicGrid.content.getChild(selected)
+    if albumNode = invalid then return
+
+    raw = albumNode.raw
+    itemId = ""
+    if raw <> invalid then itemId = Format.SafeString(Format.FirstNonEmpty([raw.Id], ""), "")
+    if itemId = "" then return
+
+    m.top.selectedAlbum = {
+        itemId: itemId
+        item: raw
+    }
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onArtistSelected
+'-------------------------------------------------------------------------------
+sub onArtistSelected()
+    selectedIndex = m.musicGrid.itemSelected
+    content = m.musicGrid.content
+    if content = invalid or selectedIndex < 0 or selectedIndex >= content.getChildCount() then return
+
+    node = content.getChild(selectedIndex)
+    raw = node.raw
+    if raw = invalid then return
+
+    musicBrainzArtistId = ""
+    if raw.ProviderIds <> invalid then musicBrainzArtistId = Format.SafeString(raw.ProviderIds.MusicBrainzArtist, "")
+    m.top.selectedArtist = {
+        itemId: Format.SafeString(raw.Id, "")
+        musicBrainzArtistId: musicBrainzArtistId
+        item: raw
+        backdropUrl: getArtistImageUrl(raw, m.state.request, "Backdrop", 1920, 1080)
+        logoUrl: getArtistImageUrl(raw, m.state.request, "Logo", 600, 300)
+    }
+end sub
+
+
+'-------------------------------------------------------------------------------
+' isAlbumsGridAtFirstRow
+'-------------------------------------------------------------------------------
+function isAlbumsGridAtFirstRow() as boolean
+    grid = getActiveGrid()
+    focusedIndex = grid.itemFocused
+    if focusedIndex = invalid then return true
+
+    return focusedIndex < grid.numColumns
+end function
+
+
+'-------------------------------------------------------------------------------
+' isFirstAlbumFocused
+'-------------------------------------------------------------------------------
+function isFirstAlbumFocused() as boolean
+    focusedIndex = getActiveGrid().itemFocused
+    if focusedIndex = invalid then return true
+
+    return focusedIndex <= 0
+end function
+
+
+'-------------------------------------------------------------------------------
+' openMediaActions
+'-------------------------------------------------------------------------------
+function openMediaActions() as boolean
+    grid = getActiveGrid()
+    if grid.content = invalid then return false
+
+    focusedIndex = grid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then return false
+
+    focusedNode = grid.content.getChild(focusedIndex)
+    if focusedNode = invalid or focusedNode.raw = invalid then return false
+
+    m.top.overlayRequested = {
+        id: "mediaActions"
+        sourcePage: "musicLibrary"
+        componentName: "MediaActionsDialog"
+        openFunction: "openMediaActions"
+        closeField: "closeRequested"
+        item: focusedNode.raw
+        server: m.state.request.server
+        token: m.state.request.token
+        userId: m.state.request.userId
+    }
+    return true
+end function

@@ -1,0 +1,69 @@
+
+'-------------------------------------------------------------------------------
+' applyMediaStateChange
+'-------------------------------------------------------------------------------
+sub applyMediaStateChange(change as object)
+    applyItemsMediaStateChange(m.state.loadedAlbums, change)
+    applyItemsMediaStateChange(m.state.artists, change)
+    if isFavoriteBrowseActive() and Format.SafeString(change.action, "") = "favorite" and change.value <> true then
+        if m.top.visible = true and m.state.lifecycle.isActive = true then
+            reloadMusicLibrary()
+        else
+            m.state.refreshPending = true
+        end if
+        return
+    end if
+
+    applyGridMediaStateChange(m.musicGrid, change)
+end sub
+
+
+'-------------------------------------------------------------------------------
+' applyItemsMediaStateChange
+'-------------------------------------------------------------------------------
+sub applyItemsMediaStateChange(items as object, change as object)
+    for each item in items
+        if Format.SafeString(item.Id, "") = Format.SafeString(change.itemId, "") then
+            MediaState.ApplyToItem(item, change)
+        end if
+    end for
+end sub
+
+
+'-------------------------------------------------------------------------------
+' applyGridMediaStateChange
+'-------------------------------------------------------------------------------
+sub applyGridMediaStateChange(grid as object, change as object)
+    if grid.content = invalid then return
+
+    for i = 0 to grid.content.getChildCount() - 1
+        itemNode = grid.content.getChild(i)
+        item = itemNode.raw
+        if item <> invalid and Format.SafeString(item.Id, "") = Format.SafeString(change.itemId, "") then
+            updatedItem = cloneMusicLibraryItem(item)
+            if MediaState.ApplyToItem(updatedItem, change) <> true then return
+            itemNode.raw = updatedItem
+            return
+        end if
+    end for
+end sub
+
+
+'-------------------------------------------------------------------------------
+' cloneMusicLibraryItem
+'-------------------------------------------------------------------------------
+function cloneMusicLibraryItem(item as object) as object
+    clone = {}
+    for each key in item
+        clone[key] = item[key]
+    end for
+
+    userData = {}
+    if item.UserData <> invalid then
+        for each key in item.UserData
+            userData[key] = item.UserData[key]
+        end for
+    end if
+    clone.UserData = userData
+    return clone
+end function

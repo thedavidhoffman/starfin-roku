@@ -1,0 +1,485 @@
+
+'-------------------------------------------------------------------------------
+' loadFilterOptions
+'-------------------------------------------------------------------------------
+sub loadFilterOptions()
+    filterRequest = {}
+    for each key in m.state.request
+        filterRequest[key] = m.state.request[key]
+    end for
+    filterRequest.queryId = m.state.filterLoad.queryId
+    m.state.filterLoad.requestInFlight = true
+    m.musicFilterOptionsTask.control = "stop"
+    m.musicFilterOptionsTask.request = filterRequest
+    m.musicFilterOptionsTask.control = "run"
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onMusicFilterOptionsResponse
+'-------------------------------------------------------------------------------
+sub onMusicFilterOptionsResponse()
+    response = m.musicFilterOptionsTask.response
+    if response = invalid then return
+    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicFilterOptions") <> true then return
+    if Number.ToInteger(response.queryId, -1) <> m.state.filterLoad.queryId then return
+    if response.ok <> true then
+        m.state.filterLoad.requestInFlight = false
+        m.state.filterLoad.status = "failed"
+        m.log.error("Music filter options failed libraryId=" + getLibraryId())
+        return
+    end if
+
+    m.state.filterLoad.requestInFlight = false
+    m.state.filterLoad.status = "loaded"
+    m.state.filterCache = createFilterCacheFromOptions(response.filterOptions)
+    if reconcileActiveFilterSelection() then return
+    if isDecadeFilterActive() then showDecadeFilterRow()
+    if isGenreFilterActive() then showGenreFilterRow()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' reconcileActiveFilterSelection
+'-------------------------------------------------------------------------------
+function reconcileActiveFilterSelection() as boolean
+    if isDecadeFilterActive() then
+        options = m.state.filterCache.decadeOptions
+        if options.Count() = 0 then return fallBackToAlbumBrowse()
+        if filterOptionsContainValue(options, m.state.selectedDecade.ToStr()) then return false
+
+        m.state.selectedDecade = getFirstDecadeFilterValue(options)
+        applySelectedDecadeToRequest()
+        showDecadeFilterRow()
+        persistMusicLibraryViewState()
+        reloadMusicLibrary()
+        return true
+    end if
+
+    if isGenreFilterActive() then
+        options = m.state.filterCache.genreOptions
+        if options.Count() = 0 then return fallBackToAlbumBrowse()
+        if filterOptionsContainValue(options, m.state.selectedGenre) then return false
+
+        m.state.selectedGenre = getFirstGenreFilterValue(options)
+        m.state.request.genre = m.state.selectedGenre
+        showGenreFilterRow()
+        persistMusicLibraryViewState()
+        reloadMusicLibrary()
+        return true
+    end if
+
+    return false
+end function
+
+
+'-------------------------------------------------------------------------------
+' fallBackToAlbumBrowse
+'-------------------------------------------------------------------------------
+function fallBackToAlbumBrowse() as boolean
+    m.state.selectedSortKey = "Album"
+    m.state.selectedSort = getDefaultSortSelection()
+    m.state.activeFilterType = ""
+    m.state.selectedDecade = -1
+    m.state.selectedGenre = ""
+    configureCurrentAlbumRequest()
+    hideFilterButtonRow()
+    syncSortControls()
+    persistMusicLibraryViewState()
+    reloadMusicLibrary()
+    return true
+end function
+
+
+'-------------------------------------------------------------------------------
+' onMusicArtistsResponse
+'-------------------------------------------------------------------------------
+sub onMusicArtistsResponse()
+    response = m.musicArtistsTask.response
+    if response = invalid then return
+    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
+    if Number.ToInteger(response.queryId, -1) <> m.state.artistLoad.queryId then return
+    if response.ok <> true then
+        hidePagingSpinner()
+        m.state.artistLoad.requestInFlight = false
+        m.state.artistLoad.status = "failed"
+        m.state.artistLoad.hasMore = false
+        m.log.error("Artist load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music artists."))
+        if isArtistBrowseMode() then
+            AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music artists."))
+            if m.state.foregroundLoad.kind = "artists" and finishForegroundLoad("artists") then focusBrowseByButton()
+        end if
+        return
+    end if
+
+    startIndex = Number.ToInteger(response.startIndex, -1)
+    expectedStartIndex = m.state.artistLoad.nextStartIndex
+    if startIndex <> expectedStartIndex then
+        hidePagingSpinner()
+        m.state.artistLoad.requestInFlight = false
+        m.state.artistLoad.status = "failed"
+        m.state.artistLoad.hasMore = false
+        m.log.error("Artist page rejected libraryId=" + getLibraryId() + " expectedStartIndex=" + expectedStartIndex.ToStr() + " receivedStartIndex=" + startIndex.ToStr())
+        if m.state.foregroundLoad.kind = "artists" and finishForegroundLoad("artists") then focusBrowseByButton()
+        return
+    end if
+    hidePagingSpinner()
+    m.state.artistLoad.requestInFlight = false
+    pageArtists = getValidMusicItems(response.payload, "artist")
+    for each artist in pageArtists
+        m.state.artists.Push(artist)
+    end for
+    m.state.artistLoad.status = "loaded"
+    m.state.artistLoad.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageArtists.Count())
+    m.state.artistLoad.totalCount = Number.ToInteger(response.totalRecordCount, m.state.artists.Count())
+    m.state.artistLoad.hasMore = response.hasMore = true
+    m.log.write("Artist page accepted libraryId=" + getLibraryId() + " count=" + m.state.artists.Count().ToStr())
+    if isArtistBrowseMode() then
+        AppStatus.ClearMessage()
+        if startIndex = 0 then
+            renderArtists()
+        else
+            appendArtistPage(pageArtists)
+        end if
+        updateTitleLabel(m.state.artistLoad.totalCount)
+        blockingEnded = false
+        if m.state.foregroundLoad.kind = "artists" and (m.state.artists.Count() > 0 or m.state.artistLoad.hasMore <> true) then blockingEnded = finishForegroundLoad("artists")
+        if blockingEnded then focusAlbums()
+        if pageArtists.Count() = 0 and m.state.artistLoad.hasMore then
+            loadArtistPage(m.state.artistLoad.nextStartIndex)
+        else
+            requestNextArtistPageIfNeeded()
+        end if
+    end if
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onMusicLibraryResponse
+'-------------------------------------------------------------------------------
+sub onMusicLibraryResponse()
+    response = m.musicLibraryTask.response
+    if response = invalid then return
+    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicLibrary") <> true then return
+    if Number.ToInteger(response.queryId, -1) <> m.state.albumLoad.queryId then return
+    if response.ok <> true then
+        hidePagingSpinner()
+        m.state.albumLoad.requestInFlight = false
+        m.state.albumLoad.status = "failed"
+        m.state.albumLoad.hasMore = false
+        m.log.error("Album load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music library."))
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music library."))
+        if m.state.foregroundLoad.kind = "albums" and finishForegroundLoad("albums") then focusBrowseByButton()
+        return
+    end if
+
+    startIndex = Number.ToInteger(response.startIndex, -1)
+    expectedStartIndex = m.state.albumLoad.nextStartIndex
+    if startIndex <> expectedStartIndex then
+        hidePagingSpinner()
+        m.state.albumLoad.requestInFlight = false
+        m.state.albumLoad.status = "failed"
+        m.state.albumLoad.hasMore = false
+        m.log.error("Album page rejected libraryId=" + getLibraryId() + " expectedStartIndex=" + expectedStartIndex.ToStr() + " receivedStartIndex=" + startIndex.ToStr())
+        if m.state.foregroundLoad.kind = "albums" and finishForegroundLoad("albums") then focusBrowseByButton()
+        return
+    end if
+    hidePagingSpinner()
+    m.state.albumLoad.requestInFlight = false
+    if startIndex = 0 then
+        m.state.albumLoad.totalCount = Number.ToInteger(response.totalRecordCount, -1)
+        if m.state.albumLoad.totalCount >= 0 then updateTitleLabel(m.state.albumLoad.totalCount)
+    end if
+    pageAlbums = getValidMusicItems(response.payload, "album")
+    for each album in pageAlbums
+        m.state.loadedAlbums.Push(album)
+    end for
+    m.log.write("Album page accepted libraryId=" + getLibraryId() + " startIndex=" + startIndex.ToStr() + " pageCount=" + pageAlbums.Count().ToStr() + " totalLoaded=" + m.state.loadedAlbums.Count().ToStr())
+    AppStatus.ClearMessage()
+
+    hasMore = response.hasMore = true
+    m.state.albumLoad.hasMore = hasMore
+    m.state.albumLoad.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageAlbums.Count())
+    m.state.albumLoad.status = "loaded"
+    if m.state.albumLoad.totalCount < 0 then updateTitleLabel(m.state.loadedAlbums.Count())
+    appendAlbumPage(pageAlbums)
+    blockingEnded = false
+    if m.state.foregroundLoad.kind = "albums" and (m.state.loadedAlbums.Count() > 0 or m.state.albumLoad.hasMore <> true) then blockingEnded = finishForegroundLoad("albums")
+    if blockingEnded and isMusicLibraryControlFocused() = false then focusAlbums()
+    if pageAlbums.Count() = 0 and m.state.albumLoad.hasMore then
+        loadAlbumPage(m.state.albumLoad.nextStartIndex)
+    else
+        requestNextAlbumPageIfNeeded()
+    end if
+end sub
+
+
+'-------------------------------------------------------------------------------
+' loadAlbumPage
+'-------------------------------------------------------------------------------
+sub loadAlbumPage(startIndex as integer)
+    request = {}
+    for each key in m.state.request
+        request[key] = m.state.request[key]
+    end for
+    request.pageStartIndex = startIndex
+    request.queryId = m.state.albumLoad.queryId
+    request.albumSortOrder = Format.SafeString(m.state.request.albumSortOrder, "Ascending")
+
+    if startIndex > 0 then showPagingSpinner()
+    m.state.albumLoad.requestInFlight = true
+    m.musicLibraryTask.control = "stop"
+    m.musicLibraryTask.request = request
+    m.musicLibraryTask.control = "run"
+end sub
+
+
+'-------------------------------------------------------------------------------
+' requestNextAlbumPageIfNeeded
+'-------------------------------------------------------------------------------
+sub requestNextAlbumPageIfNeeded()
+    if m.state.albumLoad.hasMore <> true or m.state.albumLoad.requestInFlight = true then return
+    if isFocusNearLoadedEnd(m.musicGrid, m.state.loadedAlbums.Count()) <> true then return
+
+    m.state.albumLoad.status = "loading"
+    loadAlbumPage(m.state.albumLoad.nextStartIndex)
+end sub
+
+
+'-------------------------------------------------------------------------------
+' isFocusNearLoadedEnd
+'-------------------------------------------------------------------------------
+function isFocusNearLoadedEnd(grid as object, loadedCount as integer) as boolean
+    if loadedCount <= 0 then return false
+    focusedIndex = Number.ToInteger(grid.itemFocused, 0)
+    columnCount = Number.ToInteger(grid.numColumns, 1)
+    if columnCount <= 0 then columnCount = 1
+    focusedRow = Number.ToInteger(focusedIndex / columnCount, 0)
+    loadedRows = Number.ToInteger((loadedCount + columnCount - 1) / columnCount, 0)
+    return focusedRow >= loadedRows - 5
+end function
+
+
+'-------------------------------------------------------------------------------
+' cancelPendingArtistLoad
+'-------------------------------------------------------------------------------
+sub cancelPendingArtistLoad()
+    if m.state.artistLoad.status <> "loading" then return
+
+    hidePagingSpinner()
+    m.log.write("Artist load cancelled libraryId=" + getLibraryId())
+    m.musicArtistsTask.control = "stop"
+    m.state.artistLoad.status = "idle"
+    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
+    if m.state.foregroundLoad.kind = "artists" then
+        m.state.foregroundLoad.kind = ""
+        m.state.foregroundLoad.startedAt = invalid
+        showForegroundControls()
+        Spinner.Hide()
+    end if
+    AsyncLifecycle.Deactivate(m.state.lifecycle)
+end sub
+
+
+'-------------------------------------------------------------------------------
+' reloadMusicLibrary
+'-------------------------------------------------------------------------------
+sub reloadMusicLibrary()
+    request = m.state.request
+    if request = invalid then return
+
+    hidePagingSpinner()
+    m.state.loadedAlbums = []
+    m.state.artists = []
+    m.state.albumLoad.status = "loading"
+    m.state.albumLoad.requestInFlight = false
+    m.state.albumLoad.nextStartIndex = 0
+    m.state.albumLoad.totalCount = -1
+    m.state.albumLoad.hasMore = false
+    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
+    m.state.artistLoad.status = "idle"
+    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
+    AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
+    updateTitleLabel()
+    renderAlbums([])
+    m.log.write("Album reload started libraryId=" + Format.SafeString(request.libraryId, ""))
+    queueForegroundLoad("albums")
+    m.musicArtistsTask.control = "stop"
+end sub
+
+
+'-------------------------------------------------------------------------------
+' startArtistQuery
+'-------------------------------------------------------------------------------
+sub startArtistQuery()
+    request = m.state.request
+    if request = invalid or request.favoriteOnly = true then return
+
+    hidePagingSpinner()
+    m.musicLibraryTask.control = "stop"
+    m.state.albumLoad.requestInFlight = false
+    m.state.albumLoad.status = "idle"
+    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
+    m.state.artists = []
+    m.state.artistLoad.status = "loading"
+    m.state.artistLoad.requestInFlight = false
+    m.state.artistLoad.nextStartIndex = 0
+    m.state.artistLoad.totalCount = -1
+    m.state.artistLoad.hasMore = false
+    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
+    AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
+    AppStatus.ClearMessage()
+    m.log.write("Artist load started libraryId=" + Format.SafeString(request.libraryId, ""))
+    renderArtists()
+    queueForegroundLoad("artists")
+end sub
+
+
+'-------------------------------------------------------------------------------
+' queueForegroundLoad
+'-------------------------------------------------------------------------------
+sub queueForegroundLoad(kind as string)
+    m.state.foregroundLoad.pendingKind = kind
+    startPendingForegroundLoad()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' startPendingForegroundLoad
+'-------------------------------------------------------------------------------
+function startPendingForegroundLoad() as boolean
+    kind = m.state.foregroundLoad.pendingKind
+    if kind = "" then return false
+    hideForegroundControls()
+    Spinner.Show(0)
+
+    m.state.foregroundLoad.pendingKind = ""
+    startForegroundLoad(kind)
+    if kind = "artists" then
+        loadArtistPage(m.state.artistLoad.nextStartIndex)
+    else
+        loadAlbumPage(m.state.albumLoad.nextStartIndex)
+    end if
+    return true
+end function
+
+
+'-------------------------------------------------------------------------------
+' hideForegroundControls
+'-------------------------------------------------------------------------------
+sub hideForegroundControls()
+    if m.state.foregroundLoad.controlsHidden then return
+
+    if m.browseByButton.isInFocusChain() or m.sortButton.isInFocusChain() or m.filterButtonRow.isInFocusChain() then m.top.setFocus(true)
+    m.state.foregroundLoad.controlsHidden = true
+    m.state.foregroundLoad.restoreFilterVisible = m.filterButtonRow.visible
+    m.browseByButton.visible = false
+    m.sortButton.visible = false
+    m.filterButtonRow.visible = false
+    updateGridLayout()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' showForegroundControls
+'-------------------------------------------------------------------------------
+sub showForegroundControls()
+    restoreFilterVisible = m.state.foregroundLoad.restoreFilterVisible
+    m.state.foregroundLoad.controlsHidden = false
+    m.state.foregroundLoad.restoreFilterVisible = false
+    m.browseByButton.visible = true
+    m.sortButton.visible = true
+    m.filterButtonRow.visible = restoreFilterVisible
+    updateGridLayout()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' loadArtistPage
+'-------------------------------------------------------------------------------
+sub loadArtistPage(startIndex as integer)
+    request = m.state.request
+    artistRequest = {}
+    for each key in request
+        artistRequest[key] = request[key]
+    end for
+    artistRequest.queryId = m.state.artistLoad.queryId
+    artistRequest.pageStartIndex = startIndex
+    artistRequest.artistSortOrder = Format.SafeString(m.state.selectedSort.sortOrder, "Ascending")
+    if startIndex > 0 then showPagingSpinner()
+    m.state.artistLoad.requestInFlight = true
+    m.musicArtistsTask.control = "stop"
+    m.musicArtistsTask.request = artistRequest
+    m.musicArtistsTask.control = "run"
+end sub
+
+
+'-------------------------------------------------------------------------------
+' showPagingSpinner
+'-------------------------------------------------------------------------------
+sub showPagingSpinner()
+    if m.state.pagingLoad.spinnerVisible then return
+
+    m.state.pagingLoad.spinnerVisible = true
+    Spinner.Show(0)
+end sub
+
+
+'-------------------------------------------------------------------------------
+' hidePagingSpinner
+'-------------------------------------------------------------------------------
+sub hidePagingSpinner()
+    if m.state.pagingLoad.spinnerVisible <> true then return
+
+    m.state.pagingLoad.spinnerVisible = false
+    Spinner.Hide()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' requestNextArtistPageIfNeeded
+'-------------------------------------------------------------------------------
+sub requestNextArtistPageIfNeeded()
+    if m.state.artistLoad.hasMore <> true or m.state.artistLoad.requestInFlight = true then return
+    if isFocusNearLoadedEnd(m.musicGrid, m.state.artists.Count()) <> true then return
+
+    m.state.artistLoad.status = "loading"
+    loadArtistPage(m.state.artistLoad.nextStartIndex)
+end sub
+
+
+'-------------------------------------------------------------------------------
+' startForegroundLoad
+'-------------------------------------------------------------------------------
+sub startForegroundLoad(kind as string)
+    startedAt = CreateObject("roTimespan")
+    startedAt.Mark()
+    m.state.foregroundLoad.kind = kind
+    m.state.foregroundLoad.startedAt = startedAt
+end sub
+
+
+'-------------------------------------------------------------------------------
+' finishForegroundLoad
+'-------------------------------------------------------------------------------
+function finishForegroundLoad(kind as string) as boolean
+    if m.state.foregroundLoad.kind <> kind then return false
+
+    elapsedMs = 0
+    if m.state.foregroundLoad.startedAt <> invalid then elapsedMs = m.state.foregroundLoad.startedAt.TotalMilliseconds()
+    m.log.write("Foreground load completed kind=" + kind + " libraryId=" + getLibraryId() + " elapsedMs=" + elapsedMs.ToStr())
+    m.state.foregroundLoad.kind = ""
+    m.state.foregroundLoad.startedAt = invalid
+    showForegroundControls()
+    Spinner.Hide()
+    return true
+end function
+
+
+'-------------------------------------------------------------------------------
+' getLibraryId
+'-------------------------------------------------------------------------------
+function getLibraryId() as string
+    if m.state.request = invalid then return ""
+    return Format.SafeString(m.state.request.libraryId, "")
+end function

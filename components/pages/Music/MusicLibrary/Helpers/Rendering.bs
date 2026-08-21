@@ -1,0 +1,245 @@
+
+'-------------------------------------------------------------------------------
+' renderAlbums
+'-------------------------------------------------------------------------------
+sub renderAlbums(albums as object)
+    if albums = invalid then albums = []
+    m.state.loadedAlbums = albums
+    m.emptyFilterLabel.visible = isFavoriteBrowseActive() and albums.Count() = 0
+
+    content = CreateObject("roSGNode", "ContentNode")
+    request = m.state.request
+
+    for each album in albums
+        addAlbumContentNode(content, album, request)
+    end for
+
+    m.musicGrid.content = content
+    m.musicGrid.visible = true
+end sub
+
+
+'-------------------------------------------------------------------------------
+' appendAlbumPage
+'-------------------------------------------------------------------------------
+sub appendAlbumPage(albums as object)
+    content = m.musicGrid.content
+    if content = invalid then
+        content = CreateObject("roSGNode", "ContentNode")
+        m.musicGrid.content = content
+    end if
+
+    for each album in albums
+        addAlbumContentNode(content, album, m.state.request)
+    end for
+    m.emptyFilterLabel.visible = isFavoriteBrowseActive() and m.state.loadedAlbums.Count() = 0
+    m.musicGrid.visible = true
+end sub
+
+
+'-------------------------------------------------------------------------------
+' addAlbumContentNode
+'-------------------------------------------------------------------------------
+function addAlbumContentNode(content as object, album as dynamic, request as dynamic) as boolean
+    if Arrays.IsAssocArray(album) = false then
+        m.log.error("Skipping malformed album libraryId=" + getLibraryId())
+        return false
+    end if
+
+    albumName = getDisplayText(Format.FirstNonEmpty([album.Name], "Untitled Album"))
+    artistName = getDisplayText(getAlbumArtistName(album))
+    child = content.createChild("ContentNode")
+    child.title = albumName
+    child.HDPosterUrl = getAlbumArtworkUrl(album, request)
+    child.AddFields({
+        artistName: artistName
+        primaryLabel: artistName
+        secondaryLabel: albumName
+        raw: album
+    })
+    return true
+end function
+
+
+'-------------------------------------------------------------------------------
+' renderArtists
+'-------------------------------------------------------------------------------
+sub renderArtists()
+    artists = []
+    for each artist in m.state.artists
+        if Arrays.IsAssocArray(artist) then
+            artists.Push(artist)
+        else
+            m.log.error("Skipping malformed artist libraryId=" + getLibraryId())
+        end if
+    end for
+    content = CreateObject("roSGNode", "ContentNode")
+    request = m.state.request
+    for each artist in artists
+        addArtistContentNode(content, artist, request)
+    end for
+
+    m.musicGrid.content = content
+    m.musicGrid.visible = true
+    updateTitleLabel(artists.Count())
+    m.musicGrid.jumpToItem = 0
+    m.musicGrid.itemFocused = 0
+end sub
+
+
+'-------------------------------------------------------------------------------
+' getArtistImageUrl
+'-------------------------------------------------------------------------------
+function getArtistImageUrl(artist as object, request as object, imageType as string, width as integer, height as integer) as string
+    itemId = Format.SafeString(artist.Id, "")
+    tag = ""
+    if imageType = "Primary" and artist.ImageTags <> invalid then tag = Format.SafeString(artist.ImageTags.Primary, "")
+    if imageType = "Logo" and artist.ImageTags <> invalid then tag = Format.SafeString(artist.ImageTags.Logo, "")
+    if imageType = "Backdrop" and artist.BackdropImageTags <> invalid and artist.BackdropImageTags.Count() > 0 then tag = Format.SafeString(artist.BackdropImageTags[0], "")
+    if itemId = "" or tag = "" then return ""
+    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height)
+end function
+
+
+'-------------------------------------------------------------------------------
+' getAlbumArtworkUrl
+'-------------------------------------------------------------------------------
+function getAlbumArtworkUrl(album as dynamic, request as dynamic) as string
+    if Arrays.IsAssocArray(album) = false then return ""
+    if request = invalid then return ""
+
+    directUrl = Format.FirstNonEmpty([album.ImageURL, album.ImageUrl, album.PrimaryImageUrl], "")
+    if directUrl <> "" then return directUrl
+
+    itemId = Format.SafeString(Format.FirstNonEmpty([album.Id], ""), "")
+    if itemId = "" then return ""
+
+    primaryTag = ""
+    if album.ImageTags <> invalid and album.ImageTags.Primary <> invalid then primaryTag = album.ImageTags.Primary
+    if primaryTag = "" then return ""
+
+    return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, 342, 342)
+end function
+
+
+'-------------------------------------------------------------------------------
+' getAlbumArtistName
+'-------------------------------------------------------------------------------
+function getAlbumArtistName(album as dynamic) as string
+    if Arrays.IsAssocArray(album) = false then return "Unknown Artist"
+
+    artist = Format.FirstNonEmpty([album.AlbumArtist, album.Artist], "")
+    if artist <> "" then return artist
+
+    artist = Strings.GetJoinedText(album.AlbumArtists)
+    if artist <> "" then return artist
+
+    artist = Strings.GetJoinedText(album.Artists)
+    if artist <> "" then return artist
+
+    return "Unknown Artist"
+end function
+
+
+'-------------------------------------------------------------------------------
+' getAlbumYear
+'-------------------------------------------------------------------------------
+function getAlbumYear(album as dynamic) as integer
+    if Arrays.IsAssocArray(album) = false then return 0
+
+    year = Number.ToInteger(album.ProductionYear, 0)
+    if year > 0 then return year
+
+    premiereDate = Format.SafeString(album.PremiereDate, "")
+    if Len(premiereDate) < 4 then return 0
+
+    return Number.ToInteger(Left(premiereDate, 4), 0)
+end function
+
+
+'-------------------------------------------------------------------------------
+' getDisplayText
+'-------------------------------------------------------------------------------
+function getDisplayText(text as string) as string
+    normalizedText = Strings.Trim(text)
+    if LCase(Left(normalizedText, 4)) = "the " then return Mid(normalizedText, 5) + ", The"
+
+    return normalizedText
+end function
+
+
+'-------------------------------------------------------------------------------
+' getItemsFromPayload
+'-------------------------------------------------------------------------------
+function getItemsFromPayload(payload as dynamic) as object
+    if payload = invalid then return []
+    if Type(payload) = "roArray" then return payload
+    if Arrays.IsAssocArray(payload) = false then
+        m.log.error("Unexpected music payload type=" + Type(payload))
+        return []
+    end if
+    if Type(payload.Items) = "roArray" then return payload.Items
+
+    m.log.error("Music payload Items is not an array")
+    return []
+end function
+
+
+'-------------------------------------------------------------------------------
+' updateTitleLabel
+'-------------------------------------------------------------------------------
+sub updateTitleLabel(albumCount = invalid as dynamic)
+    title = "Music"
+    if m.state <> invalid and m.state.request <> invalid then title = Format.SafeString(m.state.request.title, "Music")
+    if albumCount <> invalid then title = title + MediaMetadata.BulletSeparator() + Number.FormatWithThousandsSeparator(albumCount) + " items"
+
+    m.titleLabel.text = title
+end sub
+
+
+'-------------------------------------------------------------------------------
+' appendArtistPage
+'-------------------------------------------------------------------------------
+sub appendArtistPage(artists as object)
+    content = m.musicGrid.content
+    if content = invalid then content = CreateObject("roSGNode", "ContentNode")
+    for each artist in artists
+        if Arrays.IsAssocArray(artist) then addArtistContentNode(content, artist, m.state.request)
+    end for
+    if m.musicGrid.content = invalid then m.musicGrid.content = content
+end sub
+
+
+'-------------------------------------------------------------------------------
+' addArtistContentNode
+'-------------------------------------------------------------------------------
+sub addArtistContentNode(content as object, artist as object, request as object)
+    child = content.createChild("ContentNode")
+    artistId = Format.SafeString(artist.Id, "")
+    artistName = Format.FirstNonEmpty([artist.Name], "Unknown Artist")
+    child.title = artistName
+    child.HDPosterUrl = getArtistImageUrl(artist, request, "Primary", 342, 342)
+    child.AddFields({
+        raw: artist
+        itemId: artistId
+        primaryLabel: artistName
+        secondaryLabel: ""
+        cardType: "artist"
+    })
+end sub
+
+
+'-------------------------------------------------------------------------------
+' getValidMusicItems
+'-------------------------------------------------------------------------------
+function getValidMusicItems(payload as dynamic, itemKind as string) as object
+    validItems = []
+    for each item in getItemsFromPayload(payload)
+        if Arrays.IsAssocArray(item) then
+            validItems.Push(item)
+        else
+            m.log.error("Skipping malformed " + itemKind + " libraryId=" + getLibraryId())
+        end if
+    end for
+    return validItems
+end function
