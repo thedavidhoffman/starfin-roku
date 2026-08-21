@@ -1,0 +1,371 @@
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
+    m.top.thumbnailLayoutActive = m.pageState.isThumbnailLayout
+    m.top.setFocus(true)
+    if focusPendingTarget() then
+        return
+    end if
+    if hasLibrarySpecialization() and m.top.callFunc("specializationActivate") then
+        return
+    end if
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusPendingTarget
+'-------------------------------------------------------------------------------
+function focusPendingTarget() as boolean
+    target = Format.SafeString(m.pageState.pendingFocusTarget, "")
+    if target = "" then
+        return false
+    end if
+    if target = "filterButtonRow" then
+        if focusFilterButtonRow() <> true then return false
+        m.pageState.pendingFocusTarget = ""
+        return true
+    end if
+    m.pageState.pendingFocusTarget = ""
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle.Deactivate(m.pageState.lifecycle)
+    m.top.thumbnailLayoutActive = false
+    if hasLibrarySpecialization() then
+        m.top.callFunc("specializationDeactivate")
+    end if
+    stopVideoLibraryProgressHold()
+    closeLetterGrid(false)
+    m.videoLibraryTask.control = "stop"
+    m.videoFilterOptionsTask.control = "stop"
+    m.pageState.paging.requestInFlight = false
+end sub
+
+'-------------------------------------------------------------------------------
+' focusItemsIfActive
+'-------------------------------------------------------------------------------
+sub focusItemsIfActive()
+    if m.itemsGrid.visible <> true or m.itemsGrid.content = invalid or m.itemsGrid.content.getChildCount() = 0 then
+        focusBrowseByButton()
+        return
+    end if
+    m.itemsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusFirstItem
+'-------------------------------------------------------------------------------
+function focusFirstItem() as boolean
+    if m.itemsGrid.visible <> true then
+        return false
+    end if
+    if m.itemsGrid.content = invalid or m.itemsGrid.content.getChildCount() = 0 then
+        return false
+    end if
+    m.itemsGrid.jumpToItem = 0
+    m.itemsGrid.itemFocused = 0
+    m.itemsGrid.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' focusVideoLibraryItem
+'-------------------------------------------------------------------------------
+sub focusVideoLibraryItem(index as integer)
+    if m.itemsGrid = invalid then
+        return
+    end if
+    if m.itemsGrid.content = invalid then
+        return
+    end if
+    if index < 0 or index >= m.itemsGrid.content.getChildCount() then
+        return
+    end if
+    m.itemsGrid.jumpToItem = index
+    m.itemsGrid.itemFocused = index
+    m.itemsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusBrowseByButton
+'-------------------------------------------------------------------------------
+function focusBrowseByButton() as boolean
+    if canFocusBrowseByButton() <> true then
+        return false
+    end if
+    m.top.setFocus(true)
+    m.browseByButton.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' focusSortButton
+'-------------------------------------------------------------------------------
+function focusSortButton() as boolean
+    if canFocusSortButton() <> true then
+        return false
+    end if
+    m.top.setFocus(true)
+    m.sortButton.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' canFocusBrowseByButton
+'-------------------------------------------------------------------------------
+function canFocusBrowseByButton() as boolean
+    return m.browseByButton <> invalid and m.browseByButton.visible = true
+end function
+
+'-------------------------------------------------------------------------------
+' canFocusSortButton
+'-------------------------------------------------------------------------------
+function canFocusSortButton() as boolean
+    return m.sortButton <> invalid and m.sortButton.visible = true and m.sortButton.sortEnabled = true
+end function
+
+'-------------------------------------------------------------------------------
+' requestHeaderFocus
+'-------------------------------------------------------------------------------
+function requestHeaderFocus() as boolean
+    m.top.focusExitUp = true
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onBrowseByButtonFocusExitDown
+'-------------------------------------------------------------------------------
+sub onBrowseByButtonFocusExitDown()
+    if canFocusFilterButtonRow() then
+        focusFilterButtonRow()
+        return
+    end if
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSortButtonFocusExitDown
+'-------------------------------------------------------------------------------
+sub onSortButtonFocusExitDown()
+    if canFocusFilterButtonRow() then
+        focusFilterButtonRow()
+        return
+    end if
+    focusItemsIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusFilterButtonRow
+'-------------------------------------------------------------------------------
+function focusFilterButtonRow() as boolean
+    if canFocusFilterButtonRow() <> true then
+        return false
+    end if
+    m.top.setFocus(true)
+    m.filterButtonRow.callFunc("focusFirstButton")
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' canFocusFilterButtonRow
+'-------------------------------------------------------------------------------
+function canFocusFilterButtonRow() as boolean
+    if m.filterButtonRow = invalid then
+        return false
+    end if
+    if m.filterButtonRow.visible <> true then
+        return false
+    end if
+    items = m.filterButtonRow.items
+    if items = invalid then
+        return false
+    end if
+    return items.Count() > 0
+end function
+
+'-------------------------------------------------------------------------------
+' focusFirstVideoLibraryItem
+'-------------------------------------------------------------------------------
+sub focusFirstVideoLibraryItem()
+    focusVideoLibraryItem(0)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusLetterGutterButton
+'-------------------------------------------------------------------------------
+function focusLetterGutterButton() as boolean
+    if m.letterGutterButton = invalid then
+        return false
+    end if
+    if canUseLetterNavigation() <> true then
+        return false
+    end if
+    if m.itemsGrid.visible <> true then
+        return false
+    end if
+    m.letterGutterButton.setFocus(true)
+    return openLetterGrid()
+end function
+
+'-------------------------------------------------------------------------------
+' isItemsGridAtFirstColumn
+'-------------------------------------------------------------------------------
+function isItemsGridAtFirstColumn() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then
+        return false
+    end if
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then
+        focusedIndex = 0
+    end if
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then
+        columns = 1
+    end if
+    return focusedIndex mod columns = 0
+end function
+
+'-------------------------------------------------------------------------------
+' isItemsGridAtFirstRow
+'-------------------------------------------------------------------------------
+function isItemsGridAtFirstRow() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then
+        return false
+    end if
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then
+        focusedIndex = 0
+    end if
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then
+        columns = 1
+    end if
+    return focusedIndex < columns
+end function
+
+'-------------------------------------------------------------------------------
+' isItemsGridAtLastColumn
+'-------------------------------------------------------------------------------
+function isItemsGridAtLastColumn() as boolean
+    if m.itemsGrid = invalid or m.itemsGrid.isInFocusChain() = false then
+        return false
+    end if
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then
+        focusedIndex = 0
+    end if
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then
+        columns = 1
+    end if
+    itemCount = 0
+    if m.itemsGrid.content <> invalid then
+        itemCount = m.itemsGrid.content.getChildCount()
+    end if
+    if itemCount > 0 and focusedIndex = itemCount - 1 then
+        return true
+    end if
+    return focusedIndex mod columns = columns - 1
+end function
+
+'-------------------------------------------------------------------------------
+' isFirstVideoLibraryItemFocused
+'-------------------------------------------------------------------------------
+function isFirstVideoLibraryItemFocused() as boolean
+    if m.itemsGrid = invalid then
+        return true
+    end if
+    if m.itemsGrid.content = invalid then
+        return true
+    end if
+    if m.itemsGrid.content.getChildCount() = 0 then
+        return true
+    end if
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then
+        focusedIndex = 0
+    end if
+    return focusedIndex = 0
+end function
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then
+        return false
+    end if
+    if key = "options" and m.itemsGrid.isInFocusChain() then
+        return openMediaActions()
+    end if
+    if hasLibrarySpecialization() and m.top.callFunc("specializationHandleKey", key) then
+        return true
+    end if
+    if key = "up" and m.browseByButton.isInFocusChain() then
+        return requestHeaderFocus()
+    end if
+    if key = "up" and m.sortButton.isInFocusChain() then
+        return requestHeaderFocus()
+    end if
+    if key = "right" and m.browseByButton.isInFocusChain() then
+        if canFocusSortButton() then
+            return focusSortButton()
+        end if
+        return true
+    end if
+    if key = "left" and m.sortButton.isInFocusChain() then
+        return focusBrowseByButton()
+    end if
+    if key = "up" and m.letterGutterButton.isInFocusChain() then
+        return requestHeaderFocus()
+    end if
+    if key = "left" and isItemsGridAtFirstColumn() and canUseLetterNavigation() then
+        return openLetterGrid()
+    end if
+    if key = "up" and isItemsGridAtFirstRow() and canFocusFilterButtonRow() then
+        stopVideoLibraryProgressHold("up")
+        return focusFilterButtonRow()
+    end if
+    if key = "up" and m.pageState.isThumbnailLayout = true and isItemsGridAtFirstRow() and canFocusBrowseByButton() <> true then
+        return requestHeaderFocus()
+    end if
+    if key = "up" and isItemsGridAtFirstRow() then
+        stopVideoLibraryProgressHold("up")
+        if canFocusBrowseByButton() <> true then
+            return requestHeaderFocus()
+        end if
+        return focusBrowseByButton()
+    end if
+    if key = "right" and isItemsGridAtLastColumn() then
+        return true
+    end if
+    if key = "back" then
+        if m.pageState.letterGridOpen = true then
+            closeLetterGrid(true)
+            return true
+        end if
+        if isFirstVideoLibraryItemFocused() <> true then
+            focusFirstVideoLibraryItem()
+            return true
+        end if
+        m.top.closeRequested = true
+        return true
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' canUseLetterNavigation
+'-------------------------------------------------------------------------------
+function canUseLetterNavigation() as boolean
+    if hasLibrarySpecialization() then
+        return false
+    end if
+    return m.letterGutterButton <> invalid and m.letterGutterButton.visible = true
+end function

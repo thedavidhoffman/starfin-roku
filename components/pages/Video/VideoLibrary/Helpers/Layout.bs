@@ -1,0 +1,208 @@
+'-------------------------------------------------------------------------------
+' applyGridLayout
+'-------------------------------------------------------------------------------
+sub applyGridLayout(imageAspect as string)
+    filterRowOffset = getFilterButtonRowOffset()
+    if imageAspect = "wide" then
+        m.pageState.isThumbnailLayout = true
+        m.top.thumbnailLayoutActive = true
+        m.titleLabel.translation = [
+            480
+            120
+        ]
+        m.browseByButton.translation = [
+            1634
+            120
+        ]
+        m.sortButton.translation = [
+            1832
+            120
+        ]
+        if hasLibrarySpecialization() then
+            m.top.callFunc("specializationApplyLayout", "wide")
+        end if
+        m.filterButtonRow.translation = [
+            264
+            208
+        ]
+        m.itemsGrid.translation = [
+            24
+            207 + filterRowOffset
+        ]
+        applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+        applyLetterGridLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+        m.itemsGrid.itemSize = [
+            465
+            348
+        ]
+        m.itemsGrid.itemSpacing = [
+            0
+            12
+        ]
+        m.itemsGrid.numColumns = 4
+        m.itemsGrid.numRows = 3
+        m.itemsGrid.focusBitmapUri = "pkg:/images/library/thumbnail-focus-465x348.png"
+        updateVideoLibraryProgressLayout(imageAspect)
+        return
+    end if
+    m.pageState.isThumbnailLayout = false
+    m.top.thumbnailLayoutActive = false
+    m.titleLabel.translation = [
+        480
+        120
+    ]
+    m.browseByButton.translation = [
+        1618
+        120
+    ]
+    m.sortButton.translation = [
+        1816
+        120
+    ]
+    if hasLibrarySpecialization() then
+        m.top.callFunc("specializationApplyLayout", "poster")
+    end if
+    m.filterButtonRow.translation = [
+        264
+        208
+    ]
+    m.itemsGrid.translation = [
+        96
+        207 + filterRowOffset
+    ]
+    applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+    applyLetterGridLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+    m.itemsGrid.itemSize = [
+        297
+        465
+    ]
+    m.itemsGrid.itemSpacing = [
+        -12
+        27
+    ]
+    m.itemsGrid.numColumns = 6
+    m.itemsGrid.numRows = 2
+    m.itemsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-297x465.png"
+    updateVideoLibraryProgressLayout(imageAspect)
+end sub
+
+'-------------------------------------------------------------------------------
+' getFilterButtonRowOffset
+'-------------------------------------------------------------------------------
+function getFilterButtonRowOffset() as integer
+    if canShowFilterButtonRowLayout() <> true then
+        return 0
+    end if
+    return 84
+end function
+
+'-------------------------------------------------------------------------------
+' canShowFilterButtonRowLayout
+'-------------------------------------------------------------------------------
+function canShowFilterButtonRowLayout() as boolean
+    return m.filterButtonRow <> invalid and m.filterButtonRow.visible = true
+end function
+
+'-------------------------------------------------------------------------------
+' updateVideoLibraryProgressLayout
+'-------------------------------------------------------------------------------
+sub updateVideoLibraryProgressLayout(imageAspect as string)
+    if imageAspect <> "poster" then
+        stopVideoLibraryProgressHold()
+    end if
+    m.videoLibraryProgressIndicator.layoutMode = imageAspect
+    m.videoLibraryProgressIndicator.gridLeft = Number.ToInteger(m.itemsGrid.translation[0])
+    m.videoLibraryProgressIndicator.gridTop = Number.ToInteger(m.itemsGrid.translation[1])
+    m.videoLibraryProgressIndicator.itemWidth = Number.ToInteger(m.itemsGrid.itemSize[0])
+    m.videoLibraryProgressIndicator.itemSpacingX = Number.ToInteger(m.itemsGrid.itemSpacing[0])
+    m.videoLibraryProgressIndicator.numColumns = Number.ToInteger(m.itemsGrid.numColumns)
+    m.videoLibraryProgressIndicator.numRows = Number.ToInteger(m.itemsGrid.numRows)
+    updateVideoLibraryProgressItemCount()
+    updateVideoLibraryProgressFocusedIndex()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateVideoLibraryProgressItemCount
+'-------------------------------------------------------------------------------
+sub updateVideoLibraryProgressItemCount(itemCount = invalid as dynamic)
+    resolvedItemCount = 0
+    if itemCount <> invalid then
+        resolvedItemCount = Number.ToInteger(itemCount)
+    else if m.itemsGrid.content <> invalid then
+        resolvedItemCount = m.itemsGrid.content.getChildCount()
+    end if
+    m.videoLibraryProgressIndicator.itemCount = resolvedItemCount
+    totalItemCount = m.pageState.paging.totalCount
+    if totalItemCount < resolvedItemCount then
+        totalItemCount = resolvedItemCount
+    end if
+    m.videoLibraryProgressIndicator.totalItemCount = totalItemCount
+end sub
+
+'-------------------------------------------------------------------------------
+' updateVideoLibraryProgressFocusedIndex
+'-------------------------------------------------------------------------------
+sub updateVideoLibraryProgressFocusedIndex()
+    focusedIndex = getCurrentVideoLibraryFocusedIndex()
+    m.pageState.progressFocusedIndex = focusedIndex
+    m.videoLibraryProgressIndicator.focusedIndex = focusedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' getCurrentVideoLibraryFocusedIndex
+'-------------------------------------------------------------------------------
+function getCurrentVideoLibraryFocusedIndex() as integer
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then
+        return 0
+    end if
+    return focusedIndex
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryItemCount
+'-------------------------------------------------------------------------------
+function getVideoLibraryItemCount() as integer
+    if m.itemsGrid.content = invalid then
+        return 0
+    end if
+    return m.itemsGrid.content.getChildCount()
+end function
+
+'-------------------------------------------------------------------------------
+' applyLetterGutterButtonLayout
+'-------------------------------------------------------------------------------
+sub applyLetterGutterButtonLayout(isThumbnailLayout as boolean, gridLeft as integer, gridTop as integer)
+    if isThumbnailLayout = true then
+        thumbnailVisualOffset = 20
+        m.letterGutterButton.layoutMode = "horizontal"
+        m.letterGutterButton.translation = [
+            gridLeft + thumbnailVisualOffset
+            156
+        ]
+        return
+    end if
+    m.letterGutterButton.layoutMode = "vertical"
+    m.letterGutterButton.translation = [
+        24
+        gridTop
+    ]
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLetterGridLayout
+'-------------------------------------------------------------------------------
+sub applyLetterGridLayout(isThumbnailLayout as boolean, gridLeft as integer, gridTop as integer)
+    if isThumbnailLayout = true then
+        thumbnailVisualOffset = 20
+        m.pageState.letterGridPanel = {
+            x: gridLeft + thumbnailVisualOffset
+            y: gridTop
+        }
+        return
+    end if
+    m.pageState.letterGridPanel = {
+        x: 72
+        y: gridTop
+    }
+end sub

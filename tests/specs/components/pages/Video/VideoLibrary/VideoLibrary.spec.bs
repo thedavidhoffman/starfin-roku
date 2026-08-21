@@ -80,6 +80,96 @@ namespace tests
             m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 0)
         end function
 
+        @it("focuses decade pills when switching from title browsing")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.selectedSortKey = "SortName"
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Decade", sortKey: "SortName", sortOrder: "Ascending", label: "Decade" })
+
+            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
+            m.assertEqual(m.node.filterButtonRow.selectedValue, "1970")
+            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
+        end function
+
+        @it("focuses genre pills when switching from title browsing")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.selectedSortKey = "SortName"
+            m.node.pageState.filterCache.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Genre", sortKey: "SortName", sortOrder: "Ascending", label: "Genre" })
+
+            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
+            m.assertEqual(m.node.filterButtonRow.selectedValue, "Comedy")
+            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
+        end function
+
+        @it("queues decade-pill focus while restoring saved view state")
+        function _()
+            m.node.pageState.selectedSort = { optionKey: "Decade", sortKey: "SortName", sortOrder: "Ascending", label: "Decade" }
+            m.node.pageState.activeFilterType = "Decade"
+            m.node.pageState.selectedDecade = 1980
+
+            'bs:disable-next-line 1140
+            resetFilterState()
+            'bs:disable-next-line 1140
+            resetLoadFocusState()
+
+            m.assertEqual(m.node.pageState.selectedDecade, 1980)
+            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
+        end function
+
+        @it("retains pending pill focus until the decade row is available")
+        function _()
+            m.node.pageState.pendingFocusTarget = "filterButtonRow"
+            m.node.filterButtonRow.visible = false
+
+            'bs:disable-next-line 1140
+            focused = focusPendingTarget()
+
+            m.assertFalse(focused)
+            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
+        end function
+
+        @it("restores and focuses the saved decade pill")
+        function _()
+            m.node.pageState.activeFilterType = "Decade"
+            m.node.pageState.selectedDecade = 1980
+            m.node.pageState.pendingFocusTarget = "filterButtonRow"
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
+
+            'bs:disable-next-line 1140
+            showDecadeFilterRow()
+            'bs:disable-next-line 1140
+            focused = focusPendingTarget()
+
+            m.assertTrue(focused)
+            m.assertEqual(m.node.filterButtonRow.selectedValue, "1980")
+            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
+            m.assertEqual(m.node.pageState.pendingFocusTarget, "")
+        end function
+
+        @it("focuses the first decade when the saved decade is unavailable")
+        function _()
+            m.node.pageState.activeFilterType = "Decade"
+            m.node.pageState.selectedDecade = 1960
+            m.node.pageState.pendingFocusTarget = "filterButtonRow"
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
+
+            'bs:disable-next-line 1140
+            showDecadeFilterRow()
+            'bs:disable-next-line 1140
+            focused = focusPendingTarget()
+
+            m.assertTrue(focused)
+            m.assertEqual(m.node.pageState.selectedDecade, 1970)
+            m.assertEqual(m.node.filterButtonRow.selectedValue, "1970")
+        end function
+
         @it("adds the active starts-with bucket to the counted page title")
         function _()
             m.node.pageState.request = { title: "Movies" }

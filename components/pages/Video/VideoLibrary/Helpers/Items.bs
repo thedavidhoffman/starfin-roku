@@ -1,0 +1,462 @@
+'-------------------------------------------------------------------------------
+' onItemSelected
+'-------------------------------------------------------------------------------
+sub onItemSelected()
+    selected = m.itemsGrid.itemSelected
+    if selected = invalid then
+        return
+    end if
+    if m.itemsGrid.content = invalid then
+        return
+    end if
+    node = m.itemsGrid.content.getChild(selected)
+    if node = invalid then
+        return
+    end if
+    item = node.raw
+    if hasLibrarySpecialization() and m.top.callFunc("specializationHandleItemSelected", selected, item) then
+        return
+    end if
+    itemId = Format.SafeString(Format.FirstNonEmpty([
+        item.Id
+    ], ""), "")
+    if itemId = "" then
+        return
+    end if
+    selection = {
+        itemId: itemId
+        item: item
+    }
+    if isPlayableMovie(item) then
+        m.top.selectedMovie = selection
+    else if isTVSeries(item) then
+        m.top.selectedSeries = selection
+    else if isTVEpisode(item) then
+        m.top.selectedEpisode = selection
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderItems
+'-------------------------------------------------------------------------------
+sub renderItems(items as object)
+    if items = invalid then
+        items = []
+    end if
+    m.pageState.items = items
+    detachVideoLibraryGridContent()
+    content = buildVideoLibraryContent(items)
+    m.itemsGrid.content = content
+    m.itemsGrid.visible = content.getChildCount() > 0
+    m.emptyFavoritesLabel.visible = isFavoriteBrowseActive() and m.pageState.isLoading <> true and content.getChildCount() = 0
+    updateAvailableLetters(items)
+    updateVideoLibraryProgressItemCount(content.getChildCount())
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaStateChange
+'-------------------------------------------------------------------------------
+sub onMediaStateChange()
+    change = m.top.mediaStateChange
+    if change = invalid then
+        return
+    end if
+    itemId = Format.SafeString(change.itemId, "")
+    if itemId = "" then
+        return
+    end if
+    action = Format.SafeString(change.action, "")
+    if applyMediaStateChangeToMatchingItems(itemId, change) <> true then
+        return
+    end if
+    if isFavoriteBrowseActive() and action = "favorite" and change.value <> true then
+        m.pageState.allItems = getItemsExcludingId(m.pageState.allItems, itemId)
+        renderItems(m.pageState.allItems)
+        updateTitleLabel(m.pageState.allItems.Count())
+        return
+    end if
+    notifyVideoLibraryItemsChanged(itemId)
+    if hasLibrarySpecialization() then
+        m.top.callFunc("specializationSyncState")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' applyMediaStateChangeToMatchingItems
+'-------------------------------------------------------------------------------
+function applyMediaStateChangeToMatchingItems(itemId as string, change as object) as boolean
+    didApply = false
+    for each item in m.pageState.allItems
+        if Format.SafeString(item.Id, "") = itemId then
+            if MediaState.ApplyToItem(item, change) then
+                didApply = true
+            end if
+        end if
+    end for
+    return didApply
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsExcludingId
+'-------------------------------------------------------------------------------
+function getItemsExcludingId(items as object, itemId as string) as object
+    remaining = []
+    for each item in items
+        if Format.SafeString(item.Id, "") <> itemId then
+            remaining.Push(item)
+        end if
+    end for
+    return remaining
+end function
+
+'-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    if change = invalid then
+        return
+    end if
+    itemId = Format.SafeString(change.itemId, "")
+    if itemId = "" then
+        return
+    end if
+    if applyPlaybackProgressChangeToMatchingItems(itemId, change) <> true then
+        return
+    end if
+    notifyVideoLibraryItemsChanged(itemId)
+    if hasLibrarySpecialization() then
+        m.top.callFunc("specializationSyncState")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackProgressChangeToMatchingItems
+'-------------------------------------------------------------------------------
+function applyPlaybackProgressChangeToMatchingItems(itemId as string, change as object) as boolean
+    didApply = false
+    for each item in m.pageState.allItems
+        if Format.SafeString(item.Id, "") = itemId then
+            if PlaybackProgress.ApplyChangeToItem(item, change) then
+                didApply = true
+            end if
+        end if
+    end for
+    return didApply
+end function
+
+'-------------------------------------------------------------------------------
+' notifyVideoLibraryItemsChanged
+'-------------------------------------------------------------------------------
+sub notifyVideoLibraryItemsChanged(itemId as string)
+    for i = 0 to m.pageState.allItems.Count() - 1
+        item = m.pageState.allItems[i]
+        if Format.SafeString(item.Id, "") = itemId then
+            notifyVideoLibraryItemChanged(item, i)
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' notifyVideoLibraryItemChanged
+'-------------------------------------------------------------------------------
+sub notifyVideoLibraryItemChanged(item as object, occurrenceIndex = invalid as dynamic)
+    cacheKey = getVideoLibraryItemCacheKey(item, occurrenceIndex)
+    if cacheKey = "" then
+        return
+    end if
+    node = m.pageState.itemNodeCache[cacheKey]
+    if node = invalid then
+        return
+    end if
+    node.raw = invalid
+    node.raw = item
+end sub
+
+'-------------------------------------------------------------------------------
+' detachVideoLibraryGridContent
+'-------------------------------------------------------------------------------
+sub detachVideoLibraryGridContent()
+    if m.itemsGrid = invalid then
+        return
+    end if
+    if m.itemsGrid.content = invalid then
+        return
+    end if
+    childCount = m.itemsGrid.content.getChildCount()
+    if childCount > 0 then
+        m.itemsGrid.content.removeChildrenIndex(childCount, 0)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' buildVideoLibraryContent
+'-------------------------------------------------------------------------------
+function buildVideoLibraryContent(items as object) as object
+    content = CreateObject("roSGNode", "ContentNode")
+    if items = invalid then
+        return content
+    end if
+    ensureVideoLibraryItemNodeCache()
+    for i = 0 to items.Count() - 1
+        item = items[i]
+        node = getCachedVideoLibraryItemNode(item, i)
+        if node <> invalid then
+            content.appendChild(node)
+        end if
+    end for
+    return content
+end function
+
+'-------------------------------------------------------------------------------
+' clearVideoLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub clearVideoLibraryItemNodeCache()
+    m.pageState.itemNodeCache = {}
+    m.pageState.itemNodeCacheAspect = ""
+end sub
+
+'-------------------------------------------------------------------------------
+' rebuildVideoLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub rebuildVideoLibraryItemNodeCache()
+    clearVideoLibraryItemNodeCache()
+    ensureVideoLibraryItemNodeCache()
+end sub
+
+'-------------------------------------------------------------------------------
+' ensureVideoLibraryItemNodeCache
+'-------------------------------------------------------------------------------
+sub ensureVideoLibraryItemNodeCache()
+    if m.pageState.itemNodeCacheAspect = m.pageState.imageAspect then
+        return
+    end if
+    m.pageState.itemNodeCache = {}
+    m.pageState.itemNodeCacheAspect = m.pageState.imageAspect
+end sub
+
+'-------------------------------------------------------------------------------
+' getCachedVideoLibraryItemNode
+'-------------------------------------------------------------------------------
+function getCachedVideoLibraryItemNode(item as dynamic, occurrenceIndex = invalid as dynamic) as dynamic
+    cacheKey = getVideoLibraryItemCacheKey(item, occurrenceIndex)
+    if cacheKey = "" then
+        return createVideoLibraryItemNode(item)
+    end if
+    ensureVideoLibraryItemNodeCache()
+    node = m.pageState.itemNodeCache[cacheKey]
+    if node = invalid then
+        node = createVideoLibraryItemNode(item)
+        m.pageState.itemNodeCache[cacheKey] = node
+    end if
+    return node
+end function
+
+'-------------------------------------------------------------------------------
+' createVideoLibraryItemNode
+'-------------------------------------------------------------------------------
+function createVideoLibraryItemNode(item as dynamic) as dynamic
+    if Arrays.IsAssocArray(item) = false then
+        return invalid
+    end if
+    imageAspect = m.pageState.imageAspect
+    node = CreateObject("roSGNode", "ContentNode")
+    node.HDPosterUrl = getItemImageUrl(item, imageAspect)
+    node.AddFields({
+        imageAspect: imageAspect
+        raw: item
+    })
+    return node
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryItemCacheKey
+'-------------------------------------------------------------------------------
+function getVideoLibraryItemCacheKey(item as dynamic, occurrenceIndex = invalid as dynamic) as string
+    if Arrays.IsAssocArray(item) = false then
+        return ""
+    end if
+    if hasLibrarySpecialization() then
+        return m.top.callFunc("specializationCacheKey", item, occurrenceIndex)
+    end if
+    return Format.SafeString(item.Id, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getVisibleVideoLibraryItems
+'-------------------------------------------------------------------------------
+function getVisibleVideoLibraryItems() as object
+    return m.pageState.allItems
+end function
+
+'-------------------------------------------------------------------------------
+' renderCurrentVideoLibraryItems
+'-------------------------------------------------------------------------------
+sub renderCurrentVideoLibraryItems()
+    renderItems(getVisibleVideoLibraryItems())
+    updateTitleLabel(m.pageState.items.Count())
+    m.itemsGrid.jumpToItem = 0
+    m.itemsGrid.itemFocused = 0
+end sub
+
+'-------------------------------------------------------------------------------
+' getItemImageUrl
+'-------------------------------------------------------------------------------
+function getItemImageUrl(item as dynamic, imageAspect as string) as string
+    if Arrays.IsAssocArray(item) = false then
+        return ""
+    end if
+    if hasLibrarySpecialization() then
+        return m.top.callFunc("specializationImageUrl", item, imageAspect)
+    end if
+    itemId = Format.FirstNonEmpty([
+        item.Id
+    ], "")
+    if itemId = "" then
+        return ""
+    end if
+    if imageAspect = "wide" then
+        imageUrl = getImageUrlForType(itemId, item, "Thumb", 441, 249)
+        if imageUrl <> "" then
+            return imageUrl
+        end if
+        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 441, 249)
+        if imageUrl <> "" then
+            return imageUrl
+        end if
+        return getImageUrlForType(itemId, item, "Primary", 441, 249)
+    end if
+    return getImageUrlForType(itemId, item, "Primary", 252, 378)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageUrlForType
+'-------------------------------------------------------------------------------
+function getImageUrlForType(itemId as string, item as dynamic, imageType as string, width as integer, height as integer) as string
+    tag = getImageTag(item, imageType)
+    if tag = "" then
+        return ""
+    end if
+    request = m.pageState.request
+    if request = invalid then
+        return ""
+    end if
+    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageTag
+'-------------------------------------------------------------------------------
+function getImageTag(item as dynamic, imageType as string) as string
+    if item = invalid then
+        return ""
+    end if
+    if imageType = "Backdrop" then
+        if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
+            return item.BackdropImageTags[0]
+        end if
+        return ""
+    end if
+    if item.ImageTags = invalid then
+        return ""
+    end if
+    if imageType = "Primary" and item.ImageTags.Primary <> invalid then
+        return item.ImageTags.Primary
+    end if
+    if imageType = "Thumb" and item.ImageTags.Thumb <> invalid then
+        return item.ImageTags.Thumb
+    end if
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryImageAspect
+'-------------------------------------------------------------------------------
+function getVideoLibraryImageAspect() as string
+    if hasLibrarySpecialization() then
+        return m.top.callFunc("specializationImageAspect")
+    end if
+    settings = m.top.settings
+    settingKey = "movie-library-image-type"
+    request = m.pageState.request
+    collectionType = ""
+    if request <> invalid then
+        collectionType = Format.SafeString(request.collectionType, "")
+    end if
+    if collectionType = "tvshows" then
+        settingKey = "tv-library-image-type"
+    else if collectionType = "collection" then
+        settingKey = "collection-items-image-type"
+    end if
+    if LCase(settings[settingKey]) = "thumbnail" then
+        return "wide"
+    end if
+    return "poster"
+end function
+
+'-------------------------------------------------------------------------------
+' isPlayableMovie
+'-------------------------------------------------------------------------------
+function isPlayableMovie(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false then
+        return false
+    end if
+    itemType = LCase(Format.FirstNonEmpty([
+        item.Type
+    ], ""))
+    return itemType = "movie" or itemType = "video"
+end function
+
+'-------------------------------------------------------------------------------
+' isTVSeries
+'-------------------------------------------------------------------------------
+function isTVSeries(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false then
+        return false
+    end if
+    return LCase(Format.FirstNonEmpty([
+        item.Type
+    ], "")) = "series"
+end function
+
+'-------------------------------------------------------------------------------
+' isTVEpisode
+'-------------------------------------------------------------------------------
+function isTVEpisode(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false then
+        return false
+    end if
+    return LCase(Format.FirstNonEmpty([
+        item.Type
+    ], "")) = "episode"
+end function
+
+'-------------------------------------------------------------------------------
+' openMediaActions
+'-------------------------------------------------------------------------------
+function openMediaActions() as boolean
+    if m.itemsGrid.content = invalid then
+        return false
+    end if
+    focusedIndex = m.itemsGrid.itemFocused
+    if focusedIndex = invalid or focusedIndex < 0 then
+        return false
+    end if
+    focusedNode = m.itemsGrid.content.getChild(focusedIndex)
+    if focusedNode = invalid or focusedNode.raw = invalid then
+        return false
+    end if
+    m.top.overlayRequested = {
+        id: "mediaActions"
+        sourcePage: "videoLibrary"
+        componentName: "MediaActionsDialog"
+        openFunction: "openMediaActions"
+        closeField: "closeRequested"
+        item: focusedNode.raw
+        server: m.pageState.request.server
+        token: m.pageState.request.token
+        userId: m.pageState.request.userId
+    }
+    return true
+end function
+

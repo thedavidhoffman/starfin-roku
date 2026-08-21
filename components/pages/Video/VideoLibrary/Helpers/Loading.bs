@@ -1,0 +1,382 @@
+'-------------------------------------------------------------------------------
+' prepareLoadRequest
+'-------------------------------------------------------------------------------
+sub prepareLoadRequest(request as object)
+    m.pageState.request = request
+    AsyncLifecycle.Begin(m.pageState.lifecycle, request.libraryId)
+    m.pageState.imageAspect = getVideoLibraryImageAspect()
+    restoredState = loadSavedVideoLibraryViewState(request)
+    if restoredState <> invalid then
+        applySavedVideoLibraryViewState(request, restoredState)
+    else
+        normalizeLoadRequestSort(request)
+    end if
+    if request.favoriteOnly = true then
+        m.pageState.selectedSort = getFavoritesSortSelection()
+        if restoredState <> invalid then
+            m.pageState.selectedSort.sortOrder = getNormalizedSortOrder(Format.SafeString(restoredState.sortOrder, "Ascending"))
+        end if
+    else if restoredState = invalid then
+        m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
+    end if
+    m.pageState.selectedSortKey = m.pageState.selectedSort.optionKey
+    request.sortBy = Format.SafeString(m.pageState.selectedSort.sortKey, "SortName")
+    request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
+end sub
+
+'-------------------------------------------------------------------------------
+' normalizeLoadRequestSort
+'-------------------------------------------------------------------------------
+sub normalizeLoadRequestSort(request as object)
+    if request.sortBy = invalid then
+        request.sortBy = "SortName"
+    end if
+    if request.sortOrder = invalid then
+        request.sortOrder = "Ascending"
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' runVideoLibraryTask
+'-------------------------------------------------------------------------------
+sub loadVideoLibraryPage(startIndex as integer)
+    request = buildVideoLibraryPageRequest(startIndex)
+    if request = invalid then
+        return
+    end if
+    m.pageState.paging.requestInFlight = true
+    m.videoLibraryTask.control = "stop"
+    m.videoLibraryTask.request = request
+    m.videoLibraryTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' buildVideoLibraryPageRequest
+'-------------------------------------------------------------------------------
+function buildVideoLibraryPageRequest(startIndex as integer) as dynamic
+    if m.pageState.request = invalid then
+        return invalid
+    end if
+    request = {}
+    for each key in m.pageState.request
+        request[key] = m.pageState.request[key]
+    end for
+    request.pageStartIndex = startIndex
+    request.queryId = m.pageState.paging.queryId
+    request.startsWith = m.pageState.selectedStartsWith
+    request.genre = ""
+    request.years = []
+    if isGenreFilterActive() then
+        request.genre = m.pageState.selectedGenre
+    end if
+    if isDecadeFilterActive() and m.pageState.selectedDecade >= 0 then
+        for year = m.pageState.selectedDecade to m.pageState.selectedDecade + 9
+            request.years.Push(year.ToStr())
+        end for
+    end if
+    return request
+end function
+
+'-------------------------------------------------------------------------------
+' onVideoLibraryResponse
+'-------------------------------------------------------------------------------
+sub onVideoLibraryResponse()
+    response = m.videoLibraryTask.response
+    if response = invalid then
+        return
+    end if
+    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "videoLibrary") <> true then
+        return
+    end if
+    if Number.ToInteger(response.queryId, -1) <> m.pageState.paging.queryId then
+        return
+    end if
+    if response.ok <> true then
+        m.pageState.isLoading = false
+        m.pageState.paging.requestInFlight = false
+        Spinner.Hide()
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load library."))
+        return
+    end if
+    startIndex = Number.ToInteger(response.startIndex, -1)
+    if startIndex <> m.pageState.paging.nextStartIndex then
+        m.pageState.paging.requestInFlight = false
+        return
+    end if
+    m.pageState.isLoading = false
+    m.pageState.paging.requestInFlight = false
+    pageItems = getItemsFromPayload(response.payload)
+    if startIndex = 0 then
+        m.pageState.allItems = []
+    end if
+    for each item in pageItems
+        m.pageState.allItems.Push(item)
+    end for
+    m.pageState.paging.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageItems.Count())
+    m.pageState.paging.totalCount = Number.ToInteger(response.totalRecordCount, m.pageState.allItems.Count())
+    m.pageState.paging.hasMore = response.hasMore = true
+    if hasLibrarySpecialization() and m.top.callFunc("specializationItemsLoaded") then
+        return
+    end if
+    if hasLibrarySpecialization() then
+        syncSortControls()
+    end if
+    if startIndex = 0 then
+        rebuildVideoLibraryItemNodeCache()
+        renderItems(m.pageState.allItems)
+    else
+        appendVideoLibraryPage(pageItems, startIndex)
+    end if
+    if isDecadeFilterActive() then
+        showDecadeFilterRow()
+    end if
+    if isGenreFilterActive() then
+        showGenreFilterRow()
+    end if
+    if hasLibrarySpecialization() then
+        m.top.callFunc("specializationSyncState")
+    end if
+    updateTitleLabel(m.pageState.paging.totalCount)
+    AppStatus.ClearMessage()
+    if m.pageState.refocusBrowseByButtonAfterLoad = true then
+        m.pageState.refocusBrowseByButtonAfterLoad = false
+        focusBrowseByButton()
+    else if m.pageState.refocusSortButtonAfterLoad = true then
+        m.pageState.refocusSortButtonAfterLoad = false
+        focusSortButton()
+    else if focusPendingTarget() <> true then
+        if hasLibrarySpecialization() = false or m.top.callFunc("specializationActivate") <> true then
+            focusItemsIfActive()
+        end if
+    end if
+    Spinner.Hide()
+    requestNextVideoLibraryPageIfNeeded()
+end sub
+
+'-------------------------------------------------------------------------------
+' appendVideoLibraryPage
+'-------------------------------------------------------------------------------
+sub appendVideoLibraryPage(pageItems as object, startIndex as integer)
+    if m.itemsGrid.content = invalid then
+        renderItems(m.pageState.allItems)
+        return
+    end if
+    ensureVideoLibraryItemNodeCache()
+    for i = 0 to pageItems.Count() - 1
+        node = getCachedVideoLibraryItemNode(pageItems[i], startIndex + i)
+        if node <> invalid then
+            m.itemsGrid.content.appendChild(node)
+        end if
+    end for
+    m.pageState.items = m.pageState.allItems
+    m.itemsGrid.visible = m.itemsGrid.content.getChildCount() > 0
+    updateVideoLibraryProgressItemCount(m.itemsGrid.content.getChildCount())
+end sub
+
+'-------------------------------------------------------------------------------
+' loadVideoFilterOptions
+'-------------------------------------------------------------------------------
+sub loadVideoFilterOptions()
+    if m.pageState.request = invalid then
+        return
+    end if
+    request = {}
+    for each key in m.pageState.request
+        request[key] = m.pageState.request[key]
+    end for
+    m.pageState.filtersQueryId = m.pageState.filtersQueryId + 1
+    request.queryId = m.pageState.filtersQueryId
+    m.videoFilterOptionsTask.control = "stop"
+    m.videoFilterOptionsTask.request = request
+    m.videoFilterOptionsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoFilterOptionsResponse
+'-------------------------------------------------------------------------------
+sub onVideoFilterOptionsResponse()
+    response = m.videoFilterOptionsTask.response
+    if response = invalid then
+        return
+    end if
+    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "videoFilterOptions") <> true then
+        return
+    end if
+    if Number.ToInteger(response.queryId, -1) <> m.pageState.filtersQueryId then
+        return
+    end if
+    if response.ok <> true then
+        return
+    end if
+    m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
+    if isDecadeFilterActive() then
+        options = m.pageState.filterCache.decadeOptions
+        if options.Count() = 0 then
+            applySortSelection(getDefaultSortSelection())
+            return
+        end if
+        if filterOptionsContainValue(options, m.pageState.selectedDecade.ToStr()) <> true then
+            m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
+            showDecadeFilterRow()
+            reloadVideoLibraryForSort("filter")
+            return
+        end if
+        showDecadeFilterRow()
+    end if
+    if isGenreFilterActive() then
+        options = m.pageState.filterCache.genreOptions
+        if options.Count() = 0 then
+            applySortSelection(getDefaultSortSelection())
+            return
+        end if
+        if filterOptionsContainValue(options, m.pageState.selectedGenre) <> true then
+            m.pageState.selectedGenre = getFirstGenreFilterValue(options)
+            showGenreFilterRow()
+            reloadVideoLibraryForSort("filter")
+            return
+        end if
+        showGenreFilterRow()
+    end if
+    focusPendingTarget()
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemFocused
+'-------------------------------------------------------------------------------
+sub onItemFocused()
+    updateVideoLibraryProgressFocusedIndex()
+    requestNextVideoLibraryPageIfNeeded()
+end sub
+
+'-------------------------------------------------------------------------------
+' requestNextVideoLibraryPageIfNeeded
+'-------------------------------------------------------------------------------
+sub requestNextVideoLibraryPageIfNeeded()
+    if m.pageState.paging.hasMore <> true or m.pageState.paging.requestInFlight = true then
+        return
+    end if
+    loadedCount = m.pageState.allItems.Count()
+    if loadedCount <= 0 then
+        return
+    end if
+    columnCount = Number.ToInteger(m.itemsGrid.numColumns, 1)
+    if columnCount <= 0 then
+        columnCount = 1
+    end if
+    focusedRow = Number.ToInteger(Number.ToInteger(m.itemsGrid.itemFocused, 0) / columnCount, 0)
+    loadedRows = Number.ToInteger((loadedCount + columnCount - 1) / columnCount, 0)
+    if focusedRow < loadedRows - 7 then
+        return
+    end if
+    loadVideoLibraryPage(m.pageState.paging.nextStartIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemsGridNavigationKeyPressed
+'-------------------------------------------------------------------------------
+sub onItemsGridNavigationKeyPressed()
+    event = m.itemsGrid.navigationKeyPressed
+    if event = invalid then
+        return
+    end if
+    if m.pageState.imageAspect <> "poster" then
+        return
+    end if
+    key = Format.SafeString(event.key, "")
+    if key <> "down" and key <> "up" then
+        return
+    end if
+    if event.press = false then
+        stopVideoLibraryProgressHold(key)
+        return
+    end if
+    startVideoLibraryProgressHold(key)
+    advanceVideoLibraryProgressForKey(key)
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoLibraryProgressHoldTimerFire
+'-------------------------------------------------------------------------------
+sub onVideoLibraryProgressHoldTimerFire()
+    advanceVideoLibraryProgressForKey(m.pageState.progressHoldKey)
+end sub
+
+'-------------------------------------------------------------------------------
+' startVideoLibraryProgressHold
+'-------------------------------------------------------------------------------
+sub startVideoLibraryProgressHold(key as string)
+    m.pageState.progressHoldKey = key
+    m.videoLibraryProgressHoldTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' stopVideoLibraryProgressHold
+'-------------------------------------------------------------------------------
+sub stopVideoLibraryProgressHold(key = invalid as dynamic)
+    if key <> invalid and key <> "" and key <> m.pageState.progressHoldKey then
+        return
+    end if
+    m.pageState.progressHoldKey = ""
+    m.videoLibraryProgressHoldTimer.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' advanceVideoLibraryProgressForKey
+'-------------------------------------------------------------------------------
+sub advanceVideoLibraryProgressForKey(key as string)
+    if key <> "down" and key <> "up" then
+        return
+    end if
+    if m.pageState.imageAspect <> "poster" then
+        stopVideoLibraryProgressHold()
+        return
+    end if
+    itemCount = getVideoLibraryItemCount()
+    if itemCount <= 0 then
+        stopVideoLibraryProgressHold()
+        return
+    end if
+    columns = m.itemsGrid.numColumns
+    if columns = invalid or columns <= 0 then
+        columns = 1
+    end if
+    focusedIndex = m.pageState.progressFocusedIndex
+    if focusedIndex = invalid or focusedIndex < 0 then
+        focusedIndex = getCurrentVideoLibraryFocusedIndex()
+    end if
+    if key = "down" then
+        focusedIndex = focusedIndex + columns
+    else if key = "up" then
+        focusedIndex = focusedIndex - columns
+    end if
+    if focusedIndex < 0 then
+        focusedIndex = 0
+    end if
+    if focusedIndex >= itemCount then
+        focusedIndex = itemCount - 1
+    end if
+    m.pageState.progressFocusedIndex = focusedIndex
+    m.videoLibraryProgressIndicator.focusedIndex = focusedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' getItemsFromPayload
+'-------------------------------------------------------------------------------
+function getItemsFromPayload(payload as dynamic) as object
+    if payload = invalid then
+        return []
+    end if
+    if Type(payload) = "roArray" then
+        return payload
+    end if
+    if Arrays.IsAssocArray(payload) = false then
+        return []
+    end if
+    if payload.Items <> invalid then
+        return payload.Items
+    end if
+    if payload.items <> invalid then
+        return payload.items
+    end if
+    return []
+end function
