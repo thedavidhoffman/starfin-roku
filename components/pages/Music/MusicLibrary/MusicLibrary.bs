@@ -50,50 +50,63 @@ end sub
 '-------------------------------------------------------------------------------
 sub initState()
     m.state = {
-        request: invalid
-        loadedAlbums: []
-        artists: []
-        selectedSortKey: "Album"
-        selectedSort: getDefaultSortSelection()
-        activeFilterType: ""
-        selectedDecade: -1
-        selectedGenre: ""
-        filterCache: createEmptyFilterCache()
-        filterLoad: {
-            status: "idle"
-            requestInFlight: false
-            queryId: 0
+        context: invalid
+        browse: {
+            selection: getDefaultSortSelection()
+            filterType: ""
+            decade: -1
+            genre: ""
+        }
+        content: {
+            albums: {
+                items: []
+                load: createPageLoadState()
+            }
+            artists: {
+                items: []
+                load: createPageLoadState()
+            }
+        }
+        filters: {
+            options: createEmptyFilterCache()
+            load: createLoadState()
         }
         refreshPending: false
-        foregroundLoad: {
-            kind: ""
-            pendingKind: ""
-            startedAt: invalid
-            controlsHidden: false
-            restoreFilterVisible: false
-        }
-        pagingLoad: {
-            spinnerVisible: false
-        }
-        albumLoad: {
-            status: "idle"
-            requestInFlight: false
-            nextStartIndex: 0
-            totalCount: -1
-            hasMore: false
-            queryId: 0
-        }
-        artistLoad: {
-            status: "idle"
-            queryId: 0
-            requestInFlight: false
-            nextStartIndex: 0
-            totalCount: -1
-            hasMore: false
+        loadingUi: {
+            foreground: {
+                kind: ""
+                pausedKind: ""
+                startedAt: invalid
+                controlsHidden: false
+                restoreFilterVisible: false
+            }
+            pagingSpinnerVisible: false
         }
         lifecycle: AsyncLifecycle.Create()
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' createLoadState
+'-------------------------------------------------------------------------------
+function createLoadState() as object
+    return {
+        status: "idle"
+        requestInFlight: false
+        queryId: 0
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' createPageLoadState
+'-------------------------------------------------------------------------------
+function createPageLoadState() as object
+    state = createLoadState()
+    state.nextStartIndex = 0
+    state.totalCount = -1
+    state.hasMore = false
+    return state
+end function
 
 
 '-------------------------------------------------------------------------------
@@ -103,42 +116,39 @@ sub onLoadRequestChanged()
     request = m.top.loadRequest
     if request = invalid then return
 
-    m.state.request = request
-    m.state.loadedAlbums = []
-    m.state.artists = []
-    m.state.albumLoad.status = "loading"
-    m.state.albumLoad.requestInFlight = false
-    m.state.albumLoad.nextStartIndex = 0
-    m.state.albumLoad.totalCount = -1
-    m.state.albumLoad.hasMore = false
-    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
-    m.state.artistLoad.status = "idle"
-    m.state.artistLoad.requestInFlight = false
-    m.state.artistLoad.nextStartIndex = 0
-    m.state.artistLoad.totalCount = -1
-    m.state.artistLoad.hasMore = false
-    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
-    m.state.filterLoad.status = "loading"
-    m.state.filterLoad.requestInFlight = false
-    m.state.filterLoad.queryId = m.state.filterLoad.queryId + 1
+    m.state.context = request
+    m.state.content.albums.items = []
+    m.state.content.artists.items = []
+    m.state.content.albums.load.status = "loading"
+    m.state.content.albums.load.requestInFlight = false
+    m.state.content.albums.load.nextStartIndex = 0
+    m.state.content.albums.load.totalCount = -1
+    m.state.content.albums.load.hasMore = false
+    m.state.content.albums.load.queryId = m.state.content.albums.load.queryId + 1
+    m.state.content.artists.load.status = "idle"
+    m.state.content.artists.load.requestInFlight = false
+    m.state.content.artists.load.nextStartIndex = 0
+    m.state.content.artists.load.totalCount = -1
+    m.state.content.artists.load.hasMore = false
+    m.state.content.artists.load.queryId = m.state.content.artists.load.queryId + 1
+    m.state.filters.load.status = "loading"
+    m.state.filters.load.requestInFlight = false
+    m.state.filters.load.queryId = m.state.filters.load.queryId + 1
     savedState = LibraryViewStateStore.Load(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""))
     if savedState <> invalid then
-        applySavedMusicLibraryViewState(request, savedState)
+        applySavedMusicLibraryViewState(savedState)
     else if request.favoriteOnly = true then
-        m.state.selectedSortKey = "Favorites"
-        m.state.selectedSort = getFavoritesSortSelection()
-        m.state.activeFilterType = ""
-        m.state.selectedDecade = -1
-        m.state.selectedGenre = ""
+        m.state.browse.selection = getFavoritesSortSelection()
+        m.state.browse.filterType = ""
+        m.state.browse.decade = -1
+        m.state.browse.genre = ""
     else
-        m.state.selectedSortKey = "Album"
-        m.state.selectedSort = getDefaultSortSelection()
-        m.state.activeFilterType = ""
-        m.state.selectedDecade = -1
-        m.state.selectedGenre = ""
+        m.state.browse.selection = getDefaultSortSelection()
+        m.state.browse.filterType = ""
+        m.state.browse.decade = -1
+        m.state.browse.genre = ""
     end if
-    configureCurrentAlbumRequest()
-    m.state.filterCache = createEmptyFilterCache()
+    m.state.filters.options = createEmptyFilterCache()
     syncSortControls()
     hideFilterButtonRow()
     AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
@@ -158,30 +168,43 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
-    AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.request, "libraryId")
+    AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.context, "libraryId")
     if m.state.refreshPending then
         m.state.refreshPending = false
         reloadMusicLibrary()
         focusAlbums()
         return
     end if
-    if m.state.foregroundLoad.kind <> "" then
+    if m.state.loadingUi.foreground.kind <> "" then
         focusAlbums()
         return
     end if
-    if m.state.foregroundLoad.pendingKind <> "" then
-        startPendingForegroundLoad()
+    if m.state.filters.load.status = "paused" then
+        m.state.filters.load.status = "loading"
+        loadFilterOptions()
+    end if
+    if m.state.loadingUi.foreground.pausedKind <> "" then
+        kind = m.state.loadingUi.foreground.pausedKind
+        m.state.loadingUi.foreground.pausedKind = ""
+        if kind = "artists" then
+            m.state.content.artists.load.status = "loading"
+        else
+            m.state.content.albums.load.status = "loading"
+        end if
+        queueForegroundLoad(kind)
         focusAlbums()
         return
     end if
-
-    if m.state.filterLoad.status = "loading" and m.state.filterLoad.requestInFlight <> true then loadFilterOptions()
 
     if isArtistBrowseMode() then
-        if m.state.artistLoad.status = "loading" and m.state.artistLoad.requestInFlight <> true then loadArtistPage(m.state.artistLoad.nextStartIndex)
-    else if m.state.albumLoad.status = "loading" and m.state.albumLoad.requestInFlight <> true then
-        m.log.write("Album paging resumed libraryId=" + getLibraryId() + " startIndex=" + m.state.albumLoad.nextStartIndex.ToStr())
-        loadAlbumPage(m.state.albumLoad.nextStartIndex)
+        if m.state.content.artists.load.status = "paused" then
+            m.state.content.artists.load.status = "loading"
+            loadArtistPage(m.state.content.artists.load.nextStartIndex)
+        end if
+    else if m.state.content.albums.load.status = "paused" then
+        m.state.content.albums.load.status = "loading"
+        m.log.write("Album paging resumed libraryId=" + getLibraryId() + " startIndex=" + m.state.content.albums.load.nextStartIndex.ToStr())
+        loadAlbumPage(m.state.content.albums.load.nextStartIndex)
     end if
     focusAlbums()
 end sub
@@ -191,16 +214,20 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
-    wasLoading = m.state.foregroundLoad.kind <> ""
+    wasLoading = m.state.loadingUi.foreground.kind <> ""
+    m.state.loadingUi.foreground.pausedKind = m.state.loadingUi.foreground.kind
     hidePagingSpinner()
-    m.state.foregroundLoad.kind = ""
-    m.state.foregroundLoad.startedAt = invalid
-    m.state.albumLoad.requestInFlight = false
-    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
-    m.state.artistLoad.requestInFlight = false
-    m.state.filterLoad.requestInFlight = false
-    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
-    m.state.filterLoad.queryId = m.state.filterLoad.queryId + 1
+    m.state.loadingUi.foreground.kind = ""
+    m.state.loadingUi.foreground.startedAt = invalid
+    if m.state.content.albums.load.requestInFlight then m.state.content.albums.load.status = "paused"
+    m.state.content.albums.load.requestInFlight = false
+    m.state.content.albums.load.queryId = m.state.content.albums.load.queryId + 1
+    if m.state.content.artists.load.requestInFlight then m.state.content.artists.load.status = "paused"
+    m.state.content.artists.load.requestInFlight = false
+    if m.state.filters.load.requestInFlight then m.state.filters.load.status = "paused"
+    m.state.filters.load.requestInFlight = false
+    m.state.content.artists.load.queryId = m.state.content.artists.load.queryId + 1
+    m.state.filters.load.queryId = m.state.filters.load.queryId + 1
     AsyncLifecycle.Deactivate(m.state.lifecycle)
     m.musicLibraryTask.control = "stop"
     m.musicArtistsTask.control = "stop"
