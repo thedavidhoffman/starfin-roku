@@ -26,6 +26,7 @@ sub onMusicFilterOptionsResponse()
     if response.ok <> true then
         m.state.filters.load.requestInFlight = false
         m.state.filters.load.status = "failed"
+        m.state.loadingUi.foreground.focusAfterLoad = ""
         m.log.error("Music filter options failed libraryId=" + getLibraryId())
         return
     end if
@@ -36,6 +37,7 @@ sub onMusicFilterOptionsResponse()
     if reconcileActiveFilterSelection() then return
     if isDecadeFilterActive() then showDecadeFilterRow()
     if isGenreFilterActive() then showGenreFilterRow()
+    focusAfterForegroundLoad()
 end sub
 
 
@@ -79,6 +81,7 @@ function fallBackToAlbumBrowse() as boolean
     m.state.browse.filterType = ""
     m.state.browse.decade = -1
     m.state.browse.genre = ""
+    m.state.loadingUi.foreground.focusAfterLoad = ""
     hideFilterButtonRow()
     syncSortControls()
     persistMusicLibraryViewState()
@@ -166,7 +169,9 @@ sub onMusicLibraryResponse()
         m.state.content.albums.load.hasMore = false
         m.log.error("Album load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music library."))
         AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music library."))
-        if m.state.loadingUi.foreground.kind = "albums" and finishForegroundLoad("albums") then focusBrowseByButton()
+        if m.state.loadingUi.foreground.kind = "albums" and finishForegroundLoad("albums") then
+            if focusAfterForegroundLoad() <> true then focusBrowseByButton()
+        end if
         return
     end if
 
@@ -179,7 +184,9 @@ sub onMusicLibraryResponse()
         m.state.content.albums.load.status = "failed"
         m.state.content.albums.load.hasMore = false
         m.log.error("Album page rejected libraryId=" + getLibraryId() + " expectedStartIndex=" + expectedStartIndex.ToStr() + " receivedStartIndex=" + startIndex.ToStr())
-        if m.state.loadingUi.foreground.kind = "albums" and finishForegroundLoad("albums") then focusBrowseByButton()
+        if m.state.loadingUi.foreground.kind = "albums" and finishForegroundLoad("albums") then
+            if focusAfterForegroundLoad() <> true then focusBrowseByButton()
+        end if
         return
     end if
     hidePagingSpinner()
@@ -189,6 +196,7 @@ sub onMusicLibraryResponse()
         if m.state.content.albums.load.totalCount >= 0 then updateTitleLabel(m.state.content.albums.load.totalCount)
     end if
     pageAlbums = getValidMusicItems(response.payload, "album")
+    if isFilteredAlbumBrowseActive() then pageAlbums = canonicalizeFilteredAlbums(pageAlbums)
     isFilteredRefresh = m.state.loadingUi.filteredRefreshActive and startIndex = 0
     if isFilteredRefresh then
         m.state.content.albums.items = pageAlbums
@@ -204,6 +212,7 @@ sub onMusicLibraryResponse()
     m.state.content.albums.load.hasMore = hasMore
     m.state.content.albums.load.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageAlbums.Count())
     m.state.content.albums.load.status = "loaded"
+    if isFilteredAlbumBrowseActive() then cacheFilteredAlbumPage(pageAlbums, startIndex)
     if m.state.content.albums.load.totalCount < 0 then updateTitleLabel(m.state.content.albums.items.Count())
     if isFilteredRefresh then
         m.state.loadingUi.filteredRefreshActive = false
@@ -213,7 +222,9 @@ sub onMusicLibraryResponse()
     end if
     blockingEnded = false
     if m.state.loadingUi.foreground.kind = "albums" and (m.state.content.albums.items.Count() > 0 or m.state.content.albums.load.hasMore <> true) then blockingEnded = finishForegroundLoad("albums")
-    if blockingEnded and isMusicLibraryControlFocused() = false then focusAlbums()
+    if blockingEnded then
+        if focusAfterForegroundLoad() <> true and isMusicLibraryControlFocused() = false then focusAlbums()
+    end if
     if pageAlbums.Count() = 0 and m.state.content.albums.load.hasMore then
         loadAlbumPage(m.state.content.albums.load.nextStartIndex)
     else

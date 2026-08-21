@@ -1,0 +1,166 @@
+'-------------------------------------------------------------------------------
+' isFilteredAlbumBrowseActive
+'-------------------------------------------------------------------------------
+function isFilteredAlbumBrowseActive() as boolean
+    return isDecadeFilterActive() or isGenreFilterActive()
+end function
+
+
+'-------------------------------------------------------------------------------
+' getFilteredResultCacheKey
+'-------------------------------------------------------------------------------
+function getFilteredResultCacheKey() as string
+    sortOrder = Format.SafeString(m.state.browse.selection.sortOrder, "Ascending")
+    if isDecadeFilterActive() then return "decade|" + m.state.browse.decade.ToStr() + "|" + sortOrder
+    if isGenreFilterActive() then return "genre|" + LCase(m.state.browse.genre) + "|" + sortOrder
+    return ""
+end function
+
+
+'-------------------------------------------------------------------------------
+' clearFilteredResultCache
+'-------------------------------------------------------------------------------
+sub clearFilteredResultCache()
+    cache = m.state.filters.resultCache
+    cache.albumsById = {}
+    cache.entries = {}
+    cache.accessSequence = 0
+end sub
+
+
+'-------------------------------------------------------------------------------
+' canonicalizeFilteredAlbums
+'-------------------------------------------------------------------------------
+function canonicalizeFilteredAlbums(albums as object) as object
+    canonicalAlbums = []
+    albumsById = m.state.filters.resultCache.albumsById
+    for each album in albums
+        albumId = Format.SafeString(album.Id, "")
+        if albumId = "" then
+            canonicalAlbums.Push(album)
+        else
+            albumsById[albumId] = album
+            canonicalAlbums.Push(albumsById[albumId])
+        end if
+    end for
+    return canonicalAlbums
+end function
+
+
+'-------------------------------------------------------------------------------
+' cacheFilteredAlbumPage
+'-------------------------------------------------------------------------------
+sub cacheFilteredAlbumPage(albums as object, startIndex as integer)
+    cacheKey = getFilteredResultCacheKey()
+    if cacheKey = "" then return
+
+    cache = m.state.filters.resultCache
+    entry = cache.entries[cacheKey]
+    if entry = invalid or startIndex = 0 then
+        entry = { itemIds: [] }
+        cache.entries[cacheKey] = entry
+    end if
+    for each album in albums
+        albumId = Format.SafeString(album.Id, "")
+        if albumId <> "" then entry.itemIds.Push(albumId)
+    end for
+    entry.nextStartIndex = m.state.content.albums.load.nextStartIndex
+    entry.totalCount = m.state.content.albums.load.totalCount
+    entry.hasMore = m.state.content.albums.load.hasMore
+    touchFilteredCacheEntry(entry)
+    enforceFilteredResultCacheLimits()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' restoreCachedFilteredView
+'-------------------------------------------------------------------------------
+function restoreCachedFilteredView() as boolean
+    cacheKey = getFilteredResultCacheKey()
+    if cacheKey = "" then return false
+
+    cache = m.state.filters.resultCache
+    entry = cache.entries[cacheKey]
+    if entry = invalid then return false
+
+    albums = []
+    for each albumId in entry.itemIds
+        album = cache.albumsById[albumId]
+        if album <> invalid then albums.Push(album)
+    end for
+    if albums.Count() <> entry.itemIds.Count() then
+        cache.entries.Delete(cacheKey)
+        pruneFilteredAlbumObjects()
+        return false
+    end if
+
+    m.filteredRefreshTimer.control = "stop"
+    m.musicLibraryTask.control = "stop"
+    hidePagingSpinner()
+    m.state.loadingUi.filteredRefreshPending = false
+    m.state.loadingUi.filteredRefreshActive = false
+    m.state.content.albums.load.queryId = m.state.content.albums.load.queryId + 1
+    m.state.content.albums.load.requestInFlight = false
+    m.state.content.albums.load.status = "loaded"
+    m.state.content.albums.load.nextStartIndex = Number.ToInteger(entry.nextStartIndex, albums.Count())
+    m.state.content.albums.load.totalCount = Number.ToInteger(entry.totalCount, albums.Count())
+    m.state.content.albums.load.hasMore = entry.hasMore = true
+    m.state.content.albums.items = albums
+    touchFilteredCacheEntry(entry)
+    displayedCount = m.state.content.albums.load.totalCount
+    if displayedCount < 0 then displayedCount = albums.Count()
+    updateTitleLabel(displayedCount)
+    renderAlbums(albums)
+    AppStatus.ClearMessage()
+    return true
+end function
+
+
+'-------------------------------------------------------------------------------
+' touchFilteredCacheEntry
+'-------------------------------------------------------------------------------
+sub touchFilteredCacheEntry(entry as object)
+    cache = m.state.filters.resultCache
+    cache.accessSequence = cache.accessSequence + 1
+    entry.lastAccess = cache.accessSequence
+end sub
+
+
+'-------------------------------------------------------------------------------
+' enforceFilteredResultCacheLimits
+'-------------------------------------------------------------------------------
+sub enforceFilteredResultCacheLimits()
+    cache = m.state.filters.resultCache
+    while cache.entries.Count() > cache.maxEntries
+        oldestKey = ""
+        oldestAccess = cache.accessSequence + 1
+        for each cacheKey in cache.entries
+            entry = cache.entries[cacheKey]
+            access = Number.ToInteger(entry.lastAccess, 0)
+            if access < oldestAccess then
+                oldestAccess = access
+                oldestKey = cacheKey
+            end if
+        end for
+        if oldestKey = "" then exit while
+        cache.entries.Delete(oldestKey)
+    end while
+    pruneFilteredAlbumObjects()
+end sub
+
+
+'-------------------------------------------------------------------------------
+' pruneFilteredAlbumObjects
+'-------------------------------------------------------------------------------
+sub pruneFilteredAlbumObjects()
+    cache = m.state.filters.resultCache
+    retainedIds = {}
+    for each cacheKey in cache.entries
+        for each albumId in cache.entries[cacheKey].itemIds
+            retainedIds[albumId] = true
+        end for
+    end for
+    for each albumId in cache.albumsById.Keys()
+        if retainedIds[albumId] = invalid then cache.albumsById.Delete(albumId)
+    end for
+end sub

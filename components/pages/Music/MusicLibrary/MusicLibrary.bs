@@ -72,6 +72,12 @@ sub initState()
         filters: {
             options: createEmptyFilterCache()
             load: createLoadState()
+            resultCache: {
+                albumsById: {}
+                entries: {}
+                accessSequence: 0
+                maxEntries: 8
+            }
         }
         refreshPending: false
         loadingUi: {
@@ -81,6 +87,7 @@ sub initState()
                 startedAt: invalid
                 controlsHidden: false
                 restoreFilterVisible: false
+                focusAfterLoad: ""
             }
             pagingSpinnerVisible: false
             filteredRefreshPending: false
@@ -121,6 +128,7 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.state.context = request
+    clearFilteredResultCache()
     m.state.content.albums.items = []
     m.state.content.artists.items = []
     m.state.content.albums.load.status = "loading"
@@ -155,6 +163,11 @@ sub onLoadRequestChanged()
     m.state.filters.options = createEmptyFilterCache()
     syncSortControls()
     hideFilterButtonRow()
+    if isFilteredAlbumBrowseActive() then
+        m.state.loadingUi.foreground.focusAfterLoad = "filter"
+    else
+        m.state.loadingUi.foreground.focusAfterLoad = ""
+    end if
     AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
     updateTitleLabel()
     renderAlbums([])
