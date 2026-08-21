@@ -43,10 +43,11 @@ sub executeRequest()
     params.AddReplace("startIndex", startIndex)
     params.AddReplace("limit", pageSize)
 
-    if startsWith = "#" and LCase(Format.SafeString(request.collectionType, "")) <> "playlist" then
+    requestMode = getVideoLibraryRequestMode(request, startsWith)
+    if requestMode = "nonAlphabetic" then
         response = loadNonAlphabeticPage(request, params, startIndex, pageSize)
     else
-        if LCase(Format.SafeString(request.collectionType, "")) = "playlist" then
+        if requestMode = "playlist" then
             playlistParams = {
                 userId: Format.SafeString(request.userId, "")
                 fields: "SortName,ProductionYear,PremiereDate,DateCreated,Genres"
@@ -82,6 +83,16 @@ sub executeRequest()
         queryId: Number.ToInteger(request.queryId, -1)
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryRequestMode
+'-------------------------------------------------------------------------------
+function getVideoLibraryRequestMode(request as object, startsWith as string) as string
+    collectionType = LCase(Format.SafeString(request.collectionType, ""))
+    if startsWith = "#" and collectionType <> "playlist" then return "nonAlphabetic"
+    if collectionType = "playlist" then return "playlist"
+    return "items"
+end function
 
 '-------------------------------------------------------------------------------
 ' loadNonAlphabeticPage
