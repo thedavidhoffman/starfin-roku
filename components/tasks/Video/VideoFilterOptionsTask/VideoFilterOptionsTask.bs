@@ -2,7 +2,6 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.log = new Logger("MusicFilterOptionsTask", m.global.logService)
     m.top.functionName = "executeRequest"
 end sub
 
@@ -14,34 +13,21 @@ sub executeRequest()
     libraryId = ""
     if request <> invalid then libraryId = Format.SafeString(request.libraryId, "")
     if request = invalid or Format.SafeString(request.server, "") = "" or Format.SafeString(request.token, "") = "" or Format.SafeString(request.userId, "") = "" or libraryId = "" then
-        queryId = -1
-        if request <> invalid then queryId = Number.ToInteger(request.queryId, -1)
-        m.top.response = { ok: false, action: "musicFilterOptions", libraryId: libraryId, queryId: queryId, errorMessage: "Invalid music filter request." }
+        m.top.response = { ok: false, action: "videoFilterOptions", libraryId: libraryId, queryId: -1, errorMessage: "Invalid video filter request." }
         return
     end if
 
-    params = {
-        userId: Format.SafeString(request.userId, "")
-        parentId: libraryId
-        includeItemTypes: "MusicAlbum"
-    }
+    params = { userId: Format.SafeString(request.userId, ""), parentId: libraryId, includeItemTypes: Format.SafeString(request.includeItemTypes, "") }
     requestUrl = request.server + "/Items/Filters" + Url.BuildQueryString(params)
     response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
     if response.ok <> true then
-        response.AddReplace("action", "musicFilterOptions")
+        response.AddReplace("action", "videoFilterOptions")
         response.AddReplace("libraryId", libraryId)
         response.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
         m.top.response = response
         return
     end if
-
-    m.top.response = {
-        ok: true
-        action: "musicFilterOptions"
-        libraryId: libraryId
-        queryId: Number.ToInteger(request.queryId, -1)
-        filterOptions: buildFilterOptions(response.data)
-    }
+    m.top.response = { ok: true, action: "videoFilterOptions", libraryId: libraryId, queryId: Number.ToInteger(request.queryId, -1), filterOptions: buildFilterOptions(response.data) }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -50,7 +36,6 @@ end sub
 function buildFilterOptions(data as dynamic) as object
     result = { decadeOptions: [], genreOptions: [] }
     if Arrays.IsAssocArray(data) = false then return result
-
     decades = {}
     if Type(data.Years) = "roArray" then
         for each value in data.Years
@@ -63,7 +48,6 @@ function buildFilterOptions(data as dynamic) as object
     for each decadeKey in decadeKeys
         result.decadeOptions.Push({ label: decadeKey, value: Number.ToInteger(decadeKey, -1) })
     end for
-
     if Type(data.Genres) = "roArray" then
         genres = []
         for each value in data.Genres

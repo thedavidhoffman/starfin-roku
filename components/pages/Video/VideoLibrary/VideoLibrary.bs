@@ -26,6 +26,7 @@ sub init()
         activeFilterType: ""
         selectedDecade: -1
         selectedGenre: ""
+        selectedStartsWith: "ALL"
         renderDecadeFilterOnApply: false
         filterCache: createEmptyFilterCache()
         itemNodeCache: {}
@@ -36,6 +37,14 @@ sub init()
         refocusBrowseByButtonAfterLoad: false
         refocusSortButtonAfterLoad: false
         isLoading: false
+        paging: {
+            nextStartIndex: 0
+            totalCount: -1
+            hasMore: false
+            requestInFlight: false
+            queryId: 0
+        }
+        filtersQueryId: 0
         lifecycle: AsyncLifecycle.Create()
     }
     m.browseByButton.selectedSort = getDefaultSortSelection()
@@ -57,6 +66,7 @@ sub initReferences()
     m.emptyFavoritesLabel = m.top.findNode("emptyFavoritesLabel")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.videoLibraryTask = m.top.findNode("videoLibraryTask")
+    m.videoFilterOptionsTask = m.top.findNode("videoFilterOptionsTask")
     m.videoLibraryProgressIndicator = m.top.findNode("videoLibraryProgressIndicator")
     m.videoLibraryProgressHoldTimer = m.top.findNode("videoLibraryProgressHoldTimer")
 end sub
@@ -66,6 +76,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.videoLibraryTask.observeField("response", "onVideoLibraryResponse")
+    m.videoFilterOptionsTask.observeField("response", "onVideoFilterOptionsResponse")
     m.videoLibraryProgressHoldTimer.observeField("fire", "onVideoLibraryProgressHoldTimerFire")
     m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
@@ -103,9 +114,11 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     ensureLibrarySpecializationInitialized()
+    m.pageState.selectedStartsWith = "ALL"
     prepareLoadRequest(request)
     resetVideoLibraryForLoad()
-    runVideoLibraryTask(request)
+    loadVideoFilterOptions()
+    loadVideoLibraryPage(0)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -185,6 +198,11 @@ sub resetVideoLibraryItemsState()
     m.pageState.allItems = []
     m.pageState.items = []
     clearVideoLibraryItemNodeCache()
+    m.pageState.paging.nextStartIndex = 0
+    m.pageState.paging.totalCount = -1
+    m.pageState.paging.hasMore = false
+    m.pageState.paging.requestInFlight = false
+    m.pageState.paging.queryId = m.pageState.paging.queryId + 1
 end sub
 
 '-------------------------------------------------------------------------------
@@ -212,10 +230,37 @@ end sub
 '-------------------------------------------------------------------------------
 ' runVideoLibraryTask
 '-------------------------------------------------------------------------------
-sub runVideoLibraryTask(request as object)
+sub loadVideoLibraryPage(startIndex as integer)
+    request = buildVideoLibraryPageRequest(startIndex)
+    if request = invalid then return
+    m.pageState.paging.requestInFlight = true
+    m.videoLibraryTask.control = "stop"
     m.videoLibraryTask.request = request
     m.videoLibraryTask.control = "run"
 end sub
+
+'-------------------------------------------------------------------------------
+' buildVideoLibraryPageRequest
+'-------------------------------------------------------------------------------
+function buildVideoLibraryPageRequest(startIndex as integer) as dynamic
+    if m.pageState.request = invalid then return invalid
+    request = {}
+    for each key in m.pageState.request
+        request[key] = m.pageState.request[key]
+    end for
+    request.pageStartIndex = startIndex
+    request.queryId = m.pageState.paging.queryId
+    request.startsWith = m.pageState.selectedStartsWith
+    request.genre = ""
+    request.years = []
+    if isGenreFilterActive() then request.genre = m.pageState.selectedGenre
+    if isDecadeFilterActive() and m.pageState.selectedDecade >= 0 then
+        for year = m.pageState.selectedDecade to m.pageState.selectedDecade + 9
+            request.years.Push(year.ToStr())
+        end for
+    end if
+    return request
+end function
 
 '-------------------------------------------------------------------------------
 ' onVideoLibraryResponse
@@ -224,29 +269,43 @@ sub onVideoLibraryResponse()
     response = m.videoLibraryTask.response
     if response = invalid then return
     if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "videoLibrary") <> true then return
+    if Number.ToInteger(response.queryId, -1) <> m.pageState.paging.queryId then return
 
     if response.ok <> true then
         m.pageState.isLoading = false
+        m.pageState.paging.requestInFlight = false
         Spinner.Hide()
         AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load library."))
         return
     end if
 
+    startIndex = Number.ToInteger(response.startIndex, -1)
+    if startIndex <> m.pageState.paging.nextStartIndex then
+        m.pageState.paging.requestInFlight = false
+        return
+    end if
     m.pageState.isLoading = false
-    m.pageState.allItems = getItemsFromPayload(response.payload)
-    m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
-    rebuildVideoLibraryItemNodeCache()
+    m.pageState.paging.requestInFlight = false
+    pageItems = getItemsFromPayload(response.payload)
+    if startIndex = 0 then m.pageState.allItems = []
+    for each item in pageItems
+        m.pageState.allItems.Push(item)
+    end for
+    m.pageState.paging.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageItems.Count())
+    m.pageState.paging.totalCount = Number.ToInteger(response.totalRecordCount, m.pageState.allItems.Count())
+    m.pageState.paging.hasMore = response.hasMore = true
     if hasLibrarySpecialization() and m.top.callFunc("specializationItemsLoaded") then return
     if hasLibrarySpecialization() then syncSortControls()
-    if isDecadeFilterActive() then
-        showDecadeFilterRow()
-    else if isGenreFilterActive() then
-        showGenreFilterRow()
-    else
+    if startIndex = 0 then
+        rebuildVideoLibraryItemNodeCache()
         renderItems(m.pageState.allItems)
+    else
+        appendVideoLibraryPage(pageItems, startIndex)
     end if
+    if isDecadeFilterActive() then showDecadeFilterRow()
+    if isGenreFilterActive() then showGenreFilterRow()
     if hasLibrarySpecialization() then m.top.callFunc("specializationSyncState")
-    updateTitleLabel(m.pageState.items.Count())
+    updateTitleLabel(m.pageState.paging.totalCount)
     AppStatus.ClearMessage()
     if m.pageState.refocusBrowseByButtonAfterLoad = true then
         m.pageState.refocusBrowseByButtonAfterLoad = false
@@ -254,10 +313,85 @@ sub onVideoLibraryResponse()
     else if m.pageState.refocusSortButtonAfterLoad = true then
         m.pageState.refocusSortButtonAfterLoad = false
         focusSortButton()
-    else
+    else if focusPendingTarget() <> true then
         if hasLibrarySpecialization() = false or m.top.callFunc("specializationActivate") <> true then focusItemsIfActive()
     end if
     Spinner.Hide()
+    requestNextVideoLibraryPageIfNeeded()
+end sub
+
+'-------------------------------------------------------------------------------
+' appendVideoLibraryPage
+'-------------------------------------------------------------------------------
+sub appendVideoLibraryPage(pageItems as object, startIndex as integer)
+    if m.itemsGrid.content = invalid then
+        renderItems(m.pageState.allItems)
+        return
+    end if
+    ensureVideoLibraryItemNodeCache()
+    for i = 0 to pageItems.Count() - 1
+        node = getCachedVideoLibraryItemNode(pageItems[i], startIndex + i)
+        if node <> invalid then m.itemsGrid.content.appendChild(node)
+    end for
+    m.pageState.items = m.pageState.allItems
+    m.itemsGrid.visible = m.itemsGrid.content.getChildCount() > 0
+    updateVideoLibraryProgressItemCount(m.itemsGrid.content.getChildCount())
+end sub
+
+'-------------------------------------------------------------------------------
+' loadVideoFilterOptions
+'-------------------------------------------------------------------------------
+sub loadVideoFilterOptions()
+    if m.pageState.request = invalid then return
+    request = {}
+    for each key in m.pageState.request
+        request[key] = m.pageState.request[key]
+    end for
+    m.pageState.filtersQueryId = m.pageState.filtersQueryId + 1
+    request.queryId = m.pageState.filtersQueryId
+    m.videoFilterOptionsTask.control = "stop"
+    m.videoFilterOptionsTask.request = request
+    m.videoFilterOptionsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoFilterOptionsResponse
+'-------------------------------------------------------------------------------
+sub onVideoFilterOptionsResponse()
+    response = m.videoFilterOptionsTask.response
+    if response = invalid then return
+    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "videoFilterOptions") <> true then return
+    if Number.ToInteger(response.queryId, -1) <> m.pageState.filtersQueryId then return
+    if response.ok <> true then return
+    m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
+    if isDecadeFilterActive() then
+        options = m.pageState.filterCache.decadeOptions
+        if options.Count() = 0 then
+            applySortSelection(getDefaultSortSelection())
+            return
+        end if
+        if filterOptionsContainValue(options, m.pageState.selectedDecade.ToStr()) <> true then
+            m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
+            showDecadeFilterRow()
+            reloadVideoLibraryForSort("filter")
+            return
+        end if
+        showDecadeFilterRow()
+    end if
+    if isGenreFilterActive() then
+        options = m.pageState.filterCache.genreOptions
+        if options.Count() = 0 then
+            applySortSelection(getDefaultSortSelection())
+            return
+        end if
+        if filterOptionsContainValue(options, m.pageState.selectedGenre) <> true then
+            m.pageState.selectedGenre = getFirstGenreFilterValue(options)
+            showGenreFilterRow()
+            reloadVideoLibraryForSort("filter")
+            return
+        end if
+        showGenreFilterRow()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -343,10 +477,6 @@ sub applySavedVideoLibraryViewState(request as object, state as object)
         m.pageState.activeFilterType = optionKey
         m.pageState.selectedDecade = Number.ToInteger(state.selectedDecade, -1)
         m.pageState.selectedGenre = Format.SafeString(state.selectedGenre, "")
-    else if optionKey = "Random" then
-        request.sortBy = "Random"
-        request.sortOrder = ""
-        m.pageState.selectedSort = buildSortSelection("Random", "")
     else if optionKey = "PremiereDate" or optionKey = "DateCreated" or optionKey = "SortName" then
         request.sortBy = optionKey
         request.sortOrder = getNormalizedSortOrder(Format.SafeString(state.sortOrder, "Ascending"))
@@ -572,10 +702,7 @@ end function
 ' getVisibleVideoLibraryItems
 '-------------------------------------------------------------------------------
 function getVisibleVideoLibraryItems() as object
-    if isDecadeFilterActive() then return getCachedFilterItems("Decade", m.pageState.selectedDecade.ToStr())
-    if isGenreFilterActive() then return getCachedFilterItems("Genre", m.pageState.selectedGenre)
-
-    return getSortedVideoLibraryItems(m.pageState.allItems)
+    return m.pageState.allItems
 end function
 
 '-------------------------------------------------------------------------------
@@ -614,7 +741,6 @@ sub showDecadeFilterRow()
     m.filterButtonRow.selectedValue = m.pageState.selectedDecade.ToStr()
     m.filterButtonRow.visible = options.Count() > 0
     applyGridLayout(m.pageState.imageAspect)
-    if m.pageState.selectedDecade >= 0 or m.pageState.renderDecadeFilterOnApply = true then renderItems(getVisibleVideoLibraryItems())
     m.pageState.renderDecadeFilterOnApply = false
 end sub
 
@@ -630,7 +756,6 @@ sub showGenreFilterRow()
     m.filterButtonRow.selectedValue = m.pageState.selectedGenre
     m.filterButtonRow.visible = options.Count() > 0
     applyGridLayout(m.pageState.imageAspect)
-    if m.pageState.selectedGenre <> "" then renderItems(getVisibleVideoLibraryItems())
 end sub
 
 '-------------------------------------------------------------------------------
@@ -691,8 +816,9 @@ sub onFilterButtonRowSelected()
     end if
 
     m.filterButtonRow.setFocus(true)
-    renderCurrentVideoLibraryItems()
+    m.pageState.pendingFocusTarget = "filterButtonRow"
     persistVideoLibraryViewState()
+    reloadVideoLibraryForSort("filter")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -846,6 +972,22 @@ end sub
 '-------------------------------------------------------------------------------
 sub onItemFocused()
     updateVideoLibraryProgressFocusedIndex()
+    requestNextVideoLibraryPageIfNeeded()
+end sub
+
+'-------------------------------------------------------------------------------
+' requestNextVideoLibraryPageIfNeeded
+'-------------------------------------------------------------------------------
+sub requestNextVideoLibraryPageIfNeeded()
+    if m.pageState.paging.hasMore <> true or m.pageState.paging.requestInFlight = true then return
+    loadedCount = m.pageState.allItems.Count()
+    if loadedCount <= 0 then return
+    columnCount = Number.ToInteger(m.itemsGrid.numColumns, 1)
+    if columnCount <= 0 then columnCount = 1
+    focusedRow = Number.ToInteger(Number.ToInteger(m.itemsGrid.itemFocused, 0) / columnCount, 0)
+    loadedRows = Number.ToInteger((loadedCount + columnCount - 1) / columnCount, 0)
+    if focusedRow < loadedRows - 7 then return
+    loadVideoLibraryPage(m.pageState.paging.nextStartIndex)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -935,6 +1077,8 @@ sub updateTitleLabel(itemCount = invalid as dynamic)
     request = m.pageState.request
     title = "Library"
     if request <> invalid then title = Format.SafeString(request.title, "Library")
+    startsWith = Format.SafeString(m.pageState.selectedStartsWith, "ALL")
+    if startsWith <> "" and startsWith <> "ALL" then title = title + " (" + startsWith + ")"
 
     if itemCount <> invalid then title = title + MediaMetadata.BulletSeparator() + Number.FormatWithThousandsSeparator(itemCount) + " items"
 
@@ -945,14 +1089,7 @@ end sub
 ' updateAvailableLetters
 '-------------------------------------------------------------------------------
 sub updateAvailableLetters(items as object)
-    availableLetters = {}
-
-    for each item in items
-        letter = getItemSortLetter(item)
-        if letter <> "" then availableLetters[letter] = true
-    end for
-
-    m.pageState.availableLetters = availableLetters
+    m.pageState.availableLetters = {}
 end sub
 
 '-------------------------------------------------------------------------------
@@ -983,6 +1120,7 @@ function openLetterGrid() as boolean
         openFunction: "openGrid"
         closeFields: ["closeRequested", "letterSelected"]
         availableLetters: m.pageState.availableLetters
+        selectedLetter: m.pageState.selectedStartsWith
         panelX: m.pageState.letterGridPanel.x
         panelY: m.pageState.letterGridPanel.y
     }
@@ -1011,12 +1149,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub selectLetter(letter as string)
     if letter = "" then return
-
-    index = findFirstItemIndexForLetter(letter)
-    if index < 0 then return
-
+    if letter = m.pageState.selectedStartsWith then
+        closeLetterGrid(true)
+        return
+    end if
+    m.pageState.selectedStartsWith = letter
     closeLetterGrid(false)
-    focusVideoLibraryItem(index)
+    reloadVideoLibraryForSort("items")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1035,15 +1174,15 @@ end sub
 ' getVideoSortOptions
 '-------------------------------------------------------------------------------
 function getVideoSortOptions() as object
-    return [
+    options = [
         { optionKey: "SortName", sortKey: "SortName", sortOrder: "", label: "Title" }
         { optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "", label: "Release Date" }
         { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "", label: "Date Added" }
-        { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
-        { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
         { optionKey: "Favorites", sortKey: "SortName", sortOrder: "", label: "Favorites" }
-        { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
     ]
+    if m.pageState.filterCache.decadeOptions.Count() > 0 then options.Push({ optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" })
+    if m.pageState.filterCache.genreOptions.Count() > 0 then options.Push({ optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" })
+    return options
 end function
 
 '-------------------------------------------------------------------------------
@@ -1062,6 +1201,7 @@ function applySortSelection(selection as object) as boolean
     selection = resetSortOrder(selection)
     selectedSortKey = getSelectionOptionKey(selection)
     if selectedSortKey = "" then return false
+    if selectedSortKey <> Format.SafeString(m.pageState.selectedSortKey, "") then m.pageState.selectedStartsWith = "ALL"
     if selectedSortKey = "Favorites" then
         if isFavoriteBrowseActive() then return false
 
@@ -1074,7 +1214,7 @@ function applySortSelection(selection as object) as boolean
         m.sortButton.selectedSort = m.pageState.selectedSort
         m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
         persistVideoLibraryViewState()
-        reloadVideoLibraryForSort()
+        reloadVideoLibraryForSort("items")
         return false
     end if
 
@@ -1088,7 +1228,7 @@ function applySortSelection(selection as object) as boolean
         m.sortButton.selectedSort = selection
         m.sortButton.sortEnabled = canUseSortOrder(selection)
         persistVideoLibraryViewState()
-        reloadVideoLibraryForSort()
+        reloadVideoLibraryForSort("items")
         return false
     end if
 
@@ -1114,8 +1254,9 @@ function applySortSelection(selection as object) as boolean
         m.sortButton.selectedSort = m.pageState.selectedSort
         m.sortButton.sortEnabled = false
         closeLetterGrid(false)
-        showDecadeFilterRow()
         persistVideoLibraryViewState()
+        showDecadeFilterRow()
+        reloadVideoLibraryForSort("filter")
         return false
     end if
 
@@ -1139,8 +1280,9 @@ function applySortSelection(selection as object) as boolean
         m.sortButton.selectedSort = m.pageState.selectedSort
         m.sortButton.sortEnabled = false
         closeLetterGrid(false)
-        showGenreFilterRow()
         persistVideoLibraryViewState()
+        showGenreFilterRow()
+        reloadVideoLibraryForSort("filter")
         return false
     end if
 
@@ -1162,8 +1304,8 @@ function applySortSelection(selection as object) as boolean
         m.browseByButton.selectedSort = m.pageState.selectedSort
         m.sortButton.selectedSort = m.pageState.selectedSort
         m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
-        renderCurrentVideoLibraryItems()
         persistVideoLibraryViewState()
+        reloadVideoLibraryForSort("items")
         return false
     end if
 
@@ -1172,8 +1314,8 @@ function applySortSelection(selection as object) as boolean
     m.browseByButton.selectedSort = selection
     m.sortButton.selectedSort = selection
     m.sortButton.sortEnabled = canUseSortOrder(selection)
-    renderCurrentVideoLibraryItems()
     persistVideoLibraryViewState()
+    reloadVideoLibraryForSort("items")
     return false
 end function
 
@@ -1192,8 +1334,8 @@ function applySortOrderSelection(selection as object) as boolean
     m.browseByButton.selectedSort = m.pageState.selectedSort
     m.sortButton.selectedSort = m.pageState.selectedSort
     m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
-    renderCurrentVideoLibraryItems()
     persistVideoLibraryViewState()
+    reloadVideoLibraryForSort("items")
     return false
 end function
 
@@ -1220,7 +1362,7 @@ function canUseSortOrder(selection as object) as boolean
     if selection = invalid then return false
 
     sortKey = Format.SafeString(selection.sortKey, "")
-    return sortKey <> "" and sortKey <> "Random"
+    return sortKey <> ""
 end function
 
 '-------------------------------------------------------------------------------
@@ -1228,7 +1370,6 @@ end function
 '-------------------------------------------------------------------------------
 function resetSortOrder(selection as object) as object
     if selection = invalid then return selection
-    if Format.SafeString(selection.sortKey, "") = "Random" then return selection
     if Format.SafeString(selection.sortKey, "") = "" then return selection
 
     selection.sortOrder = "Ascending"
@@ -1244,8 +1385,6 @@ function getSelectionOptionKey(selection as object) as string
 
     sortKey = Format.SafeString(selection.sortKey, "")
     if sortKey = "" then return ""
-    if sortKey = "Random" then return "Random"
-
     return sortKey + ":" + getSortOrderFromSelection(selection)
 end function
 
@@ -1262,23 +1401,27 @@ sub reloadVideoLibraryForSort(refocusTarget = invalid as dynamic)
     request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
     m.pageState.request = request
     AsyncLifecycle.Begin(m.pageState.lifecycle, request.libraryId)
-    m.pageState.refocusBrowseByButtonAfterLoad = refocusTarget <> "sort"
+    m.pageState.refocusBrowseByButtonAfterLoad = refocusTarget = invalid
     m.pageState.refocusSortButtonAfterLoad = refocusTarget = "sort"
     m.pageState.isLoading = true
+    m.pageState.paging.nextStartIndex = 0
+    m.pageState.paging.totalCount = -1
+    m.pageState.paging.hasMore = false
+    m.pageState.paging.requestInFlight = false
+    m.pageState.paging.queryId = m.pageState.paging.queryId + 1
+    m.pageState.allItems = []
     Spinner.Show(0)
     renderItems([])
     m.itemsGrid.jumpToItem = 0
     m.itemsGrid.itemFocused = 0
 
-    m.videoLibraryTask.request = request
-    m.videoLibraryTask.control = "run"
+    loadVideoLibraryPage(0)
 end sub
 
 '-------------------------------------------------------------------------------
 ' getSortOrderFromSelection
 '-------------------------------------------------------------------------------
 function getSortOrderFromSelection(selection as object) as string
-    if selection <> invalid and Format.SafeString(selection.sortKey, "") = "Random" then return ""
     if selection <> invalid and Format.SafeString(selection.sortOrder, "") = "Descending" then return "Descending"
 
     return "Ascending"
@@ -1320,14 +1463,7 @@ end function
 '-------------------------------------------------------------------------------
 function buildSortSelection(sortKey as string, sortOrder as string) as object
     normalizedSortKey = Format.SafeString(sortKey, "SortName")
-    if normalizedSortKey = "Random" then
-        return {
-            optionKey: "Random"
-            sortKey: "Random"
-            sortOrder: ""
-            label: "Random"
-        }
-    end if
+    if normalizedSortKey = "Random" then normalizedSortKey = "SortName"
 
     return {
         optionKey: normalizedSortKey
@@ -1349,7 +1485,6 @@ end function
 ' getSortSelectionLabel
 '-------------------------------------------------------------------------------
 function getSortSelectionLabel(sortKey as string) as string
-    if sortKey = "Random" then return "Random"
     if sortKey = "PremiereDate" then return "Release Date"
     if sortKey = "DateCreated" then return "Date Added"
     return "Title"
@@ -1391,18 +1526,33 @@ sub deactivate()
     stopVideoLibraryProgressHold()
     closeLetterGrid(false)
     m.videoLibraryTask.control = "stop"
+    m.videoFilterOptionsTask.control = "stop"
+    m.pageState.paging.requestInFlight = false
 end sub
 
 '-------------------------------------------------------------------------------
 ' focusItemsIfActive
 '-------------------------------------------------------------------------------
 sub focusItemsIfActive()
-    if m.itemsGrid.visible <> true then return
-    if m.itemsGrid.content = invalid then return
-    if m.itemsGrid.content.getChildCount() = 0 then return
+    if m.itemsGrid.visible <> true or m.itemsGrid.content = invalid or m.itemsGrid.content.getChildCount() = 0 then
+        focusBrowseByButton()
+        return
+    end if
 
     m.itemsGrid.setFocus(true)
 end sub
+
+'-------------------------------------------------------------------------------
+' focusFirstItem
+'-------------------------------------------------------------------------------
+function focusFirstItem() as boolean
+    if m.itemsGrid.visible <> true then return false
+    if m.itemsGrid.content = invalid or m.itemsGrid.content.getChildCount() = 0 then return false
+    m.itemsGrid.jumpToItem = 0
+    m.itemsGrid.itemFocused = 0
+    m.itemsGrid.setFocus(true)
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' focusVideoLibraryItem
@@ -1820,6 +1970,9 @@ sub updateVideoLibraryProgressItemCount(itemCount = invalid as dynamic)
     end if
 
     m.videoLibraryProgressIndicator.itemCount = resolvedItemCount
+    totalItemCount = m.pageState.paging.totalCount
+    if totalItemCount < resolvedItemCount then totalItemCount = resolvedItemCount
+    m.videoLibraryProgressIndicator.totalItemCount = totalItemCount
 end sub
 
 '-------------------------------------------------------------------------------

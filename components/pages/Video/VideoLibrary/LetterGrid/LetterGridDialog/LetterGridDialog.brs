@@ -30,7 +30,7 @@ end sub
 ' configureDialog
 '-------------------------------------------------------------------------------
 sub configureDialog()
-    m.top.title = "Jump To..."
+    m.top.title = "Starts with..."
     m.top.dialogWidth = 540
     m.top.dialogHeight = 562
     if m.top.panelX = invalid or m.top.panelX < 0 then m.top.panelX = 72
@@ -46,11 +46,20 @@ sub syncContent()
     if content = invalid then return
 
     content.availableLetters = m.top.availableLetters
+    content.activeLetter = m.top.activeLetter
     if m.letterContent <> content then
         if m.letterContent <> invalid then m.letterContent.unobserveField("letterSelected")
         m.letterContent = content
         m.letterContent.observeField("letterSelected", "onContentLetterSelected")
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onActiveLetterChanged
+'-------------------------------------------------------------------------------
+sub onActiveLetterChanged()
+    content = getLetterGridContent()
+    if content <> invalid then content.activeLetter = m.top.activeLetter
 end sub
 
 '-------------------------------------------------------------------------------

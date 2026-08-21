@@ -26,27 +26,46 @@ sub executeRequest()
         fields: "SortName,ProductionYear,PremiereDate,DateCreated,Genres"
         enableImageTypes: "Primary,Backdrop,Thumb,Logo"
         imageTypeLimit: 1
-        enableTotalRecordCount: false
+        enableTotalRecordCount: true
         sortBy: getSortBy(request)
         sortOrder: getSortOrder(request)
     }
     if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
-
-    if LCase(Format.SafeString(request.collectionType, "")) = "playlist" then
-        playlistParams = {
-            userId: Format.SafeString(request.userId, "")
-            fields: "SortName,ProductionYear,PremiereDate,DateCreated,Genres"
-            enableImageTypes: "Primary,Backdrop,Thumb,Logo"
-            imageTypeLimit: 1
-        }
-        requestUrl = request.server + "/Playlists/" + Format.SafeString(request.libraryId, "") + "/Items" + Url.BuildQueryString(playlistParams)
-    else
-        requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+    if Format.SafeString(request.genre, "") <> "" then params.AddReplace("genres", request.genre)
+    if Type(request.years) = "roArray" and request.years.Count() > 0 then params.AddReplace("years", request.years.Join(","))
+    startsWith = Format.SafeString(request.startsWith, "ALL")
+    if startsWith <> "" and startsWith <> "ALL" and startsWith <> "#" then
+        params.AddReplace("nameStartsWith", startsWith)
     end if
-    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+
+    pageSize = 100
+    startIndex = Number.ToInteger(request.pageStartIndex, 0)
+    params.AddReplace("startIndex", startIndex)
+    params.AddReplace("limit", pageSize)
+
+    if startsWith = "#" and LCase(Format.SafeString(request.collectionType, "")) <> "playlist" then
+        response = loadNonAlphabeticPage(request, params, startIndex, pageSize)
+    else
+        if LCase(Format.SafeString(request.collectionType, "")) = "playlist" then
+            playlistParams = {
+                userId: Format.SafeString(request.userId, "")
+                fields: "SortName,ProductionYear,PremiereDate,DateCreated,Genres"
+                enableImageTypes: "Primary,Backdrop,Thumb,Logo"
+                imageTypeLimit: 1
+                startIndex: startIndex
+                limit: pageSize
+                enableTotalRecordCount: true
+            }
+            requestUrl = request.server + "/Playlists/" + Format.SafeString(request.libraryId, "") + "/Items" + Url.BuildQueryString(playlistParams)
+        else
+            requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+        end if
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    end if
     if response.ok <> true then
         response.AddReplace("action", "videoLibrary")
         response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        response.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
         m.top.response = response
         return
     end if
@@ -56,9 +75,108 @@ sub executeRequest()
         action: "videoLibrary"
         libraryId: Format.SafeString(request.libraryId, "")
         payload: response.data
-        filterOptions: buildFilterOptions(getItemsFromPayload(response.data))
+        startIndex: startIndex
+        nextStartIndex: startIndex + getItemsFromPayload(response.data).Count()
+        totalRecordCount: getTotalRecordCount(response.data)
+        hasMore: hasMorePages(response.data, startIndex, getItemsFromPayload(response.data).Count(), pageSize)
+        queryId: Number.ToInteger(request.queryId, -1)
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' loadNonAlphabeticPage
+'-------------------------------------------------------------------------------
+function loadNonAlphabeticPage(request as object, params as object, startIndex as integer, pageSize as integer) as object
+    yearsKey = ""
+    if Type(request.years) = "roArray" then yearsKey = request.years.Join(",")
+    cacheKey = Format.SafeString(request.libraryId, "") + "|" + Format.SafeString(request.sortBy, "") + "|" + Format.SafeString(request.sortOrder, "") + "|" + Format.SafeString(request.genre, "") + "|" + yearsKey + "|" + (request.favoriteOnly = true).ToStr()
+    if startIndex = 0 or m.nonAlphabeticCache = invalid or m.nonAlphabeticCache.key <> cacheKey then
+        baseParams = {}
+        for each key in params
+            if LCase(key) <> "startindex" and LCase(key) <> "limit" then baseParams[key] = params[key]
+        end for
+
+        lowerParams = {}
+        for each key in baseParams
+            lowerParams[key] = baseParams[key]
+        end for
+        lowerParams.AddReplace("nameLessThan", "A")
+        lowerUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(lowerParams)
+        lowerResponse = HttpClient.Request(lowerUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        if lowerResponse.ok <> true then return lowerResponse
+
+        upperParams = {}
+        for each key in baseParams
+            upperParams[key] = baseParams[key]
+        end for
+        upperParams.AddReplace("nameStartsWithOrGreater", "Z")
+        upperUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(upperParams)
+        upperResponse = HttpClient.Request(upperUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        if upperResponse.ok <> true then return upperResponse
+
+        items = getItemsFromPayload(lowerResponse.data)
+        for each item in getItemsFromPayload(upperResponse.data)
+            name = UCase(Format.SafeString(item.Name, ""))
+            if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
+        end for
+        items = sortNonAlphabeticItems(items, Format.SafeString(request.sortBy, "SortName"), Format.SafeString(request.sortOrder, "Ascending"))
+        m.nonAlphabeticCache = { key: cacheKey, items: items }
+    end if
+
+    allItems = m.nonAlphabeticCache.items
+    pageItems = []
+    lastIndex = startIndex + pageSize - 1
+    if lastIndex >= allItems.Count() then lastIndex = allItems.Count() - 1
+    if startIndex < allItems.Count() then
+        for i = startIndex to lastIndex
+            pageItems.Push(allItems[i])
+        end for
+    end if
+    return { ok: true, data: { Items: pageItems, TotalRecordCount: allItems.Count() } }
+end function
+
+'-------------------------------------------------------------------------------
+' sortNonAlphabeticItems
+'-------------------------------------------------------------------------------
+function sortNonAlphabeticItems(items as object, sortBy as string, sortOrder as string) as object
+    entries = []
+    for each item in items
+        title = LCase(Format.SafeString(item.SortName, Format.SafeString(item.Name, "")))
+        sortValue = title
+        if sortBy = "PremiereDate" then sortValue = Format.SafeString(item.PremiereDate, "") + "|" + title
+        if sortBy = "DateCreated" then sortValue = Format.SafeString(item.DateCreated, "") + "|" + title
+        entries.Push({ item: item, sortKey: sortValue })
+    end for
+    entries.SortBy("sortKey")
+    result = []
+    if sortOrder = "Descending" then
+        for i = entries.Count() - 1 to 0 step -1
+            result.Push(entries[i].item)
+        end for
+    else
+        for each entry in entries
+            result.Push(entry.item)
+        end for
+    end if
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' getTotalRecordCount
+'-------------------------------------------------------------------------------
+function getTotalRecordCount(payload as dynamic) as integer
+    if Arrays.IsAssocArray(payload) = false then return -1
+    return Number.ToInteger(payload.TotalRecordCount, -1)
+end function
+
+'-------------------------------------------------------------------------------
+' hasMorePages
+'-------------------------------------------------------------------------------
+function hasMorePages(payload as dynamic, startIndex as integer, pageCount as integer, pageSize as integer) as boolean
+    if pageCount < pageSize then return false
+    totalRecordCount = getTotalRecordCount(payload)
+    return totalRecordCount < 0 or startIndex + pageCount < totalRecordCount
+end function
 
 '-------------------------------------------------------------------------------
 ' buildFilterOptions
@@ -185,8 +303,6 @@ end function
 ' getSortOrder
 '-------------------------------------------------------------------------------
 function getSortOrder(request as dynamic) as string
-    if Format.SafeString(request.sortBy, "") = "Random" then return ""
-
     sortOrder = Format.SafeString(request.sortOrder, "")
     if sortOrder = "Descending" then return "Descending"
 

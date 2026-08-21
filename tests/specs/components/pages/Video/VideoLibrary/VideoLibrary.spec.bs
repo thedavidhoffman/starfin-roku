@@ -1,0 +1,160 @@
+namespace tests
+
+    @SGNode("VideoLibrary")
+    @suite("VideoLibrary component")
+    class VideoLibraryTests extends rooibos.BaseTestSuite
+
+        @describe("server paging")
+
+        @it("requests the next page seven rows from the loaded end")
+        function _()
+            m.configurePaging(60, 60, 18)
+
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+
+            m.assertTrue(m.node.pageState.paging.requestInFlight)
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 60)
+            m.assertEqual(m.node.videoLibraryTask.request.queryId, 7)
+        end function
+
+        @it("does not page before the threshold or during an active request")
+        function _()
+            m.configurePaging(60, 60, 17)
+
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+            m.assertInvalid(m.node.videoLibraryTask.request)
+
+            m.node.itemsGrid.itemFocused = 18
+            m.node.pageState.paging.requestInFlight = true
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+            m.assertInvalid(m.node.videoLibraryTask.request)
+        end function
+
+        @it("composes genre decade and starts-with request fields")
+        function _()
+            m.configurePaging(0, 0, 0)
+            m.node.pageState.activeFilterType = "Genre"
+            m.node.pageState.selectedGenre = "Drama"
+            m.node.pageState.selectedStartsWith = "B"
+
+            'bs:disable-next-line 1140
+            request = buildVideoLibraryPageRequest(100)
+
+            m.assertEqual(request.pageStartIndex, 100)
+            m.assertEqual(request.genre, "Drama")
+            m.assertEqual(request.startsWith, "B")
+        end function
+
+        @it("omits Random from Browse By")
+        function _()
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1990", value: 1990 }]
+            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            'bs:disable-next-line 1140
+            options = getVideoSortOptions()
+            m.assertEqual(options.Count(), 6)
+            for each option in options
+                m.assertFalse(option.optionKey = "Random")
+            end for
+        end function
+
+        @it("retains filter-row focus while changing a genre pill")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.activeFilterType = "Genre"
+            m.node.pageState.selectedGenre = "Drama"
+            m.node.filterButtonRow = {
+                filterSelected: { type: "Genre", value: "Comedy" }
+                selectedValue: "Drama"
+                setFocus: sub(value as boolean)
+                end sub
+            }
+
+            'bs:disable-next-line 1140
+            onFilterButtonRowSelected()
+
+            m.assertEqual(m.node.pageState.selectedGenre, "Comedy")
+            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 0)
+        end function
+
+        @it("adds the active starts-with bucket to the counted page title")
+        function _()
+            m.node.pageState.request = { title: "Movies" }
+            m.node.pageState.selectedStartsWith = "M"
+
+            'bs:disable-next-line 1140
+            updateTitleLabel(123)
+
+            m.assertEqual(m.node.titleLabel.text, "Movies (M)" + MediaMetadata.BulletSeparator() + "123 items")
+        end function
+
+        @it("clears starts-with when a different browse option is selected")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.selectedSortKey = "SortName"
+            m.node.pageState.selectedStartsWith = "M"
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "Ascending", label: "Release Date" })
+
+            m.assertEqual(m.node.pageState.selectedStartsWith, "ALL")
+            m.assertEqual(m.node.videoLibraryTask.request.startsWith, "ALL")
+        end function
+
+        @it("retains starts-with when the active browse option is reselected")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.selectedSortKey = "SortName"
+            m.node.pageState.selectedStartsWith = "M"
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "SortName", sortKey: "SortName", sortOrder: "Ascending", label: "Title" })
+
+            m.assertEqual(m.node.pageState.selectedStartsWith, "M")
+        end function
+
+        @it("focuses Browse By when an empty result hides the grid")
+        function _()
+            m.node.itemsGrid.content = CreateObject("roSGNode", "ContentNode")
+            m.node.itemsGrid.visible = false
+            m.node.browseByButton.visible = true
+
+            'bs:disable-next-line 1140
+            focusItemsIfActive()
+
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
+        end function
+
+        @it("passes loaded and total counts separately to the progress indicator")
+        function _()
+            m.node.pageState.paging.totalCount = 1000
+            m.node.videoLibraryProgressIndicator = { itemCount: 0, totalItemCount: -1 }
+
+            'bs:disable-next-line 1140
+            updateVideoLibraryProgressItemCount(100)
+
+            m.assertEqual(m.node.videoLibraryProgressIndicator.itemCount, 100)
+            m.assertEqual(m.node.videoLibraryProgressIndicator.totalItemCount, 1000)
+        end function
+
+        private sub configurePaging(itemCount as integer, nextStartIndex as integer, focusedIndex as integer)
+            items = []
+            for i = 0 to itemCount - 1
+                items.Push({ Id: i.ToStr() })
+            end for
+            m.node.pageState.request = { libraryId: "library-1", server: "http://server", token: "token", userId: "user", includeItemTypes: "Movie" }
+            m.node.pageState.allItems = items
+            m.node.pageState.paging.hasMore = true
+            m.node.pageState.paging.requestInFlight = false
+            m.node.pageState.paging.nextStartIndex = nextStartIndex
+            m.node.pageState.paging.queryId = 7
+            m.node.itemsGrid = { itemFocused: focusedIndex, numColumns: 6 }
+            m.node.videoLibraryTask = { control: "", request: invalid }
+        end sub
+
+    end class
+
+end namespace
