@@ -1,0 +1,148 @@
+namespace tests
+
+    @SGNode("AudioPlayer")
+    @suite("AudioPlayer screensaver lifecycle")
+    class AudioPlayerScreensaverTests extends rooibos.BaseTestSuite
+
+        @describe("playback state changes")
+
+        @it("enables custom screensaver suppression while playing")
+        function _()
+            m.configurePlayer("playing", "bounce")
+
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+
+            m.assertTrue(m.node.player.disableScreenSaver)
+            m.assertFalse(m.node.playerState.changingTrack)
+        end function
+
+        @it("restores Roku screensaver behavior while paused and resumes custom mode")
+        function _()
+            m.configurePlayer("playing", "starfield")
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+
+            m.node.player.state = "paused"
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+            m.assertFalse(m.node.player.disableScreenSaver)
+
+            m.node.player.state = "playing"
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+            m.assertTrue(m.node.player.disableScreenSaver)
+        end function
+
+        @it("preserves an active screensaver through a successful track transition")
+        function _()
+            m.configurePlayer("finished", "bounce")
+            m.node.playerState.tracks = [{ Id: "track-1" }, { Id: "track-2" }]
+            m.node.playerState.currentIndex = 0
+            m.node.screensaverOverlay.callFunc("startDelay")
+            m.node.player.disableScreenSaver = true
+            m.node.playbackInfoTask = { request: invalid, control: "" }
+
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+
+            m.assertTrue(m.node.playerState.changingTrack)
+            m.assertEqual(m.node.playerState.currentIndex, 1)
+            m.assertTrue(m.node.player.disableScreenSaver)
+        end function
+
+        @it("ends the screensaver session on final completion and playback errors")
+        function _()
+            m.configurePlayer("finished", "bounce")
+            m.node.playerState.tracks = [{ Id: "track-1" }]
+            m.node.playerState.currentIndex = 0
+            m.node.player.disableScreenSaver = true
+
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+            m.assertFalse(m.node.player.disableScreenSaver)
+
+            m.node.player.state = "error"
+            m.node.player.disableScreenSaver = true
+            m.node.screensaverOverlay.callFunc("startDelay")
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+            m.assertFalse(m.node.player.disableScreenSaver)
+        end function
+
+        @it("ends the session when playback information fails or has no URL")
+        function _()
+            m.configurePlaybackInfoResponse({ ok: false, itemId: "track-1" })
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+            m.assertStoppedScreensaverSession()
+
+            m.configurePlaybackInfoResponse({ ok: true, itemId: "track-1", streamUrl: "" })
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+            m.assertStoppedScreensaverSession()
+        end function
+
+        @it("ignores stale playback information without cancelling the current transition")
+        function _()
+            m.configurePlaybackInfoResponse({ ok: false, itemId: "old-track" })
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertTrue(m.node.playerState.changingTrack)
+            m.assertTrue(m.node.player.disableScreenSaver)
+        end function
+
+        @it("ignores uncorrelated playback information without cancelling the current transition")
+        function _()
+            m.configurePlaybackInfoResponse({ ok: false, errorMessage: "Uncorrelated failure" })
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertTrue(m.node.playerState.changingTrack)
+            m.assertTrue(m.node.player.disableScreenSaver)
+        end function
+
+        @it("restores Roku screensaver behavior when deactivated")
+        function _()
+            m.configurePlayer("playing", "bounce")
+            m.node.player.disableScreenSaver = true
+            m.node.screensaverOverlay.callFunc("startDelay")
+            m.node.tracksTask = { control: "run" }
+            m.node.playbackInfoTask = { control: "run" }
+
+            'bs:disable-next-line 1140
+            deactivate()
+
+            m.assertFalse(m.node.player.disableScreenSaver)
+            m.assertEqual(m.node.player.control, "stop")
+        end function
+
+        private sub configurePlayer(state as string, screensaverType as string)
+            settings = {}
+            settings[SettingsStore.Key.ScreensaverType] = screensaverType
+            settings[SettingsStore.Key.ScreensaverDelay] = "1"
+            m.node.player = { state: state, control: "", disableScreenSaver: false }
+            m.node.playerState.request = { settings: settings }
+            m.node.playerState.changingTrack = true
+        end sub
+
+        private sub configurePlaybackInfoResponse(response as object)
+            m.configurePlayer("stopped", "bounce")
+            m.node.player.disableScreenSaver = true
+            m.node.playerState.tracks = [{ Id: "track-1", Name: "Track" }]
+            m.node.playerState.currentIndex = 0
+            m.node.playbackInfoTask = { response: response }
+            m.node.screensaverOverlay.callFunc("startDelay")
+        end sub
+
+        private sub assertStoppedScreensaverSession()
+            m.assertFalse(m.node.playerState.changingTrack)
+            m.assertFalse(m.node.player.disableScreenSaver)
+        end sub
+
+    end class
+
+end namespace

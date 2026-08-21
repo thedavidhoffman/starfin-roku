@@ -1,0 +1,104 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.poster = m.top.findNode("poster")
+    m.animation = m.top.findNode("bounceAnimation")
+    m.interpolator = m.top.findNode("bounceInterpolator")
+    m.timer = m.top.findNode("bounceLegTimer")
+    m.bounceState = { width: 1920, height: 1080, size: 500, speed: 130.0, endPosition: invalid, velocityX: 1.0, velocityY: 1.0 }
+    m.timer.observeField("fire", "onBounceLegTimerFired")
+    updatePoster()
+    startBounceFromCenter()
+end sub
+
+'-------------------------------------------------------------------------------
+' updatePoster
+'-------------------------------------------------------------------------------
+sub updatePoster()
+    if m.top.artworkUri <> "" then m.poster.uri = m.top.artworkUri
+end sub
+
+'-------------------------------------------------------------------------------
+' startBounceFromCenter
+'-------------------------------------------------------------------------------
+sub startBounceFromCenter()
+    position = [710, 290]
+    m.poster.translation = position
+    pi = 3.14159265
+    angle = (pi / 4) + ((Rnd(0) * (pi / 6)) - (pi / 12))
+    quadrant = Rnd(4)
+    if quadrant = 2 then angle = angle + (pi / 2)
+    if quadrant = 3 then angle = angle + pi
+    if quadrant = 4 then angle = angle + (3 * pi / 2)
+    m.bounceState.velocityX = Cos(angle)
+    m.bounceState.velocityY = Sin(angle)
+    startBounceLeg(position)
+end sub
+
+'-------------------------------------------------------------------------------
+' onBounceLegTimerFired
+'-------------------------------------------------------------------------------
+sub onBounceLegTimerFired()
+    position = m.bounceState.endPosition
+    if position = invalid then return
+    m.poster.translation = position
+    updateVelocity(position)
+    startBounceLeg(position)
+end sub
+
+'-------------------------------------------------------------------------------
+' startBounceLeg
+'-------------------------------------------------------------------------------
+sub startBounceLeg(position as object)
+    updateVelocity(position)
+    destination = getBoundaryPosition(position)
+    deltaX = destination[0] - position[0]
+    deltaY = destination[1] - position[1]
+    duration = Sqr((deltaX * deltaX) + (deltaY * deltaY)) / m.bounceState.speed
+    if duration < 0.1 then duration = 0.1
+    m.bounceState.endPosition = destination
+    m.animation.control = "stop"
+    m.animation.duration = duration
+    m.interpolator.key = [0.0, 1.0]
+    m.interpolator.keyValue = [position, destination]
+    m.animation.control = "start"
+    m.timer.control = "stop"
+    m.timer.duration = duration
+    m.timer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' getBoundaryPosition
+'-------------------------------------------------------------------------------
+function getBoundaryPosition(position as object) as object
+    maxX = m.bounceState.width - m.bounceState.size
+    maxY = m.bounceState.height - m.bounceState.size
+    timeX = 100000.0
+    timeY = 100000.0
+    if m.bounceState.velocityX > 0 then timeX = (maxX - position[0]) / m.bounceState.velocityX else if m.bounceState.velocityX < 0 then timeX = (0 - position[0]) / m.bounceState.velocityX
+    if m.bounceState.velocityY > 0 then timeY = (maxY - position[1]) / m.bounceState.velocityY else if m.bounceState.velocityY < 0 then timeY = (0 - position[1]) / m.bounceState.velocityY
+    travelTime = timeX
+    if timeY < travelTime then travelTime = timeY
+    return [clampPosition(position[0] + (m.bounceState.velocityX * travelTime), maxX), clampPosition(position[1] + (m.bounceState.velocityY * travelTime), maxY)]
+end function
+
+'-------------------------------------------------------------------------------
+' updateVelocity
+'-------------------------------------------------------------------------------
+sub updateVelocity(position as object)
+    maxX = m.bounceState.width - m.bounceState.size
+    maxY = m.bounceState.height - m.bounceState.size
+    if (position[0] <= 1 and m.bounceState.velocityX < 0) or (position[0] >= maxX - 1 and m.bounceState.velocityX > 0) then m.bounceState.velocityX = -m.bounceState.velocityX
+    if (position[1] <= 1 and m.bounceState.velocityY < 0) or (position[1] >= maxY - 1 and m.bounceState.velocityY > 0) then m.bounceState.velocityY = -m.bounceState.velocityY
+end sub
+
+'-------------------------------------------------------------------------------
+' clampPosition
+'-------------------------------------------------------------------------------
+function clampPosition(value as dynamic, maximum as integer) as integer
+    result = Number.ToInteger(value, 0)
+    if result < 0 then return 0
+    if result > maximum then return maximum
+    return result
+end function

@@ -1,0 +1,79 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.starLayer = m.top.findNode("starLayer")
+    m.starTimer = m.top.findNode("starTimer")
+    m.starfieldState = { width: 1920, height: 1080, centerX: 960.0, centerY: 540.0, speed: 0.009, stars: [] }
+    m.starTimer.observeField("fire", "onStarTimerFired")
+    buildStars()
+    m.starTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' buildStars
+'-------------------------------------------------------------------------------
+sub buildStars()
+    for i = 0 to 149
+        node = CreateObject("roSGNode", "Rectangle")
+        node.width = 1
+        node.height = 1
+        node.color = &hFFFFFFFF
+        m.starLayer.appendChild(node)
+        star = { node: node, worldX: 0.0, worldY: 0.0, z: 1.0, driftX: 0.0, driftY: 0.0 }
+        resetStar(star, false)
+        m.starfieldState.stars.Push(star)
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' onStarTimerFired
+'-------------------------------------------------------------------------------
+sub onStarTimerFired()
+    for each star in m.starfieldState.stars
+        updateStar(star)
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' updateStar
+'-------------------------------------------------------------------------------
+sub updateStar(star as object)
+    star.z = star.z - m.starfieldState.speed
+    star.worldX = star.worldX + star.driftX
+    star.worldY = star.worldY + star.driftY
+    if star.z <= 0.08 then resetStar(star, true) : return
+    screenX = m.starfieldState.centerX + (star.worldX / star.z)
+    screenY = m.starfieldState.centerY + (star.worldY / star.z)
+    if screenX < -20 or screenX > m.starfieldState.width + 20 or screenY < -20 or screenY > m.starfieldState.height + 20 then resetStar(star, true) : return
+    depth = 1.0 - star.z
+    size = Number.ToInteger(1 + (depth * 5), 1)
+    if size < 1 then size = 1
+    if size > 6 then size = 6
+    alpha = Number.ToInteger(80 + (depth * 175), 80)
+    if alpha < 80 then alpha = 80
+    if alpha > 255 then alpha = 255
+    star.node.width = size
+    star.node.height = size
+    star.node.translation = [Number.ToInteger(screenX, 0), Number.ToInteger(screenY, 0)]
+    star.node.color = &hFFFFFF00 + alpha
+end sub
+
+'-------------------------------------------------------------------------------
+' resetStar
+'-------------------------------------------------------------------------------
+sub resetStar(star as object, fromCenter as boolean)
+    star.worldX = randomRange(-m.starfieldState.centerX, m.starfieldState.centerX)
+    star.worldY = randomRange(-m.starfieldState.centerY, m.starfieldState.centerY)
+    star.driftX = randomRange(-0.35, 0.35)
+    star.driftY = randomRange(-0.2, 0.2)
+    if fromCenter then star.z = randomRange(0.85, 1.0) else star.z = randomRange(0.12, 1.0)
+    updateStar(star)
+end sub
+
+'-------------------------------------------------------------------------------
+' randomRange
+'-------------------------------------------------------------------------------
+function randomRange(minimum as float, maximum as float) as float
+    return minimum + (Rnd(0) * (maximum - minimum))
+end function

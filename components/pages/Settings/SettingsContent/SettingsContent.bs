@@ -13,6 +13,7 @@ sub init()
         m.top.findNode("videoPanel")
         m.top.findNode("collectionsPanel")
         m.top.findNode("playlistsPanel")
+        m.top.findNode("screensaverPanel")
         m.top.findNode("advancedPanel")
     ]
     m.settingsControls = {
@@ -26,6 +27,8 @@ sub init()
         collectionCardsImageTypeOptions: m.top.findNode("collectionCardsImageTypeOptions")
         collectionItemsImageTypeOptions: m.top.findNode("collectionItemsImageTypeOptions")
         playlistImageTypeOptions: m.top.findNode("playlistImageTypeOptions")
+        screensaverTypeOptions: m.top.findNode("screensaverTypeOptions")
+        screensaverDelayOptions: m.top.findNode("screensaverDelayOptions")
         tmdbApiKeyInput: m.top.findNode("tmdbApiKeyInput")
         resetStarfinButton: m.top.findNode("resetStarfinButton")
         abortResetButton: m.top.findNode("abortResetButton")
@@ -44,6 +47,7 @@ sub init()
         [m.settingsControls.videoStreamingModeOptions]
         [m.settingsControls.collectionCardsImageTypeOptions, m.settingsControls.collectionItemsImageTypeOptions]
         [m.settingsControls.playlistImageTypeOptions]
+        [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
         [m.settingsControls.resetStarfinButton]
     ]
     m.focusState = {
@@ -65,6 +69,7 @@ sub init()
     initTVEpisodeListDisplayOptions()
     initMediaShellBackgroundOptions()
     initThemeMusicOptions()
+    initScreensaverOptions()
     initVideoStreamingModeOptions()
 
     m.categoryList.observeField("itemFocused", "onCategoryFocused")
@@ -78,6 +83,8 @@ sub init()
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
     m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
+    m.settingsControls.screensaverTypeOptions.observeField("itemSelected", "onScreensaverTypeSelected")
+    m.settingsControls.screensaverDelayOptions.observeField("itemSelected", "onScreensaverDelaySelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemFocused", "onVideoStreamingModeFocused")
     m.settingsControls.resetStarfinButton.observeField("buttonSelected", "onResetStarfinSelected")
@@ -93,11 +100,19 @@ end sub
 '-------------------------------------------------------------------------------
 sub initCategoryList()
     content = CreateObject("roSGNode", "ContentNode")
-    for each title in ["Global", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Advanced"]
+    for each title in ["Global", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Screensaver", "Advanced"]
         item = content.createChild("ContentNode")
         item.title = title
     end for
     m.categoryList.content = content
+end sub
+
+'-------------------------------------------------------------------------------
+' initScreensaverOptions
+'-------------------------------------------------------------------------------
+sub initScreensaverOptions()
+    setOptionTitles(m.settingsControls.screensaverTypeOptions, ["Roku screensaver", "Bouncing artwork", "Starfield"])
+    setOptionTitles(m.settingsControls.screensaverDelayOptions, ["1 minute", "5 minutes", "15 minutes", "30 minutes"])
 end sub
 
 '-------------------------------------------------------------------------------
@@ -170,6 +185,8 @@ sub loadSettingsValues()
     m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvEpisodeListDisplay)
     m.settingsState.values[SettingsStore.Key.MediaShellBackground] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
     m.settingsState.values[SettingsStore.Key.ThemeMusic] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ThemeMusic)
+    m.settingsState.values[SettingsStore.Key.ScreensaverType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverType)
+    m.settingsState.values[SettingsStore.Key.ScreensaverDelay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverDelay)
     m.settingsState.values[SettingsStore.Key.VideoStreamingMode] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.VideoStreamingMode)
     m.settingsState.values[SettingsStore.Key.DisplayAccountBadge] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.DisplayAccountBadge)
     m.settingsState.values[SettingsStore.Key.TmdbApiKey] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TmdbApiKey)
@@ -182,6 +199,8 @@ sub loadSettingsValues()
     setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[SettingsStore.Key.MediaShellBackground])
     setOnOffOption(m.settingsControls.themeMusicOptions, m.settingsState.values[SettingsStore.Key.ThemeMusic])
+    setScreensaverTypeOption(m.settingsState.values[SettingsStore.Key.ScreensaverType])
+    setScreensaverDelayOption(m.settingsState.values[SettingsStore.Key.ScreensaverDelay])
     setVideoStreamingModeOption(m.settingsState.values[SettingsStore.Key.VideoStreamingMode])
     setOnOffOption(m.settingsControls.displayAccountBadgeOptions, m.settingsState.values[SettingsStore.Key.DisplayAccountBadge])
     m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[SettingsStore.Key.TmdbApiKey]
@@ -289,7 +308,7 @@ sub onResetStarfinSelected()
     m.settingsControls.resetStarfinButton.visible = false
     m.resetStarfinState.description.visible = false
     m.resetStarfinState.confirmationGroup.visible = true
-    m.categoryControls[7] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
+    m.categoryControls[8] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
     focusCategoryControl(0, invalid)
 end sub
 
@@ -316,7 +335,7 @@ sub showResetStarfinState()
     m.settingsControls.resetStarfinButton.visible = true
     m.resetStarfinState.description.visible = true
     m.resetStarfinState.confirmationGroup.visible = false
-    m.categoryControls[7] = [m.settingsControls.resetStarfinButton]
+    m.categoryControls[8] = [m.settingsControls.resetStarfinButton]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -341,7 +360,7 @@ end function
 '-------------------------------------------------------------------------------
 function getSettingsValues() as object
     settings = {}
-    for each key in [SettingsStore.Key.TvLibraryDisplay, SettingsStore.Key.MovieLibraryDisplay, SettingsStore.Key.CollectionCardsImageType, SettingsStore.Key.CollectionItemsImageType, SettingsStore.Key.PlaylistImageType, SettingsStore.Key.TvEpisodeListDisplay, SettingsStore.Key.MediaShellBackground, SettingsStore.Key.ThemeMusic, SettingsStore.Key.VideoStreamingMode, SettingsStore.Key.DisplayAccountBadge, SettingsStore.Key.TmdbApiKey]
+    for each key in [SettingsStore.Key.TvLibraryDisplay, SettingsStore.Key.MovieLibraryDisplay, SettingsStore.Key.CollectionCardsImageType, SettingsStore.Key.CollectionItemsImageType, SettingsStore.Key.PlaylistImageType, SettingsStore.Key.TvEpisodeListDisplay, SettingsStore.Key.MediaShellBackground, SettingsStore.Key.ThemeMusic, SettingsStore.Key.ScreensaverType, SettingsStore.Key.ScreensaverDelay, SettingsStore.Key.VideoStreamingMode, SettingsStore.Key.DisplayAccountBadge, SettingsStore.Key.TmdbApiKey]
         settings[key] = SettingsStore.GetSettingValue(m.settingsState.values, key)
     end for
     return settings
@@ -602,6 +621,62 @@ sub onThemeMusicSelected()
     else
         m.settingsState.values[SettingsStore.Key.ThemeMusic] = "off"
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onScreensaverTypeSelected
+'-------------------------------------------------------------------------------
+sub onScreensaverTypeSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.screensaverTypeOptions)
+    if selectedIndex < 0 then return
+    m.settingsControls.screensaverTypeOptions.checkedItem = selectedIndex
+    if selectedIndex = 1 then
+        m.settingsState.values[SettingsStore.Key.ScreensaverType] = "bounce"
+    else if selectedIndex = 2 then
+        m.settingsState.values[SettingsStore.Key.ScreensaverType] = "starfield"
+    else
+        m.settingsState.values[SettingsStore.Key.ScreensaverType] = "roku"
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onScreensaverDelaySelected
+'-------------------------------------------------------------------------------
+sub onScreensaverDelaySelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.screensaverDelayOptions)
+    if selectedIndex < 0 then return
+    m.settingsControls.screensaverDelayOptions.checkedItem = selectedIndex
+    values = ["1", "5", "15", "30"]
+    m.settingsState.values[SettingsStore.Key.ScreensaverDelay] = values[selectedIndex]
+end sub
+
+'-------------------------------------------------------------------------------
+' setScreensaverTypeOption
+'-------------------------------------------------------------------------------
+sub setScreensaverTypeOption(value as dynamic)
+    normalizedValue = ""
+    if value <> invalid then normalizedValue = LCase(value.ToStr())
+    if normalizedValue = "bounce" then
+        m.settingsControls.screensaverTypeOptions.checkedItem = 1
+    else if normalizedValue = "starfield" then
+        m.settingsControls.screensaverTypeOptions.checkedItem = 2
+    else
+        m.settingsControls.screensaverTypeOptions.checkedItem = 0
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' setScreensaverDelayOption
+'-------------------------------------------------------------------------------
+sub setScreensaverDelayOption(value as dynamic)
+    normalizedValue = "1"
+    if value <> invalid then normalizedValue = value.ToStr()
+    values = ["1", "5", "15", "30"]
+    selectedIndex = 0
+    for i = 0 to values.Count() - 1
+        if values[i] = normalizedValue then selectedIndex = i
+    end for
+    m.settingsControls.screensaverDelayOptions.checkedItem = selectedIndex
 end sub
 
 '-------------------------------------------------------------------------------

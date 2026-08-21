@@ -1,0 +1,120 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.screensaverDelayTimer = m.top.findNode("screensaverDelayTimer")
+    m.screensaverLayer = m.top.findNode("screensaverLayer")
+    m.screensaverState = { activeNode: invalid, type: "roku", enabled: false }
+    m.screensaverDelayTimer.observeField("fire", "onScreensaverDelayTimerFired")
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false or isVisible() <> true then return false
+    recordActivity()
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' startDelay
+'-------------------------------------------------------------------------------
+sub startDelay()
+    m.screensaverState.type = getScreensaverType()
+    m.screensaverState.enabled = m.screensaverState.type <> "roku"
+    stopDelayTimer()
+    if m.screensaverState.enabled <> true then return
+    m.screensaverDelayTimer.duration = getScreensaverDelaySeconds()
+    m.screensaverDelayTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' stopOverlay
+'-------------------------------------------------------------------------------
+sub stopOverlay()
+    stopDelayTimer()
+    removeScreensaver()
+    m.screensaverState.enabled = false
+end sub
+
+'-------------------------------------------------------------------------------
+' recordActivity
+'-------------------------------------------------------------------------------
+function recordActivity() as boolean
+    wasVisible = isVisible()
+    if wasVisible then
+        removeScreensaver()
+        m.top.dismissed = true
+    end if
+    if m.screensaverState.enabled then startDelay()
+    return wasVisible
+end function
+
+'-------------------------------------------------------------------------------
+' isVisible
+'-------------------------------------------------------------------------------
+function isVisible() as boolean
+    return m.screensaverState.activeNode <> invalid
+end function
+
+'-------------------------------------------------------------------------------
+' stopDelayTimer
+'-------------------------------------------------------------------------------
+sub stopDelayTimer()
+    m.screensaverDelayTimer.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' onScreensaverDelayTimerFired
+'-------------------------------------------------------------------------------
+sub onScreensaverDelayTimerFired()
+    stopDelayTimer()
+    showConfiguredScreensaver()
+end sub
+
+'-------------------------------------------------------------------------------
+' showConfiguredScreensaver
+'-------------------------------------------------------------------------------
+sub showConfiguredScreensaver()
+    m.screensaverState.type = getScreensaverType()
+    if m.screensaverState.type = "roku" then return
+    removeScreensaver()
+    componentName = "Starfield"
+    if m.screensaverState.type = "bounce" then componentName = "Bounce"
+    screensaver = CreateObject("roSGNode", componentName)
+    if m.screensaverState.type = "bounce" then screensaver.artworkUri = m.top.artworkUri
+    m.screensaverLayer.appendChild(screensaver)
+    m.screensaverState.activeNode = screensaver
+    m.top.setFocus(true)
+    m.top.shown = true
+end sub
+
+'-------------------------------------------------------------------------------
+' removeScreensaver
+'-------------------------------------------------------------------------------
+sub removeScreensaver()
+    while m.screensaverLayer.getChildCount() > 0
+        m.screensaverLayer.removeChild(m.screensaverLayer.getChild(0))
+    end while
+    m.screensaverState.activeNode = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' getScreensaverType
+'-------------------------------------------------------------------------------
+function getScreensaverType() as string
+    value = LCase(SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.ScreensaverType))
+    if value = "bounce" or value = "starfield" then return value
+    return "roku"
+end function
+
+'-------------------------------------------------------------------------------
+' getScreensaverDelaySeconds
+'-------------------------------------------------------------------------------
+function getScreensaverDelaySeconds() as integer
+    value = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.ScreensaverDelay)
+    minutes = Number.ToInteger(value, 1)
+    if minutes <> 1 and minutes <> 5 and minutes <> 15 and minutes <> 30 then minutes = 1
+    return minutes * 60
+end function

@@ -29,6 +29,7 @@
 ## Unit tests
 
 - When changing a file with an existing corresponding unit-test suite, update that suite to cover the changed behavior.
+- Do not modify production source code or expand production interfaces solely to make a unit test possible or pass. Adapt the test to existing production behavior and boundaries. If a new unit test reveals a genuine production bug, stop and report the bug instead of silently changing production code as part of the test work.
 - Run the relevant unit tests after making the change.
 - If no test change is necessary, verify that the existing tests still cover the behavior and mention that in the final response.
 

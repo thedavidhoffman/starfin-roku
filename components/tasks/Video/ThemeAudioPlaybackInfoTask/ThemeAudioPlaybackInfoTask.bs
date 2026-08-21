@@ -11,13 +11,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
+    itemId = ""
+    if request <> invalid then itemId = Format.SafeString(request.itemId, "")
     validationError = validateRequest(request)
     if validationError <> invalid then
+        validationError.AddReplace("itemId", itemId)
         m.top.response = validationError
         return
     end if
 
-    itemId = Format.SafeString(request.itemId, "")
     requestUrl = request.server + "/Items/" + itemId + "/PlaybackInfo" + Url.BuildQueryString({
         UserId: Format.SafeString(request.userId, "")
         IsPlayback: true
@@ -27,12 +29,14 @@ sub executeRequest()
     result = HttpClient.Request(requestUrl, "POST", invalid, buildPlaybackInfoBody(), JellyfinAuth.BuildTokenHeaders(request.token))
     if result.ok <> true then
         result.AddReplace("action", "themeAudioPlaybackInfo")
+        result.AddReplace("itemId", itemId)
         m.top.response = result
         return
     end if
 
     streamInfo = buildThemeAudioStreamInfo(request, result.data)
     if streamInfo.ok <> true then
+        streamInfo.AddReplace("itemId", itemId)
         m.top.response = streamInfo
         return
     end if

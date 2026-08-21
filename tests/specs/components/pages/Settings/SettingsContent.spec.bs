@@ -1,0 +1,144 @@
+namespace tests
+
+    @SGNode("SettingsContent")
+    @suite("SettingsContent component")
+    class SettingsContentTests extends rooibos.BaseTestSuite
+
+        @describe("category and panel setup")
+
+        @it("initializes every settings category and matching panel")
+        function _()
+            expectedTitles = ["Global", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Screensaver", "Advanced"]
+
+            m.assertEqual(m.node.categoryPanels.Count(), expectedTitles.Count())
+            m.assertEqual(m.node.categoryControls.Count(), expectedTitles.Count())
+            m.assertEqual(m.node.categoryList.content.getChildCount(), expectedTitles.Count())
+            for i = 0 to expectedTitles.Count() - 1
+                m.assertEqual(m.node.categoryList.content.getChild(i).title, expectedTitles[i])
+            end for
+        end function
+
+        @it("shows only the selected category panel")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(7)
+
+            m.assertEqual(m.node.focusState.categoryIndex, 7)
+            for i = 0 to m.node.categoryPanels.Count() - 1
+                m.assertEqual(m.node.categoryPanels[i].visible, i = 7)
+            end for
+        end function
+
+        @describe("screensaver settings")
+
+        @it("builds screensaver type and delay options in display order")
+        function _()
+            typeOptions = m.node.settingsControls.screensaverTypeOptions.content
+            delayOptions = m.node.settingsControls.screensaverDelayOptions.content
+
+            m.assertEqual(typeOptions.getChildCount(), 3)
+            m.assertEqual(typeOptions.getChild(0).title, "Roku screensaver")
+            m.assertEqual(typeOptions.getChild(1).title, "Bouncing artwork")
+            m.assertEqual(typeOptions.getChild(2).title, "Starfield")
+            m.assertEqual(delayOptions.getChildCount(), 4)
+            m.assertEqual(delayOptions.getChild(0).title, "1 minute")
+            m.assertEqual(delayOptions.getChild(1).title, "5 minutes")
+            m.assertEqual(delayOptions.getChild(2).title, "15 minutes")
+            m.assertEqual(delayOptions.getChild(3).title, "30 minutes")
+        end function
+
+        @it("maps stored screensaver types to their checked options")
+        function _()
+            'bs:disable-next-line 1140
+            setScreensaverTypeOption("roku")
+            m.assertEqual(m.node.settingsControls.screensaverTypeOptions.checkedItem, 0)
+
+            'bs:disable-next-line 1140
+            setScreensaverTypeOption("bounce")
+            m.assertEqual(m.node.settingsControls.screensaverTypeOptions.checkedItem, 1)
+
+            'bs:disable-next-line 1140
+            setScreensaverTypeOption("starfield")
+            m.assertEqual(m.node.settingsControls.screensaverTypeOptions.checkedItem, 2)
+
+            'bs:disable-next-line 1140
+            setScreensaverTypeOption("unknown")
+            m.assertEqual(m.node.settingsControls.screensaverTypeOptions.checkedItem, 0)
+        end function
+
+        @it("maps stored delays to their checked options with a one-minute fallback")
+        function _()
+            values = ["1", "5", "15", "30"]
+            for i = 0 to values.Count() - 1
+                'bs:disable-next-line 1140
+                setScreensaverDelayOption(values[i])
+                m.assertEqual(m.node.settingsControls.screensaverDelayOptions.checkedItem, i)
+            end for
+
+            'bs:disable-next-line 1140
+            setScreensaverDelayOption("unsupported")
+            m.assertEqual(m.node.settingsControls.screensaverDelayOptions.checkedItem, 0)
+        end function
+
+        @it("stores selected screensaver type and delay values")
+        function _()
+            m.node.settingsControls.screensaverTypeOptions.itemSelected = 1
+            'bs:disable-next-line 1140
+            onScreensaverTypeSelected()
+            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.ScreensaverType], "bounce")
+
+            m.node.settingsControls.screensaverTypeOptions.itemSelected = 2
+            'bs:disable-next-line 1140
+            onScreensaverTypeSelected()
+            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.ScreensaverType], "starfield")
+
+            m.node.settingsControls.screensaverTypeOptions.itemSelected = 0
+            'bs:disable-next-line 1140
+            onScreensaverTypeSelected()
+            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.ScreensaverType], "roku")
+
+            m.node.settingsControls.screensaverDelayOptions.itemSelected = 3
+            'bs:disable-next-line 1140
+            onScreensaverDelaySelected()
+            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.ScreensaverDelay], "30")
+        end function
+
+        @it("includes screensaver values in settings output")
+        function _()
+            m.node.settingsState.values = SettingsStore.Defaults()
+            m.node.settingsState.values[SettingsStore.Key.ScreensaverType] = "starfield"
+            m.node.settingsState.values[SettingsStore.Key.ScreensaverDelay] = "15"
+
+            'bs:disable-next-line 1140
+            settings = getSettingsValues()
+
+            m.assertEqual(settings[SettingsStore.Key.ScreensaverType], "starfield")
+            m.assertEqual(settings[SettingsStore.Key.ScreensaverDelay], "15")
+            m.assertEqual(settings[SettingsStore.Key.TvLibraryDisplay], "poster")
+            m.assertEqual(settings[SettingsStore.Key.VideoStreamingMode], PlaybackMode.Mode.Automatic)
+        end function
+
+        @describe("reset confirmation")
+
+        @it("switches between reset confirmation and normal reset controls")
+        function _()
+            m.node.focusState.categoryIndex = 8
+
+            'bs:disable-next-line 1140
+            onResetStarfinSelected()
+            m.assertTrue(m.node.resetStarfinState.confirmationVisible)
+            m.assertFalse(m.node.settingsControls.resetStarfinButton.visible)
+            m.assertTrue(m.node.resetStarfinState.confirmationGroup.visible)
+            m.assertEqual(m.node.categoryControls[8].Count(), 2)
+
+            'bs:disable-next-line 1140
+            showResetStarfinState()
+            m.assertFalse(m.node.resetStarfinState.confirmationVisible)
+            m.assertTrue(m.node.settingsControls.resetStarfinButton.visible)
+            m.assertFalse(m.node.resetStarfinState.confirmationGroup.visible)
+            m.assertEqual(m.node.categoryControls[8].Count(), 1)
+        end function
+
+    end class
+
+end namespace

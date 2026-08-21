@@ -19,7 +19,8 @@ sub init()
     m.playPauseButton = m.top.findNode("playPauseButton")
     m.nextButton = m.top.findNode("nextButton")
     m.trackList = m.top.findNode("trackList")
-    m.audio = m.top.findNode("audio")
+    m.player = m.top.findNode("player")
+    m.screensaverOverlay = m.top.findNode("screensaverOverlay")
     m.tracksTask = m.top.findNode("tracksTask")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
 
@@ -31,17 +32,19 @@ sub init()
         buttonIndex: 1
         seeking: false
         seekPosition: 0.0
+        changingTrack: false
     }
     configureButtons()
     m.tracksTask.observeField("response", "onTracksResponse")
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
-    m.audio.observeField("state", "onAudioStateChanged")
-    m.audio.observeField("position", "onPlaybackProgressChanged")
-    m.audio.observeField("duration", "onPlaybackProgressChanged")
+    m.player.observeField("state", "onPlayerStateChanged")
+    m.player.observeField("position", "onPlaybackProgressChanged")
+    m.player.observeField("duration", "onPlaybackProgressChanged")
     m.trackList.observeField("itemSelected", "onTrackSelected")
     m.previousButton.observeField("buttonSelected", "playPrevious")
     m.playPauseButton.observeField("buttonSelected", "togglePlayback")
     m.nextButton.observeField("buttonSelected", "playNext")
+    m.screensaverOverlay.observeField("dismissed", "onScreensaverDismissed")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -70,6 +73,9 @@ sub onLoadRequestChanged()
     m.artistName.text = getAlbumArtist(album)
     artworkUrl = getAlbumArtworkUrl(album, request)
     m.albumArtwork.uri = artworkUrl
+    m.screensaverOverlay.settings = request.settings
+    m.screensaverOverlay.artworkUri = artworkUrl
+    m.player.disableScreenSaver = false
     m.backdrop.uri = ""
     m.trackList.content = CreateObject("roSGNode", "ContentNode")
     updateTimeline(0, 0)
@@ -96,6 +102,7 @@ sub onTracksResponse()
     album = response.album
     if album = invalid then album = request.item
     artworkUrl = getAlbumArtworkUrl(album, request)
+    m.screensaverOverlay.artworkUri = artworkUrl
     m.backdrop.uri = getAlbumBackgroundUrl(album, request, artworkUrl)
     m.playerState.tracks = response.data.Items
     renderTracks()
@@ -134,7 +141,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub playTrack(index as integer)
     if index < 0 or index >= m.playerState.tracks.Count() then return
-    m.audio.control = "stop"
+    m.playerState.changingTrack = true
+    m.player.control = "stop"
     m.playerState.currentIndex = index
     m.playerState.seeking = false
     renderTracks()
@@ -158,37 +166,69 @@ end sub
 sub onPlaybackInfoResponse()
     response = m.playbackInfoTask.response
     track = getCurrentTrack()
-    if response = invalid or track = invalid or response.ok <> true then return
-    if Format.SafeString(response.itemId, "") <> Format.SafeString(track.Id, "") then return
+    if track = invalid then
+        stopScreensaverSession()
+        return
+    end if
+    if response = invalid then
+        stopScreensaverSession()
+        return
+    end if
+    responseItemId = Format.SafeString(response.itemId, "")
+    trackItemId = Format.SafeString(track.Id, "")
+    if responseItemId = "" or responseItemId <> trackItemId then return
+    if response.ok <> true then
+        stopScreensaverSession()
+        return
+    end if
 
     content = CreateObject("roSGNode", "ContentNode")
     content.url = Format.SafeString(response.streamUrl, "")
     content.streamFormat = Format.SafeString(response.streamFormat, "")
     content.title = Format.FirstNonEmpty([track.Name], "Untitled Track")
-    if content.url = "" then return
-    m.audio.content = content
-    m.audio.control = "play"
+    if content.url = "" then
+        stopScreensaverSession()
+        return
+    end if
+    m.player.content = content
+    m.player.control = "play"
     updatePlayPauseIcon()
 end sub
 
 '-------------------------------------------------------------------------------
-' onAudioStateChanged
+' onPlayerStateChanged
 '-------------------------------------------------------------------------------
-sub onAudioStateChanged()
-    state = LCase(Format.SafeString(m.audio.state, ""))
+sub onPlayerStateChanged()
+    state = LCase(Format.SafeString(m.player.state, ""))
     updatePlayPauseIcon()
-    if state = "finished" then playNext()
+    if state = "playing" then
+        m.playerState.changingTrack = false
+        if isCustomScreensaverEnabled(m.playerState.request.settings) then
+            m.player.disableScreenSaver = true
+            if m.screensaverOverlay.callFunc("isVisible") <> true then m.screensaverOverlay.callFunc("startDelay")
+        else
+            m.player.disableScreenSaver = false
+        end if
+    else if state = "finished" then
+        if m.playerState.currentIndex < m.playerState.tracks.Count() - 1 then
+            playNext()
+        else
+            stopScreensaverSession()
+        end if
+    else if state = "paused" or state = "error" or (state = "stopped" and m.playerState.changingTrack <> true) then
+        stopScreensaverSession()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
 ' togglePlayback
 '-------------------------------------------------------------------------------
 sub togglePlayback()
-    state = LCase(Format.SafeString(m.audio.state, ""))
+    state = LCase(Format.SafeString(m.player.state, ""))
     if state = "playing" then
-        m.audio.control = "pause"
+        m.player.control = "pause"
     else
-        m.audio.control = "resume"
+        m.player.control = "resume"
     end if
     updatePlayPauseIcon()
 end sub
@@ -198,7 +238,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub updatePlayPauseIcon()
     if m.playPauseButton = invalid then return
-    if LCase(Format.SafeString(m.audio.state, "")) = "playing" then
+    if LCase(Format.SafeString(m.player.state, "")) = "playing" then
         m.playPauseButton.icon = "pkg:/images/icons/playback-controls/pause-unfocused.png"
         m.playPauseButton.focusedIcon = "pkg:/images/icons/playback-controls/pause-focused.png"
     else
@@ -226,7 +266,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlaybackProgressChanged()
     if m.playerState.seeking = true then return
-    updateTimeline(m.audio.position, m.audio.duration)
+    updateTimeline(m.player.position, m.player.duration)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -251,11 +291,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub seekBy(seconds as float)
     duration = getTrackDuration(getCurrentTrack())
-    if duration < 1 then duration = Number.ToFloat(m.audio.duration, 0.0)
-    position = Number.ToFloat(m.audio.position, 0.0) + seconds
+    if duration < 1 then duration = Number.ToFloat(m.player.duration, 0.0)
+    position = Number.ToFloat(m.player.position, 0.0) + seconds
     if position < 0 then position = 0
     if duration > 0 and position > duration then position = duration
-    m.audio.seek = position
+    m.player.seek = position
     updateTimeline(position, duration)
 end sub
 
@@ -377,7 +417,8 @@ end sub
 sub deactivate()
     m.tracksTask.control = "stop"
     m.playbackInfoTask.control = "stop"
-    m.audio.control = "stop"
+    stopScreensaverSession()
+    m.player.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------
@@ -385,6 +426,7 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if m.screensaverOverlay.callFunc("recordActivity") then return true
     key = LCase(key)
     area = m.playerState.focusArea
     if key = "back" then
@@ -410,3 +452,27 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     return false
 end function
+
+'-------------------------------------------------------------------------------
+' onScreensaverDismissed
+'-------------------------------------------------------------------------------
+sub onScreensaverDismissed()
+    focusArea(m.playerState.focusArea)
+end sub
+
+'-------------------------------------------------------------------------------
+' isCustomScreensaverEnabled
+'-------------------------------------------------------------------------------
+function isCustomScreensaverEnabled(settings as dynamic) as boolean
+    screensaverType = LCase(SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverType))
+    return screensaverType = "bounce" or screensaverType = "starfield"
+end function
+
+'-------------------------------------------------------------------------------
+' stopScreensaverSession
+'-------------------------------------------------------------------------------
+sub stopScreensaverSession()
+    m.playerState.changingTrack = false
+    m.screensaverOverlay.callFunc("stopOverlay")
+    m.player.disableScreenSaver = false
+end sub

@@ -1,0 +1,66 @@
+namespace tests
+
+    @SGNode("ScreensaverOverlay")
+    @suite("ScreensaverOverlay component")
+    class ScreensaverOverlayTests extends rooibos.BaseTestSuite
+
+        @describe("session lifecycle")
+
+        @it("starts custom delays and leaves Roku mode disabled")
+        function _()
+            m.setSettings("bounce", "5")
+            'bs:disable-next-line 1140
+            startDelay()
+            m.assertTrue(m.node.screensaverState.enabled)
+            m.assertEqual(m.node.screensaverDelayTimer.duration.ToStr(), "300")
+
+            m.setSettings("roku", "1")
+            'bs:disable-next-line 1140
+            startDelay()
+            m.assertFalse(m.node.screensaverState.enabled)
+        end function
+
+        @it("dismisses an active screensaver and restarts its delay")
+        function _()
+            m.setSettings("bounce", "1")
+            'bs:disable-next-line 1140
+            startDelay()
+            m.node.screensaverState.activeNode = true
+            'bs:disable-next-line 1140
+            m.assertTrue(isVisible())
+
+            'bs:disable-next-line 1140
+            wasVisible = recordActivity()
+
+            m.assertTrue(wasVisible)
+            'bs:disable-next-line 1140
+            m.assertFalse(isVisible())
+            m.assertTrue(m.node.screensaverState.enabled)
+        end function
+
+        @it("fully stops the session and ignores later activity")
+        function _()
+            m.setSettings("bounce", "1")
+            'bs:disable-next-line 1140
+            startDelay()
+            'bs:disable-next-line 1140
+            stopOverlay()
+
+            m.assertFalse(m.node.screensaverState.enabled)
+
+            'bs:disable-next-line 1140
+            wasVisible = recordActivity()
+            m.assertFalse(wasVisible)
+            m.assertFalse(m.node.screensaverState.enabled)
+        end function
+
+        private sub setSettings(screensaverType as string, delay as string)
+            settings = {}
+            settings[SettingsStore.Key.ScreensaverType] = screensaverType
+            settings[SettingsStore.Key.ScreensaverDelay] = delay
+            m.node.top.settings = settings
+        end sub
+
+    end class
+
+end namespace

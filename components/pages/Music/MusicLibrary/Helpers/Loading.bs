@@ -95,7 +95,6 @@ sub onMusicArtistsResponse()
     if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
     if Number.ToInteger(response.queryId, -1) <> m.state.content.artists.load.queryId then return
     if response.ok <> true then
-        hidePagingSpinner()
         m.state.content.artists.load.requestInFlight = false
         m.state.content.artists.load.status = "failed"
         m.state.content.artists.load.hasMore = false
@@ -110,7 +109,6 @@ sub onMusicArtistsResponse()
     startIndex = Number.ToInteger(response.startIndex, -1)
     expectedStartIndex = m.state.content.artists.load.nextStartIndex
     if startIndex <> expectedStartIndex then
-        hidePagingSpinner()
         m.state.content.artists.load.requestInFlight = false
         m.state.content.artists.load.status = "failed"
         m.state.content.artists.load.hasMore = false
@@ -118,7 +116,6 @@ sub onMusicArtistsResponse()
         if m.state.loadingUi.foreground.kind = "artists" and finishForegroundLoad("artists") then focusBrowseByButton()
         return
     end if
-    hidePagingSpinner()
     m.state.content.artists.load.requestInFlight = false
     pageArtists = getValidMusicItems(response.payload, "artist")
     for each artist in pageArtists
@@ -157,7 +154,6 @@ sub onMusicLibraryResponse()
     if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicLibrary") <> true then return
     if Number.ToInteger(response.queryId, -1) <> m.state.content.albums.load.queryId then return
     if response.ok <> true then
-        hidePagingSpinner()
         m.state.loadingUi.filteredRefreshActive = false
         m.state.content.albums.load.requestInFlight = false
         m.state.content.albums.load.status = "failed"
@@ -173,7 +169,6 @@ sub onMusicLibraryResponse()
     startIndex = Number.ToInteger(response.startIndex, -1)
     expectedStartIndex = m.state.content.albums.load.nextStartIndex
     if startIndex <> expectedStartIndex then
-        hidePagingSpinner()
         m.state.loadingUi.filteredRefreshActive = false
         m.state.content.albums.load.requestInFlight = false
         m.state.content.albums.load.status = "failed"
@@ -184,7 +179,6 @@ sub onMusicLibraryResponse()
         end if
         return
     end if
-    hidePagingSpinner()
     m.state.content.albums.load.requestInFlight = false
     if startIndex = 0 then
         m.state.content.albums.load.totalCount = Number.ToInteger(response.totalRecordCount, -1)
@@ -246,7 +240,6 @@ sub loadAlbumPage(startIndex as integer)
     if isGenreFilterActive() then request.genre = m.state.browse.genre
     if isDecadeFilterActive() then request.years = getSelectedDecadeYears()
 
-    if startIndex > 0 then showPagingSpinner()
     m.state.content.albums.load.requestInFlight = true
     m.musicLibraryTask.control = "stop"
     m.musicLibraryTask.request = request
@@ -283,7 +276,6 @@ end function
 sub cancelPendingArtistLoad()
     if m.state.content.artists.load.status <> "loading" then return
 
-    hidePagingSpinner()
     m.log.write("Artist load cancelled libraryId=" + getLibraryId())
     m.musicArtistsTask.control = "stop"
     m.state.content.artists.load.status = "idle"
@@ -304,7 +296,6 @@ sub reloadMusicLibrary()
     request = m.state.context
     if request = invalid then return
 
-    hidePagingSpinner()
     m.filteredRefreshTimer.control = "stop"
     m.state.loadingUi.filteredRefreshPending = false
     m.state.loadingUi.filteredRefreshActive = false
@@ -365,7 +356,6 @@ sub startArtistQuery()
     request = m.state.context
     if request = invalid or isFavoriteBrowseActive() then return
 
-    hidePagingSpinner()
     m.musicLibraryTask.control = "stop"
     m.state.content.albums.load.requestInFlight = false
     m.state.content.albums.load.status = "idle"
@@ -439,31 +429,10 @@ sub loadArtistPage(startIndex as integer)
     artistRequest.queryId = m.state.content.artists.load.queryId
     artistRequest.pageStartIndex = startIndex
     artistRequest.artistSortOrder = Format.SafeString(m.state.browse.selection.sortOrder, "Ascending")
-    if startIndex > 0 then showPagingSpinner()
     m.state.content.artists.load.requestInFlight = true
     m.musicArtistsTask.control = "stop"
     m.musicArtistsTask.request = artistRequest
     m.musicArtistsTask.control = "run"
-end sub
-
-'-------------------------------------------------------------------------------
-' showPagingSpinner
-'-------------------------------------------------------------------------------
-sub showPagingSpinner()
-    if m.state.loadingUi.pagingSpinnerVisible then return
-
-    m.state.loadingUi.pagingSpinnerVisible = true
-    Spinner.Show(0)
-end sub
-
-'-------------------------------------------------------------------------------
-' hidePagingSpinner
-'-------------------------------------------------------------------------------
-sub hidePagingSpinner()
-    if m.state.loadingUi.pagingSpinnerVisible <> true then return
-
-    m.state.loadingUi.pagingSpinnerVisible = false
-    Spinner.Hide()
 end sub
 
 '-------------------------------------------------------------------------------
