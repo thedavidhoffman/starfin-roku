@@ -1,7 +1,3 @@
-'===============================================================================
-' MusicLibrary
-'===============================================================================
-
 '-------------------------------------------------------------------------------
 ' musicLibraryHandleHomeLibrarySelected
 '-------------------------------------------------------------------------------
@@ -90,7 +86,9 @@ sub musicLibraryHandleSortOverlayClosed(closed as object)
 
     overlay = closed.overlay
     if overlay <> invalid and overlay.sortSelected <> invalid then
-        m.musicLibraryPage.callFunc("applySortSelection", overlay.sortSelected)
+        isLoading = m.musicLibraryPage.callFunc("applySortSelection", overlay.sortSelected)
+        if isLoading = true then return
+
         optionKey = Format.SafeString(overlay.sortSelected.optionKey, "")
         if optionKey = "Decade" or optionKey = "Genre" then
             if m.musicLibraryPage.callFunc("focusFilterButtonRow") = true then return
@@ -123,9 +121,11 @@ sub musicLibraryHandleArtistSelected()
     page.loadRequest = {
         itemId: selection.itemId
         server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        libraryId: m.musicLibraryPage.loadRequest.libraryId
         musicBrainzArtistId: Format.SafeString(selection.musicBrainzArtistId, "")
         item: selection.item
-        albums: selection.albums
         backdropUrl: Format.SafeString(selection.backdropUrl, "")
         logoUrl: Format.SafeString(selection.logoUrl, "")
         settings: m.settings
@@ -133,6 +133,7 @@ sub musicLibraryHandleArtistSelected()
 
     m.musicArtistPage = page
     authAppendDynamicPage(page)
+    m.musicLibraryPage.callFunc("deactivate")
     m.musicLibraryPage.visible = false
     m.header.visible = false
     page.callFunc("activate")
@@ -162,8 +163,13 @@ sub musicAudioPlayerShow(selection as dynamic, sourcePage as string)
         item: selection.item
         sourcePage: sourcePage
     }
-    if m.musicLibraryPage <> invalid then m.musicLibraryPage.visible = false
-    if m.musicArtistPage <> invalid then m.musicArtistPage.visible = false
+    if sourcePage = "library" and m.musicLibraryPage <> invalid then
+        m.musicLibraryPage.callFunc("deactivate")
+        m.musicLibraryPage.visible = false
+    else if sourcePage = "artist" and m.musicArtistPage <> invalid then
+        m.musicArtistPage.callFunc("deactivate")
+        m.musicArtistPage.visible = false
+    end if
     if sourcePage = "home" then m.homePage.visible = false
     m.header.visible = false
     m.audioPlayerPage = page
@@ -183,10 +189,12 @@ sub musicAudioPlayerHandleCloseRequested()
     if request <> invalid and request.sourcePage = "artist" and m.musicArtistPage <> invalid then
         m.musicArtistPage.visible = true
         m.musicArtistPage.callFunc("activate")
+        m.musicArtistPage.focusRequested = true
     else if m.musicLibraryPage <> invalid then
         m.musicLibraryPage.visible = true
         m.header.visible = true
         m.musicLibraryPage.callFunc("activate")
+        m.musicLibraryPage.focusRequested = true
     else
         showHome()
     end if
@@ -217,6 +225,7 @@ sub musicArtistHandleCloseRequested()
         m.musicLibraryPage.visible = true
         m.header.visible = true
         m.musicLibraryPage.callFunc("activate")
+        m.musicLibraryPage.focusRequested = true
     else
         showHome()
     end if

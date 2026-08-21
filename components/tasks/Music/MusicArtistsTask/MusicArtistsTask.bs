@@ -17,7 +17,9 @@ sub executeRequest()
     if request <> invalid then libraryId = Format.SafeString(request.libraryId, "")
     if request = invalid or Format.SafeString(request.server, "") = "" or Format.SafeString(request.token, "") = "" or Format.SafeString(request.userId, "") = "" or libraryId = "" then
         m.log.error("Invalid artist request libraryId=" + libraryId)
-        m.top.response = { ok: false, action: "musicArtists", libraryId: libraryId, errorMessage: "Invalid music artists request." }
+        queryId = -1
+        if request <> invalid then queryId = Number.ToInteger(request.queryId, -1)
+        m.top.response = { ok: false, action: "musicArtists", libraryId: libraryId, queryId: queryId, errorMessage: "Invalid music artists request." }
         return
     end if
 
@@ -27,23 +29,56 @@ sub executeRequest()
         fields: "SortName,ProviderIds"
         enableImageTypes: "Primary,Backdrop,Logo"
         imageTypeLimit: 1
-        enableTotalRecordCount: false
+        enableTotalRecordCount: true
+        sortBy: "SortName"
+        sortOrder: Format.SafeString(request.artistSortOrder, "Ascending")
     }
-    requestUrl = request.server + "/Artists" + Url.BuildQueryString(params)
+    pageSize = 100
+    startIndex = Number.ToInteger(request.pageStartIndex, 0)
+    params.startIndex = startIndex
+    params.limit = pageSize
+    requestUrl = request.server + "/Artists/AlbumArtists" + Url.BuildQueryString(params)
     response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
-    m.log.write("HTTP completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
+    m.log.write("HTTP page completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
     if response.ok <> true then
         m.log.error("Artist request failed libraryId=" + Format.SafeString(request.libraryId, "") + " message=" + Format.SafeString(response.errorMessage, ""))
         response.AddReplace("action", "musicArtists")
         response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        response.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
         m.top.response = response
         return
     end if
 
+    artists = getArtistItems(response.data)
+    totalRecordCount = getArtistTotalRecordCount(response.data)
     m.top.response = {
         ok: true
         action: "musicArtists"
         libraryId: Format.SafeString(request.libraryId, "")
+        queryId: Number.ToInteger(request.queryId, -1)
         payload: response.data
+        startIndex: startIndex
+        nextStartIndex: startIndex + artists.Count()
+        totalRecordCount: totalRecordCount
+        hasMore: artists.Count() = pageSize and (totalRecordCount < 0 or startIndex + artists.Count() < totalRecordCount)
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' getArtistTotalRecordCount
+'-------------------------------------------------------------------------------
+function getArtistTotalRecordCount(payload as dynamic) as integer
+    if Arrays.IsAssocArray(payload) = false then return -1
+    return Number.ToInteger(payload.TotalRecordCount, -1)
+end function
+
+'-------------------------------------------------------------------------------
+' getArtistItems
+'-------------------------------------------------------------------------------
+function getArtistItems(payload as dynamic) as object
+    if payload = invalid then return []
+    if Type(payload) = "roArray" then return payload
+    if Arrays.IsAssocArray(payload) = false then return []
+    if Type(payload.Items) = "roArray" then return payload.Items
+    return []
+end function

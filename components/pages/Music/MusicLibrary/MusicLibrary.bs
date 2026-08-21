@@ -8,14 +8,13 @@ sub init()
     m.sortButton = m.top.findNode("sortButton")
     m.filterButtonRow = m.top.findNode("filterButtonRow")
     m.emptyFilterLabel = m.top.findNode("emptyFilterLabel")
-    m.filterFocusTimer = m.top.findNode("filterFocusTimer")
-    m.loadWatchdogTimer = m.top.findNode("loadWatchdogTimer")
-    m.albumsGrid = m.top.findNode("albumsGrid")
-    m.artistsGrid = m.top.findNode("artistsGrid")
+    m.musicGrid = m.top.findNode("musicGrid")
     m.musicLibraryTask = m.top.findNode("musicLibraryTask")
     m.musicArtistsTask = m.top.findNode("musicArtistsTask")
+    m.musicFilterOptionsTask = m.top.findNode("musicFilterOptionsTask")
     m.musicLibraryTask.observeField("response", "onMusicLibraryResponse")
     m.musicArtistsTask.observeField("response", "onMusicArtistsResponse")
+    m.musicFilterOptionsTask.observeField("response", "onMusicFilterOptionsResponse")
     m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
     m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
@@ -23,14 +22,11 @@ sub init()
     m.filterButtonRow.observeField("filterSelected", "onFilterButtonRowSelected")
     m.filterButtonRow.observeField("focusExitUp", "onFilterButtonRowFocusExitUp")
     m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
-    m.filterFocusTimer.observeField("fire", "onFilterFocusTimerFired")
-    m.loadWatchdogTimer.observeField("fire", "onLoadWatchdogTimerFired")
-    m.albumsGrid.observeField("itemSelected", "onAlbumSelected")
-    m.artistsGrid.observeField("itemSelected", "onArtistSelected")
+    m.musicGrid.observeField("itemSelected", "onMusicItemSelected")
+    m.musicGrid.observeField("itemFocused", "onMusicGridItemFocused")
     m.state = {
         request: invalid
-        allAlbums: []
-        albums: []
+        loadedAlbums: []
         artists: []
         selectedSortKey: "Album"
         selectedSort: getDefaultSortSelection()
@@ -38,16 +34,37 @@ sub init()
         selectedDecade: -1
         selectedGenre: ""
         filterCache: createEmptyFilterCache()
-        sortCache: createEmptySortCache()
+        filterLoad: {
+            status: "idle"
+            requestInFlight: false
+            queryId: 0
+        }
+        refreshPending: false
         foregroundLoad: {
             kind: ""
+            pendingKind: ""
             startedAt: invalid
+            controlsHidden: false
+            restoreFilterVisible: false
+        }
+        pagingLoad: {
+            spinnerVisible: false
         }
         albumLoad: {
             status: "idle"
+            requestInFlight: false
+            nextStartIndex: 0
+            totalCount: -1
+            hasMore: false
+            queryId: 0
         }
         artistLoad: {
             status: "idle"
+            queryId: 0
+            requestInFlight: false
+            nextStartIndex: 0
+            totalCount: -1
+            hasMore: false
         }
         lifecycle: AsyncLifecycle.Create()
     }
@@ -62,11 +79,23 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.state.request = request
-    m.state.allAlbums = []
-    m.state.albums = []
+    m.state.loadedAlbums = []
     m.state.artists = []
     m.state.albumLoad.status = "loading"
+    m.state.albumLoad.requestInFlight = false
+    m.state.albumLoad.nextStartIndex = 0
+    m.state.albumLoad.totalCount = -1
+    m.state.albumLoad.hasMore = false
+    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
     m.state.artistLoad.status = "idle"
+    m.state.artistLoad.requestInFlight = false
+    m.state.artistLoad.nextStartIndex = 0
+    m.state.artistLoad.totalCount = -1
+    m.state.artistLoad.hasMore = false
+    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
+    m.state.filterLoad.status = "loading"
+    m.state.filterLoad.requestInFlight = false
+    m.state.filterLoad.queryId = m.state.filterLoad.queryId + 1
     savedState = LibraryViewStateStore.Load(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""))
     if savedState <> invalid then
         applySavedMusicLibraryViewState(request, savedState)
@@ -83,19 +112,109 @@ sub onLoadRequestChanged()
         m.state.selectedDecade = -1
         m.state.selectedGenre = ""
     end if
+    configureCurrentAlbumRequest()
     m.state.filterCache = createEmptyFilterCache()
-    m.state.sortCache = createEmptySortCache()
     syncSortControls()
     hideFilterButtonRow()
     AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
-    updateTitleLabel(0)
+    updateTitleLabel()
     renderAlbums([])
-    Spinner.Show(0)
-    startForegroundLoad("albums")
-    m.log.write("Album load started libraryId=" + Format.SafeString(request.libraryId, ""))
-    m.musicLibraryTask.request = request
-    m.musicLibraryTask.control = "run"
+    if isArtistBrowseMode() then
+        startArtistQuery()
+    else
+        m.log.write("Album load started libraryId=" + Format.SafeString(request.libraryId, ""))
+        queueForegroundLoad("albums")
+    end if
+    loadFilterOptions()
 end sub
+
+'-------------------------------------------------------------------------------
+' loadFilterOptions
+'-------------------------------------------------------------------------------
+sub loadFilterOptions()
+    filterRequest = {}
+    for each key in m.state.request
+        filterRequest[key] = m.state.request[key]
+    end for
+    filterRequest.queryId = m.state.filterLoad.queryId
+    m.state.filterLoad.requestInFlight = true
+    m.musicFilterOptionsTask.control = "stop"
+    m.musicFilterOptionsTask.request = filterRequest
+    m.musicFilterOptionsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onMusicFilterOptionsResponse
+'-------------------------------------------------------------------------------
+sub onMusicFilterOptionsResponse()
+    response = m.musicFilterOptionsTask.response
+    if response = invalid then return
+    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicFilterOptions") <> true then return
+    if Number.ToInteger(response.queryId, -1) <> m.state.filterLoad.queryId then return
+    if response.ok <> true then
+        m.state.filterLoad.requestInFlight = false
+        m.state.filterLoad.status = "failed"
+        m.log.error("Music filter options failed libraryId=" + getLibraryId())
+        return
+    end if
+
+    m.state.filterLoad.requestInFlight = false
+    m.state.filterLoad.status = "loaded"
+    m.state.filterCache = createFilterCacheFromOptions(response.filterOptions)
+    if reconcileActiveFilterSelection() then return
+    if isDecadeFilterActive() then showDecadeFilterRow()
+    if isGenreFilterActive() then showGenreFilterRow()
+end sub
+
+'-------------------------------------------------------------------------------
+' reconcileActiveFilterSelection
+'-------------------------------------------------------------------------------
+function reconcileActiveFilterSelection() as boolean
+    if isDecadeFilterActive() then
+        options = m.state.filterCache.decadeOptions
+        if options.Count() = 0 then return fallBackToAlbumBrowse()
+        if filterOptionsContainValue(options, m.state.selectedDecade.ToStr()) then return false
+
+        m.state.selectedDecade = getFirstDecadeFilterValue(options)
+        applySelectedDecadeToRequest()
+        showDecadeFilterRow()
+        persistMusicLibraryViewState()
+        reloadMusicLibrary()
+        return true
+    end if
+
+    if isGenreFilterActive() then
+        options = m.state.filterCache.genreOptions
+        if options.Count() = 0 then return fallBackToAlbumBrowse()
+        if filterOptionsContainValue(options, m.state.selectedGenre) then return false
+
+        m.state.selectedGenre = getFirstGenreFilterValue(options)
+        m.state.request.genre = m.state.selectedGenre
+        showGenreFilterRow()
+        persistMusicLibraryViewState()
+        reloadMusicLibrary()
+        return true
+    end if
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' fallBackToAlbumBrowse
+'-------------------------------------------------------------------------------
+function fallBackToAlbumBrowse() as boolean
+    m.state.selectedSortKey = "Album"
+    m.state.selectedSort = getDefaultSortSelection()
+    m.state.activeFilterType = ""
+    m.state.selectedDecade = -1
+    m.state.selectedGenre = ""
+    configureCurrentAlbumRequest()
+    hideFilterButtonRow()
+    syncSortControls()
+    persistMusicLibraryViewState()
+    reloadMusicLibrary()
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' onMusicArtistsResponse
@@ -104,25 +223,58 @@ sub onMusicArtistsResponse()
     response = m.musicArtistsTask.response
     if response = invalid then return
     if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
-    finishForegroundLoad("artists")
+    if Number.ToInteger(response.queryId, -1) <> m.state.artistLoad.queryId then return
     if response.ok <> true then
+        hidePagingSpinner()
+        m.state.artistLoad.requestInFlight = false
         m.state.artistLoad.status = "failed"
+        m.state.artistLoad.hasMore = false
         m.log.error("Artist load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music artists."))
-        if isArtistBrowseMode() then AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music artists."))
+        if isArtistBrowseMode() then
+            AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music artists."))
+            if m.state.foregroundLoad.kind = "artists" and finishForegroundLoad("artists") then focusBrowseByButton()
+        end if
         return
     end if
 
-    m.state.artists = getItemsFromPayload(response.payload)
+    startIndex = Number.ToInteger(response.startIndex, -1)
+    expectedStartIndex = m.state.artistLoad.nextStartIndex
+    if startIndex <> expectedStartIndex then
+        hidePagingSpinner()
+        m.state.artistLoad.requestInFlight = false
+        m.state.artistLoad.status = "failed"
+        m.state.artistLoad.hasMore = false
+        m.log.error("Artist page rejected libraryId=" + getLibraryId() + " expectedStartIndex=" + expectedStartIndex.ToStr() + " receivedStartIndex=" + startIndex.ToStr())
+        if m.state.foregroundLoad.kind = "artists" and finishForegroundLoad("artists") then focusBrowseByButton()
+        return
+    end if
+    hidePagingSpinner()
+    m.state.artistLoad.requestInFlight = false
+    pageArtists = getValidMusicItems(response.payload, "artist")
+    for each artist in pageArtists
+        m.state.artists.Push(artist)
+    end for
     m.state.artistLoad.status = "loaded"
-    m.log.write("Artist response accepted libraryId=" + getLibraryId() + " count=" + m.state.artists.Count().ToStr())
+    m.state.artistLoad.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageArtists.Count())
+    m.state.artistLoad.totalCount = Number.ToInteger(response.totalRecordCount, m.state.artists.Count())
+    m.state.artistLoad.hasMore = response.hasMore = true
+    m.log.write("Artist page accepted libraryId=" + getLibraryId() + " count=" + m.state.artists.Count().ToStr())
     if isArtistBrowseMode() then
         AppStatus.ClearMessage()
-        renderTimer = CreateObject("roTimespan")
-        renderTimer.Mark()
-        m.log.write("Artist render started libraryId=" + getLibraryId() + " count=" + m.state.artists.Count().ToStr())
-        renderArtists()
-        m.log.write("Artist render completed libraryId=" + getLibraryId() + " elapsedMs=" + renderTimer.TotalMilliseconds().ToStr())
-        focusAlbums()
+        if startIndex = 0 then
+            renderArtists()
+        else
+            appendArtistPage(pageArtists)
+        end if
+        updateTitleLabel(m.state.artistLoad.totalCount)
+        blockingEnded = false
+        if m.state.foregroundLoad.kind = "artists" and (m.state.artists.Count() > 0 or m.state.artistLoad.hasMore <> true) then blockingEnded = finishForegroundLoad("artists")
+        if blockingEnded then focusAlbums()
+        if pageArtists.Count() = 0 and m.state.artistLoad.hasMore then
+            loadArtistPage(m.state.artistLoad.nextStartIndex)
+        else
+            requestNextArtistPageIfNeeded()
+        end if
     end if
 end sub
 
@@ -133,83 +285,189 @@ sub onMusicLibraryResponse()
     response = m.musicLibraryTask.response
     if response = invalid then return
     if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicLibrary") <> true then return
-    finishForegroundLoad("albums")
-
+    if Number.ToInteger(response.queryId, -1) <> m.state.albumLoad.queryId then return
     if response.ok <> true then
+        hidePagingSpinner()
+        m.state.albumLoad.requestInFlight = false
         m.state.albumLoad.status = "failed"
+        m.state.albumLoad.hasMore = false
         m.log.error("Album load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music library."))
         AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music library."))
+        if m.state.foregroundLoad.kind = "albums" and finishForegroundLoad("albums") then focusBrowseByButton()
         return
     end if
 
-    m.state.allAlbums = getItemsFromPayload(response.payload)
-    m.state.albumLoad.status = "loaded"
-    m.state.filterCache = createFilterCacheFromOptions(response.filterOptions)
-    m.state.sortCache = createEmptySortCache()
-    m.log.write("Album response accepted libraryId=" + getLibraryId() + " count=" + m.state.allAlbums.Count().ToStr())
-    AppStatus.ClearMessage()
-    if isArtistBrowseMode() then
-        ensureArtistsLoaded()
+    startIndex = Number.ToInteger(response.startIndex, -1)
+    expectedStartIndex = m.state.albumLoad.nextStartIndex
+    if startIndex <> expectedStartIndex then
+        hidePagingSpinner()
+        m.state.albumLoad.requestInFlight = false
+        m.state.albumLoad.status = "failed"
+        m.state.albumLoad.hasMore = false
+        m.log.error("Album page rejected libraryId=" + getLibraryId() + " expectedStartIndex=" + expectedStartIndex.ToStr() + " receivedStartIndex=" + startIndex.ToStr())
+        if m.state.foregroundLoad.kind = "albums" and finishForegroundLoad("albums") then focusBrowseByButton()
         return
     end if
-    renderTimer = CreateObject("roTimespan")
-    renderTimer.Mark()
-    m.log.write("Album render started libraryId=" + getLibraryId() + " count=" + m.state.allAlbums.Count().ToStr())
-    if isDecadeFilterActive() then
-        showDecadeFilterRow()
-    else if isGenreFilterActive() then
-        showGenreFilterRow()
-    else
-        renderCurrentAlbums()
+    hidePagingSpinner()
+    m.state.albumLoad.requestInFlight = false
+    if startIndex = 0 then
+        m.state.albumLoad.totalCount = Number.ToInteger(response.totalRecordCount, -1)
+        if m.state.albumLoad.totalCount >= 0 then updateTitleLabel(m.state.albumLoad.totalCount)
     end if
-    updateTitleLabel(m.state.albums.Count())
-    m.log.write("Album render completed libraryId=" + getLibraryId() + " elapsedMs=" + renderTimer.TotalMilliseconds().ToStr())
-    focusAlbums()
+    pageAlbums = getValidMusicItems(response.payload, "album")
+    for each album in pageAlbums
+        m.state.loadedAlbums.Push(album)
+    end for
+    m.log.write("Album page accepted libraryId=" + getLibraryId() + " startIndex=" + startIndex.ToStr() + " pageCount=" + pageAlbums.Count().ToStr() + " totalLoaded=" + m.state.loadedAlbums.Count().ToStr())
+    AppStatus.ClearMessage()
+
+    hasMore = response.hasMore = true
+    m.state.albumLoad.hasMore = hasMore
+    m.state.albumLoad.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageAlbums.Count())
+    m.state.albumLoad.status = "loaded"
+    if m.state.albumLoad.totalCount < 0 then updateTitleLabel(m.state.loadedAlbums.Count())
+    appendAlbumPage(pageAlbums)
+    blockingEnded = false
+    if m.state.foregroundLoad.kind = "albums" and (m.state.loadedAlbums.Count() > 0 or m.state.albumLoad.hasMore <> true) then blockingEnded = finishForegroundLoad("albums")
+    if blockingEnded and isMusicLibraryControlFocused() = false then focusAlbums()
+    if pageAlbums.Count() = 0 and m.state.albumLoad.hasMore then
+        loadAlbumPage(m.state.albumLoad.nextStartIndex)
+    else
+        requestNextAlbumPageIfNeeded()
+    end if
 end sub
+
+'-------------------------------------------------------------------------------
+' isMusicLibraryControlFocused
+'-------------------------------------------------------------------------------
+function isMusicLibraryControlFocused() as boolean
+    if m.browseByButton.isInFocusChain() then return true
+    if m.sortButton.isInFocusChain() then return true
+    return m.filterButtonRow.isInFocusChain()
+end function
+
+'-------------------------------------------------------------------------------
+' loadAlbumPage
+'-------------------------------------------------------------------------------
+sub loadAlbumPage(startIndex as integer)
+    request = {}
+    for each key in m.state.request
+        request[key] = m.state.request[key]
+    end for
+    request.pageStartIndex = startIndex
+    request.queryId = m.state.albumLoad.queryId
+    request.albumSortOrder = Format.SafeString(m.state.request.albumSortOrder, "Ascending")
+
+    if startIndex > 0 then showPagingSpinner()
+    m.state.albumLoad.requestInFlight = true
+    m.musicLibraryTask.control = "stop"
+    m.musicLibraryTask.request = request
+    m.musicLibraryTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onMusicGridItemFocused
+'-------------------------------------------------------------------------------
+sub onMusicGridItemFocused()
+    if isArtistBrowseMode() then
+        requestNextArtistPageIfNeeded()
+    else
+        requestNextAlbumPageIfNeeded()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onMusicItemSelected
+'-------------------------------------------------------------------------------
+sub onMusicItemSelected()
+    if isArtistBrowseMode() then
+        onArtistSelected()
+    else
+        onAlbumSelected()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' requestNextAlbumPageIfNeeded
+'-------------------------------------------------------------------------------
+sub requestNextAlbumPageIfNeeded()
+    if m.state.albumLoad.hasMore <> true or m.state.albumLoad.requestInFlight = true then return
+    if isFocusNearLoadedEnd(m.musicGrid, m.state.loadedAlbums.Count()) <> true then return
+
+    m.state.albumLoad.status = "loading"
+    loadAlbumPage(m.state.albumLoad.nextStartIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' isFocusNearLoadedEnd
+'-------------------------------------------------------------------------------
+function isFocusNearLoadedEnd(grid as object, loadedCount as integer) as boolean
+    if loadedCount <= 0 then return false
+    focusedIndex = Number.ToInteger(grid.itemFocused, 0)
+    columnCount = Number.ToInteger(grid.numColumns, 1)
+    if columnCount <= 0 then columnCount = 1
+    focusedRow = Number.ToInteger(focusedIndex / columnCount, 0)
+    loadedRows = Number.ToInteger((loadedCount + columnCount - 1) / columnCount, 0)
+    return focusedRow >= loadedRows - 5
+end function
 
 '-------------------------------------------------------------------------------
 ' renderAlbums
 '-------------------------------------------------------------------------------
 sub renderAlbums(albums as object)
     if albums = invalid then albums = []
-    m.state.albums = albums
+    m.state.loadedAlbums = albums
     m.emptyFilterLabel.visible = isFavoriteBrowseActive() and albums.Count() = 0
 
     content = CreateObject("roSGNode", "ContentNode")
     request = m.state.request
 
     for each album in albums
-        if Arrays.IsAssocArray(album) = false then
-            m.log.error("Skipping malformed album libraryId=" + getLibraryId())
-            continue for
-        end if
-
-        albumName = getDisplayText(Format.FirstNonEmpty([album.Name], "Untitled Album"))
-        artistName = getDisplayText(getAlbumArtistName(album))
-
-        child = content.createChild("ContentNode")
-        child.title = albumName
-        child.HDPosterUrl = getAlbumArtworkUrl(album, request)
-        child.AddFields({
-            artistName: artistName
-            primaryLabel: artistName
-            secondaryLabel: albumName
-            releaseYear: getAlbumReleaseYearText(album)
-            raw: album
-        })
+        addAlbumContentNode(content, album, request)
     end for
 
-    m.albumsGrid.content = content
+    m.musicGrid.content = content
+    m.musicGrid.visible = true
 end sub
 
 '-------------------------------------------------------------------------------
-' getAlbumReleaseYearText
+' appendAlbumPage
 '-------------------------------------------------------------------------------
-function getAlbumReleaseYearText(album as dynamic) as string
-    year = getAlbumYear(album)
-    if year <= 0 then return ""
+sub appendAlbumPage(albums as object)
+    content = m.musicGrid.content
+    if content = invalid then
+        content = CreateObject("roSGNode", "ContentNode")
+        m.musicGrid.content = content
+    end if
 
-    return year.ToStr()
+    for each album in albums
+        addAlbumContentNode(content, album, m.state.request)
+    end for
+    m.emptyFilterLabel.visible = isFavoriteBrowseActive() and m.state.loadedAlbums.Count() = 0
+    m.musicGrid.visible = true
+end sub
+
+'-------------------------------------------------------------------------------
+' addAlbumContentNode
+'-------------------------------------------------------------------------------
+function addAlbumContentNode(content as object, album as dynamic, request as dynamic) as boolean
+    if Arrays.IsAssocArray(album) = false then
+        m.log.error("Skipping malformed album libraryId=" + getLibraryId())
+        return false
+    end if
+
+    albumName = getDisplayText(Format.FirstNonEmpty([album.Name], "Untitled Album"))
+    artistName = getDisplayText(getAlbumArtistName(album))
+    child = content.createChild("ContentNode")
+    child.title = albumName
+    child.HDPosterUrl = getAlbumArtworkUrl(album, request)
+    child.AddFields({
+        artistName: artistName
+        primaryLabel: artistName
+        secondaryLabel: albumName
+        raw: album
+    })
+    return true
 end function
 
 '-------------------------------------------------------------------------------
@@ -218,28 +476,6 @@ end function
 function isAlbumBrowseMode() as boolean
     return Format.SafeString(m.state.selectedSortKey, "Album") = "Album"
 end function
-
-'-------------------------------------------------------------------------------
-' renderCurrentAlbums
-'-------------------------------------------------------------------------------
-sub renderCurrentAlbums()
-    if isArtistBrowseMode() then
-        m.emptyFilterLabel.visible = false
-        if m.state.artistLoad.status = "loaded" then
-            renderArtists()
-        else
-            ensureArtistsLoaded()
-        end if
-        return
-    end if
-
-    m.artistsGrid.visible = false
-    m.albumsGrid.visible = true
-    renderAlbums(getVisibleAlbums())
-    updateTitleLabel(m.state.albums.Count())
-    m.albumsGrid.jumpToItem = 0
-    m.albumsGrid.itemFocused = 0
-end sub
 
 '-------------------------------------------------------------------------------
 ' renderArtists
@@ -253,25 +489,17 @@ sub renderArtists()
             m.log.error("Skipping malformed artist libraryId=" + getLibraryId())
         end if
     end for
-    artists.SortBy("SortName")
-    if Format.SafeString(m.state.selectedSort.sortOrder, "Ascending") = "Descending" then reverseAlbums(artists)
-
     content = CreateObject("roSGNode", "ContentNode")
     request = m.state.request
     for each artist in artists
-        child = content.createChild("ContentNode")
-        artistId = Format.SafeString(artist.Id, "")
-        child.title = Format.FirstNonEmpty([artist.Name], "Unknown Artist")
-        child.HDPosterUrl = getArtistImageUrl(artist, request, "Primary", 342, 342)
-        child.AddFields({ raw: artist, itemId: artistId })
+        addArtistContentNode(content, artist, request)
     end for
 
-    m.artistsGrid.content = content
-    m.albumsGrid.visible = false
-    m.artistsGrid.visible = true
+    m.musicGrid.content = content
+    m.musicGrid.visible = true
     updateTitleLabel(artists.Count())
-    m.artistsGrid.jumpToItem = 0
-    m.artistsGrid.itemFocused = 0
+    m.musicGrid.jumpToItem = 0
+    m.musicGrid.itemFocused = 0
 end sub
 
 '-------------------------------------------------------------------------------
@@ -292,16 +520,6 @@ end function
 '-------------------------------------------------------------------------------
 function isArtistBrowseMode() as boolean
     return Format.SafeString(m.state.selectedSortKey, "Album") = "Artist"
-end function
-
-'-------------------------------------------------------------------------------
-' getVisibleAlbums
-'-------------------------------------------------------------------------------
-function getVisibleAlbums() as object
-    if isDecadeFilterActive() then return getSortedDecadeAlbums(m.state.selectedDecade.ToStr())
-    if isGenreFilterActive() then return getSortedGenreAlbums(m.state.selectedGenre)
-
-    return getSortedAlbums(m.state.allAlbums)
 end function
 
 '-------------------------------------------------------------------------------
@@ -358,25 +576,6 @@ function getAlbumYear(album as dynamic) as integer
 end function
 
 '-------------------------------------------------------------------------------
-' getAlbumTitle
-'-------------------------------------------------------------------------------
-function getAlbumTitle(album as dynamic) as string
-    if Arrays.IsAssocArray(album) = false then return ""
-
-    return Format.FirstNonEmpty([album.SortName, album.Name], "")
-end function
-
-'-------------------------------------------------------------------------------
-' getSortText
-'-------------------------------------------------------------------------------
-function getSortText(text as string) as string
-    normalizedText = Strings.Trim(text)
-    if LCase(Left(normalizedText, 4)) = "the " then return Mid(normalizedText, 5)
-
-    return normalizedText
-end function
-
-'-------------------------------------------------------------------------------
 ' getDisplayText
 '-------------------------------------------------------------------------------
 function getDisplayText(text as string) as string
@@ -384,217 +583,6 @@ function getDisplayText(text as string) as string
     if LCase(Left(normalizedText, 4)) = "the " then return Mid(normalizedText, 5) + ", The"
 
     return normalizedText
-end function
-
-'-------------------------------------------------------------------------------
-' getAlbumGenres
-'-------------------------------------------------------------------------------
-function getAlbumGenres(album as dynamic) as object
-    if Arrays.IsAssocArray(album) = false then return []
-    if Type(album.Genres) <> "roArray" then return []
-
-    return album.Genres
-end function
-
-'-------------------------------------------------------------------------------
-' getSortedAlbums
-'-------------------------------------------------------------------------------
-function getSortedAlbums(albums as object) as object
-    selection = m.state.selectedSort
-    if selection = invalid then selection = getDefaultSortSelection()
-
-    optionKey = Format.SafeString(selection.optionKey, "Album")
-    if optionKey = "Random" then return shuffleAlbums(copyAlbums(albums))
-
-    if optionKey = "ArtistAlbum" then
-        if m.state.sortCache.artistAlbum = invalid then
-            m.state.sortCache.artistAlbum = copyAlbums(albums)
-            sortAlbumsByArtistThenYear(m.state.sortCache.artistAlbum)
-        end if
-        sortedAlbums = copyAlbums(m.state.sortCache.artistAlbum)
-    else
-        if m.state.sortCache.album = invalid then
-            m.state.sortCache.album = copyAlbums(albums)
-            sortAlbumsByTitleThenArtist(m.state.sortCache.album)
-        end if
-        sortedAlbums = copyAlbums(m.state.sortCache.album)
-    end if
-
-    if Format.SafeString(selection.sortOrder, "Ascending") = "Descending" then reverseAlbums(sortedAlbums)
-    return sortedAlbums
-end function
-
-'-------------------------------------------------------------------------------
-' sortAlbumsByTitleThenArtist
-'-------------------------------------------------------------------------------
-sub sortAlbumsByTitleThenArtist(albums as object)
-    sortAlbumsByMode(albums, "titleArtist")
-end sub
-
-'-------------------------------------------------------------------------------
-' sortAlbumsByArtistThenYear
-'-------------------------------------------------------------------------------
-sub sortAlbumsByArtistThenYear(albums as object)
-    sortAlbumsByMode(albums, "artistYearTitle")
-end sub
-
-'-------------------------------------------------------------------------------
-' sortAlbumsByYearThenTitle
-'-------------------------------------------------------------------------------
-sub sortAlbumsByYearThenTitle(albums as object)
-    sortAlbumsByMode(albums, "yearTitleArtist")
-end sub
-
-'-------------------------------------------------------------------------------
-' sortAlbumsByMode
-'-------------------------------------------------------------------------------
-sub sortAlbumsByMode(albums as object, mode as string)
-    if albums = invalid or albums.Count() < 2 then return
-
-    entries = []
-    for each album in albums
-        entries.Push({
-            album: album
-            artist: getSortText(getAlbumArtistName(album))
-            title: getSortText(getAlbumTitle(album))
-            year: getAlbumYear(album)
-        })
-    end for
-
-    sortedEntries = mergeSortAlbumEntries(entries, mode)
-    for i = 0 to sortedEntries.Count() - 1
-        albums[i] = sortedEntries[i].album
-    end for
-end sub
-
-'-------------------------------------------------------------------------------
-' mergeSortAlbumEntries
-'-------------------------------------------------------------------------------
-function mergeSortAlbumEntries(entries as object, mode as string) as object
-    sortedEntries = entries
-    width = 1
-    entryCount = sortedEntries.Count()
-
-    while width < entryCount
-        mergedEntries = []
-        startIndex = 0
-        while startIndex < entryCount
-            leftIndex = startIndex
-            rightIndex = startIndex + width
-            leftEnd = rightIndex
-            if leftEnd > entryCount then leftEnd = entryCount
-            rightEnd = startIndex + (width * 2)
-            if rightEnd > entryCount then rightEnd = entryCount
-
-            while leftIndex < leftEnd or rightIndex < rightEnd
-                if rightIndex >= rightEnd then
-                    mergedEntries.Push(sortedEntries[leftIndex])
-                    leftIndex = leftIndex + 1
-                else if leftIndex >= leftEnd then
-                    mergedEntries.Push(sortedEntries[rightIndex])
-                    rightIndex = rightIndex + 1
-                else if compareAlbumSortEntries(sortedEntries[leftIndex], sortedEntries[rightIndex], mode) <= 0 then
-                    mergedEntries.Push(sortedEntries[leftIndex])
-                    leftIndex = leftIndex + 1
-                else
-                    mergedEntries.Push(sortedEntries[rightIndex])
-                    rightIndex = rightIndex + 1
-                end if
-            end while
-
-            startIndex = startIndex + (width * 2)
-        end while
-
-        sortedEntries = mergedEntries
-        width = width * 2
-    end while
-
-    return sortedEntries
-end function
-
-'-------------------------------------------------------------------------------
-' compareAlbumSortEntries
-'-------------------------------------------------------------------------------
-function compareAlbumSortEntries(left as object, right as object, mode as string) as integer
-    if mode = "artistYearTitle" then
-        comparison = Strings.NaturalCompare(left.artist, right.artist)
-        if comparison <> 0 then return comparison
-        if left.year < right.year then return -1
-        if left.year > right.year then return 1
-        return Strings.NaturalCompare(left.title, right.title)
-    end if
-
-    if mode = "yearTitleArtist" then
-        if left.year < right.year then return -1
-        if left.year > right.year then return 1
-        comparison = Strings.NaturalCompare(left.title, right.title)
-        if comparison <> 0 then return comparison
-        return Strings.NaturalCompare(left.artist, right.artist)
-    end if
-
-    comparison = Strings.NaturalCompare(left.title, right.title)
-    if comparison <> 0 then return comparison
-    return Strings.NaturalCompare(left.artist, right.artist)
-end function
-
-'-------------------------------------------------------------------------------
-' createEmptySortCache
-'-------------------------------------------------------------------------------
-function createEmptySortCache() as object
-    return {
-        album: invalid
-        artistAlbum: invalid
-    }
-end function
-
-'-------------------------------------------------------------------------------
-' copyAlbums
-'-------------------------------------------------------------------------------
-function copyAlbums(albums as object) as object
-    copiedAlbums = []
-    if albums = invalid then return copiedAlbums
-
-    for each album in albums
-        copiedAlbums.Push(album)
-    end for
-
-    return copiedAlbums
-end function
-
-'-------------------------------------------------------------------------------
-' reverseAlbums
-'-------------------------------------------------------------------------------
-sub reverseAlbums(albums as object)
-    if albums = invalid or albums.Count() < 2 then return
-
-    leftIndex = 0
-    rightIndex = albums.Count() - 1
-    while leftIndex < rightIndex
-        temp = albums[leftIndex]
-        albums[leftIndex] = albums[rightIndex]
-        albums[rightIndex] = temp
-        leftIndex = leftIndex + 1
-        rightIndex = rightIndex - 1
-    end while
-end sub
-
-'-------------------------------------------------------------------------------
-' shuffleAlbums
-'-------------------------------------------------------------------------------
-function shuffleAlbums(albums as object) as object
-    if albums = invalid or albums.Count() < 2 then return albums
-
-    for i = albums.Count() - 1 to 1 step -1
-        swapIndex = Number.ToInteger(Rnd(0) * (i + 1))
-        if swapIndex < 0 then swapIndex = 0
-        if swapIndex > i then swapIndex = i
-
-        temp = albums[i]
-        albums[i] = albums[swapIndex]
-        albums[swapIndex] = temp
-    end for
-
-    return albums
 end function
 
 '-------------------------------------------------------------------------------
@@ -650,73 +638,75 @@ function isGenreFilterActive() as boolean
     return Format.SafeString(m.state.activeFilterType, "") = "Genre"
 end function
 
-' getSortedDecadeAlbums
-'-------------------------------------------------------------------------------
-function getSortedDecadeAlbums(decadeKey as string) as object
-    albums = []
-    targetDecade = Number.ToInteger(decadeKey, -1)
-    if targetDecade < 0 then return albums
-
-    for each album in m.state.allAlbums
-        year = getAlbumYear(album)
-        if year > 0 and Number.ToInteger(Fix(year / 10) * 10, 0) = targetDecade then albums.Push(album)
-    end for
-
-    sortAlbumsByYearThenTitle(albums)
-    return albums
-end function
-
-'-------------------------------------------------------------------------------
-' getSortedGenreAlbums
-'-------------------------------------------------------------------------------
-function getSortedGenreAlbums(genreLabel as string) as object
-    albums = []
-    targetGenre = LCase(Strings.Trim(genreLabel))
-    if targetGenre = "" then return albums
-
-    for each album in m.state.allAlbums
-        if albumHasGenre(album, targetGenre) then albums.Push(album)
-    end for
-
-    sortAlbumsByTitleThenArtist(albums)
-    return albums
-end function
-
-'-------------------------------------------------------------------------------
-' albumHasGenre
-'-------------------------------------------------------------------------------
-function albumHasGenre(album as dynamic, targetGenre as string) as boolean
-    for each genre in getAlbumGenres(album)
-        if LCase(Strings.Trim(Format.SafeString(genre, ""))) = targetGenre then return true
-    end for
-
-    return false
-end function
-
 '-------------------------------------------------------------------------------
 ' updateTitleLabel
 '-------------------------------------------------------------------------------
 sub updateTitleLabel(albumCount = invalid as dynamic)
     title = "Music"
     if m.state <> invalid and m.state.request <> invalid then title = Format.SafeString(m.state.request.title, "Music")
-    if albumCount <> invalid and albumCount > 0 then title = title + " (" + albumCount.ToStr() + ")"
+    if albumCount <> invalid then title = title + MediaMetadata.BulletSeparator() + Number.FormatWithThousandsSeparator(albumCount) + " items"
 
     m.titleLabel.text = title
+end sub
+
+'-------------------------------------------------------------------------------
+' appendArtistPage
+'-------------------------------------------------------------------------------
+sub appendArtistPage(artists as object)
+    content = m.musicGrid.content
+    if content = invalid then content = CreateObject("roSGNode", "ContentNode")
+    for each artist in artists
+        if Arrays.IsAssocArray(artist) then addArtistContentNode(content, artist, m.state.request)
+    end for
+    if m.musicGrid.content = invalid then m.musicGrid.content = content
+end sub
+
+'-------------------------------------------------------------------------------
+' addArtistContentNode
+'-------------------------------------------------------------------------------
+sub addArtistContentNode(content as object, artist as object, request as object)
+    child = content.createChild("ContentNode")
+    artistId = Format.SafeString(artist.Id, "")
+    artistName = Format.FirstNonEmpty([artist.Name], "Unknown Artist")
+    child.title = artistName
+    child.HDPosterUrl = getArtistImageUrl(artist, request, "Primary", 342, 342)
+    child.AddFields({
+        raw: artist
+        itemId: artistId
+        primaryLabel: artistName
+        secondaryLabel: ""
+        cardType: "artist"
+    })
 end sub
 
 '-------------------------------------------------------------------------------
 ' getMusicSortOptions
 '-------------------------------------------------------------------------------
 function getMusicSortOptions() as object
-    return [
+    options = [
         { optionKey: "Album", sortKey: "Album", sortOrder: "Ascending", label: "Album" }
         { optionKey: "ArtistAlbum", sortKey: "ArtistAlbum", sortOrder: "Ascending", label: "Artist/Album" }
         { optionKey: "Artist", sortKey: "Artist", sortOrder: "Ascending", label: "Artist" }
-        { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
-        { optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" }
-        { optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" }
         { optionKey: "Favorites", sortKey: "Album", sortOrder: "Ascending", label: "Favorites" }
     ]
+    if m.state.filterCache.decadeOptions.Count() > 0 then options.Push({ optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" })
+    if m.state.filterCache.genreOptions.Count() > 0 then options.Push({ optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" })
+    return options
+end function
+
+'-------------------------------------------------------------------------------
+' getValidMusicItems
+'-------------------------------------------------------------------------------
+function getValidMusicItems(payload as dynamic, itemKind as string) as object
+    validItems = []
+    for each item in getItemsFromPayload(payload)
+        if Arrays.IsAssocArray(item) then
+            validItems.Push(item)
+        else
+            m.log.error("Skipping malformed " + itemKind + " libraryId=" + getLibraryId())
+        end if
+    end for
+    return validItems
 end function
 
 '-------------------------------------------------------------------------------
@@ -766,7 +756,7 @@ function canUseSortOrder(selection as object) as boolean
     if selection = invalid then return false
 
     optionKey = Format.SafeString(selection.optionKey, "")
-    if optionKey = "Decade" or optionKey = "Genre" or optionKey = "Random" then return false
+    if optionKey = "Decade" or optionKey = "Genre" then return false
 
     sortKey = Format.SafeString(selection.sortKey, "")
     return sortKey = "Album" or sortKey = "ArtistAlbum" or sortKey = "Artist"
@@ -799,8 +789,13 @@ sub onSortOrderChanged()
 
     m.state.selectedSort.sortOrder = sortOrder
     syncSortControls()
-    renderCurrentAlbums()
     persistMusicLibraryViewState()
+    if isArtistBrowseMode() then
+        startArtistQuery()
+    else
+        m.state.request.albumSortOrder = sortOrder
+        reloadMusicLibrary()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -811,31 +806,29 @@ function applySortSelection(selection as object) as boolean
 
     optionKey = Format.SafeString(selection.optionKey, "")
     if optionKey = "" then return false
-    if optionKey <> "Artist" then cancelPendingArtistLoad()
-    if optionKey = "Favorites" then
-        if isFavoriteBrowseActive() then return false
-
-        m.state.activeFilterType = ""
-        m.state.selectedDecade = -1
-        m.state.selectedGenre = ""
-        hideFilterButtonRow()
-        m.state.selectedSortKey = "Favorites"
-        m.state.selectedSort = getFavoritesSortSelection()
-        m.state.request.favoriteOnly = true
-        syncSortControls()
-        persistMusicLibraryViewState()
-        reloadMusicLibrary()
+    if optionKey = m.state.selectedSortKey then
+        if optionKey = "Artist" and m.state.artistLoad.status = "failed" then
+            startArtistQuery()
+            return true
+        end if
+        if optionKey <> "Artist" and m.state.albumLoad.status = "failed" then
+            reloadMusicLibrary()
+            return true
+        end if
         return false
     end if
-
-    wasFavoriteBrowse = isFavoriteBrowseActive()
-    if wasFavoriteBrowse then
-        m.state.request.favoriteOnly = false
-        if optionKey = "Decade" or optionKey = "Genre" then optionKey = "Album"
-    end if
+    cancelPendingArtistLoad()
+    m.state.request.favoriteOnly = false
+    m.state.request.genre = ""
+    m.state.request.years = []
+    m.state.request.albumSortBy = "SortName"
+    m.state.request.albumSortOrder = "Ascending"
+    m.state.activeFilterType = ""
+    m.state.selectedDecade = -1
+    m.state.selectedGenre = ""
+    hideFilterButtonRow()
 
     if optionKey = "Decade" then
-        m.state.selectedSortKey = optionKey
         m.state.selectedSort = {
             optionKey: "Decade"
             sortKey: "Album"
@@ -844,14 +837,9 @@ function applySortSelection(selection as object) as boolean
         }
         m.state.activeFilterType = "Decade"
         m.state.selectedDecade = getFirstDecadeFilterValue(m.state.filterCache.decadeOptions)
-        syncSortControls()
+        applySelectedDecadeToRequest()
         showDecadeFilterRow()
-        queueFilterButtonRowFocus()
-        persistMusicLibraryViewState()
-        return false
-    end if
-
-    if optionKey = "Genre" then
+    else if optionKey = "Genre" then
         m.state.selectedSortKey = optionKey
         m.state.selectedSort = {
             optionKey: "Genre"
@@ -861,25 +849,8 @@ function applySortSelection(selection as object) as boolean
         }
         m.state.activeFilterType = "Genre"
         m.state.selectedGenre = getFirstGenreFilterValue(m.state.filterCache.genreOptions)
-        syncSortControls()
+        m.state.request.genre = m.state.selectedGenre
         showGenreFilterRow()
-        queueFilterButtonRowFocus()
-        persistMusicLibraryViewState()
-        return false
-    end if
-
-    m.state.activeFilterType = ""
-    m.state.selectedDecade = -1
-    m.state.selectedGenre = ""
-    hideFilterButtonRow()
-
-    if optionKey = "Random" then
-        m.state.selectedSort = {
-            optionKey: "Random"
-            sortKey: "Random"
-            sortOrder: ""
-            label: "Random"
-        }
     else if optionKey = "ArtistAlbum" then
         m.state.selectedSort = {
             optionKey: "ArtistAlbum"
@@ -887,6 +858,7 @@ function applySortSelection(selection as object) as boolean
             sortOrder: "Ascending"
             label: "Artist/Album"
         }
+        m.state.request.albumSortBy = "AlbumArtist,SortName"
     else if optionKey = "Artist" then
         m.state.selectedSort = {
             optionKey: "Artist"
@@ -894,20 +866,22 @@ function applySortSelection(selection as object) as boolean
             sortOrder: "Ascending"
             label: "Artist"
         }
+    else if optionKey = "Favorites" then
+        m.state.selectedSort = getFavoritesSortSelection()
+        m.state.request.favoriteOnly = true
     else
         m.state.selectedSort = getDefaultSortSelection()
     end if
 
     m.state.selectedSortKey = Format.SafeString(m.state.selectedSort.optionKey, "Album")
     syncSortControls()
-    if wasFavoriteBrowse then
-        persistMusicLibraryViewState()
-        reloadMusicLibrary()
+    persistMusicLibraryViewState()
+    if optionKey = "Artist" then
+        startArtistQuery()
     else
-        renderCurrentAlbums()
-        persistMusicLibraryViewState()
+        reloadMusicLibrary()
     end if
-    return false
+    return true
 end function
 
 '-------------------------------------------------------------------------------
@@ -916,13 +890,15 @@ end function
 sub cancelPendingArtistLoad()
     if m.state.artistLoad.status <> "loading" then return
 
+    hidePagingSpinner()
     m.log.write("Artist load cancelled libraryId=" + getLibraryId())
     m.musicArtistsTask.control = "stop"
     m.state.artistLoad.status = "idle"
+    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
     if m.state.foregroundLoad.kind = "artists" then
-        stopLoadWatchdog()
         m.state.foregroundLoad.kind = ""
         m.state.foregroundLoad.startedAt = invalid
+        showForegroundControls()
         Spinner.Hide()
     end if
     AsyncLifecycle.Deactivate(m.state.lifecycle)
@@ -935,24 +911,22 @@ sub reloadMusicLibrary()
     request = m.state.request
     if request = invalid then return
 
-    m.state.allAlbums = []
-    m.state.albums = []
+    hidePagingSpinner()
+    m.state.loadedAlbums = []
     m.state.artists = []
     m.state.albumLoad.status = "loading"
+    m.state.albumLoad.requestInFlight = false
+    m.state.albumLoad.nextStartIndex = 0
+    m.state.albumLoad.totalCount = -1
+    m.state.albumLoad.hasMore = false
+    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
     m.state.artistLoad.status = "idle"
-    m.state.filterCache = createEmptyFilterCache()
-    m.state.sortCache = createEmptySortCache()
-    m.albumsGrid.visible = true
-    m.artistsGrid.visible = false
+    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
     AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
-    updateTitleLabel(0)
+    updateTitleLabel()
     renderAlbums([])
-    Spinner.Show(0)
-    startForegroundLoad("albums")
     m.log.write("Album reload started libraryId=" + Format.SafeString(request.libraryId, ""))
-    m.musicLibraryTask.control = "stop"
-    m.musicLibraryTask.request = request
-    m.musicLibraryTask.control = "run"
+    queueForegroundLoad("albums")
     m.musicArtistsTask.control = "stop"
 end sub
 
@@ -967,9 +941,29 @@ sub showDecadeFilterRow()
     m.filterButtonRow.filterType = "Decade"
     m.filterButtonRow.items = options
     m.filterButtonRow.selectedValue = m.state.selectedDecade.ToStr()
-    m.filterButtonRow.visible = options.Count() > 0
+    filterVisible = options.Count() > 0
+    if m.state.foregroundLoad.controlsHidden then
+        m.state.foregroundLoad.restoreFilterVisible = filterVisible
+        m.filterButtonRow.visible = false
+    else
+        m.filterButtonRow.visible = filterVisible
+    end if
     updateGridLayout()
-    renderCurrentAlbums()
+end sub
+
+'-------------------------------------------------------------------------------
+' configureCurrentAlbumRequest
+'-------------------------------------------------------------------------------
+sub configureCurrentAlbumRequest()
+    request = m.state.request
+    request.favoriteOnly = m.state.selectedSortKey = "Favorites"
+    request.genre = ""
+    request.years = []
+    request.albumSortBy = "SortName"
+    request.albumSortOrder = Format.SafeString(m.state.selectedSort.sortOrder, "Ascending")
+    if m.state.selectedSortKey = "ArtistAlbum" then request.albumSortBy = "AlbumArtist,SortName"
+    if m.state.selectedSortKey = "Genre" then request.genre = m.state.selectedGenre
+    if m.state.selectedSortKey = "Decade" then applySelectedDecadeToRequest()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -983,15 +977,34 @@ sub showGenreFilterRow()
     m.filterButtonRow.filterType = "Genre"
     m.filterButtonRow.items = options
     m.filterButtonRow.selectedValue = m.state.selectedGenre
-    m.filterButtonRow.visible = options.Count() > 0
+    filterVisible = options.Count() > 0
+    if m.state.foregroundLoad.controlsHidden then
+        m.state.foregroundLoad.restoreFilterVisible = filterVisible
+        m.filterButtonRow.visible = false
+    else
+        m.filterButtonRow.visible = filterVisible
+    end if
     updateGridLayout()
-    renderCurrentAlbums()
+end sub
+
+'-------------------------------------------------------------------------------
+' applySelectedDecadeToRequest
+'-------------------------------------------------------------------------------
+sub applySelectedDecadeToRequest()
+    years = []
+    if m.state.selectedDecade >= 0 then
+        for year = m.state.selectedDecade to m.state.selectedDecade + 9
+            years.Push(year.ToStr())
+        end for
+    end if
+    m.state.request.years = years
 end sub
 
 '-------------------------------------------------------------------------------
 ' hideFilterButtonRow
 '-------------------------------------------------------------------------------
 sub hideFilterButtonRow()
+    if m.state.foregroundLoad.controlsHidden then m.state.foregroundLoad.restoreFilterVisible = false
     m.filterButtonRow.visible = false
     m.filterButtonRow.items = []
     m.filterButtonRow.selectedValue = ""
@@ -1004,8 +1017,7 @@ end sub
 sub updateGridLayout()
     y = 208
     if m.filterButtonRow <> invalid and m.filterButtonRow.visible = true then y = 292
-    m.albumsGrid.translation = [48, y]
-    m.artistsGrid.translation = [48, y]
+    m.musicGrid.translation = [48, y]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1037,16 +1049,17 @@ sub onFilterButtonRowSelected()
     if filterType = "Decade" then
         m.state.selectedDecade = Number.ToInteger(selected.value, -1)
         m.filterButtonRow.selectedValue = m.state.selectedDecade.ToStr()
+        applySelectedDecadeToRequest()
     else if filterType = "Genre" then
         m.state.selectedGenre = Format.SafeString(selected.value, "")
         m.filterButtonRow.selectedValue = m.state.selectedGenre
+        m.state.request.genre = m.state.selectedGenre
     else
         return
     end if
 
-    m.filterButtonRow.setFocus(true)
-    renderCurrentAlbums()
     persistMusicLibraryViewState()
+    reloadMusicLibrary()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1068,21 +1081,6 @@ function focusFilterButtonRow() as boolean
     m.filterButtonRow.callFunc("focusFirstButton")
     return true
 end function
-
-'-------------------------------------------------------------------------------
-' queueFilterButtonRowFocus
-'-------------------------------------------------------------------------------
-sub queueFilterButtonRowFocus()
-    m.filterFocusTimer.control = "stop"
-    m.filterFocusTimer.control = "start"
-end sub
-
-'-------------------------------------------------------------------------------
-' onFilterFocusTimerFired
-'-------------------------------------------------------------------------------
-sub onFilterFocusTimerFired()
-    focusFilterButtonRow()
-end sub
 
 '-------------------------------------------------------------------------------
 ' focusSortButton
@@ -1138,11 +1136,18 @@ sub focusAlbums()
 end sub
 
 '-------------------------------------------------------------------------------
+' onFocusRequested
+'-------------------------------------------------------------------------------
+sub onFocusRequested()
+    if m.top.visible <> true then return
+    focusAlbums()
+end sub
+
+'-------------------------------------------------------------------------------
 ' getActiveGrid
 '-------------------------------------------------------------------------------
 function getActiveGrid() as object
-    if isArtistBrowseMode() then return m.artistsGrid
-    return m.albumsGrid
+    return m.musicGrid
 end function
 
 '-------------------------------------------------------------------------------
@@ -1150,6 +1155,30 @@ end function
 '-------------------------------------------------------------------------------
 sub activate()
     AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.request, "libraryId")
+    if m.state.refreshPending then
+        m.state.refreshPending = false
+        reloadMusicLibrary()
+        focusAlbums()
+        return
+    end if
+    if m.state.foregroundLoad.kind <> "" then
+        focusAlbums()
+        return
+    end if
+    if m.state.foregroundLoad.pendingKind <> "" then
+        startPendingForegroundLoad()
+        focusAlbums()
+        return
+    end if
+
+    if m.state.filterLoad.status = "loading" and m.state.filterLoad.requestInFlight <> true then loadFilterOptions()
+
+    if isArtistBrowseMode() then
+        if m.state.artistLoad.status = "loading" and m.state.artistLoad.requestInFlight <> true then loadArtistPage(m.state.artistLoad.nextStartIndex)
+    else if m.state.albumLoad.status = "loading" and m.state.albumLoad.requestInFlight <> true then
+        m.log.write("Album paging resumed libraryId=" + getLibraryId() + " startIndex=" + m.state.albumLoad.nextStartIndex.ToStr())
+        loadAlbumPage(m.state.albumLoad.nextStartIndex)
+    end if
     focusAlbums()
 end sub
 
@@ -1157,32 +1186,155 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
-    stopLoadWatchdog()
+    wasLoading = m.state.foregroundLoad.kind <> ""
+    hidePagingSpinner()
     m.state.foregroundLoad.kind = ""
     m.state.foregroundLoad.startedAt = invalid
+    m.state.albumLoad.requestInFlight = false
+    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
+    m.state.artistLoad.requestInFlight = false
+    m.state.filterLoad.requestInFlight = false
+    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
+    m.state.filterLoad.queryId = m.state.filterLoad.queryId + 1
     AsyncLifecycle.Deactivate(m.state.lifecycle)
     m.musicLibraryTask.control = "stop"
     m.musicArtistsTask.control = "stop"
+    m.musicFilterOptionsTask.control = "stop"
+    if wasLoading then
+        showForegroundControls()
+        Spinner.Hide()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
-' ensureArtistsLoaded
+' startArtistQuery
 '-------------------------------------------------------------------------------
-sub ensureArtistsLoaded()
-    if m.state.artistLoad.status = "loaded" or m.state.artistLoad.status = "loading" then return
-    if m.state.albumLoad.status <> "loaded" then return
+sub startArtistQuery()
     request = m.state.request
     if request = invalid or request.favoriteOnly = true then return
 
+    hidePagingSpinner()
+    m.musicLibraryTask.control = "stop"
+    m.state.albumLoad.requestInFlight = false
+    m.state.albumLoad.status = "idle"
+    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
+    m.state.artists = []
     m.state.artistLoad.status = "loading"
+    m.state.artistLoad.requestInFlight = false
+    m.state.artistLoad.nextStartIndex = 0
+    m.state.artistLoad.totalCount = -1
+    m.state.artistLoad.hasMore = false
+    m.state.artistLoad.queryId = m.state.artistLoad.queryId + 1
     AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
     AppStatus.ClearMessage()
-    Spinner.Show(0)
-    startForegroundLoad("artists")
     m.log.write("Artist load started libraryId=" + Format.SafeString(request.libraryId, ""))
+    renderArtists()
+    queueForegroundLoad("artists")
+end sub
+
+'-------------------------------------------------------------------------------
+' queueForegroundLoad
+'-------------------------------------------------------------------------------
+sub queueForegroundLoad(kind as string)
+    m.state.foregroundLoad.pendingKind = kind
+    startPendingForegroundLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingForegroundLoad
+'-------------------------------------------------------------------------------
+function startPendingForegroundLoad() as boolean
+    kind = m.state.foregroundLoad.pendingKind
+    if kind = "" then return false
+    hideForegroundControls()
+    Spinner.Show(0)
+
+    m.state.foregroundLoad.pendingKind = ""
+    startForegroundLoad(kind)
+    if kind = "artists" then
+        loadArtistPage(m.state.artistLoad.nextStartIndex)
+    else
+        loadAlbumPage(m.state.albumLoad.nextStartIndex)
+    end if
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' hideForegroundControls
+'-------------------------------------------------------------------------------
+sub hideForegroundControls()
+    if m.state.foregroundLoad.controlsHidden then return
+
+    if m.browseByButton.isInFocusChain() or m.sortButton.isInFocusChain() or m.filterButtonRow.isInFocusChain() then m.top.setFocus(true)
+    m.state.foregroundLoad.controlsHidden = true
+    m.state.foregroundLoad.restoreFilterVisible = m.filterButtonRow.visible
+    m.browseByButton.visible = false
+    m.sortButton.visible = false
+    m.filterButtonRow.visible = false
+    updateGridLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' showForegroundControls
+'-------------------------------------------------------------------------------
+sub showForegroundControls()
+    restoreFilterVisible = m.state.foregroundLoad.restoreFilterVisible
+    m.state.foregroundLoad.controlsHidden = false
+    m.state.foregroundLoad.restoreFilterVisible = false
+    m.browseByButton.visible = true
+    m.sortButton.visible = true
+    m.filterButtonRow.visible = restoreFilterVisible
+    updateGridLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' loadArtistPage
+'-------------------------------------------------------------------------------
+sub loadArtistPage(startIndex as integer)
+    request = m.state.request
+    artistRequest = {}
+    for each key in request
+        artistRequest[key] = request[key]
+    end for
+    artistRequest.queryId = m.state.artistLoad.queryId
+    artistRequest.pageStartIndex = startIndex
+    artistRequest.artistSortOrder = Format.SafeString(m.state.selectedSort.sortOrder, "Ascending")
+    if startIndex > 0 then showPagingSpinner()
+    m.state.artistLoad.requestInFlight = true
     m.musicArtistsTask.control = "stop"
-    m.musicArtistsTask.request = request
+    m.musicArtistsTask.request = artistRequest
     m.musicArtistsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' showPagingSpinner
+'-------------------------------------------------------------------------------
+sub showPagingSpinner()
+    if m.state.pagingLoad.spinnerVisible then return
+
+    m.state.pagingLoad.spinnerVisible = true
+    Spinner.Show(0)
+end sub
+
+'-------------------------------------------------------------------------------
+' hidePagingSpinner
+'-------------------------------------------------------------------------------
+sub hidePagingSpinner()
+    if m.state.pagingLoad.spinnerVisible <> true then return
+
+    m.state.pagingLoad.spinnerVisible = false
+    Spinner.Hide()
+end sub
+
+'-------------------------------------------------------------------------------
+' requestNextArtistPageIfNeeded
+'-------------------------------------------------------------------------------
+sub requestNextArtistPageIfNeeded()
+    if m.state.artistLoad.hasMore <> true or m.state.artistLoad.requestInFlight = true then return
+    if isFocusNearLoadedEnd(m.musicGrid, m.state.artists.Count()) <> true then return
+
+    m.state.artistLoad.status = "loading"
+    loadArtistPage(m.state.artistLoad.nextStartIndex)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1193,53 +1345,23 @@ sub startForegroundLoad(kind as string)
     startedAt.Mark()
     m.state.foregroundLoad.kind = kind
     m.state.foregroundLoad.startedAt = startedAt
-    m.loadWatchdogTimer.control = "stop"
-    m.loadWatchdogTimer.control = "start"
 end sub
 
 '-------------------------------------------------------------------------------
 ' finishForegroundLoad
 '-------------------------------------------------------------------------------
-sub finishForegroundLoad(kind as string)
-    if m.state.foregroundLoad.kind <> kind then return
+function finishForegroundLoad(kind as string) as boolean
+    if m.state.foregroundLoad.kind <> kind then return false
 
     elapsedMs = 0
     if m.state.foregroundLoad.startedAt <> invalid then elapsedMs = m.state.foregroundLoad.startedAt.TotalMilliseconds()
     m.log.write("Foreground load completed kind=" + kind + " libraryId=" + getLibraryId() + " elapsedMs=" + elapsedMs.ToStr())
-    stopLoadWatchdog()
     m.state.foregroundLoad.kind = ""
     m.state.foregroundLoad.startedAt = invalid
+    showForegroundControls()
     Spinner.Hide()
-end sub
-
-'-------------------------------------------------------------------------------
-' stopLoadWatchdog
-'-------------------------------------------------------------------------------
-sub stopLoadWatchdog()
-    m.loadWatchdogTimer.control = "stop"
-end sub
-
-'-------------------------------------------------------------------------------
-' onLoadWatchdogTimerFired
-'-------------------------------------------------------------------------------
-sub onLoadWatchdogTimerFired()
-    kind = Format.SafeString(m.state.foregroundLoad.kind, "")
-    if kind = "" then return
-
-    m.log.error("Foreground load timed out kind=" + kind + " libraryId=" + getLibraryId() + " elapsedMs=45000")
-    if kind = "artists" then
-        m.state.artistLoad.status = "failed"
-        m.musicArtistsTask.control = "stop"
-    else
-        m.state.albumLoad.status = "failed"
-        m.musicLibraryTask.control = "stop"
-    end if
-    m.state.foregroundLoad.kind = ""
-    m.state.foregroundLoad.startedAt = invalid
-    AsyncLifecycle.Deactivate(m.state.lifecycle)
-    Spinner.Hide()
-    AppStatus.SetMessage("Music took too long to load. Please leave this page and try again.")
-end sub
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' getLibraryId
@@ -1253,12 +1375,12 @@ end function
 ' onAlbumSelected
 '-------------------------------------------------------------------------------
 sub onAlbumSelected()
-    selected = m.albumsGrid.itemSelected
+    selected = m.musicGrid.itemSelected
     if selected = invalid or selected < 0 then return
-    if m.albumsGrid.content = invalid then return
-    if selected >= m.albumsGrid.content.getChildCount() then return
+    if m.musicGrid.content = invalid then return
+    if selected >= m.musicGrid.content.getChildCount() then return
 
-    albumNode = m.albumsGrid.content.getChild(selected)
+    albumNode = m.musicGrid.content.getChild(selected)
     if albumNode = invalid then return
 
     raw = albumNode.raw
@@ -1276,8 +1398,8 @@ end sub
 ' onArtistSelected
 '-------------------------------------------------------------------------------
 sub onArtistSelected()
-    selectedIndex = m.artistsGrid.itemSelected
-    content = m.artistsGrid.content
+    selectedIndex = m.musicGrid.itemSelected
+    content = m.musicGrid.content
     if content = invalid or selectedIndex < 0 or selectedIndex >= content.getChildCount() then return
 
     node = content.getChild(selectedIndex)
@@ -1290,48 +1412,10 @@ sub onArtistSelected()
         itemId: Format.SafeString(raw.Id, "")
         musicBrainzArtistId: musicBrainzArtistId
         item: raw
-        albums: getAlbumsForArtist(raw)
         backdropUrl: getArtistImageUrl(raw, m.state.request, "Backdrop", 1920, 1080)
         logoUrl: getArtistImageUrl(raw, m.state.request, "Logo", 600, 300)
     }
 end sub
-
-'-------------------------------------------------------------------------------
-' getAlbumsForArtist
-'-------------------------------------------------------------------------------
-function getAlbumsForArtist(artist as object) as object
-    albums = []
-    artistId = Format.SafeString(artist.Id, "")
-    artistName = LCase(Strings.Trim(Format.SafeString(artist.Name, "")))
-
-    for each album in m.state.allAlbums
-        if Arrays.IsAssocArray(album) = false then continue for
-        if albumMatchesArtist(album, artistId, artistName) then albums.Push(album)
-    end for
-    sortAlbumsByYearThenTitle(albums)
-    return albums
-end function
-
-'-------------------------------------------------------------------------------
-' albumMatchesArtist
-'-------------------------------------------------------------------------------
-function albumMatchesArtist(album as object, artistId as string, artistName as string) as boolean
-    if Type(album.ArtistItems) = "roArray" then
-        for each artistItem in album.ArtistItems
-            if Arrays.IsAssocArray(artistItem) = false then continue for
-            if artistId <> "" and Format.SafeString(artistItem.Id, "") = artistId then return true
-            if artistName <> "" and LCase(Strings.Trim(Format.SafeString(artistItem.Name, ""))) = artistName then return true
-        end for
-    end if
-
-    if artistName <> "" and LCase(Strings.Trim(Format.SafeString(album.AlbumArtist, ""))) = artistName then return true
-    if Type(album.Artists) = "roArray" then
-        for each name in album.Artists
-            if LCase(Strings.Trim(Format.SafeString(name, ""))) = artistName then return true
-        end for
-    end if
-    return false
-end function
 
 '-------------------------------------------------------------------------------
 ' isAlbumsGridAtFirstRow
@@ -1427,20 +1511,18 @@ end function
 ' applyMediaStateChange
 '-------------------------------------------------------------------------------
 sub applyMediaStateChange(change as object)
-    applyItemsMediaStateChange(m.state.allAlbums, change)
-    applyItemsMediaStateChange(m.state.albums, change)
+    applyItemsMediaStateChange(m.state.loadedAlbums, change)
     applyItemsMediaStateChange(m.state.artists, change)
     if isFavoriteBrowseActive() and Format.SafeString(change.action, "") = "favorite" and change.value <> true then
-        itemId = Format.SafeString(change.itemId, "")
-        m.state.allAlbums = withoutMusicLibraryItem(m.state.allAlbums, itemId)
-        m.state.albums = withoutMusicLibraryItem(m.state.albums, itemId)
-        m.state.artists = withoutMusicLibraryItem(m.state.artists, itemId)
-        renderCurrentAlbums()
+        if m.top.visible = true and m.state.lifecycle.isActive = true then
+            reloadMusicLibrary()
+        else
+            m.state.refreshPending = true
+        end if
         return
     end if
 
-    applyGridMediaStateChange(m.albumsGrid, change)
-    applyGridMediaStateChange(m.artistsGrid, change)
+    applyGridMediaStateChange(m.musicGrid, change)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1474,8 +1556,6 @@ sub applySavedMusicLibraryViewState(request as object, state as object)
         m.state.activeFilterType = optionKey
         m.state.selectedDecade = Number.ToInteger(state.selectedDecade, -1)
         m.state.selectedGenre = Format.SafeString(state.selectedGenre, "")
-    else if optionKey = "Random" then
-        m.state.selectedSort = { optionKey: "Random", sortKey: "Random", sortOrder: "", label: "Random" }
     else if optionKey = "ArtistAlbum" then
         m.state.selectedSort = { optionKey: "ArtistAlbum", sortKey: "ArtistAlbum", sortOrder: sortOrder, label: "Artist/Album" }
     else if optionKey = "Artist" then
@@ -1513,17 +1593,6 @@ sub persistMusicLibraryViewState()
         collectionType: Format.SafeString(request.collectionType, "")
     })
 end sub
-
-'-------------------------------------------------------------------------------
-' withoutMusicLibraryItem
-'-------------------------------------------------------------------------------
-function withoutMusicLibraryItem(items as object, itemId as string) as object
-    remaining = []
-    for each item in items
-        if Format.SafeString(item.Id, "") <> itemId then remaining.Push(item)
-    end for
-    return remaining
-end function
 
 '-------------------------------------------------------------------------------
 ' applyItemsMediaStateChange

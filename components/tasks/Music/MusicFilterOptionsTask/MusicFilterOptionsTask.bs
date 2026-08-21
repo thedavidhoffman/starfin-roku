@@ -1,0 +1,79 @@
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = new Logger("MusicFilterOptionsTask", m.global.logService)
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    libraryId = ""
+    if request <> invalid then libraryId = Format.SafeString(request.libraryId, "")
+    if request = invalid or Format.SafeString(request.server, "") = "" or Format.SafeString(request.token, "") = "" or Format.SafeString(request.userId, "") = "" or libraryId = "" then
+        queryId = -1
+        if request <> invalid then queryId = Number.ToInteger(request.queryId, -1)
+        m.top.response = { ok: false, action: "musicFilterOptions", libraryId: libraryId, queryId: queryId, errorMessage: "Invalid music filter request." }
+        return
+    end if
+
+    params = {
+        userId: Format.SafeString(request.userId, "")
+        parentId: libraryId
+        includeItemTypes: "MusicAlbum"
+    }
+    requestUrl = request.server + "/Items/Filters" + Url.BuildQueryString(params)
+    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    if response.ok <> true then
+        response.AddReplace("action", "musicFilterOptions")
+        response.AddReplace("libraryId", libraryId)
+        response.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
+        m.top.response = response
+        return
+    end if
+
+    m.top.response = {
+        ok: true
+        action: "musicFilterOptions"
+        libraryId: libraryId
+        queryId: Number.ToInteger(request.queryId, -1)
+        filterOptions: buildFilterOptions(response.data)
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' buildFilterOptions
+'-------------------------------------------------------------------------------
+function buildFilterOptions(data as dynamic) as object
+    result = { decadeOptions: [], genreOptions: [] }
+    if Arrays.IsAssocArray(data) = false then return result
+
+    decades = {}
+    if Type(data.Years) = "roArray" then
+        for each value in data.Years
+            year = Number.ToInteger(value, 0)
+            if year > 0 then decades[(Fix(year / 10) * 10).ToStr()] = true
+        end for
+    end if
+    decadeKeys = decades.Keys()
+    decadeKeys.Sort()
+    for each decadeKey in decadeKeys
+        result.decadeOptions.Push({ label: decadeKey + "s", value: Number.ToInteger(decadeKey, -1) })
+    end for
+
+    if Type(data.Genres) = "roArray" then
+        genres = []
+        for each value in data.Genres
+            label = Strings.Trim(Format.SafeString(value, ""))
+            if label <> "" then genres.Push(label)
+        end for
+        genres.Sort()
+        for each label in genres
+            result.genreOptions.Push({ label: label, value: label })
+        end for
+    end if
+    return result
+end function

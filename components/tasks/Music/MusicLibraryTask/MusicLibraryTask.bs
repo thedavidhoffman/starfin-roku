@@ -15,7 +15,10 @@ sub executeRequest()
     requestTimer.Mark()
     validationError = validateRequest(request)
     if validationError <> invalid then
-        if request <> invalid then validationError.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        if request <> invalid then
+            validationError.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+            validationError.AddReplace("queryId", Number.ToInteger(request.queryId, 0))
+        end if
         m.top.response = validationError
         return
     end if
@@ -25,101 +28,82 @@ sub executeRequest()
         parentId: Format.SafeString(request.libraryId, "")
         recursive: true
         includeItemTypes: "MusicAlbum"
-        fields: "SortName,AlbumArtist,Artists,ArtistItems,ProductionYear,PremiereDate,Genres"
+        fields: "SortName,AlbumArtist,Artists,ProductionYear,PremiereDate"
         enableImageTypes: "Primary"
         imageTypeLimit: 1
-        enableTotalRecordCount: false
-        sortBy: "SortName"
-        sortOrder: "Ascending"
+        enableTotalRecordCount: true
+        sortBy: getAlbumSortBy(request)
+        sortOrder: getAlbumSortOrder(request)
     }
     if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
+    if Format.SafeString(request.artistIds, "") <> "" then params.AddReplace("artistIds", request.artistIds)
+    if Format.SafeString(request.genre, "") <> "" then params.AddReplace("genres", request.genre)
+    if Type(request.years) = "roArray" and request.years.Count() > 0 then params.AddReplace("years", request.years.Join(","))
 
+    pageSize = 100
+    startIndex = Number.ToInteger(request.pageStartIndex, 0)
+    params.AddReplace("startIndex", startIndex)
+    params.AddReplace("limit", pageSize)
     requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
     response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
-    m.log.write("HTTP completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
+    m.log.write("HTTP page completed libraryId=" + Format.SafeString(request.libraryId, "") + " startIndex=" + startIndex.ToStr() + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
     if response.ok <> true then
         m.log.error("Album request failed libraryId=" + Format.SafeString(request.libraryId, "") + " message=" + Format.SafeString(response.errorMessage, ""))
         response.AddReplace("action", "musicLibrary")
         response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        response.AddReplace("queryId", Number.ToInteger(request.queryId, 0))
         m.top.response = response
         return
     end if
 
     albums = getItemsFromPayload(response.data)
-    processingTimer = CreateObject("roTimespan")
-    processingTimer.Mark()
-    m.log.write("Album processing started libraryId=" + Format.SafeString(request.libraryId, "") + " count=" + albums.Count().ToStr())
-    filterOptions = buildFilterOptions(albums)
-    m.log.write("Album processing completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + processingTimer.TotalMilliseconds().ToStr())
     m.top.response = {
         ok: true
         action: "musicLibrary"
         libraryId: Format.SafeString(request.libraryId, "")
         payload: response.data
-        filterOptions: filterOptions
+        startIndex: startIndex
+        nextStartIndex: startIndex + albums.Count()
+        hasMore: hasMoreAlbumPages(response.data, startIndex, albums.Count(), pageSize)
+        totalRecordCount: getAlbumTotalRecordCount(response.data)
+        queryId: Number.ToInteger(request.queryId, 0)
     }
 end sub
 
 '-------------------------------------------------------------------------------
-' buildFilterOptions
+' getAlbumSortBy
 '-------------------------------------------------------------------------------
-function buildFilterOptions(albums as object) as object
-    filterOptions = {
-        decadeOptions: []
-        genreOptions: []
-    }
-    if albums = invalid then return filterOptions
+function getAlbumSortBy(request as object) as string
+    sortBy = Format.SafeString(request.albumSortBy, "SortName")
+    if sortBy = "AlbumArtist,SortName" or sortBy = "ProductionYear,SortName" then return sortBy
+    return "SortName"
+end function
 
-    decadeValues = []
-    decadeValueByKey = {}
-    genreLabels = []
-    genreLabelByKey = {}
+'-------------------------------------------------------------------------------
+' getAlbumSortOrder
+'-------------------------------------------------------------------------------
+function getAlbumSortOrder(request as object) as string
+    if Format.SafeString(request.albumSortOrder, "Ascending") = "Descending" then return "Descending"
+    return "Ascending"
+end function
 
-    for each album in albums
-        if Arrays.IsAssocArray(album) = false then
-            m.log.error("Skipping malformed album while building filters")
-            continue for
-        end if
-        year = getAlbumYear(album)
-        if year > 0 then
-            decade = Number.ToInteger(Fix(year / 10) * 10, 0)
-            decadeKey = decade.ToStr()
-            if decadeValueByKey[decadeKey] = invalid then
-                decadeValueByKey[decadeKey] = decade
-                decadeValues.Push(decade)
-            end if
-        end if
+'-------------------------------------------------------------------------------
+' getAlbumTotalRecordCount
+'-------------------------------------------------------------------------------
+function getAlbumTotalRecordCount(payload as dynamic) as integer
+    if Arrays.IsAssocArray(payload) = false then return -1
+    return Number.ToInteger(payload.TotalRecordCount, -1)
+end function
 
-        for each genre in getAlbumGenres(album)
-            genreLabel = Strings.Trim(Format.SafeString(genre, ""))
-            if genreLabel = "" then continue for
+'-------------------------------------------------------------------------------
+' hasMoreAlbumPages
+'-------------------------------------------------------------------------------
+function hasMoreAlbumPages(payload as dynamic, startIndex as integer, pageCount as integer, pageSize as integer) as boolean
+    if pageCount < pageSize then return false
+    if Arrays.IsAssocArray(payload) = false then return true
 
-            genreKey = LCase(genreLabel)
-            if genreLabelByKey[genreKey] = invalid then
-                genreLabelByKey[genreKey] = genreLabel
-                genreLabels.Push(genreLabel)
-            end if
-        end for
-    end for
-
-    decadeValues.Sort()
-    for each decade in decadeValues
-        decadeKey = decade.ToStr()
-        filterOptions.decadeOptions.Push({
-            label: decadeKey
-            value: decade
-        })
-    end for
-
-    genreLabels.Sort()
-    for each genreLabel in genreLabels
-        filterOptions.genreOptions.Push({
-            label: genreLabel
-            value: genreLabel
-        })
-    end for
-
-    return filterOptions
+    totalRecordCount = Number.ToInteger(payload.TotalRecordCount, -1)
+    return totalRecordCount < 0 or startIndex + pageCount < totalRecordCount
 end function
 
 '-------------------------------------------------------------------------------
@@ -136,31 +120,6 @@ function getItemsFromPayload(payload as dynamic) as object
 
     m.log.error("Album payload Items is not an array")
     return []
-end function
-
-'-------------------------------------------------------------------------------
-' getAlbumYear
-'-------------------------------------------------------------------------------
-function getAlbumYear(album as dynamic) as integer
-    if Arrays.IsAssocArray(album) = false then return 0
-
-    year = Number.ToInteger(album.ProductionYear, 0)
-    if year > 0 then return year
-
-    premiereDate = Format.SafeString(album.PremiereDate, "")
-    if Len(premiereDate) < 4 then return 0
-
-    return Number.ToInteger(Left(premiereDate, 4), 0)
-end function
-
-'-------------------------------------------------------------------------------
-' getAlbumGenres
-'-------------------------------------------------------------------------------
-function getAlbumGenres(album as dynamic) as object
-    if Arrays.IsAssocArray(album) = false then return []
-    if Type(album.Genres) <> "roArray" then return []
-
-    return album.Genres
 end function
 
 '-------------------------------------------------------------------------------

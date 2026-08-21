@@ -2,15 +2,28 @@
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = new Logger("MusicArtist", m.global.logService)
     m.mediaShell = m.top.findNode("mediaShell")
     m.albumsRow = m.top.findNode("albumsRow")
     m.artistTask = m.top.findNode("artistTask")
+    m.artistAlbumsTask = m.top.findNode("artistAlbumsTask")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.artistTask.observeField("response", "onArtistResponse")
+    m.artistAlbumsTask.observeField("response", "onArtistAlbumsResponse")
     m.albumsRow.observeField("rowItemSelected", "onAlbumSelected")
+    m.albumsRow.observeField("rowItemFocused", "onAlbumFocused")
     m.state = {
         request: invalid
         overview: ""
+        albums: []
+        albumLoad: {
+            status: "idle"
+            queryId: 0
+            requestInFlight: false
+            nextStartIndex: 0
+            totalCount: -1
+            hasMore: false
+        }
         lifecycle: AsyncLifecycle.Create()
     }
 end sub
@@ -40,7 +53,15 @@ sub onLoadRequestChanged()
     AsyncLifecycle.Begin(m.state.lifecycle, request.itemId)
     applyBackgroundSetting(request.settings)
     renderArtist()
-    renderAlbums(request.albums)
+    renderAlbums([])
+    m.state.albums = []
+    m.state.albumLoad.status = "loading"
+    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
+    m.state.albumLoad.requestInFlight = false
+    m.state.albumLoad.nextStartIndex = 0
+    m.state.albumLoad.totalCount = -1
+    m.state.albumLoad.hasMore = false
+    loadAlbumPage(0)
 
     artistId = Format.SafeString(request.musicBrainzArtistId, "")
     if artistId = "" then
@@ -54,6 +75,103 @@ sub onLoadRequestChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onArtistAlbumsResponse
+'-------------------------------------------------------------------------------
+sub onArtistAlbumsResponse()
+    response = m.artistAlbumsTask.response
+    if m.state.lifecycle.isActive <> true then return
+    if response = invalid then return
+    if Format.SafeString(response.libraryId, "") <> Format.SafeString(m.state.request.libraryId, "") then return
+    if Number.ToInteger(response.queryId, -1) <> m.state.albumLoad.queryId then return
+    if response.ok <> true then
+        m.state.albumLoad.requestInFlight = false
+        m.state.albumLoad.status = "failed"
+        m.state.albumLoad.hasMore = false
+        return
+    end if
+
+    startIndex = Number.ToInteger(response.startIndex, -1)
+    expectedStartIndex = m.state.albumLoad.nextStartIndex
+    if startIndex <> expectedStartIndex then
+        m.state.albumLoad.requestInFlight = false
+        m.state.albumLoad.status = "failed"
+        m.state.albumLoad.hasMore = false
+        m.log.error("Artist album page rejected artistId=" + Format.SafeString(m.state.request.itemId, "") + " expectedStartIndex=" + expectedStartIndex.ToStr() + " receivedStartIndex=" + startIndex.ToStr())
+        return
+    end if
+    m.state.albumLoad.requestInFlight = false
+    albums = getItemsFromAlbumPayload(response.payload)
+    for each album in albums
+        m.state.albums.Push(album)
+    end for
+    m.state.albumLoad.status = "loaded"
+    m.state.albumLoad.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + albums.Count())
+    m.state.albumLoad.totalCount = Number.ToInteger(response.totalRecordCount, m.state.albums.Count())
+    m.state.albumLoad.hasMore = response.hasMore = true
+    if startIndex = 0 then
+        renderAlbums(albums)
+        if m.top.visible = true and m.albumsRow.visible = true and m.mediaShell.isInFocusChain() <> true and m.albumsRow.isInFocusChain() <> true then
+            m.top.setFocus(true)
+            m.albumsRow.setFocus(true)
+        end if
+    else
+        appendAlbums(albums)
+    end if
+    requestNextAlbumPageIfNeeded()
+end sub
+
+'-------------------------------------------------------------------------------
+' loadAlbumPage
+'-------------------------------------------------------------------------------
+sub loadAlbumPage(startIndex as integer)
+    request = m.state.request
+    albumRequest = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        libraryId: request.libraryId
+        artistIds: request.itemId
+        pageStartIndex: startIndex
+        queryId: m.state.albumLoad.queryId
+        albumSortOrder: "Ascending"
+        albumSortBy: "ProductionYear,SortName"
+    }
+    m.state.albumLoad.requestInFlight = true
+    m.artistAlbumsTask.control = "stop"
+    m.artistAlbumsTask.request = albumRequest
+    m.artistAlbumsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlbumFocused
+'-------------------------------------------------------------------------------
+sub onAlbumFocused()
+    requestNextAlbumPageIfNeeded()
+end sub
+
+'-------------------------------------------------------------------------------
+' requestNextAlbumPageIfNeeded
+'-------------------------------------------------------------------------------
+sub requestNextAlbumPageIfNeeded()
+    if m.state.albumLoad.hasMore <> true or m.state.albumLoad.requestInFlight = true then return
+    focused = m.albumsRow.rowItemFocused
+    if focused = invalid or focused.Count() < 2 then return
+    if Number.ToInteger(focused[1], 0) < m.state.albums.Count() - 5 then return
+
+    m.state.albumLoad.status = "loading"
+    loadAlbumPage(m.state.albumLoad.nextStartIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' getItemsFromAlbumPayload
+'-------------------------------------------------------------------------------
+function getItemsFromAlbumPayload(payload as dynamic) as object
+    if Type(payload) = "roArray" then return payload
+    if payload <> invalid and Type(payload.Items) = "roArray" then return payload.Items
+    return []
+end function
+
+'-------------------------------------------------------------------------------
 ' renderAlbums
 '-------------------------------------------------------------------------------
 sub renderAlbums(albums as dynamic)
@@ -63,15 +181,40 @@ sub renderAlbums(albums as dynamic)
     row = content.createChild("ContentNode")
     request = m.state.request
     for each album in albums
-        child = row.createChild("ContentNode")
-        child.title = Format.FirstNonEmpty([album.Name], "Untitled Album")
-        child.HDPosterUrl = getAlbumArtworkUrl(album, request)
-        child.AddFields({ releaseYear: getAlbumReleaseYear(album), raw: album })
+        addAlbumNode(row, album, request)
     end for
 
     hasAlbums = row.getChildCount() > 0
     m.albumsRow.content = content
     m.albumsRow.visible = hasAlbums
+end sub
+
+'-------------------------------------------------------------------------------
+' appendAlbums
+'-------------------------------------------------------------------------------
+sub appendAlbums(albums as object)
+    content = m.albumsRow.content
+    if content = invalid or content.getChildCount() = 0 then
+        renderAlbums(albums)
+        return
+    end if
+
+    row = content.getChild(0)
+    request = m.state.request
+    for each album in albums
+        addAlbumNode(row, album, request)
+    end for
+    m.albumsRow.visible = row.getChildCount() > 0
+end sub
+
+'-------------------------------------------------------------------------------
+' addAlbumNode
+'-------------------------------------------------------------------------------
+sub addAlbumNode(row as object, album as object, request as object)
+    child = row.createChild("ContentNode")
+    child.title = Format.FirstNonEmpty([album.Name], "Untitled Album")
+    child.HDPosterUrl = getAlbumArtworkUrl(album, request)
+    child.AddFields({ releaseYear: getAlbumReleaseYear(album), raw: album })
 end sub
 
 '-------------------------------------------------------------------------------
@@ -168,6 +311,22 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.request, "itemId")
+    if m.state.albumLoad.status = "loading" and m.state.albumLoad.requestInFlight <> true then loadAlbumPage(m.state.albumLoad.nextStartIndex)
+    focusArtistContent()
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusRequested
+'-------------------------------------------------------------------------------
+sub onFocusRequested()
+    if m.top.visible <> true then return
+    focusArtistContent()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusArtistContent
+'-------------------------------------------------------------------------------
+sub focusArtistContent()
     m.top.setFocus(true)
     if m.albumsRow.visible = true then
         m.albumsRow.setFocus(true)
@@ -181,7 +340,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub deactivate()
     AsyncLifecycle.Deactivate(m.state.lifecycle)
+    m.state.albumLoad.requestInFlight = false
+    m.state.albumLoad.queryId = m.state.albumLoad.queryId + 1
     m.artistTask.control = "stop"
+    m.artistAlbumsTask.control = "stop"
 end sub
 
 '-------------------------------------------------------------------------------

@@ -17,6 +17,8 @@
 - API response fields are PascalCase; access API data with PascalCase field names such as `item.CollectionType`, not mixed fallback expressions like `FirstNonEmpty([item.CollectionType, item.collectionType], "")`.
 - For date or time formatting/parsing helpers, use the existing functions in `source/DateTime.brs`; add new shared date helpers there instead of creating component-local date formatting functions.
 - For numeric conversion, always use `Number_ToInteger(value, fallback)` and `Number_ToFloat(value, fallback)` from `source/Number.brs`. Do not use raw `int()`, `Val()`, or direct float casts in component or task code unless there is a specific documented reason.
+- Always invoke SceneGraph interface functions with `node.callFunc("functionName", ...)`.
+- Do not use BrighterScript's `node@.functionName(...)` syntax. Zero-argument calls have caused runtime argument and type failures despite passing compilation.
 
 ## BrightScript naming
 
