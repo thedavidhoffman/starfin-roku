@@ -1,0 +1,198 @@
+'-------------------------------------------------------------------------------
+' onMarkAsWatchedSelected
+'-------------------------------------------------------------------------------
+sub onMarkAsWatchedSelected()
+    runWatchedTask("MarkAsWatched")
+end sub
+
+'-------------------------------------------------------------------------------
+' onMarkAsUnwatchedSelected
+'-------------------------------------------------------------------------------
+sub onMarkAsUnwatchedSelected()
+    runWatchedTask("MarkAsUnwatched")
+end sub
+
+'-------------------------------------------------------------------------------
+' runWatchedTask
+'-------------------------------------------------------------------------------
+sub runWatchedTask(action as string)
+    item = m.state.itemContent
+    request = m.state.request
+    if item = invalid or request = invalid then return
+    if canMarkWatched(item) <> true then return
+
+    itemId = Format.SafeString(item.itemId, "")
+    if itemId = "" then return
+
+    m.watchedTask.request = {
+        action: action
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+    }
+    m.watchedTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onWatchedTaskResponse
+'-------------------------------------------------------------------------------
+sub onWatchedTaskResponse()
+    response = m.watchedTask.response
+    if response = invalid then return
+    if m.state.lifecycle.isActive <> true then return
+
+    if response.ok <> true then
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to update watched state."))
+        return
+    end if
+
+    item = m.state.itemContent
+    if item = invalid then return
+
+    itemId = Format.SafeString(response.itemId, "")
+    if itemId = "" or itemId <> Format.SafeString(item.itemId, "") then return
+
+    isWatched = Format.SafeString(response.action, "") = "MarkAsWatched"
+    updateItemWatchedState(item, isWatched)
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(item.raw))
+    m.mediaToolbar.isWatched = isWatched
+    m.mediaToolbar.callFunc("focusWatchedAction")
+    m.top.watchedStateChanged = {
+        itemId: itemId
+        isWatched: isWatched
+    }
+    AppStatus.ClearMessage()
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    if change = invalid then return
+
+    m.state.playbackProgressChange = change
+    m.top.playbackProgressChanged = change
+
+    item = m.state.itemContent
+    if item = invalid or item.raw = invalid then
+        return
+    end if
+
+    itemId = Format.SafeString(change.itemId, "")
+    if itemId = "" or itemId <> Format.SafeString(item.itemId, "") then
+        return
+    end if
+
+    updateItemPlaybackProgress(item, change)
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(item.raw))
+    m.mediaToolbar.isWatched = isItemWatched(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' isItemWatched
+'-------------------------------------------------------------------------------
+function isItemWatched(item as dynamic) as boolean
+    if item = invalid then return false
+    if item.raw = invalid then return false
+    if item.raw.UserData = invalid then return false
+    if Format.SafeString(item.itemType, "") = "SeasonSummary" then
+        return item.raw.UserData.UnplayedItemCount = 0
+    end if
+
+    return item.raw.UserData.Played = true
+end function
+
+'-------------------------------------------------------------------------------
+' canMarkWatched
+'-------------------------------------------------------------------------------
+function canMarkWatched(item as dynamic) as boolean
+    if item = invalid then return false
+    if Format.SafeString(item.itemId, "") = "" then return false
+
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' updateItemWatchedState
+'-------------------------------------------------------------------------------
+sub updateItemWatchedState(item as dynamic, isWatched as boolean)
+    if item = invalid or item.raw = invalid then return
+
+    raw = item.raw
+    if raw.UserData = invalid then raw.UserData = {}
+
+    raw.UserData.Played = isWatched
+    if Format.SafeString(item.itemType, "") = "SeasonSummary" then
+        if isWatched then
+            raw.UserData.UnplayedItemCount = 0
+        else
+            raw.UserData.UnplayedItemCount = 1
+        end if
+    end if
+
+    if isWatched then
+        raw.UserData.PlayedPercentage = 0
+        raw.UserData.PlaybackPositionTicks = 0
+    else
+        raw.UserData.PlayedPercentage = 0
+    end if
+
+    item.raw = raw
+    m.state.itemContent = item
+    if m.state.playSelection <> invalid then
+        m.state.playSelection.item = raw
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' updateItemPlaybackProgress
+'-------------------------------------------------------------------------------
+sub updateItemPlaybackProgress(item as dynamic, change as object)
+    if item = invalid or item.raw = invalid then return
+
+    raw = item.raw
+    if raw.UserData = invalid then raw.UserData = {}
+
+    if change.isFinished = true then
+        raw.UserData.Played = true
+        raw.UserData.PlayedPercentage = 0
+        raw.UserData.PlaybackPositionTicks = 0
+    else
+        positionTicks = getPlaybackProgressTicks(change.positionTicks)
+        raw.UserData.Played = false
+        raw.UserData.PlaybackPositionTicks = positionTicks
+        raw.UserData.PlayedPercentage = getPlaybackProgressPercentage(positionTicks, raw.RunTimeTicks, change.durationTicks)
+    end if
+
+    item.raw = raw
+    m.state.itemContent = item
+    if m.state.playSelection <> invalid then
+        m.state.playSelection.item = raw
+        m.state.playSelection.startPositionTicks = raw.UserData.PlaybackPositionTicks
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackProgressTicks
+'-------------------------------------------------------------------------------
+function getPlaybackProgressTicks(value as dynamic) as longinteger
+    if value = invalid or value <= 0 then return 0
+
+    return value
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackProgressPercentage
+'-------------------------------------------------------------------------------
+function getPlaybackProgressPercentage(positionTicks as dynamic, runtimeTicks as dynamic, durationTicks as dynamic) as float
+    if positionTicks = invalid or positionTicks <= 0 then return 0
+    if runtimeTicks = invalid or runtimeTicks <= 0 then runtimeTicks = durationTicks
+    if runtimeTicks = invalid or runtimeTicks <= 0 then return 0
+
+    percentage = (positionTicks * 100.0) / runtimeTicks
+    if percentage > 100 then return 100
+
+    return percentage
+end function

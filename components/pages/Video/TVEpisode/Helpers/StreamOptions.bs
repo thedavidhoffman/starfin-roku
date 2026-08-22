@@ -1,0 +1,294 @@
+'-------------------------------------------------------------------------------
+' onVideoToolbarSubtitlesSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarSubtitlesSelected()
+    item = m.state.itemContent
+    if item = invalid or item.raw = invalid then return
+
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "subtitleOptions"
+    m.streamOptions.callFunc("openSubtitleOptions", {
+        subtitleStreams: getSubtitleStreams(item.raw)
+        selectedSubtitleStreamIndex: getSelectedSubtitleStreamIndex()
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' onStreamOptionsOverlayRequested
+'-------------------------------------------------------------------------------
+sub onStreamOptionsOverlayRequested()
+    request = m.streamOptions.overlayRequested
+    if request = invalid then return
+
+    request.sourcePage = "tvEpisode"
+    m.top.streamOptionsRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' handleStreamOptionsOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleStreamOptionsOverlayClosed(closed as object)
+    applyClosedStreamOptionsSelection(closed)
+    m.streamOptions.callFunc("closeOptions")
+end sub
+
+'-------------------------------------------------------------------------------
+' applyClosedStreamOptionsSelection
+'-------------------------------------------------------------------------------
+sub applyClosedStreamOptionsSelection(closed as object)
+    if closed = invalid then return
+    request = closed.request
+    overlay = closed.overlay
+    if request = invalid or overlay = invalid then return
+
+    selection = getClosedOptionValue(overlay)
+    if Format.SafeString(request.id, "") = "subtitleOptions" then
+        m.streamOptions.callFunc("applySubtitleSelection", selection)
+    else if Format.SafeString(request.id, "") = "audioOptions" then
+        m.streamOptions.callFunc("applyAudioSelection", selection)
+    else if Format.SafeString(request.id, "") = "chapterOptions" and overlay.selectedOptionChanged = true then
+        m.streamOptions.callFunc("applyChapterSelection", selection)
+    else if Format.SafeString(request.id, "") = "videoOptions" then
+        m.streamOptions.callFunc("applyVideoModeSelection", overlay.selectedOption)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getClosedOptionValue
+'-------------------------------------------------------------------------------
+function getClosedOptionValue(overlay as dynamic) as dynamic
+    if overlay = invalid then return invalid
+    if overlay.selectedOption = invalid then return invalid
+    return overlay.selectedOption.value
+end function
+
+'-------------------------------------------------------------------------------
+' onStreamOptionsCloseRequested
+'-------------------------------------------------------------------------------
+sub onStreamOptionsCloseRequested()
+    focusVideoToolbar()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSubtitleOptionSelected
+'-------------------------------------------------------------------------------
+sub onSubtitleOptionSelected()
+    selection = m.streamOptions.selectedSubtitle
+    if selection = invalid then return
+
+    if selection.isOff = true then
+        m.state.selectedStreams.subtitle = invalid
+        m.state.selectedStreams.subtitleOff = true
+        m.log.write("Subtitle option selected: Off")
+    else
+        m.state.selectedStreams.subtitle = selection
+        m.state.selectedStreams.subtitleOff = false
+        m.log.write("Subtitle option selected streamIndex=" + Format.SafeString(selection.streamIndex, "") + " label=" + Format.SafeString(selection.label, ""))
+    end if
+
+    applySelectedStreamsToPlaySelection(m.state.playSelection)
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarAudioSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarAudioSelected()
+    item = m.state.itemContent
+    if item = invalid or item.raw = invalid then return
+
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "audioOptions"
+    m.streamOptions.callFunc("openAudioOptions", {
+        audioStreams: getAudioStreams(item.raw)
+        selectedAudioStreamIndex: getSelectedAudioStreamIndex()
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarVideoSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarVideoSelected()
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "videoOptions"
+    m.streamOptions.callFunc("openVideoOptions", {
+        selectedKey: m.state.videoMode
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoModeSelected
+'-------------------------------------------------------------------------------
+sub onVideoModeSelected()
+    selection = m.streamOptions.selectedVideoMode
+    if selection = invalid then return
+
+    applyPlaybackVideoMode(selection.key)
+    applySelectedStreamsToPlaySelection(m.state.playSelection)
+    m.log.write("Video mode selected: " + m.state.videoMode)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackVideoMode
+'-------------------------------------------------------------------------------
+sub applyPlaybackVideoMode(videoMode as dynamic)
+    mode = ""
+    if videoMode <> invalid then mode = videoMode.ToStr()
+    if mode = "" then mode = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.VideoStreamingMode)
+    mode = PlaybackMode.Normalize(mode)
+    m.state.videoMode = mode
+    if m.state.playSelection <> invalid then m.state.playSelection.AddReplace("videoMode", mode)
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarChaptersSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarChaptersSelected()
+    item = m.state.itemContent
+    if item = invalid or item.raw = invalid then return
+
+    chapters = getChapters(item.raw)
+    if chapters.Count() = 0 then return
+
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "chapterOptions"
+    m.streamOptions.callFunc("openChapterOptions", {
+        chapters: chapters
+        selectedChapterKey: m.state.selectedChapterKey
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarMediaInfoSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarMediaInfoSelected()
+    item = m.state.itemContent
+    if item = invalid or item.raw = invalid then return
+
+    m.mediaToolbar.callFunc("deactivate")
+    m.state.focusArea = "mediaInfo"
+    m.top.overlayRequested = {
+        id: "mediaInfo"
+        sourcePage: "tvEpisode"
+        componentName: "VideoMediaInfo"
+        openFunction: "openVideoMediaInfo"
+        closeField: "closeRequested"
+        item: item.raw
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onChapterOptionSelected
+'-------------------------------------------------------------------------------
+sub onChapterOptionSelected()
+    selection = m.streamOptions.selectedChapter
+    if selection = invalid or selection.startPositionTicks = invalid then return
+    if m.state.playSelection = invalid then return
+
+    playSelection = buildRestartSelection(m.state.playSelection)
+    playSelection.startPositionTicks = selection.startPositionTicks
+    applySelectedStreamsToPlaySelection(playSelection)
+    m.state.selectedChapterKey = Format.SafeString(selection.startPositionTicks, "")
+    m.log.write("Chapter option selected startPositionTicks=" + Format.SafeString(selection.startPositionTicks, "") + " label=" + Format.SafeString(selection.label, ""))
+    m.top.selectedEpisode = playSelection
+end sub
+
+'-------------------------------------------------------------------------------
+' onAudioOptionSelected
+'-------------------------------------------------------------------------------
+sub onAudioOptionSelected()
+    selection = m.streamOptions.selectedAudio
+    if selection = invalid then return
+
+    m.state.selectedStreams.audio = selection
+    m.log.write("Audio option selected streamIndex=" + Format.SafeString(selection.streamIndex, "") + " label=" + Format.SafeString(selection.label, ""))
+    applySelectedStreamsToPlaySelection(m.state.playSelection)
+end sub
+
+'-------------------------------------------------------------------------------
+' getSubtitleStreams
+'-------------------------------------------------------------------------------
+function getSubtitleStreams(item as dynamic) as object
+    if item = invalid or item.MediaStreams = invalid then return []
+
+    subtitleStreams = []
+    for i = 0 to item.MediaStreams.Count() - 1
+        stream = item.MediaStreams[i]
+        if stream <> invalid and LCase(Format.SafeString(stream.Type, "")) = "subtitle" then
+            if stream.Index = invalid then stream.AddReplace("sourceIndex", i)
+            subtitleStreams.Push(stream)
+        end if
+    end for
+
+    return subtitleStreams
+end function
+
+'-------------------------------------------------------------------------------
+' getAudioStreams
+'-------------------------------------------------------------------------------
+function getAudioStreams(item as dynamic) as object
+    if item = invalid or item.MediaStreams = invalid then return []
+
+    audioStreams = []
+    for i = 0 to item.MediaStreams.Count() - 1
+        stream = item.MediaStreams[i]
+        if stream <> invalid and LCase(Format.SafeString(stream.Type, "")) = "audio" then
+            if stream.Index = invalid then stream.AddReplace("sourceIndex", i)
+            audioStreams.Push(stream)
+        end if
+    end for
+
+    return audioStreams
+end function
+
+'-------------------------------------------------------------------------------
+' getChapters
+'-------------------------------------------------------------------------------
+function getChapters(item as dynamic) as object
+    return MediaOptions.GetChapters(item)
+end function
+
+'-------------------------------------------------------------------------------
+' applySelectedStreamsToPlaySelection
+'-------------------------------------------------------------------------------
+sub applySelectedStreamsToPlaySelection(selection as dynamic)
+    if selection = invalid then return
+
+    selection.AddReplace("videoMode", m.state.videoMode)
+
+    audioIndex = getSelectedAudioStreamIndex()
+    if audioIndex >= 0 then selection.AddReplace("audioStreamIndex", audioIndex)
+
+    subtitleIndex = getSelectedSubtitleStreamIndex()
+    if subtitleIndex >= -1 then selection.AddReplace("subtitleStreamIndex", subtitleIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' getSelectedAudioStreamIndex
+'-------------------------------------------------------------------------------
+function getSelectedAudioStreamIndex() as integer
+    if m.state = invalid or m.state.selectedStreams = invalid then return -1
+    if m.state.selectedStreams.audio = invalid then return -1
+
+    return getSelectedStreamIndex(m.state.selectedStreams.audio, -1)
+end function
+
+'-------------------------------------------------------------------------------
+' getSelectedSubtitleStreamIndex
+'-------------------------------------------------------------------------------
+function getSelectedSubtitleStreamIndex() as integer
+    if m.state = invalid or m.state.selectedStreams = invalid then return -1
+    if m.state.selectedStreams.subtitleOff = true then return -1
+    if m.state.selectedStreams.subtitle = invalid then return -1
+
+    return getSelectedStreamIndex(m.state.selectedStreams.subtitle, -1)
+end function
+
+'-------------------------------------------------------------------------------
+' getSelectedStreamIndex
+'-------------------------------------------------------------------------------
+function getSelectedStreamIndex(selection as dynamic, fallback as integer) as integer
+    if selection = invalid then return fallback
+    if selection.streamIndex <> invalid then return int(selection.streamIndex)
+    if selection.stream <> invalid and selection.stream.Index <> invalid then return int(selection.stream.Index)
+    return fallback
+end function

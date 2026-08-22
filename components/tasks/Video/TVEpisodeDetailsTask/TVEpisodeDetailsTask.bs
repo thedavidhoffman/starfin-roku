@@ -50,12 +50,13 @@ sub executeRequest()
         series: series
     }
 
-    if request.loadPlaybackQueue = true then
+    if request.loadPlaybackQueue = true and LCase(Format.SafeString(episodeResult.data.Type, "")) = "episode" then
         queue = loadPlaybackQueue(request, episodeResult.data)
         if queue <> invalid then
             response.AddReplace("playbackQueue", queue.items)
             response.AddReplace("playbackQueueIndex", queue.index)
             response.AddReplace("season", queue.season)
+            response.AddReplace("playbackQueueScope", "series")
         end if
     end if
 
@@ -94,11 +95,10 @@ end function
 '-------------------------------------------------------------------------------
 function loadPlaybackQueue(request as object, episode as dynamic) as dynamic
     seriesId = Format.SafeString(Format.FirstNonEmpty([episode.SeriesId], ""), "")
-    seasonId = Format.SafeString(Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], ""), "")
     itemId = Format.SafeString(Format.FirstNonEmpty([episode.Id, request.itemId], ""), "")
-    if seriesId = "" or seasonId = "" or itemId = "" then return invalid
+    if seriesId = "" or itemId = "" then return invalid
 
-    episodesResult = loadEpisodes(request, seriesId, seasonId)
+    episodesResult = loadEpisodes(request, seriesId)
     if episodesResult = invalid or episodesResult.ok <> true then
         m.log.write("Unable to load episode playback queue for itemId=" + itemId)
         return invalid
@@ -107,8 +107,9 @@ function loadPlaybackQueue(request as object, episode as dynamic) as dynamic
     episodes = getItemsFromPayload(episodesResult.data)
     if episodes.Count() = 0 then return invalid
 
-    queueItems = buildPlaybackQueueItems(episodes, buildSeasonIdentity(episode, seasonId))
+    queueItems = buildPlaybackQueueItems(episodes)
     queueIndex = getPlaybackQueueIndex(queueItems, itemId)
+    seasonId = Format.SafeString(Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], ""), "")
 
     return {
         items: queueItems
@@ -120,10 +121,9 @@ end function
 '-------------------------------------------------------------------------------
 ' loadEpisodes
 '-------------------------------------------------------------------------------
-function loadEpisodes(request as object, seriesId as string, seasonId as string) as object
+function loadEpisodes(request as object, seriesId as string) as object
     params = {
         userId: Format.SafeString(request.userId, "")
-        seasonId: seasonId
         fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
     }
 
@@ -144,16 +144,17 @@ end function
 '-------------------------------------------------------------------------------
 ' buildPlaybackQueueItems
 '-------------------------------------------------------------------------------
-function buildPlaybackQueueItems(episodes as object, season as object) as object
+function buildPlaybackQueueItems(episodes as object) as object
     queue = []
     for each episode in episodes
         episodeId = Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
         if episodeId = "" then continue for
 
+        seasonId = Format.SafeString(Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], ""), "")
         queue.Push({
             itemId: episodeId
             item: episode
-            season: season
+            season: buildSeasonIdentity(episode, seasonId)
             startPositionTicks: PlaybackProgress.GetTicksFromItem(episode)
         })
     end for

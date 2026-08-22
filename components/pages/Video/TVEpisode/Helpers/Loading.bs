@@ -1,0 +1,136 @@
+'-------------------------------------------------------------------------------
+' loadItemDetails
+'-------------------------------------------------------------------------------
+sub loadItemDetails()
+    request = m.state.request
+    if request = invalid then return
+
+    itemId = Format.SafeString(request.itemId, "")
+    if itemId = "" then
+        m.state.itemId = ""
+        m.cast.people = []
+        return
+    end if
+
+    if itemId = m.state.itemId then return
+    m.state.itemId = itemId
+    m.cast.people = []
+
+    m.episodeDetailsTask.control = "stop"
+    m.episodeDetailsTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+        loadPlaybackQueue: Format.SafeString(request.playbackQueueScope, "") <> "series"
+    }
+    m.episodeDetailsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onEpisodeDetailsResponse
+'-------------------------------------------------------------------------------
+sub onEpisodeDetailsResponse()
+    response = m.episodeDetailsTask.response
+    if response = invalid then return
+    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "itemId", "tvEpisodeDetails") <> true then return
+    if response.ok <> true then
+        m.state.playbackRefreshPending = false
+        renderEpisodeContent(m.state.itemContent, false)
+        return
+    end if
+    if Format.SafeString(response.itemId, "") <> m.state.itemId then return
+
+    isPlaybackRefresh = m.state.playbackRefreshPending = true
+    m.state.playbackRefreshPending = false
+    if isPlaybackRefresh then m.state.request.startPositionTicks = invalid
+
+    applySeriesDetails(response.series)
+    applyPlaybackQueueDetails(response)
+    applyEpisodeDetails(response.payload, false)
+    m.cast.people = getPeople(response.payload)
+    if isPlaybackRefresh then notifyRefreshedWatchedState(response.payload)
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshPlaybackState
+'-------------------------------------------------------------------------------
+sub refreshPlaybackState()
+    request = m.state.request
+    if request = invalid then return
+
+    itemId = Format.SafeString(request.itemId, "")
+    if itemId = "" then return
+
+    m.state.playbackRefreshPending = true
+    m.episodeDetailsTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+        loadPlaybackQueue: false
+    }
+    m.episodeDetailsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' notifyRefreshedWatchedState
+'-------------------------------------------------------------------------------
+sub notifyRefreshedWatchedState(item as dynamic)
+    if item = invalid or item.UserData = invalid then return
+    if item.UserData.Played <> true then return
+
+    m.state.playbackProgressChange = invalid
+    m.top.playbackProgressChanged = invalid
+    m.top.watchedStateChanged = {
+        itemId: Format.SafeString(item.Id, "")
+        isWatched: true
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackQueueDetails
+'-------------------------------------------------------------------------------
+sub applyPlaybackQueueDetails(response as object)
+    if response = invalid then return
+    if m.state.request = invalid then return
+    if response.playbackQueue = invalid then return
+
+    m.state.request.playbackQueue = response.playbackQueue
+    m.state.request.playbackQueueIndex = response.playbackQueueIndex
+    m.state.request.playbackQueueScope = Format.SafeString(response.playbackQueueScope, "series")
+    if m.state.request.season = invalid and response.season <> invalid then m.state.request.season = response.season
+    updateEpisodeBrowseState()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderInitialEpisodeContent
+'-------------------------------------------------------------------------------
+sub renderInitialEpisodeContent()
+    request = m.state.request
+    if request = invalid or request.item = invalid then return
+
+    applyEpisodeDetails(request.item, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' applySeriesDetails
+'-------------------------------------------------------------------------------
+sub applySeriesDetails(series as dynamic)
+    if series = invalid then return
+    if m.state.request = invalid then return
+
+    m.state.request.series = SeriesIdentity.FromItem(Format.SafeString(m.state.request.server, ""), series)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyEpisodeDetails
+'-------------------------------------------------------------------------------
+sub applyEpisodeDetails(details as dynamic, logoPending = false as boolean)
+    if details = invalid then return
+
+    item = buildEpisodeContentNode(details)
+    m.state.itemContent = item
+    m.state.playSelection = buildPlaySelection(details)
+    renderEpisodeContent(item, logoPending)
+end sub

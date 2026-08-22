@@ -1,0 +1,367 @@
+namespace tests
+
+    @SGNode("TVEpisode")
+    @suite("TVEpisode component")
+    class TVEpisodeTests extends rooibos.BaseTestSuite
+
+        @describe("local helper responsibilities")
+
+        @it("formats episode and season rendering metadata")
+        function _()
+            episode = {
+                itemType: "Episode"
+                raw: { Type: "Episode", ParentIndexNumber: 2, IndexNumber: 10 }
+            }
+            season = {
+                itemType: "Season"
+                raw: { Type: "Season", IndexNumber: 3, ChildCount: 8, ProductionYear: 2025 }
+            }
+
+            'bs:disable-next-line 1140
+            m.assertEqual(getEpisodePositionText(episode), "Season 2" + MediaMetadata.BulletSeparator() + "Episode 10")
+            'bs:disable-next-line 1140
+            m.assertEqual(getEpisodePositionText(season), "Season 3")
+            'bs:disable-next-line 1140
+            m.assertEqual(getSeasonMetadataText(season.raw), "8 episodes" + MediaMetadata.BulletSeparator() + "2025")
+        end function
+
+        @it("applies a loaded series queue to episode navigation")
+        function _()
+            queue = [
+                { itemId: "s2e10", item: { Id: "s2e10", Type: "Episode" }, season: { Id: "season-2" } }
+                { itemId: "s3e1", item: { Id: "s3e1", Type: "Episode" }, season: { Id: "season-3" } }
+                { itemId: "s3e2", item: { Id: "s3e2", Type: "Episode" }, season: { Id: "season-3" } }
+            ]
+            m.node.state.layout.isCinematic = true
+            m.node.state.request = {
+                item: queue[1].item
+                playbackQueue: invalid
+                playbackQueueIndex: invalid
+            }
+
+            'bs:disable-next-line 1140
+            applyPlaybackQueueDetails({
+                playbackQueue: queue
+                playbackQueueIndex: 1
+                playbackQueueScope: "series"
+                season: queue[1].season
+            })
+
+            m.assertEqual(m.node.state.episodeBrowse.index, 1)
+            m.assertEqual(m.node.state.episodeBrowse.count, 3)
+            m.assertTrue(m.node.previousNextButton.hasPrevious)
+            m.assertTrue(m.node.previousNextButton.hasNext)
+            'bs:disable-next-line 1140
+            m.assertTrue(canShowEpisodeBrowse())
+        end function
+
+        @it("disables navigation at series queue boundaries")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.node.state.request = {
+                item: { Id: "first", Type: "Episode" }
+                playbackQueue: [{ itemId: "first" }, { itemId: "last" }]
+                playbackQueueIndex: 0
+                playbackQueueScope: "series"
+            }
+
+            'bs:disable-next-line 1140
+            updateEpisodeBrowseState()
+            m.assertFalse(m.node.previousNextButton.hasPrevious)
+            m.assertTrue(m.node.previousNextButton.hasNext)
+
+            m.node.state.request.playbackQueueIndex = 1
+            'bs:disable-next-line 1140
+            updateEpisodeBrowseState()
+            m.assertTrue(m.node.previousNextButton.hasPrevious)
+            m.assertFalse(m.node.previousNextButton.hasNext)
+        end function
+
+        @it("applies selected stream options to playback")
+        function _()
+            m.node.state.videoMode = "directPlay"
+            m.node.state.selectedStreams = {
+                audio: { streamIndex: 4 }
+                subtitle: invalid
+                subtitleOff: true
+            }
+            selection = {}
+
+            'bs:disable-next-line 1140
+            applySelectedStreamsToPlaySelection(selection)
+
+            m.assertEqual(selection.videoMode, "directPlay")
+            m.assertEqual(selection.audioStreamIndex, 4)
+            m.assertEqual(selection.subtitleStreamIndex, -1)
+        end function
+
+        @it("calculates and clamps playback progress")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getPlaybackProgressPercentage(25, 100, invalid), 25.0)
+            'bs:disable-next-line 1140
+            m.assertEqual(getPlaybackProgressPercentage(150, 100, invalid), 100.0)
+            'bs:disable-next-line 1140
+            m.assertEqual(getPlaybackProgressPercentage(25, invalid, 200), 12.5)
+        end function
+
+        @it("formats rendering fallbacks and filters empty metadata")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertTrue(isSeasonNumberTitle(" Season 12 "))
+            'bs:disable-next-line 1140
+            m.assertFalse(isSeasonNumberTitle("Season Twelve"))
+            'bs:disable-next-line 1140
+            m.assertEqual(joinText(["", "First", invalid, "Second"], " / "), "First / Second")
+            'bs:disable-next-line 1140
+            m.assertEqual(getEpisodeNumberText({}), "Episode")
+            'bs:disable-next-line 1140
+            m.assertEqual(getAiredDateText({ AirDate: "2025-04-03T12:30:00Z" }), "2025-04-03")
+            'bs:disable-next-line 1140
+            m.assertEqual(getSeasonMetadataText({ RecursiveItemCount: 4, ChildCount: 8, PremiereDate: "2024-01-01" }), "4 episodes" + MediaMetadata.BulletSeparator() + "2024")
+        end function
+
+        @it("identifies season content from normalized and raw item types")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertTrue(isSeasonDetailsItem({ itemType: "SeasonSummary", raw: {} }))
+            'bs:disable-next-line 1140
+            m.assertTrue(isSeasonDetailsItem({ itemType: "", raw: { Type: "Season" } }))
+            'bs:disable-next-line 1140
+            m.assertFalse(isSeasonDetailsItem({ itemType: "Episode", raw: { Type: "Episode" } }))
+            'bs:disable-next-line 1140
+            m.assertEqual(getMediaShellType({ itemType: "Season", raw: {} }), "tv-season")
+        end function
+
+        @it("calculates item progress from played percentage and runtime")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getProgressPercent({ UserData: { Played: true, PlayedPercentage: 75 } }), 0.0)
+            'bs:disable-next-line 1140
+            m.assertEqual(getProgressPercent({ UserData: { Played: false, PlayedPercentage: 125 } }), 100.0)
+            'bs:disable-next-line 1140
+            m.assertEqual(getProgressPercent({ UserData: { Played: false, PlaybackPositionTicks: 25000000& }, RunTimeTicks: 100000000& }), 25.0)
+            'bs:disable-next-line 1140
+            m.assertEqual(getProgressWidth({ UserData: { PlayedPercentage: 50 } }), 255)
+        end function
+
+        @it("filters audio and subtitle streams and preserves source indexes")
+        function _()
+            item = {
+                MediaStreams: [
+                    { Type: "Video", Index: 0 }
+                    { Type: "Audio", Index: 4 }
+                    { Type: "Subtitle" }
+                    { Type: "audio" }
+                ]
+            }
+
+            'bs:disable-next-line 1140
+            audio = getAudioStreams(item)
+            'bs:disable-next-line 1140
+            subtitles = getSubtitleStreams(item)
+
+            m.assertEqual(audio.Count(), 2)
+            m.assertEqual(audio[0].Index, 4)
+            m.assertEqual(audio[1].sourceIndex, 3)
+            m.assertEqual(subtitles.Count(), 1)
+            m.assertEqual(subtitles[0].sourceIndex, 2)
+        end function
+
+        @it("resolves selected stream indexes from direct and nested selections")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getSelectedStreamIndex({ streamIndex: 7, stream: { Index: 8 } }, -1), 7)
+            'bs:disable-next-line 1140
+            m.assertEqual(getSelectedStreamIndex({ stream: { Index: 8 } }, -1), 8)
+            'bs:disable-next-line 1140
+            m.assertEqual(getSelectedStreamIndex({}, -1), -1)
+
+            m.node.state.selectedStreams.subtitle = { streamIndex: 9 }
+            m.node.state.selectedStreams.subtitleOff = false
+            'bs:disable-next-line 1140
+            m.assertEqual(getSelectedSubtitleStreamIndex(), 9)
+            m.node.state.selectedStreams.subtitleOff = true
+            'bs:disable-next-line 1140
+            m.assertEqual(getSelectedSubtitleStreamIndex(), -1)
+        end function
+
+        @it("updates unfinished and completed playback state")
+        function _()
+            item = {
+                itemId: "episode-1"
+                itemType: "Episode"
+                raw: { RunTimeTicks: 100000000&, UserData: {} }
+            }
+            m.node.state.playSelection = { item: item.raw, startPositionTicks: 0 }
+
+            'bs:disable-next-line 1140
+            updateItemPlaybackProgress(item, { positionTicks: 40000000&, durationTicks: 100000000&, isFinished: false })
+            'bs:disable-next-line 1140
+            expectedTicks = getPlaybackProgressTicks(40000000&)
+            m.assertFalse(item.raw.UserData.Played)
+            m.assertEqual(item.raw.UserData.PlaybackPositionTicks, expectedTicks)
+            m.assertEqual(item.raw.UserData.PlayedPercentage, 40.0)
+            m.assertEqual(m.node.state.playSelection.startPositionTicks, expectedTicks)
+
+            'bs:disable-next-line 1140
+            updateItemPlaybackProgress(item, { positionTicks: 100000000&, durationTicks: 100000000&, isFinished: true })
+            m.assertTrue(item.raw.UserData.Played)
+            m.assertEqual(item.raw.UserData.PlaybackPositionTicks, 0)
+            m.assertEqual(item.raw.UserData.PlayedPercentage, 0)
+        end function
+
+        @it("updates watched state for episodes and season summaries")
+        function _()
+            episode = { itemId: "e1", itemType: "Episode", raw: { UserData: { PlaybackPositionTicks: 25 } } }
+            'bs:disable-next-line 1140
+            updateItemWatchedState(episode, true)
+            'bs:disable-next-line 1140
+            m.assertTrue(isItemWatched(episode))
+            m.assertEqual(episode.raw.UserData.PlaybackPositionTicks, 0)
+
+            season = { itemId: "s1", itemType: "SeasonSummary", raw: { UserData: { UnplayedItemCount: 3 } } }
+            'bs:disable-next-line 1140
+            updateItemWatchedState(season, true)
+            'bs:disable-next-line 1140
+            m.assertTrue(isItemWatched(season))
+            m.assertEqual(season.raw.UserData.UnplayedItemCount, 0)
+            'bs:disable-next-line 1140
+            updateItemWatchedState(season, false)
+            m.assertEqual(season.raw.UserData.UnplayedItemCount, 1)
+        end function
+
+        @it("builds the details task request and suppresses duplicate loads")
+        function _()
+            m.node.state.request = {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                itemId: "episode-1"
+                playbackQueueScope: "series"
+            }
+
+            'bs:disable-next-line 1140
+            loadItemDetails()
+
+            m.assertEqual(m.node.episodeDetailsTask.request.itemId, "episode-1")
+            m.assertFalse(m.node.episodeDetailsTask.request.loadPlaybackQueue)
+            firstRequest = m.node.episodeDetailsTask.request
+            'bs:disable-next-line 1140
+            loadItemDetails()
+            m.assertEqual(m.node.episodeDetailsTask.request, firstRequest)
+        end function
+
+        @it("builds a playback refresh request without reloading the queue")
+        function _()
+            m.node.state.request = { server: "server", token: "token", userId: "user", itemId: "episode-2" }
+
+            'bs:disable-next-line 1140
+            refreshPlaybackState()
+
+            m.assertTrue(m.node.state.playbackRefreshPending)
+            m.assertEqual(m.node.episodeDetailsTask.request.itemId, "episode-2")
+            m.assertFalse(m.node.episodeDetailsTask.request.loadPlaybackQueue)
+        end function
+
+        @it("navigates to the requested episode while preserving queue context")
+        function _()
+            queue = [
+                { itemId: "s2e10", item: { Id: "s2e10", Type: "Episode" }, season: { Id: "season-2" }, startPositionTicks: 20 }
+                { itemId: "s3e1", item: { Id: "s3e1", Type: "Episode" }, season: { Id: "season-3" }, startPositionTicks: 30 }
+            ]
+            m.node.state.request = {
+                server: "server"
+                token: "token"
+                itemId: "s2e10"
+                item: queue[0].item
+                playbackQueue: queue
+                playbackQueueIndex: 0
+                playbackQueueScope: "series"
+                season: queue[0].season
+            }
+
+            'bs:disable-next-line 1140
+            showEpisodeAtQueueIndex(1)
+
+            m.assertEqual(m.node.state.request.itemId, "s3e1")
+            m.assertEqual(m.node.state.request.playbackQueueIndex, 1)
+            m.assertEqual(m.node.state.request.seasonId, "season-3")
+            m.assertEqual(m.node.state.request.startPositionTicks, 30)
+            m.assertEqual(m.node.state.request.playbackQueue, queue)
+        end function
+
+        @it("ignores episode navigation outside the queue")
+        function _()
+            m.node.state.request = {
+                itemId: "episode-1"
+                item: { Id: "episode-1", Type: "Episode" }
+                playbackQueue: [{ itemId: "episode-1", item: { Id: "episode-1" }, season: { Id: "season-1" } }]
+            }
+            m.node.loadRequest = invalid
+
+            'bs:disable-next-line 1140
+            showEpisodeAtQueueIndex(-1)
+            m.assertInvalid(m.node.loadRequest)
+            'bs:disable-next-line 1140
+            showEpisodeAtQueueIndex(1)
+            m.assertInvalid(m.node.loadRequest)
+        end function
+
+        @it("resolves current series and season identities using documented precedence")
+        function _()
+            m.node.state.request = {
+                seriesId: "request-series"
+                series: { Id: "series-object", Name: "Series" }
+                seasonId: "request-season"
+                season: invalid
+                seasons: []
+            }
+            m.node.state.itemContent = {
+                raw: { SeriesId: "item-series", SeasonId: "item-season", SeasonName: "Season 4" }
+            }
+
+            'bs:disable-next-line 1140
+            m.assertEqual(getCurrentSeriesId(), "item-series")
+            'bs:disable-next-line 1140
+            m.assertEqual(getCurrentSeasonId(), "request-season")
+            'bs:disable-next-line 1140
+            selection = getCurrentSeasonSelection()
+            m.assertEqual(selection.seriesId, "item-series")
+            m.assertEqual(selection.seasonId, "request-season")
+            m.assertEqual(selection.season.Name, "Season 4")
+        end function
+
+        @it("retains cast focus after a valid person selection")
+        function _()
+            m.node.state.request = { seriesId: "series-1" }
+            m.node.state.itemContent = invalid
+            m.node.cast.selectedPerson = { itemId: "person-1", name: "Actor" }
+
+            'bs:disable-next-line 1140
+            onCastPersonSelected()
+
+            m.assertEqual(m.node.cast.selectedPerson.itemId, "person-1")
+            m.assertEqual(m.node.state.focusArea, "cast")
+        end function
+
+        @it("handles remote navigation between toolbar and episode browsing")
+        function _()
+            m.node.previousNextButton.visible = true
+            m.node.state.focusArea = "toolbar"
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("up", true))
+            m.assertEqual(m.node.state.focusArea, "episodeBrowse")
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("down", true))
+            m.assertEqual(m.node.state.focusArea, "toolbar")
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("back", false))
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("back", true))
+        end function
+
+    end class
+
+end namespace

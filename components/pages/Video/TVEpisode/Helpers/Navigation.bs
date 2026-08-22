@@ -1,0 +1,367 @@
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.request, "itemId")
+    m.top.setFocus(true)
+    if m.state.focusArea = "cast" and m.cast.hasItems = true then
+        focusCast()
+    else if m.state.focusArea = "episodeBrowse" and m.previousNextButton.visible = true then
+        focusEpisodeBrowse()
+    else
+        focusVideoToolbar()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' suspendForPlayback
+'-------------------------------------------------------------------------------
+sub suspendForPlayback()
+    m.cast.callFunc("deactivate")
+    m.previousNextButton.callFunc("deactivate")
+    m.top.setFocus(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    AsyncLifecycle.Deactivate(m.state.lifecycle)
+    m.episodeDetailsTask.control = "stop"
+    m.watchedTask.control = "stop"
+    m.cast.callFunc("deactivate")
+    m.previousNextButton.callFunc("deactivate")
+    m.top.setFocus(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' resetFocus
+'-------------------------------------------------------------------------------
+sub resetFocus()
+    m.state.focusArea = "toolbar"
+    m.previousNextButton.callFunc("deactivate")
+    m.mediaToolbar.callFunc("resetFocus")
+end sub
+
+'-------------------------------------------------------------------------------
+' focusVideoToolbar
+'-------------------------------------------------------------------------------
+sub focusVideoToolbar()
+    m.state.focusArea = "toolbar"
+    applyCinematicLayout()
+    m.previousNextButton.callFunc("deactivate")
+    m.mediaToolbar.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' focusEpisodeBrowse
+'-------------------------------------------------------------------------------
+sub focusEpisodeBrowse()
+    if m.previousNextButton.visible <> true then return
+
+    m.state.focusArea = "episodeBrowse"
+    m.mediaToolbar.callFunc("deactivate")
+    m.cast.callFunc("deactivate")
+    m.previousNextButton.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' focusMediaDescription
+'-------------------------------------------------------------------------------
+function focusMediaDescription() as boolean
+    if m.mediaShell.callFunc("canFocusDescription") <> true then return false
+
+    m.state.focusArea = "description"
+    m.mediaToolbar.callFunc("deactivate")
+    m.previousNextButton.callFunc("deactivate")
+    m.cast.callFunc("deactivate")
+    m.top.setFocus(true)
+    return m.mediaShell.callFunc("focusDescription")
+end function
+
+'-------------------------------------------------------------------------------
+' handleDescriptionOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleDescriptionOverlayClosed()
+    focusMediaDescription()
+end sub
+
+'-------------------------------------------------------------------------------
+' handleVideoMediaInfoOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleVideoMediaInfoOverlayClosed()
+    focusVideoToolbar()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusCast
+'-------------------------------------------------------------------------------
+sub focusCast()
+    if m.cast.hasItems <> true then return
+
+    m.mediaToolbar.callFunc("deactivate")
+    m.previousNextButton.callFunc("deactivate")
+    m.state.focusArea = "cast"
+    applyCinematicLayout()
+    m.cast.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarFocusExitDown
+'-------------------------------------------------------------------------------
+sub onVideoToolbarFocusExitDown()
+    focusCast()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateEpisodeBrowseState
+'-------------------------------------------------------------------------------
+sub updateEpisodeBrowseState()
+    request = m.state.request
+    if request = invalid or Type(request.playbackQueue) <> "roArray" or Format.SafeString(request.playbackQueueScope, "") <> "series" then
+        m.state.episodeBrowse.index = -1
+        m.state.episodeBrowse.count = 0
+    else
+        m.state.episodeBrowse.index = Number.ToInteger(request.playbackQueueIndex, -1)
+        m.state.episodeBrowse.count = request.playbackQueue.Count()
+    end if
+
+    m.previousNextButton.hasPrevious = m.state.episodeBrowse.index > 0
+    m.previousNextButton.hasNext = m.state.episodeBrowse.index >= 0 and m.state.episodeBrowse.index < m.state.episodeBrowse.count - 1
+    applyCinematicLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' canShowEpisodeBrowse
+'-------------------------------------------------------------------------------
+function canShowEpisodeBrowse() as boolean
+    if m.state.layout.isCinematic <> true then return false
+    if m.state.episodeBrowse.index < 0 or m.state.episodeBrowse.count <= 0 then return false
+
+    request = m.state.request
+    if request = invalid or request.item = invalid then return false
+    return LCase(Format.SafeString(request.item.Type, "")) = "episode"
+end function
+
+'-------------------------------------------------------------------------------
+' onPreviousEpisodeSelected
+'-------------------------------------------------------------------------------
+sub onPreviousEpisodeSelected()
+    showEpisodeAtQueueIndex(m.state.episodeBrowse.index - 1)
+end sub
+
+'-------------------------------------------------------------------------------
+' onNextEpisodeSelected
+'-------------------------------------------------------------------------------
+sub onNextEpisodeSelected()
+    showEpisodeAtQueueIndex(m.state.episodeBrowse.index + 1)
+end sub
+
+'-------------------------------------------------------------------------------
+' showEpisodeAtQueueIndex
+'-------------------------------------------------------------------------------
+sub showEpisodeAtQueueIndex(targetIndex as integer)
+    request = m.state.request
+    if request = invalid or Type(request.playbackQueue) <> "roArray" then return
+    if targetIndex < 0 or targetIndex >= request.playbackQueue.Count() then return
+
+    queueItem = request.playbackQueue[targetIndex]
+    if queueItem = invalid then return
+
+    itemId = Format.SafeString(queueItem.itemId, "")
+    if itemId = "" or queueItem.item = invalid then return
+
+    nextRequest = {}
+    for each key in request
+        nextRequest[key] = request[key]
+    end for
+    nextRequest.itemId = itemId
+    nextRequest.item = queueItem.item
+    nextRequest.startPositionTicks = queueItem.startPositionTicks
+    nextRequest.playbackQueueIndex = targetIndex
+    nextRequest.playbackQueueScope = "series"
+    nextRequest.season = queueItem.season
+    nextRequest.seasonId = Format.SafeString(queueItem.season.Id, "")
+
+    m.top.loadRequest = nextRequest
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarSeriesSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarSeriesSelected()
+    selection = getCurrentSeriesSelection()
+    if selection = invalid then return
+
+    m.top.selectedSeries = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoToolbarSeasonSelected
+'-------------------------------------------------------------------------------
+sub onVideoToolbarSeasonSelected()
+    selection = getCurrentSeasonSelection()
+    if selection = invalid then return
+
+    m.top.selectedSeason = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastFocusExitUp
+'-------------------------------------------------------------------------------
+sub onCastFocusExitUp()
+    focusVideoToolbar()
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastPersonSelected
+'-------------------------------------------------------------------------------
+sub onCastPersonSelected()
+    selection = m.cast.selectedPerson
+    if selection = invalid then return
+    if selection.itemId = invalid or selection.itemId = "" then return
+
+    selection.sourceItemType = "series"
+    selection.sourceSeriesId = getCurrentSeriesId()
+    m.state.focusArea = "cast"
+    m.top.selectedPerson = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' getCurrentSeriesId
+'-------------------------------------------------------------------------------
+function getCurrentSeriesId() as string
+    item = m.state.itemContent
+    if item <> invalid and item.raw <> invalid then
+        seriesId = Format.FirstNonEmpty([item.raw.SeriesId], "")
+        if seriesId <> "" then return seriesId
+    end if
+
+    request = m.state.request
+    if request = invalid then return ""
+    if request.series <> invalid then
+        seriesId = Format.FirstNonEmpty([request.series.Id], "")
+        if seriesId <> "" then return seriesId
+    end if
+
+    return Format.FirstNonEmpty([request.seriesId], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentSeriesSelection
+'-------------------------------------------------------------------------------
+function getCurrentSeriesSelection() as dynamic
+    request = m.state.request
+    if request = invalid then return invalid
+
+    seriesId = getCurrentSeriesId()
+    if seriesId = "" then return invalid
+
+    series = invalid
+    if request.series <> invalid then series = request.series
+
+    return {
+        itemId: seriesId
+        item: series
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentSeasonSelection
+'-------------------------------------------------------------------------------
+function getCurrentSeasonSelection() as dynamic
+    request = m.state.request
+    if request = invalid then return invalid
+
+    seriesId = getCurrentSeriesId()
+    seasonId = getCurrentSeasonId()
+    if seriesId = "" or seasonId = "" then return invalid
+
+    return {
+        seriesId: seriesId
+        seasonId: seasonId
+        series: request.series
+        season: getCurrentSeasonIdentity(seasonId)
+        seasons: request.seasons
+        nextSeason: invalid
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentSeasonId
+'-------------------------------------------------------------------------------
+function getCurrentSeasonId() as string
+    request = m.state.request
+    if request <> invalid then
+        seasonId = Format.FirstNonEmpty([request.seasonId], "")
+        if seasonId <> "" then return seasonId
+
+        if request.season <> invalid then
+            seasonId = Format.FirstNonEmpty([request.season.Id], "")
+            if seasonId <> "" then return seasonId
+        end if
+    end if
+
+    item = m.state.itemContent
+    if item <> invalid and item.raw <> invalid then
+        return Format.FirstNonEmpty([item.raw.SeasonId, item.raw.ParentId], "")
+    end if
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentSeasonIdentity
+'-------------------------------------------------------------------------------
+function getCurrentSeasonIdentity(seasonId as string) as object
+    request = m.state.request
+    if request <> invalid and request.season <> invalid then return request.season
+
+    seasonName = ""
+    item = m.state.itemContent
+    if item <> invalid and item.raw <> invalid then
+        seasonName = Format.FirstNonEmpty([item.raw.SeasonName], "")
+        if seasonName = "" and item.raw.ParentIndexNumber <> invalid then seasonName = "Season " + Format.SafeString(item.raw.ParentIndexNumber, "")
+    end if
+
+    return {
+        Id: seasonId
+        Name: seasonName
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+
+    if key = "up" and m.state.focusArea = "toolbar" and m.previousNextButton.visible = true then
+        focusEpisodeBrowse()
+        return true
+    end if
+
+    if key = "up" and m.state.focusArea = "toolbar" then
+        if focusMediaDescription() then return true
+        return true
+    end if
+
+    if key = "down" and m.state.focusArea = "episodeBrowse" then
+        focusVideoToolbar()
+        return true
+    end if
+
+    if key = "down" and m.state.focusArea = "description" then
+        focusVideoToolbar()
+        return true
+    end if
+
+    if key = "back" then
+        m.top.closeRequested = true
+        return true
+    end if
+
+    if m.state.focusArea = "episodeBrowse" and (key = "left" or key = "right") then return true
+
+    return false
+end function

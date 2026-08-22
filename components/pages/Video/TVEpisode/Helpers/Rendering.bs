@@ -1,0 +1,395 @@
+'-------------------------------------------------------------------------------
+' getSeriesLogoUrl
+'-------------------------------------------------------------------------------
+function getSeriesLogoUrl(request as dynamic) as string
+    if request = invalid or request.series = invalid then return ""
+
+    logoUrl = Format.FirstNonEmpty([request.series.logoUrl], "")
+    if logoUrl <> "" then return logoUrl
+
+    return getImageUrl(request.series, "Logo", 600, 300)
+end function
+
+'-------------------------------------------------------------------------------
+' getImageUrl
+'-------------------------------------------------------------------------------
+function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
+    if item = invalid then return ""
+
+    itemId = Format.FirstNonEmpty([item.Id], "")
+    if itemId = "" then return ""
+
+    tag = ""
+    if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
+    if tag = "" then return ""
+    request = m.state.request
+    if request = invalid then return ""
+
+    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height, { format: "Png" })
+end function
+
+'-------------------------------------------------------------------------------
+' renderEpisodeContent
+'-------------------------------------------------------------------------------
+sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
+    if item = invalid then
+        clearContent()
+        return
+    end if
+
+    title = getDisplayTitle(item)
+    episodePositionText = getEpisodePositionText(item)
+    episodeMetadataText = getSecondaryMetadataText(item)
+    m.mediaShell.mediaContent = {
+        mediaType: getMediaShellType(item)
+        backdropUrl: Format.SafeString(item.HDPosterUrl, "")
+        logoUrl: getMediaShellLogoUrl()
+        logoTitle: getMediaShellLogoTitle(item)
+        logoPending: logoPending
+        title: title
+        primaryInfoText: episodePositionText
+        secondaryInfoText: episodeMetadataText
+        overview: Format.SafeString(item.description, "")
+    }
+
+    if isSeasonDetailsItem(item) then
+        m.mediaToolbar.mediaType = "tv-season"
+    else
+        m.mediaToolbar.mediaType = "tv-episode"
+    end if
+    playbackItem = item.raw
+    if isSeasonDetailsItem(item) and m.state.playSelection <> invalid then playbackItem = m.state.playSelection.item
+    m.mediaToolbar.resumeItem = invalid
+    m.mediaToolbar.playItem = playbackItem
+    m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(playbackItem).Count()
+    m.mediaToolbar.audioStreamCount = getAudioStreams(playbackItem).Count()
+    m.mediaToolbar.chapterCount = getChapters(playbackItem).Count()
+    m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(playbackItem))
+    m.mediaToolbar.supportsWatchedActions = canMarkWatched(item)
+    m.mediaToolbar.isWatched = isItemWatched(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' getMediaShellType
+'-------------------------------------------------------------------------------
+function getMediaShellType(item as dynamic) as string
+    if isSeasonDetailsItem(item) then return "tv-season"
+    return "tv-episode"
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaShellLogoUrl
+'-------------------------------------------------------------------------------
+function getMediaShellLogoUrl() as string
+    return getSeriesLogoUrl(m.state.request)
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaShellLogoTitle
+'-------------------------------------------------------------------------------
+function getMediaShellLogoTitle(item as dynamic) as string
+    seriesName = ""
+    if item <> invalid and item.raw <> invalid then seriesName = Format.FirstNonEmpty([item.raw.SeriesName], "")
+
+    request = m.state.request
+    if request = invalid or request.series = invalid then return seriesName
+
+    return Format.FirstNonEmpty([request.series.Name, seriesName], "")
+end function
+
+'-------------------------------------------------------------------------------
+' isSeasonNumberTitle
+'-------------------------------------------------------------------------------
+function isSeasonNumberTitle(title as string) as boolean
+    value = LCase(Strings.Trim(title))
+    if Left(value, 7) <> "season " then return false
+
+    seasonNumber = Strings.Trim(Mid(value, 8))
+    if seasonNumber = "" then return false
+
+    for i = 1 to Len(seasonNumber)
+        char = Mid(seasonNumber, i, 1)
+        if char < "0" or char > "9" then return false
+    end for
+
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' getSecondaryMetadataText
+'-------------------------------------------------------------------------------
+function getSecondaryMetadataText(item as dynamic) as string
+    if item = invalid then return ""
+    if isSeasonDetailsItem(item) then return getSeasonMetadataText(item.raw)
+
+    raw = item.raw
+    if raw = invalid then return ""
+
+    parts = []
+
+    dateText = Format.SafeString(item.episodeDate, "")
+    if dateText <> "" then parts.Push(dateText)
+
+    runtimeText = MediaMetadata.FormatRuntime(raw.RunTimeTicks)
+    if runtimeText <> "" then parts.Push(runtimeText)
+
+    ratingText = getRatingText(raw)
+    if ratingText <> "" then parts.Push(ratingText)
+
+    return joinText(parts, MediaMetadata.BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getRatingText
+'-------------------------------------------------------------------------------
+function getRatingText(item as dynamic) as string
+    rating = MediaMetadata.FormatRating(item.CommunityRating)
+    if rating = "" then return ""
+
+    return "Rating " + rating
+end function
+
+'-------------------------------------------------------------------------------
+' joinText
+'-------------------------------------------------------------------------------
+function joinText(values as dynamic, separator as string) as string
+    if values = invalid then return ""
+
+    result = ""
+    for each value in values
+        text = Format.SafeString(value, "")
+        if text = "" then continue for
+
+        if result <> "" then result = result + separator
+        result = result + text
+    end for
+
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' getDisplayTitle
+'-------------------------------------------------------------------------------
+function getDisplayTitle(item as dynamic) as string
+    if item = invalid then return ""
+    return Format.SafeString(item.title, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodePositionText
+'-------------------------------------------------------------------------------
+function getEpisodePositionText(item as dynamic) as string
+    if item = invalid or item.raw = invalid then return ""
+    if isSeasonDetailsItem(item) then return getSeasonPositionText(item.raw)
+
+    seasonNumber = Format.SafeString(item.raw.ParentIndexNumber, "")
+    episodeNumber = Format.SafeString(item.raw.IndexNumber, "")
+
+    parts = []
+    if seasonNumber <> "" then parts.Push("Season " + seasonNumber)
+    if episodeNumber <> "" then parts.Push("Episode " + episodeNumber)
+
+    return joinText(parts, MediaMetadata.BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonMetadataText
+'-------------------------------------------------------------------------------
+function getSeasonMetadataText(item as dynamic) as string
+    if item = invalid then return ""
+
+    parts = []
+
+    count = Format.FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
+    if count <> "" then parts.Push(Format.SafeString(count, "") + " episodes")
+
+    year = Format.FirstNonEmpty([item.ProductionYear], "")
+    if year = "" then year = DateTime.ToYear(item.PremiereDate)
+    if year <> "" then parts.Push(Format.SafeString(year, ""))
+
+    return joinText(parts, MediaMetadata.BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonPositionText
+'-------------------------------------------------------------------------------
+function getSeasonPositionText(item as dynamic) as string
+    seasonNumber = Format.SafeString(item.IndexNumber, "")
+    if seasonNumber <> "" then return "Season " + seasonNumber
+
+    title = Format.SafeString(item.Name, "")
+    if isSeasonNumberTitle(title) then return title
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' isSeasonDetailsItem
+'-------------------------------------------------------------------------------
+function isSeasonDetailsItem(item as dynamic) as boolean
+    itemType = Format.SafeString(item.itemType, "")
+    if itemType = "SeasonSummary" or itemType = "Season" then return true
+    if item.raw = invalid then return false
+
+    return Format.SafeString(item.raw.Type, "") = "Season"
+end function
+
+'-------------------------------------------------------------------------------
+' buildEpisodeContentNode
+'-------------------------------------------------------------------------------
+function buildEpisodeContentNode(details as dynamic) as object
+    content = CreateObject("roSGNode", "ContentNode")
+    content.title = Format.FirstNonEmpty([details.Name], "")
+    content.description = Format.FirstNonEmpty([details.Overview], "")
+    content.HDPosterUrl = getEpisodePosterUrl(details)
+    content.AddFields({
+        itemId: Format.SafeString(Format.FirstNonEmpty([details.Id], ""), "")
+        itemType: Format.SafeString(Format.FirstNonEmpty([details.Type], ""), "")
+        episodeNumber: getEpisodeNumberText(details)
+        episodeDate: DateTime.ToShortDate(getAiredDateText(details))
+        progressPercent: getProgressPercent(details)
+        progressWidth: getProgressWidth(details)
+        raw: details
+    })
+
+    return content
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodePosterUrl
+'-------------------------------------------------------------------------------
+function getEpisodePosterUrl(item as dynamic) as string
+    imageSize = DeviceCapabilities.GetMaxScreenImageSize()
+    request = m.state.request
+    if request = invalid then return ""
+
+    if Format.SafeString(item.Type, "") = "Season" then
+        posterUrl = Format.SafeString(request.posterUrl, "")
+        if posterUrl <> "" then return posterUrl
+    end if
+
+    itemId = Format.FirstNonEmpty([item.Id], "")
+    primaryTag = ""
+    if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
+    if itemId <> "" and primaryTag <> "" then return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
+
+    parentThumbId = Format.FirstNonEmpty([item.ParentThumbItemId], "")
+    parentThumbTag = Format.FirstNonEmpty([item.ParentThumbImageTag], "")
+    if parentThumbId <> "" and parentThumbTag <> "" then return Url.BuildImageUrl(request.server, parentThumbId, "Thumb", parentThumbTag, imageSize.width, imageSize.height)
+
+    seriesId = Format.FirstNonEmpty([item.SeriesId], "")
+    seriesTag = Format.FirstNonEmpty([item.SeriesPrimaryImageTag], "")
+    if seriesId <> "" and seriesTag <> "" then return Url.BuildImageUrl(request.server, seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeNumberText
+'-------------------------------------------------------------------------------
+function getEpisodeNumberText(item as dynamic) as string
+    indexText = Format.FirstNonEmpty([item.IndexNumber], "")
+    if indexText <> "" then return "Episode " + Format.SafeString(indexText, "")
+    return "Episode"
+end function
+
+'-------------------------------------------------------------------------------
+' getAiredDateText
+'-------------------------------------------------------------------------------
+function getAiredDateText(item as dynamic) as string
+    airedDate = Format.FirstNonEmpty([item.PremiereDate, item.AirDate, item.DateCreated], "")
+    if Len(airedDate) >= 10 then return Left(airedDate, 10)
+    return airedDate
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressPercent
+'-------------------------------------------------------------------------------
+function getProgressPercent(item as dynamic) as float
+    if item.UserData <> invalid and item.UserData.Played = true then return 0
+
+    if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
+        playedPercentage = item.UserData.PlayedPercentage
+        if playedPercentage <= 0 then return 0
+        if playedPercentage > 100 then return 100
+        return playedPercentage
+    end if
+
+    if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
+
+    progressTicks = PlaybackProgress.GetTicksFromItem(item)
+    if progressTicks <= 0 then return 0
+
+    progressPercent = (progressTicks * 100.0) / item.RunTimeTicks
+    if progressPercent > 100 then return 100
+
+    return progressPercent
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressWidth
+'-------------------------------------------------------------------------------
+function getProgressWidth(item as dynamic) as integer
+    progressPercent = getProgressPercent(item)
+    if progressPercent <= 0 then return 0
+
+    progressWidth = int(510 * (progressPercent / 100))
+    if progressWidth < 1 then return 1
+    if progressWidth > 510 then return 510
+
+    return progressWidth
+end function
+
+'-------------------------------------------------------------------------------
+' clearContent
+'-------------------------------------------------------------------------------
+sub clearContent()
+    m.mediaShell.mediaContent = {
+        mediaType: "tv-episode"
+        backdropUrl: ""
+        logoUrl: ""
+        logoTitle: ""
+        title: ""
+        primaryInfoText: ""
+        secondaryInfoText: ""
+        overview: ""
+    }
+    m.mediaToolbar.supportsWatchedActions = false
+    m.mediaToolbar.isWatched = false
+    m.mediaToolbar.mediaType = "tv-episode"
+    m.mediaToolbar.subtitleStreamCount = 0
+    m.mediaToolbar.audioStreamCount = 0
+    m.mediaToolbar.chapterCount = 0
+    m.mediaToolbar.resumePositionSeconds = 0
+    m.mediaToolbar.resumeItem = invalid
+    m.mediaToolbar.playItem = invalid
+    m.state.itemContent = invalid
+    m.state.playSelection = invalid
+    m.cast.people = []
+end sub
+
+'-------------------------------------------------------------------------------
+' clearPageState
+'-------------------------------------------------------------------------------
+sub clearPageState()
+    m.mediaToolbar.supportsWatchedActions = false
+    m.mediaToolbar.isWatched = false
+    m.mediaToolbar.mediaType = "tv-episode"
+    m.mediaToolbar.subtitleStreamCount = 0
+    m.mediaToolbar.audioStreamCount = 0
+    m.mediaToolbar.chapterCount = 0
+    m.mediaToolbar.resumePositionSeconds = 0
+    m.mediaToolbar.resumeItem = invalid
+    m.mediaToolbar.playItem = invalid
+    m.state.itemContent = invalid
+    m.state.playSelection = invalid
+    m.cast.people = []
+end sub
+
+'-------------------------------------------------------------------------------
+' getPeople
+'-------------------------------------------------------------------------------
+function getPeople(item as dynamic) as object
+    if item = invalid or item.People = invalid then return []
+    return item.People
+end function
