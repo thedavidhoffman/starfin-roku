@@ -40,6 +40,31 @@ namespace tests
             m.assertEqual(getResolvedAudioStreamIndex(source, 3), 3)
             'bs:disable-next-line 1140
             m.assertEqual(getMediaStreamByIndex(source, "audio", 4).Index, 4)
+            source.DefaultSubtitleStreamIndex = 7
+            'bs:disable-next-line 1140
+            m.assertEqual(getResolvedSubtitleStreamIndex(source, -2), 7)
+            'bs:disable-next-line 1140
+            m.assertEqual(getResolvedSubtitleStreamIndex(source, -1), -1)
+            'bs:disable-next-line 1140
+            m.assertEqual(getResolvedSubtitleStreamIndex(source, 9), 9)
+            'bs:disable-next-line 1140
+            m.assertEqual(getPlaybackRequestSubtitleStreamIndex({}), -2)
+            'bs:disable-next-line 1140
+            m.assertEqual(getPlaybackRequestSubtitleStreamIndex({ subtitleStreamIndex: "5" }), 5)
+
+            source.MediaStreams.Push({
+                Type: "Subtitle"
+                Index: 7
+                Codec: "subrip"
+                DeliveryMethod: "External"
+                DeliveryUrl: "/Videos/item/Subtitles/7/Stream.srt"
+            })
+            playbackInfo = { MediaSources: [source] }
+            'bs:disable-next-line 1140
+            resolvedSubtitleIndex = getResolvedSubtitleStreamIndex(source, -2)
+            externalTrack = SubtitlePlayback.BuildExternalTrack(playbackInfo, resolvedSubtitleIndex, "https://server.test", "token")
+            m.assertEqual(externalTrack.index, 7)
+            m.assertTrue(Instr(1, externalTrack.deliveryUrl, "api_key=token") > 0)
         end function
 
         @it("constructs server routes and masks sensitive query values")

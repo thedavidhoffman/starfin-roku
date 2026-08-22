@@ -8,6 +8,7 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/SeriesIdentity.bs"
 import "pkg:/source/PlaybackProgress.bs"
 import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/SubtitlePlayback.bs"
 import "pkg:/source/DateTime.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/MediaOptions.bs"
@@ -123,6 +124,9 @@ sub initReferences()
         selectedAudioStreamIndex: -1
         selectedChapterKey: ""
         pendingVideoMode: ""
+        pendingExternalSubtitleUrl: ""
+        captionModeCaptured: false
+        originalCaptionMode: invalid
     }
 
     m.seek = {
@@ -154,6 +158,7 @@ sub initHandlers()
     m.videoPlayer.observeField("state", "onVideoStateChanged")
     m.videoPlayer.observeField("position", "onVideoPositionChanged")
     m.videoPlayer.observeField("duration", "onVideoDurationChanged")
+    m.videoPlayer.observeField("availableSubtitleTracks", "onAvailableSubtitleTracksChanged")
     m.playbackControls.observeField("visible", "onPlaybackControlsVisibilityChanged")
     m.playbackControls.observeField("playPausePressed", "onPlayPausePressed")
     m.playbackControls.observeField("skipBackPressed", "onSkipBackPressed")
@@ -318,6 +323,7 @@ sub stopPlayback(preserveRecovery = false as boolean)
     hideCast()
     reportPlaystateStop()
     cleanupTrickplayPreload()
+    cleanupSubtitlePlayback()
     m.videoPlayer.control = "stop"
     if preserveRecovery <> true then resetMediaSegments()
     if preserveRecovery <> true then resetPlaybackRecovery()

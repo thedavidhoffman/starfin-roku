@@ -1,0 +1,87 @@
+namespace tests
+
+    @suite("SubtitlePlayback")
+    class SubtitlePlaybackTests extends rooibos.BaseTestSuite
+
+        @describe("external subtitle tracks")
+
+        @it("builds an authenticated external SRT track")
+        function _()
+            playbackInfo = {
+                MediaSources: [{
+                    MediaStreams: [{
+                        Type: "Subtitle"
+                        Index: 4
+                        Codec: "subrip"
+                        DeliveryMethod: "External"
+                        DeliveryUrl: "/Videos/item/Subtitles/4/0/Stream.srt"
+                        Language: "eng"
+                        DisplayTitle: "English"
+                    }]
+                }]
+            }
+
+            result = SubtitlePlayback.BuildExternalTrack(playbackInfo, 4, "https://example.test", "secret")
+
+            m.assertEqual(result.index, 4)
+            m.assertEqual(result.codec, "subrip")
+            m.assertEqual(result.deliveryUrl, "https://example.test/Videos/item/Subtitles/4/0/Stream.srt?api_key=secret")
+            m.assertEqual(result.track.Language, "eng")
+            m.assertEqual(result.track.Description, "English")
+            m.assertEqual(result.track.TrackName, result.deliveryUrl)
+        end function
+
+        @it("does not create a Roku track for encoded subtitles")
+        function _()
+            playbackInfo = {
+                MediaSources: [{
+                    MediaStreams: [{
+                        Type: "Subtitle"
+                        Index: 2
+                        DeliveryMethod: "Encode"
+                        DeliveryUrl: "/subtitle.srt"
+                    }]
+                }]
+            }
+
+            m.assertInvalid(SubtitlePlayback.BuildExternalTrack(playbackInfo, 2, "https://example.test", "secret"))
+            m.assertEqual(SubtitlePlayback.GetDeliveryMethod(playbackInfo, 2), "encode")
+        end function
+
+        @it("preserves absolute delivery URLs and replaces their API key")
+        function _()
+            result = SubtitlePlayback.ResolveDeliveryUrl("https://unused.test", "https://media.test/sub.srt?api_key=old&x=1", "new")
+            m.assertEqual(result, "https://media.test/sub.srt?api_key=new&x=1")
+        end function
+
+        @it("authenticates same-origin absolute delivery URLs with normalized default ports")
+        function _()
+            result = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "https://MEDIA.test:443/sub.srt", "secret")
+            m.assertEqual(result, "https://MEDIA.test:443/sub.srt?api_key=secret")
+        end function
+
+        @it("does not send Jellyfin credentials to cross-origin subtitle URLs")
+        function _()
+            result = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "https://captions.test/sub.srt?x=1", "secret")
+            m.assertEqual(result, "https://captions.test/sub.srt?x=1")
+        end function
+
+        @it("requires the scheme and effective port to match")
+        function _()
+            differentScheme = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "http://media.test/sub.srt", "secret")
+            differentPort = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "https://media.test:8443/sub.srt", "secret")
+            m.assertEqual(differentScheme, "http://media.test/sub.srt")
+            m.assertEqual(differentPort, "https://media.test:8443/sub.srt")
+        end function
+
+        @it("matches Roku track names containing the supplied URL")
+        function _()
+            subtitleUrl = "https://example.test/sub.srt?api_key=secret"
+            tracks = [{ TrackName: "#EXT-X-MEDIA:" + subtitleUrl }]
+            m.assertEqual(SubtitlePlayback.FindAvailableTrackName(tracks, subtitleUrl), tracks[0].TrackName)
+            m.assertEqual(SubtitlePlayback.FindAvailableTrackName(tracks, "missing"), "")
+        end function
+
+    end class
+
+end namespace

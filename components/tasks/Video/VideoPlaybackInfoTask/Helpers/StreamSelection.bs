@@ -24,6 +24,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
     playSessionId = Format.SafeString(playbackInfo.PlaySessionId, "")
     transcodingUrl = Format.SafeString(mediaSource.TranscodingUrl, "")
     audioStreamIndex = getResolvedAudioStreamIndex(mediaSource, requestedAudioStreamIndex)
+    subtitleStreamIndex = getResolvedSubtitleStreamIndex(mediaSource, requestedSubtitleStreamIndex)
     directPlaySupported = mediaSource.SupportsDirectPlay = true
     directPlayAllowed = playbackFlags.enableDirectPlay = true
     transcodingAllowed = playbackFlags.enableDirectStream = true or playbackFlags.enableTranscoding = true
@@ -76,7 +77,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         liveStreamId: Format.SafeString(mediaSource.LiveStreamId, "")
         videoStreamIndex: getDefaultVideoStreamIndex(mediaSource)
         audioStreamIndex: audioStreamIndex
-        subtitleStreamIndex: requestedSubtitleStreamIndex
+        subtitleStreamIndex: subtitleStreamIndex
     }
 end function
 
@@ -174,10 +175,20 @@ end function
 ' getPlaybackRequestSubtitleStreamIndex
 '-------------------------------------------------------------------------------
 function getPlaybackRequestSubtitleStreamIndex(request as dynamic) as integer
-    if request = invalid then return -1
-    if request.subtitleStreamIndex <> invalid then return int(request.subtitleStreamIndex)
+    if request = invalid then return -2
+    if request.subtitleStreamIndex <> invalid then return Number.ToInteger(request.subtitleStreamIndex, -2)
 
-    return -1
+    return -2
+end function
+
+'-------------------------------------------------------------------------------
+' getResolvedSubtitleStreamIndex
+'-------------------------------------------------------------------------------
+function getResolvedSubtitleStreamIndex(mediaSource as dynamic, requestedSubtitleStreamIndex as integer) as integer
+    if requestedSubtitleStreamIndex >= -1 then return requestedSubtitleStreamIndex
+    if mediaSource = invalid then return -1
+
+    return Number.ToInteger(mediaSource.DefaultSubtitleStreamIndex, -1)
 end function
 
 '-------------------------------------------------------------------------------
@@ -333,4 +344,3 @@ function firstMediaSource(playbackInfo as dynamic) as dynamic
 
     return playbackInfo.MediaSources[0]
 end function
-

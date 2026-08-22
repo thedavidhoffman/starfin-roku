@@ -7,6 +7,7 @@ import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/DeviceCapabilities.bs"
+import "pkg:/source/SubtitlePlayback.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
@@ -96,6 +97,11 @@ sub executeRequest()
 
     m.log.write("Selected stream URL: " + maskUrl(streamInfo.streamUrl))
 
+    externalSubtitleTrack = SubtitlePlayback.BuildExternalTrack(result.data, streamInfo.subtitleStreamIndex, request.server, request.token)
+    subtitleDeliveryMethod = SubtitlePlayback.GetDeliveryMethod(result.data, streamInfo.subtitleStreamIndex)
+    if subtitleDeliveryMethod = "" then subtitleDeliveryMethod = "none"
+    m.log.write("Resolved subtitle stream index=" + Format.SafeString(streamInfo.subtitleStreamIndex, "") + " deliveryMethod=" + subtitleDeliveryMethod + " externalTrackAttached=" + boolToText(externalSubtitleTrack <> invalid))
+
     m.top.response = {
         ok: true
         action: "playbackInfo"
@@ -107,5 +113,6 @@ sub executeRequest()
         playSessionId: streamInfo.playSessionId
         playbackIdentity: buildPlaybackIdentity(request, streamInfo, firstMediaSource(result.data))
         startPositionTicks: getStartPositionTicks(request)
+        externalSubtitleTrack: externalSubtitleTrack
     }
 end sub

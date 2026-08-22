@@ -59,6 +59,9 @@ sub applyPlaybackResponse(response as object, request as object)
 
     item = response.item
     startPositionSeconds = PlaybackProgress.TicksToSeconds(response.startPositionTicks)
+    if request.subtitleStreamIndex = invalid and response.playbackIdentity <> invalid then
+        request.AddReplace("subtitleStreamIndex", response.playbackIdentity.subtitleStreamIndex)
+    end if
 
     applyPlaybackSessionState(response, request, item)
     loadMediaSegments(response)
@@ -251,6 +254,13 @@ function buildVideoContent(response as object, request as object, item as dynami
     content.PlayStart = startPositionSeconds
     content.AddHeader("Authorization", JellyfinAuth.BuildAuthorizationHeader(request.token, request.userId))
 
+    m.streamOptions.pendingExternalSubtitleUrl = ""
+    if response.externalSubtitleTrack <> invalid then
+        content.SubtitleTracks = [response.externalSubtitleTrack.track]
+        m.streamOptions.pendingExternalSubtitleUrl = response.externalSubtitleTrack.deliveryUrl
+    end if
+    m.log.write("Subtitle content resolvedIndex=" + Format.SafeString(response.playbackIdentity.subtitleStreamIndex, "") + " externalTrackAttached=" + boolToText(response.externalSubtitleTrack <> invalid))
+
     return content
 end function
 
@@ -287,10 +297,53 @@ end sub
 sub startVideoContent(content as object, response as object, startPositionSeconds as integer)
     logPlaybackContentAssignment(response, startPositionSeconds)
     m.videoPlayer.content = content
+    if m.streamOptions.pendingExternalSubtitleUrl = "" then
+        setSubtitleCaptionMode("Off")
+        m.videoPlayer.subtitleTrack = ""
+    end if
     m.top.setFocus(true)
     updateBufferingSpinner("buffering")
     m.videoPlayer.control = "play"
     AppStatus.ClearMessage()
+end sub
+
+'-------------------------------------------------------------------------------
+' onAvailableSubtitleTracksChanged
+'-------------------------------------------------------------------------------
+sub onAvailableSubtitleTracksChanged()
+    deliveryUrl = m.streamOptions.pendingExternalSubtitleUrl
+    if deliveryUrl = "" then return
+
+    trackName = SubtitlePlayback.FindAvailableTrackName(m.videoPlayer.availableSubtitleTracks, deliveryUrl)
+    if trackName = "" then return
+
+    setSubtitleCaptionMode("On")
+    m.videoPlayer.subtitleTrack = trackName
+    m.log.write("External subtitle track selected resolvedIndex=" + Format.SafeString(m.session.playbackIdentity.subtitleStreamIndex, ""))
+end sub
+
+'-------------------------------------------------------------------------------
+' setSubtitleCaptionMode
+'-------------------------------------------------------------------------------
+sub setSubtitleCaptionMode(captionMode as string)
+    if m.streamOptions.captionModeCaptured <> true then
+        m.streamOptions.originalCaptionMode = m.videoPlayer.globalCaptionMode
+        m.streamOptions.captionModeCaptured = true
+    end if
+    m.videoPlayer.globalCaptionMode = captionMode
+end sub
+
+'-------------------------------------------------------------------------------
+' cleanupSubtitlePlayback
+'-------------------------------------------------------------------------------
+sub cleanupSubtitlePlayback()
+    m.videoPlayer.subtitleTrack = ""
+    m.streamOptions.pendingExternalSubtitleUrl = ""
+    if m.streamOptions.captionModeCaptured = true then
+        m.videoPlayer.globalCaptionMode = m.streamOptions.originalCaptionMode
+    end if
+    m.streamOptions.captionModeCaptured = false
+    m.streamOptions.originalCaptionMode = invalid
 end sub
 
 '-------------------------------------------------------------------------------

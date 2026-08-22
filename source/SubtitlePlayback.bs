@@ -1,0 +1,112 @@
+namespace SubtitlePlayback
+
+    '---------------------------------------------------------------------------
+    ' SubtitlePlayback.BuildExternalTrack
+    '---------------------------------------------------------------------------
+    function BuildExternalTrack(playbackInfo as dynamic, streamIndex as integer, server as string, token as string) as dynamic
+        stream = SubtitlePlayback.__GetSelectedStream(playbackInfo, streamIndex)
+        if stream = invalid then return invalid
+        if LCase(Format.SafeString(stream.DeliveryMethod, "")) <> "external" then return invalid
+
+        deliveryUrl = SubtitlePlayback.ResolveDeliveryUrl(server, stream.DeliveryUrl, token)
+        if deliveryUrl = "" then return invalid
+
+        return {
+            index: streamIndex
+            codec: Format.SafeString(stream.Codec, "")
+            deliveryUrl: deliveryUrl
+            track: {
+                Language: Format.SafeString(stream.Language, "")
+                Description: Format.FirstNonEmpty([stream.DisplayTitle, stream.Title], "")
+                TrackName: deliveryUrl
+            }
+        }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SubtitlePlayback.ResolveDeliveryUrl
+    '---------------------------------------------------------------------------
+    function ResolveDeliveryUrl(server as string, deliveryUrl as dynamic, token as string) as string
+        path = Format.SafeString(deliveryUrl, "")
+        if path = "" then return ""
+
+        lowerPath = LCase(path)
+        isAbsolute = Instr(1, lowerPath, "http://") = 1 or Instr(1, lowerPath, "https://") = 1
+        if isAbsolute then
+            result = path
+        else if Left(path, 1) = "/" then
+            result = server + path
+        else
+            result = server + "/" + path
+        end if
+
+        canAuthenticate = isAbsolute = false or SubtitlePlayback.__GetOrigin(result) = SubtitlePlayback.__GetOrigin(server)
+        if token <> "" and canAuthenticate then result = Url.SetQueryParam(result, "api_key", token)
+        return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SubtitlePlayback.GetDeliveryMethod
+    '---------------------------------------------------------------------------
+    function GetDeliveryMethod(playbackInfo as dynamic, streamIndex as integer) as string
+        stream = SubtitlePlayback.__GetSelectedStream(playbackInfo, streamIndex)
+        if stream = invalid then return ""
+        return LCase(Format.SafeString(stream.DeliveryMethod, ""))
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SubtitlePlayback.FindAvailableTrackName
+    '---------------------------------------------------------------------------
+    function FindAvailableTrackName(availableTracks as dynamic, deliveryUrl as string) as string
+        if availableTracks = invalid or deliveryUrl = "" then return ""
+
+        for each availableTrack in availableTracks
+            if availableTrack = invalid then continue for
+            trackName = Format.SafeString(availableTrack.TrackName, "")
+            if Instr(1, trackName, deliveryUrl) > 0 then return trackName
+        end for
+
+        return ""
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SubtitlePlayback.__GetSelectedStream
+    '---------------------------------------------------------------------------
+    function __GetSelectedStream(playbackInfo as dynamic, streamIndex as integer) as dynamic
+        if playbackInfo = invalid or playbackInfo.MediaSources = invalid or playbackInfo.MediaSources.Count() = 0 then return invalid
+        mediaSource = playbackInfo.MediaSources[0]
+        if mediaSource = invalid or mediaSource.MediaStreams = invalid then return invalid
+
+        for each stream in mediaSource.MediaStreams
+            if stream = invalid then continue for
+            if LCase(Format.SafeString(stream.Type, "")) <> "subtitle" then continue for
+            if Number.ToInteger(stream.Index, -1) = streamIndex then return stream
+        end for
+
+        return invalid
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SubtitlePlayback.__GetOrigin
+    '---------------------------------------------------------------------------
+    function __GetOrigin(urlValue as dynamic) as string
+        normalized = LCase(Format.SafeString(urlValue, ""))
+        schemeEnd = Instr(1, normalized, "://")
+        if schemeEnd = 0 then return ""
+
+        scheme = Left(normalized, schemeEnd - 1)
+        authorityStart = schemeEnd + 3
+        authorityEnd = Len(normalized) + 1
+        for each separator in ["/", "?", "#"]
+            position = Instr(authorityStart, normalized, separator)
+            if position > 0 and position < authorityEnd then authorityEnd = position
+        end for
+        authority = Mid(normalized, authorityStart, authorityEnd - authorityStart)
+        if authority = "" then return ""
+
+        if scheme = "http" and Right(authority, 3) = ":80" then authority = Left(authority, Len(authority) - 3)
+        if scheme = "https" and Right(authority, 4) = ":443" then authority = Left(authority, Len(authority) - 4)
+        return scheme + "://" + authority
+    end function
+
+end namespace
