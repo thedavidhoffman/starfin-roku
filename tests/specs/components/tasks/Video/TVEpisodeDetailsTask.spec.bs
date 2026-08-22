@@ -27,6 +27,31 @@ namespace tests
             m.assertEqual(getPlaybackQueueIndex(queue, "s3e1"), 2)
         end function
 
+        @it("filters invalid queue entries and preserves resume ticks")
+        function _()
+            episodes = [
+                { Id: "episode-1", SeasonId: "season-1", UserData: { PlaybackPositionTicks: 75 } }
+                { Name: "missing id" }
+            ]
+            'bs:disable-next-line 1140
+            queue = buildPlaybackQueueItems(episodes)
+            m.assertEqual(queue.Count(), 1)
+            m.assertEqual(queue[0].startPositionTicks, 75&)
+            'bs:disable-next-line 1140
+            m.assertEqual(getPlaybackQueueIndex(queue, "missing"), 0)
+        end function
+
+        @it("extracts wrapped payloads and derives season names")
+        function _()
+            episodes = [{ Id: "episode-1" }]
+            'bs:disable-next-line 1140
+            m.assertEqual(getItemsFromPayload({ Items: episodes }), episodes)
+            'bs:disable-next-line 1140
+            season = buildSeasonIdentity({ ParentIndexNumber: 4 }, "season-4")
+            m.assertEqual(season.Id, "season-4")
+            m.assertEqual(season.Name, "Season 4")
+        end function
+
     end class
 
 end namespace

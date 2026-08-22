@@ -28,6 +28,29 @@ namespace tests
             m.assertEqual(m.node.top.response.itemId, "")
         end function
 
+        @it("builds direct and transcoded theme audio streams")
+        function _()
+            request = { server: "http://server", token: "secret", itemId: "song-1" }
+            'bs:disable-next-line 1140
+            direct = buildThemeAudioStreamInfo(request, { PlaySessionId: "play-1", MediaSources: [{ Id: "source-1", Container: "m4a" }] })
+            m.assertTrue(direct.ok)
+            m.assertEqual(direct.streamFormat, "mp4")
+            m.assertTrue(Instr(1, direct.streamUrl, "/Audio/song-1/stream") > 0)
+            'bs:disable-next-line 1140
+            transcoded = buildThemeAudioStreamInfo(request, { MediaSources: [{ TranscodingUrl: "/audio/master.m3u8" }] })
+            m.assertEqual(transcoded.streamUrl, "http://server/audio/master.m3u8")
+            m.assertEqual(transcoded.streamFormat, "hls")
+        end function
+
+        @it("masks API keys and handles missing media sources")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(maskUrl("http://server/audio?api_key=secret&x=1"), "http://server/audio?api_key=[redacted]&x=1")
+            'bs:disable-next-line 1140
+            failure = buildThemeAudioStreamInfo({ server: "server", token: "token", itemId: "song" }, invalid)
+            m.assertFalse(failure.ok)
+        end function
+
     end class
 
 end namespace

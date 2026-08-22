@@ -1,0 +1,203 @@
+'-------------------------------------------------------------------------------
+' getPlaybackRequestId
+'-------------------------------------------------------------------------------
+function getPlaybackRequestId(request as dynamic) as integer
+    if request = invalid then return -1
+    return Number.ToInteger(request.requestId, -1)
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaybackIdentity
+'-------------------------------------------------------------------------------
+function buildPlaybackIdentity(request as object, streamInfo as object, mediaSource as dynamic) as object
+    videoStream = getMediaStreamByIndex(mediaSource, "video", streamInfo.videoStreamIndex)
+    audioStream = getMediaStreamByIndex(mediaSource, "audio", streamInfo.audioStreamIndex)
+    subtitleStream = getMediaStreamByIndex(mediaSource, "subtitle", streamInfo.subtitleStreamIndex)
+    if videoStream = invalid then videoStream = {}
+    if audioStream = invalid then audioStream = {}
+    if subtitleStream = invalid then subtitleStream = {}
+
+    return {
+        itemId: Format.SafeString(request.itemId, "")
+        title: getPlaybackItemTitle(request.item)
+        playSessionId: streamInfo.playSessionId
+        mediaSourceId: streamInfo.mediaSourceId
+        liveStreamId: streamInfo.liveStreamId
+        playbackMode: getPlaybackMode(request)
+        playMethod: streamInfo.playbackMethod
+        canSeek: getCanSeek(request, mediaSource)
+        transcodeReason: getTranscodeReason(mediaSource, streamInfo.playbackMethod)
+        streamFormat: streamInfo.streamFormat
+        container: Format.SafeString(mediaSource.Container, "")
+        videoStreamIndex: streamInfo.videoStreamIndex
+        audioStreamIndex: streamInfo.audioStreamIndex
+        subtitleStreamIndex: streamInfo.subtitleStreamIndex
+        videoStreamTitle: Format.FirstNonEmpty([videoStream.DisplayTitle, videoStream.Title], "")
+        audioStreamTitle: Format.FirstNonEmpty([audioStream.DisplayTitle, audioStream.Title], "")
+        subtitleStreamTitle: Format.FirstNonEmpty([subtitleStream.DisplayTitle, subtitleStream.Title], "")
+        videoCodec: Format.SafeString(videoStream.Codec, "")
+        audioCodec: Format.SafeString(audioStream.Codec, "")
+        width: Number.ToInteger(videoStream.Width, 0)
+        height: Number.ToInteger(videoStream.Height, 0)
+        videoBitrate: Number.ToInteger(videoStream.BitRate, 0)
+        audioBitrate: Number.ToInteger(audioStream.BitRate, 0)
+        audioChannels: Number.ToInteger(audioStream.Channels, 0)
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getTranscodeReason
+'-------------------------------------------------------------------------------
+function getTranscodeReason(mediaSource as dynamic, playbackMethod as string) as string
+    method = LCase(playbackMethod)
+    if method = "direct" or method = "directplay" then return "Not required (direct play)"
+    if mediaSource = invalid then return "Not reported by Jellyfin"
+
+    if mediaSource.TranscodingReasons <> invalid then
+        reasons = Strings.GetJoinedText(mediaSource.TranscodingReasons)
+        if reasons <> "" then return reasons
+    end if
+
+    reason = getUrlQueryValue(Format.SafeString(mediaSource.TranscodingUrl, ""), "TranscodeReasons")
+    if reason = "" then return "Not reported by Jellyfin"
+    return Strings.Replace(reason, ",", ", ")
+end function
+
+'-------------------------------------------------------------------------------
+' getCanSeek
+'-------------------------------------------------------------------------------
+function getCanSeek(request as dynamic, mediaSource as dynamic) as boolean
+    if isLiveTvPlaybackRequest(request) = true then return false
+    if mediaSource <> invalid and mediaSource.IsInfiniteStream = true then return false
+
+    runtimeTicks = 0
+    if mediaSource <> invalid then runtimeTicks = Number.ToFloat(mediaSource.RunTimeTicks, 0)
+    if runtimeTicks <= 0 and request <> invalid and request.item <> invalid then
+        runtimeTicks = Number.ToFloat(request.item.RunTimeTicks, 0)
+    end if
+
+    return runtimeTicks > 0
+end function
+
+'-------------------------------------------------------------------------------
+' getUrlQueryValue
+'-------------------------------------------------------------------------------
+function getUrlQueryValue(requestUrl as string, name as string) as string
+    queryStart = Instr(1, requestUrl, "?")
+    if queryStart = 0 then return ""
+
+    lowerUrl = LCase(requestUrl)
+    lowerName = LCase(name)
+    valueStart = Instr(queryStart + 1, lowerUrl, lowerName + "=")
+    while valueStart > 0
+        if valueStart = queryStart + 1 or Mid(requestUrl, valueStart - 1, 1) = "&" then
+            valueStart = valueStart + Len(name) + 1
+            valueEnd = Instr(valueStart, requestUrl, "&")
+            if valueEnd = 0 then valueEnd = Len(requestUrl) + 1
+
+            value = Mid(requestUrl, valueStart, valueEnd - valueStart)
+            value = Strings.Replace(value, "%2C", ",")
+            value = Strings.Replace(value, "%2c", ",")
+            return value
+        end if
+
+        valueStart = Instr(valueStart + Len(name) + 1, lowerUrl, lowerName + "=")
+    end while
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackItemTitle
+'-------------------------------------------------------------------------------
+function getPlaybackItemTitle(item as dynamic) as string
+    if item = invalid then return ""
+    return Format.SafeString(item.Name, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaStreamByIndex
+'-------------------------------------------------------------------------------
+function getMediaStreamByIndex(mediaSource as dynamic, streamType as string, streamIndex as integer) as dynamic
+    if mediaSource = invalid or mediaSource.MediaStreams = invalid then return invalid
+
+    for i = 0 to mediaSource.MediaStreams.Count() - 1
+        mediaStream = mediaSource.MediaStreams[i]
+        if mediaStream = invalid then continue for
+        if LCase(Format.SafeString(mediaStream.Type, "")) <> streamType then continue for
+        if getMediaStreamIndex(mediaStream, i) = streamIndex then return mediaStream
+    end for
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackMode
+'-------------------------------------------------------------------------------
+function getPlaybackMode(request as dynamic) as string
+    if request = invalid then return PlaybackMode.Mode.Automatic
+    return PlaybackMode.Normalize(request.videoMode)
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackFlags
+'-------------------------------------------------------------------------------
+function getPlaybackFlags(selectedPlaybackMode as string, forceTranscode as boolean, forceStreamSelection as boolean, forceSubtitleSelection as boolean) as object
+    if selectedPlaybackMode = PlaybackMode.Mode.TranscodeNoRemux then
+        return {
+            enableDirectPlay: false
+            enableDirectStream: false
+            enableTranscoding: true
+        }
+    end if
+
+    if selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux then
+        return {
+            enableDirectPlay: forceTranscode <> true and forceStreamSelection <> true
+            enableDirectStream: false
+            enableTranscoding: true
+        }
+    end if
+
+    if selectedPlaybackMode = PlaybackMode.Mode.TranscodeAllowRemux or (selectedPlaybackMode = PlaybackMode.Mode.Automatic and (forceTranscode = true or forceStreamSelection = true)) then
+        enableDirectStream = true
+        if selectedPlaybackMode = PlaybackMode.Mode.Automatic and forceTranscode = true then enableDirectStream = false
+
+        return {
+            enableDirectPlay: false
+            enableDirectStream: enableDirectStream
+            enableTranscoding: true
+        }
+    end if
+
+    if selectedPlaybackMode = PlaybackMode.Mode.Automatic then
+        return {
+            enableDirectPlay: true
+            enableDirectStream: true
+            enableTranscoding: true
+        }
+    end if
+
+    if forceTranscode = true then
+        return {
+            enableDirectPlay: false
+            enableDirectStream: false
+            enableTranscoding: true
+        }
+    end if
+
+    if forceStreamSelection = true or forceSubtitleSelection = true then
+        return {
+            enableDirectPlay: false
+            enableDirectStream: true
+            enableTranscoding: true
+        }
+    end if
+
+    return {
+        enableDirectPlay: true
+        enableDirectStream: false
+        enableTranscoding: false
+    }
+end function
+

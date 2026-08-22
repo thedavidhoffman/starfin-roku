@@ -1,0 +1,92 @@
+'-------------------------------------------------------------------------------
+' buildPlaybackInfoBody
+'-------------------------------------------------------------------------------
+function buildPlaybackInfoBody() as string
+    return Json.Object([
+        Json.String("DeviceProfile") + ":" + DeviceCapabilities.BuildDeviceProfileJson()
+    ])
+end function
+
+'-------------------------------------------------------------------------------
+' buildServerUrl
+'-------------------------------------------------------------------------------
+function buildServerUrl(server as string, path as string) as string
+    if Instr(1, LCase(path), "http://") = 1 or Instr(1, LCase(path), "https://") = 1 then return path
+    if Left(path, 1) = "/" then return server + path
+
+    return server + "/" + path
+end function
+
+'-------------------------------------------------------------------------------
+' isLiveTvPlaybackRequest
+'-------------------------------------------------------------------------------
+function isLiveTvPlaybackRequest(request as dynamic) as boolean
+    if request = invalid or request.item = invalid then return false
+
+    itemType = LCase(Format.SafeString(request.item.Type, ""))
+    return itemType = "tvchannel" or itemType = "livetvchannel"
+end function
+
+'-------------------------------------------------------------------------------
+' isHttpDirectMediaSource
+'-------------------------------------------------------------------------------
+function isHttpDirectMediaSource(mediaSource as dynamic) as boolean
+    if mediaSource = invalid then return false
+    if LCase(Format.SafeString(mediaSource.Protocol, "")) <> "http" then return false
+
+    return Format.SafeString(mediaSource.Path, "") <> ""
+end function
+
+'-------------------------------------------------------------------------------
+' buildHttpDirectStreamUrl
+'-------------------------------------------------------------------------------
+function buildHttpDirectStreamUrl(server as string, path as dynamic) as string
+    requestUrl = Format.SafeString(path, "")
+    if requestUrl = "" then return ""
+
+    lowerUrl = LCase(requestUrl)
+    if Instr(1, lowerUrl, "http://localhost") = 1 or Instr(1, lowerUrl, "https://localhost") = 1 or Instr(1, lowerUrl, "http://127.0.0.1") = 1 or Instr(1, lowerUrl, "https://127.0.0.1") = 1 then
+        routePath = getAbsoluteUrlRoutePath(requestUrl)
+        if routePath <> "" then return buildServerUrl(server, routePath)
+    end if
+
+    return buildServerUrl(server, requestUrl)
+end function
+
+'-------------------------------------------------------------------------------
+' getAbsoluteUrlRoutePath
+'-------------------------------------------------------------------------------
+function getAbsoluteUrlRoutePath(requestUrl as string) as string
+    schemeEnd = Instr(1, requestUrl, "://")
+    if schemeEnd = 0 then return requestUrl
+
+    pathStart = Instr(schemeEnd + 3, requestUrl, "/")
+    if pathStart = 0 then return ""
+
+    return Mid(requestUrl, pathStart)
+end function
+
+'-------------------------------------------------------------------------------
+' getStartPositionTicks
+'-------------------------------------------------------------------------------
+function getStartPositionTicks(request as dynamic) as longinteger
+    if request = invalid then return 0
+
+    if request.startPositionTicks <> invalid then return request.startPositionTicks
+    if request.StartPositionTicks <> invalid then return request.StartPositionTicks
+
+    return PlaybackProgress.GetTicksFromItem(request.item)
+end function
+
+'-------------------------------------------------------------------------------
+' getStreamFormat
+'-------------------------------------------------------------------------------
+function getStreamFormat(container as string) as string
+    normalized = LCase(container)
+    if normalized = "mov" then return "mp4"
+    if normalized = "m4v" then return "mp4"
+    if normalized = "" then return "mp4"
+
+    return normalized
+end function
+

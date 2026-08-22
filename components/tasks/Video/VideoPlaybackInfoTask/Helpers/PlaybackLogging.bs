@@ -1,0 +1,72 @@
+'-------------------------------------------------------------------------------
+' logPlaybackRequest
+'-------------------------------------------------------------------------------
+sub logPlaybackRequest(request as object, body as string)
+    itemName = ""
+    if request.item <> invalid then itemName = Format.FirstNonEmpty([request.item.Name], "")
+
+    m.log.write("PlaybackInfo request itemId=" + Format.SafeString(request.itemId, "") + " title=" + itemName)
+    m.log.writeJson(body, 2, "PlaybackInfo request body:")
+end sub
+
+'-------------------------------------------------------------------------------
+' logPlaybackError
+'-------------------------------------------------------------------------------
+sub logPlaybackError(result as object)
+    status = Format.SafeString(result.status, "")
+    m.log.error("PlaybackInfo failed status=" + status)
+    m.log.writeConsoleOnly("PlaybackInfo failure detail status=" + status + " message=" + Format.SafeString(result.errorMessage, ""))
+
+    responseText = Format.SafeString(result.responseText, "")
+    if responseText <> "" then
+        m.log.writeConsoleOnly("PlaybackInfo error response:")
+        m.log.writeJsonConsoleOnly(responseText, 2)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' logPlaybackResponse
+'-------------------------------------------------------------------------------
+sub logPlaybackResponse(playbackInfo as dynamic)
+    if playbackInfo = invalid then
+        m.log.write("PlaybackInfo response parsed as invalid.")
+        return
+    end if
+
+    mediaSource = firstMediaSource(playbackInfo)
+    m.log.write("PlaybackInfo response PlaySessionId=" + Format.SafeString(playbackInfo.PlaySessionId, ""))
+
+    if mediaSource = invalid then
+        m.log.write("PlaybackInfo response has no media source.")
+        return
+    end if
+
+    m.log.write("PlaybackInfo media source Id=" + Format.SafeString(mediaSource.Id, "") + " Protocol=" + Format.SafeString(mediaSource.Protocol, "") + " Container=" + Format.SafeString(mediaSource.Container, ""))
+    m.log.write("PlaybackInfo media source Path=" + maskUrl(Format.SafeString(mediaSource.Path, "")))
+    m.log.write("PlaybackInfo SupportsDirectPlay=" + boolToText(mediaSource.SupportsDirectPlay) + " SupportsDirectStream=" + boolToText(mediaSource.SupportsDirectStream) + " SupportsTranscoding=" + boolToText(mediaSource.SupportsTranscoding))
+    m.log.write("PlaybackInfo TranscodingUrl=" + maskUrl(Format.SafeString(mediaSource.TranscodingUrl, "")))
+
+    if mediaSource.MediaStreams <> invalid then
+        for each mediaStream in mediaSource.MediaStreams
+            streamType = Format.SafeString(mediaStream.Type, "")
+            if LCase(streamType) = "audio" or LCase(streamType) = "video" then
+                m.log.write("PlaybackInfo stream Type=" + streamType + " Index=" + Format.SafeString(mediaStream.Index, "") + " Codec=" + Format.SafeString(mediaStream.Codec, "") + " Channels=" + Format.SafeString(mediaStream.Channels, "") + " Default=" + boolToText(mediaStream.IsDefault))
+            end if
+        end for
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' logForcedTranscodeReason
+'-------------------------------------------------------------------------------
+sub logForcedTranscodeReason(mediaStream as dynamic)
+    m.log.write("Forcing transcode because selected multichannel AAC audio is not device-decodable. Index=" + Format.SafeString(mediaStream.arrayIndex, "") + " Channels=" + Format.SafeString(mediaStream.Channels, "") + " Title=" + Format.FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+end sub
+
+'-------------------------------------------------------------------------------
+' logForcedStreamSelection
+'-------------------------------------------------------------------------------
+sub logForcedStreamSelection(mediaStream as dynamic)
+    m.log.write("Disabling direct play because a non-default audio stream was selected. Index=" + Format.SafeString(mediaStream.Index, "") + " Title=" + Format.FirstNonEmpty([mediaStream.DisplayTitle, mediaStream.Title], ""))
+end sub
+

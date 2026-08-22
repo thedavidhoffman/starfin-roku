@@ -1,0 +1,336 @@
+'-------------------------------------------------------------------------------
+' validateRequest
+'-------------------------------------------------------------------------------
+function validateRequest(request as dynamic) as dynamic
+    if request = invalid then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback request." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback server." }
+    if request.token = invalid or request.token = "" then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback token." }
+    if request.itemId = invalid or request.itemId = "" then return { ok: false, action: "playbackInfo", errorMessage: "Invalid playback item." }
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' buildStreamInfo
+'-------------------------------------------------------------------------------
+function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAudioStreamIndex as integer, requestedSubtitleStreamIndex as integer, playbackFlags as object) as object
+    mediaSource = firstMediaSource(playbackInfo)
+    if mediaSource = invalid then
+        return { ok: false, action: "playbackInfo", errorMessage: "The selected item has no playable media source." }
+    end if
+
+    mediaSourceId = Format.SafeString(mediaSource.Id, "")
+    container = Format.SafeString(mediaSource.Container, "")
+    playSessionId = Format.SafeString(playbackInfo.PlaySessionId, "")
+    transcodingUrl = Format.SafeString(mediaSource.TranscodingUrl, "")
+    audioStreamIndex = getResolvedAudioStreamIndex(mediaSource, requestedAudioStreamIndex)
+    directPlaySupported = mediaSource.SupportsDirectPlay = true
+    directPlayAllowed = playbackFlags.enableDirectPlay = true
+    transcodingAllowed = playbackFlags.enableDirectStream = true or playbackFlags.enableTranscoding = true
+
+    if directPlayAllowed and directPlaySupported then
+        streamFormat = getStreamFormat(container)
+        if isLiveTvPlaybackRequest(request) = true and isHttpDirectMediaSource(mediaSource) then
+            streamUrl = buildHttpDirectStreamUrl(request.server, mediaSource.Path)
+        else
+            streamParams = {
+                Static: true
+                Container: container
+                PlaySessionId: playSessionId
+                api_key: request.token
+            }
+            if isLiveTvPlaybackRequest(request) <> true and mediaSourceId <> "" then streamParams.MediaSourceId = mediaSourceId
+            if audioStreamIndex >= 0 then streamParams.AudioStreamIndex = audioStreamIndex
+            if requestedSubtitleStreamIndex >= -1 then streamParams.SubtitleStreamIndex = requestedSubtitleStreamIndex
+            streamUrl = request.server + "/Videos/" + request.itemId + "/stream" + Url.BuildQueryString(streamParams)
+        end if
+        playbackMethod = "DirectPlay"
+        m.log.write("Playback selection chose DirectPlay because the request allows direct play and Jellyfin reported SupportsDirectPlay=true alternativeHlsAvailable=" + boolToText(transcodingUrl <> ""))
+    else if transcodingAllowed and transcodingUrl <> "" then
+        streamUrl = buildServerUrl(request.server, transcodingUrl)
+        if requestedSubtitleStreamIndex >= -1 then streamUrl = Url.SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
+        streamFormat = "hls"
+        playbackMethod = getTranscodingPlaybackMethod(mediaSource)
+        reasons = getPlaybackMethodReasons(mediaSource)
+        reasonText = reasons.Join(", ")
+        if reasonText = "" then reasonText = "not reported"
+        m.log.write("Playback selection chose HLS method=" + playbackMethod + " reasons=" + reasonText)
+    else
+        mode = getPlaybackMode(request)
+        if directPlayAllowed and directPlaySupported <> true then
+            errorMessage = "Jellyfin did not provide a playable stream for the selected media source."
+        else
+            errorMessage = "Jellyfin did not provide the required transcoding stream."
+        end if
+        m.log.error("Playback selection failed mode=" + mode + " directPlayAllowed=" + boolToText(directPlayAllowed) + " supportsDirectPlay=" + boolToText(directPlaySupported) + " transcodingAllowed=" + boolToText(transcodingAllowed) + " transcodingUrlAvailable=" + boolToText(transcodingUrl <> ""))
+        return { ok: false, action: "playbackInfo", errorMessage: errorMessage }
+    end if
+
+    return {
+        ok: true
+        streamUrl: streamUrl
+        streamFormat: streamFormat
+        playSessionId: playSessionId
+        playbackMethod: playbackMethod
+        mediaSourceId: mediaSourceId
+        liveStreamId: Format.SafeString(mediaSource.LiveStreamId, "")
+        videoStreamIndex: getDefaultVideoStreamIndex(mediaSource)
+        audioStreamIndex: audioStreamIndex
+        subtitleStreamIndex: requestedSubtitleStreamIndex
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getTranscodingPlaybackMethod
+'-------------------------------------------------------------------------------
+function getTranscodingPlaybackMethod(mediaSource as dynamic) as string
+    reasons = getPlaybackMethodReasons(mediaSource)
+    if reasons.Count() = 0 then return "Transcode"
+
+    for each reason in reasons
+        if isDirectStreamReason(reason, mediaSource) <> true then return "Transcode"
+    end for
+
+    return "DirectStream"
+end function
+
+'-------------------------------------------------------------------------------
+' isDirectStreamReason
+'-------------------------------------------------------------------------------
+function isDirectStreamReason(reason as dynamic, mediaSource as dynamic) as boolean
+    normalized = LCase(Format.SafeString(reason, ""))
+    if normalized = "containernotsupported" then return true
+    if Left(normalized, 5) = "audio" then return true
+    if normalized = "secondaryaudionotsupported" then return true
+
+    if normalized = "subtitlecodecnotsupported" then
+        subtitleMethod = LCase(getUrlQueryValue(Format.SafeString(mediaSource.TranscodingUrl, ""), "SubtitleMethod"))
+        return subtitleMethod = "embed" or subtitleMethod = "external"
+    end if
+
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackMethodReasons
+'-------------------------------------------------------------------------------
+function getPlaybackMethodReasons(mediaSource as dynamic) as object
+    reasons = []
+    if mediaSource = invalid then return reasons
+
+    if mediaSource.TranscodingReasons <> invalid then
+        for each reason in mediaSource.TranscodingReasons
+            reasonText = Format.SafeString(reason, "")
+            if reasonText <> "" then reasons.Push(reasonText)
+        end for
+    end if
+    if reasons.Count() > 0 then return reasons
+
+    reasonText = getUrlQueryValue(Format.SafeString(mediaSource.TranscodingUrl, ""), "TranscodeReasons")
+    if reasonText = "" then return reasons
+
+    for each reason in reasonText.Split(",")
+        if reason <> "" then reasons.Push(reason)
+    end for
+
+    return reasons
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestMediaSourceId
+'-------------------------------------------------------------------------------
+function getPlaybackRequestMediaSourceId(request as dynamic) as string
+    if request = invalid then return ""
+    if request.mediaSourceId <> invalid then return Format.SafeString(request.mediaSourceId, "")
+
+    mediaSource = getPlaybackRequestMediaSource(request)
+    if mediaSource = invalid then return ""
+
+    return Format.SafeString(mediaSource.Id, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestMediaSource
+'-------------------------------------------------------------------------------
+function getPlaybackRequestMediaSource(request as dynamic) as dynamic
+    if request = invalid then return invalid
+    item = request.item
+    if item = invalid or item.MediaSources = invalid or item.MediaSources.Count() = 0 then return invalid
+    mediaSource = item.MediaSources[0]
+    return mediaSource
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestAudioStreamIndex
+'-------------------------------------------------------------------------------
+function getPlaybackRequestAudioStreamIndex(request as dynamic) as integer
+    if request = invalid then return -1
+    if request.audioStreamIndex <> invalid then return int(request.audioStreamIndex)
+
+    return getDefaultAudioStreamIndexFromStreams(getPlaybackRequestMediaStreams(request))
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestSubtitleStreamIndex
+'-------------------------------------------------------------------------------
+function getPlaybackRequestSubtitleStreamIndex(request as dynamic) as integer
+    if request = invalid then return -1
+    if request.subtitleStreamIndex <> invalid then return int(request.subtitleStreamIndex)
+
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestMediaStreams
+'-------------------------------------------------------------------------------
+function getPlaybackRequestMediaStreams(request as dynamic) as dynamic
+    if request = invalid or request.item = invalid then return invalid
+
+    item = request.item
+    if item.MediaStreams <> invalid then return item.MediaStreams
+    if item.mediaStreams <> invalid then return item.mediaStreams
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' getPlaybackRequestMediaStream
+'-------------------------------------------------------------------------------
+function getPlaybackRequestMediaStream(request as dynamic, streamIndex as integer) as dynamic
+    mediaStreams = getPlaybackRequestMediaStreams(request)
+    if mediaStreams = invalid then return invalid
+
+    for i = 0 to mediaStreams.Count() - 1
+        mediaStream = mediaStreams[i]
+        if mediaStream = invalid then continue for
+        if getMediaStreamIndex(mediaStream, i) = streamIndex then
+            mediaStream.AddReplace("arrayIndex", i)
+            return mediaStream
+        end if
+    end for
+
+    if streamIndex < 0 or streamIndex >= mediaStreams.Count() then return invalid
+
+    mediaStream = mediaStreams[streamIndex]
+    if mediaStream <> invalid then mediaStream.AddReplace("arrayIndex", streamIndex)
+    return mediaStream
+end function
+
+'-------------------------------------------------------------------------------
+' shouldForceTranscodeAudio
+'-------------------------------------------------------------------------------
+function shouldForceTranscodeAudio(mediaStream as dynamic, mediaSource as dynamic) as boolean
+    if mediaStream = invalid then return false
+    if LCase(Format.SafeString(mediaStream.Type, "")) <> "audio" then return false
+    if LCase(Format.SafeString(mediaStream.Codec, "")) <> "aac" then return false
+    if mediaStream.Channels = invalid then return false
+    if int(mediaStream.Channels) <= 2 then return false
+
+    deviceInfo = CreateObject("roDeviceInfo")
+    container = ""
+    if mediaSource <> invalid then container = Format.SafeString(mediaSource.Container, "")
+    decodeInfo = {
+        Codec: Format.SafeString(mediaStream.Codec, "")
+        ChCnt: int(mediaStream.Channels)
+    }
+    if container <> "" then decodeInfo.Container = container
+
+    result = deviceInfo.CanDecodeAudio(decodeInfo)
+    return result = invalid or result.Result <> true
+end function
+
+'-------------------------------------------------------------------------------
+' shouldForceStreamSelection
+'-------------------------------------------------------------------------------
+function shouldForceStreamSelection(request as dynamic, mediaSource as dynamic, requestedAudioStreamIndex as integer) as boolean
+    if request = invalid or request.audioStreamIndex = invalid then return false
+    if requestedAudioStreamIndex < 0 then return false
+
+    defaultAudioStreamIndex = getDefaultAudioStreamIndex(mediaSource)
+    return requestedAudioStreamIndex <> defaultAudioStreamIndex
+end function
+
+'-------------------------------------------------------------------------------
+' getDefaultAudioStreamIndexFromStreams
+'-------------------------------------------------------------------------------
+function getDefaultAudioStreamIndexFromStreams(mediaStreams as dynamic) as integer
+    if mediaStreams = invalid then return -1
+
+    firstAudioIndex = -1
+    for i = 0 to mediaStreams.Count() - 1
+        mediaStream = mediaStreams[i]
+        if mediaStream = invalid then continue for
+        if LCase(Format.SafeString(mediaStream.Type, "")) = "audio" then
+            streamIndex = getMediaStreamIndex(mediaStream, i)
+            if firstAudioIndex = -1 then firstAudioIndex = streamIndex
+            if mediaStream.IsDefault = true then return streamIndex
+        end if
+    end for
+
+    return firstAudioIndex
+end function
+
+'-------------------------------------------------------------------------------
+' getDefaultAudioStreamIndex
+'-------------------------------------------------------------------------------
+function getDefaultAudioStreamIndex(mediaSource as dynamic) as integer
+    if mediaSource = invalid or mediaSource.MediaStreams = invalid then return -1
+
+    firstAudioIndex = -1
+    for i = 0 to mediaSource.MediaStreams.Count() - 1
+        mediaStream = mediaSource.MediaStreams[i]
+        if mediaStream = invalid then continue for
+        if LCase(Format.SafeString(mediaStream.Type, "")) = "audio" then
+            streamIndex = getMediaStreamIndex(mediaStream, i)
+            if firstAudioIndex = -1 then firstAudioIndex = streamIndex
+            if mediaStream.IsDefault = true then return streamIndex
+        end if
+    end for
+
+    return firstAudioIndex
+end function
+
+'-------------------------------------------------------------------------------
+' getResolvedAudioStreamIndex
+'-------------------------------------------------------------------------------
+function getResolvedAudioStreamIndex(mediaSource as dynamic, requestedAudioStreamIndex as integer) as integer
+    if requestedAudioStreamIndex >= 0 then return requestedAudioStreamIndex
+
+    return getDefaultAudioStreamIndex(mediaSource)
+end function
+
+'-------------------------------------------------------------------------------
+' getDefaultVideoStreamIndex
+'-------------------------------------------------------------------------------
+function getDefaultVideoStreamIndex(mediaSource as dynamic) as integer
+    if mediaSource = invalid or mediaSource.MediaStreams = invalid then return 0
+
+    for i = 0 to mediaSource.MediaStreams.Count() - 1
+        mediaStream = mediaSource.MediaStreams[i]
+        if mediaStream = invalid then continue for
+        if LCase(Format.SafeString(mediaStream.Type, "")) = "video" then
+            return getMediaStreamIndex(mediaStream, i)
+        end if
+    end for
+
+    return 0
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaStreamIndex
+'-------------------------------------------------------------------------------
+function getMediaStreamIndex(mediaStream as dynamic, fallback as integer) as integer
+    if mediaStream <> invalid and mediaStream.Index <> invalid then return int(mediaStream.Index)
+    return fallback
+end function
+
+'-------------------------------------------------------------------------------
+' firstMediaSource
+'-------------------------------------------------------------------------------
+function firstMediaSource(playbackInfo as dynamic) as dynamic
+    if playbackInfo = invalid or playbackInfo.MediaSources = invalid then return invalid
+    if playbackInfo.MediaSources.Count() = 0 then return invalid
+
+    return playbackInfo.MediaSources[0]
+end function
+
