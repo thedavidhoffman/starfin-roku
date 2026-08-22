@@ -1,5 +1,18 @@
 namespace SubtitlePlayback
 
+    function NormalizeDeliveryMethod(value as dynamic) as string
+        method = LCase(Format.SafeString(value, "none"))
+        if method = "external" then return "external"
+        if method = "encode" then return "encode"
+        return "none"
+    end function
+
+    function RequiresRestart(currentDeliveryMethod as dynamic, targetDeliveryMethod as dynamic) as boolean
+        currentMethod = SubtitlePlayback.NormalizeDeliveryMethod(currentDeliveryMethod)
+        targetMethod = SubtitlePlayback.NormalizeDeliveryMethod(targetDeliveryMethod)
+        return currentMethod <> "external" or targetMethod <> "external"
+    end function
+
     '---------------------------------------------------------------------------
     ' SubtitlePlayback.BuildExternalTrack
     '---------------------------------------------------------------------------
@@ -21,6 +34,28 @@ namespace SubtitlePlayback
                 TrackName: deliveryUrl
             }
         }
+    end function
+
+    function BuildExternalTracks(playbackInfo as dynamic, server as string, token as string) as object
+        tracks = []
+        if playbackInfo = invalid or playbackInfo.MediaSources = invalid or playbackInfo.MediaSources.Count() = 0 then return tracks
+        mediaSource = playbackInfo.MediaSources[0]
+        if mediaSource = invalid or mediaSource.MediaStreams = invalid then return tracks
+        for each stream in mediaSource.MediaStreams
+            if stream <> invalid and LCase(Format.SafeString(stream.Type, "")) = "subtitle" then
+                track = SubtitlePlayback.BuildExternalTrack(playbackInfo, Number.ToInteger(stream.Index, SubtitleSelection.None), server, token)
+                if track <> invalid then tracks.Push(track)
+            end if
+        end for
+        return tracks
+    end function
+
+    function FindExternalTrack(tracks as dynamic, streamIndex as integer) as dynamic
+        if tracks = invalid then return invalid
+        for each track in tracks
+            if track <> invalid and Number.ToInteger(track.index, SubtitleSelection.None) = streamIndex then return track
+        end for
+        return invalid
     end function
 
     '---------------------------------------------------------------------------

@@ -192,11 +192,30 @@ end function
 sub applySubtitleSelection(selection as dynamic)
     if selection = invalid then return
 
-    streamIndex = -1
-    if selection.streamIndex <> invalid then streamIndex = int(selection.streamIndex)
+    streamIndex = SubtitleSelection.None
+    if selection.streamIndex <> invalid then streamIndex = Number.ToInteger(selection.streamIndex, SubtitleSelection.None)
     if streamIndex = m.streamOptions.selectedSubtitleStreamIndex then return
 
+    previousDeliveryMethod = m.streamOptions.activeSubtitleDeliveryMethod
     m.streamOptions.selectedSubtitleStreamIndex = streamIndex
+    if streamIndex = SubtitleSelection.None then
+        setSubtitleCaptionMode("Off")
+        m.videoPlayer.subtitleTrack = ""
+        m.streamOptions.activeSubtitleDeliveryMethod = "none"
+        return
+    end if
+    externalTrack = SubtitlePlayback.FindExternalTrack(m.streamOptions.externalSubtitleTracks, streamIndex)
+    targetDeliveryMethod = "encode"
+    if externalTrack <> invalid then targetDeliveryMethod = "external"
+    if SubtitlePlayback.RequiresRestart(previousDeliveryMethod, targetDeliveryMethod) <> true and externalTrack <> invalid then
+        trackName = SubtitlePlayback.FindAvailableTrackName(m.videoPlayer.availableSubtitleTracks, externalTrack.deliveryUrl)
+        if trackName <> "" then
+            setSubtitleCaptionMode("On")
+            m.videoPlayer.subtitleTrack = trackName
+            m.streamOptions.activeSubtitleDeliveryMethod = "external"
+            return
+        end if
+    end if
     restartPlaybackWithStreamOptions()
 end sub
 
@@ -275,6 +294,7 @@ function buildStreamRestartPlayRequest() as dynamic
         playbackQueueMode: request.playbackQueueMode
         audioStreamIndex: m.streamOptions.selectedAudioStreamIndex
         subtitleStreamIndex: m.streamOptions.selectedSubtitleStreamIndex
+        subtitleBurnInMode: SubtitleBurnIn.Normalize(request.subtitleBurnInMode)
     }
     if request.mediaSourceId <> invalid then restartRequest.AddReplace("mediaSourceId", request.mediaSourceId)
     restartRequest.AddReplace("videoMode", getOriginalPlaybackMode())

@@ -51,6 +51,7 @@
 
 ## SceneGraph architecture
 
+- When a component `init()` grows beyond simple orchestration because it contains substantial node lookup or observer registration, extract those responsibilities into `initReferences()` and `initHandlers()` and keep `init()` focused on initialization sequencing.
 - Keep `MainScene` focused on app-shell orchestration: top-level visibility, routing between major surfaces, global focus recovery, and app exit handling.
 - Set app-level status through `source/Status.bs` helpers (`AppStatus.SetLoading`, `AppStatus.SetMessage`, `AppStatus.ClearMessage`) using the shared `StatusLabel`; do not add page-local status labels for surfaces that can use the shared app-shell status message. `Status.bs` depends on component context through `m.top`, so use it only from component scripts, not tasks or pure source modules. Do not access shared status through parent chains such as `m.top.top.statusLabel`. Clear stale shared status during app-shell navigation and dynamic page close/reset flows instead of adding page-local cleanup labels.
 - Prefer putting feature-specific API tasks, response handling, local loading state, and local navigation state inside the component that owns that feature. For example, Library should own library loading/drilldown, HomePage should own personalized shelf loading, Player should own playback session requests, and auth/session persistence should live in an auth-focused controller rather than in `MainScene`.

@@ -8,6 +8,8 @@ import "pkg:/source/Encode.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/DeviceCapabilities.bs"
 import "pkg:/source/SubtitlePlayback.bs"
+import "pkg:/source/SubtitleSelection.bs"
+import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
@@ -43,11 +45,19 @@ sub executeRequest()
     requestedMediaSourceId = getPlaybackRequestMediaSourceId(request)
     requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
     requestedMediaSource = getPlaybackRequestMediaSource(request)
+    resolvedRequestedSubtitleIndex = getResolvedSubtitleStreamIndex(requestedMediaSource, requestedSubtitleStreamIndex)
+    subtitleBurnInMode = SubtitleBurnIn.Normalize(request.subtitleBurnInMode)
+    alwaysBurnSelectedSubtitle = subtitleBurnInMode = SubtitleBurnIn.Mode.Always and resolvedRequestedSubtitleIndex >= 0
     forceTranscode = shouldForceTranscodeAudio(requestedAudioStream, requestedMediaSource)
     forceStreamSelection = shouldForceStreamSelection(request, requestedMediaSource, requestedAudioStreamIndex)
     forceSubtitleSelection = requestedSubtitleStreamIndex >= 0
     selectedPlaybackMode = getPlaybackMode(request)
     playbackFlags = getPlaybackFlags(selectedPlaybackMode, forceTranscode, forceStreamSelection, forceSubtitleSelection)
+    if alwaysBurnSelectedSubtitle then
+        playbackFlags.enableDirectPlay = false
+        playbackFlags.enableDirectStream = false
+        playbackFlags.enableTranscoding = true
+    end if
     bitrateLimits = DeviceCapabilities.GetBitrateLimits()
     params = {
         UserId: Format.SafeString(request.userId, "")
@@ -59,7 +69,7 @@ sub executeRequest()
         EnableDirectPlay: playbackFlags.enableDirectPlay
         EnableDirectStream: playbackFlags.enableDirectStream
         EnableTranscoding: playbackFlags.enableTranscoding
-        AllowVideoStreamCopy: selectedPlaybackMode <> PlaybackMode.Mode.AutomaticNoRemux and selectedPlaybackMode <> PlaybackMode.Mode.TranscodeNoRemux
+        AllowVideoStreamCopy: alwaysBurnSelectedSubtitle <> true and selectedPlaybackMode <> PlaybackMode.Mode.AutomaticNoRemux and selectedPlaybackMode <> PlaybackMode.Mode.TranscodeNoRemux
         AllowAudioStreamCopy: true
     }
 
@@ -73,7 +83,9 @@ sub executeRequest()
     if requestedSubtitleStreamIndex >= -1 then params.SubtitleStreamIndex = requestedSubtitleStreamIndex
 
     requestUrl = request.server + "/Items/" + request.itemId + "/PlaybackInfo" + Url.BuildQueryString(params)
-    body = buildPlaybackInfoBody()
+    alwaysBurnInSubtitleWhenTranscoding = subtitleBurnInMode <> SubtitleBurnIn.Mode.PreferExternal
+    body = buildPlaybackInfoBody(alwaysBurnInSubtitleWhenTranscoding, alwaysBurnSelectedSubtitle <> true)
+    m.log.write("Subtitle burn-in mode=" + subtitleBurnInMode + " activeSubtitle=" + boolToText(resolvedRequestedSubtitleIndex >= 0) + " alwaysBurnInSubtitleWhenTranscoding=" + boolToText(alwaysBurnInSubtitleWhenTranscoding))
     logPlaybackRequest(request, body)
 
     result = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token))
@@ -98,6 +110,7 @@ sub executeRequest()
     m.log.write("Selected stream URL: " + maskUrl(streamInfo.streamUrl))
 
     externalSubtitleTrack = SubtitlePlayback.BuildExternalTrack(result.data, streamInfo.subtitleStreamIndex, request.server, request.token)
+    externalSubtitleTracks = SubtitlePlayback.BuildExternalTracks(result.data, request.server, request.token)
     subtitleDeliveryMethod = SubtitlePlayback.GetDeliveryMethod(result.data, streamInfo.subtitleStreamIndex)
     if subtitleDeliveryMethod = "" then subtitleDeliveryMethod = "none"
     m.log.write("Resolved subtitle stream index=" + Format.SafeString(streamInfo.subtitleStreamIndex, "") + " deliveryMethod=" + subtitleDeliveryMethod + " externalTrackAttached=" + boolToText(externalSubtitleTrack <> invalid))
@@ -114,5 +127,7 @@ sub executeRequest()
         playbackIdentity: buildPlaybackIdentity(request, streamInfo, firstMediaSource(result.data))
         startPositionTicks: getStartPositionTicks(request)
         externalSubtitleTrack: externalSubtitleTrack
+        externalSubtitleTracks: externalSubtitleTracks
+        subtitleDeliveryMethod: subtitleDeliveryMethod
     }
 end sub

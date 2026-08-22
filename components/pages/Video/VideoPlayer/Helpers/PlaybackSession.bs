@@ -228,6 +228,7 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         playbackQueueIndex: queueIndex
         playbackQueueMode: m.queue.mode
         videoMode: getOriginalPlaybackMode()
+        subtitleBurnInMode: SubtitleBurnIn.Normalize(m.top.playRequest.subtitleBurnInMode)
     }
     return request
 end function
@@ -255,8 +256,15 @@ function buildVideoContent(response as object, request as object, item as dynami
     content.AddHeader("Authorization", JellyfinAuth.BuildAuthorizationHeader(request.token, request.userId))
 
     m.streamOptions.pendingExternalSubtitleUrl = ""
+    m.streamOptions.activeSubtitleDeliveryMethod = SubtitlePlayback.NormalizeDeliveryMethod(response.subtitleDeliveryMethod)
+    m.streamOptions.externalSubtitleTracks = response.externalSubtitleTracks
+    if m.streamOptions.externalSubtitleTracks = invalid then m.streamOptions.externalSubtitleTracks = []
+    rokuSubtitleTracks = []
+    for each externalTrack in m.streamOptions.externalSubtitleTracks
+        rokuSubtitleTracks.Push(externalTrack.track)
+    end for
+    if rokuSubtitleTracks.Count() > 0 then content.SubtitleTracks = rokuSubtitleTracks
     if response.externalSubtitleTrack <> invalid then
-        content.SubtitleTracks = [response.externalSubtitleTrack.track]
         m.streamOptions.pendingExternalSubtitleUrl = response.externalSubtitleTrack.deliveryUrl
     end if
     m.log.write("Subtitle content resolvedIndex=" + Format.SafeString(response.playbackIdentity.subtitleStreamIndex, "") + " externalTrackAttached=" + boolToText(response.externalSubtitleTrack <> invalid))
@@ -339,6 +347,8 @@ end sub
 sub cleanupSubtitlePlayback()
     m.videoPlayer.subtitleTrack = ""
     m.streamOptions.pendingExternalSubtitleUrl = ""
+    m.streamOptions.externalSubtitleTracks = []
+    m.streamOptions.activeSubtitleDeliveryMethod = "none"
     if m.streamOptions.captionModeCaptured = true then
         m.videoPlayer.globalCaptionMode = m.streamOptions.originalCaptionMode
     end if

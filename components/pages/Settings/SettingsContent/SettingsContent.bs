@@ -1,4 +1,5 @@
 import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
 
@@ -6,19 +7,35 @@ import "pkg:/source/store/SettingsStore.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.categoryList = m.top.findNode("categoryList")
+    initReferences()
+    initCategoryList()
+    initOptionContent()
+    initHandlers()
+    loadSettingsValues()
+    showCategory(0)
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.deviceCategoryList = m.top.findNode("deviceCategoryList")
+    m.userCategoryList = m.top.findNode("userCategoryList")
     m.videoStreamingModeDescription = m.top.findNode("videoStreamingModeDescription")
+    m.subtitleBurnInDescription = m.top.findNode("subtitleBurnInDescription")
     m.videoStreamingModeDescription.font.size = m.videoStreamingModeDescription.font.size + 3
+    m.subtitleBurnInDescription.font.size = m.subtitleBurnInDescription.font.size + 3
     m.categoryPanels = [
         m.top.findNode("systemPanel")
+        m.top.findNode("videoPanel")
+        m.top.findNode("subtitlesPanel")
+        m.top.findNode("advancedPanel")
         m.top.findNode("mediaShellPanel")
         m.top.findNode("tvPanel")
         m.top.findNode("moviePanel")
-        m.top.findNode("videoPanel")
         m.top.findNode("collectionsPanel")
         m.top.findNode("playlistsPanel")
         m.top.findNode("screensaverPanel")
-        m.top.findNode("advancedPanel")
     ]
     m.settingsControls = {
         displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
@@ -28,6 +45,7 @@ sub init()
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         movieLibraryOptions: m.top.findNode("movieLibraryOptions")
         videoStreamingModeOptions: m.top.findNode("videoStreamingModeOptions")
+        subtitleBurnInOptions: m.top.findNode("subtitleBurnInOptions")
         collectionCardsImageTypeOptions: m.top.findNode("collectionCardsImageTypeOptions")
         collectionItemsImageTypeOptions: m.top.findNode("collectionItemsImageTypeOptions")
         playlistImageTypeOptions: m.top.findNode("playlistImageTypeOptions")
@@ -45,14 +63,15 @@ sub init()
     }
     m.categoryControls = [
         [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
+        [m.settingsControls.videoStreamingModeOptions]
+        [m.settingsControls.subtitleBurnInOptions]
+        [m.settingsControls.resetStarfinButton]
         [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
         [m.settingsControls.tvLibraryOptions, m.settingsControls.tvEpisodeListDisplayOptions]
         [m.settingsControls.movieLibraryOptions]
-        [m.settingsControls.videoStreamingModeOptions]
         [m.settingsControls.collectionCardsImageTypeOptions, m.settingsControls.collectionItemsImageTypeOptions]
         [m.settingsControls.playlistImageTypeOptions]
         [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
-        [m.settingsControls.resetStarfinButton]
     ]
     m.focusState = {
         categoryIndex: 0
@@ -62,22 +81,16 @@ sub init()
     m.settingsState = {
         values: SettingsStore.Defaults()
     }
+end sub
 
-    initCategoryList()
-    initDisplayAccountBadgeOptions()
-    initDisplayOptions(m.settingsControls.tvLibraryOptions)
-    initDisplayOptions(m.settingsControls.movieLibraryOptions)
-    initDisplayOptions(m.settingsControls.collectionCardsImageTypeOptions)
-    initDisplayOptions(m.settingsControls.collectionItemsImageTypeOptions)
-    initDisplayOptions(m.settingsControls.playlistImageTypeOptions)
-    initTVEpisodeListDisplayOptions()
-    initMediaShellBackgroundOptions()
-    initThemeMusicOptions()
-    initScreensaverOptions()
-    initVideoStreamingModeOptions()
-
-    m.categoryList.observeField("itemFocused", "onCategoryFocused")
-    m.categoryList.observeField("itemSelected", "onCategorySelected")
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.deviceCategoryList.observeField("itemFocused", "onDeviceCategoryFocused")
+    m.deviceCategoryList.observeField("itemSelected", "onDeviceCategorySelected")
+    m.userCategoryList.observeField("itemFocused", "onUserCategoryFocused")
+    m.userCategoryList.observeField("itemSelected", "onUserCategorySelected")
     m.settingsControls.displayAccountBadgeOptions.observeField("itemSelected", "onDisplayAccountBadgeSelected")
     m.settingsControls.tvLibraryOptions.observeField("itemSelected", "onTVLibraryDisplaySelected")
     m.settingsControls.movieLibraryOptions.observeField("itemSelected", "onMovieLibraryDisplaySelected")
@@ -91,39 +104,38 @@ sub init()
     m.settingsControls.screensaverDelayOptions.observeField("itemSelected", "onScreensaverDelaySelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemFocused", "onVideoStreamingModeFocused")
+    m.settingsControls.subtitleBurnInOptions.observeField("itemSelected", "onSubtitleBurnInSelected")
+    m.settingsControls.subtitleBurnInOptions.observeField("itemFocused", "onSubtitleBurnInFocused")
     m.settingsControls.resetStarfinButton.observeField("buttonSelected", "onResetStarfinSelected")
     m.settingsControls.abortResetButton.observeField("buttonSelected", "onAbortResetSelected")
     m.settingsControls.eraseAllDataButton.observeField("buttonSelected", "onEraseAllDataSelected")
-
-    loadSettingsValues()
-    showCategory(0)
 end sub
 
 '-------------------------------------------------------------------------------
 ' initCategoryList
 '-------------------------------------------------------------------------------
 sub initCategoryList()
-    content = CreateObject("roSGNode", "ContentNode")
-    for each title in ["Global", "Media Shell", "TV", "Movie", "Video", "Collections", "Playlists", "Screensaver", "Advanced"]
-        item = content.createChild("ContentNode")
-        item.title = title
-    end for
-    m.categoryList.content = content
+    setOptionTitles(m.deviceCategoryList, ["General", "Video", "Subtitles", "Advanced"])
+    setOptionTitles(m.userCategoryList, ["Media Shell", "TV", "Movie", "Collections", "Playlists", "Screensaver"])
 end sub
 
 '-------------------------------------------------------------------------------
-' initScreensaverOptions
+' initOptionContent
 '-------------------------------------------------------------------------------
-sub initScreensaverOptions()
+sub initOptionContent()
+    setOptionTitles(m.settingsControls.displayAccountBadgeOptions, ["Off", "On"])
+    initDisplayOptions(m.settingsControls.tvLibraryOptions)
+    initDisplayOptions(m.settingsControls.movieLibraryOptions)
+    initDisplayOptions(m.settingsControls.collectionCardsImageTypeOptions)
+    initDisplayOptions(m.settingsControls.collectionItemsImageTypeOptions)
+    initDisplayOptions(m.settingsControls.playlistImageTypeOptions)
+    setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
+    setOptionTitles(m.settingsControls.mediaShellBackgroundOptions, ["Full Screen", "Partial Screen", "Cinematic"])
+    setOptionTitles(m.settingsControls.themeMusicOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.screensaverTypeOptions, ["Roku screensaver", "Bouncing artwork", "Starfield"])
     setOptionTitles(m.settingsControls.screensaverDelayOptions, ["1 minute", "5 minutes", "15 minutes", "30 minutes"])
-end sub
-
-'-------------------------------------------------------------------------------
-' initDisplayAccountBadgeOptions
-'-------------------------------------------------------------------------------
-sub initDisplayAccountBadgeOptions()
-    setOptionTitles(m.settingsControls.displayAccountBadgeOptions, ["Off", "On"])
+    setOptionTitles(m.settingsControls.videoStreamingModeOptions, ["Automatic", "Automatic (Remux Disabled)", "Force Transcode (Allow Remux)", "Force Transcode (Remux Disabled)"])
+    setOptionTitles(m.settingsControls.subtitleBurnInOptions, ["During Transcoding", "Prefer External Subtitles", "Always Burn In"])
 end sub
 
 '-------------------------------------------------------------------------------
@@ -131,34 +143,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub initDisplayOptions(options as object)
     setOptionTitles(options, ["Poster", "Thumbnail"])
-end sub
-
-'-------------------------------------------------------------------------------
-' initTVEpisodeListDisplayOptions
-'-------------------------------------------------------------------------------
-sub initTVEpisodeListDisplayOptions()
-    setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
-end sub
-
-'-------------------------------------------------------------------------------
-' initMediaShellBackgroundOptions
-'-------------------------------------------------------------------------------
-sub initMediaShellBackgroundOptions()
-    setOptionTitles(m.settingsControls.mediaShellBackgroundOptions, ["Full Screen", "Partial Screen", "Cinematic"])
-end sub
-
-'-------------------------------------------------------------------------------
-' initThemeMusicOptions
-'-------------------------------------------------------------------------------
-sub initThemeMusicOptions()
-    setOptionTitles(m.settingsControls.themeMusicOptions, ["Off", "On"])
-end sub
-
-'-------------------------------------------------------------------------------
-' initVideoStreamingModeOptions
-'-------------------------------------------------------------------------------
-sub initVideoStreamingModeOptions()
-    setOptionTitles(m.settingsControls.videoStreamingModeOptions, ["Automatic", "Automatic (Remux Disabled)", "Force Transcode (Allow Remux)", "Force Transcode (Remux Disabled)"])
 end sub
 
 '-------------------------------------------------------------------------------
@@ -192,6 +176,7 @@ sub loadSettingsValues()
     m.settingsState.values[SettingsStore.Key.ScreensaverType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverType)
     m.settingsState.values[SettingsStore.Key.ScreensaverDelay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverDelay)
     m.settingsState.values[SettingsStore.Key.VideoStreamingMode] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.VideoStreamingMode)
+    m.settingsState.values[SettingsStore.Key.SubtitleBurnInMode] = SubtitleBurnIn.Normalize(SettingsStore.GetSettingValue(settings, SettingsStore.Key.SubtitleBurnInMode))
     m.settingsState.values[SettingsStore.Key.DisplayAccountBadge] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.DisplayAccountBadge)
     m.settingsState.values[SettingsStore.Key.TmdbApiKey] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TmdbApiKey)
 
@@ -206,6 +191,7 @@ sub loadSettingsValues()
     setScreensaverTypeOption(m.settingsState.values[SettingsStore.Key.ScreensaverType])
     setScreensaverDelayOption(m.settingsState.values[SettingsStore.Key.ScreensaverDelay])
     setVideoStreamingModeOption(m.settingsState.values[SettingsStore.Key.VideoStreamingMode])
+    setSubtitleBurnInOption(m.settingsState.values[SettingsStore.Key.SubtitleBurnInMode])
     setOnOffOption(m.settingsControls.displayAccountBadgeOptions, m.settingsState.values[SettingsStore.Key.DisplayAccountBadge])
     m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[SettingsStore.Key.TmdbApiKey]
 end sub
@@ -215,8 +201,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusFirstField()
     clearResetStarfinButtonFocus()
-    m.categoryList.jumpToItem = m.focusState.categoryIndex
-    m.categoryList.setFocus(true)
+    if m.focusState.categoryIndex < 4 then
+        m.deviceCategoryList.jumpToItem = m.focusState.categoryIndex
+        m.deviceCategoryList.setFocus(true)
+    else
+        m.userCategoryList.jumpToItem = m.focusState.categoryIndex - 4
+        m.userCategoryList.setFocus(true)
+    end if
     updateTextInputFocusVisual()
 end sub
 
@@ -237,15 +228,24 @@ end function
 '-------------------------------------------------------------------------------
 ' onCategoryFocused
 '-------------------------------------------------------------------------------
-sub onCategoryFocused()
-    showCategory(getListIndex(m.categoryList.itemFocused, m.categoryPanels.Count()))
+sub onDeviceCategoryFocused()
+    showCategory(getListIndex(m.deviceCategoryList.itemFocused, 4))
 end sub
 
 '-------------------------------------------------------------------------------
 ' onCategorySelected
 '-------------------------------------------------------------------------------
-sub onCategorySelected()
-    showCategory(getListIndex(m.categoryList.itemSelected, m.categoryPanels.Count()))
+sub onDeviceCategorySelected()
+    showCategory(getListIndex(m.deviceCategoryList.itemSelected, 4))
+    focusCategoryControl(0, 0)
+end sub
+
+sub onUserCategoryFocused()
+    showCategory(4 + getListIndex(m.userCategoryList.itemFocused, 6))
+end sub
+
+sub onUserCategorySelected()
+    showCategory(4 + getListIndex(m.userCategoryList.itemSelected, 6))
     focusCategoryControl(0, 0)
 end sub
 
@@ -257,7 +257,7 @@ sub showCategory(index as integer)
 
     m.focusState.categoryIndex = index
     m.focusState.controlIndex = 0
-    if index <> 7 and m.resetStarfinState.confirmationVisible then showResetStarfinState()
+    if index <> 3 and m.resetStarfinState.confirmationVisible then showResetStarfinState()
     for i = 0 to m.categoryPanels.Count() - 1
         m.categoryPanels[i].visible = (i = index)
     end for
@@ -269,7 +269,19 @@ end sub
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
-    if m.categoryList.isInFocusChain() then
+    if m.deviceCategoryList.isInFocusChain() or m.userCategoryList.isInFocusChain() then
+        if key = "down" and m.deviceCategoryList.isInFocusChain() and getListIndex(m.deviceCategoryList.itemFocused, 4) = 3 then
+            m.userCategoryList.jumpToItem = 0
+            m.userCategoryList.setFocus(true)
+            showCategory(4)
+            return true
+        end if
+        if key = "up" and m.userCategoryList.isInFocusChain() and getListIndex(m.userCategoryList.itemFocused, 6) = 0 then
+            m.deviceCategoryList.jumpToItem = 3
+            m.deviceCategoryList.setFocus(true)
+            showCategory(3)
+            return true
+        end if
         if key = "right" then return focusCategoryControl(0, 0)
         if key = "OK" or key = "select" then return true
         return false
@@ -312,7 +324,7 @@ sub onResetStarfinSelected()
     m.settingsControls.resetStarfinButton.visible = false
     m.resetStarfinState.description.visible = false
     m.resetStarfinState.confirmationGroup.visible = true
-    m.categoryControls[8] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
+    m.categoryControls[3] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
     focusCategoryControl(0, invalid)
 end sub
 
@@ -339,7 +351,7 @@ sub showResetStarfinState()
     m.settingsControls.resetStarfinButton.visible = true
     m.resetStarfinState.description.visible = true
     m.resetStarfinState.confirmationGroup.visible = false
-    m.categoryControls[8] = [m.settingsControls.resetStarfinButton]
+    m.categoryControls[3] = [m.settingsControls.resetStarfinButton]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -364,7 +376,7 @@ end function
 '-------------------------------------------------------------------------------
 function getSettingsValues() as object
     settings = {}
-    for each key in [SettingsStore.Key.TvLibraryDisplay, SettingsStore.Key.MovieLibraryDisplay, SettingsStore.Key.CollectionCardsImageType, SettingsStore.Key.CollectionItemsImageType, SettingsStore.Key.PlaylistImageType, SettingsStore.Key.TvEpisodeListDisplay, SettingsStore.Key.MediaShellBackground, SettingsStore.Key.ThemeMusic, SettingsStore.Key.ScreensaverType, SettingsStore.Key.ScreensaverDelay, SettingsStore.Key.VideoStreamingMode, SettingsStore.Key.DisplayAccountBadge, SettingsStore.Key.TmdbApiKey]
+    for each key in [SettingsStore.Key.TvLibraryDisplay, SettingsStore.Key.MovieLibraryDisplay, SettingsStore.Key.CollectionCardsImageType, SettingsStore.Key.CollectionItemsImageType, SettingsStore.Key.PlaylistImageType, SettingsStore.Key.TvEpisodeListDisplay, SettingsStore.Key.MediaShellBackground, SettingsStore.Key.ThemeMusic, SettingsStore.Key.ScreensaverType, SettingsStore.Key.ScreensaverDelay, SettingsStore.Key.VideoStreamingMode, SettingsStore.Key.SubtitleBurnInMode, SettingsStore.Key.DisplayAccountBadge, SettingsStore.Key.TmdbApiKey]
         settings[key] = SettingsStore.GetSettingValue(m.settingsState.values, key)
     end for
     return settings
@@ -468,6 +480,18 @@ sub onVideoStreamingModeFocused()
     m.videoStreamingModeDescription.text = getVideoStreamingModeDescription(index)
 end sub
 
+sub onSubtitleBurnInSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.subtitleBurnInOptions)
+    if selectedIndex < 0 then return
+    m.settingsControls.subtitleBurnInOptions.checkedItem = selectedIndex
+    m.settingsState.values[SettingsStore.Key.SubtitleBurnInMode] = getSubtitleBurnInModeForIndex(selectedIndex)
+end sub
+
+sub onSubtitleBurnInFocused()
+    index = getListIndex(m.settingsControls.subtitleBurnInOptions.itemFocused, 3)
+    m.subtitleBurnInDescription.text = getSubtitleBurnInDescription(index)
+end sub
+
 '-------------------------------------------------------------------------------
 ' setDisplayOption
 '-------------------------------------------------------------------------------
@@ -567,6 +591,31 @@ function getVideoStreamingModeForIndex(index as integer) as string
     if index = 2 then return PlaybackMode.Mode.TranscodeAllowRemux
     if index = 3 then return PlaybackMode.Mode.TranscodeNoRemux
     return PlaybackMode.Mode.Automatic
+end function
+
+'-------------------------------------------------------------------------------
+' setSubtitleBurnInOption
+'-------------------------------------------------------------------------------
+sub setSubtitleBurnInOption(value as dynamic)
+    mode = SubtitleBurnIn.Normalize(value)
+    selectedIndex = 0
+    if mode = SubtitleBurnIn.Mode.PreferExternal then selectedIndex = 1
+    if mode = SubtitleBurnIn.Mode.Always then selectedIndex = 2
+    m.settingsControls.subtitleBurnInOptions.checkedItem = selectedIndex
+    m.settingsControls.subtitleBurnInOptions.jumpToItem = selectedIndex
+    m.subtitleBurnInDescription.text = getSubtitleBurnInDescription(selectedIndex)
+end sub
+
+function getSubtitleBurnInModeForIndex(index as integer) as string
+    if index = 1 then return SubtitleBurnIn.Mode.PreferExternal
+    if index = 2 then return SubtitleBurnIn.Mode.Always
+    return SubtitleBurnIn.Mode.DuringTranscoding
+end function
+
+function getSubtitleBurnInDescription(index as integer) as string
+    if index = 1 then return "Uses Roku-native external subtitles whenever supported, including during transcoding. This reduces server processing and preserves video quality, but subtitle timing may be less reliable on some media."
+    if index = 2 then return "Always burns the selected subtitle into the video. This provides the most reliable synchronization but disables Direct Play and requires additional server processing."
+    return "Burns subtitles into the video when Jellyfin is already transcoding. Uses external subtitles during Direct Play. This is the recommended balance of subtitle synchronization, video quality, and server usage."
 end function
 
 '-------------------------------------------------------------------------------

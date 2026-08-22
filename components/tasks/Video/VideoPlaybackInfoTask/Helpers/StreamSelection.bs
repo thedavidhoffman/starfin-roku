@@ -185,10 +185,34 @@ end function
 ' getResolvedSubtitleStreamIndex
 '-------------------------------------------------------------------------------
 function getResolvedSubtitleStreamIndex(mediaSource as dynamic, requestedSubtitleStreamIndex as integer) as integer
-    if requestedSubtitleStreamIndex >= -1 then return requestedSubtitleStreamIndex
+    if requestedSubtitleStreamIndex = SubtitleSelection.None then return SubtitleSelection.None
     if mediaSource = invalid then return -1
+    if requestedSubtitleStreamIndex >= 0 then return getExistingSubtitleStreamIndex(mediaSource, requestedSubtitleStreamIndex)
 
-    return Number.ToInteger(mediaSource.DefaultSubtitleStreamIndex, -1)
+    defaultIndex = Number.ToInteger(mediaSource.DefaultSubtitleStreamIndex, -1)
+    if defaultIndex >= 0 then
+        resolvedDefaultIndex = getExistingSubtitleStreamIndex(mediaSource, defaultIndex)
+        if resolvedDefaultIndex >= 0 then return resolvedDefaultIndex
+    end if
+    if mediaSource.MediaStreams = invalid then return -1
+
+    for each stream in mediaSource.MediaStreams
+        if LCase(Format.SafeString(stream.Type, "")) = "subtitle" and stream.IsDefault = true then
+            return Number.ToInteger(stream.Index, -1)
+        end if
+    end for
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getExistingSubtitleStreamIndex
+'-------------------------------------------------------------------------------
+function getExistingSubtitleStreamIndex(mediaSource as dynamic, streamIndex as integer) as integer
+    if mediaSource = invalid or mediaSource.MediaStreams = invalid then return SubtitleSelection.None
+    for each stream in mediaSource.MediaStreams
+        if stream <> invalid and LCase(Format.SafeString(stream.Type, "")) = "subtitle" and Number.ToInteger(stream.Index, SubtitleSelection.None) = streamIndex then return streamIndex
+    end for
+    return SubtitleSelection.None
 end function
 
 '-------------------------------------------------------------------------------
