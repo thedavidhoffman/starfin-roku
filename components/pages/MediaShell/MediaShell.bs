@@ -12,6 +12,7 @@ sub init()
     m.mediaBackgroundPartialGroup = m.top.findNode("mediaBackgroundPartialGroup")
     MaskAssets.Apply(m.mediaBackgroundPartialGroup, "media-shell-backdrop-mask.png", [1152, 648], [768, 432])
     m.mediaBackgroundPartial = m.top.findNode("mediaBackgroundPartial")
+    m.contentGradient = m.top.findNode("contentGradient")
     m.contentGroup = m.top.findNode("contentGroup")
     m.mediaBackgroundUrl = ""
     m.logoState = {
@@ -48,6 +49,7 @@ end sub
 sub onBackgroundDisplayChanged()
     applyBackgroundDisplay()
     applyContentLayout(m.logoState.mediaType)
+    applyContentGradientVisibility(m.logoState.mediaType)
     onTitleLogoLoadStatusChanged()
 end sub
 
@@ -56,6 +58,13 @@ end sub
 '-------------------------------------------------------------------------------
 sub onDetailsVisibleChanged()
     m.infoGroup.visible = m.top.detailsVisible
+end sub
+
+'-------------------------------------------------------------------------------
+' onCastVisibleChanged
+'-------------------------------------------------------------------------------
+sub onCastVisibleChanged()
+    applyContentGradientVisibility(m.logoState.mediaType)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -79,12 +88,23 @@ sub onMediaContentChanged()
     mediaType = Format.SafeString(content.mediaType, "")
     logoPending = content.logoPending = true
     applyContentLayout(mediaType)
+    applyContentGradientVisibility(mediaType)
     renderBackdrop(Format.SafeString(content.backdropUrl, ""))
     renderTitle(Format.SafeString(content.title, ""), Format.SafeString(content.logoUrl, ""), Format.SafeString(content.logoTitle, ""), mediaType, logoPending)
     m.primaryInfoLabel.text = Format.SafeString(content.primaryInfoText, "")
     m.secondaryInfoLabel.text = Format.SafeString(content.secondaryInfoText, "")
     m.overviewDescription.title = Format.SafeString(content.title, "Description")
     m.overviewDescription.text = Strings.CollapseWhitespace(content.overview)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyContentGradientVisibility
+'-------------------------------------------------------------------------------
+sub applyContentGradientVisibility(mediaType as string)
+    isCinematic = LCase(Format.SafeString(m.top.backgroundDisplay, "full-screen")) = "cinematic"
+    usesCinematicDetailLayout = mediaType = "movie" or mediaType = "tv-episode" or mediaType = "tv-season"
+    hidesContentGradient = isCinematic and usesCinematicDetailLayout and m.top.castVisible <> true
+    m.contentGradient.visible = hidesContentGradient <> true
 end sub
 
 '-------------------------------------------------------------------------------

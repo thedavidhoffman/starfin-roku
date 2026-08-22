@@ -92,9 +92,9 @@ sub onLoadRequestChanged()
 
     m.state.request = request
     m.state.layout.isFromLibrary = request.sourcePage = "library" and request.libraryBrowseState <> invalid
-    applyLibraryBrowseState(request.libraryBrowseState)
     m.top.settings = request.settings
     applyMediaShellBackgroundSetting(request.settings)
+    applyLibraryBrowseState(request.libraryBrowseState)
     m.state.item = request.item
     m.state.themeLookupActive = false
     AsyncLifecycle.Begin(m.state.lifecycle, request.itemId)
@@ -300,11 +300,12 @@ end sub
 '-------------------------------------------------------------------------------
 sub applyCinematicLayout()
     if m.state.layout.isCinematic <> true then
+        m.mediaShell.castVisible = false
         m.mediaShell.contentTranslation = [96, 108]
         m.mediaShell.detailsVisible = true
         m.mediaToolbar.translation = [0, 588]
         m.mediaToolbar.visible = true
-        m.previousNextButton.visible = false
+        m.previousNextButton.displayEnabled = false
         m.cast.translation = [0, 699]
         m.cast.displayEnabled = true
         m.chevronFooter.direction = ""
@@ -315,9 +316,10 @@ sub applyCinematicLayout()
     m.mediaToolbar.translation = [0, 948]
     m.cast.translation = [0, 699]
     showCast = m.state.focusArea = "cast" and m.cast.hasItems = true
+    m.mediaShell.castVisible = showCast
     m.mediaShell.detailsVisible = showCast <> true
     m.mediaToolbar.visible = showCast <> true
-    m.previousNextButton.visible = m.state.layout.isFromLibrary = true
+    m.previousNextButton.displayEnabled = m.state.layout.isFromLibrary = true
     m.cast.displayEnabled = showCast
 
     if m.cast.hasItems <> true then
@@ -1136,16 +1138,19 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = "up" and m.state.focusArea = "toolbar" and m.previousNextButton.visible = true then
+    if key = "up" and m.state.focusArea = "toolbar" then
+        if focusMediaDescription() then return true
+        if m.previousNextButton.visible = true then focusLibraryBrowse()
+        return true
+    end if
+
+    if key = "up" and m.state.focusArea = "description" and m.previousNextButton.visible = true then
         focusLibraryBrowse()
         return true
     end if
 
-    if key = "up" and m.state.focusArea = "toolbar" then
-        return focusMediaDescription()
-    end if
-
     if key = "down" and m.state.focusArea = "libraryBrowse" then
+        if focusMediaDescription() then return true
         focusVideoToolbar()
         return true
     end if

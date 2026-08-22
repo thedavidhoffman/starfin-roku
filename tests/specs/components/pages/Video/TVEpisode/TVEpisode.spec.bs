@@ -77,6 +77,31 @@ namespace tests
             m.assertFalse(m.node.previousNextButton.hasNext)
         end function
 
+        @it("keeps episode navigation hidden when a reused page leaves cinematic mode")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.node.state.request = {
+                item: { Id: "second", Type: "Episode" }
+                playbackQueue: [{ itemId: "first" }, { itemId: "second" }]
+                playbackQueueIndex: 1
+                playbackQueueScope: "series"
+            }
+
+            'bs:disable-next-line 1140
+            updateEpisodeBrowseState()
+            m.assertTrue(m.node.previousNextButton.visible)
+
+            settings = {}
+            settings[SettingsStore.Key.MediaShellBackground] = "full-screen"
+            'bs:disable-next-line 1140
+            applyMediaShellBackgroundSetting(settings)
+            'bs:disable-next-line 1140
+            updateEpisodeBrowseState()
+
+            m.assertFalse(m.node.state.layout.isCinematic)
+            m.assertFalse(m.node.previousNextButton.visible)
+        end function
+
         @it("applies selected stream options to playback")
         function _()
             m.node.state.videoMode = "directPlay"
@@ -360,14 +385,22 @@ namespace tests
             m.assertEqual(m.node.state.focusArea, "cast")
         end function
 
-        @it("handles remote navigation between toolbar and episode browsing")
+        @it("routes up through a focusable description before episode browsing")
         function _()
+            description = m.node.mediaShell.findNode("overviewDescription")
+            description.canAcceptFocus = true
             m.node.previousNextButton.visible = true
             m.node.state.focusArea = "toolbar"
 
             'bs:disable-next-line 1140
             m.assertTrue(onKeyEvent("up", true))
+            m.assertEqual(m.node.state.focusArea, "description")
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("up", true))
             m.assertEqual(m.node.state.focusArea, "episodeBrowse")
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("down", true))
+            m.assertEqual(m.node.state.focusArea, "description")
             'bs:disable-next-line 1140
             m.assertTrue(onKeyEvent("down", true))
             m.assertEqual(m.node.state.focusArea, "toolbar")
@@ -375,6 +408,18 @@ namespace tests
             m.assertFalse(onKeyEvent("back", false))
             'bs:disable-next-line 1140
             m.assertTrue(onKeyEvent("back", true))
+        end function
+
+        @it("routes up directly to episode browsing when description cannot focus")
+        function _()
+            description = m.node.mediaShell.findNode("overviewDescription")
+            description.canAcceptFocus = false
+            m.node.previousNextButton.visible = true
+            m.node.state.focusArea = "toolbar"
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("up", true))
+            m.assertEqual(m.node.state.focusArea, "episodeBrowse")
         end function
 
     end class
