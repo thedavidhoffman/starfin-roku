@@ -5,6 +5,10 @@
 - https://github.com/rokudev/samples
 - https://developer.roku.com/en-au/docs/references/references-overview.md
 
+## User-owned files
+
+- Treat `.to-do.md` as user-owned scratch content. Do not modify it, and ignore its working-tree changes during status checks and code reviews unless the user explicitly asks to review or edit it.
+
 ## Roku XML style
 
 - Prefix literal XML color values with `0x`, such as `color="0xF3F7FBFF"`.
