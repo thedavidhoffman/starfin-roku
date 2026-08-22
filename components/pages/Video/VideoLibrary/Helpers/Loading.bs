@@ -94,8 +94,10 @@ sub onVideoLibraryResponse()
     if response.ok <> true then
         m.pageState.isLoading = false
         m.pageState.paging.requestInFlight = false
-        Spinner.Hide()
-        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load library."))
+        if m.pageState.cinematicBrowse.active <> true then
+            Spinner.Hide()
+            AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load library."))
+        end if
         return
     end if
     startIndex = Number.ToInteger(response.startIndex, -1)
@@ -127,6 +129,7 @@ sub onVideoLibraryResponse()
     else
         appendVideoLibraryPage(pageItems, startIndex)
     end if
+    publishCinematicBrowseState()
     if isDecadeFilterActive() then
         showDecadeFilterRow()
     end if
@@ -137,19 +140,21 @@ sub onVideoLibraryResponse()
         m.top.callFunc("specializationSyncState")
     end if
     updateTitleLabel(m.pageState.paging.totalCount)
-    AppStatus.ClearMessage()
-    if m.pageState.refocusBrowseByButtonAfterLoad = true then
-        m.pageState.refocusBrowseByButtonAfterLoad = false
-        focusBrowseByButton()
-    else if m.pageState.refocusSortButtonAfterLoad = true then
-        m.pageState.refocusSortButtonAfterLoad = false
-        focusSortButton()
-    else if focusPendingTarget() <> true then
-        if hasLibrarySpecialization() = false or m.top.callFunc("specializationActivate") <> true then
-            focusItemsIfActive()
+    if m.pageState.cinematicBrowse.active <> true then AppStatus.ClearMessage()
+    if m.pageState.cinematicBrowse.active <> true then
+        if m.pageState.refocusBrowseByButtonAfterLoad = true then
+            m.pageState.refocusBrowseByButtonAfterLoad = false
+            focusBrowseByButton()
+        else if m.pageState.refocusSortButtonAfterLoad = true then
+            m.pageState.refocusSortButtonAfterLoad = false
+            focusSortButton()
+        else if focusPendingTarget() <> true then
+            if hasLibrarySpecialization() = false or m.top.callFunc("specializationActivate") <> true then
+                focusItemsIfActive()
+            end if
         end if
     end if
-    Spinner.Hide()
+    if m.pageState.cinematicBrowse.active <> true then Spinner.Hide()
     requestNextVideoLibraryPageIfNeeded()
 end sub
 
@@ -252,6 +257,10 @@ end sub
 ' requestNextVideoLibraryPageIfNeeded
 '-------------------------------------------------------------------------------
 sub requestNextVideoLibraryPageIfNeeded()
+    if m.pageState.cinematicBrowse.active = true then
+        requestNextCinematicBrowsePageIfNeeded(m.pageState.cinematicBrowse.index)
+        return
+    end if
     if m.pageState.paging.hasMore <> true or m.pageState.paging.requestInFlight = true then
         return
     end if

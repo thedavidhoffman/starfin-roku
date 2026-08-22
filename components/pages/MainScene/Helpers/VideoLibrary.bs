@@ -37,6 +37,7 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
     if pageComponentName = "Playlists" then page.observeField("playbackSelected", "videoLibraryHandlePlaybackSelected")
     page.observeField("focusExitUp", "videoLibraryHandleFocusExitUp")
     page.observeField("thumbnailLayoutActive", "videoLibraryHandleThumbnailLayoutChanged")
+    page.observeField("cinematicBrowseStateChanged", "videoLibraryHandleCinematicBrowseStateChanged")
     page.settings = m.settings
     loadRequest = {
         server: m.session.server
@@ -180,7 +181,21 @@ sub videoLibraryHandleMovieSelected()
     selection = m.videoLibraryPage.selectedMovie
     if selection = invalid then return
     if m.videoLibraryPage <> invalid then m.videoLibraryPage.callFunc("deactivate")
-    movieShow(selection, false)
+    browseState = m.videoLibraryPage.callFunc("beginCinematicBrowse", Number.ToInteger(selection.libraryIndex, -1))
+    movieShow(selection, false, "library", browseState)
+end sub
+
+'-------------------------------------------------------------------------------
+' videoLibraryHandleCinematicBrowseStateChanged
+'-------------------------------------------------------------------------------
+sub videoLibraryHandleCinematicBrowseStateChanged()
+    if m.videoLibraryPage = invalid or m.moviePage = invalid then return
+
+    request = m.moviePage.loadRequest
+    if request = invalid or Format.SafeString(request.sourcePage, "") <> "library" then return
+
+    state = m.videoLibraryPage.cinematicBrowseStateChanged
+    if state <> invalid then m.moviePage.libraryBrowseState = state
 end sub
 
 '-------------------------------------------------------------------------------

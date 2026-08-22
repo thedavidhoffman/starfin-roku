@@ -12,7 +12,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' movieShow
 '-------------------------------------------------------------------------------
-sub movieShow(selection as object, shouldReset as boolean)
+sub movieShow(selection as object, shouldReset as boolean, sourcePage = "" as string, libraryBrowseState = invalid as dynamic)
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
 
@@ -25,6 +25,7 @@ sub movieShow(selection as object, shouldReset as boolean)
     page.observeField("themeRequested", "themeAudioHandleMovieRequested")
     page.observeField("watchedStateChanged", "movieHandleWatchedStateChanged")
     page.observeField("playbackProgressChanged", "movieHandlePlaybackProgressChanged")
+    page.observeField("libraryBrowseRequested", "movieHandleLibraryBrowseRequested")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -34,6 +35,8 @@ sub movieShow(selection as object, shouldReset as boolean)
         settings: m.settings
         playbackQueue: selection.playbackQueue
         playbackQueueIndex: selection.playbackQueueIndex
+        sourcePage: sourcePage
+        libraryBrowseState: libraryBrowseState
     }
 
     if shouldReset then resetDynamicPages()
@@ -44,6 +47,34 @@ sub movieShow(selection as object, shouldReset as boolean)
     m.homePage.visible = false
     m.header.visible = false
     page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' movieHandleLibraryBrowseRequested
+'-------------------------------------------------------------------------------
+sub movieHandleLibraryBrowseRequested()
+    if m.moviePage = invalid or m.videoLibraryPage = invalid then return
+
+    browseRequest = m.moviePage.libraryBrowseRequested
+    if browseRequest = invalid then return
+
+    targetIndex = Number.ToInteger(browseRequest.targetIndex, -1)
+    selection = m.videoLibraryPage.callFunc("selectCinematicBrowseIndex", targetIndex)
+    if selection = invalid then return
+
+    currentRequest = m.moviePage.loadRequest
+    if currentRequest = invalid then return
+
+    nextRequest = {}
+    for each key in currentRequest
+        nextRequest[key] = currentRequest[key]
+    end for
+    nextRequest.itemId = selection.itemId
+    nextRequest.item = selection.item
+    nextRequest.libraryBrowseState = selection
+
+    themeAudioStop()
+    m.moviePage.loadRequest = nextRequest
 end sub
 
 '-------------------------------------------------------------------------------

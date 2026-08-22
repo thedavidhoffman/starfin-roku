@@ -16,6 +16,7 @@ import "pkg:/source/AsyncLifecycle.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/Array.bs"
+import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -24,6 +25,7 @@ sub init()
     m.log = new Logger("Movie", m.global.logService)
     m.mediaShell = m.top.findNode("mediaShell")
     m.mediaToolbar = m.top.findNode("mediaToolbar")
+    m.previousNextButton = m.top.findNode("previousNextButton")
     m.streamOptions = m.top.findNode("streamOptions")
     m.cast = m.top.findNode("cast")
     m.chevronFooter = m.top.findNode("chevronFooter")
@@ -45,6 +47,8 @@ sub init()
     m.mediaToolbar.observeField("mediaInfoSelected", "onVideoToolbarMediaInfoSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
+    m.previousNextButton.observeField("previousSelected", "onPreviousLibraryItemSelected")
+    m.previousNextButton.observeField("nextSelected", "onNextLibraryItemSelected")
     m.streamOptions.observeField("overlayRequested", "onStreamOptionsOverlayRequested")
     m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
     m.streamOptions.observeField("selectedAudio", "onAudioOptionSelected")
@@ -67,6 +71,12 @@ sub init()
         focusArea: "toolbar"
         layout: {
             isCinematic: false
+            isFromLibrary: false
+        }
+        libraryBrowse: {
+            index: -1
+            loadedCount: 0
+            totalCount: 0
         }
         themeLookupActive: false
         lifecycle: AsyncLifecycle.Create()
@@ -81,6 +91,8 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.state.request = request
+    m.state.layout.isFromLibrary = request.sourcePage = "library" and request.libraryBrowseState <> invalid
+    applyLibraryBrowseState(request.libraryBrowseState)
     m.top.settings = request.settings
     applyMediaShellBackgroundSetting(request.settings)
     m.state.item = request.item
@@ -225,6 +237,8 @@ sub activate()
     AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.request, "itemId")
     if m.state.focusArea = "cast" and m.cast.hasItems = true then
         focusCast()
+    else if m.state.focusArea = "libraryBrowse" and m.previousNextButton.visible = true then
+        focusLibraryBrowse()
     else
         focusVideoToolbar()
     end if
@@ -290,6 +304,7 @@ sub applyCinematicLayout()
         m.mediaShell.detailsVisible = true
         m.mediaToolbar.translation = [0, 588]
         m.mediaToolbar.visible = true
+        m.previousNextButton.visible = false
         m.cast.translation = [0, 699]
         m.cast.displayEnabled = true
         m.chevronFooter.direction = ""
@@ -302,6 +317,7 @@ sub applyCinematicLayout()
     showCast = m.state.focusArea = "cast" and m.cast.hasItems = true
     m.mediaShell.detailsVisible = showCast <> true
     m.mediaToolbar.visible = showCast <> true
+    m.previousNextButton.visible = m.state.layout.isFromLibrary = true
     m.cast.displayEnabled = showCast
 
     if m.cast.hasItems <> true then
@@ -359,8 +375,21 @@ sub focusVideoToolbar()
     m.state.focusArea = "toolbar"
     applyCinematicLayout()
     m.cast.callFunc("deactivate")
+    m.previousNextButton.callFunc("deactivate")
     m.top.setFocus(true)
     m.mediaToolbar.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' focusLibraryBrowse
+'-------------------------------------------------------------------------------
+sub focusLibraryBrowse()
+    if m.previousNextButton.visible <> true then return
+
+    m.state.focusArea = "libraryBrowse"
+    m.mediaToolbar.callFunc("deactivate")
+    m.cast.callFunc("deactivate")
+    m.previousNextButton.callFunc("activate")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -371,6 +400,7 @@ function focusMediaDescription() as boolean
 
     m.state.focusArea = "description"
     m.mediaToolbar.callFunc("deactivate")
+    m.previousNextButton.callFunc("deactivate")
     m.cast.callFunc("deactivate")
     m.top.setFocus(true)
     return m.mediaShell.callFunc("focusDescription")
@@ -385,6 +415,7 @@ sub focusCast()
     m.state.focusArea = "cast"
     applyCinematicLayout()
     m.mediaToolbar.callFunc("deactivate")
+    m.previousNextButton.callFunc("deactivate")
     m.cast.callFunc("activate")
 end sub
 
@@ -393,6 +424,58 @@ end sub
 '-------------------------------------------------------------------------------
 sub onVideoToolbarFocusExitDown()
     focusCast()
+end sub
+
+'-------------------------------------------------------------------------------
+' onLibraryBrowseStateChanged
+'-------------------------------------------------------------------------------
+sub onLibraryBrowseStateChanged()
+    applyLibraryBrowseState(m.top.libraryBrowseState)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLibraryBrowseState
+'-------------------------------------------------------------------------------
+sub applyLibraryBrowseState(state as dynamic)
+    if state = invalid then
+        m.state.libraryBrowse.index = -1
+        m.state.libraryBrowse.loadedCount = 0
+        m.state.libraryBrowse.totalCount = 0
+    else
+        m.state.libraryBrowse.index = Number.ToInteger(state.index, -1)
+        m.state.libraryBrowse.loadedCount = Number.ToInteger(state.loadedCount, 0)
+        m.state.libraryBrowse.totalCount = Number.ToInteger(state.totalCount, m.state.libraryBrowse.loadedCount)
+    end if
+
+    index = m.state.libraryBrowse.index
+    m.previousNextButton.hasPrevious = index > 0
+    m.previousNextButton.hasNext = index >= 0 and index + 1 < m.state.libraryBrowse.loadedCount and index + 1 < m.state.libraryBrowse.totalCount
+    applyCinematicLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' onPreviousLibraryItemSelected
+'-------------------------------------------------------------------------------
+sub onPreviousLibraryItemSelected()
+    requestLibraryBrowseIndex(m.state.libraryBrowse.index - 1)
+end sub
+
+'-------------------------------------------------------------------------------
+' onNextLibraryItemSelected
+'-------------------------------------------------------------------------------
+sub onNextLibraryItemSelected()
+    requestLibraryBrowseIndex(m.state.libraryBrowse.index + 1)
+end sub
+
+'-------------------------------------------------------------------------------
+' requestLibraryBrowseIndex
+'-------------------------------------------------------------------------------
+sub requestLibraryBrowseIndex(targetIndex as integer)
+    if targetIndex < 0 or targetIndex >= m.state.libraryBrowse.loadedCount then return
+
+    m.top.libraryBrowseRequested = {
+        targetIndex: targetIndex
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1053,8 +1136,18 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
+    if key = "up" and m.state.focusArea = "toolbar" and m.previousNextButton.visible = true then
+        focusLibraryBrowse()
+        return true
+    end if
+
     if key = "up" and m.state.focusArea = "toolbar" then
         return focusMediaDescription()
+    end if
+
+    if key = "down" and m.state.focusArea = "libraryBrowse" then
+        focusVideoToolbar()
+        return true
     end if
 
     if key = "down" and m.state.focusArea = "description" then
@@ -1071,6 +1164,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
         onVideoToolbarPlaySelected()
         return true
     end if
+
+    if m.state.focusArea = "libraryBrowse" and (key = "left" or key = "right") then return true
 
     return false
 end function

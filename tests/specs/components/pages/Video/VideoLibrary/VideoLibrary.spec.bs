@@ -33,6 +33,33 @@ namespace tests
             m.assertInvalid(m.node.videoLibraryTask.request)
         end function
 
+        @it("requests another page when cinematic browsing reaches the last ten loaded items")
+        function _()
+            m.configurePaging(100, 100, 0)
+            m.node.pageState.paging.totalCount = 250
+
+            'bs:disable-next-line 1140
+            state = beginCinematicBrowse(90)
+
+            m.assertEqual(state.index, 90)
+            m.assertEqual(state.itemId, "90")
+            m.assertEqual(state.loadedCount, 100)
+            m.assertEqual(state.totalCount, 250)
+            m.assertTrue(m.node.pageState.cinematicBrowse.active)
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 100)
+        end function
+
+        @it("does not page before the cinematic browsing threshold")
+        function _()
+            m.configurePaging(100, 100, 0)
+
+            'bs:disable-next-line 1140
+            state = beginCinematicBrowse(89)
+
+            m.assertEqual(state.index, 89)
+            m.assertInvalid(m.node.videoLibraryTask.request)
+        end function
+
         @it("composes genre decade and starts-with request fields")
         function _()
             m.configurePaging(0, 0, 0)
@@ -233,7 +260,7 @@ namespace tests
         private sub configurePaging(itemCount as integer, nextStartIndex as integer, focusedIndex as integer)
             items = []
             for i = 0 to itemCount - 1
-                items.Push({ Id: i.ToStr() })
+                items.Push({ Id: i.ToStr(), Type: "Movie" })
             end for
             m.node.pageState.request = { libraryId: "library-1", server: "http://server", token: "token", userId: "user", includeItemTypes: "Movie" }
             m.node.pageState.allItems = items
@@ -241,6 +268,8 @@ namespace tests
             m.node.pageState.paging.requestInFlight = false
             m.node.pageState.paging.nextStartIndex = nextStartIndex
             m.node.pageState.paging.queryId = 7
+            m.node.pageState.cinematicBrowse.active = false
+            m.node.pageState.cinematicBrowse.index = -1
             m.node.itemsGrid = { itemFocused: focusedIndex, numColumns: 6 }
             m.node.videoLibraryTask = { control: "", request: invalid }
         end sub

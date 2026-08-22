@@ -26,6 +26,7 @@ sub onItemSelected()
     selection = {
         itemId: itemId
         item: item
+        libraryIndex: selected
     }
     if isPlayableMovie(item) then
         m.top.selectedMovie = selection
@@ -34,6 +35,84 @@ sub onItemSelected()
     else if isTVEpisode(item) then
         m.top.selectedEpisode = selection
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' beginCinematicBrowse
+'-------------------------------------------------------------------------------
+function beginCinematicBrowse(index as integer) as dynamic
+    if m.pageState.request = invalid then return invalid
+    if LCase(Format.SafeString(m.pageState.request.includeItemTypes, "")) <> "movie" then return invalid
+
+    m.pageState.cinematicBrowse.active = true
+    AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
+    return selectCinematicBrowseIndex(index)
+end function
+
+'-------------------------------------------------------------------------------
+' selectCinematicBrowseIndex
+'-------------------------------------------------------------------------------
+function selectCinematicBrowseIndex(index as integer) as dynamic
+    if index < 0 or index >= m.pageState.allItems.Count() then return invalid
+
+    item = m.pageState.allItems[index]
+    if isPlayableMovie(item) <> true then return invalid
+
+    m.pageState.cinematicBrowse.active = true
+    m.pageState.cinematicBrowse.index = index
+    if m.itemsGrid.content <> invalid and index < m.itemsGrid.content.getChildCount() then
+        m.itemsGrid.jumpToItem = index
+        m.itemsGrid.itemFocused = index
+    end if
+
+    requestNextCinematicBrowsePageIfNeeded(index)
+    return buildCinematicBrowseState()
+end function
+
+'-------------------------------------------------------------------------------
+' requestNextCinematicBrowsePageIfNeeded
+'-------------------------------------------------------------------------------
+sub requestNextCinematicBrowsePageIfNeeded(index as integer)
+    if m.pageState.paging.hasMore <> true or m.pageState.paging.requestInFlight = true then return
+
+    loadedCount = m.pageState.allItems.Count()
+    if loadedCount <= 0 or loadedCount - index > 10 then return
+
+    loadVideoLibraryPage(m.pageState.paging.nextStartIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' buildCinematicBrowseState
+'-------------------------------------------------------------------------------
+function buildCinematicBrowseState() as dynamic
+    index = m.pageState.cinematicBrowse.index
+    loadedCount = m.pageState.allItems.Count()
+    if index < 0 or index >= loadedCount then return invalid
+
+    item = m.pageState.allItems[index]
+    if isPlayableMovie(item) <> true then return invalid
+
+    totalCount = m.pageState.paging.totalCount
+    if totalCount < loadedCount then totalCount = loadedCount
+
+    return {
+        index: index
+        itemId: Format.SafeString(item.Id, "")
+        item: item
+        loadedCount: loadedCount
+        totalCount: totalCount
+        hasMore: m.pageState.paging.hasMore = true
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' publishCinematicBrowseState
+'-------------------------------------------------------------------------------
+sub publishCinematicBrowseState()
+    if m.pageState.cinematicBrowse.active <> true then return
+
+    state = buildCinematicBrowseState()
+    if state <> invalid then m.top.cinematicBrowseStateChanged = state
 end sub
 
 '-------------------------------------------------------------------------------
@@ -459,4 +538,3 @@ function openMediaActions() as boolean
     }
     return true
 end function
-
