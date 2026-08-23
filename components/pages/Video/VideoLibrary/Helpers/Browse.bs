@@ -366,7 +366,7 @@ sub updateTitleLabel(itemCount = invalid as dynamic)
     if request <> invalid then
         title = Format.SafeString(request.title, "Library")
     end if
-    startsWith = Format.SafeString(m.pageState.selectedStartsWith, "ALL")
+    startsWith = Format.SafeString(m.pageState.letterFilter.selected, "ALL")
     if startsWith <> "" and startsWith <> "ALL" then
         title = title + " (" + startsWith + ")"
     end if
@@ -374,13 +374,6 @@ sub updateTitleLabel(itemCount = invalid as dynamic)
         title = title + MediaMetadata.BulletSeparator() + Number.FormatWithThousandsSeparator(itemCount) + " items"
     end if
     m.titleLabel.text = title
-end sub
-
-'-------------------------------------------------------------------------------
-' updateAvailableLetters
-'-------------------------------------------------------------------------------
-sub updateAvailableLetters(items as object)
-    m.pageState.availableLetters = {}
 end sub
 
 '-------------------------------------------------------------------------------
@@ -412,12 +405,9 @@ function openLetterGrid() as boolean
         id: "letterGrid"
         componentName: "LetterGridDialog"
         openFunction: "openGrid"
-        closeFields: [
-            "closeRequested"
-            "letterSelected"
-        ]
-        availableLetters: m.pageState.availableLetters
-        selectedLetter: m.pageState.selectedStartsWith
+        closeFields: ["closeRequested"]
+        eventFields: ["letterSelected"]
+        selectedLetter: m.pageState.letterFilter.selected
         panelX: m.pageState.letterGridPanel.x
         panelY: m.pageState.letterGridPanel.y
     }
@@ -428,6 +418,7 @@ end function
 ' closeLetterGrid
 '-------------------------------------------------------------------------------
 sub closeLetterGrid(focusItems as boolean)
+    cancelPendingLetterSelection()
     wasOpen = m.pageState <> invalid and m.pageState.letterGridOpen = true
     if m.pageState <> invalid then
         m.pageState.letterGridOpen = false
@@ -450,13 +441,72 @@ sub selectLetter(letter as string)
     if letter = "" then
         return
     end if
-    if letter = m.pageState.selectedStartsWith then
+    if letter = m.pageState.letterFilter.pending then return
+    if letter = m.pageState.letterFilter.selected then
         closeLetterGrid(true)
         return
     end if
-    m.pageState.selectedStartsWith = letter
-    closeLetterGrid(false)
-    reloadVideoLibraryForSort("items")
+    beginPendingLetterSelection(letter)
+end sub
+
+'-------------------------------------------------------------------------------
+' beginPendingLetterSelection
+'-------------------------------------------------------------------------------
+sub beginPendingLetterSelection(letter as string)
+    m.pageState.letterFilter.pending = letter
+    if m.pageState.letterFilter.previousPaging = invalid then
+        m.pageState.letterFilter.previousPaging = {
+            nextStartIndex: m.pageState.paging.nextStartIndex
+            totalCount: m.pageState.paging.totalCount
+            hasMore: m.pageState.paging.hasMore
+        }
+    end if
+    m.pageState.isLoading = true
+    m.pageState.paging.nextStartIndex = 0
+    m.pageState.paging.requestInFlight = false
+    m.pageState.paging.queryId = m.pageState.paging.queryId + 1
+    updateLetterGridStatus("")
+    loadVideoLibraryPage(0)
+end sub
+
+'-------------------------------------------------------------------------------
+' restorePagingAfterRejectedLetterSelection
+'-------------------------------------------------------------------------------
+sub restorePagingAfterRejectedLetterSelection()
+    previousPaging = m.pageState.letterFilter.previousPaging
+    m.pageState.letterFilter.pending = ""
+    m.pageState.letterFilter.previousPaging = invalid
+    m.pageState.isLoading = false
+    m.pageState.paging.requestInFlight = false
+    if previousPaging = invalid then return
+
+    m.pageState.paging.nextStartIndex = previousPaging.nextStartIndex
+    m.pageState.paging.totalCount = previousPaging.totalCount
+    m.pageState.paging.hasMore = previousPaging.hasMore
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelPendingLetterSelection
+'-------------------------------------------------------------------------------
+sub cancelPendingLetterSelection()
+    if m.pageState = invalid or m.pageState.letterFilter.pending = "" then return
+
+    m.videoLibraryTask.control = "stop"
+    restorePagingAfterRejectedLetterSelection()
+    m.pageState.paging.queryId = m.pageState.paging.queryId + 1
+end sub
+
+'-------------------------------------------------------------------------------
+' updateLetterGridStatus
+'-------------------------------------------------------------------------------
+sub updateLetterGridStatus(statusText as string)
+    if m.pageState.letterGridOpen <> true then return
+
+    m.top.letterGridRequested = {
+        id: "letterGrid"
+        action: "update"
+        statusText: statusText
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -541,7 +591,7 @@ function applySortSelection(selection as object) as boolean
         return false
     end if
     if selectedSortKey <> Format.SafeString(m.pageState.selectedSortKey, "") then
-        m.pageState.selectedStartsWith = "ALL"
+        m.pageState.letterFilter.selected = "ALL"
     end if
     if selectedSortKey = "Favorites" then
         if isFavoriteBrowseActive() then

@@ -4,6 +4,22 @@ namespace tests
     @suite("VideoLibrary component")
     class VideoLibraryTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.itemsGrid = m.node.top.findNode("itemsGrid")
+            m.node.filterButtonRow = m.node.top.findNode("filterButtonRow")
+            m.node.videoLibraryTask = m.node.top.findNode("videoLibraryTask")
+            m.node.pageState.letterFilter.selected = "ALL"
+            m.node.pageState.letterFilter.pending = ""
+            m.node.pageState.letterFilter.previousPaging = invalid
+
+            scene = m.node.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                loadingSpinnerNode = CreateObject("roSGNode", "Spinner")
+                loadingSpinnerNode.id = "loadingSpinner"
+                scene.appendChild(loadingSpinnerNode)
+            end if
+        end function
+
         @describe("jumbo layout")
 
         @it("lays out two jumbo items across the screen")
@@ -11,7 +27,7 @@ namespace tests
             'bs:disable-next-line 1140
             applyGridLayout("jumbo")
 
-            m.assertEqual(m.node.itemsGrid.itemSize, [936, 591])
+            m.assertEqual(m.node.itemsGrid.itemSize, [936.0, 591.0])
             m.assertEqual(m.node.itemsGrid.numColumns, 2)
             m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/jumbo-focus-936x591.png")
         end function
@@ -95,7 +111,7 @@ namespace tests
             m.configurePaging(0, 0, 0)
             m.node.pageState.activeFilterType = "Genre"
             m.node.pageState.selectedGenre = "Drama"
-            m.node.pageState.selectedStartsWith = "B"
+            m.node.pageState.letterFilter.selected = "B"
 
             'bs:disable-next-line 1140
             request = buildVideoLibraryPageRequest(100)
@@ -122,12 +138,8 @@ namespace tests
             m.configurePaging(12, 12, 0)
             m.node.pageState.activeFilterType = "Genre"
             m.node.pageState.selectedGenre = "Drama"
-            m.node.filterButtonRow = {
-                filterSelected: { type: "Genre", value: "Comedy" }
-                selectedValue: "Drama"
-                setFocus: sub(value as boolean)
-                end sub
-            }
+            m.node.filterButtonRow.filterSelected = { type: "Genre", value: "Comedy" }
+            m.node.filterButtonRow.selectedValue = "Drama"
 
             'bs:disable-next-line 1140
             onFilterButtonRowSelected()
@@ -230,7 +242,7 @@ namespace tests
         @it("adds the active starts-with bucket to the counted page title")
         function _()
             m.node.pageState.request = { title: "Movies" }
-            m.node.pageState.selectedStartsWith = "M"
+            m.node.pageState.letterFilter.selected = "M"
 
             'bs:disable-next-line 1140
             updateTitleLabel(123)
@@ -242,12 +254,12 @@ namespace tests
         function _()
             m.configurePaging(12, 12, 0)
             m.node.pageState.selectedSortKey = "SortName"
-            m.node.pageState.selectedStartsWith = "M"
+            m.node.pageState.letterFilter.selected = "M"
 
             'bs:disable-next-line 1140
             applySortSelection({ optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "Ascending", label: "Release Date" })
 
-            m.assertEqual(m.node.pageState.selectedStartsWith, "ALL")
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
             m.assertEqual(m.node.videoLibraryTask.request.startsWith, "ALL")
         end function
 
@@ -255,12 +267,119 @@ namespace tests
         function _()
             m.configurePaging(12, 12, 0)
             m.node.pageState.selectedSortKey = "SortName"
-            m.node.pageState.selectedStartsWith = "M"
+            m.node.pageState.letterFilter.selected = "M"
 
             'bs:disable-next-line 1140
             applySortSelection({ optionKey: "SortName", sortKey: "SortName", sortOrder: "Ascending", label: "Title" })
 
-            m.assertEqual(m.node.pageState.selectedStartsWith, "M")
+            m.assertEqual(m.node.pageState.letterFilter.selected, "M")
+        end function
+
+        @it("keeps the current library intact when a letter has no matches")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.letterGridOpen = true
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "library-1")
+
+            'bs:disable-next-line 1140
+            beginPendingLetterSelection("X")
+            m.assertEqual(m.node.top.letterGridRequested.statusText, "")
+            m.node.videoLibraryTask.response = {
+                ok: true
+                action: "videoLibrary"
+                libraryId: "library-1"
+                queryId: 8
+                startIndex: 0
+                payload: { Items: [] }
+                nextStartIndex: 0
+                totalRecordCount: 0
+                hasMore: false
+            }
+
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 12)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+            m.assertEqual(m.node.pageState.letterFilter.pending, "")
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 12)
+            m.assertEqual(m.node.top.letterGridRequested.statusText, "No titles start with X.")
+        end function
+
+        @it("commits a letter and replaces the library when matches are returned")
+        function _()
+            initialItems = [{ Id: "old", Type: "Movie", Name: "Old Movie" }]
+            m.node.pageState.request = {
+                libraryId: "library-1"
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                includeItemTypes: "Movie"
+                title: "Movies"
+            }
+            m.node.pageState.allItems = initialItems
+            m.node.pageState.paging.nextStartIndex = 1
+            m.node.pageState.paging.totalCount = 1
+            m.node.pageState.paging.hasMore = false
+            m.node.pageState.paging.queryId = 7
+            m.node.pageState.letterGridOpen = true
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "library-1")
+            'bs:disable-next-line 1140
+            renderItems(initialItems)
+            m.node.videoLibraryTask = { control: "", request: invalid, response: invalid }
+
+            'bs:disable-next-line 1140
+            beginPendingLetterSelection("X")
+            m.node.videoLibraryTask.response = {
+                ok: true
+                action: "videoLibrary"
+                libraryId: "library-1"
+                queryId: 8
+                startIndex: 0
+                payload: { Items: [{ Id: "new", Type: "Movie", Name: "Xylophone" }] }
+                nextStartIndex: 1
+                totalRecordCount: 1
+                hasMore: false
+            }
+
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+
+            m.assertEqual(m.node.pageState.letterFilter.selected, "X")
+            m.assertEqual(m.node.pageState.letterFilter.pending, "")
+            m.assertEqual(m.node.pageState.allItems.Count(), 1)
+            m.assertEqual(m.node.pageState.allItems[0].Id, "new")
+            m.assertEqual(m.node.itemsGrid.content.getChildCount(), 1)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 1)
+            m.assertEqual(m.node.pageState.paging.totalCount, 1)
+            m.assertFalse(m.node.pageState.letterGridOpen)
+            m.assertEqual(m.node.top.letterGridRequested.action, "close")
+            m.assertEqual(m.node.titleLabel.text, "Movies (X)" + MediaMetadata.BulletSeparator() + "1 items")
+        end function
+
+        @it("cancels a pending letter and restores the current library state")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.letterFilter.selected = "M"
+            m.node.pageState.paging.totalCount = 40
+            m.node.pageState.letterGridOpen = true
+
+            'bs:disable-next-line 1140
+            beginPendingLetterSelection("X")
+            'bs:disable-next-line 1140
+            closeLetterGrid(false)
+
+            m.assertEqual(m.node.videoLibraryTask.control, "stop")
+            m.assertEqual(m.node.pageState.paging.queryId, 9)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 12)
+            m.assertEqual(m.node.pageState.paging.totalCount, 40)
+            m.assertTrue(m.node.pageState.paging.hasMore)
+            m.assertEqual(m.node.pageState.allItems.Count(), 12)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "M")
+            m.assertEqual(m.node.pageState.letterFilter.pending, "")
+            m.assertInvalid(m.node.pageState.letterFilter.previousPaging)
+            m.assertFalse(m.node.pageState.letterGridOpen)
+            m.assertEqual(m.node.top.letterGridRequested.action, "close")
         end function
 
         @it("focuses Browse By when an empty result hides the grid")

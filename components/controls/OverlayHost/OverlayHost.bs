@@ -29,6 +29,10 @@ function openOverlay(request as dynamic) as dynamic
     for each closeField in closeFields
         if closeField <> invalid and closeField <> "" then overlay.observeField(closeField, "onOverlayClosed")
     end for
+    eventFields = getEventFields(request)
+    for each eventField in eventFields
+        if eventField <> invalid and eventField <> "" then overlay.observeField(eventField, "onOverlayEventRaised")
+    end for
 
     m.top.appendChild(overlay)
     m.activeOverlay = overlay
@@ -39,6 +43,17 @@ function openOverlay(request as dynamic) as dynamic
 
     return overlay
 end function
+
+'-------------------------------------------------------------------------------
+' updateOverlay
+'-------------------------------------------------------------------------------
+sub updateOverlay(request as dynamic)
+    if m.activeOverlay = invalid or request = invalid then return
+    if m.activeRequest = invalid then return
+    if Format.SafeString(request.id, "") <> Format.SafeString(m.activeRequest.id, "") then return
+
+    applyOverlayRequestFields(m.activeOverlay, request)
+end sub
 
 '-------------------------------------------------------------------------------
 ' applyOverlayRequestFields
@@ -106,10 +121,10 @@ sub applyOverlayRequestFields(overlay as object, request as object)
 
     if requestId <> "letterGrid" then return
 
-    overlay.availableLetters = request.availableLetters
-    overlay.activeLetter = Format.SafeString(request.selectedLetter, "ALL")
-    overlay.panelX = request.panelX
-    overlay.panelY = request.panelY
+    if request.selectedLetter <> invalid then overlay.activeLetter = Format.SafeString(request.selectedLetter, "ALL")
+    if request.panelX <> invalid then overlay.panelX = request.panelX
+    if request.panelY <> invalid then overlay.panelY = request.panelY
+    if request.statusText <> invalid then overlay.statusText = request.statusText
 end sub
 
 '-------------------------------------------------------------------------------
@@ -118,6 +133,15 @@ end sub
 function getCloseFields(request as dynamic) as object
     if request <> invalid and request.closeFields <> invalid then return request.closeFields
     if request <> invalid and request.closeField <> invalid then return [request.closeField]
+
+    return []
+end function
+
+'-------------------------------------------------------------------------------
+' getEventFields
+'-------------------------------------------------------------------------------
+function getEventFields(request as dynamic) as object
+    if request <> invalid and request.eventFields <> invalid then return request.eventFields
 
     return []
 end function
@@ -143,5 +167,19 @@ sub onOverlayClosed()
     m.top.closed = {
         overlay: closedOverlay
         request: closedRequest
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onOverlayEventRaised
+'-------------------------------------------------------------------------------
+sub onOverlayEventRaised(event as object)
+    if m.activeOverlay = invalid or m.activeRequest = invalid then return
+
+    field = event.getField()
+    m.top.eventRaised = {
+        field: field
+        value: m.activeOverlay[field]
+        request: m.activeRequest
     }
 end sub

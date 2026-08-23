@@ -63,7 +63,8 @@ function buildVideoLibraryPageRequest(startIndex as integer) as dynamic
     end for
     request.pageStartIndex = startIndex
     request.queryId = m.pageState.paging.queryId
-    request.startsWith = m.pageState.selectedStartsWith
+    request.startsWith = m.pageState.letterFilter.selected
+    if m.pageState.letterFilter.pending <> "" then request.startsWith = m.pageState.letterFilter.pending
     request.genre = ""
     request.years = []
     if isGenreFilterActive() then
@@ -94,6 +95,12 @@ sub onVideoLibraryResponse()
     if response.ok <> true then
         m.pageState.isLoading = false
         m.pageState.paging.requestInFlight = false
+        if m.pageState.letterFilter.pending <> "" then
+            rejectedLetter = m.pageState.letterFilter.pending
+            restorePagingAfterRejectedLetterSelection()
+            updateLetterGridStatus("Unable to load titles starting with " + rejectedLetter + ".")
+            return
+        end if
         if m.pageState.movieLibraryBrowse.active <> true then
             Spinner.Hide()
             AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load library."))
@@ -108,6 +115,18 @@ sub onVideoLibraryResponse()
     m.pageState.isLoading = false
     m.pageState.paging.requestInFlight = false
     pageItems = getItemsFromPayload(response.payload)
+    if startIndex = 0 and m.pageState.letterFilter.pending <> "" and pageItems.Count() = 0 then
+        rejectedLetter = m.pageState.letterFilter.pending
+        restorePagingAfterRejectedLetterSelection()
+        updateLetterGridStatus("No titles start with " + rejectedLetter + ".")
+        return
+    end if
+    if startIndex = 0 and m.pageState.letterFilter.pending <> "" then
+        m.pageState.letterFilter.selected = m.pageState.letterFilter.pending
+        m.pageState.letterFilter.pending = ""
+        m.pageState.letterFilter.previousPaging = invalid
+        closeLetterGrid(false)
+    end if
     if startIndex = 0 then
         m.pageState.allItems = []
     end if

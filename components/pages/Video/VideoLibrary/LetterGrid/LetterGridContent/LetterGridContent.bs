@@ -6,6 +6,7 @@ import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 sub init()
     m.lettersGroup = m.top.findNode("lettersGroup")
+    m.statusLabel = m.top.findNode("statusLabel")
     m.letterItems = []
     m.focusState = {
         focusedIndex: 0
@@ -15,6 +16,13 @@ sub init()
         letterCount: 28
     }
     renderLetters()
+end sub
+
+'-------------------------------------------------------------------------------
+' onStatusTextChanged
+'-------------------------------------------------------------------------------
+sub onStatusTextChanged()
+    m.statusLabel.text = m.top.statusText
 end sub
 
 '-------------------------------------------------------------------------------
@@ -35,12 +43,9 @@ sub renderLetters()
         itemContent = CreateObject("roSGNode", "ContentNode")
         itemContent.title = letter
         item.itemContent = itemContent
-        item.isAvailable = true
         item.itemHasFocus = false
         m.letterItems.Push(item)
     end for
-
-    applyAvailableLetters()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -53,30 +58,6 @@ function getVisibleLetters() as object
     end for
     return letters
 end function
-
-'-------------------------------------------------------------------------------
-' onAvailableLettersChanged
-'-------------------------------------------------------------------------------
-sub onAvailableLettersChanged()
-    applyAvailableLetters()
-end sub
-
-'-------------------------------------------------------------------------------
-' applyAvailableLetters
-'-------------------------------------------------------------------------------
-sub applyAvailableLetters()
-    availableLetters = m.top.availableLetters
-    if availableLetters = invalid then return
-    for each item in m.letterItems
-        if item = invalid or item.itemContent = invalid then continue for
-
-        letter = Format.SafeString(item.itemContent.title, "")
-        item.isAvailable = true
-    end for
-
-    ensureFocusedLetterAvailable()
-    updateLetterFocus()
-end sub
 
 '-------------------------------------------------------------------------------
 ' getItemTranslation
@@ -97,7 +78,6 @@ end function
 sub focusLetters()
     m.lettersGroup.setFocus(true)
     focusActiveLetter()
-    ensureFocusedLetterAvailable()
     updateLetterFocus()
 end sub
 
@@ -142,7 +122,8 @@ function moveFocus(offset as integer) as boolean
     if Abs(offset) = m.focusState.columnCount then
         nextIndex = findVerticalIndex(m.focusState.focusedIndex, offset > 0)
     else
-        nextIndex = findAvailableIndexByOffset(m.focusState.focusedIndex, offset)
+        nextIndex = m.focusState.focusedIndex + offset
+        if nextIndex < 0 or nextIndex >= m.focusState.letterCount then nextIndex = -1
     end if
     if nextIndex < 0 then return true
 
@@ -175,56 +156,6 @@ function getLogicalSlot(index as integer) as integer
 end function
 
 '-------------------------------------------------------------------------------
-' ensureFocusedLetterAvailable
-'-------------------------------------------------------------------------------
-sub ensureFocusedLetterAvailable()
-    if isLetterIndexAvailable(m.focusState.focusedIndex) then return
-
-    firstAvailableIndex = findFirstAvailableIndex()
-    if firstAvailableIndex >= 0 then
-        m.focusState.focusedIndex = firstAvailableIndex
-    else
-        m.focusState.focusedIndex = 0
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' findFirstAvailableIndex
-'-------------------------------------------------------------------------------
-function findFirstAvailableIndex() as integer
-    for i = 0 to m.letterItems.Count() - 1
-        if isLetterIndexAvailable(i) then return i
-    end for
-
-    return -1
-end function
-
-'-------------------------------------------------------------------------------
-' findAvailableIndexByOffset
-'-------------------------------------------------------------------------------
-function findAvailableIndexByOffset(startIndex as integer, offset as integer) as integer
-    if offset = 0 then return -1
-
-    index = startIndex + offset
-    while index >= 0 and index < m.focusState.letterCount
-        if isLetterIndexAvailable(index) then return index
-        index = index + offset
-    end while
-
-    return -1
-end function
-
-'-------------------------------------------------------------------------------
-' isLetterIndexAvailable
-'-------------------------------------------------------------------------------
-function isLetterIndexAvailable(index as integer) as boolean
-    if index < 0 or index >= m.letterItems.Count() then return false
-
-    item = m.letterItems[index]
-    return item <> invalid and item.isAvailable = true
-end function
-
-'-------------------------------------------------------------------------------
 ' selectFocusedLetter
 '-------------------------------------------------------------------------------
 function selectFocusedLetter() as boolean
@@ -235,7 +166,6 @@ function selectFocusedLetter() as boolean
 
     letter = Format.SafeString(item.itemContent.title, "")
     if letter = "" then return false
-    if item.isAvailable <> true then return true
 
     m.top.selectedLetter = letter
     m.top.letterSelected = letter
