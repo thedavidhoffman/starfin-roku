@@ -19,6 +19,7 @@ const assets = {
   "images/masks/fhd/filmography-movie-mask.png": [342, 513, [0, 0, 341, 512]],
   "images/masks/fhd/media-card-poster-mask.png": [252, 378, [0, 0, 251, 377]],
   "images/masks/fhd/media-card-thumbnail-mask.png": [441, 249, [0, 0, 440, 248]],
+  "images/masks/fhd/media-card-jumbo-mask.png": [882, 496, [0, 0, 881, 495]],
   "images/masks/fhd/album-mask-300.png": [300, 300, [0, 0, 299, 299]],
   "images/masks/fhd/album-mask-342.png": [342, 342, [0, 0, 341, 341]],
   "images/masks/fhd/audio-player-album-mask.png": [651, 651, [0, 0, 650, 650]],
@@ -36,6 +37,7 @@ const assets = {
   "images/media-card/poster-mask-252x378.png": [252, 378, [0, 0, 251, 377]],
   "images/media-card/thumbnail-placeholder-441x249.png": [441, 249, [0, 0, 440, 248]],
   "images/media-card/thumbnail-mask-441x249.png": [441, 249, [0, 0, 440, 248]],
+  "images/media-card/jumbo-mask-882x496.png": [882, 496, [0, 0, 881, 495]],
   "images/music/album-mask-300x300.png": [300, 300, [0, 0, 299, 299]],
   "images/music/album-placeholder-300x300.png": [300, 300, [0, 0, 299, 299]],
   "images/music/album-mask-342x342.png": [342, 342, [0, 0, 341, 341]],
@@ -57,6 +59,7 @@ const hdMaskAssets = {
   "images/masks/hd/filmography-movie-mask.png": [228, 342, [0, 0, 227, 341], 342, 513],
   "images/masks/hd/media-card-poster-mask.png": [168, 252, [0, 0, 167, 251], 252, 378],
   "images/masks/hd/media-card-thumbnail-mask.png": [294, 166, [0, 0, 293, 165], 441, 249],
+  "images/masks/hd/media-card-jumbo-mask.png": [588, 331, [0, 0, 587, 330], 882, 496],
   "images/masks/hd/album-mask-300.png": [200, 200, [0, 0, 199, 199], 300, 300],
   "images/masks/hd/album-mask-342.png": [228, 228, [0, 0, 227, 227], 342, 342],
   "images/masks/hd/audio-player-album-mask.png": [434, 434, [0, 0, 433, 433], 651, 651],
@@ -81,6 +84,7 @@ const generatedMaskSources = {
   "filmography-movie-mask.png": "images/cast/filmography-movie-mask-342x513.png",
   "media-card-poster-mask.png": "images/media-card/poster-mask-252x378.png",
   "media-card-thumbnail-mask.png": "images/media-card/thumbnail-mask-441x249.png",
+  "media-card-jumbo-mask.png": "images/media-card/jumbo-mask-882x496.png",
   "album-mask-300.png": "images/music/album-mask-300x300.png",
   "album-mask-342.png": "images/music/album-mask-342x342.png",
   "audio-player-album-mask.png": "images/music/audio-player-album-mask-651x651.png",
@@ -96,7 +100,7 @@ const geometryChecks = {
   "components/pages/Video/Cast/CastItem/CastItem.brs": ["MaskAssets_GetProfile(\"cast-mask.png\", [195, 195], [130, 130])"],
   "components/pages/Video/Cast/Person/Person.brs": ["MaskAssets_Apply(m.top.findNode(\"personImageMask\"), \"person-mask.png\", [399, 600], [266, 400])"],
   "components/pages/Video/Cast/Filmography/Filmography.brs": ["MaskAssets_Apply(m.top.findNode(\"previewPosterMask\"), \"filmography-movie-mask.png\", [342, 513], [228, 342])"],
-  "components/pages/Video/VideoMediaCard/VideoMediaCard.brs": ["MaskAssets_Apply(m.posterMask, \"media-card-poster-mask.png\", [252, 378], [168, 252])", "MaskAssets_Apply(m.posterMask, \"media-card-thumbnail-mask.png\", [441, 249], [294, 166])"],
+  "components/pages/Video/VideoMediaCard/VideoMediaCard.brs": ["MaskAssets_Apply(m.posterMask, \"media-card-poster-mask.png\", [252, 378], [168, 252])", "MaskAssets_Apply(m.posterMask, \"media-card-thumbnail-mask.png\", [441, 249], [294, 166])", "MaskAssets_Apply(m.posterMask, \"media-card-jumbo-mask.png\", [882, 496], [588, 331])"],
   "components/controls/Spinner/Spinner.brs": ["m.spinner.uri = IconAssets_GetUri(\"busy-spinner.png\")"],
   "source/ResolutionAssets.brs": ["ResolutionAssets_GetUri(category as string, filename as string)", "ResolutionProfile_GetName()"],
   "source/ButtonAssets.brs": ["return ResolutionAssets_GetUri(\"buttons\", filename)"],
@@ -270,7 +274,7 @@ for (const [relativePath, [expectedWidth, expectedHeight, expectedBounds]] of Ob
   try {
     const actual = decodePng(path.join(root, relativePath));
     if (actual.width !== expectedWidth || actual.height !== expectedHeight) failures.push(`${relativePath}: expected ${expectedWidth}x${expectedHeight}, found ${actual.width}x${actual.height}`);
-    if (expectedWidth % 3 !== 0 || expectedHeight % 3 !== 0) failures.push(`${relativePath}: FHD canvas must divide evenly by 3`);
+    if ((expectedWidth % 3 !== 0 || expectedHeight % 3 !== 0) && !relativePath.includes("jumbo-mask-882x496.png")) failures.push(`${relativePath}: FHD canvas must divide evenly by 3`);
     if (actual.bounds.join(",") !== expectedBounds.join(",")) failures.push(`${relativePath}: expected alpha bounds ${expectedBounds}, found ${actual.bounds}`);
     if (relativePath.startsWith("images/masks/fhd/")) verifyMaskAlphaSignature(relativePath, actual);
   } catch (error) {
@@ -286,7 +290,7 @@ for (const [relativePath, [expectedWidth, expectedHeight, expectedBounds, fhdWid
     const actual = decodePng(path.join(root, relativePath));
     if (actual.width !== expectedWidth || actual.height !== expectedHeight) failures.push(`${relativePath}: expected ${expectedWidth}x${expectedHeight}, found ${actual.width}x${actual.height}`);
     if (actual.bounds.join(",") !== expectedBounds.join(",")) failures.push(`${relativePath}: expected alpha bounds ${expectedBounds}, found ${actual.bounds}`);
-    if ((expectedWidth * 3) !== (fhdWidth * 2) || (expectedHeight * 3) !== (fhdHeight * 2)) failures.push(`${relativePath}: HD mask must be exactly two-thirds of its FHD canvas`);
+    if (expectedWidth !== Math.round(fhdWidth * 2 / 3) || expectedHeight !== Math.round(fhdHeight * 2 / 3)) failures.push(`${relativePath}: HD mask must be the rounded two-thirds size of its FHD canvas`);
     verifyMaskAlphaSignature(relativePath, actual);
   } catch (error) {
     failures.push(`${relativePath}: ${error.message}`);

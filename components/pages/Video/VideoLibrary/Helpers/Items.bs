@@ -38,41 +38,41 @@ sub onItemSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' beginCinematicBrowse
+' beginMovieLibraryBrowse
 '-------------------------------------------------------------------------------
-function beginCinematicBrowse(index as integer) as dynamic
+function beginMovieLibraryBrowse(index as integer) as dynamic
     if m.pageState.request = invalid then return invalid
     if LCase(Format.SafeString(m.pageState.request.includeItemTypes, "")) <> "movie" then return invalid
 
-    m.pageState.cinematicBrowse.active = true
+    m.pageState.movieLibraryBrowse.active = true
     AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
-    return selectCinematicBrowseIndex(index)
+    return selectMovieLibraryBrowseIndex(index)
 end function
 
 '-------------------------------------------------------------------------------
-' selectCinematicBrowseIndex
+' selectMovieLibraryBrowseIndex
 '-------------------------------------------------------------------------------
-function selectCinematicBrowseIndex(index as integer) as dynamic
+function selectMovieLibraryBrowseIndex(index as integer) as dynamic
     if index < 0 or index >= m.pageState.allItems.Count() then return invalid
 
     item = m.pageState.allItems[index]
     if isPlayableMovie(item) <> true then return invalid
 
-    m.pageState.cinematicBrowse.active = true
-    m.pageState.cinematicBrowse.index = index
+    m.pageState.movieLibraryBrowse.active = true
+    m.pageState.movieLibraryBrowse.index = index
     if m.itemsGrid.content <> invalid and index < m.itemsGrid.content.getChildCount() then
         m.itemsGrid.jumpToItem = index
         m.itemsGrid.itemFocused = index
     end if
 
-    requestNextCinematicBrowsePageIfNeeded(index)
-    return buildCinematicBrowseState()
+    requestNextMovieLibraryBrowsePageIfNeeded(index)
+    return buildMovieLibraryBrowseState()
 end function
 
 '-------------------------------------------------------------------------------
-' requestNextCinematicBrowsePageIfNeeded
+' requestNextMovieLibraryBrowsePageIfNeeded
 '-------------------------------------------------------------------------------
-sub requestNextCinematicBrowsePageIfNeeded(index as integer)
+sub requestNextMovieLibraryBrowsePageIfNeeded(index as integer)
     if m.pageState.paging.hasMore <> true or m.pageState.paging.requestInFlight = true then return
 
     loadedCount = m.pageState.allItems.Count()
@@ -82,10 +82,10 @@ sub requestNextCinematicBrowsePageIfNeeded(index as integer)
 end sub
 
 '-------------------------------------------------------------------------------
-' buildCinematicBrowseState
+' buildMovieLibraryBrowseState
 '-------------------------------------------------------------------------------
-function buildCinematicBrowseState() as dynamic
-    index = m.pageState.cinematicBrowse.index
+function buildMovieLibraryBrowseState() as dynamic
+    index = m.pageState.movieLibraryBrowse.index
     loadedCount = m.pageState.allItems.Count()
     if index < 0 or index >= loadedCount then return invalid
 
@@ -106,13 +106,13 @@ function buildCinematicBrowseState() as dynamic
 end function
 
 '-------------------------------------------------------------------------------
-' publishCinematicBrowseState
+' publishMovieLibraryBrowseState
 '-------------------------------------------------------------------------------
-sub publishCinematicBrowseState()
-    if m.pageState.cinematicBrowse.active <> true then return
+sub publishMovieLibraryBrowseState()
+    if m.pageState.movieLibraryBrowse.active <> true then return
 
-    state = buildCinematicBrowseState()
-    if state <> invalid then m.top.cinematicBrowseStateChanged = state
+    state = buildMovieLibraryBrowseState()
+    if state <> invalid then m.top.movieLibraryBrowseStateChanged = state
 end sub
 
 '-------------------------------------------------------------------------------
@@ -343,9 +343,21 @@ function createVideoLibraryItemNode(item as dynamic) as dynamic
     node.HDPosterUrl = getItemImageUrl(item, imageAspect)
     node.AddFields({
         imageAspect: imageAspect
+        logoUrl: getItemLogoUrl(item, imageAspect)
         raw: item
     })
     return node
+end function
+
+'-------------------------------------------------------------------------------
+' getItemLogoUrl
+'-------------------------------------------------------------------------------
+function getItemLogoUrl(item as dynamic, imageAspect as string) as string
+    if imageAspect <> "jumbo" then return ""
+    if Arrays.IsAssocArray(item) = false then return ""
+    itemId = Format.SafeString(item.Id, "")
+    if itemId = "" then return ""
+    return getImageUrlForType(itemId, item, "Logo", 360, 140)
 end function
 
 '-------------------------------------------------------------------------------
@@ -405,6 +417,13 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
         end if
         return getImageUrlForType(itemId, item, "Primary", 441, 249)
     end if
+    if imageAspect = "jumbo" then
+        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 882, 496)
+        if imageUrl <> "" then return imageUrl
+        imageUrl = getImageUrlForType(itemId, item, "Thumb", 882, 496)
+        if imageUrl <> "" then return imageUrl
+        return getImageUrlForType(itemId, item, "Primary", 882, 496)
+    end if
     return getImageUrlForType(itemId, item, "Primary", 252, 378)
 end function
 
@@ -445,6 +464,9 @@ function getImageTag(item as dynamic, imageType as string) as string
     if imageType = "Thumb" and item.ImageTags.Thumb <> invalid then
         return item.ImageTags.Thumb
     end if
+    if imageType = "Logo" and item.ImageTags.Logo <> invalid then
+        return item.ImageTags.Logo
+    end if
     return ""
 end function
 
@@ -467,7 +489,9 @@ function getVideoLibraryImageAspect() as string
     else if collectionType = "collection" then
         settingKey = "collection-items-image-type"
     end if
-    if LCase(settings[settingKey]) = "thumbnail" then
+    settingValue = LCase(Format.SafeString(settings[settingKey], "poster"))
+    if settingValue = "jumbo" then return "jumbo"
+    if settingValue = "thumbnail" then
         return "wide"
     end if
     return "poster"

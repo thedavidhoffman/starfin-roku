@@ -4,6 +4,16 @@
 // after the desired outline is placed around the visible image rectangle.
 export const focusGeometry = [
   {
+    name: "video-library-jumbo-grid",
+    asset: "images/library/jumbo-focus-936x591.png",
+    owner: "components/pages/Video/VideoLibrary/VideoLibrary.xml",
+    surface: "MarkupGrid",
+    canvas: [936, 591],
+    image: [27, 0, 882, 496],
+    outline: [0, 0, 0, 0],
+    anchorCompensation: [0, 0, 0, 0],
+  },
+  {
     name: "cast-row",
     asset: "images/cast/cast-focus-246x264.png",
     owner: "components/pages/Video/Cast/Cast/Cast.xml",

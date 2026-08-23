@@ -14,10 +14,11 @@ sub init()
     m.contentGroup = m.top.findNode("contentGroup")
     m.posterMask = m.top.findNode("posterMask")
     m.poster = m.top.findNode("poster")
+    m.titleLogo = m.top.findNode("titleLogo")
     m.progressBar = m.top.findNode("progressBar")
     m.watchedIndicator = m.top.findNode("watchedIndicator")
     m.title = m.top.findNode("title")
-    m.subtitle = m.top.findNode("subtitle")
+    m.metadataLabel = m.top.findNode("metadataLabel")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -27,34 +28,32 @@ sub onItemContentChanged()
     item = m.top.itemContent
     if item = invalid then return
 
-    showSubtitle = item.showSubtitle <> false
+    showMetadata = item.showMetadata <> false
     imageAspect = Format.SafeString(item.imageAspect, "poster")
-    applyImageLayout(imageAspect, showSubtitle)
+    applyLayout(imageAspect, showMetadata)
     m.title.text = getDisplayTitle(item)
-    m.subtitle.text = getDisplaySubtitle(item)
-    m.subtitle.visible = showSubtitle
+    m.metadataLabel.text = getDisplayMetadata(item)
+    m.metadataLabel.visible = showMetadata
     m.poster.visible = true
+    renderTitleLogo(item, imageAspect)
     renderPoster(item, imageAspect)
-    updateProgress(item, imageAspect)
-    updateWatchedIndicator(item, imageAspect)
+    updateProgress(item)
+    updateWatchedIndicator(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' renderTitleLogo
+'-------------------------------------------------------------------------------
+sub renderTitleLogo(item as object, imageAspect as string)
+    logoUrl = Format.SafeString(item.logoUrl, "")
+    m.titleLogo.visible = imageAspect = "jumbo" and logoUrl <> ""
+    m.titleLogo.uri = logoUrl
 end sub
 
 '-------------------------------------------------------------------------------
 ' updateWatchedIndicator
 '-------------------------------------------------------------------------------
-sub updateWatchedIndicator(item as object, imageAspect as string)
-    if imageAspect = "wide" then
-        indicatorSize = 57
-        posterWidth = 441
-    else
-        indicatorSize = 42
-        posterWidth = 252
-    end if
-
-    m.watchedIndicator.width = indicatorSize
-    m.watchedIndicator.height = indicatorSize
-    m.watchedIndicator.translation = [posterWidth - indicatorSize - 9, 9]
-
+sub updateWatchedIndicator(item as object)
     raw = getRawItem(item)
     m.watchedIndicator.visible = raw <> invalid and raw.UserData <> invalid and raw.UserData.Played = true
 end sub
@@ -83,9 +82,9 @@ function getDisplayTitle(item as object) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getDisplaySubtitle
+' getDisplayMetadata
 '-------------------------------------------------------------------------------
-function getDisplaySubtitle(item as object) as string
+function getDisplayMetadata(item as object) as string
     raw = getRawItem(item)
     if raw = invalid then return Format.FirstNonEmpty([item.description], "")
 
@@ -100,7 +99,7 @@ function getDisplaySubtitle(item as object) as string
     end if
 
     if mediaType = "episode" then
-        return getEpisodeSubtitle(raw)
+        return getEpisodeMetadata(raw)
     end if
 
     return Format.FirstNonEmpty([raw.SeriesName, raw.AlbumArtist, raw.Album, raw.CollectionType, raw.Type], "")
@@ -126,9 +125,9 @@ function getSeriesYearRange(item as object) as string
 end function
 
 '-------------------------------------------------------------------------------
-' getEpisodeSubtitle
+' getEpisodeMetadata
 '-------------------------------------------------------------------------------
-function getEpisodeSubtitle(item as object) as string
+function getEpisodeMetadata(item as object) as string
     episodeTitle = Format.SafeString(item.Name, "")
     seasonNumber = Format.SafeString(item.ParentIndexNumber, "")
     episodeNumber = Format.SafeString(item.IndexNumber, "")
@@ -153,54 +152,131 @@ function getImageUrl(item as object, imageAspect as string) as string
     imageUrl = Format.SafeString(item.HDPosterUrl, "")
     if imageUrl <> "" then return imageUrl
 
-    if imageAspect = "wide" then return "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
+    if imageAspect = "wide" or imageAspect = "jumbo" then return "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
     return "pkg:/images/media-card/poster-placeholder-252x378.png"
 end function
 
 '-------------------------------------------------------------------------------
-' applyImageLayout
+' applyLayout
 '-------------------------------------------------------------------------------
-sub applyImageLayout(imageAspect as string, showSubtitle as boolean)
-    if imageAspect = "wide" then
-        MaskAssets.Apply(m.posterMask, "media-card-thumbnail-mask.png", [441, 249], [294, 166])
-        m.poster.width = 441
-        m.poster.height = 249
-        applyProgressLayout(441, 249)
-        m.title.width = 441
-        m.title.translation = [0, 261]
-        m.subtitle.width = 441
-        m.subtitle.translation = [0, 297]
-
-        if showSubtitle = true then
-            m.title.height = 34
-            m.title.numLines = 1
-        else
-            m.title.height = 48
-            m.title.numLines = 2
-        end if
+sub applyLayout(imageAspect as string, showMetadata as boolean)
+    m.titleLogo.visible = false
+    if imageAspect = "jumbo" then
+        applyJumboCardLayout()
+    else if imageAspect = "wide" then
+        applyThumbnailCardLayout(showMetadata)
     else
-        MaskAssets.Apply(m.posterMask, "media-card-poster-mask.png", [252, 378], [168, 252])
-        m.poster.width = 252
-        m.poster.height = 378
-        applyProgressLayout(252, 378)
-        m.title.width = 252
-        m.title.translation = [0, 390]
-        m.title.height = 48
-        m.title.numLines = 2
-        m.subtitle.width = 252
-        m.subtitle.translation = [0, 429]
+        applyPosterCardLayout()
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' applyJumboCardLayout
+'-------------------------------------------------------------------------------
+sub applyJumboCardLayout()
+    applyContentLayout([27, 0])
+    applyPosterLayout("media-card-jumbo-mask.png", [882, 496], [588, 331])
+    applyProgressLayout(882, 496, {
+        horizontalMargin: 29
+        barHeight: 18
+        upwardOffset: 20
+    })
+    applyLogoLayout([30, 306], [360, 140])
+    applyWatchedIndicatorLayout([807, 18], 57)
+    applyTextLayout(882, [0, 508], [0, 544], 34, 1)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyThumbnailCardLayout
+'-------------------------------------------------------------------------------
+sub applyThumbnailCardLayout(showMetadata as boolean)
+    titleHeight = 48
+    titleLines = 2
+    if showMetadata = true then
+        titleHeight = 34
+        titleLines = 1
+    end if
+
+    applyContentLayout([21, 0])
+    applyPosterLayout("media-card-thumbnail-mask.png", [441, 249], [294, 166])
+    applyProgressLayout(441, 249)
+    applyWatchedIndicatorLayout([375, 9], 57)
+    applyTextLayout(441, [0, 261], [0, 297], titleHeight, titleLines)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPosterCardLayout
+'-------------------------------------------------------------------------------
+sub applyPosterCardLayout()
+    applyContentLayout([21, 0])
+    applyPosterLayout("media-card-poster-mask.png", [252, 378], [168, 252])
+    applyProgressLayout(252, 378)
+    applyWatchedIndicatorLayout([201, 9], 42)
+    applyTextLayout(252, [0, 390], [0, 429], 48, 2)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyContentLayout
+'-------------------------------------------------------------------------------
+sub applyContentLayout(translation as object)
+    m.contentGroup.translation = translation
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPosterLayout
+'-------------------------------------------------------------------------------
+sub applyPosterLayout(maskName as string, maskSize as object, hdMaskSize as object)
+    MaskAssets.Apply(m.posterMask, maskName, maskSize, hdMaskSize)
+    m.poster.width = maskSize[0]
+    m.poster.height = maskSize[1]
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLogoLayout
+'-------------------------------------------------------------------------------
+sub applyLogoLayout(translation as object, size as object)
+    m.titleLogo.translation = translation
+    m.titleLogo.width = size[0]
+    m.titleLogo.height = size[1]
+end sub
+
+'-------------------------------------------------------------------------------
+' applyWatchedIndicatorLayout
+'-------------------------------------------------------------------------------
+sub applyWatchedIndicatorLayout(translation as object, size as integer)
+    m.watchedIndicator.translation = translation
+    m.watchedIndicator.width = size
+    m.watchedIndicator.height = size
+end sub
+
+'-------------------------------------------------------------------------------
+' applyTextLayout
+'-------------------------------------------------------------------------------
+sub applyTextLayout(width as integer, titleTranslation as object, metadataTranslation as object, titleHeight as integer, titleLines as integer)
+    m.title.width = width
+    m.title.translation = titleTranslation
+    m.title.height = titleHeight
+    m.title.numLines = titleLines
+    m.metadataLabel.width = width
+    m.metadataLabel.translation = metadataTranslation
 end sub
 
 '-------------------------------------------------------------------------------
 ' applyProgressLayout
 '-------------------------------------------------------------------------------
-sub applyProgressLayout(width as integer, height as integer)
+sub applyProgressLayout(width as integer, height as integer, style = invalid as dynamic)
     marginX = 9
-    progressHeight = 9
+    baselineHeight = 9
+    progressHeight = baselineHeight
+    upwardOffset = 0
+    if style <> invalid then
+        marginX = style.horizontalMargin
+        progressHeight = style.barHeight
+        upwardOffset = style.upwardOffset
+    end if
     progressBottom = 9
     progressWidth = width - (marginX * 2)
-    progressY = height - progressBottom - progressHeight
+    progressY = height - progressBottom - baselineHeight - upwardOffset
 
     m.progressBar.translation = [marginX, progressY]
     m.progressBar.barWidth = progressWidth
@@ -210,8 +286,8 @@ end sub
 '-------------------------------------------------------------------------------
 ' updateProgress
 '-------------------------------------------------------------------------------
-sub updateProgress(item as object, imageAspect as string)
-    trackWidth = getProgressTrackWidth(imageAspect)
+sub updateProgress(item as object)
+    trackWidth = m.progressBar.barWidth
     progressWidth = getProgressWidth(getRawItem(item), trackWidth)
     visible = progressWidth > 0
 
@@ -224,14 +300,6 @@ sub updateProgress(item as object, imageAspect as string)
 
     m.progressBar.progressWidth = progressWidth
 end sub
-
-'-------------------------------------------------------------------------------
-' getProgressTrackWidth
-'-------------------------------------------------------------------------------
-function getProgressTrackWidth(imageAspect as string) as integer
-    if imageAspect = "wide" then return 423
-    return 234
-end function
 
 '-------------------------------------------------------------------------------
 ' getProgressWidth

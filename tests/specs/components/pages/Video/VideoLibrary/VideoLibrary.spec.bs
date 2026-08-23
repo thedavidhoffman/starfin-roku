@@ -4,6 +4,18 @@ namespace tests
     @suite("VideoLibrary component")
     class VideoLibraryTests extends rooibos.BaseTestSuite
 
+        @describe("jumbo layout")
+
+        @it("lays out two jumbo items across the screen")
+        function _()
+            'bs:disable-next-line 1140
+            applyGridLayout("jumbo")
+
+            m.assertEqual(m.node.itemsGrid.itemSize, [936, 591])
+            m.assertEqual(m.node.itemsGrid.numColumns, 2)
+            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/jumbo-focus-936x591.png")
+        end function
+
         @describe("server paging")
 
         @it("requests the next page seven rows from the loaded end")
@@ -33,28 +45,46 @@ namespace tests
             m.assertInvalid(m.node.videoLibraryTask.request)
         end function
 
-        @it("requests another page when cinematic browsing reaches the last ten loaded items")
+        @it("supports movie-library browsing from every movie card layout")
+        function _()
+            for each imageAspect in ["poster", "wide", "jumbo"]
+                m.configurePaging(20, 20, 0)
+                'bs:disable-next-line 1140
+                applyGridLayout(imageAspect)
+
+                'bs:disable-next-line 1140
+                initialState = beginMovieLibraryBrowse(10)
+                'bs:disable-next-line 1140
+                nextState = selectMovieLibraryBrowseIndex(11)
+
+                m.assertEqual(initialState.index, 10)
+                m.assertEqual(nextState.index, 11)
+                m.assertEqual(nextState.itemId, "11")
+            end for
+        end function
+
+        @it("requests another page when movie-library browsing reaches the last ten loaded items")
         function _()
             m.configurePaging(100, 100, 0)
             m.node.pageState.paging.totalCount = 250
 
             'bs:disable-next-line 1140
-            state = beginCinematicBrowse(90)
+            state = beginMovieLibraryBrowse(90)
 
             m.assertEqual(state.index, 90)
             m.assertEqual(state.itemId, "90")
             m.assertEqual(state.loadedCount, 100)
             m.assertEqual(state.totalCount, 250)
-            m.assertTrue(m.node.pageState.cinematicBrowse.active)
+            m.assertTrue(m.node.pageState.movieLibraryBrowse.active)
             m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 100)
         end function
 
-        @it("does not page before the cinematic browsing threshold")
+        @it("does not page before the movie-library browsing threshold")
         function _()
             m.configurePaging(100, 100, 0)
 
             'bs:disable-next-line 1140
-            state = beginCinematicBrowse(89)
+            state = beginMovieLibraryBrowse(89)
 
             m.assertEqual(state.index, 89)
             m.assertInvalid(m.node.videoLibraryTask.request)
@@ -268,8 +298,8 @@ namespace tests
             m.node.pageState.paging.requestInFlight = false
             m.node.pageState.paging.nextStartIndex = nextStartIndex
             m.node.pageState.paging.queryId = 7
-            m.node.pageState.cinematicBrowse.active = false
-            m.node.pageState.cinematicBrowse.index = -1
+            m.node.pageState.movieLibraryBrowse.active = false
+            m.node.pageState.movieLibraryBrowse.index = -1
             m.node.itemsGrid = { itemFocused: focusedIndex, numColumns: 6 }
             m.node.videoLibraryTask = { control: "", request: invalid }
         end sub
