@@ -24,7 +24,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
     playSessionId = Format.SafeString(playbackInfo.PlaySessionId, "")
     transcodingUrl = Format.SafeString(mediaSource.TranscodingUrl, "")
     audioStreamIndex = getResolvedAudioStreamIndex(mediaSource, requestedAudioStreamIndex)
-    subtitleStreamIndex = getResolvedSubtitleStreamIndex(mediaSource, requestedSubtitleStreamIndex)
+    subtitleStreamIndex = getExistingSubtitleStreamIndex(mediaSource, requestedSubtitleStreamIndex)
     directPlaySupported = mediaSource.SupportsDirectPlay = true
     directPlayAllowed = playbackFlags.enableDirectPlay = true
     transcodingAllowed = playbackFlags.enableDirectStream = true or playbackFlags.enableTranscoding = true
@@ -181,28 +181,6 @@ function getPlaybackRequestSubtitleStreamIndex(request as dynamic) as integer
     return -2
 end function
 
-'-------------------------------------------------------------------------------
-' getResolvedSubtitleStreamIndex
-'-------------------------------------------------------------------------------
-function getResolvedSubtitleStreamIndex(mediaSource as dynamic, requestedSubtitleStreamIndex as integer) as integer
-    if requestedSubtitleStreamIndex = SubtitleSelection.None then return SubtitleSelection.None
-    if mediaSource = invalid then return -1
-    if requestedSubtitleStreamIndex >= 0 then return getExistingSubtitleStreamIndex(mediaSource, requestedSubtitleStreamIndex)
-
-    defaultIndex = Number.ToInteger(mediaSource.DefaultSubtitleStreamIndex, -1)
-    if defaultIndex >= 0 then
-        resolvedDefaultIndex = getExistingSubtitleStreamIndex(mediaSource, defaultIndex)
-        if resolvedDefaultIndex >= 0 then return resolvedDefaultIndex
-    end if
-    if mediaSource.MediaStreams = invalid then return -1
-
-    for each stream in mediaSource.MediaStreams
-        if LCase(Format.SafeString(stream.Type, "")) = "subtitle" and stream.IsDefault = true then
-            return Number.ToInteger(stream.Index, -1)
-        end if
-    end for
-    return -1
-end function
 
 '-------------------------------------------------------------------------------
 ' getExistingSubtitleStreamIndex

@@ -24,7 +24,7 @@ namespace tests
             m.assertFalse(noRemux.enableDirectStream)
         end function
 
-        @it("resolves stream indexes and defaults")
+        @it("resolves stream indexes and leaves subtitles off until selected")
         function _()
             streams = [
                 { Type: "Video", Index: 0, IsDefault: true }
@@ -42,13 +42,13 @@ namespace tests
             m.assertEqual(getMediaStreamByIndex(source, "audio", 4).Index, 4)
             source.DefaultSubtitleStreamIndex = 7
             'bs:disable-next-line 1140
-            m.assertEqual(getResolvedSubtitleStreamIndex(source, -2), -1)
+            m.assertEqual(getExistingSubtitleStreamIndex(source, -2), -1)
             'bs:disable-next-line 1140
-            m.assertEqual(getResolvedSubtitleStreamIndex(source, -1), -1)
+            m.assertEqual(getExistingSubtitleStreamIndex(source, -1), -1)
             'bs:disable-next-line 1140
-            m.assertEqual(getResolvedSubtitleStreamIndex(source, 9), -1)
+            m.assertEqual(getExistingSubtitleStreamIndex(source, 9), -1)
             'bs:disable-next-line 1140
-            m.assertEqual(getResolvedSubtitleStreamIndex(source, 4), -1)
+            m.assertEqual(getExistingSubtitleStreamIndex(source, 4), -1)
             'bs:disable-next-line 1140
             m.assertEqual(getPlaybackRequestSubtitleStreamIndex({}), -2)
             'bs:disable-next-line 1140
@@ -57,7 +57,7 @@ namespace tests
             source.Delete("DefaultSubtitleStreamIndex")
             source.MediaStreams.Push({ Type: "Subtitle", Index: 6, IsDefault: true })
             'bs:disable-next-line 1140
-            m.assertEqual(getResolvedSubtitleStreamIndex(source, -2), 6)
+            m.assertEqual(getExistingSubtitleStreamIndex(source, -2), -1)
 
             source.MediaStreams.Push({
                 Type: "Subtitle"
@@ -68,10 +68,12 @@ namespace tests
             })
             source.DefaultSubtitleStreamIndex = 7
             'bs:disable-next-line 1140
-            m.assertEqual(getResolvedSubtitleStreamIndex(source, 7), 7)
+            m.assertEqual(getExistingSubtitleStreamIndex(source, -2), -1)
+            'bs:disable-next-line 1140
+            m.assertEqual(getExistingSubtitleStreamIndex(source, 7), 7)
             playbackInfo = { MediaSources: [source] }
             'bs:disable-next-line 1140
-            resolvedSubtitleIndex = getResolvedSubtitleStreamIndex(source, -2)
+            resolvedSubtitleIndex = getExistingSubtitleStreamIndex(source, 7)
             externalTrack = SubtitlePlayback.BuildExternalTrack(playbackInfo, resolvedSubtitleIndex, "https://server.test", "token")
             m.assertEqual(externalTrack.index, 7)
             m.assertTrue(Instr(1, externalTrack.deliveryUrl, "api_key=token") > 0)

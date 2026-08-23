@@ -11,6 +11,7 @@ import "pkg:/source/Status.bs"
 import "pkg:/source/Spinner.bs"
 import "pkg:/source/PlaybackProgress.bs"
 import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/SubtitleSelection.bs"
 import "pkg:/source/MediaOptions.bs"
 import "pkg:/source/AsyncLifecycle.bs"
 import "pkg:/source/store/RegistryStore.bs"
@@ -525,6 +526,27 @@ function buildPlaySelection(startPositionTicks as dynamic) as dynamic
     selection.AddReplace("videoMode", m.state.videoMode)
     return selection
 end function
+
+'-------------------------------------------------------------------------------
+' applyPlaybackSubtitleSelection
+'-------------------------------------------------------------------------------
+sub applyPlaybackSubtitleSelection(playRequest as dynamic)
+    if playRequest = invalid or playRequest.subtitleStreamIndex = invalid then return
+
+    item = m.state.item
+    if item = invalid then return
+    itemId = Format.SafeString(item.Id, "")
+    if itemId = "" or Format.SafeString(playRequest.itemId, "") <> itemId then return
+
+    streamIndex = Number.ToInteger(playRequest.subtitleStreamIndex, SubtitleSelection.None)
+    if streamIndex = SubtitleSelection.None then
+        m.state.selectedStreams.subtitle = invalid
+        m.state.selectedStreams.subtitleOff = true
+    else
+        m.state.selectedStreams.subtitle = { streamIndex: streamIndex }
+        m.state.selectedStreams.subtitleOff = false
+    end if
+end sub
 
 '-------------------------------------------------------------------------------
 ' onVideoToolbarSubtitlesSelected
