@@ -1,0 +1,189 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/Encode.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = new Logger("TVEpisodeQueueTask", m.global.logService)
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    m.top.response = buildResponse(m.top.request)
+end sub
+
+'-------------------------------------------------------------------------------
+' buildResponse
+'-------------------------------------------------------------------------------
+function buildResponse(request as dynamic) as object
+    validationError = validateRequest(request)
+    if validationError <> invalid then return addResponseIdentity(validationError, request)
+
+    episodesResult = loadEpisodes(request)
+    if episodesResult = invalid or episodesResult.ok <> true then
+        return addResponseIdentity({ ok: false, action: "tvEpisodeQueue", errorMessage: "Unable to resolve the episode playback queue." }, request)
+    end if
+
+    items = getItemsFromPayload(episodesResult.data)
+    if request.operation = "adjacent" then
+        response = buildAdjacentResponse(items, request.anchorItemId)
+    else
+        response = buildForwardResponse(items, request.anchorItemId, Number.ToInteger(request.successorCount, 1))
+    end if
+    return addResponseIdentity(response, request)
+end function
+
+'-------------------------------------------------------------------------------
+' loadEpisodes
+'-------------------------------------------------------------------------------
+function loadEpisodes(request as object) as object
+    params = {
+        userId: request.userId
+        isMissing: false
+        fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
+        enableTotalRecordCount: false
+    }
+    if request.operation = "adjacent" then
+        params.AddReplace("adjacentTo", request.anchorItemId)
+    else
+        params.AddReplace("startItemId", request.anchorItemId)
+        params.AddReplace("limit", Number.ToInteger(request.successorCount, 1) + 1)
+    end if
+
+    requestUrl = request.server + "/Shows/" + request.seriesId + "/Episodes" + Url.BuildQueryString(params)
+    return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' buildAdjacentResponse
+'-------------------------------------------------------------------------------
+function buildAdjacentResponse(episodes as object, anchorItemId as string) as object
+    anchorIndex = findEpisodeIndex(episodes, anchorItemId)
+    if anchorIndex < 0 then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Episode queue anchor was not returned." }
+
+    predecessors = []
+    successors = []
+    for i = 0 to episodes.Count() - 1
+        if i = anchorIndex then continue for
+        queueItem = buildPlaybackQueueItem(episodes[i])
+        if queueItem = invalid then continue for
+        if i < anchorIndex then
+            predecessors.Push(queueItem)
+        else
+            successors.Push(queueItem)
+        end if
+    end for
+
+    return {
+        ok: true
+        action: "tvEpisodeQueue"
+        payload: {
+            predecessors: predecessors
+            successors: successors
+            reachedSeriesStart: anchorIndex = 0
+            reachedSeriesEnd: anchorIndex = episodes.Count() - 1
+        }
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildForwardResponse
+'-------------------------------------------------------------------------------
+function buildForwardResponse(episodes as object, anchorItemId as string, successorCount as integer) as object
+    anchorIndex = findEpisodeIndex(episodes, anchorItemId)
+    if anchorIndex < 0 then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Episode queue anchor was not returned." }
+
+    successors = []
+    for i = anchorIndex + 1 to episodes.Count() - 1
+        queueItem = buildPlaybackQueueItem(episodes[i])
+        if queueItem <> invalid then successors.Push(queueItem)
+    end for
+
+    return {
+        ok: true
+        action: "tvEpisodeQueue"
+        payload: {
+            predecessors: []
+            successors: successors
+            reachedSeriesStart: false
+            reachedSeriesEnd: successors.Count() < successorCount
+        }
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaybackQueueItem
+'-------------------------------------------------------------------------------
+function buildPlaybackQueueItem(episode as dynamic) as dynamic
+    if episode = invalid then return invalid
+    episodeId = Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
+    if episodeId = "" then return invalid
+
+    return {
+        itemId: episodeId
+        item: episode
+        series: { Id: Format.SafeString(Format.FirstNonEmpty([episode.SeriesId], ""), ""), Name: Format.SafeString(Format.FirstNonEmpty([episode.SeriesName], ""), "") }
+        season: { Id: Format.SafeString(Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], ""), ""), Name: Format.SafeString(Format.FirstNonEmpty([episode.SeasonName], ""), "") }
+        startPositionTicks: PlaybackProgress.GetTicksFromItem(episode)
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' findEpisodeIndex
+'-------------------------------------------------------------------------------
+function findEpisodeIndex(episodes as object, itemId as string) as integer
+    for i = 0 to episodes.Count() - 1
+        episode = episodes[i]
+        if episode <> invalid and Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "") = itemId then return i
+    end for
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getItemsFromPayload
+'-------------------------------------------------------------------------------
+function getItemsFromPayload(payload as dynamic) as object
+    if payload = invalid then return []
+    if Type(payload) = "roArray" then return payload
+    if payload.Items <> invalid and Type(payload.Items) = "roArray" then return payload.Items
+    return []
+end function
+
+'-------------------------------------------------------------------------------
+' addResponseIdentity
+'-------------------------------------------------------------------------------
+function addResponseIdentity(response as object, request as dynamic) as object
+    if request = invalid then return response
+    response.AddReplace("operation", Format.SafeString(request.operation, ""))
+    response.AddReplace("anchorItemId", Format.SafeString(request.anchorItemId, ""))
+    response.AddReplace("seriesId", Format.SafeString(request.seriesId, ""))
+    response.AddReplace("playbackRequestId", Number.ToInteger(request.playbackRequestId, -1))
+    response.AddReplace("taskRequestId", Number.ToInteger(request.taskRequestId, -1))
+    return response
+end function
+
+'-------------------------------------------------------------------------------
+' validateRequest
+'-------------------------------------------------------------------------------
+function validateRequest(request as dynamic) as dynamic
+    if request = invalid then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue request." }
+    if request.server = invalid or request.server = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue server." }
+    if request.token = invalid or request.token = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue token." }
+    if request.userId = invalid or request.userId = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue user." }
+    if request.seriesId = invalid or request.seriesId = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue series." }
+    if request.anchorItemId = invalid or request.anchorItemId = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue anchor." }
+    if request.operation <> "adjacent" and request.operation <> "forward" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue operation." }
+    if request.operation = "forward" and Number.ToInteger(request.successorCount, 0) <= 0 then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue successor count." }
+    return invalid
+end function

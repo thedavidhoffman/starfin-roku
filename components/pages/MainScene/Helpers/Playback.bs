@@ -26,9 +26,11 @@ sub playerShow(selection as object)
         playbackQueue: selection.playbackQueue
         playbackQueueIndex: selection.playbackQueueIndex
         playbackQueueMode: selection.playbackQueueMode
+        playbackQueueScope: selection.playbackQueueScope
         videoMode: SettingsStore.GetSettingValue(m.settings, SettingsStore.Key.VideoStreamingMode)
         subtitleBurnInMode: SubtitleBurnIn.Normalize(SettingsStore.GetSettingValue(m.settings, SettingsStore.Key.SubtitleBurnInMode))
     }
+    EpisodeQueueIdentity.Apply(playRequest, selection.playbackQueueScope, selection.episodeQueueId)
     if selection.audioStreamIndex <> invalid then playRequest.AddReplace("audioStreamIndex", selection.audioStreamIndex)
     if selection.subtitleStreamIndex <> invalid then playRequest.AddReplace("subtitleStreamIndex", selection.subtitleStreamIndex)
     if selection.videoMode <> invalid then playRequest.AddReplace("videoMode", selection.videoMode)
@@ -307,7 +309,7 @@ sub tvEpisodeUpNextHandlePlaySelected()
     nextItem = request.nextItem
     if nextItem = invalid then return
 
-    playerShow({
+    selection = {
         itemId: nextItem.itemId
         item: nextItem.item
         series: request.series
@@ -315,7 +317,10 @@ sub tvEpisodeUpNextHandlePlaySelected()
         playbackQueue: request.playbackQueue
         playbackQueueIndex: request.playbackQueueIndex
         playbackQueueMode: request.playbackQueueMode
-    })
+        playbackQueueScope: request.playbackQueueScope
+    }
+    EpisodeQueueIdentity.Apply(selection, request.playbackQueueScope, request.episodeQueueId)
+    playerShow(selection)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -357,7 +362,7 @@ function buildClosedPlayerTVEpisodeLoadRequest(playRequest as dynamic) as dynami
     seasonId = Format.FirstNonEmpty([item.SeasonId, item.ParentId], "")
     if seasonId = "" and playRequest.season <> invalid then seasonId = Format.FirstNonEmpty([playRequest.season.Id], "")
 
-    return {
+    loadRequest = {
         server: playRequest.server
         token: playRequest.token
         userId: playRequest.userId
@@ -371,7 +376,10 @@ function buildClosedPlayerTVEpisodeLoadRequest(playRequest as dynamic) as dynami
         playbackQueue: playRequest.playbackQueue
         playbackQueueIndex: playRequest.playbackQueueIndex
         playbackQueueMode: playRequest.playbackQueueMode
+        playbackQueueScope: playRequest.playbackQueueScope
     }
+    EpisodeQueueIdentity.Apply(loadRequest, playRequest.playbackQueueScope, playRequest.episodeQueueId)
+    return loadRequest
 end function
 
 '-------------------------------------------------------------------------------

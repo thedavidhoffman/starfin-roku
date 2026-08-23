@@ -15,6 +15,7 @@ import "pkg:/source/DateTime.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/MediaOptions.bs"
 import "pkg:/source/Number.bs"
+import "pkg:/source/EpisodeQueueIdentity.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/video-player-helpers/VideoPlayerMetadata.bs"
 import "pkg:/source/video-player-helpers/VideoPlayerStreamSelection.bs"
@@ -25,6 +26,7 @@ import "pkg:/components/pages/Video/VideoPlayer/Helpers/StreamOptions.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/Seek.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/Trickplay.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackSession.bs"
+import "pkg:/components/pages/Video/VideoPlayer/Helpers/EpisodeQueueController.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackRecovery.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackChaosMonkey.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/MediaSegments.bs"
@@ -51,7 +53,7 @@ sub initReferences()
     m.cast = m.top.findNode("cast")
     m.skipIntroButton = m.top.findNode("skipIntroButton")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
-    m.nextSeasonPlaybackTask = m.top.findNode("nextSeasonPlaybackTask")
+    m.episodeQueueTask = m.top.findNode("episodeQueueTask")
     m.mediaSegmentsTask = m.top.findNode("mediaSegmentsTask")
     m.playstateTask = m.top.findNode("playstateTask")
     m.trickplayPreloadTask = m.top.findNode("trickplayPreloadTask")
@@ -99,9 +101,18 @@ sub initReferences()
         mode: "sequential"
     }
 
-    m.nextSeasonPlayback = {
-        pending: false
-        requestId: -1
+    m.episodeQueue = {
+        eligible: false
+        initialized: false
+        id: 0
+        nextId: 0
+        seriesId: ""
+        pendingRequest: invalid
+        taskRequestId: 0
+        targetLookback: 1
+        targetLookahead: 3
+        reachedSeriesStart: false
+        reachedSeriesEnd: false
     }
 
     m.context = {
@@ -155,7 +166,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
-    m.nextSeasonPlaybackTask.observeField("response", "onNextSeasonPlaybackResponse")
+    m.episodeQueueTask.observeField("response", "onEpisodeQueueResponse")
     m.playstateTask.observeField("response", "onPlaystateResponse")
     m.mediaSegmentsTask.observeField("response", "onMediaSegmentsResponse")
     m.trickplayPreloadTask.observeField("response", "onTrickplayPreloadResponse")
@@ -234,7 +245,7 @@ sub onVideoStateChanged()
             finishEpisodePlayback()
             return
         end if
-        if beginNextSeasonPlaybackRequest() then return
+        if beginEpisodeQueueFinishResolution() then return
         finishEpisodePlayback()
     else if state = "playing" then
         if m.playback.hasReportedStart = true then

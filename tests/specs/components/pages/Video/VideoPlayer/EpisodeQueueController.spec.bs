@@ -1,0 +1,237 @@
+namespace tests
+
+    @SGNode("VideoPlayer")
+    @suite("VideoPlayer episode queue controller")
+    class EpisodeQueueControllerTests extends rooibos.BaseTestSuite
+
+        @describe("identity and normalization")
+
+        @it("resets boundaries for a fresh same-series launch")
+        function _()
+            m.node.episodeQueue = __EpisodeQueueState()
+            m.node.episodeQueue.id = 4
+            m.node.episodeQueue.nextId = 4
+            m.node.episodeQueue.seriesId = "series"
+            m.node.episodeQueue.initialized = true
+            m.node.episodeQueue.reachedSeriesStart = true
+            m.node.episodeQueue.reachedSeriesEnd = true
+
+            'bs:disable-next-line 1140
+            isContinuation = episodeQueueAdoptIdentity({}, "series")
+
+            m.assertFalse(isContinuation)
+            m.assertEqual(m.node.episodeQueue.id, 5)
+            m.assertFalse(m.node.episodeQueue.initialized)
+            m.assertFalse(m.node.episodeQueue.reachedSeriesStart)
+            m.assertFalse(m.node.episodeQueue.reachedSeriesEnd)
+        end function
+
+        @it("preserves state for an explicitly identified continuation")
+        function _()
+            m.node.episodeQueue = __EpisodeQueueState()
+            m.node.episodeQueue.id = 7
+            m.node.episodeQueue.nextId = 7
+            m.node.episodeQueue.seriesId = "series"
+            m.node.episodeQueue.initialized = true
+            m.node.episodeQueue.reachedSeriesEnd = true
+
+            'bs:disable-next-line 1140
+            isContinuation = episodeQueueAdoptIdentity({ episodeQueueId: 7 }, "series")
+
+            m.assertTrue(isContinuation)
+            m.assertTrue(m.node.episodeQueue.initialized)
+            m.assertTrue(m.node.episodeQueue.reachedSeriesEnd)
+        end function
+
+        @it("finds the current item, removes other series, and deduplicates")
+        function _()
+            current = { Id: "current", SeriesId: "series", Type: "Episode" }
+            m.node.episodeQueue = __EpisodeQueueState()
+            m.node.episodeQueue.seriesId = "series"
+            m.node.queue = {
+                items: [
+                    __EpisodeQueueItem("previous", "series")
+                    __EpisodeQueueItem("other", "another-series")
+                    __EpisodeQueueItem("current", "series")
+                    __EpisodeQueueItem("current", "series")
+                    { itemId: "ambiguous", item: { Id: "ambiguous" } }
+                ]
+                index: 0
+                mode: "sequential"
+                scope: "series"
+            }
+
+            'bs:disable-next-line 1140
+            normalizeSeriesPlaybackQueue({ itemId: "current", series: { Id: "series" }, season: { Id: "season" } }, current)
+
+            m.assertEqual(__EpisodeQueueIds(m.node.queue.items), ["previous", "current"])
+            m.assertEqual(m.node.queue.index, 1)
+        end function
+
+        @describe("anchor-based merging")
+
+        @it("positions neighbors around their anchor and preserves the active item")
+        function _()
+            m.node.queue = {
+                items: [__EpisodeQueueItem("s3e1", "series"), __EpisodeQueueItem("s3e3", "series"), __EpisodeQueueItem("s3e2", "series")]
+                index: 0
+            }
+
+            'bs:disable-next-line 1140
+            merged = episodeQueueMergeAtAnchor("s3e1", [__EpisodeQueueItem("s2e21", "series")], [__EpisodeQueueItem("s3e2", "series"), __EpisodeQueueItem("s3e2", "series")])
+
+            m.assertTrue(merged)
+            m.assertEqual(__EpisodeQueueIds(m.node.queue.items), ["s2e21", "s3e1", "s3e2", "s3e3"])
+            m.assertEqual(m.node.queue.items[m.node.queue.index].itemId, "s3e1")
+        end function
+
+        @it("supports repeated backward replenishment")
+        function _()
+            m.node.queue = { items: [__EpisodeQueueItem("s3e1", "series")], index: 0 }
+
+            'bs:disable-next-line 1140
+            episodeQueueMergeAtAnchor("s3e1", [__EpisodeQueueItem("s2e21", "series")], [])
+            m.node.queue.index = 0
+            'bs:disable-next-line 1140
+            episodeQueueMergeAtAnchor("s2e21", [__EpisodeQueueItem("s2e20", "series")], [__EpisodeQueueItem("s3e1", "series")])
+
+            m.assertEqual(__EpisodeQueueIds(m.node.queue.items), ["s2e20", "s2e21", "s3e1"])
+            m.assertEqual(m.node.queue.items[m.node.queue.index].itemId, "s2e21")
+        end function
+
+        @describe("asynchronous state")
+
+        @it("rejects stale response correlation")
+        function _()
+            m.node.episodeQueue = __EpisodeQueueState()
+            m.node.episodeQueue.id = 7
+            m.node.episodeQueue.seriesId = "series"
+            pending = __EpisodeQueuePending()
+            response = __EpisodeQueueResponse()
+
+            'bs:disable-next-line 1140
+            m.assertTrue(episodeQueueResponseMatches(response, pending))
+
+            for each fieldName in ["playbackRequestId", "taskRequestId", "operation", "anchorItemId", "seriesId"]
+                stale = __EpisodeQueueResponse()
+                stale[fieldName] = "stale"
+                'bs:disable-next-line 1140
+                m.assertFalse(episodeQueueResponseMatches(stale, pending))
+            end for
+
+            m.node.episodeQueue.id = 8
+            'bs:disable-next-line 1140
+            m.assertFalse(episodeQueueResponseMatches(response, pending))
+        end function
+
+        @it("does not update boundaries when the response anchor cannot merge")
+        function _()
+            m.node.episodeQueue = __EpisodeQueueState()
+            m.node.queue = { items: [__EpisodeQueueItem("current", "series")], index: 0, scope: "series" }
+            response = __EpisodeQueueResponse()
+            response.payload.reachedSeriesStart = true
+            response.payload.reachedSeriesEnd = true
+            pending = __EpisodeQueuePending()
+            pending.operation = "adjacent"
+            pending.anchorItemId = "missing"
+
+            'bs:disable-next-line 1140
+            applied = episodeQueueApplySuccessfulResponse(response, pending)
+
+            m.assertFalse(applied)
+            m.assertFalse(m.node.episodeQueue.initialized)
+            m.assertFalse(m.node.episodeQueue.reachedSeriesStart)
+            m.assertFalse(m.node.episodeQueue.reachedSeriesEnd)
+            m.assertEqual(__EpisodeQueueIds(m.node.queue.items), ["current"])
+        end function
+
+        @it("allows exactly one boundary retry")
+        function _()
+            pending = __EpisodeQueuePending()
+            'bs:disable-next-line 1140
+            m.assertTrue(episodeQueueShouldRetry(pending))
+
+            pending.attempt = 1
+            'bs:disable-next-line 1140
+            m.assertFalse(episodeQueueShouldRetry(pending))
+        end function
+
+        @it("promotes pending maintenance work when playback finishes")
+        function _()
+            m.node.episodeQueue = __EpisodeQueueState()
+            m.node.episodeQueue.pendingRequest = __EpisodeQueuePending()
+
+            'bs:disable-next-line 1140
+            waiting = beginEpisodeQueueFinishResolution()
+
+            m.assertTrue(waiting)
+            m.assertEqual(m.node.episodeQueue.pendingRequest.continuation, "finish")
+        end function
+
+    end class
+
+    function __EpisodeQueueState() as object
+        return {
+            eligible: true
+            initialized: false
+            id: 0
+            nextId: 0
+            seriesId: ""
+            pendingRequest: invalid
+            taskRequestId: 0
+            targetLookback: 1
+            targetLookahead: 3
+            reachedSeriesStart: false
+            reachedSeriesEnd: false
+        }
+    end function
+
+    function __EpisodeQueueItem(itemId as string, seriesId as string) as object
+        return {
+            itemId: itemId
+            item: { Id: itemId, SeriesId: seriesId, Type: "Episode" }
+            series: { Id: seriesId }
+            season: { Id: "season" }
+            startPositionTicks: 0
+        }
+    end function
+
+    function __EpisodeQueueIds(items as object) as object
+        result = []
+        for each item in items
+            result.Push(item.itemId)
+        end for
+        return result
+    end function
+
+    function __EpisodeQueuePending() as object
+        return {
+            operation: "forward"
+            anchorItemId: "anchor"
+            successorCount: 3
+            playbackRequestId: 12
+            taskRequestId: 34
+            episodeQueueId: 7
+            attempt: 0
+            continuation: "maintain"
+        }
+    end function
+
+    function __EpisodeQueueResponse() as object
+        return {
+            ok: true
+            operation: "forward"
+            anchorItemId: "anchor"
+            seriesId: "series"
+            playbackRequestId: 12
+            taskRequestId: 34
+            payload: {
+                predecessors: []
+                successors: []
+                reachedSeriesStart: false
+                reachedSeriesEnd: false
+            }
+        }
+    end function
+
+end namespace
