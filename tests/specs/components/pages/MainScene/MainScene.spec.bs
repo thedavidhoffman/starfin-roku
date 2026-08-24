@@ -1,0 +1,115 @@
+namespace tests
+    @SGNode("MainSceneTestHarness")
+    @suite("MainScene component")
+    class MainSceneTests extends rooibos.BaseTestSuite
+        @describe("declarative component contract")
+        @it("declares the bg node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("bg"))
+        end function
+        @it("declares the gradientBg node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("gradientBg"))
+        end function
+        @it("declares the login node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("login"))
+        end function
+        @it("declares the authenticatedContent node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("authenticatedContent"))
+        end function
+        @it("declares the homePage node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("homePage"))
+        end function
+        @it("declares the dynamicPageHost node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("dynamicPageHost"))
+        end function
+        @it("declares the themeAudioController node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("themeAudioController"))
+        end function
+        @it("declares the statusLabel node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("statusLabel"))
+        end function
+        @it("declares the header node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("header"))
+        end function
+        @it("declares the overlayHost node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("overlayHost"))
+        end function
+        @it("declares the loadingSpinner node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("loadingSpinner"))
+        end function
+        @it("declares the authController node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("authController"))
+        end function
+        @it("declares the mediaActionsController node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("mediaActionsController"))
+        end function
+        @describe("construction")
+        @it("does not start the application during construction")
+        function _()
+            m.assertFalse(m.node.appLifecycle.started)
+            m.assertFalse(m.node.authController.resumeRequested)
+        end function
+
+        @describe("application startup")
+        @it("copies the saved session into Login")
+        function _()
+            m.node.appLifecycle.started = false
+            savedSession = {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+            }
+            m.node.authController = m.createAuthControllerMock(savedSession)
+
+            'bs:disable-next-line 1140
+            startApp()
+
+            m.assertEqual(m.node.login.savedSession, savedSession)
+        end function
+
+        @it("requests session resume")
+        function _()
+            m.node.appLifecycle.started = false
+            m.node.authController = m.createAuthControllerMock(invalid)
+
+            'bs:disable-next-line 1140
+            startApp()
+
+            m.assertTrue(m.node.authController.resumeRequested)
+        end function
+
+        @it("does not start the application more than once")
+        function _()
+            m.node.appLifecycle.started = false
+            m.node.authController = m.createAuthControllerMock(invalid)
+            'bs:disable-next-line 1140
+            startApp()
+            m.node.authController.resumeRequested = false
+
+            'bs:disable-next-line 1140
+            startApp()
+
+            m.assertFalse(m.node.authController.resumeRequested)
+        end function
+
+        function createAuthControllerMock(savedSession as dynamic) as object
+            controller = CreateObject("roSGNode", "Group")
+            controller.addField("savedSession", "assocarray", false)
+            controller.addField("resumeRequested", "boolean", false)
+            controller.savedSession = savedSession
+            return controller
+        end function
+    end class
+end namespace
