@@ -11,6 +11,88 @@ namespace tests
             m.assertNotInvalid(m.top)
         end function
 
+        @describe("navigation events")
+
+        @it("publishes pressed Up navigation")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertFalse(handled)
+            m.assertEqual(m.top.navigationKeyPressed, { key: "up", press: true })
+        end function
+
+        @it("publishes released Up navigation")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", false)
+
+            m.assertFalse(handled)
+            m.assertEqual(m.top.navigationKeyPressed, { key: "up", press: false })
+        end function
+
+        @it("publishes pressed Down navigation")
+        function _()
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+
+            m.assertEqual(m.top.navigationKeyPressed, { key: "down", press: true })
+        end function
+
+        @it("does not publish unrelated keys")
+        function _()
+            m.top.navigationKeyPressed = { key: "existing", press: true }
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertFalse(handled)
+            m.assertEqual(m.top.navigationKeyPressed, { key: "existing", press: true })
+        end function
+
+        @describe("incomplete final row navigation")
+
+        @it("moves Down to the final item when the next row is incomplete")
+        function _()
+            m.configureGrid(8, 3, 5)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.animateToItem, 7)
+        end function
+
+        @it("allows native Down movement when the next row has the same column")
+        function _()
+            m.configureGrid(8, 3, 2)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertFalse(handled)
+        end function
+
+        @it("does not move Down from the final row")
+        function _()
+            m.configureGrid(8, 3, 6)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertFalse(handled)
+        end function
+
+        function configureGrid(itemCount as integer, columns as integer, focusedIndex as integer)
+            content = CreateObject("roSGNode", "ContentNode")
+            for index = 0 to itemCount - 1
+                content.appendChild(CreateObject("roSGNode", "ContentNode"))
+            end for
+
+            m.top.content = content
+            m.top.numColumns = columns
+            m.top.itemFocused = focusedIndex
+        end function
     end class
 
 end namespace

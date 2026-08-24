@@ -16,6 +16,86 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("sortLabel"))
         end function
 
+        @describe("selection rendering")
+
+        @it("renders the selected sort label")
+        function _()
+            m.top.selectedSort = { label: "Date Added" }
+
+            m.assertEqual(m.top.findNode("sortLabel").text, "Date Added")
+        end function
+
+        @it("uses Title when the selected label is empty")
+        function _()
+            m.top.selectedSort = { label: "" }
+
+            m.assertEqual(m.top.findNode("sortLabel").text, "Title")
+        end function
+
+        @describe("keyboard behavior")
+
+        @it("requests the browse dialog for pressed OK")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.overlayRequested.componentName, "BrowseDialog")
+            m.assertEqual(m.top.overlayRequested.openFunction, "openBrowse")
+        end function
+
+        @it("requests the browse dialog for pressed Select")
+        function _()
+            m.top.overlayRequested = invalid
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("Select", true)
+
+            m.assertTrue(handled)
+            m.assertNotInvalid(m.top.overlayRequested)
+        end function
+
+        @it("emits focus exit for pressed Down")
+        function _()
+            m.top.focusExitDown = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("Down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitDown)
+        end function
+
+        @it("emits focus exit for pressed Back")
+        function _()
+            m.top.focusExitDown = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("Back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitDown)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            m.top.overlayRequested = invalid
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", false)
+
+            m.assertFalse(handled)
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("ignores unrelated pressed keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("Right", true)
+
+            m.assertFalse(handled)
+        end function
+
     end class
 
 end namespace

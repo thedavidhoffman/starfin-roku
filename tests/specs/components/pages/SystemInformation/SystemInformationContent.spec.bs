@@ -36,6 +36,99 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("scrollRepeatTimer"))
         end function
 
+        @describe("information rendering")
+
+        @it("renders application information")
+        function _()
+            content = m.createRenderedContent()
+
+            m.assertTrue(m.hasLabel(content, "APPLICATION INFORMATION"))
+        end function
+
+        @it("renders Roku device information")
+        function _()
+            content = m.createRenderedContent()
+
+            m.assertTrue(m.hasLabel(content, "ROKU DEVICE INFORMATION"))
+        end function
+
+        @it("renders global registry information")
+        function _()
+            content = m.createRenderedContent()
+
+            m.assertTrue(m.hasLabel(content, "GLOBAL APPLICATION REGISTRY"))
+        end function
+
+        @it("shows the scrollbar for rendered system information")
+        function _()
+            content = m.createRenderedContent()
+
+            m.assertTrue(content.findNode("scrollTrack").visible)
+            m.assertTrue(content.findNode("scrollThumb").visible)
+        end function
+
+        @it("focuses system information")
+        function _()
+            m.top.callFunc("focusSystemInformation")
+
+            m.assertTrue(m.top.hasFocus())
+        end function
+
+        @describe("scroll controls")
+
+        @it("starts the hold timer for pressed Down")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.findNode("scrollHoldDelayTimer").control, "start")
+        end function
+
+        @it("stops timers when held Down is released")
+        function _()
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", false)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.findNode("scrollHoldDelayTimer").control, "stop")
+            m.assertEqual(m.top.findNode("scrollRepeatTimer").control, "stop")
+        end function
+
+        @it("consumes released Up without a held key")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", false)
+
+            m.assertTrue(handled)
+        end function
+
+        @it("ignores unrelated pressed keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertFalse(handled)
+        end function
+
+        function createRenderedContent() as object
+            content = CreateObject("roSGNode", "SystemInformationContent")
+            content.callFunc("updateSystemInformation")
+            return content
+        end function
+
+        function hasLabel(content as object, expectedText as string) as boolean
+            sheet = content.findNode("propertySheet")
+            for i = 0 to sheet.getChildCount() - 1
+                child = sheet.getChild(i)
+                if child.subtype() = "Label" and child.text = expectedText then return true
+            end for
+            return false
+        end function
+
     end class
 
 end namespace

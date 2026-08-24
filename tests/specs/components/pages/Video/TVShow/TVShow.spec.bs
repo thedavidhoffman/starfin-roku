@@ -4,6 +4,23 @@ namespace tests
     @suite("TVShow component")
     class TVShowTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.pageState.request = m.createRequest()
+            m.node.pageState.series = m.createSeries()
+            m.node.pageState.seasons = []
+            m.node.pageState.playbackQueue = invalid
+            m.node.pageState.playbackQueueIndex = 0
+            m.node.pageState.randomPlaybackQueue = invalid
+            m.node.pageState.randomQueueLoading = false
+            m.node.pageState.seriesLoaded = true
+            m.node.pageState.focusArea = "videoToolbar"
+            m.top.selectedEpisode = invalid
+            m.top.selectedSeason = invalid
+            m.top.selectedAllEpisodes = invalid
+            m.top.selectedPerson = invalid
+            m.top.overlayRequested = invalid
+            m.top.closeRequested = false
+        end function
         @describe("declarative component contract")
 
         @it("declares the mediaShell node")
@@ -51,6 +68,255 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("themeSongsTask"))
         end function
 
+        @describe("series and season rendering")
+
+        @it("renders series identity and overview")
+        function _()
+            'bs:disable-next-line 1140
+            renderSeries(m.createSeries())
+
+            content = m.top.findNode("mediaShell").mediaContent
+            m.assertEqual(content.title, "Series")
+            m.assertEqual(content.overview, "Overview")
+        end function
+
+        @it("renders valid seasons")
+        function _()
+            seasons = [m.createSeason("season-1", "Season 1"), m.createSeason("season-2", "Season 2")]
+
+            'bs:disable-next-line 1140
+            renderSeasons(seasons)
+
+            grid = m.top.findNode("seasonsGrid")
+            m.assertTrue(grid.visible)
+            m.assertEqual(grid.content.getChildCount(), 2)
+            m.assertEqual(grid.content.getChild(0).title, "Season 1")
+        end function
+
+        @it("ignores malformed seasons")
+        function _()
+            'bs:disable-next-line 1140
+            renderSeasons([invalid, "bad"])
+
+            m.assertFalse(m.top.findNode("seasonsGrid").visible)
+        end function
+
+        @it("falls back to series artwork for a season")
+        function _()
+            series = m.createSeries()
+            series.ImageTags.Primary = "series-tag"
+            m.node.pageState.series = series
+
+            'bs:disable-next-line 1140
+            imageUrl = getSeasonPosterUrl(m.createSeason("season-1", "Season 1"))
+
+            m.assertTrue(Instr(1, imageUrl, "series-1") > 0)
+        end function
+
+        @it("enables All Episodes when a valid season exists")
+        function _()
+            m.node.pageState.seasons = [m.createSeason("season-1", "Season 1")]
+
+            'bs:disable-next-line 1140
+            updateAllEpisodesAvailability()
+
+            m.assertTrue(m.top.findNode("videoToolbar").supportsAllEpisodes)
+        end function
+
+        @it("disables All Episodes without a valid season")
+        function _()
+            m.node.pageState.seasons = [{ Name: "Missing id" }]
+
+            'bs:disable-next-line 1140
+            updateAllEpisodesAvailability()
+
+            m.assertFalse(m.top.findNode("videoToolbar").supportsAllEpisodes)
+        end function
+
+        @describe("selection payloads")
+
+        @it("emits All Episodes from the first valid season")
+        function _()
+            m.node.pageState.seasons = [m.createSeason("season-1", "Season 1")]
+
+            'bs:disable-next-line 1140
+            onVideoToolbarAllEpisodesSelected()
+
+            m.assertEqual(m.top.selectedAllEpisodes.seriesId, "series-1")
+            m.assertEqual(m.top.selectedAllEpisodes.seasonId, "season-1")
+            m.assertTrue(m.top.selectedAllEpisodes.allEpisodes)
+        end function
+
+        @it("emits a resume episode selection")
+        function _()
+            episode = m.createEpisode("episode-1")
+            episode.UserData.PlaybackPositionTicks = 700
+
+            'bs:disable-next-line 1140
+            emitEpisodeSelection(episode, true)
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "episode-1")
+            m.assertEqual(m.top.selectedEpisode.startPositionTicks.ToStr(), "700")
+            m.assertEqual(m.top.selectedEpisode.playbackQueueScope, "series")
+        end function
+
+        @it("emits a fresh episode selection at zero")
+        function _()
+            'bs:disable-next-line 1140
+            emitEpisodeSelection(m.createEpisode("episode-1"), false)
+
+            m.assertEqual(m.top.selectedEpisode.startPositionTicks, 0)
+        end function
+
+        @it("ignores episode selections without an id")
+        function _()
+            'bs:disable-next-line 1140
+            emitEpisodeSelection({ Type: "Episode" }, false)
+
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("emits selected season and next season")
+        function _()
+            seasons = [m.createSeason("season-1", "Season 1"), m.createSeason("season-2", "Season 2")]
+            m.node.pageState.seasons = seasons
+            'bs:disable-next-line 1140
+            renderSeasons(seasons)
+            m.top.findNode("seasonsGrid").itemSelected = 0
+
+            'bs:disable-next-line 1140
+            onSeasonSelected()
+
+            m.assertEqual(m.top.selectedSeason.seasonId, "season-1")
+            m.assertEqual(m.top.selectedSeason.nextSeason.Id, "season-2")
+        end function
+
+        @it("starts cached random playback with random scope")
+        function _()
+            m.node.pageState.randomPlaybackQueue = [{ itemId: "episode-1", item: m.createEpisode("episode-1"), season: m.createSeason("season-1", "Season 1") }]
+
+            'bs:disable-next-line 1140
+            startRandomPlayback()
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "episode-1")
+            m.assertEqual(m.top.selectedEpisode.playbackQueueMode, "random")
+            m.assertEqual(m.top.selectedEpisode.playbackQueueScope, "random")
+        end function
+
+        @describe("playback and watched updates")
+
+        @it("advances the toolbar item after finished playback")
+        function _()
+            nextEpisode = m.createEpisode("episode-2")
+            m.node.pageState.playbackQueue = [{ itemId: "episode-1", item: m.createEpisode("episode-1") }, { itemId: "episode-2", item: nextEpisode }]
+            m.node.pageState.playbackQueueIndex = 0
+            m.top.playbackProgressChange = { itemId: "episode-1", isFinished: true }
+
+            'bs:disable-next-line 1140
+            onPlaybackProgressChange()
+
+            m.assertEqual(m.node.pageState.playbackQueueIndex, 1)
+            m.assertEqual(m.top.findNode("videoToolbar").playItem.Id, "episode-2")
+        end function
+
+        @it("ignores unfinished playback for queue advancement")
+        function _()
+            m.node.pageState.playbackQueue = [{ itemId: "episode-1", item: m.createEpisode("episode-1") }, { itemId: "episode-2", item: m.createEpisode("episode-2") }]
+            m.top.playbackProgressChange = { itemId: "episode-1", isFinished: false }
+
+            'bs:disable-next-line 1140
+            onPlaybackProgressChange()
+
+            m.assertEqual(m.node.pageState.playbackQueueIndex, 0)
+        end function
+
+        @it("updates season watched state from unplayed count")
+        function _()
+            season = m.createSeason("season-1", "Season 1")
+
+            'bs:disable-next-line 1140
+            applySeasonWatchedState(season, { unplayedItemCount: 0 })
+
+            m.assertTrue(season.UserData.Played)
+            m.assertEqual(season.UserData.UnplayedItemCount, 0)
+        end function
+
+        @describe("focus, overlays, and lifecycle")
+
+        @it("focuses seasons when rendered")
+        function _()
+            'bs:disable-next-line 1140
+            renderSeasons([m.createSeason("season-1", "Season 1")])
+
+            'bs:disable-next-line 1140
+            focusSeasonsIfActive()
+
+            m.assertEqual(m.node.pageState.focusArea, "seasons")
+            m.assertTrue(m.top.findNode("seasonsGrid").hasFocus())
+        end function
+
+        @it("routes MediaShell overlays with TV Show source")
+        function _()
+            m.top.findNode("mediaShell").overlayRequested = { id: "description" }
+
+            'bs:disable-next-line 1140
+            onMediaShellOverlayRequested()
+
+            m.assertEqual(m.top.overlayRequested.sourcePage, "tvShow")
+        end function
+
+        @it("adds series identity to cast selection")
+        function _()
+            m.top.findNode("cast").selectedPerson = { itemId: "person-1" }
+
+            'bs:disable-next-line 1140
+            onCastPersonSelected()
+
+            m.assertEqual(m.top.selectedPerson.sourceItemType, "series")
+            m.assertEqual(m.top.selectedPerson.sourceSeriesId, "series-1")
+        end function
+
+        @it("deactivation stops series tasks")
+        function _()
+            m.top.callFunc("deactivate")
+
+            m.assertEqual(m.top.findNode("tvShowTask").control, "stop")
+            m.assertEqual(m.top.findNode("randomPlaybackTask").control, "stop")
+            m.assertEqual(m.top.findNode("themeSongsTask").control, "stop")
+        end function
+
+        @it("Back requests close")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function createRequest() as object
+            return { server: "http://server", token: "token", userId: "user", itemId: "series-1", settings: {} }
+        end function
+
+        function createSeries() as object
+            return { Id: "series-1", Name: "Series", Type: "Series", Overview: "Overview", ImageTags: {}, BackdropImageTags: [], People: [], Genres: [] }
+        end function
+
+        function createSeason(id as string, name as string) as object
+            return { Id: id, Name: name, Type: "Season", ImageTags: {}, BackdropImageTags: [], UserData: { Played: false, UnplayedItemCount: 1 } }
+        end function
+
+        function createEpisode(id as string) as object
+            return { Id: id, Name: id, Type: "Episode", SeasonId: "season-1", SeasonName: "Season 1", UserData: { Played: false, PlaybackPositionTicks: 0 } }
+        end function
     end class
 
 end namespace

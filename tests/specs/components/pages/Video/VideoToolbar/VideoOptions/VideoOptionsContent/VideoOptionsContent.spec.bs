@@ -26,6 +26,83 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("optionDescription"))
         end function
 
+        @describe("option rendering")
+
+        @it("renders all playback modes")
+        function _()
+            m.assertEqual(m.top.findNode("optionList").content.getChildCount(), 4)
+        end function
+
+        @it("renders Automatic first")
+        function _()
+            m.assertEqual(m.top.findNode("optionList").content.getChild(0).title, "Automatic")
+        end function
+
+        @it("checks and focuses the selected mode")
+        function _()
+            m.top.selectedKey = "transcode-no-remux"
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 3)
+            m.assertEqual(m.top.findNode("optionList").itemFocused, 3)
+        end function
+
+        @it("uses the first option for an unknown selected mode")
+        function _()
+            m.top.selectedKey = "unknown"
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, -1)
+            m.assertEqual(m.top.findNode("optionList").itemFocused, 0)
+        end function
+
+        @it("renders the focused option title")
+        function _()
+            m.top.findNode("optionList").itemFocused = 1
+
+            m.assertEqual(m.top.findNode("optionTitle").text, "Automatic (Remux Disabled)")
+        end function
+
+        @it("renders the focused option description")
+        function _()
+            m.top.findNode("optionList").itemFocused = 2
+
+            m.assertTrue(Instr(1, m.top.findNode("optionDescription").text, "Disables Direct Play") > 0)
+        end function
+
+        @describe("option selection")
+
+        @it("emits the selected option")
+        function _()
+            m.top.findNode("optionList").itemSelected = 2
+
+            m.assertEqual(m.top.optionSelected.key, "transcode-allow-remux")
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 2)
+        end function
+
+        @it("ignores a negative selection")
+        function _()
+            m.top.optionSelected = invalid
+
+            m.top.findNode("optionList").itemSelected = -1
+
+            m.assertInvalid(m.top.optionSelected)
+        end function
+
+        @it("ignores an out of range selection")
+        function _()
+            m.top.optionSelected = invalid
+            m.top.findNode("optionList").itemSelected = 10
+
+
+            m.assertInvalid(m.top.optionSelected)
+        end function
+
+        @it("focuses the option list")
+        function _()
+            m.top.callFunc("focusOptions")
+
+            m.assertTrue(m.top.findNode("optionList").hasFocus())
+        end function
+
     end class
 
 end namespace

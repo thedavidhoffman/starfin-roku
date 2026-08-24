@@ -16,6 +16,140 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("fill"))
         end function
 
+        @describe("layout")
+
+        @it("hides the indicator for non-poster layouts")
+        function _()
+            m.top.layoutMode = "thumbnail"
+
+            'bs:disable-next-line 1140
+            onProgressStateChanged()
+
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("positions the poster indicator beside the grid")
+        function _()
+            m.top.layoutMode = "poster"
+
+            'bs:disable-next-line 1140
+            updateLayout()
+
+            m.assertTrue(m.top.translation[0] = 1854)
+            m.assertTrue(m.top.translation[1] = 207)
+        end function
+
+        @it("sizes the poster indicator to the available screen height")
+        function _()
+            m.top.layoutMode = "poster"
+
+            'bs:disable-next-line 1140
+            updateLayout()
+
+            m.assertTrue(m.node.track.height = 861)
+            m.assertTrue(m.node.fill.width = 10)
+        end function
+
+        @describe("progress visibility")
+
+        @it("hides the indicator for fewer than ten rows")
+        function _()
+            m.configureProgress(54, 54, 0)
+
+            'bs:disable-next-line 1140
+            updateProgress()
+
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("hides the indicator when all rows fit in the viewport")
+        function _()
+            m.top.layoutMode = "poster"
+            m.top.numColumns = 6
+            m.top.numRows = 10
+            m.top.itemCount = 60
+            m.top.totalItemCount = 60
+
+            'bs:disable-next-line 1140
+            updateProgress()
+
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("shows the indicator for a long poster library")
+        function _()
+            m.configureProgress(60, 60, 0)
+
+            'bs:disable-next-line 1140
+            updateProgress()
+
+            m.assertTrue(m.top.visible)
+        end function
+
+        @describe("progress fill")
+
+        @it("starts with an empty fill on the first row")
+        function _()
+            m.configureProgress(60, 60, 0)
+
+            'bs:disable-next-line 1140
+            onProgressStateChanged()
+
+            m.assertTrue(m.node.fill.height = 0)
+        end function
+
+        @it("fills proportionally for a middle row")
+        function _()
+            m.configureProgress(60, 60, 30)
+
+            'bs:disable-next-line 1140
+            onProgressStateChanged()
+
+            m.assertTrue(m.node.fill.height = 478)
+        end function
+
+        @it("fills the available height on the final row")
+        function _()
+            m.configureProgress(60, 60, 59)
+
+            'bs:disable-next-line 1140
+            onProgressStateChanged()
+
+            m.assertTrue(m.node.fill.height = 861)
+        end function
+
+        @it("clamps focused indices below the loaded range")
+        function _()
+            m.configureProgress(60, 60, -4)
+
+            'bs:disable-next-line 1140
+            onProgressStateChanged()
+
+            m.assertTrue(m.node.fill.height = 0)
+        end function
+
+        @it("clamps focused indices above the loaded range")
+        function _()
+            m.configureProgress(60, 60, 100)
+
+            'bs:disable-next-line 1140
+            onProgressStateChanged()
+
+            m.assertTrue(m.node.fill.height = 861)
+        end function
+
+        function configureProgress(itemCount as integer, totalItemCount as integer, focusedIndex as integer)
+            m.top.layoutMode = "poster"
+            m.top.gridLeft = 96
+            m.top.gridTop = 207
+            m.top.itemWidth = 297
+            m.top.itemSpacingX = -12
+            m.top.numColumns = 6
+            m.top.numRows = 2
+            m.top.itemCount = itemCount
+            m.top.totalItemCount = totalItemCount
+            m.top.focusedIndex = focusedIndex
+        end function
     end class
 
 end namespace

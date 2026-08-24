@@ -11,6 +11,149 @@ namespace tests
             m.assertNotInvalid(m.top)
         end function
 
+        @describe("dialog configuration")
+
+        @it("uses the media name as the title")
+        function _()
+            m.top.item = m.createMovie()
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.dialogTitle, "Movie")
+        end function
+
+        @it("uses the generic title when the media name is empty")
+        function _()
+            item = m.createMovie()
+            item.Name = ""
+            m.top.item = item
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.dialogTitle, "Media Actions")
+        end function
+
+        @it("offers Mark as Watched for an unwatched item")
+        function _()
+            m.top.item = m.createMovie()
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.options[0].key, "MarkAsWatched")
+        end function
+
+        @it("offers Mark as Unwatched for a watched item")
+        function _()
+            item = m.createMovie()
+            item.UserData.Played = true
+            m.top.item = item
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.options[0].key, "MarkAsUnwatched")
+        end function
+
+        @it("offers Add to Favorites for a nonfavorite item")
+        function _()
+            m.top.item = m.createMovie()
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.options[1].key, "AddToFavorites")
+        end function
+
+        @it("offers Remove from Favorites for a favorite item")
+        function _()
+            item = m.createMovie()
+            item.UserData.IsFavorite = true
+            m.top.item = item
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.options[1].key, "RemoveFromFavorites")
+        end function
+
+        @it("adds a series action for an episode with a series")
+        function _()
+            item = m.createEpisode()
+            item.SeriesId = "series-1"
+            m.top.item = item
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.options[2].key, "GoToSeries")
+        end function
+
+        @it("adds a season action for an episode with a season")
+        function _()
+            item = m.createEpisode()
+            item.SeasonId = "season-1"
+            m.top.item = item
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.options[2].key, "GoToSeason")
+        end function
+
+        @it("does not add episode navigation actions for movies")
+        function _()
+            item = m.createMovie()
+            item.SeriesId = "series-1"
+            item.SeasonId = "season-1"
+            m.top.item = item
+
+            m.top.callFunc("openMediaActions")
+
+            m.assertEqual(m.top.options.Count(), 2)
+        end function
+
+        @describe("action events")
+
+        @it("emits a supported selected action")
+        function _()
+            m.top.item = m.createMovie()
+            m.top.itemImageUrl = "http://server/movie.jpg"
+            m.top.callFunc("openMediaActions")
+
+            m.top.selectedOption = { key: "MarkAsWatched" }
+
+            m.assertEqual(m.top.mediaActionSelected.itemId, "movie-1")
+            m.assertEqual(m.top.mediaActionSelected.action, "MarkAsWatched")
+            m.assertEqual(m.top.mediaActionSelected.itemImageUrl, "http://server/movie.jpg")
+        end function
+
+        @it("ignores unsupported selected actions")
+        function _()
+            m.top.item = m.createMovie()
+            m.top.callFunc("openMediaActions")
+            m.top.mediaActionSelected = invalid
+
+            m.top.selectedOption = { key: "Unsupported" }
+
+            m.assertInvalid(m.top.mediaActionSelected)
+        end function
+
+        @it("ignores selection for an item without an id")
+        function _()
+            item = m.createMovie()
+            item.Id = ""
+            m.top.item = item
+            m.top.callFunc("openMediaActions")
+            m.top.mediaActionSelected = invalid
+
+            m.top.selectedOption = { key: "MarkAsWatched" }
+
+            m.assertInvalid(m.top.mediaActionSelected)
+        end function
+
+        function createMovie() as object
+            return { Id: "movie-1", Name: "Movie", Type: "Movie", UserData: { Played: false, IsFavorite: false }, SeriesId: "", SeasonId: "" }
+        end function
+
+        function createEpisode() as object
+            return { Id: "episode-1", Name: "Episode", Type: "Episode", UserData: { Played: false, IsFavorite: false }, SeriesId: "", SeasonId: "" }
+        end function
+
     end class
 
 end namespace

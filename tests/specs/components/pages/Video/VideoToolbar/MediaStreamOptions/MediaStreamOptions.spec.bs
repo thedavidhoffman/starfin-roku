@@ -11,6 +11,131 @@ namespace tests
             m.assertNotInvalid(m.top)
         end function
 
+        @describe("overlay requests")
+
+        @it("opens subtitle options")
+        function _()
+            m.top.callFunc("openSubtitleOptions", { subtitleStreams: [], selectedSubtitleStreamIndex: 3 })
+
+            request = m.top.overlayRequested
+            m.assertTrue(m.top.visible)
+            m.assertEqual(request.id, "subtitleOptions")
+            m.assertEqual(request.dialogTitle, "Subtitles")
+            m.assertEqual(request.selectedKey, "3")
+        end function
+
+        @it("uses Off when a subtitle selection is absent")
+        function _()
+            m.top.callFunc("openSubtitleOptions", { subtitleStreams: [] })
+
+            m.assertEqual(m.top.overlayRequested.selectedKey, "-2")
+        end function
+
+        @it("ignores an invalid subtitle request")
+        function _()
+            m.top.overlayRequested = invalid
+
+            m.top.callFunc("openSubtitleOptions", invalid)
+
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("opens audio options")
+        function _()
+            m.top.callFunc("openAudioOptions", { audioStreams: [], selectedAudioStreamIndex: 2 })
+
+            request = m.top.overlayRequested
+            m.assertEqual(request.id, "audioOptions")
+            m.assertEqual(request.dialogTitle, "Audio")
+            m.assertEqual(request.selectedKey, "2")
+        end function
+
+        @it("uses the default audio selection when absent")
+        function _()
+            m.top.callFunc("openAudioOptions", { audioStreams: [] })
+
+            m.assertEqual(m.top.overlayRequested.selectedKey, "-1")
+        end function
+
+        @it("opens chapter options")
+        function _()
+            m.top.callFunc("openChapterOptions", { chapters: [], selectedChapterKey: "chapter-2" })
+
+            request = m.top.overlayRequested
+            m.assertEqual(request.id, "chapterOptions")
+            m.assertEqual(request.selectedKey, "chapter-2")
+            m.assertFalse(request.allowDefaultSelection)
+        end function
+
+        @it("opens video options")
+        function _()
+            m.top.callFunc("openVideoOptions", { selectedKey: "direct" })
+
+            request = m.top.overlayRequested
+            m.assertEqual(request.componentName, "VideoOptionsDialog")
+            m.assertEqual(request.openFunction, "openVideoOptions")
+            m.assertEqual(request.selectedKey, "direct")
+        end function
+
+        @it("uses automatic video mode when absent")
+        function _()
+            m.top.callFunc("openVideoOptions", {})
+
+            m.assertEqual(m.top.overlayRequested.selectedKey, "automatic")
+        end function
+
+        @it("closes the option surface")
+        function _()
+            m.top.visible = true
+            m.top.closeRequested = false
+
+            m.top.callFunc("closeOptions")
+
+            m.assertFalse(m.top.visible)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @describe("selection propagation")
+
+        @it("propagates subtitle selection")
+        function _()
+            selection = { key: "2" }
+
+            m.top.callFunc("applySubtitleSelection", selection)
+
+            m.assertEqual(m.top.selectedSubtitle.key, "2")
+        end function
+
+        @it("ignores invalid subtitle selection")
+        function _()
+            m.top.selectedSubtitle = invalid
+
+            m.top.callFunc("applySubtitleSelection", invalid)
+
+            m.assertInvalid(m.top.selectedSubtitle)
+        end function
+
+        @it("propagates audio selection")
+        function _()
+            m.top.callFunc("applyAudioSelection", { key: "1" })
+
+            m.assertEqual(m.top.selectedAudio.key, "1")
+        end function
+
+        @it("propagates chapter selection")
+        function _()
+            m.top.callFunc("applyChapterSelection", { key: "chapter-1" })
+
+            m.assertEqual(m.top.selectedChapter.key, "chapter-1")
+        end function
+
+        @it("propagates video mode selection")
+        function _()
+            m.top.callFunc("applyVideoModeSelection", { key: "direct" })
+
+            m.assertEqual(m.top.selectedVideoMode.key, "direct")
+        end function
+
     end class
 
 end namespace

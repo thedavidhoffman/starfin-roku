@@ -37,6 +37,7 @@
 
 ## Unit tests
 
+- Unit tests for behavior-bearing code must provide functional coverage of observable behavior, including relevant rendering, state changes, events, focus, navigation, task requests, response handling, and boundary or error paths. Node-existence assertions are declarative smoke coverage only and must not be the sole coverage for components that contain behavior.
 - Give each distinct test case or behavior its own test. Do not combine multiple test cases into a single test function.
 - Place test files in directories that mirror the production source-code directory structure.
 - Format BrighterScript unit-test suites with one blank line after the `namespace` declaration, between the suite/class header and each `@describe`, after each `@describe`, between every test function, before `end class`, and between `end class` and `end namespace`.

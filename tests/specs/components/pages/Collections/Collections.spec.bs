@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("Collections")
@@ -19,6 +21,182 @@ namespace tests
         @it("declares the collectionsTask node")
         function _()
             m.assertNotInvalid(m.top.findNode("collectionsTask"))
+        end function
+
+        @describe("collection rendering")
+
+        @it("renders valid box-set collections")
+        function _()
+            m.setPosterSettings()
+
+            'bs:disable-next-line 1140
+            renderCollections([m.createCollection("collection-1", "Collection")])
+
+            grid = m.top.findNode("collectionsGrid")
+            m.assertTrue(grid.visible)
+            m.assertEqual(grid.content.getChildCount(), 1)
+            m.assertEqual(grid.content.getChild(0).raw.Name, "Collection")
+        end function
+
+        @it("ignores malformed collection entries")
+        function _()
+            m.setPosterSettings()
+
+            'bs:disable-next-line 1140
+            renderCollections([invalid, "bad"])
+
+            m.assertFalse(m.top.findNode("collectionsGrid").visible)
+        end function
+
+        @it("uses poster layout by default")
+        function _()
+            m.setPosterSettings()
+
+            grid = m.top.findNode("collectionsGrid")
+            m.assertEqual(grid.numColumns, 6)
+            m.assertEqual(grid.numRows, 2)
+            m.assertEqual(Number.ToInteger(grid.itemSize[0], -1), 297)
+        end function
+
+        @it("uses wide layout for thumbnail settings")
+        function _()
+            m.top.settings = { "collection-cards-image-type": "thumbnail" }
+
+            grid = m.top.findNode("collectionsGrid")
+            m.assertEqual(grid.numColumns, 4)
+            m.assertEqual(grid.numRows, 3)
+            m.assertEqual(Number.ToInteger(grid.itemSize[0], -1), 465)
+        end function
+
+        @it("renders collection image URLs from the request")
+        function _()
+            m.setPosterSettings()
+            m.node.pageState.request = { server: "http://server", token: "token" }
+            item = m.createCollection("collection-1", "Collection")
+            item.ImageTags.Primary = "tag"
+
+            'bs:disable-next-line 1140
+            renderCollections([item])
+
+            m.assertTrue(Instr(1, m.top.findNode("collectionsGrid").content.getChild(0).HDPosterUrl, "collection-1") > 0)
+        end function
+
+        @it("centers two top collections")
+        function _()
+            m.setPosterSettings()
+            m.node.pageState.usingTopCollections = true
+
+            'bs:disable-next-line 1140
+            renderCollections([m.createCollection("one", "One"), m.createCollection("two", "Two")])
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("collectionsGrid").translation[0], -1), 672)
+        end function
+
+        @describe("selection and drilldown")
+
+        @it("emits a selected collection")
+        function _()
+            item = m.createCollection("collection-1", "Collection")
+
+            'bs:disable-next-line 1140
+            openSelectedCollection("collection-1", item)
+
+            m.assertEqual(m.top.selectedCollection.itemId, "collection-1")
+            m.assertEqual(m.top.selectedCollection.item, item)
+        end function
+
+        @it("ignores grid selection without a page request")
+        function _()
+            m.setPosterSettings()
+            m.node.pageState.request = invalid
+            m.top.selectedCollection = invalid
+            'bs:disable-next-line 1140
+            renderCollections([m.createCollection("collection-1", "Collection")])
+
+            m.top.findNode("collectionsGrid").itemSelected = 0
+
+            m.assertInvalid(m.top.selectedCollection)
+        end function
+
+        @it("restores parent collection navigation state")
+        function _()
+            parentRequest = { libraryId: "parent" }
+            parentItems = [m.createCollection("parent-item", "Parent Item")]
+            m.node.pageState.navigationStack = [{ request: parentRequest, collections: parentItems, title: "Parent", usingTopCollections: false }]
+
+            'bs:disable-next-line 1140
+            navigated = navigateBackToParentCollection()
+
+            m.assertTrue(navigated)
+            m.assertEqual(m.top.findNode("titleLabel").text, "Parent")
+            m.assertEqual(m.top.findNode("collectionsGrid").content.getChildCount(), 1)
+        end function
+
+        @it("does not navigate back without parent state")
+        function _()
+            m.node.pageState.navigationStack = []
+
+            'bs:disable-next-line 1140
+            navigated = navigateBackToParentCollection()
+
+            m.assertFalse(navigated)
+        end function
+
+        @describe("focus and keyboard behavior")
+
+        @it("activates and focuses rendered collections")
+        function _()
+            m.setPosterSettings()
+            'bs:disable-next-line 1140
+            renderCollections([m.createCollection("collection-1", "Collection")])
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.findNode("collectionsGrid").hasFocus())
+        end function
+
+        @it("exits upward from the first grid row")
+        function _()
+            m.setPosterSettings()
+            'bs:disable-next-line 1140
+            renderCollections([m.createCollection("collection-1", "Collection")])
+            m.top.callFunc("activate")
+            m.top.findNode("collectionsGrid").itemFocused = 0
+            m.top.focusExitUp = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+        @it("requests close for Back without parent state")
+        function _()
+            m.node.pageState.navigationStack = []
+            m.top.closeRequested = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function setPosterSettings()
+            m.top.settings = { "collection-cards-image-type": "poster" }
+        end function
+
+        function createCollection(id as string, name as string) as object
+            return { Id: id, Name: name, Type: "BoxSet", Tags: [], ImageTags: {}, BackdropImageTags: [] }
         end function
 
     end class

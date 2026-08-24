@@ -16,6 +16,113 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("sortOrderIcon"))
         end function
 
+        @describe("sort state")
+
+        @it("is focusable when sorting is enabled")
+        function _()
+            m.top.sortEnabled = true
+
+            m.assertTrue(m.top.focusable)
+        end function
+
+        @it("is not focusable when sorting is disabled")
+        function _()
+            m.top.sortEnabled = false
+
+            m.assertFalse(m.top.focusable)
+        end function
+
+        @it("renders an upward arrow for descending order")
+        function _()
+            m.top.sortEnabled = true
+            m.top.selectedSort = { sortOrder: "Descending" }
+
+            m.assertTrue(Instr(1, m.top.findNode("sortOrderIcon").uri, "sort-arrow-up") > 0)
+        end function
+
+        @it("renders a downward arrow for ascending order")
+        function _()
+            m.top.sortEnabled = true
+            m.top.selectedSort = { sortOrder: "Ascending" }
+
+            m.assertTrue(Instr(1, m.top.findNode("sortOrderIcon").uri, "sort-arrow-down") > 0)
+        end function
+
+        @it("dims the icon when sorting is disabled")
+        function _()
+            m.top.sortEnabled = false
+
+            m.assertEqual(m.top.findNode("sortOrderIcon").opacity, 0.45)
+        end function
+
+        @describe("keyboard behavior")
+
+        @it("changes ascending order to descending for pressed OK")
+        function _()
+            m.top.sortEnabled = true
+            m.top.selectedSort = { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "Ascending", label: "Date Added" }
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.sortOrderChanged.sortOrder, "Descending")
+        end function
+
+        @it("changes descending order to ascending for pressed Select")
+        function _()
+            m.top.sortEnabled = true
+            m.top.selectedSort = { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "Descending", label: "Date Added" }
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("Select", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.sortOrderChanged.sortOrder, "Ascending")
+        end function
+
+        @it("ignores selection while sorting is disabled")
+        function _()
+            m.top.sortEnabled = false
+            m.top.sortOrderChanged = invalid
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertFalse(handled)
+            m.assertInvalid(m.top.sortOrderChanged)
+        end function
+
+        @it("emits focus exit for pressed Down")
+        function _()
+            m.top.sortEnabled = true
+            m.top.focusExitDown = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("Down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitDown)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", false)
+
+            m.assertFalse(handled)
+        end function
+
+        @it("ignores unrelated pressed keys")
+        function _()
+            m.top.sortEnabled = true
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("Right", true)
+
+            m.assertFalse(handled)
+        end function
+
     end class
 
 end namespace

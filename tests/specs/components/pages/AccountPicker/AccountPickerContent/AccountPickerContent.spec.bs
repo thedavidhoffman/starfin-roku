@@ -41,6 +41,332 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("cancelButton"))
         end function
 
+        @describe("account rendering")
+
+        @it("renders Active for the active account")
+        function _()
+            m.renderAccountsForTest([m.account("active", true)])
+
+            item = m.getRenderedAccount(0)
+
+            m.assertEqual(item.description, "Active")
+        end function
+
+        @it("renders the removal hint for an inactive account")
+        function _()
+            m.renderAccountsForTest([m.account("inactive", false)])
+
+            item = m.getRenderedAccount(0)
+
+            m.assertEqual(item.description, "* to forget")
+        end function
+
+        @it("hides account rows for an empty account list")
+        function _()
+            m.renderAccountsForTest([])
+
+            m.assertFalse(m.node.accountRows.visible)
+        end function
+
+        @describe("account selection")
+
+        @it("emits the selected account")
+        function _()
+            account = m.account("selected", false)
+            m.renderAccountsForTest([account])
+            m.node.accountRows.rowItemSelected = [0, 0]
+
+            'bs:disable-next-line 1140
+            onAccountSelected()
+
+            m.assertEqual(m.top.accountSelected, account)
+        end function
+
+        @it("ignores a malformed account selection")
+        function _()
+            m.renderAccountsForTest([m.account("selected", false)])
+            m.top.accountSelected = invalid
+            m.node.accountRows.rowItemSelected = [0]
+
+            'bs:disable-next-line 1140
+            onAccountSelected()
+
+            m.assertInvalid(m.top.accountSelected)
+        end function
+
+        @it("ignores an out-of-range account selection")
+        function _()
+            m.renderAccountsForTest([m.account("selected", false)])
+            m.top.accountSelected = invalid
+            m.node.accountRows.rowItemSelected = [0, 5]
+
+            'bs:disable-next-line 1140
+            onAccountSelected()
+
+            m.assertInvalid(m.top.accountSelected)
+        end function
+
+        @it("ignores account selection during removal confirmation")
+        function _()
+            account = m.account("selected", false)
+            m.renderAccountsForTest([account])
+            m.node.accountState.mode = "remove"
+            m.top.accountSelected = invalid
+            m.node.accountRows.rowItemSelected = [0, 0]
+
+            'bs:disable-next-line 1140
+            onAccountSelected()
+
+            m.assertInvalid(m.top.accountSelected)
+        end function
+
+        @it("emits sign-in selection")
+        function _()
+            m.top.signInSelected = false
+
+            'bs:disable-next-line 1140
+            onSignInSelected()
+
+            m.assertTrue(m.top.signInSelected)
+        end function
+
+        @describe("account overflow")
+
+        @it("shows only the right chevron at the beginning")
+        function _()
+            m.renderAccountsForTest(m.fiveAccounts())
+
+            'bs:disable-next-line 1140
+            overflow = getAccountOverflowState([0, 0])
+
+            m.assertFalse(overflow.left)
+            m.assertTrue(overflow.right)
+        end function
+
+        @it("shows both chevrons in the middle")
+        function _()
+            m.renderAccountsForTest(m.fiveAccounts())
+
+            'bs:disable-next-line 1140
+            overflow = getAccountOverflowState([0, 2])
+
+            m.assertTrue(overflow.left)
+            m.assertTrue(overflow.right)
+        end function
+
+        @it("shows only the left chevron at the end")
+        function _()
+            m.renderAccountsForTest(m.fiveAccounts())
+
+            'bs:disable-next-line 1140
+            overflow = getAccountOverflowState([0, 4])
+
+            m.assertTrue(overflow.left)
+            m.assertFalse(overflow.right)
+        end function
+
+        @describe("saved focus")
+
+        @it("clamps saved focus below the first account")
+        function _()
+            m.renderAccountsForTest([m.account("one", false), m.account("two", false)])
+
+            'bs:disable-next-line 1140
+            focused = getValidRowItem([0, -1])
+
+            m.assertEqual(focused, [0, 0])
+        end function
+
+        @it("clamps saved focus above the last account")
+        function _()
+            m.renderAccountsForTest([m.account("one", false), m.account("two", false)])
+
+            'bs:disable-next-line 1140
+            focused = getValidRowItem([0, 8])
+
+            m.assertEqual(focused, [0, 1])
+        end function
+
+        @it("focuses account rows when accounts are available")
+        function _()
+            m.renderAccountsForTest([m.account("one", false)])
+
+            'bs:disable-next-line 1140
+            focused = focusAccounts()
+
+            m.assertTrue(focused)
+            m.assertTrue(m.node.accountRows.isInFocusChain())
+        end function
+
+        @it("focuses Sign In when no accounts are available")
+        function _()
+            m.renderAccountsForTest([])
+
+            'bs:disable-next-line 1140
+            focused = focusAccounts()
+
+            m.assertTrue(focused)
+            m.assertTrue(m.node.signInButton.isInFocusChain())
+        end function
+
+        @describe("removal confirmation")
+
+        @it("does not confirm removal for the active account")
+        function _()
+            account = m.account("active", true)
+            m.renderAccountsForTest([account])
+
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(account)
+
+            m.assertEqual(m.node.accountState.mode, "picker")
+        end function
+
+        @it("shows removal controls for an inactive account")
+        function _()
+            account = m.account("inactive", false)
+            m.renderAccountsForTest([account])
+
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(account)
+
+            m.assertEqual(m.node.accountState.mode, "remove")
+            m.assertFalse(m.node.signInButton.visible)
+            m.assertTrue(m.node.removalDescription.visible)
+            m.assertTrue(m.node.removeButton.visible)
+            m.assertTrue(m.node.cancelButton.visible)
+        end function
+
+        @it("focuses Cancel when moving right from Remove")
+        function _()
+            account = m.account("inactive", false)
+            m.renderAccountsForTest([account])
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(account)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.cancelButton.hasFocusVisual)
+        end function
+
+        @it("focuses Remove when moving left from Cancel")
+        function _()
+            account = m.account("inactive", false)
+            m.renderAccountsForTest([account])
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(account)
+            'bs:disable-next-line 1140
+            focusConfirmationButton("cancel")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.removeButton.hasFocusVisual)
+        end function
+
+        @it("cancels removal with Back")
+        function _()
+            account = m.account("inactive", false)
+            m.renderAccountsForTest([account])
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(account)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.accountState.mode, "picker")
+        end function
+
+        @it("cancels removal with the Cancel button")
+        function _()
+            account = m.account("inactive", false)
+            m.renderAccountsForTest([account])
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(account)
+
+            'bs:disable-next-line 1140
+            onCancelSelected()
+
+            m.assertEqual(m.node.accountState.mode, "picker")
+        end function
+
+        @it("keeps confirmation open when account removal fails")
+        function _()
+            account = m.account("", false)
+            m.renderAccountsForTest([account])
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(account)
+
+            'bs:disable-next-line 1140
+            onRemoveSelected()
+
+            m.assertEqual(m.node.accountState.mode, "remove")
+            m.assertTrue(m.node.removeButton.hasFocusVisual)
+        end function
+
+        @it("removes an inactive saved account")
+        function _()
+            accountKey = "rooibos-account-picker-removal"
+            sectionName = RegistryStore.AccountSectionName(accountKey)
+            registry = CreateObject("roRegistry")
+            registry.Delete(sectionName)
+            registry.Flush()
+            section = CreateObject("roRegistrySection", sectionName)
+            section.Write("test-marker", "account-picker")
+            section.Flush()
+            removedAccount = m.account(accountKey, false)
+            remainingAccount = m.account("remaining", true)
+            m.top.accounts = [removedAccount, remainingAccount]
+            'bs:disable-next-line 1140
+            renderAccounts()
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(removedAccount)
+
+            'bs:disable-next-line 1140
+            onRemoveSelected()
+            registry.Delete(sectionName)
+            registry.Flush()
+
+            m.assertEqual(m.top.accounts, [remainingAccount])
+            m.assertEqual(m.top.accountsChanged, [remainingAccount])
+            m.assertEqual(m.node.accountState.mode, "picker")
+        end function
+
+        function account(accountKey as string, isActive as boolean) as object
+            return {
+                accountKey: accountKey
+                server: "http://server"
+                username: accountKey
+                userId: accountKey
+                primaryImageTag: ""
+                isActive: isActive
+            }
+        end function
+
+        function fiveAccounts() as object
+            return [
+                m.account("one", false)
+                m.account("two", false)
+                m.account("three", false)
+                m.account("four", false)
+                m.account("five", false)
+            ]
+        end function
+
+        sub renderAccountsForTest(accounts as object)
+            m.top.accounts = accounts
+            'bs:disable-next-line 1140
+            renderAccounts()
+        end sub
+
+        function getRenderedAccount(index as integer) as object
+            return m.node.accountRows.content.getChild(0).getChild(index)
+        end function
+
     end class
 
 end namespace

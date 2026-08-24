@@ -81,6 +81,302 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("seasonButton"))
         end function
 
+        @describe("button visibility")
+
+        @it("shows Play when no resume action exists")
+        function _()
+            m.top.resumePositionSeconds = 0
+            m.top.resumeItem = invalid
+
+            m.assertTrue(m.top.findNode("playButton").visible)
+            m.assertFalse(m.top.findNode("resumeButton").visible)
+        end function
+
+        @it("shows Resume when progress exists")
+        function _()
+            m.top.resumePositionSeconds = 30
+
+            m.assertTrue(m.top.findNode("resumeButton").visible)
+            m.assertFalse(m.top.findNode("playButton").visible)
+        end function
+
+        @it("shows Restart when progress exists and restart is supported")
+        function _()
+            m.top.supportsRestart = true
+            m.top.resumePositionSeconds = 30
+
+            m.assertTrue(m.top.findNode("restartButton").visible)
+        end function
+
+        @it("hides Restart when restart is unsupported")
+        function _()
+            m.top.supportsRestart = false
+            m.top.resumePositionSeconds = 30
+
+            m.assertFalse(m.top.findNode("restartButton").visible)
+        end function
+
+        @it("shows Mark as Watched for unwatched media")
+        function _()
+            m.top.supportsWatchedActions = true
+            m.top.isWatched = false
+
+            m.assertTrue(m.top.findNode("markWatchedButton").visible)
+            m.assertFalse(m.top.findNode("markUnwatchedButton").visible)
+        end function
+
+        @it("shows Mark as Unwatched for watched media")
+        function _()
+            m.top.supportsWatchedActions = true
+            m.top.isWatched = true
+
+            m.assertFalse(m.top.findNode("markWatchedButton").visible)
+            m.assertTrue(m.top.findNode("markUnwatchedButton").visible)
+        end function
+
+        @it("shows subtitle options when subtitles exist")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.subtitleStreamCount = 1
+
+            m.assertTrue(m.top.findNode("subtitlesButton").visible)
+        end function
+
+        @it("shows audio options only for multiple audio streams")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.audioStreamCount = 2
+
+            m.assertTrue(m.top.findNode("audioButton").visible)
+        end function
+
+        @it("shows chapter options when chapters exist")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.chapterCount = 1
+
+            m.assertTrue(m.top.findNode("chaptersButton").visible)
+        end function
+
+        @it("hides stream options for seasons")
+        function _()
+            m.top.subtitleStreamCount = 1
+            m.top.audioStreamCount = 2
+            m.top.chapterCount = 1
+
+            m.top.mediaType = "tv-season"
+
+            m.assertFalse(m.top.findNode("subtitlesButton").visible)
+            m.assertFalse(m.top.findNode("audioButton").visible)
+            m.assertFalse(m.top.findNode("chaptersButton").visible)
+            m.assertFalse(m.top.findNode("videoButton").visible)
+        end function
+
+        @it("shows item navigation for episodes")
+        function _()
+            m.top.supportsItemNavigation = true
+            m.top.mediaType = "tv-episode"
+
+            m.assertTrue(m.top.findNode("seriesButton").visible)
+            m.assertTrue(m.top.findNode("seasonButton").visible)
+        end function
+
+        @it("renders episode context in the play label")
+        function _()
+            m.top.resumePositionSeconds = 0
+            m.top.resumeItem = invalid
+
+            m.top.playItem = { ParentIndexNumber: 2, IndexNumber: 4 }
+
+            m.assertEqual(m.top.findNode("playButton").text, "Play S2:E4")
+        end function
+
+        @describe("focus and keyboard behavior")
+
+        @it("activates and focuses the first visible button")
+        function _()
+            m.top.resumePositionSeconds = 0
+            m.top.resumeItem = invalid
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.findNode("playButton").hasFocus())
+            m.assertTrue(m.top.findNode("playButton").hasFocusVisual)
+        end function
+
+        @it("moves focus right")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.isWatched = false
+            m.top.resumePositionSeconds = 0
+            m.top.callFunc("activate")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("markWatchedButton").hasFocus())
+        end function
+
+        @it("clamps focus at the first button when moving left")
+        function _()
+            m.top.resumePositionSeconds = 0
+            m.top.callFunc("activate")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("playButton").hasFocus())
+        end function
+
+        @it("emits downward focus exit")
+        function _()
+            m.top.focusExitDown = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitDown)
+        end function
+
+        @it("emits upward focus exit when supported")
+        function _()
+            m.top.supportsFocusExitUp = true
+            m.top.focusExitUp = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+        @it("ignores upward focus exit when unsupported")
+        function _()
+            m.top.supportsFocusExitUp = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertFalse(handled)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", false)
+
+            m.assertFalse(handled)
+        end function
+
+        @describe("button events")
+        @it("emits play selection")
+        function _()
+            m.top.playSelected = false
+
+            m.top.findNode("playButton").buttonSelected = true
+
+            m.assertTrue(m.top.playSelected)
+        end function
+        @it("emits restart selection")
+        function _()
+            m.top.restartSelected = false
+
+            m.top.findNode("restartButton").buttonSelected = true
+
+            m.assertTrue(m.top.restartSelected)
+        end function
+        @it("emits random play selection")
+        function _()
+            m.top.randomPlaySelected = false
+
+            m.top.findNode("randomPlayButton").buttonSelected = true
+
+            m.assertTrue(m.top.randomPlaySelected)
+        end function
+        @it("emits all episodes selection")
+        function _()
+            m.top.allEpisodesSelected = false
+
+            m.top.findNode("allEpisodesButton").buttonSelected = true
+
+            m.assertTrue(m.top.allEpisodesSelected)
+        end function
+        @it("emits mark watched selection")
+        function _()
+            m.top.markAsWatchedSelected = false
+
+            m.top.findNode("markWatchedButton").buttonSelected = true
+
+            m.assertTrue(m.top.markAsWatchedSelected)
+        end function
+        @it("emits mark unwatched selection")
+        function _()
+            m.top.markAsUnwatchedSelected = false
+
+            m.top.findNode("markUnwatchedButton").buttonSelected = true
+
+            m.assertTrue(m.top.markAsUnwatchedSelected)
+        end function
+        @it("emits series selection")
+        function _()
+            m.top.seriesSelected = false
+
+            m.top.findNode("seriesButton").buttonSelected = true
+
+            m.assertTrue(m.top.seriesSelected)
+        end function
+        @it("emits season selection")
+        function _()
+            m.top.seasonSelected = false
+
+            m.top.findNode("seasonButton").buttonSelected = true
+
+            m.assertTrue(m.top.seasonSelected)
+        end function
+        @it("emits subtitles selection")
+        function _()
+            m.top.subtitlesSelected = false
+
+            m.top.findNode("subtitlesButton").buttonSelected = true
+
+            m.assertTrue(m.top.subtitlesSelected)
+        end function
+        @it("emits audio selection")
+        function _()
+            m.top.audioSelected = false
+
+            m.top.findNode("audioButton").buttonSelected = true
+
+            m.assertTrue(m.top.audioSelected)
+        end function
+        @it("emits chapters selection")
+        function _()
+            m.top.chaptersSelected = false
+
+            m.top.findNode("chaptersButton").buttonSelected = true
+
+            m.assertTrue(m.top.chaptersSelected)
+        end function
+        @it("emits video selection")
+        function _()
+            m.top.videoSelected = false
+
+            m.top.findNode("videoButton").buttonSelected = true
+
+            m.assertTrue(m.top.videoSelected)
+        end function
+        @it("emits media info selection")
+        function _()
+            m.top.mediaInfoSelected = false
+
+            m.top.findNode("mediaInfoButton").buttonSelected = true
+
+            m.assertTrue(m.top.mediaInfoSelected)
+        end function
+
     end class
 
 end namespace

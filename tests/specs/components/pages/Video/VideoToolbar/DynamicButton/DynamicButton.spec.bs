@@ -21,6 +21,130 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("textLabel"))
         end function
 
+        @describe("content rendering")
+
+        @it("renders button text")
+        function _()
+            m.top.text = "Play"
+
+            'bs:disable-next-line 1140
+            onTextChanged()
+
+            m.assertEqual(m.node.textLabel.text, "Play")
+        end function
+
+        @it("renders the normal icon without focus")
+        function _()
+            m.top.hasFocusVisual = false
+            m.top.icon = "pkg:/images/icons/play.png"
+
+            'bs:disable-next-line 1140
+            onIconChanged()
+
+            m.assertEqual(m.node.iconPoster.uri, "pkg:/images/icons/play.png")
+        end function
+
+        @it("renders the focused icon when supplied")
+        function _()
+            m.top.focusedIcon = "pkg:/images/icons/play-dark.png"
+            m.top.hasFocusVisual = true
+
+            'bs:disable-next-line 1140
+            onIconChanged()
+
+            m.assertEqual(m.node.iconPoster.uri, "pkg:/images/icons/play-dark.png")
+        end function
+
+        @it("falls back to the normal icon when the focused icon is empty")
+        function _()
+            m.top.icon = "pkg:/images/icons/play.png"
+            m.top.focusedIcon = ""
+            m.top.hasFocusVisual = true
+
+            'bs:disable-next-line 1140
+            onIconChanged()
+
+            m.assertEqual(m.node.iconPoster.uri, "pkg:/images/icons/play.png")
+        end function
+
+        @describe("focus visuals")
+
+        @it("expands and reveals text with focus")
+        function _()
+            m.top.expandedWidth = 180
+            m.top.hasFocusVisual = true
+
+            'bs:disable-next-line 1140
+            onFocusVisualChanged()
+
+            m.assertTrue(m.node.background.width = 180)
+            m.assertTrue(m.node.textLabel.visible)
+        end function
+
+        @it("uses the default expanded width when the override is non-positive")
+        function _()
+            m.top.expandedWidth = 0
+            m.top.hasFocusVisual = true
+
+            'bs:disable-next-line 1140
+            onFocusVisualChanged()
+
+            m.assertTrue(m.node.background.width = 168)
+        end function
+
+        @it("collapses and hides text without focus")
+        function _()
+            m.top.hasFocusVisual = false
+
+            'bs:disable-next-line 1140
+            onFocusVisualChanged()
+
+            m.assertTrue(m.node.background.width = 64)
+            m.assertFalse(m.node.textLabel.visible)
+        end function
+
+        @describe("selection")
+
+        @it("emits selection for a pressed OK key")
+        function _()
+            m.top.buttonSelected = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.buttonSelected)
+        end function
+
+        @it("emits selection for a pressed Select key")
+        function _()
+            m.top.buttonSelected = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("select", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.buttonSelected)
+        end function
+
+        @it("ignores released selection keys")
+        function _()
+            m.top.buttonSelected = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", false)
+
+            m.assertFalse(handled)
+            m.assertFalse(m.top.buttonSelected)
+        end function
+
+        @it("ignores unrelated pressed keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertFalse(handled)
+        end function
     end class
 
 end namespace

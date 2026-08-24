@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("PlaybackControls")
@@ -114,6 +116,339 @@ namespace tests
         @it("declares the remainingLabel node")
         function _()
             m.assertNotInvalid(m.top.findNode("remainingLabel"))
+        end function
+
+        @describe("metadata and state rendering")
+
+        @it("renders the title")
+        function _()
+            m.top.title = "Movie"
+
+            m.assertEqual(m.top.findNode("titleLabel").text, "Movie")
+        end function
+
+        @it("renders the subtitle")
+        function _()
+            m.top.subtitle = "Episode"
+
+            m.assertEqual(m.top.findNode("subtitleLabel").text, "Episode")
+        end function
+
+        @it("uses the pause icon while playing")
+        function _()
+            m.top.isPlaying = true
+
+            m.assertTrue(Instr(1, m.top.findNode("playPauseButton").icon, "pause-unfocused") > 0)
+        end function
+
+        @it("uses the play icon while paused")
+        function _()
+            m.top.isPlaying = false
+
+            m.assertTrue(Instr(1, m.top.findNode("playPauseButton").icon, "play-unfocused") > 0)
+        end function
+
+        @it("shows available option buttons")
+        function _()
+            m.top.hasCastOptions = true
+            m.top.hasChapterOptions = true
+            m.top.hasSubtitleOptions = true
+            m.top.hasAudioOptions = true
+            m.top.hasVideoOptions = true
+
+            m.assertTrue(m.top.findNode("castButton").visible)
+            m.assertTrue(m.top.findNode("chapterButton").visible)
+            m.assertTrue(m.top.findNode("subtitleButton").visible)
+            m.assertTrue(m.top.findNode("audioButton").visible)
+            m.assertTrue(m.top.findNode("videoButton").visible)
+        end function
+
+        @it("disables unavailable skip buttons")
+        function _()
+            m.top.skipBackEnabled = false
+            m.top.skipForwardEnabled = false
+
+            m.assertFalse(m.top.findNode("skipBackButton").enabled)
+            m.assertFalse(m.top.findNode("skipForwardButton").enabled)
+        end function
+
+        @describe("progress rendering")
+
+        @it("renders playback progress")
+        function _()
+            m.top.duration = 100
+
+            m.top.position = 50
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").width, -1), 857)
+        end function
+
+        @it("shows preview progress while seeking")
+        function _()
+            m.top.duration = 100
+            m.top.previewPosition = 25
+
+            m.top.isSeeking = true
+
+            m.assertTrue(m.top.findNode("previewBar").visible)
+            m.assertEqual(Number.ToInteger(m.top.findNode("previewBar").width, -1), 428)
+        end function
+
+        @it("restores actual progress when seeking ends")
+        function _()
+            m.top.duration = 100
+            m.top.position = 50
+            m.top.previewPosition = 25
+            m.top.isSeeking = true
+
+            m.top.isSeeking = false
+
+            m.assertFalse(m.top.findNode("previewBar").visible)
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").width, -1), 857)
+        end function
+
+        @it("uses the tall trickplay position for tall thumbnails")
+        function _()
+            m.top.thumbnailData = { tileWidth: 100, tileHeight: 200 }
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("trickplayPreview").translation[1], -1), 360)
+        end function
+
+        @it("uses the default trickplay position for wide thumbnails")
+        function _()
+            m.top.thumbnailData = { tileWidth: 200, tileHeight: 100 }
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("trickplayPreview").translation[1], -1), 420)
+        end function
+
+        @describe("focus behavior")
+
+        @it("focuses the default playback button when activated")
+        function _()
+            m.top.hasCastOptions = false
+            m.top.hasChapterOptions = false
+            m.top.hasSubtitleOptions = false
+            m.top.hasAudioOptions = false
+            m.top.hasVideoOptions = true
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+            m.top.callFunc("resetFocus")
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.findNode("playPauseButton").hasFocus())
+        end function
+
+        @it("focuses progress from the button row with Up")
+        function _()
+            m.top.callFunc("focusButtons")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("progressBarGroup").hasFocus())
+            m.assertTrue(m.top.findNode("progressFocusRect").visible)
+        end function
+
+        @it("returns to buttons from progress with Down")
+        function _()
+            m.top.callFunc("focusProgress")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertFalse(m.top.findNode("progressFocusRect").visible)
+        end function
+
+        @it("emits downward focus exit from buttons")
+        function _()
+            m.top.callFunc("focusButtons")
+            m.top.focusExitDown = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitDown)
+        end function
+
+        @describe("progress key events")
+
+        @it("emits progress Left pressed")
+        function _()
+            m.top.callFunc("focusProgress")
+            m.top.progressLeftPressed = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.progressLeftPressed)
+        end function
+
+        @it("emits progress Left released")
+        function _()
+            m.top.callFunc("focusProgress")
+            m.top.progressLeftReleased = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", false)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.progressLeftReleased)
+        end function
+
+        @it("commits an active seek with OK")
+        function _()
+            m.top.callFunc("focusProgress")
+            m.top.isSeeking = true
+            m.top.progressSeekCommit = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.progressSeekCommit)
+        end function
+
+        @it("does not commit with OK when not seeking")
+        function _()
+            m.top.callFunc("focusProgress")
+            m.top.isSeeking = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertFalse(handled)
+        end function
+
+        @it("cancels an active seek with Back")
+        function _()
+            m.top.callFunc("focusProgress")
+            m.top.isSeeking = true
+            m.top.progressSeekCancel = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.progressSeekCancel)
+        end function
+
+        @it("emits Play/Pause from the button row play key")
+        function _()
+            m.top.callFunc("focusButtons")
+            m.top.playPausePressed = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("play", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.playPausePressed)
+        end function
+
+        @describe("button events")
+        @it("emits play pause selection")
+        function _()
+            m.top.playPausePressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("playPauseButton").buttonSelected = true
+
+            m.assertTrue(m.top.playPausePressed)
+        end function
+        @it("emits cast options selection")
+        function _()
+            m.top.castOptionsPressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("castButton").buttonSelected = true
+
+            m.assertTrue(m.top.castOptionsPressed)
+        end function
+        @it("emits chapter options selection")
+        function _()
+            m.top.chapterOptionsPressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("chapterButton").buttonSelected = true
+
+            m.assertTrue(m.top.chapterOptionsPressed)
+        end function
+        @it("emits subtitle options selection")
+        function _()
+            m.top.subtitleOptionsPressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("subtitleButton").buttonSelected = true
+
+            m.assertTrue(m.top.subtitleOptionsPressed)
+        end function
+        @it("emits audio options selection")
+        function _()
+            m.top.audioOptionsPressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("audioButton").buttonSelected = true
+
+            m.assertTrue(m.top.audioOptionsPressed)
+        end function
+        @it("emits video options selection")
+        function _()
+            m.top.videoOptionsPressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("videoButton").buttonSelected = true
+
+            m.assertTrue(m.top.videoOptionsPressed)
+        end function
+        @it("emits playback info selection")
+        function _()
+            m.top.playbackInfoPressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("playbackInfoButton").buttonSelected = true
+
+            m.assertTrue(m.top.playbackInfoPressed)
+        end function
+        @it("emits skip back selection")
+        function _()
+            m.top.skipBackPressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("skipBackButton").buttonSelected = true
+
+            m.assertTrue(m.top.skipBackPressed)
+        end function
+        @it("emits skip forward selection")
+        function _()
+            m.top.skipForwardPressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("skipForwardButton").buttonSelected = true
+
+            m.assertTrue(m.top.skipForwardPressed)
+        end function
+        @it("emits last five seconds selection")
+        function _()
+            m.top.last5Pressed = false
+            m.top.skipBackEnabled = true
+            m.top.skipForwardEnabled = true
+
+            m.top.findNode("last5Button").buttonSelected = true
+
+            m.assertTrue(m.top.last5Pressed)
         end function
 
     end class

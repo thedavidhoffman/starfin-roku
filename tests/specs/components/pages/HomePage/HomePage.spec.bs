@@ -4,6 +4,21 @@ namespace tests
     @suite("HomePage component")
     class HomePageTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.homeState.request = { server: "http://server", token: "token", userId: "user" }
+            m.node.homeState.rows = {}
+            m.node.homeState.playbackRows.continueWatchingItems = []
+            m.node.homeState.playbackRows.nextUpItems = []
+            m.node.homeState.focusedShelfIndex = 0
+            m.top.overlayRequested = invalid
+
+            scene = m.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                loadingSpinnerNode = CreateObject("roSGNode", "Spinner")
+                loadingSpinnerNode.id = "loadingSpinner"
+                scene.appendChild(loadingSpinnerNode)
+            end if
+        end function
         @describe("declarative component contract")
 
         @it("declares the contentGroup node")
@@ -61,6 +76,227 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("liveTvOnNowTask"))
         end function
 
+        @describe("selection routing")
+
+        @it("routes collection libraries")
+        function _()
+            item = m.createLibrary("collection-1", "boxsets")
+
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedCollections.libraryId, "collection-1")
+        end function
+
+        @it("routes Live TV libraries")
+        function _()
+            item = m.createLibrary("live-1", "livetv")
+
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedLiveTV.libraryId, "live-1")
+        end function
+
+        @it("routes music libraries")
+        function _()
+            item = m.createLibrary("music-1", "music")
+
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedMusicLibrary.libraryId, "music-1")
+        end function
+
+        @it("routes media libraries")
+        function _()
+            item = m.createLibrary("movies-1", "movies")
+
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedLibrary.libraryId, "movies-1")
+        end function
+
+        @it("routes episodes")
+        function _()
+            item = { Id: "episode-1", Type: "Episode" }
+
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "episode-1")
+        end function
+
+        @it("routes movies")
+        function _()
+            item = { Id: "movie-1", Type: "Movie" }
+
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedMovie.itemId, "movie-1")
+        end function
+
+        @it("routes series")
+        function _()
+            item = { Id: "series-1", Type: "Series" }
+
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedSeries.itemId, "series-1")
+        end function
+
+        @it("routes music-row selections as albums")
+        function _()
+            item = { Id: "album-1", Type: "MusicAlbum" }
+
+            'bs:disable-next-line 1140
+            selectHomeAlbum(item)
+
+            m.assertEqual(m.top.selectedAlbum.itemId, "album-1")
+        end function
+
+        @it("ignores selections without an id")
+        function _()
+            m.top.selectedMovie = invalid
+
+            'bs:disable-next-line 1140
+            selectHomeItem({ Type: "Movie" })
+
+            m.assertInvalid(m.top.selectedMovie)
+        end function
+
+        @describe("row rendering")
+
+        @it("renders valid items into row content")
+        function _()
+            'bs:disable-next-line 1140
+            content = buildRowContent("continueWatching", "Continue Watching", [{ Id: "movie-1", Type: "Movie", ImageTags: {} }])
+
+            m.assertEqual(content.title, "Continue Watching")
+            m.assertEqual(content.getChildCount(), 1)
+            m.assertTrue(content.getChild(0).showMetadata)
+        end function
+
+        @it("hides metadata for library cards")
+        function _()
+            'bs:disable-next-line 1140
+            content = buildRowContent("libraries", "My Media", [m.createLibrary("movies-1", "movies")])
+
+            m.assertFalse(content.getChild(0).showMetadata)
+            m.assertEqual(content.getChild(0).imageAspect, "wide")
+        end function
+
+        @it("removes an empty row")
+        function _()
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Next Up", [{ Id: "episode-1", Type: "Episode", ImageTags: {} }])
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Next Up", [])
+
+            m.assertFalse(m.node.homeState.rows.DoesExist("nextUp"))
+        end function
+
+        @it("renders rows in configured order")
+        function _()
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Next Up", [{ Id: "episode-1", Type: "Episode", ImageTags: {} }])
+            'bs:disable-next-line 1140
+            addRow("libraries", "My Media", [m.createLibrary("movies-1", "movies")])
+
+            'bs:disable-next-line 1140
+            renderRows(false)
+
+            m.assertEqual(m.top.findNode("shelvesGroup").getChildCount(), 2)
+            m.assertEqual(m.top.findNode("shelvesGroup").getChild(0).rowContent.rowKey, "libraries")
+            m.assertEqual(m.top.findNode("shelvesGroup").getChild(1).rowContent.rowKey, "nextUp")
+        end function
+
+        @it("filters Next Up items already represented by item id")
+        function _()
+            m.node.homeState.playbackRows.continueWatchingItems = [{ Id: "episode-1", SeriesId: "series-1" }]
+            m.node.homeState.playbackRows.nextUpItems = [{ Id: "episode-1" }, { Id: "episode-2", SeriesId: "series-2" }]
+
+            'bs:disable-next-line 1140
+            items = getFilteredNextUpItems()
+
+            m.assertEqual(items.Count(), 1)
+            m.assertEqual(items[0].Id, "episode-2")
+        end function
+
+        @it("filters Next Up items already represented by series id")
+        function _()
+            m.node.homeState.playbackRows.continueWatchingItems = [{ Id: "episode-1", SeriesId: "series-1" }]
+            m.node.homeState.playbackRows.nextUpItems = [{ Id: "episode-2", SeriesId: "series-1" }, { Id: "episode-3", SeriesId: "series-2" }]
+
+            'bs:disable-next-line 1140
+            items = getFilteredNextUpItems()
+
+            m.assertEqual(items.Count(), 1)
+            m.assertEqual(items[0].Id, "episode-3")
+        end function
+
+        @describe("focus and keyboard behavior")
+
+        @it("moves down to the next shelf")
+        function _()
+            m.renderTwoRows()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.homeState.focusedShelfIndex, 1)
+        end function
+
+        @it("emits upward focus exit from the first shelf")
+        function _()
+            m.renderTwoRows()
+            m.top.focusExitUp = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+        @it("does not move below the last shelf")
+        function _()
+            m.renderTwoRows()
+            'bs:disable-next-line 1140
+            focusShelf(1)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertFalse(handled)
+            m.assertEqual(m.node.homeState.focusedShelfIndex, 1)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function renderTwoRows()
+            'bs:disable-next-line 1140
+            addRow("libraries", "My Media", [m.createLibrary("movies-1", "movies")])
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Next Up", [{ Id: "episode-1", Type: "Episode", ImageTags: {} }])
+            'bs:disable-next-line 1140
+            renderRows(false)
+            m.node.homeState.focusedShelfIndex = 0
+        end function
+
+        function createLibrary(id as string, collectionType as string) as object
+            return { Id: id, Name: id, Type: "CollectionFolder", CollectionType: collectionType, ImageTags: {}, BackdropImageTags: [] }
+        end function
     end class
 
 end namespace

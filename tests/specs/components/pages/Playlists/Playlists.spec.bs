@@ -1,14 +1,350 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("Playlists")
     @suite("Playlists component")
     class PlaylistsTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.pageState.request = m.createRequest("playlist")
+            m.node.pageState.items = []
+            m.node.pageState.allItems = []
+            m.node.pageState.isLoading = false
+            m.node.playlistState.navigationStack = []
+            m.node.playlistState.pendingAutomaticPlaylist = invalid
+            m.node.playlistState.actionFocusId = ""
+            m.node.playlistState.restoreItemIndex = -1
+            m.top.playbackSelected = invalid
+            m.top.findNode("singlePlaylistOpenTimer").control = "stop"
+        end function
+
         @describe("declarative component contract")
 
-        @it("initializes the component")
+        @it("declares playlist playback controls")
         function _()
-            m.assertNotInvalid(m.top)
+            m.assertNotInvalid(m.top.findNode("playlistPlaybackButtons"))
+        end function
+
+        @it("declares the Resume action")
+        function _()
+            m.assertNotInvalid(m.top.findNode("playlistResumeButton"))
+        end function
+
+        @it("declares the Play action")
+        function _()
+            m.assertNotInvalid(m.top.findNode("playlistPlayButton"))
+        end function
+
+        @it("declares the Random action")
+        function _()
+            m.assertNotInvalid(m.top.findNode("playlistRandomButton"))
+        end function
+
+        @it("hides inherited browse controls during initialization")
+        function _()
+            m.assertFalse(m.top.findNode("browseByButton").visible)
+            m.assertFalse(m.top.findNode("sortButton").visible)
+            m.assertFalse(m.top.findNode("letterGutterButton").visible)
+        end function
+
+        @describe("playlist classification and layout")
+
+        @it("uses poster images by default")
+        function _()
+            m.top.settings = {}
+
+            'bs:disable-next-line 1140
+            imageAspect = specializationImageAspect()
+
+            m.assertEqual(imageAspect, "poster")
+        end function
+
+        @it("uses wide images for thumbnail settings")
+        function _()
+            m.top.settings = { "playlist-image-type": "thumbnail" }
+
+            'bs:disable-next-line 1140
+            imageAspect = specializationImageAspect()
+
+            m.assertEqual(imageAspect, "wide")
+        end function
+
+        @it("shows sort controls for a loaded playlist library")
+        function _()
+            m.node.pageState.request = m.createRequest("playlists")
+
+            'bs:disable-next-line 1140
+            visible = specializationShowsSortControls()
+
+            m.assertTrue(visible)
+        end function
+
+        @it("hides sort controls while a playlist library is loading")
+        function _()
+            m.node.pageState.request = m.createRequest("playlists")
+            m.node.pageState.isLoading = true
+
+            'bs:disable-next-line 1140
+            visible = specializationShowsSortControls()
+
+            m.assertFalse(visible)
+        end function
+
+        @it("positions poster playback actions at the poster right edge")
+        function _()
+            'bs:disable-next-line 1140
+            specializationApplyLayout("poster")
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("playlistPlaybackButtons").translation[0], -1), 1390)
+        end function
+
+        @it("positions wide playback actions at the wide right edge")
+        function _()
+            'bs:disable-next-line 1140
+            specializationApplyLayout("wide")
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("playlistPlaybackButtons").translation[0], -1), 1406)
+        end function
+
+        @describe("cache identity")
+
+        @it("uses the media item id outside playlist content")
+        function _()
+            m.node.pageState.request = m.createRequest("playlists")
+
+            'bs:disable-next-line 1140
+            key = specializationCacheKey({ Id: "movie-1" })
+
+            m.assertEqual(key, "movie-1")
+        end function
+
+        @it("uses PlaylistItemId inside playlist content")
+        function _()
+            'bs:disable-next-line 1140
+            key = specializationCacheKey({ Id: "movie-1", PlaylistItemId: "entry-1" })
+
+            m.assertEqual(key, "playlist:entry-1")
+        end function
+
+        @it("uses occurrence index when a playlist entry id is absent")
+        function _()
+            'bs:disable-next-line 1140
+            key = specializationCacheKey({ Id: "movie-1" }, 2)
+
+            m.assertEqual(key, "playlist:movie-1:2")
+        end function
+
+        @it("returns an empty cache key when playlist identity is incomplete")
+        function _()
+            'bs:disable-next-line 1140
+            key = specializationCacheKey({ Id: "" })
+
+            m.assertEqual(key, "")
+        end function
+
+        @describe("automatic playlist opening")
+
+        @it("schedules the only playlist in a playlist library")
+        function _()
+            playlist = { Id: "playlist-1", Name: "Playlist", Type: "Playlist" }
+            m.node.pageState.request = m.createRequest("playlists")
+            m.node.pageState.allItems = [playlist]
+
+            'bs:disable-next-line 1140
+            handled = specializationItemsLoaded()
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.playlistState.pendingAutomaticPlaylist, playlist)
+            m.assertEqual(m.top.findNode("singlePlaylistOpenTimer").control, "start")
+        end function
+
+        @it("does not schedule automatic opening for multiple playlists")
+        function _()
+            m.node.pageState.request = m.createRequest("playlists")
+            m.node.pageState.allItems = [
+                { Id: "playlist-1", Type: "Playlist" }
+                { Id: "playlist-2", Type: "Playlist" }
+            ]
+
+            'bs:disable-next-line 1140
+            handled = specializationItemsLoaded()
+
+            m.assertFalse(handled)
+            m.assertInvalid(m.node.playlistState.pendingAutomaticPlaylist)
+        end function
+
+        @describe("playback controls")
+
+        @it("shows playback controls when playlist content is playable")
+        function _()
+            m.node.pageState.items = [m.createMovie("movie-1", false, 0)]
+
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            m.assertTrue(m.top.findNode("playlistPlaybackButtons").visible)
+            m.assertTrue(m.top.findNode("playlistPlayButton").visible)
+            m.assertTrue(m.top.findNode("playlistRandomButton").visible)
+        end function
+
+        @it("shows Resume when an item is not played")
+        function _()
+            m.node.pageState.items = [m.createMovie("movie-1", false, 0)]
+
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            m.assertTrue(m.top.findNode("playlistResumeButton").visible)
+        end function
+
+        @it("hides Resume when every item is played without progress")
+        function _()
+            m.node.pageState.items = [m.createMovie("movie-1", true, 0)]
+
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            m.assertFalse(m.top.findNode("playlistResumeButton").visible)
+        end function
+
+        @it("hides playback controls without playable content")
+        function _()
+            m.node.pageState.items = [{ Id: "folder-1", Type: "Folder" }]
+
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            m.assertFalse(m.top.findNode("playlistPlaybackButtons").visible)
+        end function
+
+        @it("Play starts the first playable item from the beginning")
+        function _()
+            m.node.pageState.items = [m.createMovie("movie-1", false, 900)]
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            m.top.findNode("playlistPlayButton").buttonSelected = true
+
+            m.assertEqual(m.top.playbackSelected.itemId, "movie-1")
+            m.assertEqual(m.top.playbackSelected.startPositionTicks, 0)
+            m.assertEqual(m.top.playbackSelected.playbackQueueScope, "playlist")
+        end function
+
+        @it("Resume starts at the first unfinished item position")
+        function _()
+            m.node.pageState.items = [
+                m.createMovie("played", true, 0)
+                m.createMovie("resume", false, 900)
+            ]
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            m.top.findNode("playlistResumeButton").buttonSelected = true
+
+            m.assertEqual(m.top.playbackSelected.itemId, "resume")
+            m.assertEqual(m.top.playbackSelected.startPositionTicks, 900)
+            m.assertEqual(m.top.playbackSelected.playbackQueueIndex, 1)
+        end function
+
+        @it("selecting playlist content emits its queue position")
+        function _()
+            first = m.createMovie("first", false, 0)
+            second = m.createMovie("second", false, 500)
+            m.node.pageState.items = [first, second]
+
+            'bs:disable-next-line 1140
+            handled = specializationHandleItemSelected(1, second)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.playbackSelected.itemId, "second")
+            m.assertEqual(m.top.playbackSelected.playbackQueueIndex, 1)
+            m.assertEqual(m.node.playlistState.restoreItemIndex, 1)
+        end function
+
+        @it("ignores a selected item without an id")
+        function _()
+            'bs:disable-next-line 1140
+            handled = specializationHandleItemSelected(0, { Type: "Movie" })
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @describe("focus and lifecycle")
+
+        @it("focuses Resume by default when it is available")
+        function _()
+            m.node.pageState.items = [m.createMovie("movie-1", false, 0)]
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            'bs:disable-next-line 1140
+            handled = specializationActivate()
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("playlistResumeButton").isInFocusChain())
+        end function
+
+        @it("focuses Play by default when Resume is unavailable")
+        function _()
+            m.node.pageState.items = [m.createMovie("movie-1", true, 0)]
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            'bs:disable-next-line 1140
+            handled = specializationActivate()
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("playlistPlayButton").isInFocusChain())
+        end function
+
+        @it("moves right from Play to Random")
+        function _()
+            m.node.pageState.items = [m.createMovie("movie-1", true, 0)]
+            'bs:disable-next-line 1140
+            specializationSyncState()
+            'bs:disable-next-line 1140
+            focusPlaylistPlaybackButton(m.top.findNode("playlistPlayButton"))
+
+            'bs:disable-next-line 1140
+            handled = specializationHandleKey("right")
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("playlistRandomButton").isInFocusChain())
+        end function
+
+        @it("stops automatic opening when deactivated")
+        function _()
+            m.node.playlistState.pendingAutomaticPlaylist = { Id: "playlist-1" }
+            m.top.findNode("singlePlaylistOpenTimer").control = "start"
+
+            'bs:disable-next-line 1140
+            specializationDeactivate()
+
+            m.assertInvalid(m.node.playlistState.pendingAutomaticPlaylist)
+            m.assertEqual(m.top.findNode("singlePlaylistOpenTimer").control, "stop")
+        end function
+
+        function createRequest(collectionType as string) as object
+            return {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                libraryId: "library"
+                collectionType: collectionType
+            }
+        end function
+
+        function createMovie(id as string, played as boolean, positionTicks as integer) as object
+            return {
+                Id: id
+                Type: "Movie"
+                MediaType: "Video"
+                UserData: { Played: played, PlaybackPositionTicks: positionTicks }
+                ImageTags: {}
+                BackdropImageTags: []
+            }
         end function
 
     end class

@@ -26,6 +26,87 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("statusLabel"))
         end function
 
+        @describe("item rendering")
+
+        @it("renders the account username")
+        function _()
+            m.top.itemContent = m.createItemContent("David", "Active", "http://server/image.jpg")
+
+            'bs:disable-next-line 1140
+            onItemContentChanged()
+
+            m.assertEqual(m.node.nameLabel.text, "David")
+        end function
+
+        @it("renders the account status")
+        function _()
+            m.top.itemContent = m.createItemContent("David", "* to forget", "http://server/image.jpg")
+
+            'bs:disable-next-line 1140
+            onItemContentChanged()
+
+            m.assertEqual(m.node.statusLabel.text, "* to forget")
+        end function
+
+        @it("renders a supplied account image")
+        function _()
+            m.top.itemContent = m.createItemContent("David", "Active", "http://server/image.jpg")
+
+            'bs:disable-next-line 1140
+            onItemContentChanged()
+
+            m.assertEqual(m.node.poster.uri, "http://server/image.jpg")
+        end function
+
+        @it("uses the placeholder when the account image is missing")
+        function _()
+            m.top.itemContent = m.createItemContent("David", "Active", "")
+
+            'bs:disable-next-line 1140
+            onItemContentChanged()
+
+            m.assertEqual(m.node.poster.uri, "pkg:/images/cast/cast-placeholder-195x195.png")
+        end function
+
+        @describe("poster loading")
+
+        @it("replaces a failed account image with the placeholder")
+        function _()
+            m.node.poster = m.createPosterMock("failed", "http://server/broken.jpg")
+
+            'bs:disable-next-line 1140
+            onPosterLoadStatusChanged()
+
+            m.assertEqual(m.node.poster.uri, "pkg:/images/cast/cast-placeholder-195x195.png")
+        end function
+
+        @it("leaves a non-failed account image unchanged")
+        function _()
+            m.node.poster = m.createPosterMock("ready", "http://server/image.jpg")
+
+            'bs:disable-next-line 1140
+            onPosterLoadStatusChanged()
+
+            m.assertEqual(m.node.poster.uri, "http://server/image.jpg")
+        end function
+
+        function createItemContent(title as string, description as string, imageUrl as string) as object
+            item = CreateObject("roSGNode", "ContentNode")
+            item.title = title
+            item.description = description
+            item.HDPosterUrl = imageUrl
+            return item
+        end function
+
+        function createPosterMock(loadStatus as string, uri as string) as object
+            poster = CreateObject("roSGNode", "Group")
+            poster.addField("loadStatus", "string", false)
+            poster.addField("uri", "uri", false)
+            poster.loadStatus = loadStatus
+            poster.uri = uri
+            return poster
+        end function
+
     end class
 
 end namespace

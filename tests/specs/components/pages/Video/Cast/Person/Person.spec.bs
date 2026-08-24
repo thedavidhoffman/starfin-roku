@@ -4,6 +4,21 @@ namespace tests
     @suite("Person component")
     class PersonTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.pageState.request = { server: "http://server", token: "token", userId: "user", itemId: "person-1" }
+            m.node.pageState.person = m.createPerson()
+            m.node.pageState.filmography = invalid
+            m.node.pageState.focusArea = "person"
+            m.top.settings = { "tmdb-api-key": "" }
+            m.top.selectedMovie = invalid
+            m.top.selectedSeries = invalid
+            m.top.selectedEpisode = invalid
+            m.top.selectedFilmography = invalid
+            m.top.overlayRequested = invalid
+            m.top.closeRequested = false
+            'bs:disable-next-line 1140
+            clearRelated()
+        end function
         @describe("declarative component contract")
 
         @it("declares the bioGroup node")
@@ -111,6 +126,292 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("personTask"))
         end function
 
+        @describe("person rendering")
+
+        @it("renders person identity")
+        function _()
+            'bs:disable-next-line 1140
+            renderPerson(m.createPerson())
+
+            m.assertEqual(m.top.findNode("nameLabel").text, "Person")
+            lifeText = m.top.findNode("lifeLabel").text
+            m.assertTrue(Instr(1, lifeText, "Born January 2, 1980") > 0)
+            m.assertTrue(Instr(1, lifeText, "Died March 4, 2020") > 0)
+            m.assertTrue(Instr(1, lifeText, "Age 40") > 0)
+        end function
+
+        @it("renders a supplied person image URL")
+        function _()
+            person = m.createPerson()
+            person.ImageURL = "https://example.com/person.jpg"
+
+            'bs:disable-next-line 1140
+            renderPerson(person)
+
+            m.assertEqual(m.top.findNode("personImage").uri, "https://example.com/person.jpg")
+        end function
+
+        @it("uses the person placeholder without artwork")
+        function _()
+            'bs:disable-next-line 1140
+            renderPerson(m.createPerson())
+
+            m.assertEqual(m.top.findNode("personImage").uri, "pkg:/images/cast/person-placeholder-399x600.png")
+        end function
+
+        @it("renders place of birth")
+        function _()
+            person = m.createPerson()
+            person.ProductionLocations = ["New York"]
+
+            'bs:disable-next-line 1140
+            renderBirthPlace(person)
+
+            m.assertTrue(m.top.findNode("birthPlaceLabel").visible)
+            m.assertEqual(m.top.findNode("birthPlaceLabel").text, "Place of birth: New York")
+        end function
+
+        @it("hides place of birth when absent")
+        function _()
+            'bs:disable-next-line 1140
+            renderBirthPlace(m.createPerson())
+
+            m.assertFalse(m.top.findNode("birthPlaceLabel").visible)
+        end function
+
+        @it("renders supplied overview text")
+        function _()
+            person = m.createPerson()
+            person.Overview = "Biography"
+
+            'bs:disable-next-line 1140
+            renderOverview(person)
+
+            m.assertEqual(m.top.findNode("overviewLabel").text, "Biography")
+        end function
+
+        @it("renders fallback overview text")
+        function _()
+            'bs:disable-next-line 1140
+            renderOverview(m.createPerson())
+
+            m.assertEqual(m.top.findNode("overviewLabel").text, "Biographical information for this person is not currently available.")
+        end function
+
+        @it("does not truncate a short overview")
+        function _()
+            'bs:disable-next-line 1140
+            truncated = isOverviewTextTruncated("Short biography")
+
+            m.assertFalse(truncated)
+        end function
+
+        @it("detects an overview beyond twelve wrapped lines")
+        function _()
+            longText = "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+
+            'bs:disable-next-line 1140
+            truncated = isOverviewTextTruncated(longText)
+
+            m.assertTrue(truncated)
+        end function
+
+        @describe("related content")
+
+        @it("renders related movies and series")
+        function _()
+            items = [m.createRelated("movie-1", "Movie", "Movie"), m.createRelated("series-1", "Series", "Series")]
+
+            'bs:disable-next-line 1140
+            renderRelated(items, [])
+
+            m.assertTrue(m.top.findNode("relatedGroup").visible)
+            m.assertEqual(m.top.findNode("relatedRows").content.getChild(0).getChildCount(), 2)
+            m.assertEqual(m.top.findNode("relatedTitleLabel").text, "Movies/Shows with Person")
+        end function
+
+        @it("renders related episodes independently")
+        function _()
+            episodes = [m.createRelated("episode-1", "Episode", "Episode")]
+
+            'bs:disable-next-line 1140
+            renderRelated([], episodes)
+
+            m.assertTrue(m.top.findNode("relatedEpisodeRows").visible)
+            m.assertFalse(m.top.findNode("relatedRows").visible)
+            m.assertEqual(m.top.findNode("relatedEpisodesGroup").translation[1], 0.0)
+        end function
+
+        @it("hides related content when empty")
+        function _()
+            'bs:disable-next-line 1140
+            renderRelated([], [])
+
+            m.assertFalse(m.top.findNode("relatedGroup").visible)
+        end function
+
+        @it("sorts related items newest first")
+        function _()
+            older = m.createRelated("old", "Old", "Movie")
+            older.PremiereDate = "2020-01-01T00:00:00Z"
+            newer = m.createRelated("new", "New", "Movie")
+            newer.PremiereDate = "2024-01-01T00:00:00Z"
+
+            'bs:disable-next-line 1140
+            items = sortRelatedItems([older, newer])
+
+            m.assertEqual(items[0].Id, "new")
+        end function
+
+        @it("routes a related movie selection")
+        function _()
+            'bs:disable-next-line 1140
+            renderRelated([m.createRelated("movie-1", "Movie", "Movie")], [])
+
+            'bs:disable-next-line 1140
+            handleRelatedSelection(m.top.findNode("relatedRows"), [0, 0])
+
+            m.assertEqual(m.top.selectedMovie.itemId, "movie-1")
+        end function
+
+        @it("routes a related series selection")
+        function _()
+            'bs:disable-next-line 1140
+            renderRelated([m.createRelated("series-1", "Series", "Series")], [])
+
+            'bs:disable-next-line 1140
+            handleRelatedSelection(m.top.findNode("relatedRows"), [0, 0])
+
+            m.assertEqual(m.top.selectedSeries.itemId, "series-1")
+        end function
+
+        @it("routes a related episode selection")
+        function _()
+            'bs:disable-next-line 1140
+            renderRelated([], [m.createRelated("episode-1", "Episode", "Episode")])
+
+            'bs:disable-next-line 1140
+            handleRelatedSelection(m.top.findNode("relatedEpisodeRows"), [0, 0])
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "episode-1")
+        end function
+
+        @describe("filmography and overlays")
+
+        @it("extracts a TMDB person id from a trailing URL")
+        function _()
+            person = m.createPerson()
+            person.ExternalUrls = [{ Name: "TMDB", Url: "https://www.themoviedb.org/person/1234/" }]
+
+            'bs:disable-next-line 1140
+            personId = getTmdbPersonId(person)
+
+            m.assertEqual(personId, "1234")
+        end function
+
+        @it("builds filmography selection with configured API key")
+        function _()
+            m.top.settings = { "tmdb-api-key": "api-key" }
+            person = m.createPerson()
+            person.ExternalUrls = [{ Name: "TMDB", Url: "https://www.themoviedb.org/person/1234" }]
+
+            'bs:disable-next-line 1140
+            selection = buildFilmographySelection(person, "person.jpg")
+
+            m.assertEqual(selection.personId, "1234")
+            m.assertEqual(selection.apiKey, "api-key")
+            m.assertEqual(selection.imageUrl, "person.jpg")
+        end function
+
+        @it("does not build filmography selection without API key")
+        function _()
+            person = m.createPerson()
+            person.ExternalUrls = [{ Name: "TMDB", Url: "https://www.themoviedb.org/person/1234" }]
+
+            'bs:disable-next-line 1140
+            selection = buildFilmographySelection(person, "")
+
+            m.assertInvalid(selection)
+        end function
+
+        @it("opens person overview overlay")
+        function _()
+            m.top.findNode("overviewLabel").text = "Biography"
+
+            'bs:disable-next-line 1140
+            openPersonOverview()
+
+            m.assertEqual(m.top.overlayRequested.id, "personOverview")
+            m.assertEqual(m.top.overlayRequested.personName, "Person")
+            m.assertEqual(m.top.overlayRequested.overviewText, "Biography")
+        end function
+
+        @describe("focus and lifecycle")
+
+        @it("focuses Read More when available")
+        function _()
+            m.top.findNode("readMoreButton").visible = true
+
+            'bs:disable-next-line 1140
+            focusDefaultBioAction()
+
+            m.assertEqual(m.node.pageState.focusArea, "readMore")
+            m.assertTrue(m.top.findNode("readMoreButton").hasFocus())
+        end function
+
+        @it("focuses Filmography when Read More is unavailable")
+        function _()
+            m.top.findNode("readMoreButton").visible = false
+            m.top.findNode("filmographyButton").visible = true
+
+            'bs:disable-next-line 1140
+            focusDefaultBioAction()
+
+            m.assertEqual(m.node.pageState.focusArea, "filmography")
+            m.assertTrue(m.top.findNode("filmographyButton").hasFocus())
+        end function
+
+        @it("applies related layout without animation")
+        function _()
+            'bs:disable-next-line 1140
+            setLayoutMode("related", false)
+
+            m.assertEqual(m.node.layout.mode, "related")
+            m.assertEqual(m.top.findNode("bioGroup").translation, [0.0, -258.0])
+            m.assertEqual(m.top.findNode("relatedGroup").translation, [76.0, 492.0])
+        end function
+
+        @it("deactivation stops the person task")
+        function _()
+            m.top.callFunc("deactivate")
+
+            m.assertEqual(m.top.findNode("personTask").control, "stop")
+        end function
+
+        @it("Back requests close")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function createPerson() as object
+            return { Id: "person-1", Name: "Person", Type: "Person", PremiereDate: "1980-01-02T00:00:00Z", EndDate: "2020-03-04T00:00:00Z", ProductionLocations: [], ExternalUrls: [], ImageTags: {} }
+        end function
+
+        function createRelated(id as string, name as string, itemType as string) as object
+            return { Id: id, Name: name, Type: itemType, ImageTags: {}, BackdropImageTags: [], SeriesName: "Series", ParentIndexNumber: 1, IndexNumber: 1 }
+        end function
     end class
 
 end namespace

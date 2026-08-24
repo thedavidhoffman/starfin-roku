@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("VideoMediaCard")
@@ -44,6 +46,165 @@ namespace tests
         @it("declares the metadataLabel node")
         function _()
             m.assertNotInvalid(m.top.findNode("metadataLabel"))
+        end function
+
+        @describe("media rendering")
+
+        @it("renders a movie title")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("title").text, "Movie")
+        end function
+
+        @it("renders an episode series name as the title")
+        function _()
+            item = m.createItem({ Type: "Episode", Name: "Episode", SeriesName: "Series", UserData: {} })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("title").text, "Series")
+        end function
+
+        @it("renders a movie production year")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", ProductionYear: 2024, UserData: {} })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("metadataLabel").text, "2024")
+        end function
+
+        @it("renders episode season and number metadata")
+        function _()
+            item = m.createItem({ Type: "Episode", Name: "Pilot", SeriesName: "Series", ParentIndexNumber: 1, IndexNumber: 2, UserData: {} })
+
+            m.top.itemContent = item
+
+            metadata = m.top.findNode("metadataLabel").text
+            m.assertTrue(Instr(1, metadata, "S1") > 0)
+            m.assertTrue(Instr(1, metadata, "E2 - Pilot") > 0)
+        end function
+
+        @it("renders supplied artwork")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+            item.HDPosterUrl = "http://server/poster.jpg"
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("poster").uri, "http://server/poster.jpg")
+        end function
+
+        @it("uses a poster placeholder for missing poster artwork")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("poster").uri, "pkg:/images/media-card/poster-placeholder-252x378.png")
+        end function
+
+        @it("uses a thumbnail placeholder for missing wide artwork")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+            item.imageAspect = "wide"
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("poster").uri, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
+        end function
+
+        @it("hides metadata when requested")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+            item.showMetadata = false
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("metadataLabel").visible)
+        end function
+
+        @describe("card layouts")
+
+        @it("applies poster dimensions by default")
+        function _()
+            m.top.itemContent = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 252)
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 378)
+        end function
+
+        @it("applies wide thumbnail dimensions")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+            item.imageAspect = "wide"
+
+            m.top.itemContent = item
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 441)
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 249)
+        end function
+
+        @it("applies jumbo dimensions")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+            item.imageAspect = "jumbo"
+
+            m.top.itemContent = item
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 882)
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 496)
+        end function
+
+        @it("shows a supplied logo only for jumbo cards")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+            item.imageAspect = "jumbo"
+            item.logoUrl = "http://server/logo.png"
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("titleLogo").visible)
+            m.assertEqual(m.top.findNode("titleLogo").uri, "http://server/logo.png")
+        end function
+
+        @describe("playback state")
+
+        @it("shows the watched indicator for played media")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: { Played: true } })
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
+        end function
+
+        @it("shows progress for partially played media")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: { Played: false, PlayedPercentage: 50 } })
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("progressBar").visible)
+            m.assertTrue(m.top.findNode("progressBar").progressWidth > 0)
+        end function
+
+        @it("hides progress for played media")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: { Played: true, PlayedPercentage: 50 } })
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("progressBar").visible)
+        end function
+
+        function createItem(raw as object) as object
+            item = CreateObject("roSGNode", "ContentNode")
+            item.addFields({ raw: raw, imageAspect: "poster", showMetadata: true, logoUrl: "" })
+            return item
         end function
 
     end class

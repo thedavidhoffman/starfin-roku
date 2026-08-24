@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("HeaderDropdownMenu")
@@ -39,6 +41,195 @@ namespace tests
         @it("declares the itemsGroup node")
         function _()
             m.assertNotInvalid(m.top.findNode("itemsGroup"))
+        end function
+
+        @describe("item rendering")
+
+        @it("renders one button for every valid item")
+        function _()
+            m.top.items = m.createItems()
+
+            m.assertEqual(m.top.findNode("itemsGroup").getChildCount(), 3)
+        end function
+
+        @it("renders item text")
+        function _()
+            m.top.items = m.createItems()
+
+            m.assertEqual(m.top.findNode("itemsGroup").getChild(1).text, "Settings")
+        end function
+
+        @it("ignores invalid items")
+        function _()
+            m.top.items = [invalid, { text: "Missing id" }, { id: "logs", text: "Logs" }]
+
+            m.assertEqual(m.top.findNode("itemsGroup").getChildCount(), 1)
+        end function
+
+        @it("applies configured item dimensions")
+        function _()
+            m.top.itemWidth = 300
+            m.top.itemHeight = 64
+            m.top.items = m.createItems()
+
+            button = m.top.findNode("itemsGroup").getChild(0)
+            m.assertEqual(Number.ToInteger(button.buttonWidth, -1), 300)
+            m.assertEqual(Number.ToInteger(button.buttonHeight, -1), 64)
+        end function
+
+        @it("sizes the background for rendered items")
+        function _()
+            m.top.itemHeight = 56
+            m.top.itemSpacing = 10
+            m.top.items = m.createItems()
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("backgroundColor").height, -1), 224)
+        end function
+
+        @describe("identity rendering")
+
+        @it("shows a supplied identity")
+        function _()
+            m.top.identity = m.createIdentity()
+
+            m.assertTrue(m.top.findNode("identityGroup").visible)
+            m.assertEqual(m.top.findNode("identityName").text, "User")
+            m.assertEqual(m.top.findNode("identityImage").uri, "http://server/user.jpg")
+        end function
+
+        @it("hides identity when its image is absent")
+        function _()
+            m.top.identity = { name: "User", imageUri: "" }
+
+            m.assertFalse(m.top.findNode("identityGroup").visible)
+        end function
+
+        @it("moves items below a visible identity")
+        function _()
+            m.top.identity = m.createIdentity()
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("itemsGroup").translation[1], -1), 230)
+        end function
+
+        @describe("menu lifecycle")
+
+        @it("does not open an empty menu")
+        function _()
+            m.top.items = []
+
+            opened = m.top.callFunc("openMenu")
+
+            m.assertFalse(opened)
+            m.assertFalse(m.top.isOpen)
+        end function
+
+        @it("opens a menu with items")
+        function _()
+            m.top.items = m.createItems()
+
+            opened = m.top.callFunc("openMenu")
+
+            m.assertTrue(opened)
+            m.assertTrue(m.top.isOpen)
+            m.assertTrue(m.top.visible)
+        end function
+
+        @it("closes an open menu")
+        function _()
+            m.top.items = m.createItems()
+            m.top.callFunc("openMenu")
+
+            closed = m.top.callFunc("closeMenu")
+
+            m.assertTrue(closed)
+            m.assertFalse(m.top.isOpen)
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("toggle closes an open menu")
+        function _()
+            m.top.items = m.createItems()
+            m.top.callFunc("openMenu")
+
+            openAfterToggle = m.top.callFunc("toggleMenu")
+
+            m.assertFalse(openAfterToggle)
+            m.assertFalse(m.top.isOpen)
+        end function
+
+        @describe("focus and selection")
+
+        @it("focuses the first item when opened")
+        function _()
+            m.top.items = m.createItems()
+
+            m.top.callFunc("openMenu")
+
+            m.assertTrue(m.top.findNode("itemsGroup").getChild(0).hasFocus())
+        end function
+
+        @it("focuses an item by id")
+        function _()
+            m.top.items = m.createItems()
+
+            focused = m.top.callFunc("focusItemById", "settings")
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.findNode("itemsGroup").getChild(1).hasFocus())
+        end function
+
+        @it("falls back to the first item for an unknown id")
+        function _()
+            m.top.items = m.createItems()
+
+            focused = m.top.callFunc("focusItemById", "missing")
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.findNode("itemsGroup").getChild(0).hasFocus())
+        end function
+
+        @it("wraps focus forward from the last item")
+        function _()
+            m.top.items = m.createItems()
+            m.top.callFunc("focusItemById", "accounts")
+
+            focused = m.top.callFunc("focusByOffset", 1)
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.findNode("itemsGroup").getChild(0).hasFocus())
+        end function
+
+        @it("wraps focus backward from the first item")
+        function _()
+            m.top.items = m.createItems()
+            m.top.callFunc("focusFirstItem")
+
+            focused = m.top.callFunc("focusByOffset", -1)
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.findNode("itemsGroup").getChild(2).hasFocus())
+        end function
+
+        @it("emits the focused item when its button is selected")
+        function _()
+            m.top.items = m.createItems()
+            m.top.callFunc("focusItemById", "settings")
+
+            m.top.findNode("itemsGroup").getChild(1).buttonSelected = true
+
+            m.assertEqual(m.top.selectedItem.id, "settings")
+        end function
+
+        function createItems() as object
+            return [
+                { id: "system", text: "System" }
+                { id: "settings", text: "Settings" }
+                { id: "accounts", text: "Accounts" }
+            ]
+        end function
+
+        function createIdentity() as object
+            return { name: "User", imageUri: "http://server/user.jpg", imageSize: 144, maskUri: "pkg:/images/mask.png", maskSize: [144, 144] }
         end function
 
     end class

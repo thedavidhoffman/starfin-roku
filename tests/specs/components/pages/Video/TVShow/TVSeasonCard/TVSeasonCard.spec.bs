@@ -36,6 +36,85 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("year"))
         end function
 
+        @describe("season rendering")
+
+        @it("renders the season title")
+        function _()
+            item = m.createSeason("Season 1", "2024", 8, "http://server/season.jpg")
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("title").text, "Season 1")
+        end function
+
+        @it("renders year and plural episode count")
+        function _()
+            item = m.createSeason("Season 1", "2024", 8, "")
+
+            m.top.itemContent = item
+
+            m.assertTrue(Instr(1, m.top.findNode("year").text, "2024") > 0)
+            m.assertTrue(Instr(1, m.top.findNode("year").text, "8 eps.") > 0)
+        end function
+
+        @it("renders a singular episode count")
+        function _()
+            item = m.createSeason("Season 1", "", 1, "")
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("year").text, "1 ep.")
+        end function
+
+        @it("shows supplied poster artwork")
+        function _()
+            item = m.createSeason("Season 1", "", 1, "http://server/season.jpg")
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("poster").visible)
+            m.assertFalse(m.top.findNode("placeholder").visible)
+            m.assertEqual(m.top.findNode("poster").uri, "http://server/season.jpg")
+        end function
+
+        @it("shows placeholder artwork when poster artwork is missing")
+        function _()
+            item = m.createSeason("Season 1", "", 1, "")
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("poster").visible)
+            m.assertTrue(m.top.findNode("placeholder").visible)
+        end function
+
+        @it("shows the watched indicator for a fully watched season")
+        function _()
+            item = m.createSeason("Season 1", "", 1, "")
+            item.raw = { UserData: { UnplayedItemCount: 0 } }
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
+        end function
+
+        @it("hides the watched indicator for an unfinished season")
+        function _()
+            item = m.createSeason("Season 1", "", 1, "")
+            item.raw = { UserData: { UnplayedItemCount: 2 } }
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+        end function
+
+        function createSeason(title as string, year as string, episodeCount as integer, imageUrl as string) as object
+            item = CreateObject("roSGNode", "ContentNode")
+            item.addFields({ itemId: "season-1", seasonYear: year, episodeCount: episodeCount, raw: {} })
+            item.title = title
+            item.HDPosterUrl = imageUrl
+            return item
+        end function
+
     end class
 
 end namespace

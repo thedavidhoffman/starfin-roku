@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("MediaShell")
@@ -64,6 +66,185 @@ namespace tests
         @it("declares the overviewDescription node")
         function _()
             m.assertNotInvalid(m.top.findNode("overviewDescription"))
+        end function
+
+        @describe("shell layout")
+
+        @it("applies content translation")
+        function _()
+            m.top.contentTranslation = [120, 140]
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("contentGroup").translation[0], -1), 120)
+            m.assertEqual(Number.ToInteger(m.top.findNode("contentGroup").translation[1], -1), 140)
+        end function
+
+        @it("hides details when requested")
+        function _()
+            m.top.detailsVisible = false
+
+            m.assertFalse(m.top.findNode("infoGroup").visible)
+        end function
+
+        @it("uses the episode detail layout")
+        function _()
+            m.top.backgroundDisplay = "full-screen"
+            m.top.mediaContent = m.createContent("tv-episode")
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("episodeTitleLabel").translation[1], -1), 170)
+            m.assertEqual(Number.ToInteger(m.top.findNode("infoGroup").translation[1], -1), 230)
+        end function
+
+        @it("uses the cinematic episode layout")
+        function _()
+            m.top.backgroundDisplay = "cinematic"
+            m.top.mediaContent = m.createContent("tv-episode")
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("episodeTitleLabel").translation[1], -1), 527)
+            m.assertEqual(Number.ToInteger(m.top.findNode("infoGroup").translation[1], -1), 603)
+        end function
+
+        @describe("background rendering")
+
+        @it("renders a full-screen backdrop")
+        function _()
+            content = m.createContent("movie")
+            content.backdropUrl = "http://server/backdrop.jpg"
+            m.top.backgroundDisplay = "full-screen"
+
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("mediaBackgroundFull").visible)
+            m.assertFalse(m.top.findNode("mediaBackgroundPartialGroup").visible)
+            m.assertEqual(m.top.findNode("mediaBackgroundFull").uri, "http://server/backdrop.jpg")
+        end function
+
+        @it("renders a partial-screen backdrop")
+        function _()
+            content = m.createContent("movie")
+            content.backdropUrl = "http://server/partial.jpg"
+            m.top.backgroundDisplay = "partial-screen"
+
+            m.top.mediaContent = content
+
+            m.assertFalse(m.top.findNode("mediaBackgroundFull").visible)
+            m.assertTrue(m.top.findNode("mediaBackgroundPartialGroup").visible)
+        end function
+
+        @it("clears an absent backdrop")
+        function _()
+            content = m.createContent("movie")
+            content.backdropUrl = ""
+
+            m.top.mediaContent = content
+
+            m.assertFalse(m.top.findNode("mediaBackgroundFull").visible)
+            m.assertFalse(m.top.findNode("mediaBackgroundPartialGroup").visible)
+            m.assertEqual(m.top.findNode("mediaBackgroundFull").uri, "")
+        end function
+
+        @it("hides the content gradient for cinematic movie details")
+        function _()
+            m.top.castVisible = false
+            m.top.backgroundDisplay = "cinematic"
+
+            m.top.mediaContent = m.createContent("movie")
+
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+        end function
+
+        @it("shows the content gradient when cinematic cast is visible")
+        function _()
+            m.top.backgroundDisplay = "cinematic"
+            m.top.mediaContent = m.createContent("movie")
+
+            m.top.castVisible = true
+
+            m.assertTrue(m.top.findNode("contentGradient").visible)
+        end function
+
+        @describe("media details")
+
+        @it("renders a movie fallback title")
+        function _()
+            m.top.mediaContent = m.createContent("movie")
+
+            m.assertTrue(m.top.findNode("logoFallbackTitleLabel").visible)
+            m.assertEqual(m.top.findNode("logoFallbackTitleLabel").text, "Title")
+        end function
+
+        @it("renders the episode title separately")
+        function _()
+            m.top.mediaContent = m.createContent("tv-episode")
+
+            m.assertTrue(m.top.findNode("episodeTitleLabel").visible)
+            m.assertEqual(m.top.findNode("episodeTitleLabel").text, "Title")
+        end function
+
+        @it("uses logo title as the episode fallback title")
+        function _()
+            m.top.mediaContent = m.createContent("tv-episode")
+
+            m.assertEqual(m.top.findNode("logoFallbackTitleLabel").text, "Series")
+        end function
+
+        @it("renders primary and secondary information")
+        function _()
+            m.top.mediaContent = m.createContent("movie")
+
+            m.assertEqual(m.top.findNode("primaryInfoLabel").text, "Primary")
+            m.assertEqual(m.top.findNode("secondaryInfoLabel").text, "Secondary")
+        end function
+
+        @it("collapses overview whitespace")
+        function _()
+            content = m.createContent("movie")
+            content.overview = "First   second" + Chr(10) + "third"
+
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("overviewDescription").text, "First second third")
+        end function
+
+        @it("forwards description overlay requests")
+        function _()
+            request = { id: "description", componentName: "DescriptionDialog" }
+
+            m.top.findNode("overviewDescription").overlayRequested = request
+
+            m.assertEqual(m.top.overlayRequested, request)
+        end function
+
+        @it("does not focus a non-focusable description")
+        function _()
+            m.top.findNode("overviewDescription").canAcceptFocus = false
+
+            focused = m.top.callFunc("focusDescription")
+
+            m.assertFalse(focused)
+        end function
+
+        @it("focuses an available description")
+        function _()
+            m.top.findNode("overviewDescription").canAcceptFocus = true
+
+            focused = m.top.callFunc("focusDescription")
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.findNode("overviewDescription").hasFocus())
+        end function
+
+        function createContent(mediaType as string) as object
+            return {
+                mediaType: mediaType
+                title: "Title"
+                logoUrl: ""
+                logoTitle: "Series"
+                logoPending: false
+                backdropUrl: ""
+                primaryInfoText: "Primary"
+                secondaryInfoText: "Secondary"
+                overview: "Overview"
+            }
         end function
 
     end class

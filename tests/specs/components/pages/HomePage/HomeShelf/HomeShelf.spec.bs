@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("HomeShelf")
@@ -14,6 +16,148 @@ namespace tests
         @it("declares the items node")
         function _()
             m.assertNotInvalid(m.top.findNode("items"))
+        end function
+
+        @describe("shelf rendering")
+
+        @it("renders the row title")
+        function _()
+            row = m.createRow()
+            row.title = "Recently Added"
+
+            m.top.rowContent = row
+
+            m.assertEqual(m.top.findNode("titleLabel").text, "Recently Added")
+        end function
+
+        @it("wraps row content for the row list")
+        function _()
+            row = m.createRow()
+
+            m.top.rowContent = row
+
+            m.assertEqual(m.top.findNode("items").content.getChild(0), row)
+        end function
+
+        @it("applies shelf layout fields")
+        function _()
+            m.top.layout = { itemComponentName: "VideoMediaCard", itemSizeWidth: 441, width: 486, height: 348, itemSpacing: 15, focusBitmapFilename: "home-page-thumbnail-focus.png" }
+
+            items = m.top.findNode("items")
+            m.assertEqual(items.itemComponentName, "VideoMediaCard")
+            m.assertEqual(Number.ToInteger(items.itemSize[0], -1), 441)
+            m.assertEqual(Number.ToInteger(items.itemSize[1], -1), 348)
+        end function
+
+        @describe("focus and selection")
+
+        @it("activates the row list")
+        function _()
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.findNode("items").hasFocus())
+        end function
+
+        @it("returns the focused raw item")
+        function _()
+            row = m.createRow()
+            m.top.rowContent = row
+            m.top.findNode("items").rowItemFocused = [0, 0]
+
+            focusedItem = m.top.callFunc("getFocusedItem")
+
+            m.assertEqual(focusedItem.Id, "item-1")
+        end function
+
+        @it("returns the focused item image URL")
+        function _()
+            row = m.createRow()
+            m.top.rowContent = row
+            m.top.findNode("items").rowItemFocused = [0, 0]
+
+            imageUrl = m.top.callFunc("getFocusedItemImageUrl")
+
+            m.assertEqual(imageUrl, "http://server/item.jpg")
+        end function
+
+        @it("returns invalid when no focused item exists")
+        function _()
+            m.top.rowContent = m.createRow()
+            m.top.findNode("items").rowItemFocused = [-1, -1]
+
+            focusedItem = m.top.callFunc("getFocusedItem")
+
+            m.assertInvalid(focusedItem)
+        end function
+
+        @it("emits selected item context")
+        function _()
+            row = m.createRow()
+            m.top.rowIndex = 3
+            m.top.rowContent = row
+
+            m.top.findNode("items").rowItemSelected = [0, 0]
+
+            m.assertEqual(m.top.selectedItem.rowIndex, 3)
+            m.assertEqual(m.top.selectedItem.rowKey, "recent")
+            m.assertEqual(m.top.selectedItem.itemIndex, 0)
+            m.assertEqual(m.top.selectedItem.item.Id, "item-1")
+        end function
+
+        @it("propagates upward focus exit")
+        function _()
+            m.top.focusExitUp = false
+
+            m.top.findNode("items").focusExitUp = true
+
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+        @it("propagates downward focus exit")
+        function _()
+            m.top.focusExitDown = false
+
+            m.top.findNode("items").focusExitDown = true
+
+            m.assertTrue(m.top.focusExitDown)
+        end function
+
+        @it("passes focus exit availability to the row list")
+        function _()
+            m.top.canFocusExitUp = false
+            m.top.canFocusExitDown = false
+
+            m.assertFalse(m.top.findNode("items").canFocusExitUp)
+            m.assertFalse(m.top.findNode("items").canFocusExitDown)
+        end function
+
+        @describe("media state updates")
+
+        @it("returns false for a media state change without row content")
+        function _()
+            m.top.rowContent = invalid
+
+            changed = m.top.callFunc("applyMediaStateChange", { itemId: "item-1", action: "MarkAsWatched" })
+
+            m.assertFalse(changed)
+        end function
+
+        @it("returns false for playback progress on an unknown item")
+        function _()
+            m.top.rowContent = m.createRow()
+
+            changed = m.top.callFunc("applyPlaybackProgressChange", { itemId: "missing", positionTicks: 20 })
+
+            m.assertFalse(changed)
+        end function
+
+        function createRow() as object
+            row = CreateObject("roSGNode", "ContentNode")
+            row.addFields({ rowKey: "recent" })
+            item = row.createChild("ContentNode")
+            item.HDPosterUrl = "http://server/item.jpg"
+            item.addFields({ raw: { Id: "item-1", UserData: { Played: false, IsFavorite: false } } })
+            return row
         end function
 
     end class

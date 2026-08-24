@@ -51,6 +51,192 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("savedAccountsButton"))
         end function
 
+        @describe("field synchronization")
+
+        @it("renders the server value")
+        function _()
+            m.top.serverValue = "http://server"
+
+            m.assertEqual(m.top.findNode("serverInput").text, "http://server")
+        end function
+
+        @it("renders the username value")
+        function _()
+            m.top.usernameValue = "user"
+
+            m.assertEqual(m.top.findNode("usernameInput").text, "user")
+        end function
+
+        @it("masks the password value")
+        function _()
+            m.top.passwordValue = "secret"
+
+            m.assertEqual(m.top.findNode("passwordInput").text, "******")
+        end function
+
+        @it("renders status messages")
+        function _()
+            m.top.statusMessage = "Unable to sign in"
+
+            m.assertEqual(m.top.findNode("loginStatus").text, "Unable to sign in")
+        end function
+
+        @it("preloads server and username from a saved session")
+        function _()
+            m.top.savedSession = { server: "http://saved", username: "saved-user" }
+
+            m.assertEqual(m.top.serverValue, "http://saved")
+            m.assertEqual(m.top.usernameValue, "saved-user")
+        end function
+
+        @describe("login validation")
+
+        @it("rejects a missing server")
+        function _()
+            m.setCredentials("", "user", "password")
+
+            m.top.findNode("loginButton").buttonSelected = true
+
+            m.assertInvalid(m.top.loginRequested)
+            m.assertEqual(m.top.statusMessage, "Server address, username, and password are all required.")
+        end function
+
+        @it("rejects a missing username")
+        function _()
+            m.setCredentials("http://server", "", "password")
+
+            m.top.findNode("loginButton").buttonSelected = true
+
+            m.assertInvalid(m.top.loginRequested)
+        end function
+
+        @it("rejects a missing password")
+        function _()
+            m.setCredentials("http://server", "user", "")
+
+            m.top.findNode("loginButton").buttonSelected = true
+
+            m.assertInvalid(m.top.loginRequested)
+        end function
+
+        @it("emits a normalized login request")
+        function _()
+            m.setCredentials("http://server/", "  user  ", "password")
+
+            m.top.findNode("loginButton").buttonSelected = true
+
+            m.assertEqual(m.top.loginRequested.action, "login")
+            m.assertEqual(m.top.loginRequested.server, "http://server")
+            m.assertEqual(m.top.loginRequested.username, "user")
+            m.assertEqual(m.top.loginRequested.password, "password")
+            m.assertEqual(m.top.statusMessage, "Signing in...")
+        end function
+
+        @describe("saved accounts")
+
+        @it("shows Saved Accounts when accounts exist")
+        function _()
+            m.top.savedAccounts = [{ accountKey: "account-1" }]
+
+            m.assertTrue(m.top.findNode("savedAccountsButton").visible)
+        end function
+
+        @it("hides Saved Accounts when no accounts exist")
+        function _()
+            m.top.savedAccounts = []
+
+            m.assertFalse(m.top.findNode("savedAccountsButton").visible)
+        end function
+
+        @it("emits an account picker request")
+        function _()
+            accounts = [{ accountKey: "account-1" }]
+            m.top.serverValue = "http://server/"
+            m.top.savedAccounts = accounts
+
+            m.top.findNode("savedAccountsButton").buttonSelected = true
+
+            m.assertEqual(m.top.accountPickerRequested.server, "http://server")
+            m.assertEqual(m.top.accountPickerRequested.accounts, accounts)
+        end function
+
+        @it("ignores Saved Accounts selection when no accounts exist")
+        function _()
+            m.top.savedAccounts = []
+            m.top.accountPickerRequested = invalid
+
+            'bs:disable-next-line 1140
+            onSavedAccountsPressed()
+
+            m.assertInvalid(m.top.accountPickerRequested)
+        end function
+
+        @describe("focus and navigation")
+
+        @it("activates with Server focused")
+        function _()
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.findNode("serverInput").hasFocus())
+            m.assertTrue(m.top.findNode("serverInput").hasFocusVisual)
+        end function
+
+        @it("focuses the login button")
+        function _()
+            focused = m.top.callFunc("focusLoginButton")
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.findNode("loginButton").hasFocus())
+        end function
+
+        @it("falls back to Server when Saved Accounts is unavailable")
+        function _()
+            m.top.savedAccounts = []
+
+            focused = m.top.callFunc("focusSavedAccountsButton")
+
+            m.assertFalse(focused)
+            m.assertTrue(m.top.findNode("serverInput").hasFocus())
+        end function
+
+        @it("moves focus down through login fields")
+        function _()
+            m.top.callFunc("activate")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("usernameInput").hasFocus())
+        end function
+
+        @it("moves right from Sign In to Saved Accounts")
+        function _()
+            m.top.savedAccounts = [{ accountKey: "account-1" }]
+            m.top.callFunc("focusLoginButton")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("savedAccountsButton").hasFocus())
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function setCredentials(server as string, username as string, password as string)
+            m.top.loginRequested = invalid
+            m.top.serverValue = server
+            m.top.usernameValue = username
+            m.top.passwordValue = password
+        end function
+
     end class
 
 end namespace

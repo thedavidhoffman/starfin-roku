@@ -136,6 +136,80 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("thumbnailPoster4"))
         end function
 
+        @describe("thumbnail rendering")
+
+        @it("hides thumbnails when seeking stops")
+        function _()
+            m.top.isSeeking = true
+            m.top.findNode("thumbnailGroup0").visible = true
+
+            m.top.isSeeking = false
+
+            m.assertFalse(m.top.findNode("thumbnailGroup0").visible)
+        end function
+
+        @it("hides thumbnails when thumbnail data is invalid")
+        function _()
+            m.top.isSeeking = true
+            m.top.thumbnailData = m.createThumbnailData([m.createImage("http://server/initial.jpg")])
+            m.top.findNode("thumbnailGroup0").visible = true
+
+            m.top.thumbnailData = invalid
+
+            m.assertFalse(m.top.findNode("thumbnailGroup0").visible)
+        end function
+
+        @it("loads the supplied sprite sheet into an available slot")
+        function _()
+            m.top.isSeeking = true
+
+            m.top.thumbnailData = m.createThumbnailData([m.createImage("http://server/sheet.jpg")])
+
+            m.assertEqual(m.top.findNode("thumbnailPoster0").uri, "http://server/sheet.jpg")
+        end function
+
+        @it("positions the sprite sheet at the selected tile")
+        function _()
+            m.top.isSeeking = true
+            image = m.createImage("http://server/sheet-position.jpg")
+            image.column = 1
+            image.row = 1
+
+            m.top.thumbnailData = m.createThumbnailData([image])
+
+            poster = m.top.findNode("thumbnailPoster0")
+            m.assertTrue(poster.translation[0] < 0)
+            m.assertTrue(poster.translation[1] < 0)
+        end function
+
+        @it("hides unused thumbnail slots")
+        function _()
+            m.top.isSeeking = true
+            m.top.findNode("thumbnailGroup1").visible = true
+
+            m.top.thumbnailData = m.createThumbnailData([m.createImage("http://server/one-sheet.jpg")])
+
+            m.assertFalse(m.top.findNode("thumbnailGroup1").visible)
+        end function
+
+        @it("hides a slot whose image URI is empty")
+        function _()
+            m.top.isSeeking = true
+            m.top.findNode("thumbnailGroup0").visible = true
+
+            m.top.thumbnailData = m.createThumbnailData([m.createImage("")])
+
+            m.assertFalse(m.top.findNode("thumbnailGroup0").visible)
+        end function
+
+        function createThumbnailData(images as object) as object
+            return { images: images, tileWidth: 384, tileHeight: 216, layoutWidth: 1713, gap: 15, largeScale: 1.2, smallScale: 0.7 }
+        end function
+
+        function createImage(uri as string) as object
+            return { uri: uri, sheetColumns: 4, sheetRows: 3, column: 0, row: 0, canUseFastReplace: true }
+        end function
+
     end class
 
 end namespace

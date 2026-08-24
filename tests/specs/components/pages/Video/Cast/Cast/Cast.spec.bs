@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("Cast")
@@ -14,6 +16,144 @@ namespace tests
         @it("declares the castRows node")
         function _()
             m.assertNotInvalid(m.top.findNode("castRows"))
+        end function
+
+        @describe("cast rendering")
+
+        @it("uses the default title")
+        function _()
+            m.top.title = ""
+
+            m.assertEqual(m.top.findNode("titleLabel").text, "Cast & Crew")
+        end function
+
+        @it("renders a custom title")
+        function _()
+            m.top.title = "Guest Stars"
+
+            m.assertEqual(m.top.findNode("titleLabel").text, "Guest Stars")
+        end function
+
+        @it("renders valid people")
+        function _()
+            m.top.people = [m.createPerson("person-1", "Person", "Actor")]
+
+            row = m.top.findNode("castRows").content.getChild(0)
+            m.assertEqual(row.getChildCount(), 1)
+            m.assertEqual(row.getChild(0).title, "Person")
+        end function
+
+        @it("ignores people without names")
+        function _()
+            m.top.people = [{ Id: "person-1", Name: "" }]
+
+            m.assertFalse(m.top.hasItems)
+        end function
+
+        @it("renders a role as person details")
+        function _()
+            person = m.createPerson("person-1", "Person", "Captain")
+
+            m.top.people = [person]
+
+            m.assertEqual(m.top.findNode("castRows").content.getChild(0).getChild(0).description, "Captain")
+        end function
+
+        @it("hides person details when disabled")
+        function _()
+            m.top.showPersonDetails = false
+
+            m.top.people = [m.createPerson("person-1", "Person", "Captain")]
+
+            m.assertEqual(m.top.findNode("castRows").content.getChild(0).getChild(0).description, "")
+        end function
+
+        @it("uses placeholder artwork when person artwork is missing")
+        function _()
+            m.top.people = [m.createPerson("person-1", "Person", "Actor")]
+
+            m.assertEqual(m.top.findNode("castRows").content.getChild(0).getChild(0).HDPosterUrl, "pkg:/images/cast/cast-placeholder-195x195.png")
+        end function
+
+        @it("hides the component when display is disabled")
+        function _()
+            m.top.people = [m.createPerson("person-1", "Person", "Actor")]
+
+            m.top.displayEnabled = false
+
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("applies viewport width to the row list")
+        function _()
+            m.top.viewportWidth = 1200
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("castRows").itemSize[0], -1), 1200)
+        end function
+
+        @describe("focus and selection")
+
+        @it("activates and focuses cast rows when people exist")
+        function _()
+            m.top.people = [m.createPerson("person-1", "Person", "Actor")]
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.findNode("castRows").hasFocus())
+            m.assertTrue(m.top.findNode("castRows").drawFocusFeedback)
+        end function
+
+        @it("deactivates cast row focus feedback")
+        function _()
+            m.top.people = [m.createPerson("person-1", "Person", "Actor")]
+            m.top.callFunc("activate")
+
+            m.top.callFunc("deactivate")
+
+            m.assertFalse(m.top.findNode("castRows").drawFocusFeedback)
+        end function
+
+        @it("emits the selected person")
+        function _()
+            m.top.showPersonDetails = true
+            m.top.people = [m.createPerson("person-1", "Person", "Actor")]
+
+            m.top.findNode("castRows").rowItemSelected = [0, 0]
+
+            m.assertEqual(m.top.selectedPerson.itemId, "person-1")
+            m.assertEqual(m.top.selectedPerson.item.Name, "Person")
+        end function
+
+        @it("ignores an out of range selection")
+        function _()
+            m.top.people = [m.createPerson("person-1", "Person", "Actor")]
+            m.top.selectedPerson = invalid
+
+            m.top.findNode("castRows").rowItemSelected = [0, 4]
+
+            m.assertInvalid(m.top.selectedPerson)
+        end function
+
+        @it("propagates upward focus exit")
+        function _()
+            m.top.focusExitUp = false
+
+            m.top.findNode("castRows").focusExitUp = true
+
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+        @it("propagates downward focus exit")
+        function _()
+            m.top.focusExitDown = false
+
+            m.top.findNode("castRows").focusExitDown = true
+
+            m.assertTrue(m.top.focusExitDown)
+        end function
+
+        function createPerson(id as string, name as string, role as string) as object
+            return { Id: id, Name: name, Role: role, Type: "Actor", PrimaryImageTag: "", ImageTags: {} }
         end function
 
     end class

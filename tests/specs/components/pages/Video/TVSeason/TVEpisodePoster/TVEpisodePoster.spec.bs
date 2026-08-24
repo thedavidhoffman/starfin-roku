@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("TVEpisodePoster")
@@ -24,6 +26,92 @@ namespace tests
         @it("declares the watchedIndicator node")
         function _()
             m.assertNotInvalid(m.top.findNode("watchedIndicator"))
+        end function
+
+        @describe("poster rendering")
+
+        @it("renders a supplied image URL")
+        function _()
+            m.top.imageUrl = "http://server/episode.jpg"
+
+            m.assertEqual(m.top.findNode("poster").uri, "http://server/episode.jpg")
+        end function
+
+        @it("uses placeholder artwork for an empty image URL")
+        function _()
+            m.top.imageUrl = ""
+
+            m.assertEqual(m.top.findNode("poster").uri, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
+        end function
+
+        @it("applies custom poster dimensions")
+        function _()
+            m.top.posterWidth = 300
+            m.top.posterHeight = 180
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 300)
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 180)
+        end function
+
+        @it("calculates progress from percentage")
+        function _()
+            m.top.posterWidth = 531
+            m.top.posterHeight = 300
+            item = m.createEpisode({ Played: false })
+            item.progressPercent = 50
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("progressBar").visible)
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").progressWidth, -1), 256)
+        end function
+
+        @it("clamps progress to the track width")
+        function _()
+            m.top.posterWidth = 531
+            m.top.posterHeight = 300
+            item = m.createEpisode({ Played: false })
+            item.progressWidth = 9999
+
+            m.top.itemContent = item
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").progressWidth, -1), 513)
+        end function
+
+        @it("shows the watched indicator for a played episode")
+        function _()
+            item = m.createEpisode({ Played: true })
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
+        end function
+
+        @it("hides progress for a played episode")
+        function _()
+            item = m.createEpisode({ Played: true })
+            item.progressPercent = 50
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("progressBar").visible)
+        end function
+
+        @it("hides progress for a season summary")
+        function _()
+            item = m.createEpisode({ UnplayedItemCount: 2 })
+            item.itemType = "SeasonSummary"
+            item.progressPercent = 50
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("progressBar").visible)
+        end function
+
+        function createEpisode(userData as object) as object
+            item = CreateObject("roSGNode", "ContentNode")
+            item.addFields({ itemType: "Episode", progressWidth: 0, progressPercent: 0, raw: { UserData: userData } })
+            return item
         end function
 
     end class

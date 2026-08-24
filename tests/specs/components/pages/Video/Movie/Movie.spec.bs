@@ -4,6 +4,19 @@ namespace tests
     @suite("Movie component")
     class MovieTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.state.request = m.createRequest()
+            m.node.state.item = m.createMovie()
+            m.node.state.focusArea = "toolbar"
+            m.node.state.layout.isCinematic = false
+            m.node.state.layout.isFromLibrary = false
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.top.settings = {}
+            m.top.playSelected = invalid
+            m.top.selectedPerson = invalid
+            m.top.overlayRequested = invalid
+            m.top.closeRequested = false
+        end function
         @describe("declarative component contract")
 
         @it("declares the mediaShell node")
@@ -56,6 +69,238 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("watchedTask"))
         end function
 
+        @describe("movie rendering")
+
+        @it("renders movie identity and overview")
+        function _()
+            'bs:disable-next-line 1140
+            renderMovie(m.createMovie())
+
+            content = m.top.findNode("mediaShell").mediaContent
+            m.assertEqual(content.mediaType, "movie")
+            m.assertEqual(content.title, "Movie")
+            m.assertEqual(content.overview, "Overview")
+        end function
+
+        @it("renders stream and chapter counts")
+        function _()
+            item = m.createMovie()
+            item.MediaStreams = [{ Type: "Audio", Index: 1 }, { Type: "Subtitle", Index: 2 }]
+            item.Chapters = [{ Name: "Chapter", StartPositionTicks: 0 }]
+
+            'bs:disable-next-line 1140
+            renderMovie(item)
+
+            toolbar = m.top.findNode("mediaToolbar")
+            m.assertEqual(toolbar.audioStreamCount, 1)
+            m.assertEqual(toolbar.subtitleStreamCount, 1)
+            m.assertEqual(toolbar.chapterCount, 1)
+        end function
+
+        @it("renders watched and resume state")
+        function _()
+            item = m.createMovie()
+            item.UserData = { Played: true, PlaybackPositionTicks: 20000000 }
+
+            'bs:disable-next-line 1140
+            renderMovie(item)
+
+            toolbar = m.top.findNode("mediaToolbar")
+            m.assertTrue(toolbar.isWatched)
+            m.assertEqual(toolbar.resumePositionSeconds, 2)
+        end function
+
+        @it("applies the standard layout")
+        function _()
+            m.node.state.layout.isCinematic = false
+
+            'bs:disable-next-line 1140
+            applyCinematicLayout()
+
+            m.assertTrue(m.top.findNode("mediaShell").detailsVisible)
+            m.assertTrue(m.top.findNode("mediaToolbar").visible)
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "")
+        end function
+
+        @it("applies cinematic details layout without cast focus")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.node.state.focusArea = "toolbar"
+
+            'bs:disable-next-line 1140
+            applyCinematicLayout()
+
+            m.assertTrue(m.top.findNode("mediaShell").detailsVisible)
+            m.assertFalse(m.top.findNode("mediaShell").castVisible)
+            m.assertEqual(m.top.findNode("mediaToolbar").translation[1], 948.0)
+        end function
+
+        @describe("library browse state")
+
+        @it("enables previous and next within loaded bounds")
+        function _()
+            'bs:disable-next-line 1140
+            applyLibraryBrowseState({ index: 1, loadedCount: 3, totalCount: 3 })
+
+            control = m.top.findNode("previousNextButton")
+            m.assertTrue(control.hasPrevious)
+            m.assertTrue(control.hasNext)
+        end function
+
+        @it("disables previous at the beginning")
+        function _()
+            'bs:disable-next-line 1140
+            applyLibraryBrowseState({ index: 0, loadedCount: 3, totalCount: 3 })
+
+            m.assertFalse(m.top.findNode("previousNextButton").hasPrevious)
+        end function
+
+        @it("disables next at the loaded end")
+        function _()
+            'bs:disable-next-line 1140
+            applyLibraryBrowseState({ index: 2, loadedCount: 3, totalCount: 3 })
+
+            m.assertFalse(m.top.findNode("previousNextButton").hasNext)
+        end function
+
+        @describe("playback selection")
+
+        @it("omits an explicit start position for normal play")
+        function _()
+            m.node.state.item.UserData = { Played: false, PlaybackPositionTicks: 500 }
+
+            'bs:disable-next-line 1140
+            selection = buildPlaySelection(invalid)
+
+            m.assertEqual(selection.itemId, "movie-1")
+            m.assertInvalid(selection.startPositionTicks)
+        end function
+
+        @it("builds a restart selection at zero")
+        function _()
+            'bs:disable-next-line 1140
+            selection = buildPlaySelection(0)
+
+            m.assertEqual(selection.startPositionTicks, 0)
+        end function
+
+        @it("applies selected audio stream index")
+        function _()
+            m.node.state.selectedStreams.audio = { streamIndex: 3 }
+            selection = {}
+
+            'bs:disable-next-line 1140
+            applySelectedStreamsToPlaySelection(selection)
+
+            m.assertEqual(selection.audioStreamIndex, 3)
+        end function
+
+        @it("applies subtitle Off as index minus one")
+        function _()
+            m.node.state.selectedStreams.subtitleOff = true
+            selection = {}
+
+            'bs:disable-next-line 1140
+            applySelectedStreamsToPlaySelection(selection)
+
+            m.assertEqual(selection.subtitleStreamIndex, -1)
+        end function
+
+        @describe("watched and progress updates")
+
+        @it("marks an item watched and clears progress")
+        function _()
+            item = m.createMovie()
+            item.UserData = { Played: false, PlaybackPositionTicks: 500, PlayedPercentage: 50 }
+
+            'bs:disable-next-line 1140
+            updateItemWatchedState(item, true)
+
+            m.assertTrue(item.UserData.Played)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 0)
+            m.assertEqual(item.UserData.PlayedPercentage, 0)
+        end function
+
+        @it("stores unfinished playback progress")
+        function _()
+            item = m.createMovie()
+            item.RunTimeTicks = 1000
+
+            'bs:disable-next-line 1140
+            updateItemPlaybackProgress(item, { isFinished: false, positionTicks: 250, durationTicks: 1000 })
+
+            m.assertFalse(item.UserData.Played)
+            m.assertEqual(item.UserData.PlaybackPositionTicks.ToStr(), "250")
+        end function
+
+        @it("marks finished playback watched")
+        function _()
+            item = m.createMovie()
+
+            'bs:disable-next-line 1140
+            updateItemPlaybackProgress(item, { isFinished: true, positionTicks: 900, durationTicks: 1000 })
+
+            m.assertTrue(item.UserData.Played)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 0)
+        end function
+
+        @describe("events and lifecycle")
+
+        @it("routes MediaShell overlays with movie source")
+        function _()
+            m.top.findNode("mediaShell").overlayRequested = { id: "description" }
+
+            'bs:disable-next-line 1140
+            onMediaShellOverlayRequested()
+
+            m.assertEqual(m.top.overlayRequested.id, "description")
+            m.assertEqual(m.top.overlayRequested.sourcePage, "movie")
+        end function
+
+        @it("adds movie source identity to cast selection")
+        function _()
+            m.top.findNode("cast").selectedPerson = { itemId: "person-1" }
+
+            'bs:disable-next-line 1140
+            onCastPersonSelected()
+
+            m.assertEqual(m.top.selectedPerson.sourceItemType, "movie")
+            m.assertEqual(m.top.selectedPerson.sourceItemId, "movie-1")
+        end function
+
+        @it("deactivation stops all page tasks")
+        function _()
+            m.top.callFunc("deactivate")
+
+            m.assertEqual(m.top.findNode("movieTask").control, "stop")
+            m.assertEqual(m.top.findNode("themeSongsTask").control, "stop")
+            m.assertEqual(m.top.findNode("watchedTask").control, "stop")
+        end function
+
+        @it("Back requests close")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function createRequest() as object
+            return { server: "http://server", token: "token", userId: "user", itemId: "movie-1", playbackQueue: [], playbackQueueIndex: 0, settings: {} }
+        end function
+
+        function createMovie() as object
+            return { Id: "movie-1", Name: "Movie", Type: "Movie", Overview: "Overview", ImageTags: {}, BackdropImageTags: [], People: [], Genres: [], MediaStreams: [], Chapters: [], UserData: { Played: false, PlaybackPositionTicks: 0 }, RunTimeTicks: 1000 }
+        end function
     end class
 
 end namespace

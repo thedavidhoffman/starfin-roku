@@ -111,6 +111,144 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("filmographyTask"))
         end function
 
+        @describe("request boundaries")
+
+        @it("ignores an invalid load request")
+        function _()
+            task = m.top.findNode("filmographyTask")
+            task.control = "stop"
+
+            m.top.loadRequest = invalid
+
+            m.assertEqual(task.control, "stop")
+        end function
+
+        @describe("item rendering")
+
+        @it("renders valid filmography items")
+        function _()
+            items = [m.createItem("Film One", "2024-01-01", "/poster.jpg")]
+
+            'bs:disable-next-line 1140
+            renderItems(items)
+
+            m.assertTrue(m.top.findNode("filmographyList").visible)
+            m.assertTrue(m.top.findNode("filmographyCard0").visible)
+            m.assertEqual(m.top.findNode("filmographyCard0").itemContent.title, "Film One")
+        end function
+
+        @it("ignores malformed filmography items")
+        function _()
+            'bs:disable-next-line 1140
+            renderItems([invalid, "bad"])
+
+            m.assertFalse(m.top.findNode("filmographyList").visible)
+        end function
+
+        @it("shows the first item preview")
+        function _()
+            'bs:disable-next-line 1140
+            renderItems([m.createItem("Film One", "2024-01-01", "/poster.jpg")])
+
+            m.assertTrue(m.top.findNode("previewBackground").visible)
+            m.assertEqual(m.top.findNode("movieTitleLabel").text, "Film One (2024)")
+            m.assertEqual(m.top.findNode("previewPoster").uri, "https://image.tmdb.org/t/p/w342/poster.jpg")
+        end function
+
+        @it("hides preview artwork when poster is missing")
+        function _()
+            'bs:disable-next-line 1140
+            renderItems([m.createItem("Film One", "2024-01-01", "")])
+
+            m.assertFalse(m.top.findNode("previewPosterMask").visible)
+            m.assertEqual(m.top.findNode("previewPoster").uri, "")
+        end function
+
+        @it("clears the preview for an empty result")
+        function _()
+            'bs:disable-next-line 1140
+            renderItems([])
+
+            m.assertFalse(m.top.findNode("previewBackground").visible)
+            m.assertEqual(m.top.findNode("movieTitleLabel").text, "")
+        end function
+
+        @describe("focus and navigation")
+
+        @it("activates and focuses a populated list")
+        function _()
+            'bs:disable-next-line 1140
+            renderItems([m.createItem("Film One", "2024-01-01", "")])
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.findNode("filmographyList").hasFocus())
+        end function
+
+        @it("moves focus down and updates the preview")
+        function _()
+            'bs:disable-next-line 1140
+            renderItems([m.createItem("Film One", "2024-01-01", ""), m.createItem("Film Two", "2023-01-01", "")])
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("filmographyCard1").itemHasFocus)
+            m.assertEqual(m.top.findNode("movieTitleLabel").text, "Film Two (2023)")
+        end function
+
+        @it("clamps focus at the first item")
+        function _()
+            'bs:disable-next-line 1140
+            renderItems([m.createItem("Film One", "2024-01-01", "")])
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("filmographyCard0").itemHasFocus)
+        end function
+
+        @it("scrolls visible cards after moving beyond the viewport")
+        function _()
+            items = []
+            for i = 1 to 10
+                items.Push(m.createItem("Film " + i.ToStr(), "2024-01-01", ""))
+            end for
+            'bs:disable-next-line 1140
+            renderItems(items)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.findNode("filmographyCard7").itemContent.title, "Film 10")
+        end function
+
+        @it("requests close for pressed Back")
+        function _()
+            m.top.closeRequested = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function createItem(title as string, releaseDate as string, posterPath as string) as object
+            return { title: title, release_date: releaseDate, character: "Role", poster_path: posterPath, overview: "Overview", vote_average: 8.0, raw: {} }
+        end function
+
     end class
 
 end namespace

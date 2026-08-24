@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("TVEpisodeCard")
@@ -34,6 +36,158 @@ namespace tests
         @it("declares the description node")
         function _()
             m.assertNotInvalid(m.top.findNode("description"))
+        end function
+
+        @describe("episode rendering")
+
+        @it("renders an overridden episode number")
+        function _()
+            item = m.createEpisode()
+            item.episodeNumberText = "Special"
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("episodeNumber").text, "Special")
+        end function
+
+        @it("renders an indexed episode number")
+        function _()
+            item = m.createEpisode()
+            item.episodeIndexNumber = "4"
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("episodeNumber").text, "Episode 4")
+        end function
+
+        @it("uses the generic episode number when no index exists")
+        function _()
+            item = m.createEpisode()
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("episodeNumber").text, "Episode")
+        end function
+
+        @it("renders the episode title")
+        function _()
+            item = m.createEpisode()
+            item.title = "The Episode"
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("title").text, "The Episode")
+        end function
+
+        @it("collapses whitespace in the episode description")
+        function _()
+            item = m.createEpisode()
+            item.description = "First   second" + Chr(10) + "third"
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("description").text, "First second third")
+        end function
+
+        @it("passes episode content to the poster")
+        function _()
+            item = m.createEpisode()
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("episodePoster").itemContent, item)
+        end function
+
+        @it("hides layout spacer content")
+        function _()
+            item = m.createEpisode()
+            item.itemType = "LayoutSpacer"
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("contentGroup").visible)
+        end function
+
+        @describe("season summary rendering")
+
+        @it("renders the season episode count")
+        function _()
+            item = m.createEpisode()
+            item.itemType = "SeasonSummary"
+            item.episodeCount = 9
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("episodeNumber").text, "9 episodes")
+        end function
+
+        @it("renders the season year")
+        function _()
+            item = m.createEpisode()
+            item.itemType = "SeasonSummary"
+            item.seasonYear = "2024"
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("episodeDate").text, "2024")
+        end function
+
+        @it("hides the title for a season summary")
+        function _()
+            item = m.createEpisode()
+            item.itemType = "SeasonSummary"
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("title").visible)
+        end function
+
+        @it("moves the summary description into the title position")
+        function _()
+            item = m.createEpisode()
+            item.itemType = "SeasonSummary"
+
+            m.top.itemContent = item
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("description").translation[1], -1), 356)
+        end function
+
+        @describe("focus styling")
+
+        @it("changes episode number styling when focused")
+        function _()
+            m.top.itemHasFocus = false
+            unfocusedColor = m.top.findNode("episodeNumber").color
+
+            m.top.itemHasFocus = true
+
+            m.assertNotEqual(m.top.findNode("episodeNumber").color, unfocusedColor)
+        end function
+
+        @it("restores episode number styling when focus is lost")
+        function _()
+            m.top.itemHasFocus = true
+            focusedColor = m.top.findNode("episodeNumber").color
+
+            m.top.itemHasFocus = false
+
+            m.assertNotEqual(m.top.findNode("episodeNumber").color, focusedColor)
+        end function
+
+        function createEpisode() as object
+            item = CreateObject("roSGNode", "ContentNode")
+            item.addFields({
+                itemType: "Episode"
+                episodeNumberText: ""
+                episodeIndexNumber: ""
+                description: ""
+                episodeCount: 0
+                seasonYear: ""
+                premiereDate: ""
+                airDate: ""
+                dateCreated: ""
+            })
+            return item
         end function
 
     end class

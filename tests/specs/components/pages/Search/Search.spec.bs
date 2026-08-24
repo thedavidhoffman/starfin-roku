@@ -4,6 +4,17 @@ namespace tests
     @suite("Search component")
     class SearchTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.searchState.request = { server: "http://server", token: "token", userId: "user" }
+
+            scene = m.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                loadingSpinnerNode = CreateObject("roSGNode", "Spinner")
+                loadingSpinnerNode.id = "loadingSpinner"
+                scene.appendChild(loadingSpinnerNode)
+            end if
+        end function
+
         @describe("declarative component contract")
 
         @it("declares the keyboard node")
@@ -34,6 +45,234 @@ namespace tests
         @it("declares the searchTask node")
         function _()
             m.assertNotInvalid(m.top.findNode("searchTask"))
+        end function
+
+        @describe("query behavior")
+
+        @it("activates with the keyboard focused when no results exist")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.findNode("keyboard").isInFocusChain())
+        end function
+
+        @it("clears results when query becomes too short")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+
+            m.top.findNode("keyboard").text = "ab"
+
+            m.assertEqual(m.top.findNode("resultsGroup").getChildCount(), 0)
+            m.assertTrue(m.top.findNode("helpLabel").visible)
+        end function
+
+        @it("rejects a search shorter than three characters")
+        function _()
+            m.top.findNode("keyboard").text = "ab"
+            m.top.findNode("searchButton").setFocus(true)
+
+            m.top.findNode("searchButton").buttonSelected = true
+
+            m.assertEqual(m.top.findNode("searchTask").control, "stop")
+            m.assertTrue(m.top.findNode("searchButton").hasFocus())
+        end function
+
+        @it("does not dispatch a valid query without request context")
+        function _()
+            m.node.searchState.request = invalid
+            m.top.findNode("keyboard").text = "movie"
+
+            m.top.findNode("searchButton").buttonSelected = true
+
+            m.assertEqual(m.top.findNode("searchTask").control, "stop")
+        end function
+
+        @describe("result rendering")
+
+        @it("renders movie and series results as a shelf")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+
+            row = m.top.findNode("resultsGroup").getChild(0)
+            m.assertEqual(row.subtype(), "HomeShelf")
+            m.assertEqual(row.rowContent.title, "Movies & TV Shows")
+        end function
+
+        @it("renders episode results as a shelf")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+
+            row = m.top.findNode("resultsGroup").getChild(1)
+            m.assertEqual(row.subtype(), "HomeShelf")
+            m.assertEqual(row.rowContent.title, "Episodes")
+        end function
+
+        @it("renders people results as Cast")
+        function _()
+            m.node.searchState.request = { server: "http://server" }
+
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+
+            m.assertEqual(m.top.findNode("resultsGroup").getChild(2).subtype(), "Cast")
+        end function
+
+        @it("hides help when results exist")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+
+            m.assertFalse(m.top.findNode("helpLabel").visible)
+        end function
+
+        @it("shows help when results are empty")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows({ moviesAndSeries: [], episodes: [], people: [] })
+
+            m.assertTrue(m.top.findNode("helpLabel").visible)
+            m.assertTrue(m.top.findNode("keyboard").isInFocusChain())
+        end function
+
+        @describe("selection events")
+
+        @it("emits a selected movie")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+            shelf = m.top.findNode("resultsGroup").getChild(0)
+
+            shelf.selectedItem = { item: m.createMedia("movie-1", "Movie") }
+
+            m.assertEqual(m.top.selectedMovie.itemId, "movie-1")
+        end function
+
+        @it("emits a selected series")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+            shelf = m.top.findNode("resultsGroup").getChild(0)
+
+            shelf.selectedItem = { item: m.createMedia("series-1", "Series") }
+
+            m.assertEqual(m.top.selectedSeries.itemId, "series-1")
+        end function
+
+        @it("emits a selected episode")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+            shelf = m.top.findNode("resultsGroup").getChild(1)
+
+            shelf.selectedItem = { item: m.createMedia("episode-1", "Episode") }
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "episode-1")
+        end function
+
+        @it("emits a selected person")
+        function _()
+            m.node.searchState.request = { server: "http://server" }
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+            cast = m.top.findNode("resultsGroup").getChild(2)
+
+            cast.selectedPerson = { itemId: "person-1", item: m.createPerson() }
+
+            m.assertEqual(m.top.selectedPerson.itemId, "person-1")
+        end function
+
+        @describe("result navigation")
+
+        @it("moves from keyboard down to Search")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+            m.top.callFunc("activate")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("searchButton").hasFocus())
+        end function
+
+        @it("moves from Search right to the first result row")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+            'bs:disable-next-line 1140
+            focusSearchButton()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("resultsGroup").getChild(0).isInFocusChain())
+        end function
+
+        @it("moves down between result rows")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("resultsGroup").getChild(1).isInFocusChain())
+        end function
+
+        @it("moves left from results to the keyboard")
+        function _()
+            'bs:disable-next-line 1140
+            renderRows(m.createPayload())
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("keyboard").isInFocusChain())
+        end function
+
+        @it("requests close for pressed Back")
+        function _()
+            m.top.closeRequested = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function createPayload() as object
+            return {
+                moviesAndSeries: [m.createMedia("movie-1", "Movie"), m.createMedia("series-1", "Series")]
+                episodes: [m.createMedia("episode-1", "Episode")]
+                people: [m.createPerson()]
+            }
+        end function
+
+        function createMedia(id as string, itemType as string) as object
+            return { Id: id, Name: id, Type: itemType, ImageTags: {}, BackdropImageTags: [], ParentIndexNumber: 1, IndexNumber: 1 }
+        end function
+
+        function createPerson() as object
+            return { Id: "person-1", Name: "Person", Type: "Person", ImageTags: {} }
         end function
 
     end class

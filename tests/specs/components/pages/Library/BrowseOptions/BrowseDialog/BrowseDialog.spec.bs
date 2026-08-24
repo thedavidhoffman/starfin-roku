@@ -11,6 +11,92 @@ namespace tests
             m.assertNotInvalid(m.top)
         end function
 
+        @describe("dialog configuration")
+
+        @it("configures browse content")
+        function _()
+            dialog = m.createOpenDialog(invalid, invalid)
+
+            m.assertEqual(dialog.title, "Browse By")
+            m.assertTrue(dialog.dialogWidth = 520)
+            m.assertEqual(dialog.contentComponentName, "BrowseByContent")
+        end function
+
+        @it("sizes the dialog for the available options")
+        function _()
+            dialog = m.createOpenDialog([{},{},{}], invalid)
+
+            m.assertTrue(dialog.dialogHeight = 334)
+        end function
+
+        @it("uses one row for an empty option list")
+        function _()
+            dialog = m.createOpenDialog([], invalid)
+
+            m.assertTrue(dialog.dialogHeight = 230)
+        end function
+
+        @it("limits the dialog to seven visible option rows")
+        function _()
+            dialog = m.createOpenDialog([{},{},{},{},{},{},{},{}], invalid)
+
+            m.assertTrue(dialog.dialogHeight = 542)
+        end function
+
+        @describe("content synchronization")
+
+        @it("passes sort options to content")
+        function _()
+            options = [{ optionKey: "SortName", title: "Name" }]
+            dialog = m.createOpenDialog(options, invalid)
+            content = dialog.callFunc("getContentComponent")
+
+            m.assertEqual(content.sortOptions, options)
+        end function
+
+        @it("passes the selected sort key to content")
+        function _()
+            dialog = m.createOpenDialog(invalid, "DateCreated")
+            content = dialog.callFunc("getContentComponent")
+
+            m.assertEqual(content.selectedSortKey, "DateCreated")
+        end function
+
+        @it("propagates sort selection from content")
+        function _()
+            dialog = m.createOpenDialog(invalid, invalid)
+            content = dialog.callFunc("getContentComponent")
+            selection = { optionKey: "DateCreated", title: "Date added" }
+
+            content.sortSelected = selection
+
+            m.assertEqual(dialog.selectedSortKey, "DateCreated")
+            m.assertEqual(dialog.sortSelected, selection)
+        end function
+
+        @it("opens the browse dialog")
+        function _()
+            dialog = m.createOpenDialog(invalid, invalid)
+
+            m.assertTrue(dialog.findNode("dialog").visible)
+        end function
+
+        @it("focuses browse content")
+        function _()
+            dialog = m.createOpenDialog(invalid, invalid)
+            content = dialog.callFunc("getContentComponent")
+
+            m.assertTrue(content.isInFocusChain())
+        end function
+
+        function createOpenDialog(options as dynamic, selectedSortKey as dynamic) as object
+            dialog = CreateObject("roSGNode", "BrowseDialog")
+            if options <> invalid then dialog.sortOptions = options
+            if selectedSortKey <> invalid then dialog.selectedSortKey = selectedSortKey
+            dialog.callFunc("openBrowse")
+            return dialog
+        end function
+
     end class
 
 end namespace

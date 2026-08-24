@@ -51,6 +51,171 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("countdownTimer"))
         end function
 
+        @describe("request rendering")
+
+        @it("renders the series title")
+        function _()
+            m.top.autoPlayRequest = m.createRequest()
+
+            m.assertEqual(m.top.findNode("logoBanner").title, "Series")
+        end function
+
+        @it("renders the finished episode")
+        function _()
+            m.top.autoPlayRequest = m.createRequest()
+
+            m.assertEqual(m.top.findNode("finishedCard").itemContent.title, "Finished")
+        end function
+
+        @it("renders the next episode")
+        function _()
+            m.top.autoPlayRequest = m.createRequest()
+
+            m.assertEqual(m.top.findNode("nextCard").itemContent.title, "Next")
+        end function
+
+        @it("renders episode numbering")
+        function _()
+            m.top.autoPlayRequest = m.createRequest()
+
+            numberText = m.top.findNode("nextCard").itemContent.episodeNumberText
+            m.assertTrue(Instr(1, numberText, "Season 1") > 0)
+            m.assertTrue(Instr(1, numberText, "Episode 2") > 0)
+        end function
+
+        @it("renders episode progress")
+        function _()
+            m.top.autoPlayRequest = m.createRequest()
+
+            m.assertEqual(m.top.findNode("nextCard").itemContent.progressPercent, 50.0)
+            m.assertEqual(m.top.findNode("nextCard").itemContent.progressWidth, 255)
+        end function
+
+        @describe("countdown lifecycle")
+
+        @it("opens focused with a fifteen second countdown")
+        function _()
+            m.top.callFunc("openAutoPlay")
+
+            m.assertTrue(m.top.visible)
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.top.findNode("nextCountdownLabel").text, "15")
+            m.assertEqual(m.top.findNode("countdownTimer").control, "start")
+        end function
+
+        @it("decrements the countdown on timer fire")
+        function _()
+            m.top.callFunc("openAutoPlay")
+
+            'bs:disable-next-line 1140
+            onCountdownTimerFire()
+
+            m.assertEqual(m.top.findNode("nextCountdownLabel").text, "14")
+        end function
+
+        @it("plays when the countdown expires")
+        function _()
+            m.top.playSelected = false
+            m.top.callFunc("openAutoPlay")
+
+            for i = 1 to 15
+                'bs:disable-next-line 1140
+                onCountdownTimerFire()
+            end for
+
+            m.assertTrue(m.top.playSelected)
+            m.assertEqual(m.top.findNode("countdownTimer").control, "stop")
+        end function
+
+        @it("closes and stops the countdown")
+        function _()
+            m.top.callFunc("openAutoPlay")
+
+            m.top.callFunc("closeAutoPlay")
+
+            m.assertFalse(m.top.visible)
+            m.assertEqual(m.top.findNode("countdownTimer").control, "stop")
+        end function
+
+        @describe("keyboard behavior")
+
+        @it("plays immediately for pressed OK")
+        function _()
+            m.top.callFunc("openAutoPlay")
+            m.top.playSelected = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.playSelected)
+        end function
+
+        @it("cancels and closes for pressed Back")
+        function _()
+            m.top.callFunc("openAutoPlay")
+            m.top.cancelSelected = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.cancelSelected)
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("consumes unrelated keys while visible")
+        function _()
+            m.top.callFunc("openAutoPlay")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+        end function
+
+        @it("ignores keys while hidden")
+        function _()
+            m.top.callFunc("closeAutoPlay")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertFalse(handled)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            m.top.callFunc("openAutoPlay")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", false)
+
+            m.assertFalse(handled)
+        end function
+
+        function createRequest() as object
+            return {
+                server: "http://server"
+                series: { Id: "series-1", Name: "Series", ImageTags: {} }
+                finishedItem: { itemId: "episode-1", item: m.createEpisode("episode-1", "Finished", 1) }
+                nextItem: { itemId: "episode-2", item: m.createEpisode("episode-2", "Next", 2) }
+            }
+        end function
+
+        function createEpisode(id as string, name as string, episodeNumber as integer) as object
+            return {
+                Id: id
+                Name: name
+                Type: "Episode"
+                Overview: "Overview"
+                ParentIndexNumber: 1
+                IndexNumber: episodeNumber
+                ImageTags: {}
+                UserData: { Played: false, PlayedPercentage: 50.0 }
+            }
+        end function
+
     end class
 
 end namespace

@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace tests
 
     @SGNode("Header")
@@ -79,6 +81,222 @@ namespace tests
         @it("declares the accountDropdownMenu node")
         function _()
             m.assertNotInvalid(m.top.findNode("accountDropdownMenu"))
+        end function
+
+        @describe("header focus and navigation")
+
+        @it("focuses Home by default")
+        function _()
+            focused = m.top.callFunc("focusHeader")
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.callFunc("isHomeButtonFocused"))
+        end function
+
+        @it("focuses the System button")
+        function _()
+            focused = m.top.callFunc("focusSystemMenuButton")
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.findNode("systemButton").hasFocus())
+        end function
+
+        @it("focuses the Account button")
+        function _()
+            focused = m.top.callFunc("focusUserMenuButton")
+
+            m.assertTrue(focused)
+            m.assertTrue(m.top.findNode("userMenuButton").hasFocus())
+        end function
+
+        @it("moves focus right across header buttons")
+        function _()
+            m.top.callFunc("focusHeader")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("searchButton").hasFocus())
+        end function
+
+        @it("wraps focus left from Home to Account")
+        function _()
+            m.top.callFunc("focusHeader")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("userMenuButton").hasFocus())
+        end function
+
+        @it("emits Down selection")
+        function _()
+            m.top.downSelected = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.downSelected)
+        end function
+
+        @it("emits Back selection when no menu is open")
+        function _()
+            m.top.callFunc("focusHeader")
+            m.top.backSelected = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.backSelected)
+        end function
+
+        @it("ignores released keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", false)
+
+            m.assertFalse(handled)
+        end function
+
+        @describe("top-level button events")
+
+        @it("emits Home selection")
+        function _()
+            m.top.homeSelected = false
+
+            m.top.findNode("homeButton").buttonSelected = true
+
+            m.assertTrue(m.top.homeSelected)
+        end function
+
+        @it("emits Search selection")
+        function _()
+            m.top.searchSelected = false
+
+            m.top.findNode("searchButton").buttonSelected = true
+
+            m.assertTrue(m.top.searchSelected)
+        end function
+
+        @it("opens the System menu")
+        function _()
+            m.top.findNode("systemButton").buttonSelected = true
+
+            m.assertTrue(m.top.menuOpen)
+            m.assertTrue(m.top.findNode("systemDropdownMenu").isOpen)
+        end function
+
+        @it("opens the Account menu and closes System")
+        function _()
+            m.top.findNode("systemButton").buttonSelected = true
+
+            m.top.findNode("userMenuButton").buttonSelected = true
+
+            m.assertTrue(m.top.findNode("accountDropdownMenu").isOpen)
+            m.assertFalse(m.top.findNode("systemDropdownMenu").isOpen)
+        end function
+
+        @it("closes an open menu with Back without emitting Back selection")
+        function _()
+            m.top.findNode("systemButton").buttonSelected = true
+            m.top.backSelected = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertFalse(m.top.menuOpen)
+            m.assertFalse(m.top.backSelected)
+        end function
+
+        @describe("dropdown routing")
+
+        @it("requests Settings from the system menu")
+        function _()
+            m.top.findNode("systemDropdownMenu").selectedItem = { id: "settings" }
+
+            m.assertEqual(m.top.overlayRequested.componentName, "SettingsDialog")
+            m.assertEqual(m.top.overlayRequested.openFunction, "openSettings")
+        end function
+
+        @it("requests System Information from the system menu")
+        function _()
+            m.top.findNode("systemDropdownMenu").selectedItem = { id: "systemInformation" }
+
+            m.assertEqual(m.top.overlayRequested.componentName, "SystemInformationDialog")
+        end function
+
+        @it("requests Logs from the system menu")
+        function _()
+            m.top.findNode("systemDropdownMenu").selectedItem = { id: "logs" }
+
+            m.assertEqual(m.top.overlayRequested.componentName, "LogDialog")
+        end function
+
+        @it("emits account switching")
+        function _()
+            m.top.switchAccountSelected = false
+
+            m.top.findNode("accountDropdownMenu").selectedItem = { id: "switchAccount" }
+
+            m.assertTrue(m.top.switchAccountSelected)
+        end function
+
+        @it("emits logout")
+        function _()
+            m.top.logoutSelected = false
+
+            m.top.findNode("accountDropdownMenu").selectedItem = { id: "logout" }
+
+            m.assertTrue(m.top.logoutSelected)
+        end function
+
+        @describe("account identity")
+
+        @it("configures account dropdown identity")
+        function _()
+            m.top.username = "User"
+
+            m.top.userIdentityRequest = m.createIdentityRequest()
+
+            identity = m.top.findNode("accountDropdownMenu").identity
+            m.assertEqual(identity.name, "User")
+            m.assertTrue(identity.imageUri <> "")
+        end function
+
+        @it("shows the account badge when enabled")
+        function _()
+            m.top.username = "User"
+            m.top.userIdentityRequest = m.createIdentityRequest()
+
+            m.top.settings = { "display-account-badge": "on" }
+
+            m.assertTrue(m.top.findNode("accountBadge").visible)
+            m.assertEqual(m.top.findNode("accountBadgeName").text, "User")
+        end function
+
+        @it("hides the account badge when disabled")
+        function _()
+            m.top.userIdentityRequest = m.createIdentityRequest()
+
+            m.top.settings = { "display-account-badge": "off" }
+
+            m.assertFalse(m.top.findNode("accountBadge").visible)
+        end function
+
+        @it("moves the clock for thumbnail library layout")
+        function _()
+            m.top.thumbnailLibraryLayout = true
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("clock").translation[0], -1), 1704)
+        end function
+
+        function createIdentityRequest() as object
+            return { server: "http://server", userId: "user-1", token: "token", primaryImageTag: "" }
         end function
 
     end class
