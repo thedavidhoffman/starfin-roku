@@ -1,0 +1,104 @@
+namespace tests
+
+    @SGNode("DescriptionInline")
+    @suite("DescriptionInline component")
+    class DescriptionInlineTests extends rooibos.BaseTestSuite
+
+        @describe("DescriptionInline behavior")
+
+        @it("lays out the configured width and line limit")
+        function _()
+            m.top.width = 140
+            m.top.numLines = 2
+            'bs:disable-next-line 1140
+            onWidthChanged()
+            'bs:disable-next-line 1140
+            onNumLinesChanged()
+            m.assertEqual(m.node.descriptionLabel.width, 140.0)
+            m.assertEqual(m.node.descriptionLabel.numLines, 2)
+        end function
+
+        @it("detects text that exceeds the line limit")
+        function _()
+            m.top.width = 140
+            m.top.numLines = 1
+            m.top.text = "This description contains enough words to wrap across several lines."
+            'bs:disable-next-line 1140
+            onWidthChanged()
+            'bs:disable-next-line 1140
+            onNumLinesChanged()
+            'bs:disable-next-line 1140
+            onTextChanged()
+            m.assertTrue(m.top.isTruncated)
+            m.assertTrue(m.top.canAcceptFocus)
+        end function
+
+        @it("does not mark short text as truncated")
+        function _()
+            m.top.width = 140
+            m.top.numLines = 1
+            m.top.text = "Short"
+            'bs:disable-next-line 1140
+            onWidthChanged()
+            'bs:disable-next-line 1140
+            onNumLinesChanged()
+            'bs:disable-next-line 1140
+            onTextChanged()
+            m.assertFalse(m.top.isTruncated)
+            m.assertFalse(m.top.canAcceptFocus)
+        end function
+
+        @it("requests the description overlay on selection")
+        function _()
+            m.top.title = "Overview"
+            m.top.text = "Details"
+            m.top.canAcceptFocus = true
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("OK", true))
+            m.assertEqual(m.top.overlayRequested.id, "description")
+            m.assertEqual(m.top.overlayRequested.componentName, "DescriptionDialog")
+            m.assertEqual(m.top.overlayRequested.title, "Overview")
+        end function
+
+        @it("dismisses the description overlay")
+        function _()
+            'bs:disable-next-line 1140
+            dismissDialog()
+            m.assertEqual(m.top.overlayRequested.id, "description")
+            m.assertEqual(m.top.overlayRequested.action, "close")
+        end function
+
+        @it("ignores released and unrelated keys")
+        function _()
+            m.top.canAcceptFocus = true
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("OK", false))
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("down", true))
+        end function
+
+        @it("does not open the overlay for non-truncated text")
+        function _()
+            m.top.canAcceptFocus = false
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("select", true))
+        end function
+
+        @it("treats explicit line breaks as truncation")
+        function _()
+            m.top.width = 1040
+            m.top.numLines = 1
+            m.top.text = "First line" + Chr(10) + "Second line"
+
+            'bs:disable-next-line 1140
+            onTextChanged()
+
+            m.assertTrue(m.top.isTruncated)
+            m.assertTrue(m.top.canAcceptFocus)
+        end function
+
+    end class
+
+end namespace

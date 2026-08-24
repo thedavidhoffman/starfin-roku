@@ -1,0 +1,152 @@
+namespace tests
+
+    @SGNode("TVEpisodeQueueTask")
+    @suite("TVEpisodeQueueTask component")
+    class TVEpisodeQueueTaskTests extends rooibos.BaseTestSuite
+
+        @describe("request validation")
+
+        @it("rejects an invalid request without network work")
+        function _()
+            m.node.top.request = invalid
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.node.top.response.ok)
+        end function
+
+        @it("accepts complete adjacent and forward requests")
+        function _()
+            adjacent = { server: "server", token: "token", userId: "user", seriesId: "series", anchorItemId: "episode", operation: "adjacent" }
+            forward = { server: "server", token: "token", userId: "user", seriesId: "series", anchorItemId: "episode", operation: "forward", successorCount: 3 }
+
+            'bs:disable-next-line 1140
+            m.assertInvalid(validateRequest(adjacent))
+            'bs:disable-next-line 1140
+            m.assertInvalid(validateRequest(forward))
+        end function
+
+        @it("rejects invalid operations and forward counts")
+        function _()
+            invalidOperation = { server: "server", token: "token", userId: "user", seriesId: "series", anchorItemId: "episode", operation: "backward" }
+            invalidCount = { server: "server", token: "token", userId: "user", seriesId: "series", anchorItemId: "episode", operation: "forward", successorCount: 0 }
+
+            'bs:disable-next-line 1140
+            m.assertNotInvalid(validateRequest(invalidOperation))
+            'bs:disable-next-line 1140
+            m.assertNotInvalid(validateRequest(invalidCount))
+        end function
+
+        @describe("adjacent episode resolution")
+
+        @it("resolves both sides of a season boundary")
+        function _()
+            episodes = [
+                { Id: "s2e21", SeriesId: "series", SeasonId: "s2" }
+                { Id: "s3e1", SeriesId: "series", SeasonId: "s3" }
+                { Id: "s3e2", SeriesId: "series", SeasonId: "s3" }
+            ]
+
+            'bs:disable-next-line 1140
+            response = buildAdjacentResponse(episodes, "s3e1")
+
+            m.assertTrue(response.ok)
+            m.assertEqual(response.payload.predecessors[0].itemId, "s2e21")
+            m.assertEqual(response.payload.successors[0].itemId, "s3e2")
+            m.assertFalse(response.payload.reachedSeriesStart)
+            m.assertFalse(response.payload.reachedSeriesEnd)
+        end function
+
+        @it("reports the beginning and end of a series")
+        function _()
+            episodes = [{ Id: "only", SeriesId: "series", SeasonId: "s1" }]
+
+            'bs:disable-next-line 1140
+            response = buildAdjacentResponse(episodes, "only")
+
+            m.assertTrue(response.payload.reachedSeriesStart)
+            m.assertTrue(response.payload.reachedSeriesEnd)
+        end function
+
+        @it("rejects a response that omits the anchor")
+        function _()
+            'bs:disable-next-line 1140
+            response = buildAdjacentResponse([{ Id: "other" }], "anchor")
+
+            m.assertFalse(response.ok)
+        end function
+
+        @describe("forward episode resolution")
+
+        @it("returns successors and detects a short terminal page")
+        function _()
+            episodes = [{ Id: "anchor" }, { Id: "next" }]
+
+            'bs:disable-next-line 1140
+            response = buildForwardResponse(episodes, "anchor", 3)
+
+            m.assertEqual(response.payload.successors.Count(), 1)
+            m.assertEqual(response.payload.successors[0].itemId, "next")
+            m.assertTrue(response.payload.reachedSeriesEnd)
+        end function
+
+        @it("does not mark a full page as terminal")
+        function _()
+            episodes = [{ Id: "anchor" }, { Id: "one" }, { Id: "two" }]
+
+            'bs:disable-next-line 1140
+            response = buildForwardResponse(episodes, "anchor", 2)
+
+            m.assertFalse(response.payload.reachedSeriesEnd)
+        end function
+
+        @describe("response normalization")
+
+        @it("ignores malformed adjacent items")
+        function _()
+            episodes = [
+                { SeriesId: "series" }
+                { Id: "anchor", SeriesId: "series" }
+                { Id: "next", SeriesId: "series" }
+            ]
+
+            'bs:disable-next-line 1140
+            response = buildAdjacentResponse(episodes, "anchor")
+
+            m.assertTrue(response.ok)
+            m.assertEqual(response.payload.predecessors.Count(), 0)
+            m.assertEqual(response.payload.successors.Count(), 1)
+        end function
+
+        @it("rejects a forward response without its anchor")
+        function _()
+            'bs:disable-next-line 1140
+            response = buildForwardResponse([{ Id: "next" }], "anchor", 1)
+
+            m.assertFalse(response.ok)
+        end function
+
+        @it("copies all correlation identity onto a response")
+        function _()
+            request = {
+                operation: "forward"
+                anchorItemId: "anchor"
+                seriesId: "series"
+                playbackRequestId: 12
+                taskRequestId: 34
+            }
+
+            'bs:disable-next-line 1140
+            response = addResponseIdentity({ ok: true }, request)
+
+            m.assertEqual(response.operation, "forward")
+            m.assertEqual(response.anchorItemId, "anchor")
+            m.assertEqual(response.seriesId, "series")
+            m.assertEqual(response.playbackRequestId, 12)
+            m.assertEqual(response.taskRequestId, 34)
+        end function
+
+    end class
+
+end namespace

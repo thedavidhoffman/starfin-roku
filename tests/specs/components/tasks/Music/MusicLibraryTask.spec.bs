@@ -1,0 +1,58 @@
+namespace tests
+
+    @SGNode("MusicLibraryTask")
+    @suite("MusicLibraryTask component")
+    class MusicLibraryTaskTests extends rooibos.BaseTestSuite
+
+        @describe("request validation")
+
+        @it("rejects an invalid request without performing network work")
+        function _()
+            m.node.top.request = invalid
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.node.top.response.ok)
+        end function
+
+        @it("accepts a complete request")
+        function _()
+            request = { server: "server", token: "token", userId: "user", libraryId: "library" }
+
+            'bs:disable-next-line 1140
+            m.assertInvalid(validateRequest(request))
+        end function
+
+        @describe("album payload paging")
+
+        @it("normalizes sorting and evaluates page boundaries")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumSortBy({ albumSortBy: "ProductionYear,SortName" }), "ProductionYear,SortName")
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumSortBy({ albumSortBy: "Unsupported" }), "SortName")
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumSortOrder({ albumSortOrder: "Descending" }), "Descending")
+            'bs:disable-next-line 1140
+            m.assertTrue(hasMoreAlbumPages({ TotalRecordCount: 101 }, 0, 50, 50))
+            'bs:disable-next-line 1140
+            m.assertFalse(hasMoreAlbumPages({ TotalRecordCount: 50 }, 0, 50, 50))
+            'bs:disable-next-line 1140
+            m.assertFalse(hasMoreAlbumPages({ TotalRecordCount: 101 }, 0, 25, 50))
+        end function
+
+        @it("extracts array and wrapped item payloads")
+        function _()
+            values = [{ Id: "1" }]
+            'bs:disable-next-line 1140
+            m.assertEqual(getItemsFromPayload(values), values)
+            'bs:disable-next-line 1140
+            m.assertEqual(getItemsFromPayload({ Items: values }), values)
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumTotalRecordCount({ TotalRecordCount: 12 }), 12)
+        end function
+
+    end class
+
+end namespace

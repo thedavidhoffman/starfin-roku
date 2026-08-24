@@ -39,7 +39,8 @@
 
 - Unit tests for behavior-bearing code must provide functional coverage of observable behavior, including relevant rendering, state changes, events, focus, navigation, task requests, response handling, and boundary or error paths. Node-existence assertions are declarative smoke coverage only and must not be the sole coverage for components that contain behavior.
 - Give each distinct test case or behavior its own test. Do not combine multiple test cases into a single test function.
-- Place test files in directories that mirror the production source-code directory structure.
+- Place component test files in directories that mirror the production component's parent directory. Omit a redundant leaf directory when it repeats the component name, such as `components/controls/Spinner/Spinner.bs` mapping to `tests/specs/components/controls/Spinner.spec.bs`. Preserve meaningful feature and helper directories such as `Playlists` and `Helpers/Pure`.
+- Use one `<Component>.spec.bs` file per component by default. Split a component's tests only when separate files represent distinct production responsibilities; do not split suites into generic `Coverage`, `Logic`, or `EdgeCases` files.
 - Format BrighterScript unit-test suites with one blank line after the `namespace` declaration, between the suite/class header and each `@describe`, after each `@describe`, between every test function, before `end class`, and between `end class` and `end namespace`.
 - Within a test function, use blank lines intentionally to delineate setup, action, assertion groups, and other distinct test steps. Preserve these meaningful internal blank lines when normalizing suite-level spacing.
 - When changing a file with an existing corresponding unit-test suite, update that suite to cover the changed behavior.
