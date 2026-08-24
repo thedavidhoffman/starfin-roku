@@ -37,6 +37,7 @@
 
 ## Unit tests
 
+- Give each distinct test case or behavior its own test. Do not combine multiple test cases into a single test function.
 - When changing a file with an existing corresponding unit-test suite, update that suite to cover the changed behavior.
 - Do not modify production source code or expand production interfaces solely to make a unit test possible or pass. Adapt the test to existing production behavior and boundaries. If a new unit test reveals a genuine production bug, stop and report the bug instead of silently changing production code as part of the test work.
 - Run the relevant unit tests after making the change.
