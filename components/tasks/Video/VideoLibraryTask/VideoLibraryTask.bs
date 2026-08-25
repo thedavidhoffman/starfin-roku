@@ -1,3 +1,4 @@
+import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Number.bs"
@@ -87,9 +88,9 @@ sub executeRequest()
         libraryId: Format.SafeString(request.libraryId, "")
         payload: response.data
         startIndex: startIndex
-        nextStartIndex: startIndex + getItemsFromPayload(response.data).Count()
+        nextStartIndex: startIndex + ApiPayload.GetItems(response.data).Count()
         totalRecordCount: getTotalRecordCount(response.data)
-        hasMore: hasMorePages(response.data, startIndex, getItemsFromPayload(response.data).Count(), pageSize)
+        hasMore: hasMorePages(response.data, startIndex, ApiPayload.GetItems(response.data).Count(), pageSize)
         queryId: Number.ToInteger(request.queryId, -1)
     }
 end sub
@@ -135,8 +136,8 @@ function loadNonAlphabeticPage(request as object, params as object, startIndex a
         upperResponse = HttpClient.Request(upperUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
         if upperResponse.ok <> true then return upperResponse
 
-        items = getItemsFromPayload(lowerResponse.data)
-        for each item in getItemsFromPayload(upperResponse.data)
+        items = ApiPayload.GetItems(lowerResponse.data)
+        for each item in ApiPayload.GetItems(upperResponse.data)
             name = UCase(Format.SafeString(item.Name, ""))
             if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
         end for
@@ -255,17 +256,6 @@ function buildFilterOptions(items as object) as object
     end for
 
     return filterOptions
-end function
-
-'-------------------------------------------------------------------------------
-' getItemsFromPayload
-'-------------------------------------------------------------------------------
-function getItemsFromPayload(payload as dynamic) as object
-    if payload = invalid then return []
-    if Type(payload) = "roArray" then return payload
-    if Arrays.IsAssocArray(payload) = false then return []
-    if payload.Items <> invalid then return payload.Items
-    return []
 end function
 
 '-------------------------------------------------------------------------------

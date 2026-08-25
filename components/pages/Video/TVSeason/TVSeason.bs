@@ -1,3 +1,4 @@
+import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Encode.bs"
@@ -174,7 +175,7 @@ sub onTVSeasonResponse()
     if Format.SafeString(response.action, "") = "tvSeasonSeasons" then
         if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeasons") <> true then return
         if response.ok = true and response.payload <> invalid then
-            m.pageState.seasons = getItemsFromPayload(response.payload)
+            m.pageState.seasons = ApiPayload.GetItems(response.payload)
             updateAdjacentSeasons()
             renderSeason(m.pageState.season)
         end if
@@ -196,9 +197,9 @@ sub onTVSeasonResponse()
     end if
 
     m.pageState.season = payload.season
-    if payload.seasons <> invalid then m.pageState.seasons = getItemsFromPayload(payload.seasons)
+    if payload.seasons <> invalid then m.pageState.seasons = ApiPayload.GetItems(payload.seasons)
     updateAdjacentSeasons()
-    m.pageState.episodes = getItemsFromPayload(payload.episodes)
+    m.pageState.episodes = ApiPayload.GetItems(payload.episodes)
     m.pageState.episodesLoaded = true
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
@@ -1286,20 +1287,6 @@ function getSeasonDetailBackdropUrl() as string
     if imageUrl <> "" then return imageUrl
 
     return getImageUrl(request.series, "Backdrop", 1920, 1080)
-end function
-
-'-------------------------------------------------------------------------------
-' getItemsFromPayload
-'-------------------------------------------------------------------------------
-function getItemsFromPayload(payload as dynamic) as object
-    if payload = invalid then return []
-
-    payloadType = Type(payload)
-    if payloadType = "roArray" then return payload
-    if Arrays.IsAssocArray(payload) = false then return []
-
-    if payload.Items <> invalid then return payload.Items
-    return []
 end function
 
 '-------------------------------------------------------------------------------

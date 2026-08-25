@@ -1,3 +1,4 @@
+import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Encode.bs"
@@ -255,7 +256,7 @@ sub onLibrariesResponse()
         return
     end if
 
-    libraries = getItemsFromPayload(response.payload)
+    libraries = ApiPayload.GetItems(response.payload)
     addRow("libraries", "My Media", libraries)
     queueLatestMediaRows(libraries)
     renderRows()
@@ -276,16 +277,16 @@ sub onSectionResponse(event as object)
     end if
 
     if action = "continueWatching" then
-        m.homeState.playbackRows.continueWatchingItems = getItemsFromPayload(response.payload)
+        m.homeState.playbackRows.continueWatchingItems = ApiPayload.GetItems(response.payload)
         addRow(action, "Continue Watching", m.homeState.playbackRows.continueWatchingItems)
         refreshNextUpRow()
     else if action = "continueListening" then
-        addRow(action, "Continue Listening", getItemsFromPayload(response.payload))
+        addRow(action, "Continue Listening", ApiPayload.GetItems(response.payload))
     else if action = "nextUp" then
-        m.homeState.playbackRows.nextUpItems = getItemsFromPayload(response.payload)
+        m.homeState.playbackRows.nextUpItems = ApiPayload.GetItems(response.payload)
         refreshNextUpRow()
     else if action = "liveTvOnNow" then
-        addRow(action, "On Now", getItemsFromPayload(response.payload))
+        addRow(action, "On Now", ApiPayload.GetItems(response.payload))
     end if
 
     renderRows()
@@ -441,7 +442,7 @@ sub onDynamicLatestMediaResponse(event as object)
 
     library = m.homeState.latestLibraries[parentId]
     key = "latest:" + Format.SafeString(library.id, "")
-    addRow(key, "Recently Added in " + Format.FirstNonEmpty([library.name], "Library"), getItemsFromPayload(response.payload))
+    addRow(key, "Recently Added in " + Format.FirstNonEmpty([library.name], "Library"), ApiPayload.GetItems(response.payload))
     renderRows(false)
 end sub
 
@@ -725,21 +726,6 @@ end sub
 '-------------------------------------------------------------------------------
 function hasRenderedRows() as boolean
     return m.homeState.shelfNodes.Count() > 0
-end function
-
-'-------------------------------------------------------------------------------
-' getItemsFromPayload
-'-------------------------------------------------------------------------------
-function getItemsFromPayload(payload as dynamic) as object
-    if payload = invalid then return []
-
-    payloadType = Type(payload)
-    if payloadType = "roArray" then return payload
-    if Arrays.IsAssocArray(payload) = false then return []
-
-    if payload.Items <> invalid then return payload.Items
-
-    return []
 end function
 
 '-------------------------------------------------------------------------------
