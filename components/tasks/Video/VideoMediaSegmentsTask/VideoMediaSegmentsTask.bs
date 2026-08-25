@@ -3,6 +3,7 @@ import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -17,8 +18,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    validationError = validateRequest(request)
+    validationError = TaskRequest.ValidateRequest(request, "mediaSegments", ["itemId"])
     if validationError <> invalid then
+        itemId = ""
+        if request <> invalid then itemId = Format.SafeString(request.itemId, "")
+        validationError.AddReplace("itemId", itemId)
         m.top.response = validationError
         return
     end if
@@ -43,16 +47,3 @@ sub executeRequest()
         segments: segments
     }
 end sub
-
-'-------------------------------------------------------------------------------
-' validateRequest
-'-------------------------------------------------------------------------------
-function validateRequest(request as dynamic) as dynamic
-    if request = invalid then return { ok: false, action: "mediaSegments", itemId: "", errorMessage: "Invalid media segments request." }
-    itemId = Format.SafeString(request.itemId, "")
-    if Format.SafeString(request.server, "") = "" then return { ok: false, action: "mediaSegments", itemId: itemId, errorMessage: "Invalid media segments server." }
-    if Format.SafeString(request.token, "") = "" then return { ok: false, action: "mediaSegments", itemId: itemId, errorMessage: "Invalid media segments token." }
-    if itemId = "" then return { ok: false, action: "mediaSegments", itemId: itemId, errorMessage: "Invalid media segments item." }
-
-    return invalid
-end function

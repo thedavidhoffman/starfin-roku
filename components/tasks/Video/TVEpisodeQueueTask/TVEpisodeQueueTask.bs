@@ -7,6 +7,7 @@ import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -177,13 +178,11 @@ end function
 ' validateRequest
 '-------------------------------------------------------------------------------
 function validateRequest(request as dynamic) as dynamic
-    if request = invalid then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue request." }
-    if request.server = invalid or request.server = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue server." }
-    if request.token = invalid or request.token = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue token." }
-    if request.userId = invalid or request.userId = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue user." }
-    if request.seriesId = invalid or request.seriesId = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue series." }
-    if request.anchorItemId = invalid or request.anchorItemId = "" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue anchor." }
+    validationError = TaskRequest.ValidateRequest(request, "tvEpisodeQueue", ["userId", "seriesId", "anchorItemId"])
+    if validationError <> invalid then return validationError
+
     if request.operation <> "adjacent" and request.operation <> "forward" then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue operation." }
     if request.operation = "forward" and Number.ToInteger(request.successorCount, 0) <= 0 then return { ok: false, action: "tvEpisodeQueue", errorMessage: "Invalid episode queue successor count." }
+
     return invalid
 end function

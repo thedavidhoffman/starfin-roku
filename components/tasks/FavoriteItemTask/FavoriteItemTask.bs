@@ -5,6 +5,7 @@ import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -19,13 +20,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    validationError = validateRequest(request)
+    action = ""
+    if request <> invalid then action = Format.SafeString(request.action, "")
+
+    validationError = TaskRequest.ValidateRequest(request, action, ["userId", "itemId"])
     if validationError <> invalid then
         m.top.response = validationError
         return
     end if
 
-    action = Format.SafeString(request.action, "")
     method = ""
     if action = "AddToFavorites" then
         method = "POST"
@@ -46,17 +49,3 @@ sub executeRequest()
     if result.ok <> true then m.log.error("Favorite update failed: " + Format.SafeString(result.errorMessage, ""))
     m.top.response = result
 end sub
-
-'-------------------------------------------------------------------------------
-' validateRequest
-'-------------------------------------------------------------------------------
-function validateRequest(request as dynamic) as dynamic
-    action = ""
-    if request <> invalid then action = Format.SafeString(request.action, "")
-    if request = invalid then return { ok: false, action: action, errorMessage: "Invalid favorite request." }
-    if request.server = invalid or request.server = "" then return { ok: false, action: action, errorMessage: "Invalid favorite request server." }
-    if request.token = invalid or request.token = "" then return { ok: false, action: action, errorMessage: "Invalid favorite request token." }
-    if request.userId = invalid or request.userId = "" then return { ok: false, action: action, errorMessage: "Invalid favorite request user." }
-    if request.itemId = invalid or request.itemId = "" then return { ok: false, action: action, errorMessage: "Invalid favorite request item." }
-    return invalid
-end function

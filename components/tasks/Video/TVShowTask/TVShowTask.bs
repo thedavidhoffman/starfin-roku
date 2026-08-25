@@ -6,6 +6,7 @@ import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -20,7 +21,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    validationError = validateRequest(request)
+    validationError = TaskRequest.ValidateRequest(request, "tvShow", ["itemId"])
     if validationError <> invalid then
         if request <> invalid then validationError.AddReplace("itemId", Format.SafeString(request.itemId, ""))
         m.top.response = validationError
@@ -254,16 +255,4 @@ function loadSeasons(request as object) as object
 
     requestUrl = request.server + "/Shows/" + request.itemId + "/Seasons" + Url.BuildQueryString(params)
     return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
-end function
-
-'-------------------------------------------------------------------------------
-' validateRequest
-'-------------------------------------------------------------------------------
-function validateRequest(request as dynamic) as dynamic
-    if request = invalid then return { ok: false, action: "tvShow", errorMessage: "Invalid series details request." }
-    if request.server = invalid or request.server = "" then return { ok: false, action: "tvShow", errorMessage: "Invalid series details server." }
-    if request.token = invalid or request.token = "" then return { ok: false, action: "tvShow", errorMessage: "Invalid series details token." }
-    if request.itemId = invalid or request.itemId = "" then return { ok: false, action: "tvShow", errorMessage: "Invalid series details item." }
-
-    return invalid
 end function

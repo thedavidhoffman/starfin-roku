@@ -5,6 +5,8 @@ import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/TaskResponse.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -19,7 +21,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    validationError = validateRequest(request, "continueListening")
+    validationError = TaskRequest.ValidateRequest(request, "continueListening")
     if validationError <> invalid then
         m.top.response = validationError
         return
@@ -37,41 +39,9 @@ sub executeRequest()
     requestUrl = request.server + "/useritems/resume" + Url.BuildQueryString(params)
     response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
     if response.ok <> true then
-        m.top.response = withAction(response, "continueListening")
+        m.top.response = TaskResponse.Failure(response, "continueListening")
         return
     end if
 
-    m.top.response = successResponse(request, "continueListening", response.data)
+    m.top.response = TaskResponse.Success(request, "continueListening", response.data)
 end sub
-
-'-------------------------------------------------------------------------------
-' validateRequest
-'-------------------------------------------------------------------------------
-function validateRequest(request as object, action as string) as dynamic
-    if request = invalid then return { ok: false, action: action, errorMessage: "Invalid request." }
-    if request.server = invalid or request.server = "" then return { ok: false, action: action, errorMessage: "Invalid request server." }
-    if request.token = invalid or request.token = "" then return { ok: false, action: action, errorMessage: "Invalid request token." }
-
-    return invalid
-end function
-
-'-------------------------------------------------------------------------------
-' successResponse
-'-------------------------------------------------------------------------------
-function successResponse(request as object, action as string, payload as dynamic) as object
-    return {
-        ok: true
-        action: action
-        server: request.server
-        payload: payload
-    }
-end function
-
-'-------------------------------------------------------------------------------
-' withAction
-'-------------------------------------------------------------------------------
-function withAction(response as object, action as string) as object
-    if response = invalid then return { ok: false, action: action, errorMessage: "Request failed." }
-    response.AddReplace("action", action)
-    return response
-end function

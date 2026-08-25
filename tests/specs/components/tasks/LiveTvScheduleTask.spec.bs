@@ -6,22 +6,49 @@ namespace tests
 
         @describe("request validation")
 
-        @it("rejects an invalid request without performing network work")
+        @it("rejects a missing request")
         function _()
             m.node.top.request = invalid
 
             'bs:disable-next-line 1140
             executeRequest()
 
-            m.assertFalse(m.node.top.response.ok)
+            response = m.node.top.response
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "liveTvSchedule")
+            m.assertEqual(response.errorMessage, "Invalid request.")
         end function
 
-        @it("accepts a complete request")
+        @it("rejects missing channel IDs")
         function _()
-            request = { server: "server", token: "token", channelIds: "1", startTime: "start", endTime: "end" }
+            m.node.top.request = { server: "server", token: "token", startTime: "start", endTime: "end" }
 
             'bs:disable-next-line 1140
-            m.assertInvalid(validateRequest(request))
+            executeRequest()
+
+            response = m.node.top.response
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "liveTvSchedule")
+            m.assertEqual(response.errorMessage, "Invalid request channelIds.")
+            m.assertEqual(response.channelIds, "")
+            m.assertEqual(response.startTime, "start")
+            m.assertEqual(response.endTime, "end")
+        end function
+
+        @it("rejects a missing guide window")
+        function _()
+            m.node.top.request = { server: "server", token: "token", channelIds: "1", endTime: "end" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.node.top.response
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "liveTvSchedule")
+            m.assertEqual(response.errorMessage, "Invalid Live TV guide window.")
+            m.assertEqual(response.channelIds, "1")
+            m.assertEqual(response.startTime, "")
+            m.assertEqual(response.endTime, "end")
         end function
 
     end class

@@ -1,0 +1,104 @@
+namespace tests
+
+    @suite("Task request helpers")
+    class TaskRequestTests extends rooibos.BaseTestSuite
+
+        @describe("session validation")
+
+        @it("rejects a missing request")
+        function _()
+            result = TaskRequest.ValidateRequest(invalid, "load")
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.action, "load")
+            m.assertEqual(result.errorMessage, "Invalid request.")
+        end function
+
+        @it("rejects a missing server")
+        function _()
+            result = TaskRequest.ValidateRequest({ token: "token" }, "load")
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.errorMessage, "Invalid request server.")
+        end function
+
+        @it("rejects a missing token")
+        function _()
+            result = TaskRequest.ValidateRequest({ server: "server" }, "load")
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.errorMessage, "Invalid request token.")
+        end function
+
+        @it("accepts a complete session")
+        function _()
+            result = TaskRequest.ValidateRequest({ server: "server", token: "token" }, "load")
+
+            m.assertInvalid(result)
+        end function
+
+        @it("rejects a missing additional property")
+        function _()
+            result = TaskRequest.ValidateRequest({ server: "server", token: "token" }, "load", ["userId"])
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.action, "load")
+            m.assertEqual(result.errorMessage, "Invalid request userId.")
+        end function
+
+        @it("validates additional properties in their supplied order")
+        function _()
+            request = { server: "server", token: "token", itemId: "" }
+
+            result = TaskRequest.ValidateRequest(request, "load", ["userId", "itemId"])
+
+            m.assertEqual(result.errorMessage, "Invalid request userId.")
+        end function
+
+        @it("rejects an empty additional property")
+        function _()
+            request = { server: "server", token: "token", userId: "" }
+
+            result = TaskRequest.ValidateRequest(request, "load", ["userId"])
+
+            m.assertEqual(result.errorMessage, "Invalid request userId.")
+        end function
+
+        @it("accepts non-empty whitespace property values")
+        function _()
+            request = { server: " ", token: " ", userId: " " }
+
+            result = TaskRequest.ValidateRequest(request, "load", ["userId"])
+
+            m.assertInvalid(result)
+        end function
+
+        @it("accepts complete additional properties")
+        function _()
+            request = { server: "server", token: "token", userId: "user-1", itemId: "item-1" }
+
+            result = TaskRequest.ValidateRequest(request, "load", ["userId", "itemId"])
+
+            m.assertInvalid(result)
+        end function
+
+        @describe("user identity")
+
+        @it("returns the request user ID")
+        function _()
+            m.assertEqual(TaskRequest.GetUserId({ userId: "user-1" }), "user-1")
+        end function
+
+        @it("returns an empty user ID for a missing request")
+        function _()
+            m.assertEqual(TaskRequest.GetUserId(invalid), "")
+        end function
+
+        @it("returns an empty user ID when the field is unavailable")
+        function _()
+            m.assertEqual(TaskRequest.GetUserId({}), "")
+        end function
+
+    end class
+
+end namespace

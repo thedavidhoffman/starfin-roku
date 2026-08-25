@@ -5,6 +5,8 @@ import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/TaskResponse.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -19,14 +21,14 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    validationError = validateRequest(request, "favorites")
+    validationError = TaskRequest.ValidateRequest(request, "favorites")
     if validationError <> invalid then
         m.top.response = validationError
         return
     end if
 
     params = {
-        userid: getUserId(request)
+        userid: TaskRequest.GetUserId(request)
         Filters: "IsFavorite"
         Limit: getInteger(request.limit, 25)
         recursive: true
@@ -47,7 +49,7 @@ sub executeRequest()
         return
     end if
 
-    m.top.response = successResponse(request, "favorites", {
+    m.top.response = TaskResponse.Success(request, "favorites", {
         items: itemsResponse.data
         people: peopleResponse.data
     })
@@ -59,49 +61,9 @@ end sub
 function getJson(request as object, action as string, path as string, params as object) as object
     requestUrl = request.server + path + Url.BuildQueryString(params)
     response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
-    if response.ok <> true then return withAction(response, action)
+    if response.ok <> true then return TaskResponse.Failure(response, action)
 
     return response
-end function
-
-'-------------------------------------------------------------------------------
-' validateRequest
-'-------------------------------------------------------------------------------
-function validateRequest(request as object, action as string) as dynamic
-    if request = invalid then return { ok: false, action: action, errorMessage: "Invalid request." }
-    if request.server = invalid or request.server = "" then return { ok: false, action: action, errorMessage: "Invalid request server." }
-    if request.token = invalid or request.token = "" then return { ok: false, action: action, errorMessage: "Invalid request token." }
-
-    return invalid
-end function
-
-'-------------------------------------------------------------------------------
-' successResponse
-'-------------------------------------------------------------------------------
-function successResponse(request as object, action as string, payload as dynamic) as object
-    return {
-        ok: true
-        action: action
-        server: request.server
-        payload: payload
-    }
-end function
-
-'-------------------------------------------------------------------------------
-' withAction
-'-------------------------------------------------------------------------------
-function withAction(response as object, action as string) as object
-    if response = invalid then return { ok: false, action: action, errorMessage: "Request failed." }
-    response.AddReplace("action", action)
-    return response
-end function
-
-'-------------------------------------------------------------------------------
-' getUserId
-'-------------------------------------------------------------------------------
-function getUserId(request as object) as string
-    if request.userId <> invalid then return Format.SafeString(request.userId, "")
-    return ""
 end function
 
 '-------------------------------------------------------------------------------
