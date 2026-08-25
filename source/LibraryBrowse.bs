@@ -1,0 +1,92 @@
+import "pkg:/source/Array.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/Number.bs"
+
+namespace LibraryBrowse
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.NormalizeFilterOptions
+    '---------------------------------------------------------------------------
+    function NormalizeFilterOptions(filterOptions as dynamic) as object
+        normalized = {
+            decadeOptions: []
+            genreOptions: []
+        }
+        if Arrays.IsAssocArray(filterOptions) = false then return normalized
+        if Type(filterOptions.decadeOptions) = "roArray" then normalized.decadeOptions = filterOptions.decadeOptions
+        if Type(filterOptions.genreOptions) = "roArray" then normalized.genreOptions = filterOptions.genreOptions
+
+        return normalized
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.IsDecadeActive
+    '---------------------------------------------------------------------------
+    function IsDecadeActive(filterType as dynamic) as boolean
+        return Format.SafeString(filterType, "") = "Decade"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.IsGenreActive
+    '---------------------------------------------------------------------------
+    function IsGenreActive(filterType as dynamic) as boolean
+        return Format.SafeString(filterType, "") = "Genre"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.ContainsOptionValue
+    '---------------------------------------------------------------------------
+    function ContainsOptionValue(options as dynamic, value as string) as boolean
+        if Type(options) <> "roArray" or value = "" then return false
+        for each option in options
+            if Arrays.IsAssocArray(option) and Format.SafeString(option.value, "") = value then return true
+        end for
+
+        return false
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.ResolveDecade
+    '---------------------------------------------------------------------------
+    function ResolveDecade(options as dynamic, selectedDecade as dynamic) as integer
+        decade = Number.ToInteger(selectedDecade, -1)
+        if decade >= 0 and LibraryBrowse.ContainsOptionValue(options, decade.ToStr()) then return decade
+        if Type(options) <> "roArray" or options.Count() = 0 then return -1
+        if Arrays.IsAssocArray(options[0]) = false then return -1
+
+        return Number.ToInteger(options[0].value, -1)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.ResolveGenre
+    '---------------------------------------------------------------------------
+    function ResolveGenre(options as dynamic, selectedGenre as dynamic) as string
+        genre = Format.SafeString(selectedGenre, "")
+        if LibraryBrowse.ContainsOptionValue(options, genre) then return genre
+        if Type(options) <> "roArray" or options.Count() = 0 then return ""
+        if Arrays.IsAssocArray(options[0]) = false then return ""
+
+        return Format.SafeString(options[0].value, "")
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.NormalizeSortOrder
+    '---------------------------------------------------------------------------
+    function NormalizeSortOrder(sortOrder as dynamic) as string
+        if Format.SafeString(sortOrder, "") = "Descending" then return "Descending"
+        return "Ascending"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.CreateSortSelection
+    '---------------------------------------------------------------------------
+    function CreateSortSelection(optionKey as string, sortKey as string, label as string, sortOrder = "Ascending" as dynamic) as object
+        return {
+            optionKey: optionKey
+            sortKey: sortKey
+            sortOrder: LibraryBrowse.NormalizeSortOrder(sortOrder)
+            label: label
+        }
+    end function
+
+end namespace

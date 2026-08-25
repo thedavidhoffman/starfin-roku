@@ -14,43 +14,6 @@ function isArtistBrowseMode() as boolean
 end function
 
 '-------------------------------------------------------------------------------
-' createEmptyFilterCache
-'-------------------------------------------------------------------------------
-function createEmptyFilterCache() as object
-    return {
-        decadeOptions: []
-        genreOptions: []
-    }
-end function
-
-'-------------------------------------------------------------------------------
-' createFilterCacheFromOptions
-'-------------------------------------------------------------------------------
-function createFilterCacheFromOptions(filterOptions as dynamic) as object
-    cache = createEmptyFilterCache()
-    if Arrays.IsAssocArray(filterOptions) = false then return cache
-
-    if filterOptions.decadeOptions <> invalid then cache.decadeOptions = filterOptions.decadeOptions
-    if filterOptions.genreOptions <> invalid then cache.genreOptions = filterOptions.genreOptions
-
-    return cache
-end function
-
-'-------------------------------------------------------------------------------
-' isDecadeFilterActive
-'-------------------------------------------------------------------------------
-function isDecadeFilterActive() as boolean
-    return Format.SafeString(m.state.browse.filterType, "") = "Decade"
-end function
-
-'-------------------------------------------------------------------------------
-' isGenreFilterActive
-'-------------------------------------------------------------------------------
-function isGenreFilterActive() as boolean
-    return Format.SafeString(m.state.browse.filterType, "") = "Genre"
-end function
-
-'-------------------------------------------------------------------------------
 ' getMusicSortOptions
 '-------------------------------------------------------------------------------
 function getMusicSortOptions() as object
@@ -63,30 +26,6 @@ function getMusicSortOptions() as object
     if m.state.filters.options.decadeOptions.Count() > 0 then options.Push({ optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" })
     if m.state.filters.options.genreOptions.Count() > 0 then options.Push({ optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" })
     return options
-end function
-
-'-------------------------------------------------------------------------------
-' getDefaultSortSelection
-'-------------------------------------------------------------------------------
-function getDefaultSortSelection() as object
-    return {
-        optionKey: "Album"
-        sortKey: "Album"
-        sortOrder: "Ascending"
-        label: "Album"
-    }
-end function
-
-'-------------------------------------------------------------------------------
-' getFavoritesSortSelection
-'-------------------------------------------------------------------------------
-function getFavoritesSortSelection() as object
-    return {
-        optionKey: "Favorites"
-        sortKey: "Album"
-        sortOrder: "Ascending"
-        label: "Favorites"
-    }
 end function
 
 '-------------------------------------------------------------------------------
@@ -187,7 +126,7 @@ function applySortSelection(selection as object) as boolean
             label: "Decade"
         }
         m.state.browse.filterType = "Decade"
-        m.state.browse.decade = getFirstDecadeFilterValue(m.state.filters.options.decadeOptions)
+        m.state.browse.decade = LibraryBrowse.ResolveDecade(m.state.filters.options.decadeOptions, -1)
         showDecadeFilterRow()
     else if optionKey = "Genre" then
         m.state.browse.selection = {
@@ -197,7 +136,7 @@ function applySortSelection(selection as object) as boolean
             label: "Genre"
         }
         m.state.browse.filterType = "Genre"
-        m.state.browse.genre = getFirstGenreFilterValue(m.state.filters.options.genreOptions)
+        m.state.browse.genre = LibraryBrowse.ResolveGenre(m.state.filters.options.genreOptions, "")
         showGenreFilterRow()
     else if optionKey = "ArtistAlbum" then
         m.state.browse.selection = {
@@ -214,9 +153,9 @@ function applySortSelection(selection as object) as boolean
             label: "Artist"
         }
     else if optionKey = "Favorites" then
-        m.state.browse.selection = getFavoritesSortSelection()
+        m.state.browse.selection = LibraryBrowse.CreateSortSelection("Favorites", "Album", "Favorites")
     else
-        m.state.browse.selection = getDefaultSortSelection()
+        m.state.browse.selection = LibraryBrowse.CreateSortSelection("Album", "Album", "Album")
     end if
 
     syncSortControls()
@@ -241,7 +180,7 @@ end function
 sub showDecadeFilterRow()
     options = m.state.filters.options.decadeOptions
     if options = invalid then options = []
-    if filterOptionsContainValue(options, m.state.browse.decade.ToStr()) <> true then m.state.browse.decade = getFirstDecadeFilterValue(options)
+    m.state.browse.decade = LibraryBrowse.ResolveDecade(options, m.state.browse.decade)
 
     m.filterButtonRow.filterType = "Decade"
     m.filterButtonRow.items = options
@@ -262,7 +201,7 @@ end sub
 sub showGenreFilterRow()
     options = m.state.filters.options.genreOptions
     if options = invalid then options = []
-    if filterOptionsContainValue(options, m.state.browse.genre) <> true then m.state.browse.genre = getFirstGenreFilterValue(options)
+    m.state.browse.genre = LibraryBrowse.ResolveGenre(options, m.state.browse.genre)
 
     m.filterButtonRow.filterType = "Genre"
     m.filterButtonRow.items = options
@@ -311,24 +250,6 @@ sub updateGridLayout()
 end sub
 
 '-------------------------------------------------------------------------------
-' getFirstDecadeFilterValue
-'-------------------------------------------------------------------------------
-function getFirstDecadeFilterValue(options as object) as integer
-    if options = invalid or options.Count() = 0 then return -1
-
-    return Number.ToInteger(options[0].value, -1)
-end function
-
-'-------------------------------------------------------------------------------
-' getFirstGenreFilterValue
-'-------------------------------------------------------------------------------
-function getFirstGenreFilterValue(options as object) as string
-    if options = invalid or options.Count() = 0 then return ""
-
-    return Format.SafeString(options[0].value, "")
-end function
-
-'-------------------------------------------------------------------------------
 ' onFilterButtonRowSelected
 '-------------------------------------------------------------------------------
 sub onFilterButtonRowSelected()
@@ -351,28 +272,17 @@ sub onFilterButtonRowSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' filterOptionsContainValue
-'-------------------------------------------------------------------------------
-function filterOptionsContainValue(options as object, value as string) as boolean
-    if options = invalid or value = "" then return false
-    for each option in options
-        if Format.SafeString(option.value, "") = value then return true
-    end for
-    return false
-end function
-
-'-------------------------------------------------------------------------------
 ' applySavedMusicLibraryViewState
 '-------------------------------------------------------------------------------
 sub applySavedMusicLibraryViewState(state as object)
     optionKey = Format.SafeString(state.optionKey, "")
-    sortOrder = getNormalizedMusicSortOrder(Format.SafeString(state.sortOrder, "Ascending"))
+    sortOrder = LibraryBrowse.NormalizeSortOrder(state.sortOrder)
     m.state.browse.filterType = ""
     m.state.browse.decade = -1
     m.state.browse.genre = ""
 
     if optionKey = "Favorites" then
-        m.state.browse.selection = getFavoritesSortSelection()
+        m.state.browse.selection = LibraryBrowse.CreateSortSelection("Favorites", "Album", "Favorites")
         m.state.browse.selection.sortOrder = sortOrder
     else if optionKey = "Decade" or optionKey = "Genre" then
         m.state.browse.selection = { optionKey: optionKey, sortKey: "Album", sortOrder: "Ascending", label: optionKey }
@@ -384,18 +294,10 @@ sub applySavedMusicLibraryViewState(state as object)
     else if optionKey = "Artist" then
         m.state.browse.selection = { optionKey: "Artist", sortKey: "Artist", sortOrder: sortOrder, label: "Artist" }
     else
-        m.state.browse.selection = getDefaultSortSelection()
+        m.state.browse.selection = LibraryBrowse.CreateSortSelection("Album", "Album", "Album")
         m.state.browse.selection.sortOrder = sortOrder
     end if
 end sub
-
-'-------------------------------------------------------------------------------
-' getNormalizedMusicSortOrder
-'-------------------------------------------------------------------------------
-function getNormalizedMusicSortOrder(sortOrder as string) as string
-    if sortOrder = "Descending" then return "Descending"
-    return "Ascending"
-end function
 
 '-------------------------------------------------------------------------------
 ' persistMusicLibraryViewState

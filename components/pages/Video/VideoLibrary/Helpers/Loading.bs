@@ -12,18 +12,15 @@ sub prepareLoadRequest(request as object)
         applySavedVideoLibraryViewState(request, restoredState)
     else
         normalizeLoadRequestSort(request)
-    end if
-    if request.favoriteOnly = true then
-        m.pageState.selectedSort = getFavoritesSortSelection()
-        if restoredState <> invalid then
-            m.pageState.selectedSort.sortOrder = getNormalizedSortOrder(Format.SafeString(restoredState.sortOrder, "Ascending"))
+        if request.favoriteOnly = true then
+            selection = LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites", request.sortOrder)
+        else
+            selection = buildSortSelection(request.sortBy, request.sortOrder)
         end if
-    else if restoredState = invalid then
-        m.pageState.selectedSort = buildSortSelection(request.sortBy, request.sortOrder)
+        commitVideoLibraryBrowseState(selection)
     end if
-    m.pageState.selectedSortKey = m.pageState.selectedSort.optionKey
     request.sortBy = Format.SafeString(m.pageState.selectedSort.sortKey, "SortName")
-    request.sortOrder = getSortOrderFromSelection(m.pageState.selectedSort)
+    request.sortOrder = LibraryBrowse.NormalizeSortOrder(m.pageState.selectedSort.sortOrder)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -69,11 +66,11 @@ function buildVideoLibraryPageRequest(startIndex as integer) as dynamic
     if m.pageState.letterFilter.pending <> "" then request.startsWith = m.pageState.letterFilter.pending
     request.genre = ""
     request.years = []
-    if isGenreFilterActive() then
-        request.genre = m.pageState.selectedGenre
+    if LibraryBrowse.IsGenreActive(m.pageState.activeFilterType) then
+        request.genre = m.pageState.filterSelection.genre
     end if
-    if isDecadeFilterActive() and m.pageState.selectedDecade >= 0 then
-        for year = m.pageState.selectedDecade to m.pageState.selectedDecade + 9
+    if LibraryBrowse.IsDecadeActive(m.pageState.activeFilterType) and m.pageState.filterSelection.decade >= 0 then
+        for year = m.pageState.filterSelection.decade to m.pageState.filterSelection.decade + 9
             request.years.Push(year.ToStr())
         end for
     end if
@@ -104,6 +101,7 @@ sub onVideoLibraryResponse()
             return
         end if
         if m.pageState.movieLibraryBrowse.active <> true then
+            markBrowseTransitionItemsFailed()
             Spinner.Hide()
             AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load library."))
         end if
@@ -151,30 +149,13 @@ sub onVideoLibraryResponse()
         appendVideoLibraryPage(pageItems, startIndex)
     end if
     publishMovieLibraryBrowseState()
-    if isDecadeFilterActive() then
-        showDecadeFilterRow()
-    end if
-    if isGenreFilterActive() then
-        showGenreFilterRow()
-    end if
+
     if hasLibrarySpecialization() then
         m.top.callFunc("specializationSyncState")
     end if
     updateTitleLabel(m.pageState.paging.totalCount)
     if m.pageState.movieLibraryBrowse.active <> true then AppStatus.ClearMessage()
-    if m.pageState.movieLibraryBrowse.active <> true then
-        if m.pageState.refocusBrowseByButtonAfterLoad = true then
-            m.pageState.refocusBrowseByButtonAfterLoad = false
-            focusBrowseByButton()
-        else if m.pageState.refocusSortButtonAfterLoad = true then
-            m.pageState.refocusSortButtonAfterLoad = false
-            focusSortButton()
-        else if focusPendingTarget() <> true then
-            if hasLibrarySpecialization() = false or m.top.callFunc("specializationActivate") <> true then
-                focusItemsIfActive()
-            end if
-        end if
-    end if
+    if startIndex = 0 and m.pageState.movieLibraryBrowse.active <> true then markBrowseTransitionItemsReady()
     if m.pageState.movieLibraryBrowse.active <> true then Spinner.Hide()
     requestNextVideoLibraryPageIfNeeded()
 end sub
@@ -232,39 +213,13 @@ sub onVideoFilterOptionsResponse()
         return
     end if
     if response.ok <> true then
+        handleBrowseTransitionOptionsFailure()
         return
     end if
     m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
-    if isDecadeFilterActive() then
-        options = m.pageState.filterCache.decadeOptions
-        if options.Count() = 0 then
-            applySortSelection(getDefaultSortSelection())
-            return
-        end if
-        if filterOptionsContainValue(options, m.pageState.selectedDecade.ToStr()) <> true then
-            m.pageState.selectedDecade = getFirstDecadeFilterValue(options)
-            showDecadeFilterRow()
-            reloadVideoLibraryForSort("filter")
-            return
-        end if
-        showDecadeFilterRow()
-    end if
-    if isGenreFilterActive() then
-        options = m.pageState.filterCache.genreOptions
-        if options.Count() = 0 then
-            applySortSelection(getDefaultSortSelection())
-            return
-        end if
-        if filterOptionsContainValue(options, m.pageState.selectedGenre) <> true then
-            m.pageState.selectedGenre = getFirstGenreFilterValue(options)
-            showGenreFilterRow()
-            reloadVideoLibraryForSort("filter")
-            return
-        end if
-        showGenreFilterRow()
-    end if
-    focusPendingTarget()
+    markBrowseTransitionOptionsReady()
 end sub
+
 
 '-------------------------------------------------------------------------------
 ' onItemFocused

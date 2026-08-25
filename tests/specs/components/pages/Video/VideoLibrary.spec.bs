@@ -8,15 +8,180 @@ namespace tests
             m.node.itemsGrid = m.node.top.findNode("itemsGrid")
             m.node.filterButtonRow = m.node.top.findNode("filterButtonRow")
             m.node.videoLibraryTask = m.node.top.findNode("videoLibraryTask")
+            m.node.top.settings = {}
             m.node.pageState.letterFilter.selected = "ALL"
             m.node.pageState.letterFilter.pending = ""
             m.node.pageState.letterFilter.previousPaging = invalid
+            m.restoreAccountKey = "rooibos-video-library-restore"
+            m.cleanupRestoreRegistry()
             scene = m.node.top.getScene()
             if scene.findNode("loadingSpinner") = invalid then
                 loadingSpinnerNode = CreateObject("roSGNode", "Spinner")
                 loadingSpinnerNode.id = "loadingSpinner"
                 scene.appendChild(loadingSpinnerNode)
             end if
+        end function
+
+        protected override function afterEach()
+            m.cleanupRestoreRegistry()
+        end function
+
+        @describe("view-state persistence")
+
+        @it("persists a movie-scoped library without a canonical collection type")
+        function _()
+            'bs:disable-next-line 1140
+            canPersist = canPersistVideoLibraryViewState({ collectionType: "", includeItemTypes: "Movie" })
+
+            m.assertTrue(canPersist)
+        end function
+
+        @it("persists a series-scoped library without a canonical collection type")
+        function _()
+            'bs:disable-next-line 1140
+            canPersist = canPersistVideoLibraryViewState({ collectionType: "", includeItemTypes: "Series" })
+
+            m.assertTrue(canPersist)
+        end function
+
+        @it("does not persist a mixed collection")
+        function _()
+            'bs:disable-next-line 1140
+            canPersist = canPersistVideoLibraryViewState({ collectionType: "collection", includeItemTypes: "Movie,Series" })
+
+            m.assertFalse(canPersist)
+        end function
+
+        @it("restores a decade filter with its saved title sort order enabled")
+        function _()
+            request = {}
+            m.node.sortButton.sortEnabled = false
+
+            'bs:disable-next-line 1140
+            applySavedVideoLibraryViewState(request, { optionKey: "Decade", selectedDecade: 1980, selectedGenre: "", sortOrder: "Descending" })
+            m.assertEqual(m.node.pageState.selectedSort.sortKey, "SortName")
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Descending")
+            m.assertEqual(request.sortOrder, "Descending")
+            m.assertTrue(m.node.sortButton.sortEnabled)
+        end function
+
+        @it("restores a genre filter with its saved title sort order enabled")
+        function _()
+            request = {}
+            m.node.sortButton.sortEnabled = false
+
+            'bs:disable-next-line 1140
+            applySavedVideoLibraryViewState(request, { optionKey: "Genre", selectedDecade: -1, selectedGenre: "Drama", sortOrder: "Descending" })
+            m.assertEqual(m.node.pageState.selectedSort.sortKey, "SortName")
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Descending")
+            m.assertEqual(request.sortOrder, "Descending")
+            m.assertTrue(m.node.sortButton.sortEnabled)
+        end function
+
+        @describe("load-workflow restoration")
+
+        @it("restores a movie decade with descending title order")
+        function _()
+            request = m.restoreRequest("movie-decade", "movies", "Movie")
+            m.saveRestoreState(request, "Decade", 1980, "", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertRestoredBrowseState(request, "Decade", "Descending")
+            m.assertEqual(m.node.pageState.filterSelection.decade, 1980)
+            m.assertEqual(request.favoriteOnly, false)
+        end function
+
+        @it("restores a movie genre with ascending title order")
+        function _()
+            request = m.restoreRequest("movie-genre", "movies", "Movie")
+            m.saveRestoreState(request, "Genre", -1, "Drama", "Ascending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertRestoredBrowseState(request, "Genre", "Ascending")
+            m.assertEqual(m.node.pageState.filterSelection.genre, "Drama")
+            m.assertEqual(request.favoriteOnly, false)
+        end function
+
+        @it("restores a TV decade with ascending title order")
+        function _()
+            request = m.restoreRequest("tv-decade", "tvshows", "Series")
+            m.saveRestoreState(request, "Decade", 1990, "", "Ascending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertRestoredBrowseState(request, "Decade", "Ascending")
+            m.assertEqual(m.node.pageState.filterSelection.decade, 1990)
+            m.assertEqual(request.favoriteOnly, false)
+        end function
+
+        @it("restores a TV genre with descending title order")
+        function _()
+            request = m.restoreRequest("tv-genre", "tvshows", "Series")
+            m.saveRestoreState(request, "Genre", -1, "Comedy", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertRestoredBrowseState(request, "Genre", "Descending")
+            m.assertEqual(m.node.pageState.filterSelection.genre, "Comedy")
+            m.assertEqual(request.favoriteOnly, false)
+        end function
+
+        @describe("production persistence round trips")
+
+        @it("round-trips a movie decade and descending title sort")
+        function _()
+            request = m.restoreRequest("movie-decade-round-trip", "movies", "Movie")
+            m.node.pageState.request = request
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1980", value: 1980 }]
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
+            m.node.pageState.filterSelection.decade = 1980
+
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Descending" })
+            savedState = LibraryViewStateStore.Load(request.accountKey, request.libraryId)
+            freshRequest = m.restoreRequest(request.libraryId, request.collectionType, request.includeItemTypes)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            'bs:disable-next-line 1140
+            prepareLoadRequest(freshRequest)
+
+            m.assertEqual(savedState.optionKey, "Decade")
+            m.assertEqual(savedState.selectedDecade, 1980)
+            m.assertEqual(savedState.sortOrder, "Descending")
+            m.assertRestoredBrowseState(freshRequest, "Decade", "Descending")
+            m.assertEqual(m.node.pageState.filterSelection.decade, 1980)
+        end function
+
+        @it("round-trips a TV genre and descending title sort")
+        function _()
+            request = m.restoreRequest("tv-genre-round-trip", "tvshows", "Series")
+            m.node.pageState.request = request
+            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Genre", "SortName", "Genre"))
+            m.node.pageState.filterSelection.genre = "Drama"
+
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Descending" })
+            savedState = LibraryViewStateStore.Load(request.accountKey, request.libraryId)
+            freshRequest = m.restoreRequest(request.libraryId, request.collectionType, request.includeItemTypes)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            'bs:disable-next-line 1140
+            prepareLoadRequest(freshRequest)
+
+            m.assertEqual(savedState.optionKey, "Genre")
+            m.assertEqual(savedState.selectedGenre, "Drama")
+            m.assertEqual(savedState.sortOrder, "Descending")
+            m.assertRestoredBrowseState(freshRequest, "Genre", "Descending")
+            m.assertEqual(m.node.pageState.filterSelection.genre, "Drama")
         end function
 
         @describe("jumbo layout")
@@ -109,7 +274,7 @@ namespace tests
         function _()
             m.configurePaging(0, 0, 0)
             m.node.pageState.activeFilterType = "Genre"
-            m.node.pageState.selectedGenre = "Drama"
+            m.node.pageState.filterSelection.genre = "Drama"
             m.node.pageState.letterFilter.selected = "B"
 
             'bs:disable-next-line 1140
@@ -132,111 +297,377 @@ namespace tests
             end for
         end function
 
-        @it("retains filter-row focus while changing a genre pill")
+        @it("keeps filter options available after selecting favorites")
+        function _()
+            m.configurePaging(12, 12, 0)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1990", value: 1990 }]
+            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Favorites", sortKey: "SortName", sortOrder: "Ascending", label: "Favorites" })
+            'bs:disable-next-line 1140
+            options = getVideoSortOptions()
+
+            m.assertEqual(options.Count(), 6)
+            m.assertEqual(options[4].optionKey, "Decade")
+            m.assertEqual(options[5].optionKey, "Genre")
+        end function
+
+        @it("defaults decade after favorites invalidates the previous filter selection")
+        function _()
+            m.configurePaging(12, 12, 0)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
+            m.node.pageState.filterSelection.decade = 1980
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Favorites", sortKey: "SortName", sortOrder: "Ascending", label: "Favorites" })
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" })
+
+            m.assertFalse(m.node.pageState.request.favoriteOnly)
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "Decade")
+            m.assertEqual(m.node.browseByButton.selectedSort.optionKey, "Decade")
+            m.assertEqual(m.node.pageState.activeFilterType, "Decade")
+            m.assertEqual(m.node.pageState.selectedSort.sortKey, "SortName")
+            m.assertTrue(m.node.sortButton.sortEnabled)
+            m.assertEqual(m.node.pageState.filterSelection.decade, 1970)
+            m.assertEqual(m.node.filterButtonRow.selectedValue, "1970")
+        end function
+
+        @it("defaults genre after favorites invalidates the previous filter selection")
+        function _()
+            m.configurePaging(12, 12, 0)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Genre", "SortName", "Genre"))
+            m.node.pageState.filterCache.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
+            m.node.pageState.filterSelection.genre = "Drama"
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Favorites", sortKey: "SortName", sortOrder: "Ascending", label: "Favorites" })
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" })
+
+            m.assertFalse(m.node.pageState.request.favoriteOnly)
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "Genre")
+            m.assertEqual(m.node.browseByButton.selectedSort.optionKey, "Genre")
+            m.assertEqual(m.node.pageState.activeFilterType, "Genre")
+            m.assertEqual(m.node.pageState.selectedSort.sortKey, "SortName")
+            m.assertTrue(m.node.sortButton.sortEnabled)
+            m.assertEqual(m.node.pageState.filterSelection.genre, "Comedy")
+            m.assertEqual(m.node.filterButtonRow.selectedValue, "Comedy")
+        end function
+
+        @describe("filter sorting")
+
+        @it("sorts an active decade filter by title descending")
+        function _()
+            m.configurePaging(12, 12, 0)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
+            m.node.pageState.filterSelection.decade = 1980
+
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Descending" })
+
+            m.assertEqual(m.node.pageState.selectedSort.sortKey, "SortName")
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Descending")
+            m.assertEqual(m.node.videoLibraryTask.request.sortBy, "SortName")
+            m.assertEqual(m.node.videoLibraryTask.request.sortOrder, "Descending")
+            m.assertEqual(m.node.videoLibraryTask.request.years[0], "1980")
+            m.assertTrue(m.node.sortButton.sortEnabled)
+        end function
+
+        @describe("browse transitions")
+
+        @it("waits for filter options when library items arrive first")
+        function _()
+            m.node.pageState.activeFilterType = "Genre"
+            m.node.pageState.filterSelection.genre = "Drama"
+            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+
+            'bs:disable-next-line 1140
+            beginBrowseTransition("Genre", false)
+            'bs:disable-next-line 1140
+            markBrowseTransitionItemsReady()
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "awaitingOptions")
+            m.assertFalse(m.node.pageState.browseTransition.focusApplied)
+
+            'bs:disable-next-line 1140
+            markBrowseTransitionOptionsReady()
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertTrue(m.node.pageState.browseTransition.focusApplied)
+            m.assertEqual(m.node.filterButtonRow.selectedValue, "Drama")
+            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
+        end function
+
+        @it("preserves a restored movie decade when library items arrive before filter options")
+        function _()
+            m.node.pageState.request = { libraryId: "movies-1", title: "Movies" }
+            m.node.pageState.activeFilterType = "Decade"
+            m.node.pageState.filterSelection.decade = 1980
+            m.node.pageState.filterCache = { decadeOptions: [], genreOptions: [], decadeItemsByValue: {}, genreItemsByValue: {} }
+            m.node.filterButtonRow.visible = false
+            m.node.pageState.paging.nextStartIndex = 0
+            m.node.pageState.paging.queryId = 7
+            m.node.pageState.movieLibraryBrowse.active = false
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "movies-1")
+            'bs:disable-next-line 1140
+            beginBrowseTransition("Decade", false)
+            m.node.videoLibraryTask.response = {
+                ok: true
+                action: "videoLibrary"
+                libraryId: "movies-1"
+                queryId: 7
+                startIndex: 0
+                payload: { Items: [{ Id: "movie-1", Type: "Movie" }] }
+                nextStartIndex: 1
+                totalRecordCount: 1
+                hasMore: false
+            }
+
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+
+            m.assertEqual(m.node.pageState.filterSelection.decade, 1980)
+            m.assertEqual(m.node.pageState.browseTransition.phase, "awaitingOptions")
+            m.assertFalse(m.node.filterButtonRow.visible)
+        end function
+
+        @it("waits for library items when filter options arrive first")
+        function _()
+            m.node.pageState.activeFilterType = "Decade"
+            m.node.pageState.filterSelection.decade = 1980
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1980", value: 1980 }]
+
+            'bs:disable-next-line 1140
+            beginBrowseTransition("Decade", false)
+            'bs:disable-next-line 1140
+            markBrowseTransitionOptionsReady()
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "awaitingItems")
+            m.assertFalse(m.node.pageState.browseTransition.focusApplied)
+
+            'bs:disable-next-line 1140
+            markBrowseTransitionItemsReady()
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertTrue(m.node.pageState.browseTransition.focusApplied)
+            m.assertEqual(m.node.filterButtonRow.selectedValue, "1980")
+            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
+        end function
+
+        @it("falls back to Browse when a cancelled overlay has no focusable item")
+        function _()
+            m.node.itemsGrid.visible = false
+            m.node.top.findNode("browseByButton").visible = true
+
+            'bs:disable-next-line 1140
+            handleBrowseOverlayClosed(invalid)
+
+            m.assertTrue(m.node.top.findNode("browseByButton").isInFocusChain())
+        end function
+
+        @it("falls back to Browse when an unchanged option has no focusable item")
+        function _()
+            m.node.pageState.request = { favoriteOnly: false }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites"))
+            m.node.itemsGrid.visible = false
+            m.node.top.findNode("browseByButton").visible = true
+
+            'bs:disable-next-line 1140
+            handleBrowseOverlayClosed(LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites"))
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertTrue(m.node.top.findNode("browseByButton").isInFocusChain())
+        end function
+
+        @it("focuses the active genre row when that browse mode is reselected")
+        function _()
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Genre", "SortName", "Genre"))
+            m.node.pageState.filterSelection.genre = "Drama"
+            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            'bs:disable-next-line 1140
+            showGenreFilterRow()
+            'bs:disable-next-line 1140
+            focusBrowseByButton()
+
+            'bs:disable-next-line 1140
+            handleBrowseOverlayClosed({ optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" })
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
+        end function
+
+        @it("does not complete a transition when its focus target is unavailable")
+        function _()
+            m.node.top.findNode("browseByButton").visible = false
+
+            'bs:disable-next-line 1140
+            beginBrowseTransition("browseButton", true)
+            'bs:disable-next-line 1140
+            markBrowseTransitionItemsReady()
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "ready")
+            m.assertFalse(m.node.pageState.browseTransition.focusApplied)
+
+            m.node.top.findNode("browseByButton").visible = true
+        end function
+
+        @it("does not move focus after a completed transition is reconciled again")
+        function _()
+            m.node.pageState.activeFilterType = "Genre"
+            m.node.pageState.filterSelection.genre = "Drama"
+            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+
+            'bs:disable-next-line 1140
+            beginBrowseTransition("Genre", true)
+            'bs:disable-next-line 1140
+            markBrowseTransitionItemsReady()
+            'bs:disable-next-line 1140
+            focusBrowseByButton()
+
+            'bs:disable-next-line 1140
+            reconcileBrowseTransition()
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertTrue(m.node.top.findNode("browseByButton").isInFocusChain())
+        end function
+
+        @it("resolves a missing saved genre and reloads with the fallback")
         function _()
             m.configurePaging(12, 12, 0)
             m.node.pageState.activeFilterType = "Genre"
-            m.node.pageState.selectedGenre = "Drama"
-            m.node.filterButtonRow.filterSelected = { type: "Genre", value: "Comedy" }
-            m.node.filterButtonRow.selectedValue = "Drama"
-
-            'bs:disable-next-line 1140
-            onFilterButtonRowSelected()
-
-            m.assertEqual(m.node.pageState.selectedGenre, "Comedy")
-            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
-            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 0)
-        end function
-
-        @it("focuses decade pills when switching from title browsing")
-        function _()
-            m.configurePaging(12, 12, 0)
-            m.node.pageState.selectedSortKey = "SortName"
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
-
-            'bs:disable-next-line 1140
-            applySortSelection({ optionKey: "Decade", sortKey: "SortName", sortOrder: "Ascending", label: "Decade" })
-
-            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
-            m.assertEqual(m.node.filterButtonRow.selectedValue, "1970")
-            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
-        end function
-
-        @it("focuses genre pills when switching from title browsing")
-        function _()
-            m.configurePaging(12, 12, 0)
-            m.node.pageState.selectedSortKey = "SortName"
+            m.node.pageState.filterSelection.genre = "Missing"
             m.node.pageState.filterCache.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
 
             'bs:disable-next-line 1140
-            applySortSelection({ optionKey: "Genre", sortKey: "SortName", sortOrder: "Ascending", label: "Genre" })
+            beginBrowseTransition("Genre", false)
+            'bs:disable-next-line 1140
+            markBrowseTransitionOptionsReady()
 
-            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
-            m.assertEqual(m.node.filterButtonRow.selectedValue, "Comedy")
-            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
+            m.assertEqual(m.node.pageState.filterSelection.genre, "Comedy")
+            m.assertEqual(m.node.videoLibraryTask.request.genre, "Comedy")
+            m.assertEqual(m.node.pageState.browseTransition.phase, "awaitingItems")
         end function
 
-        @it("queues decade-pill focus while restoring saved view state")
+        @it("falls back to title browsing when an active filter has no options")
         function _()
-            m.node.pageState.selectedSort = { optionKey: "Decade", sortKey: "SortName", sortOrder: "Ascending", label: "Decade" }
+            m.configurePaging(12, 12, 0)
             m.node.pageState.activeFilterType = "Decade"
-            m.node.pageState.selectedDecade = 1980
+            m.node.pageState.filterSelection.decade = 1980
+            m.node.pageState.filterCache.decadeOptions = []
 
             'bs:disable-next-line 1140
-            resetFilterState()
+            beginBrowseTransition("Decade", false)
             'bs:disable-next-line 1140
-            resetLoadFocusState()
+            markBrowseTransitionOptionsReady()
 
-            m.assertEqual(m.node.pageState.selectedDecade, 1980)
-            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
+            m.assertEqual(m.node.pageState.activeFilterType, "")
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "SortName")
+            m.assertEqual(m.node.pageState.browseTransition.mode, "items")
         end function
 
-        @it("retains pending pill focus until the decade row is available")
+        @describe("browse request failures")
+
+        @it("falls back to Browse when an ordinary sort reload fails")
         function _()
-            m.node.pageState.pendingFocusTarget = "filterButtonRow"
-            m.node.filterButtonRow.visible = false
+            m.node.itemsGrid.content = CreateObject("roSGNode", "ContentNode")
+            m.node.itemsGrid.visible = false
+            m.node.browseByButton.visible = true
 
-            'bs:disable-next-line 1140
-            focused = focusPendingTarget()
+            m.failVideoLibraryLoad("items", true)
 
-            m.assertFalse(focused)
-            m.assertEqual(m.node.pageState.pendingFocusTarget, "filterButtonRow")
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
         end function
 
-        @it("restores and focuses the saved decade pill")
+        @it("returns to the decade row when its reload fails after options are ready")
         function _()
-            m.node.pageState.activeFilterType = "Decade"
-            m.node.pageState.selectedDecade = 1980
-            m.node.pageState.pendingFocusTarget = "filterButtonRow"
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
-
+            m.node.pageState.request = { libraryId: "failure-library", favoriteOnly: false }
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1980", value: 1980 }]
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
+            m.node.pageState.filterSelection.decade = 1980
             'bs:disable-next-line 1140
             showDecadeFilterRow()
-            'bs:disable-next-line 1140
-            focused = focusPendingTarget()
 
-            m.assertTrue(focused)
-            m.assertEqual(m.node.filterButtonRow.selectedValue, "1980")
+            m.failVideoLibraryLoad("Decade", true)
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
             m.assertTrue(m.node.filterButtonRow.isInFocusChain())
-            m.assertEqual(m.node.pageState.pendingFocusTarget, "")
         end function
 
-        @it("focuses the first decade when the saved decade is unavailable")
+        @it("waits for genre options when the item request fails first")
         function _()
-            m.node.pageState.activeFilterType = "Decade"
-            m.node.pageState.selectedDecade = 1960
-            m.node.pageState.pendingFocusTarget = "filterButtonRow"
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
-
+            m.node.pageState.request = { libraryId: "failure-library", favoriteOnly: false }
             'bs:disable-next-line 1140
-            showDecadeFilterRow()
-            'bs:disable-next-line 1140
-            focused = focusPendingTarget()
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Genre", "SortName", "Genre"))
+            m.node.pageState.filterSelection.genre = "Drama"
 
-            m.assertTrue(focused)
-            m.assertEqual(m.node.pageState.selectedDecade, 1970)
-            m.assertEqual(m.node.filterButtonRow.selectedValue, "1970")
+            m.failVideoLibraryLoad("Genre", false)
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "awaitingOptions")
+            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            'bs:disable-next-line 1140
+            markBrowseTransitionOptionsReady()
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertTrue(m.node.filterButtonRow.isInFocusChain())
         end function
+
+        @it("preserves saved filter state when filter-options loading fails")
+        function _()
+            request = m.restoreRequest("filter-options-failure", "movies", "Movie")
+            m.node.pageState.request = request
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade", "Descending"))
+            m.node.pageState.filterSelection.decade = 1980
+            'bs:disable-next-line 1140
+            persistVideoLibraryViewState()
+            expectedState = LibraryViewStateStore.Load(request.accountKey, request.libraryId)
+            m.node.browseByButton.visible = true
+
+            m.failVideoFilterOptionsLoad("Decade", true)
+            actualState = LibraryViewStateStore.Load(request.accountKey, request.libraryId)
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "Decade")
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Descending")
+            m.assertEqual(m.node.pageState.filterSelection.decade, 1980)
+            m.assertEqual(actualState, expectedState)
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
+        end function
+
+        @it("waits for items after filter-options loading fails first")
+        function _()
+            request = m.restoreRequest("filter-options-first", "tvshows", "Series")
+            m.node.pageState.request = request
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Genre", "SortName", "Genre", "Descending"))
+            m.node.pageState.filterSelection.genre = "Drama"
+            m.node.browseByButton.visible = true
+
+            m.failVideoFilterOptionsLoad("Genre", false)
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "awaitingItems")
+            'bs:disable-next-line 1140
+            markBrowseTransitionItemsReady()
+
+            m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "Genre")
+            m.assertEqual(m.node.pageState.filterSelection.genre, "Drama")
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
+        end function
+
+        @describe("letter filtering")
 
         @it("adds the active starts-with bucket to the counted page title")
         function _()
@@ -252,7 +683,8 @@ namespace tests
         @it("clears starts-with when a different browse option is selected")
         function _()
             m.configurePaging(12, 12, 0)
-            m.node.pageState.selectedSortKey = "SortName"
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
             m.node.pageState.letterFilter.selected = "M"
 
             'bs:disable-next-line 1140
@@ -265,7 +697,8 @@ namespace tests
         @it("retains starts-with when the active browse option is reselected")
         function _()
             m.configurePaging(12, 12, 0)
-            m.node.pageState.selectedSortKey = "SortName"
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
             m.node.pageState.letterFilter.selected = "M"
 
             'bs:disable-next-line 1140
@@ -420,6 +853,92 @@ namespace tests
             m.node.pageState.movieLibraryBrowse.index = -1
             m.node.itemsGrid = { itemFocused: focusedIndex, numColumns: 6 }
             m.node.videoLibraryTask = { control: "", request: invalid }
+        end sub
+
+        private sub failVideoLibraryLoad(mode as string, optionsReady as boolean)
+            libraryId = "failure-library"
+            m.node.pageState.request = { libraryId: libraryId, title: "Library", favoriteOnly: false }
+            m.node.pageState.paging.nextStartIndex = 0
+            m.node.pageState.paging.queryId = 17
+            m.node.pageState.movieLibraryBrowse.active = false
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, libraryId)
+            'bs:disable-next-line 1140
+            beginBrowseTransition(mode, optionsReady)
+            m.node.videoLibraryTask.response = {
+                ok: false
+                action: "videoLibrary"
+                libraryId: libraryId
+                queryId: 17
+                errorMessage: "Unable to load library."
+            }
+
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+        end sub
+
+        private sub failVideoFilterOptionsLoad(mode as string, itemsReady as boolean)
+            libraryId = m.node.pageState.request.libraryId
+            m.node.pageState.filtersQueryId = 23
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, libraryId)
+            'bs:disable-next-line 1140
+            beginBrowseTransition(mode, false)
+            if itemsReady then
+                'bs:disable-next-line 1140
+                markBrowseTransitionItemsReady()
+            end if
+            m.node.videoFilterOptionsTask.response = {
+                ok: false
+                action: "videoFilterOptions"
+                libraryId: libraryId
+                queryId: 23
+            }
+
+            'bs:disable-next-line 1140
+            onVideoFilterOptionsResponse()
+        end sub
+
+        private function restoreRequest(libraryId as string, collectionType as string, includeItemTypes as string) as object
+            return {
+                accountKey: m.restoreAccountKey
+                libraryId: libraryId
+                collectionType: collectionType
+                includeItemTypes: includeItemTypes
+                title: "Library"
+                favoriteOnly: false
+                sortBy: "SortName"
+                sortOrder: "Ascending"
+            }
+        end function
+
+        private sub saveRestoreState(request as object, optionKey as string, selectedDecade as integer, selectedGenre as string, sortOrder as string)
+            LibraryViewStateStore.Save(request.accountKey, request.libraryId, {
+                optionKey: optionKey
+                sortKey: "SortName"
+                sortOrder: sortOrder
+                selectedDecade: selectedDecade
+                selectedGenre: selectedGenre
+                libraryTitle: request.title
+                collectionType: request.collectionType
+            })
+        end sub
+
+        private sub assertRestoredBrowseState(request as object, optionKey as string, sortOrder as string)
+            m.assertEqual(m.node.pageState.selectedSortKey, optionKey)
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, optionKey)
+            m.assertEqual(m.node.pageState.selectedSort.sortKey, "SortName")
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, sortOrder)
+            m.assertEqual(m.node.pageState.activeFilterType, optionKey)
+            m.assertEqual(request.sortBy, "SortName")
+            m.assertEqual(request.sortOrder, sortOrder)
+            m.assertEqual(m.node.browseByButton.selectedSort.optionKey, optionKey)
+            m.assertEqual(m.node.sortButton.selectedSort.sortOrder, sortOrder)
+            m.assertTrue(m.node.sortButton.sortEnabled)
+        end sub
+
+        private sub cleanupRestoreRegistry()
+            registry = CreateObject("roRegistry")
+            registry.Delete(RegistryStore.AccountSectionName(m.restoreAccountKey))
+            registry.Flush()
         end sub
 
     end class

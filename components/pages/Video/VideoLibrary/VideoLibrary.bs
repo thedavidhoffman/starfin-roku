@@ -3,6 +3,7 @@ import "pkg:/source/String.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/Json.bs"
+import "pkg:/source/LibraryBrowse.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/Number.bs"
@@ -20,6 +21,7 @@ import "pkg:/source/VideoLibrarySort.bs"
 import "pkg:/source/VideoLibraryFilter.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Loading.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Browse.bs"
+import "pkg:/components/pages/Video/VideoLibrary/Helpers/BrowseTransition.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Items.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Navigation.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Layout.bs"
@@ -49,22 +51,20 @@ sub init()
         selectedSortKey: "SortName"
         selectedSort: invalid
         activeFilterType: ""
-        selectedDecade: -1
-        selectedGenre: ""
+        filterSelection: {
+            decade: -1
+            genre: ""
+        }
         letterFilter: {
             selected: "ALL"
             pending: ""
             previousPaging: invalid
         }
-        renderDecadeFilterOnApply: false
         filterCache: createEmptyFilterCache()
         itemNodeCache: {}
         itemNodeCacheAspect: ""
         progressFocusedIndex: 0
         progressHoldKey: ""
-        pendingFocusTarget: ""
-        refocusBrowseByButtonAfterLoad: false
-        refocusSortButtonAfterLoad: false
         isLoading: false
         paging: {
             nextStartIndex: 0
@@ -80,10 +80,7 @@ sub init()
         filtersQueryId: 0
         lifecycle: AsyncLifecycle.Create()
     }
-    m.browseByButton.selectedSort = getDefaultSortSelection()
-    m.sortButton.selectedSort = getDefaultSortSelection()
-    m.sortButton.sortEnabled = canUseSortOrder(getDefaultSortSelection())
-    m.pageState.selectedSort = getDefaultSortSelection()
+    commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -162,9 +159,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub resetVideoLibraryForLoad()
     m.pageState.isLoading = true
-    resetFilterState()
+    resetFilterCache()
     resetVideoLibraryItemsState()
-    resetLoadFocusState()
+    beginBrowseTransition(m.pageState.activeFilterType, false)
     syncSortControls()
     if hasLibrarySpecialization() then
         m.top.callFunc("specializationReset")
@@ -177,27 +174,39 @@ sub resetVideoLibraryForLoad()
 end sub
 
 '-------------------------------------------------------------------------------
-' resetFilterState
+' resetFilterCache
 '-------------------------------------------------------------------------------
-sub resetFilterState()
-    optionKey = Format.SafeString(m.pageState.selectedSort.optionKey, "")
+sub resetFilterCache()
+    m.pageState.filterCache = createEmptyFilterCache()
+end sub
+
+'-------------------------------------------------------------------------------
+' clearFilterSelections
+'-------------------------------------------------------------------------------
+sub clearFilterSelections()
+    m.pageState.activeFilterType = ""
+    m.pageState.filterSelection.decade = -1
+    m.pageState.filterSelection.genre = ""
+end sub
+
+'-------------------------------------------------------------------------------
+' commitVideoLibraryBrowseState
+'-------------------------------------------------------------------------------
+sub commitVideoLibraryBrowseState(selection as object)
+    if selection = invalid then return
+
+    optionKey = Format.SafeString(selection.optionKey, "")
+    if optionKey = "" then return
+
+    m.pageState.selectedSortKey = optionKey
+    m.pageState.selectedSort = selection
     if optionKey = "Decade" or optionKey = "Genre" then
         m.pageState.activeFilterType = optionKey
-        if optionKey = "Decade" then
-            m.pageState.selectedGenre = ""
-        end if
-        if optionKey = "Genre" then
-            m.pageState.selectedDecade = -1
-        end if
-        m.pageState.renderDecadeFilterOnApply = false
-        m.pageState.filterCache = createEmptyFilterCache()
-        return
+    else
+        clearFilterSelections()
     end if
-    m.pageState.activeFilterType = ""
-    m.pageState.selectedDecade = -1
-    m.pageState.selectedGenre = ""
-    m.pageState.renderDecadeFilterOnApply = false
-    m.pageState.filterCache = createEmptyFilterCache()
+    if m.pageState.request <> invalid then m.pageState.request.favoriteOnly = optionKey = "Favorites"
+    syncSortControls()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -214,15 +223,6 @@ sub resetVideoLibraryItemsState()
     m.pageState.paging.queryId = m.pageState.paging.queryId + 1
 end sub
 
-'-------------------------------------------------------------------------------
-' resetLoadFocusState
-'-------------------------------------------------------------------------------
-sub resetLoadFocusState()
-    m.pageState.pendingFocusTarget = ""
-    m.pageState.refocusBrowseByButtonAfterLoad = false
-    m.pageState.refocusSortButtonAfterLoad = false
-    if isDecadeFilterActive() then m.pageState.pendingFocusTarget = "filterButtonRow"
-end sub
 
 '-------------------------------------------------------------------------------
 ' syncSortControls
@@ -236,7 +236,7 @@ sub syncSortControls()
     m.sortButton.visible = sortControlsVisible
     m.browseByButton.selectedSort = m.pageState.selectedSort
     m.sortButton.selectedSort = m.pageState.selectedSort
-    m.sortButton.sortEnabled = canUseSortOrder(m.pageState.selectedSort)
+    m.sortButton.sortEnabled = true
 end sub
 
 '-------------------------------------------------------------------------------

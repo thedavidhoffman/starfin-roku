@@ -1,0 +1,145 @@
+namespace tests
+
+    @suite("Library browse helpers")
+    class LibraryBrowseTests extends rooibos.BaseTestSuite
+
+        @describe("filter options")
+
+        @it("returns empty options for an invalid payload")
+        function _()
+            result = LibraryBrowse.NormalizeFilterOptions(invalid)
+
+            m.assertEqual(result, { decadeOptions: [], genreOptions: [] })
+        end function
+
+        @it("preserves valid decade and genre option arrays")
+        function _()
+            decades = [{ label: "1990s", value: 1990 }]
+            genres = [{ label: "Drama", value: "Drama" }]
+
+            result = LibraryBrowse.NormalizeFilterOptions({ decadeOptions: decades, genreOptions: genres })
+
+            m.assertEqual(result.decadeOptions, decades)
+            m.assertEqual(result.genreOptions, genres)
+        end function
+
+        @it("rejects malformed option collections")
+        function _()
+            result = LibraryBrowse.NormalizeFilterOptions({ decadeOptions: "invalid", genreOptions: {} })
+
+            m.assertEqual(result, { decadeOptions: [], genreOptions: [] })
+        end function
+
+        @it("detects an active decade filter")
+        function _()
+            m.assertTrue(LibraryBrowse.IsDecadeActive("Decade"))
+        end function
+
+        @it("rejects a non-decade filter")
+        function _()
+            m.assertFalse(LibraryBrowse.IsDecadeActive("Genre"))
+        end function
+
+        @it("detects an active genre filter")
+        function _()
+            m.assertTrue(LibraryBrowse.IsGenreActive("Genre"))
+        end function
+
+        @it("rejects an invalid genre filter")
+        function _()
+            m.assertFalse(LibraryBrowse.IsGenreActive(invalid))
+        end function
+
+        @it("finds exact option values")
+        function _()
+            options = [{ value: "Drama" }, { value: "Comedy" }]
+
+            m.assertTrue(LibraryBrowse.ContainsOptionValue(options, "Drama"))
+        end function
+
+        @it("matches option values case-sensitively")
+        function _()
+            options = [{ value: "Drama" }]
+
+            m.assertFalse(LibraryBrowse.ContainsOptionValue(options, "drama"))
+        end function
+
+        @it("rejects an empty option value")
+        function _()
+            options = [{ value: "Drama" }]
+
+            m.assertFalse(LibraryBrowse.ContainsOptionValue(options, ""))
+        end function
+
+        @it("rejects invalid options")
+        function _()
+            m.assertFalse(LibraryBrowse.ContainsOptionValue(invalid, "Drama"))
+        end function
+
+        @describe("filter selection")
+
+        @it("preserves a valid decade")
+        function _()
+            result = LibraryBrowse.ResolveDecade([{ value: 1970 }, { value: 1980 }], 1980)
+
+            m.assertEqual(result, 1980)
+        end function
+
+        @it("falls back to the first decade")
+        function _()
+            result = LibraryBrowse.ResolveDecade([{ value: 1970 }, { value: 1980 }], 1960)
+
+            m.assertEqual(result, 1970)
+        end function
+
+        @it("returns no decade when options are empty")
+        function _()
+            m.assertEqual(LibraryBrowse.ResolveDecade([], 1980), -1)
+        end function
+
+        @it("preserves a valid genre")
+        function _()
+            result = LibraryBrowse.ResolveGenre([{ value: "Comedy" }, { value: "Drama" }], "Drama")
+
+            m.assertEqual(result, "Drama")
+        end function
+
+        @it("falls back to the first genre")
+        function _()
+            result = LibraryBrowse.ResolveGenre([{ value: "Comedy" }, { value: "Drama" }], "Horror")
+
+            m.assertEqual(result, "Comedy")
+        end function
+
+        @it("returns no genre when options are empty")
+        function _()
+            m.assertEqual(LibraryBrowse.ResolveGenre([], "Drama"), "")
+        end function
+
+        @describe("sort selections")
+
+        @it("preserves descending sort order")
+        function _()
+            m.assertEqual(LibraryBrowse.NormalizeSortOrder("Descending"), "Descending")
+        end function
+
+        @it("defaults invalid sort order to ascending")
+        function _()
+            m.assertEqual(LibraryBrowse.NormalizeSortOrder("invalid"), "Ascending")
+        end function
+
+        @it("creates a normalized sort selection")
+        function _()
+            result = LibraryBrowse.CreateSortSelection("Favorites", "Album", "Favorites", "Descending")
+
+            m.assertEqual(result, {
+                optionKey: "Favorites"
+                sortKey: "Album"
+                sortOrder: "Descending"
+                label: "Favorites"
+            })
+        end function
+
+    end class
+
+end namespace

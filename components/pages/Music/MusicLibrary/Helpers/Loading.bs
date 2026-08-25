@@ -32,10 +32,10 @@ sub onMusicFilterOptionsResponse()
 
     m.state.filters.load.requestInFlight = false
     m.state.filters.load.status = "loaded"
-    m.state.filters.options = createFilterCacheFromOptions(response.filterOptions)
+    m.state.filters.options = LibraryBrowse.NormalizeFilterOptions(response.filterOptions)
     if reconcileActiveFilterSelection() then return
-    if isDecadeFilterActive() then showDecadeFilterRow()
-    if isGenreFilterActive() then showGenreFilterRow()
+    if LibraryBrowse.IsDecadeActive(m.state.browse.filterType) then showDecadeFilterRow()
+    if LibraryBrowse.IsGenreActive(m.state.browse.filterType) then showGenreFilterRow()
     focusAfterForegroundLoad()
 end sub
 
@@ -43,24 +43,24 @@ end sub
 ' reconcileActiveFilterSelection
 '-------------------------------------------------------------------------------
 function reconcileActiveFilterSelection() as boolean
-    if isDecadeFilterActive() then
+    if LibraryBrowse.IsDecadeActive(m.state.browse.filterType) then
         options = m.state.filters.options.decadeOptions
         if options.Count() = 0 then return fallBackToAlbumBrowse()
-        if filterOptionsContainValue(options, m.state.browse.decade.ToStr()) then return false
+        if LibraryBrowse.ContainsOptionValue(options, m.state.browse.decade.ToStr()) then return false
 
-        m.state.browse.decade = getFirstDecadeFilterValue(options)
+        m.state.browse.decade = LibraryBrowse.ResolveDecade(options, m.state.browse.decade)
         showDecadeFilterRow()
         persistMusicLibraryViewState()
         reloadMusicLibrary()
         return true
     end if
 
-    if isGenreFilterActive() then
+    if LibraryBrowse.IsGenreActive(m.state.browse.filterType) then
         options = m.state.filters.options.genreOptions
         if options.Count() = 0 then return fallBackToAlbumBrowse()
-        if filterOptionsContainValue(options, m.state.browse.genre) then return false
+        if LibraryBrowse.ContainsOptionValue(options, m.state.browse.genre) then return false
 
-        m.state.browse.genre = getFirstGenreFilterValue(options)
+        m.state.browse.genre = LibraryBrowse.ResolveGenre(options, m.state.browse.genre)
         showGenreFilterRow()
         persistMusicLibraryViewState()
         reloadMusicLibrary()
@@ -74,7 +74,7 @@ end function
 ' fallBackToAlbumBrowse
 '-------------------------------------------------------------------------------
 function fallBackToAlbumBrowse() as boolean
-    m.state.browse.selection = getDefaultSortSelection()
+    m.state.browse.selection = LibraryBrowse.CreateSortSelection("Album", "Album", "Album")
     m.state.browse.filterType = ""
     m.state.browse.decade = -1
     m.state.browse.genre = ""
@@ -237,8 +237,8 @@ sub loadAlbumPage(startIndex as integer)
     request.albumSortBy = "SortName"
     request.albumSortOrder = Format.SafeString(m.state.browse.selection.sortOrder, "Ascending")
     if m.state.browse.selection.optionKey = "ArtistAlbum" then request.albumSortBy = "AlbumArtist,SortName"
-    if isGenreFilterActive() then request.genre = m.state.browse.genre
-    if isDecadeFilterActive() then request.years = getSelectedDecadeYears()
+    if LibraryBrowse.IsGenreActive(m.state.browse.filterType) then request.genre = m.state.browse.genre
+    if LibraryBrowse.IsDecadeActive(m.state.browse.filterType) then request.years = getSelectedDecadeYears()
 
     m.state.content.albums.load.requestInFlight = true
     m.musicLibraryTask.control = "stop"

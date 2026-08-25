@@ -1,0 +1,151 @@
+'-------------------------------------------------------------------------------
+' beginBrowseTransition
+'-------------------------------------------------------------------------------
+sub beginBrowseTransition(mode as string, optionsReady as boolean)
+    m.pageState.browseTransition = {
+        phase: "awaitingResponses"
+        mode: mode
+        optionsReady: optionsReady
+        itemsReady: false
+        focusApplied: false
+    }
+    reconcileBrowseTransition()
+end sub
+
+'-------------------------------------------------------------------------------
+' markBrowseTransitionOptionsReady
+'-------------------------------------------------------------------------------
+sub markBrowseTransitionOptionsReady()
+    if reconcileActiveFilterOptions() <> true then return
+
+    m.pageState.browseTransition.optionsReady = true
+    reconcileBrowseTransition()
+end sub
+
+'-------------------------------------------------------------------------------
+' reconcileActiveFilterOptions
+'-------------------------------------------------------------------------------
+function reconcileActiveFilterOptions() as boolean
+    if LibraryBrowse.IsDecadeActive(m.pageState.activeFilterType) then
+        options = m.pageState.filterCache.decadeOptions
+        if options.Count() = 0 then
+            applySortSelection(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            return false
+        end if
+        resolvedDecade = LibraryBrowse.ResolveDecade(options, m.pageState.filterSelection.decade)
+        if resolvedDecade <> m.pageState.filterSelection.decade then
+            m.pageState.filterSelection.decade = resolvedDecade
+            persistVideoLibraryViewState()
+            showDecadeFilterRow()
+            reloadVideoLibraryForSort("filter")
+            return false
+        end if
+        showDecadeFilterRow()
+    else if LibraryBrowse.IsGenreActive(m.pageState.activeFilterType) then
+        options = m.pageState.filterCache.genreOptions
+        if options.Count() = 0 then
+            applySortSelection(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            return false
+        end if
+        resolvedGenre = LibraryBrowse.ResolveGenre(options, m.pageState.filterSelection.genre)
+        if resolvedGenre <> m.pageState.filterSelection.genre then
+            m.pageState.filterSelection.genre = resolvedGenre
+            persistVideoLibraryViewState()
+            showGenreFilterRow()
+            reloadVideoLibraryForSort("filter")
+            return false
+        end if
+        showGenreFilterRow()
+    end if
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' handleBrowseTransitionOptionsFailure
+'-------------------------------------------------------------------------------
+sub handleBrowseTransitionOptionsFailure()
+    transition = m.pageState.browseTransition
+    if transition = invalid then return
+
+    hideFilterButtonRow()
+    transition.mode = "browseButton"
+    transition.optionsReady = true
+    reconcileBrowseTransition()
+end sub
+
+'-------------------------------------------------------------------------------
+' markBrowseTransitionItemsReady
+'-------------------------------------------------------------------------------
+sub markBrowseTransitionItemsReady()
+    m.pageState.browseTransition.itemsReady = true
+    reconcileBrowseTransition()
+end sub
+
+'-------------------------------------------------------------------------------
+' markBrowseTransitionItemsFailed
+'-------------------------------------------------------------------------------
+sub markBrowseTransitionItemsFailed()
+    m.pageState.browseTransition.itemsReady = true
+    reconcileBrowseTransition()
+end sub
+
+'-------------------------------------------------------------------------------
+' reconcileBrowseTransition
+'-------------------------------------------------------------------------------
+sub reconcileBrowseTransition()
+    transition = m.pageState.browseTransition
+    if transition = invalid or transition.phase = "idle" then return
+
+    isFilterMode = LibraryBrowse.IsDecadeActive(transition.mode) or LibraryBrowse.IsGenreActive(transition.mode)
+    if isFilterMode and transition.optionsReady <> true then
+        transition.phase = "awaitingOptions"
+        return
+    end if
+    if transition.itemsReady <> true then
+        transition.phase = "awaitingItems"
+        return
+    end if
+
+    transition.phase = "ready"
+    if transition.focusApplied <> true then
+        if isFilterMode then
+            transition.focusApplied = focusFilterButtonRow()
+        else if transition.mode = "browseButton" then
+            transition.focusApplied = focusBrowseByButton()
+        else if hasLibrarySpecialization() and m.top.callFunc("specializationActivate") then
+            transition.focusApplied = true
+        else
+            transition.focusApplied = focusFirstItem()
+            if transition.focusApplied <> true then transition.focusApplied = focusBrowseByButton()
+        end if
+    end if
+    if transition.focusApplied = true then transition.phase = "idle"
+end sub
+
+'-------------------------------------------------------------------------------
+' handleBrowseOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleBrowseOverlayClosed(selection as dynamic)
+    if selection = invalid then
+        restoreBrowseOverlayFocus("items")
+        return
+    end if
+
+    applySortSelection(selection)
+    if m.pageState.browseTransition.phase <> "idle" then return
+
+    optionKey = Format.SafeString(selection.optionKey, "")
+    if optionKey = "Decade" or optionKey = "Genre" then
+        restoreBrowseOverlayFocus(optionKey)
+    else
+        restoreBrowseOverlayFocus("items")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreBrowseOverlayFocus
+'-------------------------------------------------------------------------------
+sub restoreBrowseOverlayFocus(mode as string)
+    beginBrowseTransition(mode, true)
+    markBrowseTransitionItemsReady()
+end sub
