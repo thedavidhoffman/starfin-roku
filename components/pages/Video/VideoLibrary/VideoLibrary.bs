@@ -19,6 +19,7 @@ import "pkg:/source/store/LibraryViewStateStore.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/VideoLibrarySort.bs"
 import "pkg:/source/VideoLibraryFilter.bs"
+import "pkg:/source/LibraryGridLayout.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Loading.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Browse.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/BrowseTransition.bs"
@@ -31,12 +32,8 @@ import "pkg:/components/pages/Video/VideoLibrary/Helpers/Layout.bs"
 '-------------------------------------------------------------------------------
 sub init()
     initReferences()
-    if hasLibrarySpecialization() then
-        m.browseByButton.visible = false
-        m.sortButton.visible = false
-    end if
     initHandlers()
-    m.specializationInitialized = false
+    m.playlistSpecializationInitialized = false
     m.pageState = {
         request: invalid
         allItems: []
@@ -125,7 +122,7 @@ end sub
 ' onSettingsChanged
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
-    ensureLibrarySpecializationInitialized()
+    ensurePlaylistSpecializationInitialized()
     imageAspect = getVideoLibraryImageAspect()
     if imageAspect <> m.pageState.imageAspect then
         m.pageState.imageAspect = imageAspect
@@ -143,7 +140,7 @@ sub onLoadRequestChanged()
     if request = invalid then
         return
     end if
-    ensureLibrarySpecializationInitialized()
+    ensurePlaylistSpecializationInitialized()
     m.pageState.letterFilter.selected = "ALL"
     m.pageState.letterFilter.pending = ""
     m.pageState.letterFilter.previousPaging = invalid
@@ -162,7 +159,7 @@ sub resetVideoLibraryForLoad()
     resetVideoLibraryItemsState()
     beginBrowseTransition(m.pageState.activeFilterType, false)
     syncSortControls()
-    if hasLibrarySpecialization() then
+    if hasPlaylistSpecialization() then
         m.top.callFunc("specializationReset")
     end if
     updateTitleLabel()
@@ -227,34 +224,48 @@ end sub
 ' syncSortControls
 '-------------------------------------------------------------------------------
 sub syncSortControls()
-    sortControlsVisible = true
-    if hasLibrarySpecialization() then
-        sortControlsVisible = m.top.callFunc("specializationShowsSortControls")
-    end if
-    m.browseByButton.visible = sortControlsVisible
-    m.sortButton.visible = sortControlsVisible
+    capabilities = getVideoLibraryBrowseCapabilities()
+    applyBrowseCapabilities(capabilities)
     m.browseByButton.selectedSort = m.pageState.selectedSort
     m.sortButton.selectedSort = m.pageState.selectedSort
     m.sortButton.sortEnabled = true
 end sub
 
 '-------------------------------------------------------------------------------
-' hasLibrarySpecialization
+' applyBrowseCapabilities
 '-------------------------------------------------------------------------------
-function hasLibrarySpecialization() as boolean
+sub applyBrowseCapabilities(capabilities as object)
+    m.browseByButton.visible = capabilities.browse
+    m.sortButton.visible = capabilities.sort
+end sub
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryBrowseCapabilities
+'-------------------------------------------------------------------------------
+function getVideoLibraryBrowseCapabilities() as object
+    if hasPlaylistSpecialization() then
+        return m.top.callFunc("specializationBrowseCapabilities")
+    end if
+    return { browse: true, sort: true }
+end function
+
+'-------------------------------------------------------------------------------
+' hasPlaylistSpecialization
+'-------------------------------------------------------------------------------
+function hasPlaylistSpecialization() as boolean
     return m.top.isSubtype("Playlists")
 end function
 
 '-------------------------------------------------------------------------------
-' ensureLibrarySpecializationInitialized
+' ensurePlaylistSpecializationInitialized
 '-------------------------------------------------------------------------------
-sub ensureLibrarySpecializationInitialized()
-    if hasLibrarySpecialization() <> true then
+sub ensurePlaylistSpecializationInitialized()
+    if hasPlaylistSpecialization() <> true then
         return
     end if
-    if m.specializationInitialized then
+    if m.playlistSpecializationInitialized then
         return
     end if
     m.top.callFunc("specializationInitialize")
-    m.specializationInitialized = true
+    m.playlistSpecializationInitialized = true
 end sub

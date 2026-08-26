@@ -14,7 +14,7 @@ sub onItemSelected()
         return
     end if
     item = node.raw
-    if hasLibrarySpecialization() and m.top.callFunc("specializationHandleItemSelected", selected, item) then
+    if hasPlaylistSpecialization() and m.top.callFunc("specializationHandleItemSelected", selected, item) then
         return
     end if
     itemId = Format.SafeString(Format.FirstNonEmpty([
@@ -154,7 +154,7 @@ sub onMediaStateChange()
         return
     end if
     notifyVideoLibraryItemsChanged(itemId)
-    if hasLibrarySpecialization() then
+    if hasPlaylistSpecialization() then
         m.top.callFunc("specializationSyncState")
     end if
 end sub
@@ -203,7 +203,7 @@ sub onPlaybackProgressChange()
         return
     end if
     notifyVideoLibraryItemsChanged(itemId)
-    if hasLibrarySpecialization() then
+    if hasPlaylistSpecialization() then
         m.top.callFunc("specializationSyncState")
     end if
 end sub
@@ -343,9 +343,20 @@ function createVideoLibraryItemNode(item as dynamic) as dynamic
     node.AddFields({
         imageAspect: imageAspect
         logoUrl: getItemLogoUrl(item, imageAspect)
+        showMetadata: getVideoLibraryItemMetadataVisibility(item)
         raw: item
     })
     return node
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryItemMetadataVisibility
+'-------------------------------------------------------------------------------
+function getVideoLibraryItemMetadataVisibility(item as object) as boolean
+    if hasPlaylistSpecialization() then
+        return m.top.callFunc("specializationShowsItemMetadata", item)
+    end if
+    return true
 end function
 
 '-------------------------------------------------------------------------------
@@ -366,7 +377,7 @@ function getVideoLibraryItemCacheKey(item as dynamic, occurrenceIndex = invalid 
     if Arrays.IsAssocArray(item) = false then
         return ""
     end if
-    if hasLibrarySpecialization() then
+    if hasPlaylistSpecialization() then
         return m.top.callFunc("specializationCacheKey", item, occurrenceIndex)
     end if
     return Format.SafeString(item.Id, "")
@@ -396,39 +407,34 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if Arrays.IsAssocArray(item) = false then
         return ""
     end if
-    if hasLibrarySpecialization() then
+    if hasPlaylistSpecialization() then
         return m.top.callFunc("specializationImageUrl", item, imageAspect)
     end if
     request = m.pageState.request
     if request = invalid then
         return ""
     end if
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, "items")
+    artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
+    artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
     if imageAspect = "wide" then
-        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", 441, 249)
-        if imageUrl <> "" then
-            return imageUrl
-        end if
-        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", 441, 249)
-        if imageUrl <> "" then
-            return imageUrl
-        end if
-        return ItemImage.GetUrl(request.server, item, "Primary", 441, 249)
+        return ItemImage.GetWideUrl(request.server, item, artworkWidth, artworkHeight)
     end if
     if imageAspect = "jumbo" then
-        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", 882, 496)
+        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", artworkWidth, artworkHeight)
         if imageUrl <> "" then return imageUrl
-        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", 882, 496)
+        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", artworkWidth, artworkHeight)
         if imageUrl <> "" then return imageUrl
-        return ItemImage.GetUrl(request.server, item, "Primary", 882, 496)
+        return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
     end if
-    return ItemImage.GetUrl(request.server, item, "Primary", 252, 378)
+    return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
 end function
 
 '-------------------------------------------------------------------------------
 ' getVideoLibraryImageAspect
 '-------------------------------------------------------------------------------
 function getVideoLibraryImageAspect() as string
-    if hasLibrarySpecialization() then
+    if hasPlaylistSpecialization() then
         return m.top.callFunc("specializationImageAspect")
     end if
     settings = m.top.settings

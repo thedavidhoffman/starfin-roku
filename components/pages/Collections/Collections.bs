@@ -11,6 +11,7 @@ import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/Array.bs"
+import "pkg:/source/LibraryGridLayout.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -283,17 +284,15 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     request = m.pageState.request
     if request = invalid then return ""
 
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, "cards")
+    artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
+    artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
+
     if imageAspect = "wide" then
-        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", 441, 249)
-        if imageUrl <> "" then return imageUrl
-
-        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", 441, 249)
-        if imageUrl <> "" then return imageUrl
-
-        return ItemImage.GetUrl(request.server, item, "Primary", 441, 249)
+        return ItemImage.GetWideUrl(request.server, item, artworkWidth, artworkHeight)
     end if
 
-    return ItemImage.GetUrl(request.server, item, "Primary", 252, 378)
+    return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
 end function
 
 '-------------------------------------------------------------------------------
@@ -310,22 +309,13 @@ end function
 ' applyGridLayout
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
-    if imageAspect = "wide" then
-        m.collectionsGrid.translation = [24, 207]
-        m.collectionsGrid.itemSize = [465, 348]
-        m.collectionsGrid.itemSpacing = [0, -24]
-        m.collectionsGrid.numColumns = 4
-        m.collectionsGrid.numRows = 3
-        m.collectionsGrid.focusBitmapUri = "pkg:/images/library/thumbnail-focus-465x348.png"
-        return
-    end if
-
-    m.collectionsGrid.translation = [96, 207]
-    m.collectionsGrid.itemSize = [297, 465]
-    m.collectionsGrid.itemSpacing = [-12, -12]
-    m.collectionsGrid.numColumns = 6
-    m.collectionsGrid.numRows = 2
-    m.collectionsGrid.focusBitmapUri = "pkg:/images/library/poster-focus-297x465.png"
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, "cards")
+    m.collectionsGrid.translation = layoutSpec.translation
+    m.collectionsGrid.itemSize = layoutSpec.itemSize
+    m.collectionsGrid.itemSpacing = layoutSpec.itemSpacing
+    m.collectionsGrid.numColumns = layoutSpec.numColumns
+    m.collectionsGrid.numRows = layoutSpec.numRows
+    m.collectionsGrid.focusBitmapUri = layoutSpec.focusBitmapUri
 end sub
 
 '-------------------------------------------------------------------------------
@@ -333,11 +323,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub applyGridTranslation(imageAspect as string, itemCount as integer)
     if m.pageState.usingTopCollections <> true or itemCount <> 2 then
-        if imageAspect = "wide" then
-            m.collectionsGrid.translation = [24, 207]
-        else
-            m.collectionsGrid.translation = [96, 207]
-        end if
+        layoutSpec = LibraryGridLayout.GetSpec(imageAspect, "cards")
+        m.collectionsGrid.translation = layoutSpec.translation
         return
     end if
 

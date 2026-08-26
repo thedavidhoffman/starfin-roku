@@ -15,10 +15,10 @@ sub specializationInitialize()
     m.playlistPlayButton = m.playlistChrome.findNode("playlistPlayButton")
     m.playlistRandomButton = m.playlistChrome.findNode("playlistRandomButton")
     m.singlePlaylistOpenTimer = m.playlistChrome.findNode("singlePlaylistOpenTimer")
-    m.browseByButton.visible = false
-    m.sortButton.visible = false
     m.letterGutterButton.visible = false
     m.singlePlaylistOpenTimer.observeField("fire", "onSinglePlaylistOpenTimerFire")
+    m.videoLibraryProgressIndicator.observeField("visible", "onPlaylistProgressLayoutChanged")
+    m.videoLibraryProgressIndicator.observeField("rightEdge", "onPlaylistProgressLayoutChanged")
     m.playlistResumeButton.observeField("buttonSelected", "onPlaylistResumeSelected")
     m.playlistPlayButton.observeField("buttonSelected", "onPlaylistPlaySelected")
     m.playlistRandomButton.observeField("buttonSelected", "onPlaylistRandomSelected")
@@ -39,8 +39,6 @@ function specializationItemsLoaded() as boolean
     if isPlaylistLibraryRequest() and m.pageState.allItems.Count() = 1 then
         playlist = m.pageState.allItems[0]
         if Format.SafeString(playlist.Id, "") <> "" then
-            m.browseByButton.visible = false
-            m.sortButton.visible = false
             AppStatus.ClearMessage()
             m.playlistState.pendingAutomaticPlaylist = playlist
             m.singlePlaylistOpenTimer.control = "start"
@@ -137,7 +135,7 @@ function specializationHandleKey(key as string) as boolean
     if key = "left" and isItemsGridAtFirstColumn() then return true
     if key = "up" and isItemsGridAtFirstRow() and isPlaylistLibraryRequest() then
         stopVideoLibraryProgressHold("up")
-        return focusBrowseByButton()
+        return requestHeaderFocus()
     end if
     if key = "up" and isItemsGridAtFirstRow() and isPlaylistContentRequest() then
         stopVideoLibraryProgressHold("up")
@@ -155,20 +153,52 @@ function specializationHandleKey(key as string) as boolean
 end function
 
 '-------------------------------------------------------------------------------
-' specializationShowsSortControls
+' specializationBrowseCapabilities
 '-------------------------------------------------------------------------------
-function specializationShowsSortControls() as boolean
-    return isPlaylistLibraryRequest() and m.pageState.isLoading <> true
+function specializationBrowseCapabilities() as object
+    return { browse: false, sort: false }
 end function
 
 '-------------------------------------------------------------------------------
 ' specializationApplyLayout
 '-------------------------------------------------------------------------------
 sub specializationApplyLayout(imageAspect as string)
-    rightEdge = 1864
-    if imageAspect = "wide" then rightEdge = 1880
-    groupX = rightEdge - 474
-    m.playlistPlaybackButtons.translation = [groupX, 120]
+    contentRole = "items"
+    if isPlaylistLibraryRequest() then contentRole = "cards"
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, contentRole)
+    applyVideoLibraryGridSpec(layoutSpec, getFilterButtonRowOffset())
+    syncPlaylistChromeLayout(imageAspect)
+end sub
+
+'-------------------------------------------------------------------------------
+' specializationProgressLayoutMode
+'-------------------------------------------------------------------------------
+function specializationProgressLayoutMode(imageAspect as string) as string
+    if isPlaylistContentRequest() and imageAspect = "poster" then return "poster"
+    return "hidden"
+end function
+
+'-------------------------------------------------------------------------------
+' onPlaylistProgressLayoutChanged
+'-------------------------------------------------------------------------------
+sub onPlaylistProgressLayoutChanged()
+    syncPlaylistChromeLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' syncPlaylistChromeLayout
+'-------------------------------------------------------------------------------
+sub syncPlaylistChromeLayout(imageAspect = invalid as dynamic)
+    if imageAspect = invalid then imageAspect = m.pageState.imageAspect
+    contentRole = "items"
+    if isPlaylistLibraryRequest() then contentRole = "cards"
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, contentRole)
+    rightEdge = LibraryGridLayout.GetVisibleRightEdge(m.itemsGrid, layoutSpec)
+    if isPlaylistContentRequest() and imageAspect = "poster" and m.videoLibraryProgressIndicator.visible then
+        rightEdge = Number.ToInteger(m.videoLibraryProgressIndicator.rightEdge, rightEdge)
+    end if
+    contentWidth = Number.ToInteger(m.playlistChrome.contentWidth, 0)
+    m.playlistPlaybackButtons.translation = [rightEdge - contentWidth, 120]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -190,16 +220,30 @@ function specializationImageUrl(item as object, imageAspect as string) as string
     request = m.pageState.request
     if request = invalid then return ""
     if isTVEpisode(item) then return getPlaylistEpisodeImageUrl(item, imageAspect)
-    if imageAspect = "wide" then return ItemImage.GetUrl(request.server, item, "Thumb", 441, 249)
-    return ItemImage.GetUrl(request.server, item, "Primary", 252, 378)
+    contentRole = "items"
+    if isPlaylistLibraryRequest() then contentRole = "cards"
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, contentRole)
+    artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
+    artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
+    if imageAspect = "wide" then return ItemImage.GetWideUrl(request.server, item, artworkWidth, artworkHeight)
+    return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
 end function
 
 '-------------------------------------------------------------------------------
 ' specializationImageAspect
 '-------------------------------------------------------------------------------
 function specializationImageAspect() as string
-    if LCase(m.top.settings[SettingsStore.Key.PlaylistImageType]) = "thumbnail" then return "wide"
+    settingKey = SettingsStore.Key.PlaylistItemsImageType
+    if isPlaylistLibraryRequest() then settingKey = SettingsStore.Key.PlaylistCardsImageType
+    if LCase(Format.SafeString(m.top.settings[settingKey], "poster")) = "thumbnail" then return "wide"
     return "poster"
+end function
+
+'-------------------------------------------------------------------------------
+' specializationShowsItemMetadata
+'-------------------------------------------------------------------------------
+function specializationShowsItemMetadata(item as object) as boolean
+    return isPlaylist(item) <> true
 end function
 
 '-------------------------------------------------------------------------------
@@ -445,8 +489,6 @@ sub openPlaylist(item as object, addToNavigationStack = true as boolean)
     request = m.pageState.request
     if request = invalid then return
     if addToNavigationStack then m.playlistState.navigationStack.Push(request)
-    m.browseByButton.visible = false
-    m.sortButton.visible = false
     m.top.loadRequest = {
         server: request.server
         token: request.token
@@ -489,13 +531,16 @@ end function
 function getPlaylistEpisodeImageUrl(item as object, imageAspect as string) as string
     request = m.pageState.request
     if request = invalid then return ""
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, "items")
+    artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
+    artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
     if imageAspect = "wide" then
-        return ItemImage.GetUrl(request.server, item, "Primary", 441, 249)
+        return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
     end if
     seriesId = Format.SafeString(item.SeriesId, "")
     seriesPrimaryTag = Format.SafeString(item.SeriesPrimaryImageTag, "")
     if seriesId = "" or seriesPrimaryTag = "" then return ""
-    return Url.BuildImageUrl(request.server, seriesId, "Primary", seriesPrimaryTag, 252, 378)
+    return Url.BuildImageUrl(request.server, seriesId, "Primary", seriesPrimaryTag, artworkWidth, artworkHeight)
 end function
 
 '-------------------------------------------------------------------------------

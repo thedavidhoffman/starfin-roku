@@ -50,9 +50,12 @@ namespace tests
 
         @describe("playlist classification and layout")
 
-        @it("uses poster images by default")
+        @it("uses the playlist item setting inside a playlist")
         function _()
-            m.top.settings = {}
+            m.top.settings = {
+                "playlist-cards-image-type": "thumbnail"
+                "playlist-items-image-type": "poster"
+            }
 
             'bs:disable-next-line 1140
             imageAspect = specializationImageAspect()
@@ -60,9 +63,13 @@ namespace tests
             m.assertEqual(imageAspect, "poster")
         end function
 
-        @it("uses wide images for thumbnail settings")
+        @it("uses the playlist card setting for the playlist library")
         function _()
-            m.top.settings = { "playlist-image-type": "thumbnail" }
+            m.node.pageState.request = m.createRequest("playlists")
+            m.top.settings = {
+                "playlist-cards-image-type": "thumbnail"
+                "playlist-items-image-type": "poster"
+            }
 
             'bs:disable-next-line 1140
             imageAspect = specializationImageAspect()
@@ -70,41 +77,214 @@ namespace tests
             m.assertEqual(imageAspect, "wide")
         end function
 
-        @it("shows sort controls for a loaded playlist library")
+        @it("uses playlist thumbnail artwork when available")
+        function _()
+            playlist = {
+                Id: "playlist-1"
+                ImageTags: { Primary: "primary-tag", Thumb: "thumb-tag" }
+            }
+
+            'bs:disable-next-line 1140
+            imageUrl = specializationImageUrl(playlist, "wide")
+
+            m.assertTrue(Instr(1, imageUrl, "/Images/Thumb?") > 0)
+            m.assertTrue(Instr(1, imageUrl, "tag=thumb-tag") > 0)
+        end function
+
+        @it("falls back to primary artwork when a playlist has no wide artwork")
+        function _()
+            playlist = {
+                Id: "playlist-1"
+                ImageTags: { Primary: "primary-tag" }
+                BackdropImageTags: []
+            }
+
+            'bs:disable-next-line 1140
+            imageUrl = specializationImageUrl(playlist, "wide")
+
+            m.assertTrue(Instr(1, imageUrl, "/Images/Primary?") > 0)
+            m.assertTrue(Instr(1, imageUrl, "tag=primary-tag") > 0)
+        end function
+
+        @it("hides browse and sort controls for playlist cards after synchronization")
         function _()
             m.node.pageState.request = m.createRequest("playlists")
 
             'bs:disable-next-line 1140
-            visible = specializationShowsSortControls()
+            syncSortControls()
 
-            m.assertTrue(visible)
+            m.assertFalse(m.top.findNode("browseByButton").visible)
+            m.assertFalse(m.top.findNode("sortButton").visible)
         end function
 
-        @it("hides sort controls while a playlist library is loading")
+        @it("hides browse and sort controls for playlist items after synchronization")
+        function _()
+            'bs:disable-next-line 1140
+            syncSortControls()
+
+            m.assertFalse(m.top.findNode("browseByButton").visible)
+            m.assertFalse(m.top.findNode("sortButton").visible)
+        end function
+
+        @it("hides metadata on playlist card view models")
         function _()
             m.node.pageState.request = m.createRequest("playlists")
-            m.node.pageState.isLoading = true
 
             'bs:disable-next-line 1140
-            visible = specializationShowsSortControls()
+            node = createVideoLibraryItemNode({ Id: "playlist-1", Type: "Playlist", Name: "Favorites" })
 
-            m.assertFalse(visible)
+            m.assertFalse(node.showMetadata)
         end function
 
-        @it("positions poster playback actions at the poster right edge")
+        @it("shows metadata on playlist item view models")
         function _()
             'bs:disable-next-line 1140
-            specializationApplyLayout("poster")
+            node = createVideoLibraryItemNode(m.createMovie("movie-1", false, 0))
 
-            m.assertEqual(Number.ToInteger(m.top.findNode("playlistPlaybackButtons").translation[0], -1), 1390)
+            m.assertTrue(node.showMetadata)
+        end function
+
+        @it("skips filter option loading for playlists")
+        function _()
+            previousQueryId = m.node.pageState.filtersQueryId
+
+            'bs:disable-next-line 1140
+            loadVideoFilterOptions()
+
+            m.assertEqual(m.top.findNode("videoFilterOptionsTask").control, "stop")
+            m.assertEqual(m.node.pageState.filtersQueryId, previousQueryId + 1)
+        end function
+
+        @it("does not persist browse or sort state for mixed playlist items")
+        function _()
+            request = m.createRequest("playlist")
+            request.includeItemTypes = "Movie,Series,Episode,Video"
+
+            'bs:disable-next-line 1140
+            canPersist = canPersistVideoLibraryViewState(request)
+
+            m.assertFalse(canPersist)
+        end function
+
+        @it("does not persist browse or sort state for movie-only playlist items")
+        function _()
+            request = m.createRequest("playlist")
+            request.includeItemTypes = "Movie"
+
+            'bs:disable-next-line 1140
+            canPersist = canPersistVideoLibraryViewState(request)
+
+            m.assertFalse(canPersist)
+        end function
+
+        @it("does not persist browse or sort state for series-only playlist items")
+        function _()
+            request = m.createRequest("playlist")
+            request.includeItemTypes = "Series"
+
+            'bs:disable-next-line 1140
+            canPersist = canPersistVideoLibraryViewState(request)
+
+            m.assertFalse(canPersist)
+        end function
+
+        @it("positions poster playback actions at the visible grid edge")
+        function _()
+            m.top.findNode("videoLibraryProgressIndicator").visible = false
+
+            'bs:disable-next-line 1140
+            applyGridLayout("poster")
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("playlistPlaybackButtons").translation[0], -1), 1320)
+        end function
+
+        @it("enables the poster progress indicator for playlist items")
+        function _()
+            'bs:disable-next-line 1140
+            layoutMode = specializationProgressLayoutMode("poster")
+
+            m.assertEqual(layoutMode, "poster")
+        end function
+
+        @it("hides the poster progress indicator for playlist cards")
+        function _()
+            m.node.pageState.request = m.createRequest("playlists")
+
+            'bs:disable-next-line 1140
+            layoutMode = specializationProgressLayoutMode("poster")
+
+            m.assertEqual(layoutMode, "hidden")
+        end function
+
+        @it("aligns poster playback actions with the progress indicator right edge")
+        function _()
+            m.top.findNode("videoLibraryProgressIndicator").rightEdge = 1810
+            m.top.findNode("videoLibraryProgressIndicator").visible = true
+
+            'bs:disable-next-line 1140
+            syncPlaylistChromeLayout("poster")
+
+            m.assertEqual(m.top.findNode("playlistPlaybackButtons").translation, [1336, 120])
+        end function
+
+        @it("aligns poster playback actions with the grid when the progress indicator is hidden")
+        function _()
+            m.top.findNode("videoLibraryProgressIndicator").visible = false
+
+            'bs:disable-next-line 1140
+            syncPlaylistChromeLayout("poster")
+
+            m.assertEqual(m.top.findNode("playlistPlaybackButtons").translation, [1320, 120])
+        end function
+
+        @it("uses collection item poster geometry inside a playlist")
+        function _()
+            'bs:disable-next-line 1140
+            applyGridLayout("poster")
+
+            grid = m.top.findNode("itemsGrid")
+            m.assertEqual(grid.translation, [96, 207])
+            m.assertEqual(grid.itemSize, [297, 465])
+            m.assertEqual(grid.itemSpacing, [-12, 27])
+            m.assertEqual(grid.numColumns, 6)
+            m.assertEqual(grid.numRows, 2)
+            m.assertEqual(grid.focusBitmapUri, "pkg:/images/library/poster-focus-297x465.png")
+        end function
+
+        @it("uses collection card poster spacing for the playlist library")
+        function _()
+            m.node.pageState.request = m.createRequest("playlists")
+
+            'bs:disable-next-line 1140
+            applyGridLayout("poster")
+
+            m.assertEqual(m.top.findNode("itemsGrid").itemSpacing, [-12, -12])
         end function
 
         @it("positions wide playback actions at the wide right edge")
         function _()
             'bs:disable-next-line 1140
-            specializationApplyLayout("wide")
+            applyGridLayout("wide")
 
             m.assertEqual(Number.ToInteger(m.top.findNode("playlistPlaybackButtons").translation[0], -1), 1406)
+        end function
+
+        @it("uses collection item thumbnail spacing inside a playlist")
+        function _()
+            'bs:disable-next-line 1140
+            applyGridLayout("wide")
+
+            m.assertEqual(m.top.findNode("itemsGrid").itemSpacing, [0, 12])
+        end function
+
+        @it("uses collection card thumbnail spacing for the playlist library")
+        function _()
+            m.node.pageState.request = m.createRequest("playlists")
+
+            'bs:disable-next-line 1140
+            applyGridLayout("wide")
+
+            m.assertEqual(m.top.findNode("itemsGrid").itemSpacing, [0, -24])
         end function
 
         @describe("cache identity")
@@ -272,6 +452,35 @@ namespace tests
         end function
 
         @describe("focus and lifecycle")
+
+        @it("routes Up from playlist cards to the app header")
+        function _()
+            m.node.pageState.request = m.createRequest("playlists")
+            m.top.focusExitUp = false
+            m.top.findNode("itemsGrid").itemFocused = 0
+
+            'bs:disable-next-line 1140
+            handled = specializationHandleKey("up")
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitUp)
+            m.assertFalse(m.top.findNode("browseByButton").isInFocusChain())
+        end function
+
+        @it("routes Up from playlist items to playback actions")
+        function _()
+            m.node.pageState.items = [m.createMovie("movie-1", false, 0)]
+            m.top.findNode("itemsGrid").itemFocused = 0
+            'bs:disable-next-line 1140
+            specializationSyncState()
+
+            'bs:disable-next-line 1140
+            handled = specializationHandleKey("up")
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("playlistResumeButton").isInFocusChain())
+            m.assertFalse(m.top.findNode("browseByButton").isInFocusChain())
+        end function
 
         @it("focuses Resume by default when it is available")
         function _()
