@@ -2,6 +2,7 @@ import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
+import "pkg:/source/ItemImage.bs"
 import "pkg:/source/SeriesIdentity.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/DeviceCapabilities.bs"
@@ -856,12 +857,8 @@ function getBackdropUrl(item as dynamic) as string
     if item = invalid then return ""
 
     imageSize = DeviceCapabilities.GetMaxScreenImageSize()
-    if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
-        itemId = Format.FirstNonEmpty([item.Id], "")
-        request = m.pageState.request
-        if request = invalid then return ""
-        return Url.BuildImageUrl(request.server, itemId, "Backdrop", item.BackdropImageTags[0], imageSize.width, imageSize.height)
-    end if
+    imageUrl = getImageUrl(item, "Backdrop", imageSize.width, imageSize.height)
+    if imageUrl <> "" then return imageUrl
 
     imageUrl = getImageUrl(item, "Primary", imageSize.width, imageSize.height)
     if imageUrl <> "" then return imageUrl
@@ -873,22 +870,12 @@ end function
 ' getImageUrl
 '-------------------------------------------------------------------------------
 function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
-    if item = invalid then return ""
-
-    itemId = Format.FirstNonEmpty([item.Id], "")
-    if itemId = "" then return ""
-
-    tag = ""
-    if imageType = "Primary" and item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then tag = item.ImageTags.Primary
-    if imageType = "Logo" and item.ImageTags <> invalid and item.ImageTags.Logo <> invalid then tag = item.ImageTags.Logo
-    if imageType = "Backdrop" and item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then tag = item.BackdropImageTags[0]
-    if tag = "" then return ""
     request = m.pageState.request
     if request = invalid then return ""
 
     options = invalid
     if imageType = "Logo" then options = { format: "Png" }
-    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height, options)
+    return ItemImage.GetUrl(request.server, item, imageType, width, height, options)
 end function
 
 '-------------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
+import "pkg:/source/ItemImage.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Spinner.bs"
 import "pkg:/source/Status.bs"
@@ -761,20 +762,16 @@ end function
 '-------------------------------------------------------------------------------
 function getMovieThumbnailImageUrl(item as dynamic, imageAspect as string) as string
     imageSize = getImageSize(imageAspect)
-    itemId = Format.FirstNonEmpty([item.Id], "")
     request = m.homeState.request
     if request = invalid then return ""
 
-    thumbTag = getImageTag(item, "Thumb")
-    if itemId <> "" and thumbTag <> "" then return Url.BuildImageUrl(request.server, itemId, "Thumb", thumbTag, imageSize.width, imageSize.height)
+    imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", imageSize.width, imageSize.height)
+    if imageUrl <> "" then return imageUrl
 
-    backdropTag = getBackdropImageTag(item)
-    if itemId <> "" and backdropTag <> "" then return Url.BuildImageUrl(request.server, itemId, "Backdrop", backdropTag, imageSize.width, imageSize.height)
+    imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", imageSize.width, imageSize.height)
+    if imageUrl <> "" then return imageUrl
 
-    primaryTag = getImageTag(item, "Primary")
-    if itemId <> "" and primaryTag <> "" then return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
-
-    return ""
+    return ItemImage.GetUrl(request.server, item, "Primary", imageSize.width, imageSize.height)
 end function
 
 '-------------------------------------------------------------------------------
@@ -822,9 +819,8 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     request = m.homeState.request
     if request = invalid then return ""
 
-    primaryTag = ""
-    if item.ImageTags <> invalid and item.ImageTags.Primary <> invalid then primaryTag = item.ImageTags.Primary
-    if itemId <> "" and primaryTag <> "" then return Url.BuildImageUrl(request.server, itemId, "Primary", primaryTag, imageSize.width, imageSize.height)
+    imageUrl = ItemImage.GetUrl(request.server, item, "Primary", imageSize.width, imageSize.height)
+    if imageUrl <> "" then return imageUrl
 
     parentThumbId = Format.FirstNonEmpty([item.ParentThumbItemId, item.ParentThumbImageItemId], "")
     parentThumbTag = Format.FirstNonEmpty([item.ParentThumbImageTag], "")
@@ -850,26 +846,6 @@ function getEpisodePosterImageUrl(item as dynamic, imageAspect as string) as str
     if seriesId <> "" and seriesTag <> "" then return Url.BuildImageUrl(request.server, seriesId, "Primary", seriesTag, imageSize.width, imageSize.height)
 
     return ""
-end function
-
-'-------------------------------------------------------------------------------
-' getImageTag
-'-------------------------------------------------------------------------------
-function getImageTag(item as dynamic, imageType as string) as string
-    if item = invalid or item.ImageTags = invalid then return ""
-
-    tag = item.ImageTags[imageType]
-    return Format.FirstNonEmpty([tag], "")
-end function
-
-'-------------------------------------------------------------------------------
-' getBackdropImageTag
-'-------------------------------------------------------------------------------
-function getBackdropImageTag(item as dynamic) as string
-    if item = invalid then return ""
-    if item.BackdropImageTags = invalid or item.BackdropImageTags.Count() = 0 then return ""
-
-    return Format.FirstNonEmpty([item.BackdropImageTags[0]], "")
 end function
 
 '-------------------------------------------------------------------------------

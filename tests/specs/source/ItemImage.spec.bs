@@ -1,0 +1,51 @@
+namespace tests
+
+    @suite("Item image helpers")
+    class ItemImageTests extends rooibos.BaseTestSuite
+
+        @describe("ItemImage.GetTag")
+
+        @it("resolves supported image tags")
+        function _()
+            item = {
+                ImageTags: { Primary: "primary-tag", Thumb: "thumb-tag", Logo: "logo-tag" }
+                BackdropImageTags: ["backdrop-tag", "alternate-tag"]
+            }
+
+            m.assertEqual(ItemImage.GetTag(item, "Primary"), "primary-tag")
+            m.assertEqual(ItemImage.GetTag(item, "Thumb"), "thumb-tag")
+            m.assertEqual(ItemImage.GetTag(item, "Logo"), "logo-tag")
+            m.assertEqual(ItemImage.GetTag(item, "Backdrop"), "backdrop-tag")
+        end function
+
+        @it("returns empty for missing and unsupported image tags")
+        function _()
+            m.assertEqual(ItemImage.GetTag(invalid, "Primary"), "")
+            m.assertEqual(ItemImage.GetTag({ ImageTags: {}, BackdropImageTags: [] }, "Backdrop"), "")
+            m.assertEqual(ItemImage.GetTag({ ImageTags: {} }, "Banner"), "")
+        end function
+
+        @describe("ItemImage.GetUrl")
+
+        @it("builds a tagged item image URL")
+        function _()
+            result = ItemImage.GetUrl("server.local", { Id: "item-1", ImageTags: { Logo: "logo-tag" } }, "Logo", 600, 300, { format: "Png" })
+            normalizedResult = LCase(result)
+
+            m.assertTrue(Left(result, Len("http://server.local/Items/item-1/Images/Logo?")) = "http://server.local/Items/item-1/Images/Logo?")
+            m.assertTrue(Instr(1, normalizedResult, "tag=logo-tag") > 0)
+            m.assertTrue(Instr(1, normalizedResult, "maxwidth=600") > 0)
+            m.assertTrue(Instr(1, normalizedResult, "maxheight=300") > 0)
+            m.assertTrue(Instr(1, normalizedResult, "format=png") > 0)
+        end function
+
+        @it("requires an item ID and matching image tag")
+        function _()
+            m.assertEqual(ItemImage.GetUrl(invalid, { Id: "item-1", ImageTags: { Primary: "tag" } }, "Primary", 300, 200), "")
+            m.assertEqual(ItemImage.GetUrl("server.local", { ImageTags: { Primary: "tag" } }, "Primary", 300, 200), "")
+            m.assertEqual(ItemImage.GetUrl("server.local", { Id: "item-1", ImageTags: {} }, "Primary", 300, 200), "")
+        end function
+
+    end class
+
+end namespace

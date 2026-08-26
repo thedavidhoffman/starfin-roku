@@ -354,9 +354,9 @@ end function
 function getItemLogoUrl(item as dynamic, imageAspect as string) as string
     if imageAspect <> "jumbo" then return ""
     if Arrays.IsAssocArray(item) = false then return ""
-    itemId = Format.SafeString(item.Id, "")
-    if itemId = "" then return ""
-    return getImageUrlForType(itemId, item, "Logo", 360, 140)
+    request = m.pageState.request
+    if request = invalid then return ""
+    return ItemImage.GetUrl(request.server, item, "Logo", 360, 140)
 end function
 
 '-------------------------------------------------------------------------------
@@ -399,74 +399,29 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if hasLibrarySpecialization() then
         return m.top.callFunc("specializationImageUrl", item, imageAspect)
     end if
-    itemId = Format.FirstNonEmpty([
-        item.Id
-    ], "")
-    if itemId = "" then
-        return ""
-    end if
-    if imageAspect = "wide" then
-        imageUrl = getImageUrlForType(itemId, item, "Thumb", 441, 249)
-        if imageUrl <> "" then
-            return imageUrl
-        end if
-        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 441, 249)
-        if imageUrl <> "" then
-            return imageUrl
-        end if
-        return getImageUrlForType(itemId, item, "Primary", 441, 249)
-    end if
-    if imageAspect = "jumbo" then
-        imageUrl = getImageUrlForType(itemId, item, "Backdrop", 882, 496)
-        if imageUrl <> "" then return imageUrl
-        imageUrl = getImageUrlForType(itemId, item, "Thumb", 882, 496)
-        if imageUrl <> "" then return imageUrl
-        return getImageUrlForType(itemId, item, "Primary", 882, 496)
-    end if
-    return getImageUrlForType(itemId, item, "Primary", 252, 378)
-end function
-
-'-------------------------------------------------------------------------------
-' getImageUrlForType
-'-------------------------------------------------------------------------------
-function getImageUrlForType(itemId as string, item as dynamic, imageType as string, width as integer, height as integer) as string
-    tag = getImageTag(item, imageType)
-    if tag = "" then
-        return ""
-    end if
     request = m.pageState.request
     if request = invalid then
         return ""
     end if
-    return Url.BuildImageUrl(request.server, itemId, imageType, tag, width, height)
-end function
-
-'-------------------------------------------------------------------------------
-' getImageTag
-'-------------------------------------------------------------------------------
-function getImageTag(item as dynamic, imageType as string) as string
-    if item = invalid then
-        return ""
-    end if
-    if imageType = "Backdrop" then
-        if item.BackdropImageTags <> invalid and item.BackdropImageTags.Count() > 0 then
-            return item.BackdropImageTags[0]
+    if imageAspect = "wide" then
+        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", 441, 249)
+        if imageUrl <> "" then
+            return imageUrl
         end if
-        return ""
+        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", 441, 249)
+        if imageUrl <> "" then
+            return imageUrl
+        end if
+        return ItemImage.GetUrl(request.server, item, "Primary", 441, 249)
     end if
-    if item.ImageTags = invalid then
-        return ""
+    if imageAspect = "jumbo" then
+        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", 882, 496)
+        if imageUrl <> "" then return imageUrl
+        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", 882, 496)
+        if imageUrl <> "" then return imageUrl
+        return ItemImage.GetUrl(request.server, item, "Primary", 882, 496)
     end if
-    if imageType = "Primary" and item.ImageTags.Primary <> invalid then
-        return item.ImageTags.Primary
-    end if
-    if imageType = "Thumb" and item.ImageTags.Thumb <> invalid then
-        return item.ImageTags.Thumb
-    end if
-    if imageType = "Logo" and item.ImageTags.Logo <> invalid then
-        return item.ImageTags.Logo
-    end if
-    return ""
+    return ItemImage.GetUrl(request.server, item, "Primary", 252, 378)
 end function
 
 '-------------------------------------------------------------------------------
