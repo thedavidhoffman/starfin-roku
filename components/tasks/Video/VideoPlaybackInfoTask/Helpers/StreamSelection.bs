@@ -2,7 +2,7 @@
 ' buildStreamInfo
 '-------------------------------------------------------------------------------
 function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAudioStreamIndex as integer, requestedSubtitleStreamIndex as integer, playbackFlags as object) as object
-    mediaSource = firstMediaSource(playbackInfo)
+    mediaSource = PlaybackRequest.FirstMediaSource(playbackInfo)
     if mediaSource = invalid then
         return { ok: false, action: "playbackInfo", errorMessage: "The selected item has no playable media source." }
     end if
@@ -18,7 +18,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
     transcodingAllowed = playbackFlags.enableDirectStream = true or playbackFlags.enableTranscoding = true
 
     if directPlayAllowed and directPlaySupported then
-        streamFormat = getStreamFormat(container)
+        streamFormat = PlaybackRequest.GetVideoStreamFormat(container)
         if isLiveTvPlaybackRequest(request) = true and isHttpDirectMediaSource(mediaSource) then
             streamUrl = buildHttpDirectStreamUrl(request.server, mediaSource.Path)
         else
@@ -36,7 +36,7 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
         playbackMethod = "DirectPlay"
         m.log.write("Playback selection chose DirectPlay because the request allows direct play and Jellyfin reported SupportsDirectPlay=true alternativeHlsAvailable=" + boolToText(transcodingUrl <> ""))
     else if transcodingAllowed and transcodingUrl <> "" then
-        streamUrl = buildServerUrl(request.server, transcodingUrl)
+        streamUrl = PlaybackRequest.BuildServerUrl(request.server, transcodingUrl)
         if requestedSubtitleStreamIndex >= -1 then streamUrl = Url.SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
         streamFormat = "hls"
         playbackMethod = getTranscodingPlaybackMethod(mediaSource)
@@ -323,14 +323,4 @@ end function
 function getMediaStreamIndex(mediaStream as dynamic, fallback as integer) as integer
     if mediaStream <> invalid and mediaStream.Index <> invalid then return Number.ToInteger(mediaStream.Index, fallback)
     return fallback
-end function
-
-'-------------------------------------------------------------------------------
-' firstMediaSource
-'-------------------------------------------------------------------------------
-function firstMediaSource(playbackInfo as dynamic) as dynamic
-    if playbackInfo = invalid or playbackInfo.MediaSources = invalid then return invalid
-    if playbackInfo.MediaSources.Count() = 0 then return invalid
-
-    return playbackInfo.MediaSources[0]
 end function

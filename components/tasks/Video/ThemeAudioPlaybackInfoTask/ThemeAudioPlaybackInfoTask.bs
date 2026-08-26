@@ -4,6 +4,7 @@ import "pkg:/source/Logger.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/DeviceCapabilities.bs"
+import "pkg:/source/PlaybackRequest.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
@@ -52,7 +53,7 @@ sub executeRequest()
         return
     end if
 
-    m.log.write("Theme audio PlaybackInfo resolved itemId=" + itemId + " streamFormat=" + Format.SafeString(streamInfo.streamFormat, "") + " streamUrl=" + maskUrl(Format.SafeString(streamInfo.streamUrl, "")))
+    m.log.write("Theme audio PlaybackInfo resolved itemId=" + itemId + " streamFormat=" + Format.SafeString(streamInfo.streamFormat, "") + " streamUrl=" + PlaybackRequest.MaskUrl(streamInfo.streamUrl))
     m.top.response = {
         ok: true
         action: "themeAudioPlaybackInfo"
@@ -67,14 +68,14 @@ end sub
 ' buildThemeAudioStreamInfo
 '-------------------------------------------------------------------------------
 function buildThemeAudioStreamInfo(request as object, playbackInfo as dynamic) as object
-    mediaSource = firstMediaSource(playbackInfo)
+    mediaSource = PlaybackRequest.FirstMediaSource(playbackInfo)
     if mediaSource = invalid then return { ok: false, action: "themeAudioPlaybackInfo", errorMessage: "Theme song has no playable media source." }
 
     transcodingUrl = Format.SafeString(mediaSource.TranscodingUrl, "")
     if transcodingUrl <> "" then
         return {
             ok: true
-            streamUrl: buildServerUrl(request.server, transcodingUrl)
+            streamUrl: PlaybackRequest.BuildServerUrl(request.server, transcodingUrl)
             streamFormat: "hls"
         }
     end if
@@ -90,22 +91,8 @@ function buildThemeAudioStreamInfo(request as object, playbackInfo as dynamic) a
     return {
         ok: true
         streamUrl: request.server + "/Audio/" + Format.SafeString(request.itemId, "") + "/stream" + Url.BuildQueryString(streamParams)
-        streamFormat: getStreamFormat(container)
+        streamFormat: PlaybackRequest.GetAudioStreamFormat(container)
     }
-end function
-
-'-------------------------------------------------------------------------------
-' maskUrl
-'-------------------------------------------------------------------------------
-function maskUrl(requestUrl as string) as string
-    apiKeyIndex = Instr(1, LCase(requestUrl), "api_key=")
-    if apiKeyIndex = 0 then return requestUrl
-
-    valueStart = apiKeyIndex + Len("api_key=")
-    valueEnd = Instr(valueStart, requestUrl, "&")
-    if valueEnd = 0 then return Left(requestUrl, valueStart - 1) + "[redacted]"
-
-    return Left(requestUrl, valueStart - 1) + "[redacted]" + Mid(requestUrl, valueEnd)
 end function
 
 '-------------------------------------------------------------------------------
@@ -115,35 +102,4 @@ function buildPlaybackInfoBody() as string
     return Json.Object([
         Json.String("DeviceProfile") + ":" + DeviceCapabilities.BuildDeviceProfileJson()
     ])
-end function
-
-'-------------------------------------------------------------------------------
-' firstMediaSource
-'-------------------------------------------------------------------------------
-function firstMediaSource(playbackInfo as dynamic) as dynamic
-    if playbackInfo = invalid or playbackInfo.MediaSources = invalid then return invalid
-    if playbackInfo.MediaSources.Count() = 0 then return invalid
-
-    return playbackInfo.MediaSources[0]
-end function
-
-'-------------------------------------------------------------------------------
-' buildServerUrl
-'-------------------------------------------------------------------------------
-function buildServerUrl(server as string, path as string) as string
-    if Instr(1, LCase(path), "http://") = 1 or Instr(1, LCase(path), "https://") = 1 then return path
-    if Left(path, 1) = "/" then return server + path
-
-    return server + "/" + path
-end function
-
-'-------------------------------------------------------------------------------
-' getStreamFormat
-'-------------------------------------------------------------------------------
-function getStreamFormat(container as string) as string
-    normalized = LCase(container)
-    if normalized = "m4a" then return "mp4"
-    if normalized = "" then return "mp3"
-
-    return normalized
 end function

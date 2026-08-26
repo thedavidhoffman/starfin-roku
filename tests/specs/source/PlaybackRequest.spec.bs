@@ -1,0 +1,74 @@
+namespace tests
+
+    @suite("Playback request helpers")
+    class PlaybackRequestTests extends rooibos.BaseTestSuite
+
+        @describe("PlaybackRequest.FirstMediaSource")
+
+        @it("returns the first media source")
+        function _()
+            source = { Id: "source-1" }
+
+            m.assertEqual(PlaybackRequest.FirstMediaSource({ MediaSources: [source, { Id: "source-2" }] }), source)
+        end function
+
+        @it("returns invalid when media sources are unavailable")
+        function _()
+            m.assertInvalid(PlaybackRequest.FirstMediaSource(invalid))
+            m.assertInvalid(PlaybackRequest.FirstMediaSource({ MediaSources: [] }))
+        end function
+
+        @describe("PlaybackRequest.BuildServerUrl")
+
+        @it("joins absolute and relative server paths")
+        function _()
+            m.assertEqual(PlaybackRequest.BuildServerUrl("http://server", "/Videos/1/stream"), "http://server/Videos/1/stream")
+            m.assertEqual(PlaybackRequest.BuildServerUrl("http://server", "Videos/1/stream"), "http://server/Videos/1/stream")
+        end function
+
+        @it("preserves an absolute URL")
+        function _()
+            m.assertEqual(PlaybackRequest.BuildServerUrl("http://server", "https://media/stream"), "https://media/stream")
+        end function
+
+        @describe("PlaybackRequest.MaskUrl")
+
+        @it("redacts supported sensitive query values")
+        function _()
+            masked = PlaybackRequest.MaskUrl("http://server/video?api_key=one&token=two&X-Emby-Token=three&MediaSourceId=source-1")
+
+            m.assertEqual(masked, "http://server/video?api_key=[redacted]&token=[redacted]&X-Emby-Token=[redacted]&MediaSourceId=source-1")
+        end function
+
+        @it("does not redact text outside an exact query key")
+        function _()
+            value = "http://server/api_key=path?not_api_key=secret&MediaSourceId=source-1"
+
+            m.assertEqual(PlaybackRequest.MaskUrl(value), value)
+        end function
+
+        @it("returns an empty string for an invalid value")
+        function _()
+            m.assertEqual(PlaybackRequest.MaskUrl(invalid), "")
+        end function
+
+        @describe("stream formats")
+
+        @it("normalizes audio containers")
+        function _()
+            m.assertEqual(PlaybackRequest.GetAudioStreamFormat("m4a"), "mp4")
+            m.assertEqual(PlaybackRequest.GetAudioStreamFormat("FLAC"), "flac")
+            m.assertEqual(PlaybackRequest.GetAudioStreamFormat(""), "mp3")
+        end function
+
+        @it("normalizes video containers")
+        function _()
+            m.assertEqual(PlaybackRequest.GetVideoStreamFormat("mov"), "mp4")
+            m.assertEqual(PlaybackRequest.GetVideoStreamFormat("m4v"), "mp4")
+            m.assertEqual(PlaybackRequest.GetVideoStreamFormat("MATROSKA"), "matroska")
+            m.assertEqual(PlaybackRequest.GetVideoStreamFormat(""), "mp4")
+        end function
+
+    end class
+
+end namespace

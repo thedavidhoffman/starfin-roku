@@ -55,6 +55,15 @@
 - Treat unrelated pending changes as user-owned or concurrent work. Preserve them, do not reformat or revert them, and scope reviews and verification to the requested work.
 - Generated output belongs under `build/` and `out/`; do not treat generated files there as source changes.
 
+## Repeated fixes and workflow design
+
+- For bugs spanning handlers, asynchronous responses, persistence, focus or navigation, or rendering, trace the complete workflow before changing code: identify the canonical state, its owner, every writer and reader, and the events that advance the workflow.
+- When an earlier fix for the same behavior fails or exposes another inconsistency, pause before adding another localized workaround and assess whether state ownership or transitions are fragmented.
+- Before a third attempted fix in the same workflow, explicitly map the event sequence, competing state, bypassed owners, and obsolete prior fixes; then decide whether a canonical commit path, reconciler, or state machine is warranted.
+- Prefer one canonical representation and one owner for each side effect. Route derived-state synchronization through a single path.
+- Test stateful asynchronous workflows across relevant event orderings, persisted-state restoration, failures, cancellation, repeated events, unavailable focus targets, and mode transitions.
+- After introducing a cohesive mechanism, perform one bounded cleanup review for bypasses and orphaned code, then stop redesigning once ownership is clear and behavior is covered.
+
 ## SceneGraph architecture
 
 - When a component `init()` grows beyond simple orchestration because it contains substantial node lookup or observer registration, extract those responsibilities into `initReferences()` and `initHandlers()` and keep `init()` focused on initialization sequencing.
