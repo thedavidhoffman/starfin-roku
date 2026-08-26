@@ -51,6 +51,7 @@ function reconcileActiveFilterSelection() as boolean
         m.state.browse.decade = LibraryBrowse.ResolveDecade(options, m.state.browse.decade)
         showDecadeFilterRow()
         persistMusicLibraryViewState()
+        m.state.committedFilterView = invalid
         reloadMusicLibrary()
         return true
     end if
@@ -63,6 +64,7 @@ function reconcileActiveFilterSelection() as boolean
         m.state.browse.genre = LibraryBrowse.ResolveGenre(options, m.state.browse.genre)
         showGenreFilterRow()
         persistMusicLibraryViewState()
+        m.state.committedFilterView = invalid
         reloadMusicLibrary()
         return true
     end if
@@ -152,9 +154,17 @@ sub onMusicLibraryResponse()
     response = m.musicLibraryTask.response
     if response = invalid then return
     if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicLibrary") <> true then return
-    if Number.ToInteger(response.queryId, -1) <> m.state.content.albums.load.queryId then return
+    if Number.ToInteger(response.queryId, -1) <> m.state.content.albums.load.queryId then
+        m.log.write("Library response ignored stale libraryId=" + getLibraryId() + " mediaType=music queryId=" + Number.ToInteger(response.queryId, -1).ToStr())
+        return
+    end if
     if response.ok <> true then
-        m.state.loadingUi.filteredRefreshActive = false
+        if m.state.filterRefresh.phase = "loading" then
+            m.filteredRefreshTimer.control = "stop"
+            m.filteredRefreshTimer.duration = 0.2
+            rollbackMusicFilterRefresh(Format.SafeString(response.errorMessage, "Unable to load music library."))
+            return
+        end if
         m.state.content.albums.load.requestInFlight = false
         m.state.content.albums.load.status = "failed"
         m.state.content.albums.load.hasMore = false
@@ -169,7 +179,12 @@ sub onMusicLibraryResponse()
     startIndex = Number.ToInteger(response.startIndex, -1)
     expectedStartIndex = m.state.content.albums.load.nextStartIndex
     if startIndex <> expectedStartIndex then
-        m.state.loadingUi.filteredRefreshActive = false
+        if m.state.filterRefresh.phase = "loading" then
+            m.filteredRefreshTimer.control = "stop"
+            m.filteredRefreshTimer.duration = 0.2
+            rollbackMusicFilterRefresh("Music filter returned an unexpected page.")
+            return
+        end if
         m.state.content.albums.load.requestInFlight = false
         m.state.content.albums.load.status = "failed"
         m.state.content.albums.load.hasMore = false
@@ -185,9 +200,10 @@ sub onMusicLibraryResponse()
         if m.state.content.albums.load.totalCount >= 0 then updateTitleLabel(m.state.content.albums.load.totalCount)
     end if
     pageAlbums = getValidMusicItems(response.payload, "album")
-    if isFilteredAlbumBrowseActive() then pageAlbums = canonicalizeFilteredAlbums(pageAlbums)
-    isFilteredRefresh = m.state.loadingUi.filteredRefreshActive and startIndex = 0
+    isFilteredRefresh = m.state.filterRefresh.phase = "loading" and startIndex = 0
     if isFilteredRefresh then
+        m.filteredRefreshTimer.control = "stop"
+        m.filteredRefreshTimer.duration = 0.2
         m.state.content.albums.items = pageAlbums
     else
         for each album in pageAlbums
@@ -201,14 +217,15 @@ sub onMusicLibraryResponse()
     m.state.content.albums.load.hasMore = hasMore
     m.state.content.albums.load.nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageAlbums.Count())
     m.state.content.albums.load.status = "loaded"
-    if isFilteredAlbumBrowseActive() then cacheFilteredAlbumPage(pageAlbums, startIndex)
     if m.state.content.albums.load.totalCount < 0 then updateTitleLabel(m.state.content.albums.items.Count())
     if isFilteredRefresh then
-        m.state.loadingUi.filteredRefreshActive = false
         renderAlbums(pageAlbums)
+        LibraryBrowseRefresh.Commit(m.state.filterRefresh)
+        m.log.write("Filter refresh committed libraryId=" + getLibraryId() + " mediaType=music filter=" + getMusicFilterLogValue() + " queryId=" + m.state.content.albums.load.queryId.ToStr())
     else
         appendAlbumPage(pageAlbums)
     end if
+    rememberCommittedMusicFilterView()
     blockingEnded = false
     if m.state.loadingUi.foreground.kind = "albums" and (m.state.content.albums.items.Count() > 0 or m.state.content.albums.load.hasMore <> true) then blockingEnded = finishForegroundLoad("albums")
     if blockingEnded then
@@ -250,6 +267,7 @@ end sub
 ' requestNextAlbumPageIfNeeded
 '-------------------------------------------------------------------------------
 sub requestNextAlbumPageIfNeeded()
+    if LibraryBrowseRefresh.CanPage(m.state.filterRefresh) <> true then return
     if m.state.content.albums.load.hasMore <> true or m.state.content.albums.load.requestInFlight = true then return
     if isFocusNearLoadedEnd(m.musicGrid, m.state.content.albums.items.Count()) <> true then return
 
@@ -297,8 +315,7 @@ sub reloadMusicLibrary()
     if request = invalid then return
 
     m.filteredRefreshTimer.control = "stop"
-    m.state.loadingUi.filteredRefreshPending = false
-    m.state.loadingUi.filteredRefreshActive = false
+    LibraryBrowseRefresh.Cancel(m.state.filterRefresh)
     m.state.content.albums.items = []
     m.state.content.artists.items = []
     m.state.content.albums.load.status = "loading"
@@ -325,12 +342,13 @@ sub scheduleFilteredRefresh()
     if request = invalid then return
 
     m.filteredRefreshTimer.control = "stop"
-    m.musicLibraryTask.control = "stop"
-    m.state.content.albums.load.queryId = m.state.content.albums.load.queryId + 1
+    if m.state.filterRefresh.phase = "idle" and m.state.committedFilterView = invalid then rememberCommittedMusicFilterView()
+    queryId = LibraryBrowseRefresh.Queue(m.state.filterRefresh, m.state.content.albums.load.queryId)
+    m.state.content.albums.load.queryId = queryId
     m.state.content.albums.load.status = "debouncing"
     m.state.content.albums.load.requestInFlight = false
-    m.state.content.albums.load.hasMore = false
-    m.state.loadingUi.filteredRefreshPending = true
+    m.log.write("Filter refresh queued libraryId=" + getLibraryId() + " mediaType=music filter=" + getMusicFilterLogValue() + " queryId=" + queryId.ToStr())
+    m.filteredRefreshTimer.duration = 0.2
     m.filteredRefreshTimer.control = "start"
 end sub
 
@@ -338,16 +356,102 @@ end sub
 ' onFilteredRefreshTimerFired
 '-------------------------------------------------------------------------------
 sub onFilteredRefreshTimerFired()
-    if m.state.loadingUi.filteredRefreshPending <> true then return
+    if m.state.filterRefresh.phase = "loading" then
+        m.musicLibraryTask.control = "stop"
+        rollbackMusicFilterRefresh("Music filter request timed out.")
+        m.filteredRefreshTimer.duration = 0.2
+        return
+    end if
+    if m.state.filterRefresh.phase <> "debouncing" then return
 
-    m.state.loadingUi.filteredRefreshPending = false
-    m.state.loadingUi.filteredRefreshActive = true
+    if LibraryBrowseRefresh.Begin(m.state.filterRefresh) <> true then return
+    m.musicLibraryTask.control = "stop"
     m.state.content.albums.load.status = "loading"
     m.state.content.albums.load.nextStartIndex = 0
     m.state.content.albums.load.totalCount = -1
     AsyncLifecycle.Begin(m.state.lifecycle, m.state.context.libraryId)
+    m.log.write("Filter refresh started libraryId=" + getLibraryId() + " mediaType=music filter=" + getMusicFilterLogValue() + " queryId=" + m.state.content.albums.load.queryId.ToStr())
     loadAlbumPage(0)
+    m.filteredRefreshTimer.duration = LibraryBrowseRefresh.RequestTimeoutSeconds()
+    m.filteredRefreshTimer.control = "start"
 end sub
+
+'-------------------------------------------------------------------------------
+' rememberCommittedMusicFilterView
+'-------------------------------------------------------------------------------
+sub rememberCommittedMusicFilterView()
+    m.state.committedFilterView = {
+        selection: LibraryBrowse.CreateSortSelection(m.state.browse.selection.optionKey, m.state.browse.selection.sortKey, m.state.browse.selection.label, m.state.browse.selection.sortOrder)
+        filterType: m.state.browse.filterType
+        decade: m.state.browse.decade
+        genre: m.state.browse.genre
+        items: m.state.content.albums.items
+        nextStartIndex: m.state.content.albums.load.nextStartIndex
+        totalCount: m.state.content.albums.load.totalCount
+        hasMore: m.state.content.albums.load.hasMore
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' rollbackMusicFilterRefresh
+'-------------------------------------------------------------------------------
+sub rollbackMusicFilterRefresh(message as string)
+    LibraryBrowseRefresh.Rollback(m.state.filterRefresh)
+    m.state.content.albums.load.queryId = m.state.filterRefresh.queryId
+    m.state.content.albums.load.requestInFlight = false
+    restoreCommittedMusicFilterView(m.state.committedFilterView)
+    AppStatus.SetMessage(message)
+    focusRestoredMusicFilterView()
+    m.log.error("Filter refresh rolled back libraryId=" + getLibraryId() + " mediaType=music message=" + message)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusRestoredMusicFilterView
+'-------------------------------------------------------------------------------
+sub focusRestoredMusicFilterView()
+    if isFilteredAlbumBrowseActive() and focusFilterButtonRow() then return
+
+    focusBrowseByButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreCommittedMusicFilterView
+'-------------------------------------------------------------------------------
+sub restoreCommittedMusicFilterView(previous as dynamic)
+    if previous = invalid then return
+
+    m.state.browse.selection = previous.selection
+    m.state.browse.filterType = previous.filterType
+    m.state.browse.decade = previous.decade
+    m.state.browse.genre = previous.genre
+    m.state.content.albums.items = previous.items
+    m.state.content.albums.load.status = "loaded"
+    m.state.content.albums.load.requestInFlight = false
+    m.state.content.albums.load.requestInFlight = false
+    m.state.content.albums.load.nextStartIndex = previous.nextStartIndex
+    m.state.content.albums.load.totalCount = previous.totalCount
+    m.state.content.albums.load.hasMore = previous.hasMore
+    syncSortControls()
+    if LibraryBrowse.IsDecadeActive(previous.filterType) then
+        showDecadeFilterRow()
+    else if LibraryBrowse.IsGenreActive(previous.filterType) then
+        showGenreFilterRow()
+    else
+        hideFilterButtonRow()
+    end if
+    renderAlbums(previous.items)
+    updateTitleLabel(previous.totalCount)
+    persistMusicLibraryViewState()
+end sub
+
+'-------------------------------------------------------------------------------
+' getMusicFilterLogValue
+'-------------------------------------------------------------------------------
+function getMusicFilterLogValue() as string
+    if LibraryBrowse.IsDecadeActive(m.state.browse.filterType) then return "Decade:" + m.state.browse.decade.ToStr()
+    if LibraryBrowse.IsGenreActive(m.state.browse.filterType) then return "Genre:" + m.state.browse.genre
+    return Format.SafeString(m.state.browse.selection.optionKey, "Album")
+end function
 
 '-------------------------------------------------------------------------------
 ' startArtistQuery

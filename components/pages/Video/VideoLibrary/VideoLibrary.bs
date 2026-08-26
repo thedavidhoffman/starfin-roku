@@ -5,6 +5,8 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/ItemImage.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/LibraryBrowse.bs"
+import "pkg:/source/LibraryBrowseRefresh.bs"
+import "pkg:/source/Logger.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/PlaybackProgress.bs"
@@ -18,7 +20,6 @@ import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/store/LibraryViewStateStore.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/VideoLibrarySort.bs"
-import "pkg:/source/VideoLibraryFilter.bs"
 import "pkg:/source/LibraryGridLayout.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Loading.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Browse.bs"
@@ -63,7 +64,9 @@ sub init()
             pending: ""
             previousPaging: invalid
         }
-        filterCache: createEmptyFilterCache()
+        filterOptions: LibraryBrowse.NormalizeFilterOptions(invalid)
+        filterRefresh: LibraryBrowseRefresh.Create()
+        committedFilterView: invalid
         itemNodeCache: {}
         itemNodeCacheAspect: ""
         progressFocusedIndex: 0
@@ -91,6 +94,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
+    m.log = new Logger("VideoLibrary", m.global.logService)
     m.titleLabel = m.top.findNode("titleLabel")
     m.browseByButton = m.top.findNode("browseByButton")
     m.sortButton = m.top.findNode("sortButton")
@@ -102,6 +106,7 @@ sub initReferences()
     m.videoFilterOptionsTask = m.top.findNode("videoFilterOptionsTask")
     m.videoLibraryProgressIndicator = m.top.findNode("videoLibraryProgressIndicator")
     m.videoLibraryProgressHoldTimer = m.top.findNode("videoLibraryProgressHoldTimer")
+    m.filterRefreshTimer = m.top.findNode("filterRefreshTimer")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -111,6 +116,7 @@ sub initHandlers()
     m.videoLibraryTask.observeField("response", "onVideoLibraryResponse")
     m.videoFilterOptionsTask.observeField("response", "onVideoFilterOptionsResponse")
     m.videoLibraryProgressHoldTimer.observeField("fire", "onVideoLibraryProgressHoldTimerFire")
+    m.filterRefreshTimer.observeField("fire", "onVideoFilterRefreshTimerFired")
     m.videoLibraryProgressIndicator.observeField("visible", "onVideoLibraryProgressChromeChanged")
     m.videoLibraryProgressIndicator.observeField("rightEdge", "onVideoLibraryProgressChromeChanged")
     m.browseByButton.observeField("overlayRequested", "onSortOverlayRequested")
@@ -149,6 +155,9 @@ sub onLoadRequestChanged()
     if request = invalid then
         return
     end if
+    m.filterRefreshTimer.control = "stop"
+    LibraryBrowseRefresh.Cancel(m.pageState.filterRefresh)
+    m.pageState.committedFilterView = invalid
     ensurePlaylistSpecializationInitialized()
     m.pageState.letterFilter.selected = "ALL"
     m.pageState.letterFilter.pending = ""
@@ -165,7 +174,7 @@ end sub
 sub resetVideoLibraryForLoad()
     m.pageState.isLoading = true
     m.chromeLayout.deferProgressSync = true
-    resetFilterCache()
+    resetFilterOptions()
     resetVideoLibraryItemsState()
     beginBrowseTransition(m.pageState.activeFilterType, false)
     syncSortControls()
@@ -180,10 +189,10 @@ sub resetVideoLibraryForLoad()
 end sub
 
 '-------------------------------------------------------------------------------
-' resetFilterCache
+' resetFilterOptions
 '-------------------------------------------------------------------------------
-sub resetFilterCache()
-    m.pageState.filterCache = createEmptyFilterCache()
+sub resetFilterOptions()
+    m.pageState.filterOptions = LibraryBrowse.NormalizeFilterOptions(invalid)
 end sub
 
 '-------------------------------------------------------------------------------

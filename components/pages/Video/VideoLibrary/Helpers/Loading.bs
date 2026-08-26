@@ -94,9 +94,16 @@ sub onVideoLibraryResponse()
         return
     end if
     if Number.ToInteger(response.queryId, -1) <> m.pageState.paging.queryId then
+        m.log.write("Library response ignored stale libraryId=" + getVideoLibraryId() + " mediaType=video queryId=" + Number.ToInteger(response.queryId, -1).ToStr())
         return
     end if
     if response.ok <> true then
+        if m.pageState.filterRefresh.phase = "loading" then
+            m.filterRefreshTimer.control = "stop"
+            m.filterRefreshTimer.duration = 0.2
+            rollbackVideoFilterRefresh(Format.SafeString(response.errorMessage, "Unable to load library."))
+            return
+        end if
         m.pageState.isLoading = false
         m.pageState.paging.requestInFlight = false
         if m.pageState.letterFilter.pending <> "" then
@@ -115,6 +122,12 @@ sub onVideoLibraryResponse()
     end if
     startIndex = Number.ToInteger(response.startIndex, -1)
     if startIndex <> m.pageState.paging.nextStartIndex then
+        if m.pageState.filterRefresh.phase = "loading" then
+            m.filterRefreshTimer.control = "stop"
+            m.filterRefreshTimer.duration = 0.2
+            rollbackVideoFilterRefresh("Library filter returned an unexpected page.")
+            return
+        end if
         m.pageState.paging.requestInFlight = false
         return
     end if
@@ -153,10 +166,17 @@ sub onVideoLibraryResponse()
     if startIndex = 0 then
         rebuildVideoLibraryItemNodeCache()
         renderItems(m.pageState.allItems)
+        if m.pageState.filterRefresh.phase = "loading" then
+            m.filterRefreshTimer.control = "stop"
+            m.filterRefreshTimer.duration = 0.2
+            LibraryBrowseRefresh.Commit(m.pageState.filterRefresh)
+            m.log.write("Filter refresh committed libraryId=" + getVideoLibraryId() + " mediaType=video filter=" + getVideoFilterLogValue() + " queryId=" + m.pageState.paging.queryId.ToStr())
+        end if
         if m.chromeLayout.deferProgressSync = true then commitVideoLibraryChromeLayout()
     else
         appendVideoLibraryPage(pageItems, startIndex)
     end if
+    rememberCommittedVideoFilterView()
     publishMovieLibraryBrowseState()
 
     if isPlaylistsView() then
@@ -231,7 +251,7 @@ sub onVideoFilterOptionsResponse()
         handleBrowseTransitionOptionsFailure()
         return
     end if
-    m.pageState.filterCache = createFilterCacheFromOptions(response.filterOptions)
+    m.pageState.filterOptions = LibraryBrowse.NormalizeFilterOptions(response.filterOptions)
     markBrowseTransitionOptionsReady()
 end sub
 
@@ -252,6 +272,7 @@ sub requestNextVideoLibraryPageIfNeeded()
         requestNextMovieLibraryBrowsePageIfNeeded(m.pageState.movieLibraryBrowse.index)
         return
     end if
+    if LibraryBrowseRefresh.CanPage(m.pageState.filterRefresh) <> true then return
     if m.pageState.paging.hasMore <> true or m.pageState.paging.requestInFlight = true then
         return
     end if

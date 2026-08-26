@@ -1,0 +1,85 @@
+import "pkg:/source/Number.bs"
+
+namespace LibraryBrowseRefresh
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.Create
+    '---------------------------------------------------------------------------
+    function Create() as object
+        return {
+            phase: "idle"
+            queryId: 0
+        }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.Queue
+    '---------------------------------------------------------------------------
+    function Queue(state as object, queryFloor = 0 as integer) as integer
+        state.queryId = Number.ToInteger(state.queryId, 0)
+        if state.queryId < queryFloor then state.queryId = queryFloor
+        state.queryId++
+        state.phase = "debouncing"
+        return state.queryId
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.IsActive
+    '---------------------------------------------------------------------------
+    function IsActive(state as object) as boolean
+        return state.phase = "debouncing" or state.phase = "loading"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.CanPage
+    '---------------------------------------------------------------------------
+    function CanPage(state as object) as boolean
+        return IsActive(state) <> true
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.RequestTimeoutSeconds
+    '---------------------------------------------------------------------------
+    function RequestTimeoutSeconds() as float
+        return 45.0
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.Begin
+    '---------------------------------------------------------------------------
+    function Begin(state as object) as boolean
+        if state.phase <> "debouncing" then return false
+        state.phase = "loading"
+        return true
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.Commit
+    '---------------------------------------------------------------------------
+    sub Commit(state as object)
+        state.phase = "idle"
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.Rollback
+    '---------------------------------------------------------------------------
+    sub Rollback(state as object)
+        __Invalidate(state)
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowseRefresh.Cancel
+    '---------------------------------------------------------------------------
+    sub Cancel(state as object)
+        __Invalidate(state)
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' __Invalidate
+    '---------------------------------------------------------------------------
+    sub __Invalidate(state as object)
+        state.queryId = Number.ToInteger(state.queryId, 0) + 1
+        state.phase = "idle"
+    end sub
+
+end namespace

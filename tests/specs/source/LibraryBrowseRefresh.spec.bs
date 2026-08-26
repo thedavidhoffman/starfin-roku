@@ -1,0 +1,94 @@
+namespace Tests
+
+    @suite("LibraryBrowseRefresh")
+    class LibraryBrowseRefreshTests extends rooibos.BaseTestSuite
+
+        @describe("transaction lifecycle")
+
+        @it("requeues with a new identity")
+        sub requeuesWithNewIdentity()
+            state = LibraryBrowseRefresh.Create()
+
+            first = LibraryBrowseRefresh.Queue(state)
+            second = LibraryBrowseRefresh.Queue(state)
+
+            m.assertEqual(second, first + 1)
+            m.assertEqual(state.phase, "debouncing")
+        end sub
+
+        @it("queues above the owning page query identity")
+        sub queuesAboveOwningPageQueryIdentity()
+            state = LibraryBrowseRefresh.Create()
+
+            queryId = LibraryBrowseRefresh.Queue(state, 40)
+
+            m.assertEqual(queryId, 41)
+        end sub
+
+        @it("blocks paging while a transaction is active")
+        sub blocksPagingWhileTransactionIsActive()
+            state = LibraryBrowseRefresh.Create()
+
+            m.assertTrue(LibraryBrowseRefresh.CanPage(state))
+
+            LibraryBrowseRefresh.Queue(state)
+
+            m.assertTrue(LibraryBrowseRefresh.IsActive(state))
+            m.assertFalse(LibraryBrowseRefresh.CanPage(state))
+
+            LibraryBrowseRefresh.Begin(state)
+
+            m.assertFalse(LibraryBrowseRefresh.CanPage(state))
+        end sub
+
+        @it("begins only a debouncing transaction")
+        sub beginsOnlyDebouncingTransaction()
+            state = LibraryBrowseRefresh.Create()
+
+            m.assertFalse(LibraryBrowseRefresh.Begin(state))
+
+            LibraryBrowseRefresh.Queue(state)
+
+            m.assertTrue(LibraryBrowseRefresh.Begin(state))
+            m.assertEqual(state.phase, "loading")
+            m.assertFalse(LibraryBrowseRefresh.Begin(state))
+        end sub
+
+        @it("commits the loading transaction")
+        sub commitsLoadingTransaction()
+            state = LibraryBrowseRefresh.Create()
+            LibraryBrowseRefresh.Queue(state)
+            LibraryBrowseRefresh.Begin(state)
+
+            LibraryBrowseRefresh.Commit(state)
+
+            m.assertEqual(state.phase, "idle")
+            m.assertTrue(LibraryBrowseRefresh.CanPage(state))
+        end sub
+
+        @it("invalidates work during rollback")
+        sub invalidatesWorkDuringRollback()
+            state = LibraryBrowseRefresh.Create()
+            queryId = LibraryBrowseRefresh.Queue(state)
+            LibraryBrowseRefresh.Begin(state)
+
+            LibraryBrowseRefresh.Rollback(state)
+
+            m.assertEqual(state.queryId, queryId + 1)
+            m.assertEqual(state.phase, "idle")
+        end sub
+
+        @it("invalidates work when cancelled")
+        sub invalidatesWorkWhenCancelled()
+            state = LibraryBrowseRefresh.Create()
+            queryId = LibraryBrowseRefresh.Queue(state)
+
+            LibraryBrowseRefresh.Cancel(state)
+
+            m.assertEqual(state.queryId, queryId + 1)
+            m.assertEqual(state.phase, "idle")
+        end sub
+
+    end class
+
+end namespace

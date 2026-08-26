@@ -36,6 +36,13 @@ function isFavoriteBrowseActive() as boolean
 end function
 
 '-------------------------------------------------------------------------------
+' isFilteredAlbumBrowseActive
+'-------------------------------------------------------------------------------
+function isFilteredAlbumBrowseActive() as boolean
+    return LibraryBrowse.IsDecadeActive(m.state.browse.filterType) or LibraryBrowse.IsGenreActive(m.state.browse.filterType)
+end function
+
+'-------------------------------------------------------------------------------
 ' syncSortControls
 '-------------------------------------------------------------------------------
 sub syncSortControls()
@@ -87,6 +94,8 @@ sub onSortOrderChanged()
     persistMusicLibraryViewState()
     if isArtistBrowseMode() then
         startArtistQuery()
+    else if isFilteredAlbumBrowseActive() then
+        scheduleFilteredRefresh()
     else
         reloadMusicLibrary()
     end if
@@ -165,11 +174,11 @@ function applySortSelection(selection as object) as boolean
         startArtistQuery()
     else
         if optionKey = "Decade" or optionKey = "Genre" then
-            m.state.loadingUi.foreground.focusAfterLoad = "filter"
+            scheduleFilteredRefresh()
         else
             m.state.loadingUi.foreground.focusAfterLoad = ""
+            reloadMusicLibrary()
         end if
-        reloadMusicLibrary()
     end if
     return true
 end function
@@ -268,7 +277,7 @@ sub onFilterButtonRowSelected()
     end if
 
     persistMusicLibraryViewState()
-    if restoreCachedFilteredView() <> true then scheduleFilteredRefresh()
+    scheduleFilteredRefresh()
 end sub
 
 '-------------------------------------------------------------------------------

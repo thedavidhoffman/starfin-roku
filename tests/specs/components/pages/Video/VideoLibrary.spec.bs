@@ -290,7 +290,7 @@ namespace tests
         function _()
             request = m.restoreRequest("movie-decade-round-trip", "movies", "Movie")
             m.node.pageState.request = request
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1980", value: 1980 }]
+            m.node.pageState.filterOptions.decadeOptions = [{ label: "1980", value: 1980 }]
             'bs:disable-next-line 1140
             commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
             m.node.pageState.filterSelection.decade = 1980
@@ -315,7 +315,7 @@ namespace tests
         function _()
             request = m.restoreRequest("tv-genre-round-trip", "tvshows", "Series")
             m.node.pageState.request = request
-            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
             'bs:disable-next-line 1140
             commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Genre", "SortName", "Genre"))
             m.node.pageState.filterSelection.genre = "Drama"
@@ -595,8 +595,8 @@ namespace tests
 
         @it("omits Random from Browse By")
         function _()
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1990", value: 1990 }]
-            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.decadeOptions = [{ label: "1990", value: 1990 }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
             'bs:disable-next-line 1140
             options = getVideoSortOptions()
             m.assertEqual(options.Count(), 6)
@@ -610,8 +610,8 @@ namespace tests
             m.configurePaging(12, 12, 0)
             'bs:disable-next-line 1140
             commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1990", value: 1990 }]
-            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.decadeOptions = [{ label: "1990", value: 1990 }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
 
             'bs:disable-next-line 1140
             applySortSelection({ optionKey: "Favorites", sortKey: "SortName", sortOrder: "Ascending", label: "Favorites" })
@@ -623,12 +623,23 @@ namespace tests
             m.assertEqual(options[5].optionKey, "Genre")
         end function
 
+        @it("does not request pages during a filter transaction")
+        function _()
+            m.configurePaging(60, 60, 18)
+            LibraryBrowseRefresh.Queue(m.node.pageState.filterRefresh)
+
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+
+            m.assertInvalid(m.node.videoLibraryTask.request)
+        end function
+
         @it("defaults decade after favorites invalidates the previous filter selection")
         function _()
             m.configurePaging(12, 12, 0)
             'bs:disable-next-line 1140
             commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
+            m.node.pageState.filterOptions.decadeOptions = [{ label: "1970", value: 1970 }, { label: "1980", value: 1980 }]
             m.node.pageState.filterSelection.decade = 1980
 
             'bs:disable-next-line 1140
@@ -651,7 +662,7 @@ namespace tests
             m.configurePaging(12, 12, 0)
             'bs:disable-next-line 1140
             commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Genre", "SortName", "Genre"))
-            m.node.pageState.filterCache.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
             m.node.pageState.filterSelection.genre = "Drama"
 
             'bs:disable-next-line 1140
@@ -670,6 +681,141 @@ namespace tests
         end function
 
         @describe("filter sorting")
+
+        @it("debounces rapid decade movement and requests only the final value")
+        function _()
+            m.configurePaging(12, 12, 0)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
+            m.node.pageState.filterSelection.decade = 1990
+
+            'bs:disable-next-line 1140
+            scheduleVideoFilterRefresh()
+            firstQueryId = m.node.pageState.paging.queryId
+            m.node.pageState.filterSelection.decade = 2020
+            'bs:disable-next-line 1140
+            scheduleVideoFilterRefresh()
+
+            m.assertEqual(m.node.pageState.filterRefresh.phase, "debouncing")
+            m.assertEqual(m.node.pageState.filterSelection.decade, 2020)
+            m.assertEqual(m.node.pageState.paging.queryId, firstQueryId + 1)
+            m.assertEqual(m.node.pageState.allItems.Count(), 12)
+
+            'bs:disable-next-line 1140
+            onVideoFilterRefreshTimerFired()
+
+            m.assertEqual(m.node.videoLibraryTask.request.years[0], "2020")
+            m.assertEqual(m.node.videoLibraryTask.request.years[9], "2029")
+            m.assertEqual(m.node.pageState.filterRefresh.phase, "loading")
+        end function
+
+        @it("rolls a failed filter refresh back to the committed view")
+        function _()
+            m.configurePaging(12, 12, 0)
+            previousItems = m.node.pageState.allItems
+            m.node.pageState.committedFilterView = {
+                selection: LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+                filterType: ""
+                decade: -1
+                genre: ""
+                items: previousItems
+                nextStartIndex: 12
+                totalCount: 1200
+                hasMore: true
+            }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
+            m.node.pageState.filterSelection.decade = 2020
+            LibraryBrowseRefresh.Queue(m.node.pageState.filterRefresh)
+            LibraryBrowseRefresh.Begin(m.node.pageState.filterRefresh)
+
+            'bs:disable-next-line 1140
+            rollbackVideoFilterRefresh("failed")
+
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "SortName")
+            m.assertEqual(m.node.pageState.allItems.Count(), 12)
+            m.assertEqual(m.node.pageState.paging.totalCount, 1200)
+            m.assertEqual(m.node.pageState.filterRefresh.phase, "idle")
+            'bs:disable-next-line 1140
+            m.assertFalse(focusFilterButtonRow())
+        end function
+
+        @it("returns focus to a restored decade filter")
+        function _()
+            m.configurePaging(1, 1, 0)
+            m.node.pageState.filterOptions.decadeOptions = [{ label: "2010", value: 2010 }, { label: "2020", value: 2020 }]
+            m.node.pageState.committedFilterView = {
+                selection: LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade")
+                filterType: "Decade"
+                decade: 2010
+                genre: ""
+                items: m.node.pageState.allItems
+                nextStartIndex: 1
+                totalCount: 1
+                hasMore: false
+            }
+            m.node.pageState.activeFilterType = "Decade"
+            m.node.pageState.filterSelection.decade = 2020
+            LibraryBrowseRefresh.Queue(m.node.pageState.filterRefresh)
+            LibraryBrowseRefresh.Begin(m.node.pageState.filterRefresh)
+
+            'bs:disable-next-line 1140
+            rollbackVideoFilterRefresh("failed")
+
+            m.assertEqual(m.node.pageState.filterSelection.decade, 2010)
+            'bs:disable-next-line 1140
+            m.assertTrue(focusFilterButtonRow())
+        end function
+
+        @it("restores the committed view when deactivated during debounce")
+        function _()
+            m.configurePaging(12, 12, 0)
+            previousItems = m.node.pageState.allItems
+            m.node.pageState.committedFilterView = {
+                selection: LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+                filterType: ""
+                decade: -1
+                genre: ""
+                items: previousItems
+                nextStartIndex: 12
+                totalCount: 1200
+                hasMore: true
+            }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
+            m.node.pageState.filterSelection.decade = 2020
+            LibraryBrowseRefresh.Queue(m.node.pageState.filterRefresh)
+
+            'bs:disable-next-line 1140
+            deactivate()
+
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "SortName")
+            m.assertEqual(m.node.pageState.allItems.Count(), 12)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 12)
+            m.assertEqual(m.node.pageState.filterRefresh.phase, "idle")
+        end function
+
+        @it("restores current paging after a later page was committed")
+        function _()
+            m.configurePaging(200, 200, 175)
+            m.node.pageState.paging.totalCount = 350
+            'bs:disable-next-line 1140
+            rememberCommittedVideoFilterView()
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
+            m.node.pageState.filterSelection.decade = 2020
+            LibraryBrowseRefresh.Queue(m.node.pageState.filterRefresh)
+            LibraryBrowseRefresh.Begin(m.node.pageState.filterRefresh)
+
+            'bs:disable-next-line 1140
+            rollbackVideoFilterRefresh("failed")
+            m.node.videoLibraryTask = { control: "", request: invalid }
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 200)
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 200)
+        end function
 
         @it("sorts an active decade filter by title descending")
         function _()
@@ -695,7 +841,7 @@ namespace tests
         function _()
             m.node.pageState.activeFilterType = "Genre"
             m.node.pageState.filterSelection.genre = "Drama"
-            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
 
             'bs:disable-next-line 1140
             beginBrowseTransition("Genre", false)
@@ -719,7 +865,7 @@ namespace tests
             m.node.pageState.request = { libraryId: "movies-1", title: "Movies" }
             m.node.pageState.activeFilterType = "Decade"
             m.node.pageState.filterSelection.decade = 1980
-            m.node.pageState.filterCache = { decadeOptions: [], genreOptions: [], decadeItemsByValue: {}, genreItemsByValue: {} }
+            m.node.pageState.filterOptions = { decadeOptions: [], genreOptions: [] }
             m.node.filterButtonRow.visible = false
             m.node.pageState.paging.nextStartIndex = 0
             m.node.pageState.paging.queryId = 7
@@ -751,7 +897,7 @@ namespace tests
         function _()
             m.node.pageState.activeFilterType = "Decade"
             m.node.pageState.filterSelection.decade = 1980
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1980", value: 1980 }]
+            m.node.pageState.filterOptions.decadeOptions = [{ label: "1980", value: 1980 }]
 
             'bs:disable-next-line 1140
             beginBrowseTransition("Decade", false)
@@ -801,7 +947,7 @@ namespace tests
             'bs:disable-next-line 1140
             commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Genre", "SortName", "Genre"))
             m.node.pageState.filterSelection.genre = "Drama"
-            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
             'bs:disable-next-line 1140
             showGenreFilterRow()
             'bs:disable-next-line 1140
@@ -833,7 +979,7 @@ namespace tests
         function _()
             m.node.pageState.activeFilterType = "Genre"
             m.node.pageState.filterSelection.genre = "Drama"
-            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
 
             'bs:disable-next-line 1140
             beginBrowseTransition("Genre", true)
@@ -854,7 +1000,7 @@ namespace tests
             m.configurePaging(12, 12, 0)
             m.node.pageState.activeFilterType = "Genre"
             m.node.pageState.filterSelection.genre = "Missing"
-            m.node.pageState.filterCache.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
 
             'bs:disable-next-line 1140
             beginBrowseTransition("Genre", false)
@@ -862,6 +1008,8 @@ namespace tests
             markBrowseTransitionOptionsReady()
 
             m.assertEqual(m.node.pageState.filterSelection.genre, "Comedy")
+            m.assertInvalid(m.node.pageState.committedFilterView)
+            m.assertEqual(m.node.pageState.filterRefresh.phase, "idle")
             m.assertEqual(m.node.videoLibraryTask.request.genre, "Comedy")
             m.assertEqual(m.node.pageState.browseTransition.phase, "awaitingItems")
         end function
@@ -871,7 +1019,7 @@ namespace tests
             m.configurePaging(12, 12, 0)
             m.node.pageState.activeFilterType = "Decade"
             m.node.pageState.filterSelection.decade = 1980
-            m.node.pageState.filterCache.decadeOptions = []
+            m.node.pageState.filterOptions.decadeOptions = []
 
             'bs:disable-next-line 1140
             beginBrowseTransition("Decade", false)
@@ -902,7 +1050,7 @@ namespace tests
         @it("returns to the decade row when its reload fails after options are ready")
         function _()
             m.node.pageState.request = { libraryId: "failure-library", favoriteOnly: false }
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1980", value: 1980 }]
+            m.node.pageState.filterOptions.decadeOptions = [{ label: "1980", value: 1980 }]
             'bs:disable-next-line 1140
             commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Decade", "SortName", "Decade"))
             m.node.pageState.filterSelection.decade = 1980
@@ -925,7 +1073,7 @@ namespace tests
             m.failVideoLibraryLoad("Genre", false)
 
             m.assertEqual(m.node.pageState.browseTransition.phase, "awaitingOptions")
-            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
             'bs:disable-next-line 1140
             markBrowseTransitionOptionsReady()
 
@@ -1032,7 +1180,7 @@ namespace tests
         @it("keeps letter navigation available when switching to Decade")
         function _()
             m.configurePaging(12, 12, 0)
-            m.node.pageState.filterCache.decadeOptions = [{ label: "1980", value: 1980 }]
+            m.node.pageState.filterOptions.decadeOptions = [{ label: "1980", value: 1980 }]
             m.node.pageState.letterFilter.selected = "M"
 
             'bs:disable-next-line 1140
@@ -1045,7 +1193,7 @@ namespace tests
         @it("keeps letter navigation available when switching to Genre")
         function _()
             m.configurePaging(12, 12, 0)
-            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
             m.node.pageState.letterFilter.selected = "M"
 
             'bs:disable-next-line 1140

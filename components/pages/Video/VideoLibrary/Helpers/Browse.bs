@@ -75,7 +75,7 @@ end sub
 ' showDecadeFilterRow
 '-------------------------------------------------------------------------------
 sub showDecadeFilterRow()
-    options = m.pageState.filterCache.decadeOptions
+    options = m.pageState.filterOptions.decadeOptions
     if options = invalid then
         options = []
     end if
@@ -91,7 +91,7 @@ end sub
 ' showGenreFilterRow
 '-------------------------------------------------------------------------------
 sub showGenreFilterRow()
-    options = m.pageState.filterCache.genreOptions
+    options = m.pageState.filterOptions.genreOptions
     if options = invalid then
         options = []
     end if
@@ -143,7 +143,7 @@ sub onFilterButtonRowSelected()
     end if
     m.filterButtonRow.setFocus(true)
     persistVideoLibraryViewState()
-    reloadVideoLibraryForSort("filter")
+    scheduleVideoFilterRefresh()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -159,62 +159,6 @@ end sub
 sub onFilterButtonRowFocusExitDown()
     focusItemsIfActive()
 end sub
-
-'-------------------------------------------------------------------------------
-' createEmptyFilterCache
-'-------------------------------------------------------------------------------
-function createEmptyFilterCache() as object
-    cache = LibraryBrowse.NormalizeFilterOptions(invalid)
-    cache.decadeItemsByValue = {}
-    cache.genreItemsByValue = {}
-    return cache
-end function
-
-'-------------------------------------------------------------------------------
-' createFilterCacheFromOptions
-'-------------------------------------------------------------------------------
-function createFilterCacheFromOptions(filterOptions as dynamic) as object
-    cache = createEmptyFilterCache()
-    options = LibraryBrowse.NormalizeFilterOptions(filterOptions)
-    cache.decadeOptions = options.decadeOptions
-    cache.genreOptions = options.genreOptions
-    return cache
-end function
-
-'-------------------------------------------------------------------------------
-' getCachedFilterItems
-'-------------------------------------------------------------------------------
-function getCachedFilterItems(filterType as string, filterValue as string) as object
-    cache = m.pageState.filterCache
-    if cache = invalid then
-        return []
-    end if
-    if filterType = "Decade" then
-        filterKey = Format.SafeString(filterValue, "")
-        items = cache.decadeItemsByValue[filterKey]
-        if items = invalid then
-            items = VideoLibraryFilter.ByDecade(m.pageState.allItems, Number.ToInteger(filterKey, -1))
-            cache.decadeItemsByValue[filterKey] = items
-        end if
-        if items <> invalid then
-            return items
-        end if
-        return []
-    end if
-    if filterType = "Genre" then
-        filterKey = Format.SafeString(filterValue, "")
-        items = cache.genreItemsByValue[filterKey]
-        if items = invalid then
-            items = VideoLibraryFilter.ByGenre(m.pageState.allItems, filterKey)
-            cache.genreItemsByValue[filterKey] = items
-        end if
-        if items <> invalid then
-            return items
-        end if
-        return []
-    end if
-    return []
-end function
 
 '-------------------------------------------------------------------------------
 ' getSortedVideoLibraryItems
@@ -482,7 +426,7 @@ function getVideoSortOptions() as object
             label: "Favorites"
         }
     ]
-    if m.pageState.filterCache.decadeOptions.Count() > 0 then
+    if m.pageState.filterOptions.decadeOptions.Count() > 0 then
         options.Push({
             optionKey: "Decade"
             sortKey: ""
@@ -490,7 +434,7 @@ function getVideoSortOptions() as object
             label: "Decade"
         })
     end if
-    if m.pageState.filterCache.genreOptions.Count() > 0 then
+    if m.pageState.filterOptions.genreOptions.Count() > 0 then
         options.Push({
             optionKey: "Genre"
             sortKey: ""
@@ -535,14 +479,14 @@ sub applySortSelection(selection as object)
         if Format.SafeString(m.pageState.selectedSortKey, "") = "Decade" then return
 
         selection = LibraryBrowse.CreateSortSelection("Decade", "SortName", Format.SafeString(selection.label, "Decade"))
-        m.pageState.filterSelection.decade = LibraryBrowse.ResolveDecade(m.pageState.filterCache.decadeOptions, m.pageState.filterSelection.decade)
+        m.pageState.filterSelection.decade = LibraryBrowse.ResolveDecade(m.pageState.filterOptions.decadeOptions, m.pageState.filterSelection.decade)
         filterRowAction = "Decade"
         reloadTarget = "filter"
     else if selectedSortKey = "Genre" then
         if Format.SafeString(m.pageState.selectedSortKey, "") = "Genre" then return
 
         selection = LibraryBrowse.CreateSortSelection("Genre", "SortName", Format.SafeString(selection.label, "Genre"))
-        m.pageState.filterSelection.genre = LibraryBrowse.ResolveGenre(m.pageState.filterCache.genreOptions, m.pageState.filterSelection.genre)
+        m.pageState.filterSelection.genre = LibraryBrowse.ResolveGenre(m.pageState.filterOptions.genreOptions, m.pageState.filterSelection.genre)
         filterRowAction = "Genre"
         reloadTarget = "filter"
     else
@@ -565,8 +509,139 @@ sub applySortSelection(selection as object)
         hideFilterButtonRow()
     end if
     persistVideoLibraryViewState()
-    reloadVideoLibraryForSort(reloadTarget)
+    if filterRowAction = "Decade" or filterRowAction = "Genre" then
+        scheduleVideoFilterRefresh()
+    else
+        reloadVideoLibraryForSort(reloadTarget)
+    end if
 end sub
+
+'-------------------------------------------------------------------------------
+' scheduleVideoFilterRefresh
+'-------------------------------------------------------------------------------
+sub scheduleVideoFilterRefresh()
+    if m.pageState.request = invalid then return
+
+    m.filterRefreshTimer.control = "stop"
+    if m.pageState.filterRefresh.phase = "idle" and m.pageState.committedFilterView = invalid then rememberCommittedVideoFilterView()
+    queryId = LibraryBrowseRefresh.Queue(m.pageState.filterRefresh, m.pageState.paging.queryId)
+    m.pageState.paging.queryId = queryId
+    m.pageState.paging.requestInFlight = false
+    m.log.write("Filter refresh queued libraryId=" + getVideoLibraryId() + " mediaType=video filter=" + getVideoFilterLogValue() + " queryId=" + queryId.ToStr())
+    m.filterRefreshTimer.duration = 0.2
+    m.filterRefreshTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoFilterRefreshTimerFired
+'-------------------------------------------------------------------------------
+sub onVideoFilterRefreshTimerFired()
+    if m.pageState.filterRefresh.phase = "loading" then
+        m.videoLibraryTask.control = "stop"
+        rollbackVideoFilterRefresh("Library filter request timed out.")
+        m.filterRefreshTimer.duration = 0.2
+        return
+    end if
+    if LibraryBrowseRefresh.Begin(m.pageState.filterRefresh) <> true then return
+
+    m.videoLibraryTask.control = "stop"
+    m.pageState.isLoading = true
+    m.pageState.paging.nextStartIndex = 0
+    m.pageState.paging.totalCount = -1
+    m.pageState.paging.hasMore = false
+    m.pageState.paging.requestInFlight = false
+    AsyncLifecycle.Begin(m.pageState.lifecycle, m.pageState.request.libraryId)
+    beginBrowseTransition(m.pageState.activeFilterType, true)
+    m.log.write("Filter refresh started libraryId=" + getVideoLibraryId() + " mediaType=video filter=" + getVideoFilterLogValue() + " queryId=" + m.pageState.paging.queryId.ToStr())
+    loadVideoLibraryPage(0)
+    m.filterRefreshTimer.duration = LibraryBrowseRefresh.RequestTimeoutSeconds()
+    m.filterRefreshTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' rememberCommittedVideoFilterView
+'-------------------------------------------------------------------------------
+sub rememberCommittedVideoFilterView()
+    m.pageState.committedFilterView = {
+        selection: LibraryBrowse.CreateSortSelection(m.pageState.selectedSort.optionKey, m.pageState.selectedSort.sortKey, m.pageState.selectedSort.label, m.pageState.selectedSort.sortOrder)
+        filterType: m.pageState.activeFilterType
+        decade: m.pageState.filterSelection.decade
+        genre: m.pageState.filterSelection.genre
+        items: m.pageState.allItems
+        nextStartIndex: m.pageState.paging.nextStartIndex
+        totalCount: m.pageState.paging.totalCount
+        hasMore: m.pageState.paging.hasMore
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' rollbackVideoFilterRefresh
+'-------------------------------------------------------------------------------
+sub rollbackVideoFilterRefresh(message as string)
+    LibraryBrowseRefresh.Rollback(m.pageState.filterRefresh)
+    m.pageState.paging.queryId = m.pageState.filterRefresh.queryId
+    m.pageState.isLoading = false
+    m.pageState.paging.requestInFlight = false
+    restoreCommittedVideoFilterView(m.pageState.committedFilterView)
+    AppStatus.SetMessage(message)
+    focusRestoredVideoFilterView()
+    m.log.error("Filter refresh rolled back libraryId=" + getVideoLibraryId() + " mediaType=video message=" + message)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusRestoredVideoFilterView
+'-------------------------------------------------------------------------------
+sub focusRestoredVideoFilterView()
+    if (LibraryBrowse.IsDecadeActive(m.pageState.activeFilterType) or LibraryBrowse.IsGenreActive(m.pageState.activeFilterType)) and focusFilterButtonRow() then return
+
+    focusBrowseByButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreCommittedVideoFilterView
+'-------------------------------------------------------------------------------
+sub restoreCommittedVideoFilterView(previous as dynamic)
+    if previous = invalid then return
+
+    commitVideoLibraryBrowseState(previous.selection)
+    m.pageState.activeFilterType = previous.filterType
+    m.pageState.filterSelection.decade = previous.decade
+    m.pageState.filterSelection.genre = previous.genre
+    m.pageState.allItems = previous.items
+    m.pageState.isLoading = false
+    m.pageState.paging.requestInFlight = false
+    m.pageState.paging.nextStartIndex = previous.nextStartIndex
+    m.pageState.paging.totalCount = previous.totalCount
+    m.pageState.paging.hasMore = previous.hasMore
+    if LibraryBrowse.IsDecadeActive(previous.filterType) then
+        showDecadeFilterRow()
+    else if LibraryBrowse.IsGenreActive(previous.filterType) then
+        showGenreFilterRow()
+    else
+        hideFilterButtonRow()
+    end if
+    rebuildVideoLibraryItemNodeCache()
+    renderItems(previous.items)
+    updateTitleLabel(previous.totalCount)
+    persistVideoLibraryViewState()
+end sub
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryId
+'-------------------------------------------------------------------------------
+function getVideoLibraryId() as string
+    if m.pageState.request = invalid then return ""
+    return Format.SafeString(m.pageState.request.libraryId, "")
+end function
+
+'-------------------------------------------------------------------------------
+' getVideoFilterLogValue
+'-------------------------------------------------------------------------------
+function getVideoFilterLogValue() as string
+    if LibraryBrowse.IsDecadeActive(m.pageState.activeFilterType) then return "Decade:" + m.pageState.filterSelection.decade.ToStr()
+    if LibraryBrowse.IsGenreActive(m.pageState.activeFilterType) then return "Genre:" + m.pageState.filterSelection.genre
+    return Format.SafeString(m.pageState.selectedSortKey, "SortName")
+end function
 
 '-------------------------------------------------------------------------------
 ' applySortOrderSelection
@@ -622,6 +697,8 @@ sub reloadVideoLibraryForSort(refocusTarget = invalid as dynamic)
     if Format.SafeString(m.pageState.selectedSort.sortKey, "") = "" then
         return
     end if
+    m.filterRefreshTimer.control = "stop"
+    LibraryBrowseRefresh.Cancel(m.pageState.filterRefresh)
     request.sortBy = Format.SafeString(m.pageState.selectedSort.sortKey, "SortName")
     request.sortOrder = LibraryBrowse.NormalizeSortOrder(m.pageState.selectedSort.sortOrder)
     m.pageState.request = request
