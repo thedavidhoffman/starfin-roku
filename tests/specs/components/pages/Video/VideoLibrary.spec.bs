@@ -704,6 +704,93 @@ namespace tests
 
         @describe("letter filtering")
 
+        @it("hides letter navigation for release-date browsing")
+        function _()
+            m.configurePaging(12, 12, 0)
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "Ascending", label: "Release Date" })
+
+            m.assertFalse(m.node.letterGutterButton.visible)
+            'bs:disable-next-line 1140
+            m.assertFalse(canUseLetterNavigation())
+        end function
+
+        @it("hides letter navigation for date-added browsing")
+        function _()
+            m.configurePaging(12, 12, 0)
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "Ascending", label: "Date Added" })
+
+            m.assertFalse(m.node.letterGutterButton.visible)
+            'bs:disable-next-line 1140
+            m.assertFalse(canUseLetterNavigation())
+        end function
+
+        @it("shows neutral letter navigation when returning to title browsing")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.letterFilter.selected = "M"
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("PremiereDate", "PremiereDate", "Release Date"))
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "SortName", sortKey: "SortName", sortOrder: "Ascending", label: "Title" })
+
+            m.assertTrue(m.node.letterGutterButton.visible)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+        end function
+
+        @it("keeps letter navigation available when switching to Favorites")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.letterFilter.selected = "M"
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Favorites", sortKey: "SortName", sortOrder: "Ascending", label: "Favorites" })
+
+            m.assertTrue(m.node.letterGutterButton.visible)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+        end function
+
+        @it("keeps letter navigation available when switching to Decade")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.filterCache.decadeOptions = [{ label: "1980", value: 1980 }]
+            m.node.pageState.letterFilter.selected = "M"
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Decade", sortKey: "", sortOrder: "", label: "Decade" })
+
+            m.assertTrue(m.node.letterGutterButton.visible)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+        end function
+
+        @it("keeps letter navigation available when switching to Genre")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.filterCache.genreOptions = [{ label: "Drama", value: "Drama" }]
+            m.node.pageState.letterFilter.selected = "M"
+
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Genre", sortKey: "", sortOrder: "", label: "Genre" })
+
+            m.assertTrue(m.node.letterGutterButton.visible)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+        end function
+
+        @it("restores persisted date browsing with letter navigation hidden")
+        function _()
+            request = m.restoreRequest("date-library", "movies", "Movie")
+
+            'bs:disable-next-line 1140
+            applySavedVideoLibraryViewState(request, { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "Descending" })
+
+            m.assertFalse(m.node.letterGutterButton.visible)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+        end function
+
         @it("adds the active starts-with bucket to the counted page title")
         function _()
             m.node.pageState.request = { title: "Movies" }
@@ -740,6 +827,39 @@ namespace tests
             applySortSelection({ optionKey: "SortName", sortKey: "SortName", sortOrder: "Ascending", label: "Title" })
 
             m.assertEqual(m.node.pageState.letterFilter.selected, "M")
+        end function
+
+        @it("retains starts-with when only the sort direction changes")
+        function _()
+            m.configurePaging(12, 12, 0)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            m.node.pageState.letterFilter.selected = "M"
+
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Descending" })
+
+            m.assertEqual(m.node.pageState.letterFilter.selected, "M")
+            m.assertTrue(m.node.letterGutterButton.visible)
+        end function
+
+        @it("closes and cancels a pending letter when the browse option changes")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.letterGridOpen = true
+            m.node.pageState.letterFilter.selected = "M"
+
+            'bs:disable-next-line 1140
+            beginPendingLetterSelection("X")
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "PremiereDate", sortKey: "PremiereDate", sortOrder: "Ascending", label: "Release Date" })
+
+            m.assertFalse(m.node.pageState.letterGridOpen)
+            m.assertEqual(m.node.pageState.letterFilter.pending, "")
+            m.assertInvalid(m.node.pageState.letterFilter.previousPaging)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+            m.assertEqual(m.node.top.letterGridRequested.action, "close")
+            m.assertFalse(m.node.letterGutterButton.visible)
         end function
 
         @it("keeps the current library intact when a letter has no matches")
