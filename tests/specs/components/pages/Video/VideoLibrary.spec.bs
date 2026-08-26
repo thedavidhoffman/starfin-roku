@@ -12,6 +12,7 @@ namespace tests
             m.node.pageState.letterFilter.selected = "ALL"
             m.node.pageState.letterFilter.pending = ""
             m.node.pageState.letterFilter.previousPaging = invalid
+            m.node.chromeLayout.deferProgressSync = false
             m.restoreAccountKey = "rooibos-video-library-restore"
             m.cleanupRestoreRegistry()
             scene = m.node.top.getScene()
@@ -356,8 +357,8 @@ namespace tests
             'bs:disable-next-line 1140
             applyGridLayout("poster")
 
-            m.assertEqual(m.node.browseByButton.translation, [1548, 120])
-            m.assertEqual(m.node.sortButton.translation, [1746, 120])
+            m.assertEqual(m.node.browseByButton.translation, [1548.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1746.0, 120.0])
         end function
 
         @it("aligns poster browse controls with the progress indicator edge")
@@ -365,8 +366,8 @@ namespace tests
             m.node.videoLibraryProgressIndicator.rightEdge = 1810
             m.node.videoLibraryProgressIndicator.visible = true
 
-            m.assertEqual(m.node.browseByButton.translation, [1564, 120])
-            m.assertEqual(m.node.sortButton.translation, [1762, 120])
+            m.assertEqual(m.node.browseByButton.translation, [1564.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1762.0, 120.0])
         end function
 
         @it("realigns poster browse controls when the progress edge changes")
@@ -374,8 +375,112 @@ namespace tests
             m.node.videoLibraryProgressIndicator.visible = true
             m.node.videoLibraryProgressIndicator.rightEdge = 1820
 
-            m.assertEqual(m.node.browseByButton.translation, [1574, 120])
-            m.assertEqual(m.node.sortButton.translation, [1772, 120])
+            m.assertEqual(m.node.browseByButton.translation, [1574.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1772.0, 120.0])
+        end function
+
+        @it("keeps browse controls stable while progress synchronization is deferred")
+        function _()
+            m.node.videoLibraryProgressIndicator.rightEdge = 1810
+            m.node.videoLibraryProgressIndicator.visible = true
+            m.node.chromeLayout.deferProgressSync = true
+
+            m.node.videoLibraryProgressIndicator.visible = false
+
+            m.assertEqual(m.node.browseByButton.translation, [1564.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1762.0, 120.0])
+        end function
+
+        @it("defers progress alignment before an initial load clears the grid")
+        function _()
+            m.node.pageState.request = m.restoreRequest("initial-layout", "movies", "Movie")
+            m.node.videoLibraryProgressIndicator.rightEdge = 1810
+            m.node.videoLibraryProgressIndicator.visible = true
+
+            'bs:disable-next-line 1140
+            resetVideoLibraryForLoad()
+
+            m.assertTrue(m.node.chromeLayout.deferProgressSync)
+            m.assertEqual(m.node.itemsGrid.content.getChildCount(), 0)
+            m.assertEqual(m.node.browseByButton.translation, [1564.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1762.0, 120.0])
+        end function
+
+        @it("defers progress alignment before a sort reload clears the grid")
+        function _()
+            request = m.restoreRequest("sort-layout", "movies", "Movie")
+            m.node.pageState.request = request
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            m.node.videoLibraryProgressIndicator.rightEdge = 1810
+            m.node.videoLibraryProgressIndicator.visible = true
+
+            'bs:disable-next-line 1140
+            reloadVideoLibraryForSort("items")
+
+            m.assertTrue(m.node.chromeLayout.deferProgressSync)
+            m.assertEqual(m.node.itemsGrid.content.getChildCount(), 0)
+            m.assertEqual(m.node.browseByButton.translation, [1564.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1762.0, 120.0])
+        end function
+
+        @it("commits final progress alignment after a normal first page response")
+        function _()
+            request = m.restoreRequest("response-layout", "movies", "Movie")
+            m.node.pageState.request = request
+            m.node.pageState.paging.nextStartIndex = 0
+            m.node.pageState.paging.queryId = 41
+            m.node.pageState.movieLibraryBrowse.active = false
+            m.node.chromeLayout.deferProgressSync = true
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, request.libraryId)
+            m.node.videoLibraryTask.response = {
+                ok: true
+                action: "videoLibrary"
+                libraryId: request.libraryId
+                queryId: 41
+                startIndex: 0
+                payload: { Items: [{ Id: "movie-1", Name: "Movie", Type: "Movie" }] }
+                nextStartIndex: 1
+                totalRecordCount: 100
+                hasMore: true
+            }
+
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+
+            progressRightEdge = Number.ToInteger(m.node.videoLibraryProgressIndicator.rightEdge, -1)
+            m.assertFalse(m.node.chromeLayout.deferProgressSync)
+            m.assertTrue(m.node.videoLibraryProgressIndicator.visible)
+            m.assertEqual(m.node.sortButton.translation, [progressRightEdge - 48.0, 120.0])
+            m.assertEqual(m.node.browseByButton.translation, [progressRightEdge - 246.0, 120.0])
+        end function
+
+        @it("commits deferred browse controls to the progress edge")
+        function _()
+            m.node.chromeLayout.deferProgressSync = true
+            m.node.videoLibraryProgressIndicator.rightEdge = 1820
+            m.node.videoLibraryProgressIndicator.visible = true
+
+            'bs:disable-next-line 1140
+            commitVideoLibraryChromeLayout()
+
+            m.assertFalse(m.node.chromeLayout.deferProgressSync)
+            m.assertEqual(m.node.browseByButton.translation, [1574.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1772.0, 120.0])
+        end function
+
+        @it("commits deferred browse controls to the grid edge when progress is hidden")
+        function _()
+            m.node.videoLibraryProgressIndicator.rightEdge = 1810
+            m.node.videoLibraryProgressIndicator.visible = true
+            m.node.chromeLayout.deferProgressSync = true
+            m.node.videoLibraryProgressIndicator.visible = false
+
+            'bs:disable-next-line 1140
+            commitVideoLibraryChromeLayout()
+
+            m.assertEqual(m.node.browseByButton.translation, [1548.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1746.0, 120.0])
         end function
 
         @it("returns poster browse controls to the grid when progress is hidden")
@@ -384,8 +489,8 @@ namespace tests
             m.node.videoLibraryProgressIndicator.visible = true
             m.node.videoLibraryProgressIndicator.visible = false
 
-            m.assertEqual(m.node.browseByButton.translation, [1548, 120])
-            m.assertEqual(m.node.sortButton.translation, [1746, 120])
+            m.assertEqual(m.node.browseByButton.translation, [1548.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1746.0, 120.0])
         end function
 
         @it("aligns thumbnail browse controls with the visible grid edge")
@@ -395,8 +500,8 @@ namespace tests
             'bs:disable-next-line 1140
             applyGridLayout("wide")
 
-            m.assertEqual(m.node.browseByButton.translation, [1634, 120])
-            m.assertEqual(m.node.sortButton.translation, [1832, 120])
+            m.assertEqual(m.node.browseByButton.translation, [1634.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1832.0, 120.0])
         end function
 
         @describe("server paging")
@@ -785,9 +890,11 @@ namespace tests
             m.node.itemsGrid.content = CreateObject("roSGNode", "ContentNode")
             m.node.itemsGrid.visible = false
             m.node.browseByButton.visible = true
+            m.node.chromeLayout.deferProgressSync = true
 
             m.failVideoLibraryLoad("items", true)
 
+            m.assertFalse(m.node.chromeLayout.deferProgressSync)
             m.assertEqual(m.node.pageState.browseTransition.phase, "idle")
             m.assertTrue(m.node.browseByButton.isInFocusChain())
         end function
@@ -1177,7 +1284,13 @@ namespace tests
             m.node.pageState.paging.queryId = 7
             m.node.pageState.movieLibraryBrowse.active = false
             m.node.pageState.movieLibraryBrowse.index = -1
-            m.node.itemsGrid = { itemFocused: focusedIndex, numColumns: 6 }
+            m.node.itemsGrid = {
+                itemFocused: focusedIndex
+                numColumns: 6
+                translation: [96, 207]
+                itemSize: [297, 465]
+                itemSpacing: [-12, 27]
+            }
             m.node.videoLibraryTask = { control: "", request: invalid }
         end sub
 

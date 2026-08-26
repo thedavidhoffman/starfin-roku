@@ -337,6 +337,33 @@ namespace tests
             m.assertEqual(m.top.findNode("singlePlaylistOpenTimer").control, "start")
         end function
 
+        @it("commits deferred chrome before automatically opening the only playlist")
+        function _()
+            request = m.createRequest("playlists")
+            m.node.pageState.request = request
+            m.node.pageState.paging.nextStartIndex = 0
+            m.node.pageState.paging.queryId = 31
+            m.node.chromeLayout.deferProgressSync = true
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, request.libraryId)
+            m.node.videoLibraryTask.response = {
+                ok: true
+                action: "videoLibrary"
+                libraryId: request.libraryId
+                queryId: 31
+                startIndex: 0
+                payload: { Items: [{ Id: "playlist-1", Name: "Playlist", Type: "Playlist" }] }
+                nextStartIndex: 1
+                totalRecordCount: 1
+                hasMore: false
+            }
+
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+
+            m.assertFalse(m.node.chromeLayout.deferProgressSync)
+            m.assertEqual(m.top.findNode("singlePlaylistOpenTimer").control, "start")
+        end function
+
         @it("does not schedule automatic opening for multiple playlists")
         function _()
             m.node.pageState.request = m.createRequest("playlists")
