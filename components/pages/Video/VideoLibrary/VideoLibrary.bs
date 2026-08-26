@@ -159,7 +159,7 @@ sub resetVideoLibraryForLoad()
     resetVideoLibraryItemsState()
     beginBrowseTransition(m.pageState.activeFilterType, false)
     syncSortControls()
-    if hasPlaylistSpecialization() then
+    if isPlaylistsView() then
         m.top.callFunc("specializationReset")
     end if
     updateTitleLabel()
@@ -226,17 +226,16 @@ end sub
 sub syncSortControls()
     capabilities = getVideoLibraryBrowseCapabilities()
     applyBrowseCapabilities(capabilities)
-    m.letterGutterButton.visible = isLetterNavigationBrowseSelection(m.pageState.selectedSort)
+    m.letterGutterButton.visible = capabilities.browse and supportsLetterNavigation(m.pageState.selectedSort)
     m.browseByButton.selectedSort = m.pageState.selectedSort
     m.sortButton.selectedSort = m.pageState.selectedSort
     m.sortButton.sortEnabled = true
 end sub
 
 '-------------------------------------------------------------------------------
-' isLetterNavigationBrowseSelection
+' supportsLetterNavigation
 '-------------------------------------------------------------------------------
-function isLetterNavigationBrowseSelection(selection as dynamic) as boolean
-    if hasPlaylistSpecialization() then return false
+function supportsLetterNavigation(selection as dynamic) as boolean
     if selection = invalid then return true
 
     sortKey = Format.SafeString(selection.sortKey, "SortName")
@@ -255,16 +254,24 @@ end sub
 ' getVideoLibraryBrowseCapabilities
 '-------------------------------------------------------------------------------
 function getVideoLibraryBrowseCapabilities() as object
-    if hasPlaylistSpecialization() then
+    if isPlaylistsView() then
         return m.top.callFunc("specializationBrowseCapabilities")
     end if
+    if isCollectionContentRequest(m.pageState.request) then return { browse: false, sort: false }
     return { browse: true, sort: true }
 end function
 
 '-------------------------------------------------------------------------------
-' hasPlaylistSpecialization
+' isCollectionContentRequest
 '-------------------------------------------------------------------------------
-function hasPlaylistSpecialization() as boolean
+function isCollectionContentRequest(request as dynamic) as boolean
+    return request <> invalid and LCase(Format.SafeString(request.collectionType, "")) = "collection"
+end function
+
+'-------------------------------------------------------------------------------
+' isPlaylistsView
+'-------------------------------------------------------------------------------
+function isPlaylistsView() as boolean
     return m.top.isSubtype("Playlists")
 end function
 
@@ -272,7 +279,7 @@ end function
 ' ensurePlaylistSpecializationInitialized
 '-------------------------------------------------------------------------------
 sub ensurePlaylistSpecializationInitialized()
-    if hasPlaylistSpecialization() <> true then
+    if isPlaylistsView() <> true then
         return
     end if
     if m.playlistSpecializationInitialized then

@@ -63,6 +63,77 @@ namespace tests
             m.assertEqual(m.top.findNode("videoFilterOptionsTask").request.libraryId, "library-1")
         end function
 
+        @it("hides browse and sort controls for collection content")
+        function _()
+            m.node.pageState.request = {
+                collectionType: "collection"
+                includeItemTypes: "Movie,Series"
+            }
+
+            'bs:disable-next-line 1140
+            syncSortControls()
+
+            m.assertFalse(m.top.findNode("browseByButton").visible)
+            m.assertFalse(m.top.findNode("sortButton").visible)
+        end function
+
+        @it("hides letter navigation for collection content")
+        function _()
+            m.node.pageState.request = {
+                collectionType: "collection"
+                includeItemTypes: "Movie,Series"
+            }
+
+            'bs:disable-next-line 1140
+            syncSortControls()
+
+            m.assertFalse(m.top.findNode("letterGutterButton").visible)
+        end function
+
+        @it("skips filter option loading for collection content")
+        function _()
+            m.node.pageState.request = {
+                libraryId: "collection-1"
+                collectionType: "collection"
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                includeItemTypes: "Movie,Series"
+            }
+            previousQueryId = m.node.pageState.filtersQueryId
+            m.top.findNode("videoFilterOptionsTask").request = invalid
+
+            'bs:disable-next-line 1140
+            loadVideoFilterOptions()
+
+            m.assertInvalid(m.top.findNode("videoFilterOptionsTask").request)
+            m.assertEqual(m.node.pageState.filtersQueryId, previousQueryId + 1)
+        end function
+
+        @it("keeps browsing controls available for movie libraries")
+        function _()
+            m.node.pageState.request = { collectionType: "movies" }
+
+            'bs:disable-next-line 1140
+            syncSortControls()
+
+            m.assertTrue(m.top.findNode("browseByButton").visible)
+            m.assertTrue(m.top.findNode("sortButton").visible)
+            m.assertTrue(m.top.findNode("letterGutterButton").visible)
+        end function
+
+        @it("keeps browsing controls available for TV libraries")
+        function _()
+            m.node.pageState.request = { collectionType: "tvshows" }
+
+            'bs:disable-next-line 1140
+            syncSortControls()
+
+            m.assertTrue(m.top.findNode("browseByButton").visible)
+            m.assertTrue(m.top.findNode("sortButton").visible)
+            m.assertTrue(m.top.findNode("letterGutterButton").visible)
+        end function
+
         @it("persists a movie-scoped library without a canonical collection type")
         function _()
             'bs:disable-next-line 1140
@@ -83,6 +154,22 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             canPersist = canPersistVideoLibraryViewState({ collectionType: "collection", includeItemTypes: "Movie,Series" })
+
+            m.assertFalse(canPersist)
+        end function
+
+        @it("does not persist a movie-only collection")
+        function _()
+            'bs:disable-next-line 1140
+            canPersist = canPersistVideoLibraryViewState({ collectionType: "collection", includeItemTypes: "Movie" })
+
+            m.assertFalse(canPersist)
+        end function
+
+        @it("does not persist a series-only collection")
+        function _()
+            'bs:disable-next-line 1140
+            canPersist = canPersistVideoLibraryViewState({ collectionType: "collection", includeItemTypes: "Series" })
 
             m.assertFalse(canPersist)
         end function
@@ -114,6 +201,35 @@ namespace tests
         end function
 
         @describe("load-workflow restoration")
+
+        @it("normalizes collection content to title ascending")
+        function _()
+            request = m.restoreRequest("collection-1", "collection", "Movie,Series")
+            request.sortBy = "PremiereDate"
+            request.sortOrder = "Descending"
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertEqual(request.sortBy, "SortName")
+            m.assertEqual(request.sortOrder, "Ascending")
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "SortName")
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Ascending")
+        end function
+
+        @it("ignores saved browse state for collection content")
+        function _()
+            request = m.restoreRequest("collection-saved-state", "collection", "Movie")
+            m.saveRestoreState(request, "Genre", -1, "Drama", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "SortName")
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Ascending")
+            m.assertEqual(m.node.pageState.activeFilterType, "")
+            m.assertEqual(request.favoriteOnly, false)
+        end function
 
         @it("restores a movie decade with descending title order")
         function _()
