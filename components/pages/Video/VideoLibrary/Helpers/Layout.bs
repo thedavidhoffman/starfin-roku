@@ -3,76 +3,69 @@
 '-------------------------------------------------------------------------------
 sub applyGridLayout(imageAspect as string)
     filterRowOffset = getFilterButtonRowOffset()
-    if imageAspect = "jumbo" then
-        m.pageState.isThumbnailLayout = false
-        m.top.thumbnailLayoutActive = false
-        m.titleLabel.translation = [480, 120]
-        m.browseByButton.translation = [1618, 120]
-        m.sortButton.translation = [1816, 120]
-        m.filterButtonRow.translation = [264, 208]
-        layoutSpec = LibraryGridLayout.GetSpec("jumbo", "items")
-        applyVideoLibraryGridSpec(layoutSpec, filterRowOffset)
-        applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
-        applyLetterGridLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
-        updateVideoLibraryProgressLayout(imageAspect)
-        return
-    end if
-    if imageAspect = "wide" then
-        m.pageState.isThumbnailLayout = true
-        m.top.thumbnailLayoutActive = true
-        m.titleLabel.translation = [
-            480
-            120
-        ]
-        m.browseByButton.translation = [
-            1634
-            120
-        ]
-        m.sortButton.translation = [
-            1832
-            120
-        ]
-        m.filterButtonRow.translation = [
-            264
-            208
-        ]
-        layoutSpec = LibraryGridLayout.GetSpec("wide", "items")
-        applyVideoLibraryGridSpec(layoutSpec, filterRowOffset)
-        applyLetterGutterButtonLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
-        applyLetterGridLayout(true, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
-        if isPlaylistsView() then
-            m.top.callFunc("specializationApplyLayout", "wide")
-        end if
-        updateVideoLibraryProgressLayout(imageAspect)
-        return
-    end if
-    m.pageState.isThumbnailLayout = false
-    m.top.thumbnailLayoutActive = false
-    m.titleLabel.translation = [
-        480
-        120
-    ]
-    m.browseByButton.translation = [
-        1618
-        120
-    ]
-    m.sortButton.translation = [
-        1816
-        120
-    ]
-    m.filterButtonRow.translation = [
-        264
-        208
-    ]
-    layoutSpec = LibraryGridLayout.GetSpec("poster", "items")
+    isThumbnailLayout = imageAspect = "wide"
+    usesHorizontalLetterLayout = imageAspect = "wide" or imageAspect = "jumbo"
+
+    m.pageState.isThumbnailLayout = isThumbnailLayout
+    m.top.thumbnailLayoutActive = isThumbnailLayout
+    m.titleLabel.translation = [480, 120]
+    m.filterButtonRow.translation = [264, 208]
+
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, "items")
     applyVideoLibraryGridSpec(layoutSpec, filterRowOffset)
-    applyLetterGutterButtonLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
-    applyLetterGridLayout(false, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
     if isPlaylistsView() then
-        m.top.callFunc("specializationApplyLayout", "poster")
+        m.top.callFunc("specializationApplyLayout", imageAspect)
     end if
+
+    applyLetterGutterButtonLayout(usesHorizontalLetterLayout, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
+    applyLetterGridLayout(usesHorizontalLetterLayout, m.itemsGrid.translation[0], m.itemsGrid.translation[1])
     updateVideoLibraryProgressLayout(imageAspect)
+    syncVideoLibraryChromeLayout(imageAspect)
 end sub
+
+'-------------------------------------------------------------------------------
+' onVideoLibraryProgressChromeChanged
+'-------------------------------------------------------------------------------
+sub onVideoLibraryProgressChromeChanged()
+    syncVideoLibraryChromeLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' syncVideoLibraryChromeLayout
+'-------------------------------------------------------------------------------
+sub syncVideoLibraryChromeLayout(imageAspect = invalid as dynamic)
+    if imageAspect = invalid then imageAspect = m.pageState.imageAspect
+
+    syncVideoLibraryBrowseControlsLayout(imageAspect)
+    if isPlaylistsView() then
+        m.top.callFunc("specializationSyncChromeLayout", imageAspect)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' syncVideoLibraryBrowseControlsLayout
+'-------------------------------------------------------------------------------
+sub syncVideoLibraryBrowseControlsLayout(imageAspect = invalid as dynamic)
+    if imageAspect = invalid then imageAspect = m.pageState.imageAspect
+
+    rightEdge = getVideoLibraryChromeRightEdge(imageAspect, "items")
+    sortX = rightEdge - m.chromeLayout.sortWidth
+    browseX = sortX - m.chromeLayout.buttonGap - m.chromeLayout.browseWidth
+    m.browseByButton.translation = [browseX, m.chromeLayout.y]
+    m.sortButton.translation = [sortX, m.chromeLayout.y]
+end sub
+
+'-------------------------------------------------------------------------------
+' getVideoLibraryChromeRightEdge
+'-------------------------------------------------------------------------------
+function getVideoLibraryChromeRightEdge(imageAspect as string, contentRole as string) as integer
+    layoutSpec = LibraryGridLayout.GetSpec(imageAspect, contentRole)
+    rightEdge = LibraryGridLayout.GetVisibleRightEdge(m.itemsGrid, layoutSpec)
+    if m.videoLibraryProgressIndicator.visible then
+        rightEdge = Number.ToInteger(m.videoLibraryProgressIndicator.rightEdge, rightEdge)
+    end if
+    return rightEdge
+end function
 
 '-------------------------------------------------------------------------------
 ' applyVideoLibraryGridSpec
