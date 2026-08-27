@@ -9,6 +9,10 @@ sub activate()
     if isPlaylistsView() and m.top.callFunc("specializationActivate") then
         return
     end if
+    if m.pageState.randomPlayback.restoreFocus then
+        m.pageState.randomPlayback.restoreFocus = false
+        if focusMusicVideoRandomButton() then return
+    end if
     focusItemsIfActive()
 end sub
 
@@ -27,6 +31,7 @@ sub deactivate()
     if isPlaylistsView() then
         m.top.callFunc("specializationDeactivate")
     end if
+    cancelMusicVideoRandomPlayback(false)
     stopVideoLibraryProgressHold()
     closeLetterGrid(false)
     m.videoLibraryTask.control = "stop"
@@ -87,6 +92,7 @@ function focusBrowseByButton() as boolean
         return false
     end if
     m.top.setFocus(true)
+    m.musicVideoRandomButton.hasFocusVisual = false
     m.browseByButton.setFocus(true)
     return true
 end function
@@ -99,7 +105,19 @@ function focusSortButton() as boolean
         return false
     end if
     m.top.setFocus(true)
+    m.musicVideoRandomButton.hasFocusVisual = false
     m.sortButton.setFocus(true)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' focusMusicVideoRandomButton
+'-------------------------------------------------------------------------------
+function focusMusicVideoRandomButton() as boolean
+    if m.musicVideoRandomButton.visible <> true then return false
+    m.top.setFocus(true)
+    m.musicVideoRandomButton.setFocus(true)
+    m.musicVideoRandomButton.hasFocusVisual = true
     return true
 end function
 
@@ -294,6 +312,18 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if isPlaylistsView() and m.top.callFunc("specializationHandleKey", key) then
         return true
     end if
+    if key = "up" and m.musicVideoRandomButton.isInFocusChain() then
+        m.musicVideoRandomButton.hasFocusVisual = false
+        return requestHeaderFocus()
+    end if
+    if key = "down" and m.musicVideoRandomButton.isInFocusChain() then
+        m.musicVideoRandomButton.hasFocusVisual = false
+        if canFocusFilterButtonRow() then return focusFilterButtonRow()
+        focusItemsIfActive()
+        return true
+    end if
+    if key = "left" and m.musicVideoRandomButton.isInFocusChain() then return true
+    if key = "right" and m.musicVideoRandomButton.isInFocusChain() then return focusBrowseByButton()
     if key = "up" and m.browseByButton.isInFocusChain() then
         return requestHeaderFocus()
     end if
@@ -305,6 +335,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return focusSortButton()
         end if
         return true
+    end if
+    if key = "left" and m.browseByButton.isInFocusChain() and m.musicVideoRandomButton.visible then
+        return focusMusicVideoRandomButton()
     end if
     if key = "left" and m.sortButton.isInFocusChain() then
         return focusBrowseByButton()
@@ -324,6 +357,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     if key = "up" and isItemsGridAtFirstRow() then
         stopVideoLibraryProgressHold("up")
+        if m.musicVideoRandomButton.visible then return focusMusicVideoRandomButton()
         if canFocusBrowseByButton() <> true then
             return requestHeaderFocus()
         end if

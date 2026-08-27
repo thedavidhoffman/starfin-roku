@@ -12,6 +12,8 @@ namespace tests
             m.node.pageState.letterFilter.selected = "ALL"
             m.node.pageState.letterFilter.pending = ""
             m.node.pageState.letterFilter.previousPaging = invalid
+            m.node.pageState.randomPlayback.loading = false
+            m.node.pageState.randomPlayback.restoreFocus = false
             m.node.chromeLayout.deferProgressSync = false
             m.restoreAccountKey = "rooibos-video-library-restore"
             m.cleanupRestoreRegistry()
@@ -159,6 +161,209 @@ namespace tests
             m.assertTrue(m.top.findNode("browseByButton").visible)
             m.assertTrue(m.top.findNode("sortButton").visible)
             m.assertTrue(m.top.findNode("letterGutterButton").visible)
+        end function
+
+        @describe("music video random playback")
+
+        @it("shows Random only for a music video library with playable results")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos" }
+            m.node.pageState.allItems = [{ Id: "video-1", Type: "MusicVideo" }]
+
+            'bs:disable-next-line 1140
+            syncMusicVideoRandomButton()
+
+            m.assertTrue(m.node.musicVideoRandomButton.visible)
+
+            m.node.pageState.request = { collectionType: "movies" }
+
+            'bs:disable-next-line 1140
+            syncMusicVideoRandomButton()
+
+            m.assertFalse(m.node.musicVideoRandomButton.visible)
+        end function
+
+        @it("keeps Random hidden when music video results are not playable")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos" }
+            m.node.pageState.allItems = [{ Type: "MusicVideo" }, { Id: "folder", Type: "Folder" }]
+
+            'bs:disable-next-line 1140
+            syncMusicVideoRandomButton()
+
+            m.assertFalse(m.node.musicVideoRandomButton.visible)
+        end function
+
+        @it("positions Random before Browse and Sort")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos" }
+            m.node.pageState.allItems = [{ Id: "video-1", Type: "MusicVideo" }]
+            'bs:disable-next-line 1140
+            syncMusicVideoRandomButton()
+
+            'bs:disable-next-line 1140
+            applyGridLayout("poster")
+
+            m.assertEqual(m.node.musicVideoRandomButton.translation, [1375.0, 120.0])
+            m.assertEqual(m.node.browseByButton.translation, [1548.0, 120.0])
+            m.assertEqual(m.node.sortButton.translation, [1746.0, 120.0])
+            m.assertEqual(m.node.titleLabel.translation, [569.0, 120.0])
+            m.assertEqual(m.node.titleLabel.width, 782.0)
+        end function
+
+        @it("retains the centered default title boundary without Random")
+        function _()
+            m.node.pageState.request = { collectionType: "movies" }
+            m.node.musicVideoRandomButton.visible = false
+
+            'bs:disable-next-line 1140
+            applyGridLayout("poster")
+
+            m.assertEqual(m.node.titleLabel.translation, [480.0, 120.0])
+            m.assertEqual(m.node.titleLabel.width, 960.0)
+        end function
+
+        @it("moves focus across Random Browse and Sort")
+        function _()
+            m.node.musicVideoRandomButton.visible = true
+            'bs:disable-next-line 1140
+            focusMusicVideoRandomButton()
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("right", true))
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("right", true))
+            m.assertTrue(m.node.sortButton.isInFocusChain())
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("left", true))
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("left", true))
+            m.assertTrue(m.node.musicVideoRandomButton.isInFocusChain())
+        end function
+
+        @it("builds a full-result request from the active library filters")
+        function _()
+            m.node.pageState.request = {
+                libraryId: "music-videos"
+                collectionType: "musicvideos"
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                includeItemTypes: "MusicVideo"
+                favoriteOnly: true
+            }
+            m.node.pageState.activeFilterType = "Genre"
+            m.node.pageState.filterSelection.genre = "Rock"
+            m.node.pageState.letterFilter.selected = "M"
+            m.node.pageState.paging.queryId = 8
+            m.node.musicVideoRandomPlaybackTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            onMusicVideoRandomSelected()
+
+            request = m.node.musicVideoRandomPlaybackTask.request
+            m.assertEqual(request.libraryId, "music-videos")
+            m.assertTrue(request.favoriteOnly)
+            m.assertEqual(request.genre, "Rock")
+            m.assertEqual(request.startsWith, "M")
+            m.assertEqual(request.queryId, 8)
+            m.assertInvalid(request.limit)
+        end function
+
+        @it("starts a random queue without changing the visible library")
+        function _()
+            m.node.pageState.request = { libraryId: "music-videos", collectionType: "musicvideos" }
+            originalItems = [{ Id: "visible-1", Type: "MusicVideo" }]
+            m.node.pageState.allItems = originalItems
+            m.node.pageState.paging.queryId = 12
+            m.node.pageState.paging.nextStartIndex = 100
+            m.node.itemsGrid.content = CreateObject("roSGNode", "ContentNode")
+            m.node.itemsGrid.content.createChild("ContentNode")
+            m.node.itemsGrid.itemFocused = 0
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "music-videos")
+            m.top.selectedVideo = invalid
+            m.node.pageState.randomPlayback.loading = true
+            m.node.musicVideoRandomPlaybackTask.response = {
+                ok: true
+                action: "musicVideoRandomPlayback"
+                libraryId: "music-videos"
+                queryId: 12
+                playbackQueue: [
+                    { itemId: "random-1", item: { Id: "random-1", Type: "MusicVideo" }, startPositionTicks: 0 }
+                    { itemId: "random-2", item: { Id: "random-2", Type: "MusicVideo" }, startPositionTicks: 0 }
+                ]
+            }
+
+            'bs:disable-next-line 1140
+            onMusicVideoRandomPlaybackResponse()
+
+            m.assertEqual(m.top.selectedVideo.playbackQueue.Count(), 2)
+            m.assertEqual(m.top.selectedVideo.playbackQueueIndex, 0)
+            m.assertEqual(m.top.selectedVideo.playbackQueueMode, "random")
+            m.assertEqual(m.top.selectedVideo.playbackQueueScope, "random")
+            m.assertEqual(m.node.pageState.allItems, originalItems)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 100)
+            m.assertEqual(m.node.itemsGrid.content.getChildCount(), 1)
+            m.assertEqual(m.node.itemsGrid.itemFocused, 0)
+        end function
+
+        @it("ignores a random queue response from an obsolete browse query")
+        function _()
+            m.node.pageState.request = { libraryId: "music-videos", collectionType: "musicvideos" }
+            m.node.pageState.paging.queryId = 13
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "music-videos")
+            m.top.selectedVideo = invalid
+            m.node.musicVideoRandomPlaybackTask.response = {
+                ok: true
+                action: "musicVideoRandomPlayback"
+                libraryId: "music-videos"
+                queryId: 12
+                playbackQueue: [{ itemId: "stale", item: { Id: "stale" }, startPositionTicks: 0 }]
+            }
+
+            'bs:disable-next-line 1140
+            onMusicVideoRandomPlaybackResponse()
+
+            m.assertInvalid(m.top.selectedVideo)
+        end function
+
+        @it("prevents duplicate random queue requests while loading")
+        function _()
+            m.node.pageState.request = {
+                libraryId: "music-videos"
+                collectionType: "musicvideos"
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                includeItemTypes: "MusicVideo"
+            }
+            m.node.pageState.randomPlayback.loading = true
+            m.node.musicVideoRandomPlaybackTask.request = invalid
+
+            'bs:disable-next-line 1140
+            onMusicVideoRandomSelected()
+
+            m.assertInvalid(m.node.musicVideoRandomPlaybackTask.request)
+        end function
+
+        @it("restores Random focus after playback")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos" }
+            m.node.pageState.allItems = [{ Id: "video-1", Type: "MusicVideo" }]
+            m.node.pageState.randomPlayback.restoreFocus = true
+            'bs:disable-next-line 1140
+            syncMusicVideoRandomButton()
+
+            'bs:disable-next-line 1140
+            activate()
+
+            m.assertTrue(m.node.musicVideoRandomButton.isInFocusChain())
+            m.assertFalse(m.node.pageState.randomPlayback.restoreFocus)
         end function
 
         @it("persists a movie-scoped library without a canonical collection type")
@@ -410,6 +615,36 @@ namespace tests
 
             'bs:disable-next-line 1140
             m.assertEqual(getVideoLibraryImageAspect(), "wide")
+        end function
+
+        @it("hides the secondary label for music video items")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos" }
+
+            'bs:disable-next-line 1140
+            m.assertFalse(getVideoLibraryItemMetadataVisibility({}))
+
+            m.node.pageState.request = { collectionType: "movies" }
+
+            'bs:disable-next-line 1140
+            m.assertTrue(getVideoLibraryItemMetadataVisibility({}))
+        end function
+
+        @it("tightens vertical spacing only for music video libraries")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos" }
+
+            'bs:disable-next-line 1140
+            applyGridLayout("poster")
+
+            m.assertEqual(m.node.itemsGrid.itemSpacing, [-12.0, -12.0])
+
+            m.node.pageState.request = { collectionType: "movies" }
+
+            'bs:disable-next-line 1140
+            applyGridLayout("poster")
+
+            m.assertEqual(m.node.itemsGrid.itemSpacing, [-12.0, 27.0])
         end function
 
         @it("keeps the same item renderer when leaving detailed layout")

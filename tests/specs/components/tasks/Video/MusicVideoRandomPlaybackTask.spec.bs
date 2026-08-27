@@ -1,0 +1,52 @@
+namespace tests
+
+    @SGNode("MusicVideoRandomPlaybackTask")
+    @suite("MusicVideoRandomPlaybackTask component")
+    class MusicVideoRandomPlaybackTaskTests extends rooibos.BaseTestSuite
+
+        @describe("request construction")
+
+        @it("applies active favorites genre and decade filters")
+        function _()
+            request = {
+                userId: "user"
+                libraryId: "music-videos"
+                favoriteOnly: true
+                genre: "Rock"
+                years: ["1990", "1991"]
+            }
+
+            'bs:disable-next-line 1140
+            params = buildMusicVideoRandomPlaybackParams(request)
+
+            m.assertEqual(params.parentId, "music-videos")
+            m.assertEqual(params.includeItemTypes, "MusicVideo")
+            m.assertEqual(params.filters, "IsFavorite")
+            m.assertEqual(params.genres, "Rock")
+            m.assertEqual(params.years, "1990,1991")
+            m.assertInvalid(params.limit)
+        end function
+
+        @describe("queue construction")
+
+        @it("builds playable queue entries and ignores missing IDs")
+        function _()
+            items = [
+                { Id: "video-1", UserData: { PlaybackPositionTicks: 25 } }
+                { Name: "Missing ID" }
+                { Id: "video-2" }
+            ]
+
+            'bs:disable-next-line 1140
+            queue = buildMusicVideoPlaybackQueue(items)
+
+            m.assertEqual(queue.Count(), 2)
+            m.assertEqual(queue[0].itemId, "video-1")
+            m.assertEqual(Number.ToInteger(queue[0].startPositionTicks, -1), 25)
+            m.assertTrue(queue[0].hasPlaybackIdentity)
+            m.assertEqual(queue[1].itemId, "video-2")
+        end function
+
+    end class
+
+end namespace

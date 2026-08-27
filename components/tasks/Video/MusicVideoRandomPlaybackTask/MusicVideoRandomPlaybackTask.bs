@@ -1,0 +1,141 @@
+import "pkg:/source/ApiPayload.bs"
+import "pkg:/source/Encode.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    validationError = TaskRequest.ValidateRequest(request, "musicVideoRandomPlayback", ["userId", "libraryId"])
+    if validationError <> invalid then
+        libraryId = ""
+        queryId = -1
+        if request <> invalid then
+            libraryId = Format.SafeString(request.libraryId, "")
+            queryId = Number.ToInteger(request.queryId, -1)
+        end if
+        validationError.AddReplace("libraryId", libraryId)
+        validationError.AddReplace("queryId", queryId)
+        m.top.response = validationError
+        return
+    end if
+
+    params = buildMusicVideoRandomPlaybackParams(request)
+    startsWith = Format.SafeString(request.startsWith, "ALL")
+    if startsWith = "#" then
+        result = loadNonAlphabeticMusicVideos(request, params)
+    else
+        if startsWith <> "" and startsWith <> "ALL" then params.AddReplace("nameStartsWith", startsWith)
+        result = requestMusicVideos(request, params)
+    end if
+
+    if result.ok <> true then
+        result.AddReplace("action", "musicVideoRandomPlayback")
+        result.AddReplace("libraryId", request.libraryId)
+        result.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
+        m.top.response = result
+        return
+    end if
+
+    m.top.response = {
+        ok: true
+        action: "musicVideoRandomPlayback"
+        libraryId: request.libraryId
+        queryId: Number.ToInteger(request.queryId, -1)
+        playbackQueue: buildMusicVideoPlaybackQueue(ApiPayload.GetItems(result.data))
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' buildMusicVideoRandomPlaybackParams
+'-------------------------------------------------------------------------------
+function buildMusicVideoRandomPlaybackParams(request as object) as object
+    params = {
+        userId: Format.SafeString(request.userId, "")
+        parentId: Format.SafeString(request.libraryId, "")
+        recursive: true
+        includeItemTypes: "MusicVideo"
+        fields: "SortName,ProductionYear,UserData"
+        enableImageTypes: "Primary,Backdrop,Thumb,Logo"
+        imageTypeLimit: 1
+    }
+    if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
+    if Format.SafeString(request.genre, "") <> "" then params.AddReplace("genres", request.genre)
+    if Type(request.years) = "roArray" and request.years.Count() > 0 then params.AddReplace("years", request.years.Join(","))
+    return params
+end function
+
+'-------------------------------------------------------------------------------
+' requestMusicVideos
+'-------------------------------------------------------------------------------
+function requestMusicVideos(request as object, params as object) as object
+    requestUrl = request.server + "/Users/" + request.userId + "/Items" + Url.BuildQueryString(params)
+    return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' loadNonAlphabeticMusicVideos
+'-------------------------------------------------------------------------------
+function loadNonAlphabeticMusicVideos(request as object, params as object) as object
+    lowerParams = cloneParams(params)
+    lowerParams.AddReplace("nameLessThan", "A")
+    lowerResponse = requestMusicVideos(request, lowerParams)
+    if lowerResponse.ok <> true then return lowerResponse
+
+    upperParams = cloneParams(params)
+    upperParams.AddReplace("nameStartsWithOrGreater", "Z")
+    upperResponse = requestMusicVideos(request, upperParams)
+    if upperResponse.ok <> true then return upperResponse
+
+    items = ApiPayload.GetItems(lowerResponse.data)
+    for each item in ApiPayload.GetItems(upperResponse.data)
+        name = UCase(Format.SafeString(item.Name, ""))
+        if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
+    end for
+    return { ok: true, data: { Items: items } }
+end function
+
+'-------------------------------------------------------------------------------
+' cloneParams
+'-------------------------------------------------------------------------------
+function cloneParams(params as object) as object
+    result = {}
+    for each key in params
+        result[key] = params[key]
+    end for
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' buildMusicVideoPlaybackQueue
+'-------------------------------------------------------------------------------
+function buildMusicVideoPlaybackQueue(items as object) as object
+    queue = []
+    for each item in items
+        itemId = Format.SafeString(item.Id, "")
+        if itemId = "" then continue for
+        queue.Push({
+            itemId: itemId
+            item: item
+            startPositionTicks: PlaybackProgress.GetTicksFromItem(item)
+            hasPlaybackIdentity: true
+        })
+    end for
+    return queue
+end function

@@ -26,6 +26,7 @@ import "pkg:/components/pages/Video/VideoLibrary/Helpers/BrowseTransition.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Items.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Navigation.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Layout.bs"
+import "pkg:/components/pages/Video/VideoLibrary/Helpers/MusicVideoRandomPlayback.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -34,6 +35,7 @@ sub init()
     initReferences()
     m.playlistSpecializationInitialized = false
     m.chromeLayout = {
+        randomWidth: 165
         browseWidth: 190
         sortWidth: 48
         buttonGap: 8
@@ -82,6 +84,10 @@ sub init()
             active: false
             index: -1
         }
+        randomPlayback: {
+            loading: false
+            restoreFocus: false
+        }
         filtersQueryId: 0
         lifecycle: AsyncLifecycle.Create()
     }
@@ -95,6 +101,7 @@ end sub
 sub initReferences()
     m.log = new Logger("VideoLibrary", m.global.logService)
     m.titleLabel = m.top.findNode("titleLabel")
+    m.musicVideoRandomButton = m.top.findNode("musicVideoRandomButton")
     m.browseByButton = m.top.findNode("browseByButton")
     m.sortButton = m.top.findNode("sortButton")
     m.letterGutterButton = m.top.findNode("letterGutterButton")
@@ -102,6 +109,7 @@ sub initReferences()
     m.emptyFavoritesLabel = m.top.findNode("emptyFavoritesLabel")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.videoLibraryTask = m.top.findNode("videoLibraryTask")
+    m.musicVideoRandomPlaybackTask = m.top.findNode("musicVideoRandomPlaybackTask")
     m.videoFilterOptionsTask = m.top.findNode("videoFilterOptionsTask")
     m.videoLibraryProgressIndicator = m.top.findNode("videoLibraryProgressIndicator")
     m.videoLibraryProgressHoldTimer = m.top.findNode("videoLibraryProgressHoldTimer")
@@ -113,6 +121,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.videoLibraryTask.observeField("response", "onVideoLibraryResponse")
+    m.musicVideoRandomPlaybackTask.observeField("response", "onMusicVideoRandomPlaybackResponse")
     m.videoFilterOptionsTask.observeField("response", "onVideoFilterOptionsResponse")
     m.videoLibraryProgressHoldTimer.observeField("fire", "onVideoLibraryProgressHoldTimerFire")
     m.filterRefreshTimer.observeField("fire", "onVideoFilterRefreshTimerFired")
@@ -122,6 +131,7 @@ sub initHandlers()
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
     m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
     m.sortButton.observeField("focusExitDown", "onSortButtonFocusExitDown")
+    m.musicVideoRandomButton.observeField("buttonSelected", "onMusicVideoRandomSelected")
     m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
     m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
     m.filterButtonRow.observeField("focusExitUp", "onFilterButtonRowFocusExitUp")
@@ -231,6 +241,7 @@ end sub
 ' resetVideoLibraryItemsState
 '-------------------------------------------------------------------------------
 sub resetVideoLibraryItemsState()
+    cancelMusicVideoRandomPlayback()
     m.pageState.allItems = []
     m.pageState.items = []
     clearVideoLibraryItemNodeCache()
@@ -239,6 +250,7 @@ sub resetVideoLibraryItemsState()
     m.pageState.paging.hasMore = false
     m.pageState.paging.requestInFlight = false
     m.pageState.paging.queryId = m.pageState.paging.queryId + 1
+    syncMusicVideoRandomButton()
 end sub
 
 
@@ -288,6 +300,14 @@ end function
 '-------------------------------------------------------------------------------
 function isCollectionContentRequest(request as dynamic) as boolean
     return request <> invalid and LCase(Format.SafeString(request.collectionType, "")) = "collection"
+end function
+
+'-------------------------------------------------------------------------------
+' isMusicVideoLibraryRequest
+'-------------------------------------------------------------------------------
+function isMusicVideoLibraryRequest() as boolean
+    request = m.pageState.request
+    return request <> invalid and LCase(Format.SafeString(request.collectionType, "")) = "musicvideos"
 end function
 
 '-------------------------------------------------------------------------------
