@@ -18,7 +18,7 @@ namespace tests
         @it("initializes every settings category and matching panel")
         function _()
             deviceTitles = ["General", "Video", "Subtitles", "Advanced"]
-            userTitles = ["Media Shell", "TV", "Movie", "Collections", "Playlists", "Screensaver"]
+            userTitles = ["Media Shell", "Artwork", "TV", "Screensaver"]
 
             m.assertEqual(m.node.categoryPanels.Count(), deviceTitles.Count() + userTitles.Count())
             m.assertEqual(m.node.categoryControls.Count(), deviceTitles.Count() + userTitles.Count())
@@ -41,121 +41,28 @@ namespace tests
             m.assertEqual(options.getChild(2).title, "Always Burn In")
         end function
 
-        @it("offers Jumbo and Detailed for movie and TV libraries")
+        @it("stores artwork grid changes in settings state")
         function _()
-            tvOptions = m.node.settingsControls.tvLibraryOptions.content
-            movieOptions = m.node.settingsControls.movieLibraryOptions.content
+            m.node.settingsControls.artworkSettingsGrid.selectionChanged = {
+                settingKey: SettingsStore.Key.CollectionCardsImageType
+                value: "detailed"
+            }
 
-            m.assertEqual(tvOptions.getChildCount(), 4)
-            m.assertEqual(tvOptions.getChild(2).title, "Jumbo")
-            m.assertEqual(tvOptions.getChild(3).title, "Detailed")
-            m.assertEqual(m.node.settingsControls.tvLibraryOptions.numRows, 4)
-            m.assertEqual(movieOptions.getChildCount(), 4)
-            m.assertEqual(movieOptions.getChild(2).title, "Jumbo")
-            m.assertEqual(movieOptions.getChild(3).title, "Detailed")
-            m.assertEqual(m.node.settingsControls.movieLibraryOptions.numRows, 4)
+            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.CollectionCardsImageType], "detailed")
+            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.CollectionItemsImageType], "poster")
         end function
 
-        @it("offers Poster Thumbnail and Jumbo for collection and playlist cards")
-        function _()
-            collectionOptions = m.node.settingsControls.collectionCardsImageTypeOptions.content
-            playlistOptions = m.node.settingsControls.playlistCardsImageTypeOptions.content
-
-            m.assertEqual(collectionOptions.getChildCount(), 3)
-            m.assertEqual(collectionOptions.getChild(2).title, "Jumbo")
-            m.assertEqual(m.node.settingsControls.collectionCardsImageTypeOptions.numRows, 3)
-            m.assertEqual(playlistOptions.getChildCount(), 3)
-            m.assertEqual(playlistOptions.getChild(2).title, "Jumbo")
-            m.assertEqual(m.node.settingsControls.playlistCardsImageTypeOptions.numRows, 3)
-        end function
-
-        @it("offers all four display options for collection and playlist items")
-        function _()
-            collectionOptions = m.node.settingsControls.collectionItemsImageTypeOptions.content
-            playlistOptions = m.node.settingsControls.playlistItemsImageTypeOptions.content
-
-            m.assertEqual(collectionOptions.getChildCount(), 4)
-            m.assertEqual(collectionOptions.getChild(2).title, "Jumbo")
-            m.assertEqual(collectionOptions.getChild(3).title, "Detailed")
-            m.assertEqual(m.node.settingsControls.collectionItemsImageTypeOptions.numRows, 4)
-            m.assertEqual(playlistOptions.getChildCount(), 4)
-            m.assertEqual(playlistOptions.getChild(2).title, "Jumbo")
-            m.assertEqual(playlistOptions.getChild(3).title, "Detailed")
-            m.assertEqual(m.node.settingsControls.playlistItemsImageTypeOptions.numRows, 4)
-        end function
-
-        @it("stores Jumbo for collection cards and Detailed for collection items")
-        function _()
-            m.node.settingsControls.collectionCardsImageTypeOptions.itemSelected = 2
-            'bs:disable-next-line 1140
-            onCollectionCardsImageTypeSelected()
-            m.node.settingsControls.collectionItemsImageTypeOptions.itemSelected = 3
-            'bs:disable-next-line 1140
-            onCollectionItemsImageTypeSelected()
-
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.CollectionCardsImageType], "jumbo")
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.CollectionItemsImageType], "detailed")
-        end function
-
-        @it("stores Jumbo for playlist cards and Detailed for playlist items")
-        function _()
-            m.node.settingsControls.playlistCardsImageTypeOptions.itemSelected = 2
-            'bs:disable-next-line 1140
-            onPlaylistCardsImageTypeSelected()
-            m.node.settingsControls.playlistItemsImageTypeOptions.itemSelected = 3
-            'bs:disable-next-line 1140
-            onPlaylistItemsImageTypeSelected()
-
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.PlaylistCardsImageType], "jumbo")
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.PlaylistItemsImageType], "detailed")
-        end function
-
-        @it("stores the playlist card display independently")
+        @it("loads all artwork values into the grid")
         function _()
             m.node.settingsState.values = SettingsStore.Defaults()
-            m.node.settingsControls.playlistCardsImageTypeOptions.itemSelected = 0
+            m.node.settingsState.values[SettingsStore.Key.MusicVideosImageType] = "jumbo"
 
             'bs:disable-next-line 1140
-            onPlaylistCardsImageTypeSelected()
+            selections = getArtworkSettingsValues()
 
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.PlaylistCardsImageType], "poster")
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.PlaylistItemsImageType], "thumbnail")
-        end function
-
-        @it("stores the playlist item display independently")
-        function _()
-            m.node.settingsState.values = SettingsStore.Defaults()
-            m.node.settingsControls.playlistItemsImageTypeOptions.itemSelected = 0
-
-            'bs:disable-next-line 1140
-            onPlaylistItemsImageTypeSelected()
-
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.PlaylistCardsImageType], "thumbnail")
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.PlaylistItemsImageType], "poster")
-        end function
-
-        @it("maps and stores the Jumbo library display mode")
-        function _()
-            'bs:disable-next-line 1140
-            setDisplayOption(m.node.settingsControls.tvLibraryOptions, "jumbo")
-            m.assertEqual(m.node.settingsControls.tvLibraryOptions.checkedItem, 2)
-
-            m.node.settingsControls.movieLibraryOptions.itemSelected = 2
-            'bs:disable-next-line 1140
-            onMovieLibraryDisplaySelected()
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.MovieLibraryDisplay], "jumbo")
-        end function
-
-        @it("maps and stores the Detailed library display mode")
-        function _()
-            'bs:disable-next-line 1140
-            setDisplayOption(m.node.settingsControls.tvLibraryOptions, "detailed")
-            m.assertEqual(m.node.settingsControls.tvLibraryOptions.checkedItem, 3)
-
-            m.node.settingsControls.movieLibraryOptions.itemSelected = 3
-            'bs:disable-next-line 1140
-            onMovieLibraryDisplaySelected()
-            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.MovieLibraryDisplay], "detailed")
+            m.assertEqual(selections.Count(), 8)
+            m.assertEqual(selections[SettingsStore.Key.MusicVideosImageType], "jumbo")
+            m.assertEqual(selections[SettingsStore.Key.HomeVideosImageType], "poster")
         end function
 
         @it("maps and stores subtitle burn-in modes")
