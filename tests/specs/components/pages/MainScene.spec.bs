@@ -71,6 +71,42 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("mediaActionsController"))
         end function
 
+        @describe("video library routing")
+
+        @it("uses music video items for music video libraries")
+        function _()
+            'bs:disable-next-line 1140
+            includeItemTypes = getVideoLibraryIncludeItemTypes("musicvideos")
+
+            m.assertEqual(includeItemTypes, "MusicVideo")
+        end function
+
+        @it("launches selected music videos from the video library")
+        function _()
+            m.node.session = {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+            }
+            m.node.settings = {}
+            page = CreateObject("roSGNode", "VideoLibrary")
+            page.visible = true
+            page.selectedVideo = {
+                itemId: "music-video-1"
+                item: { Id: "music-video-1", Type: "MusicVideo", Name: "Music Video" }
+            }
+            m.node.videoLibraryPage = page
+            m.node.dynamicPageHost.appendChild(page)
+
+            'bs:disable-next-line 1140
+            videoLibraryHandleVideoSelected()
+
+            m.assertFalse(page.visible)
+            m.assertNotInvalid(m.node.videoPlayer)
+            m.assertEqual(m.node.videoPlayer.playRequest.itemId, "music-video-1")
+            m.assertEqual(m.node.dynamicPageHost.getChildCount(), 2)
+        end function
+
         @describe("construction")
 
         @it("does not start the application during construction")
