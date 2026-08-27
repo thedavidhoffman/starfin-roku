@@ -33,7 +33,7 @@ sub executeRequest()
         parentId: Format.SafeString(request.libraryId, "")
         recursive: LCase(Format.SafeString(request.collectionType, "")) <> "playlists"
         includeItemTypes: Format.SafeString(request.includeItemTypes, "")
-        fields: "SortName,ProductionYear"
+        fields: getVideoLibraryFields(request)
         enableImageTypes: "Primary,Backdrop,Thumb,Logo"
         imageTypeLimit: 1
         enableTotalRecordCount: true
@@ -60,7 +60,7 @@ sub executeRequest()
         if requestMode = "playlist" then
             playlistParams = {
                 userId: Format.SafeString(request.userId, "")
-                fields: "SortName,ProductionYear"
+                fields: getVideoLibraryFields(request)
                 enableImageTypes: "Primary,Backdrop,Thumb,Logo"
                 imageTypeLimit: 1
                 startIndex: startIndex
@@ -105,12 +105,23 @@ function getVideoLibraryRequestMode(request as object, startsWith as string) as 
 end function
 
 '-------------------------------------------------------------------------------
+' getVideoLibraryFields
+'-------------------------------------------------------------------------------
+function getVideoLibraryFields(request as dynamic) as string
+    fields = "SortName,ProductionYear"
+    if request <> invalid and request.detailed = true then
+        fields = fields + ",Overview,OfficialRating"
+    end if
+    return fields
+end function
+
+'-------------------------------------------------------------------------------
 ' loadNonAlphabeticPage
 '-------------------------------------------------------------------------------
 function loadNonAlphabeticPage(request as object, params as object, startIndex as integer, pageSize as integer) as object
     yearsKey = ""
     if Type(request.years) = "roArray" then yearsKey = request.years.Join(",")
-    cacheKey = Format.SafeString(request.libraryId, "") + "|" + Format.SafeString(request.sortBy, "") + "|" + Format.SafeString(request.sortOrder, "") + "|" + Format.SafeString(request.genre, "") + "|" + yearsKey + "|" + (request.favoriteOnly = true).ToStr()
+    cacheKey = Format.SafeString(request.libraryId, "") + "|" + Format.SafeString(request.sortBy, "") + "|" + Format.SafeString(request.sortOrder, "") + "|" + Format.SafeString(request.genre, "") + "|" + yearsKey + "|" + (request.favoriteOnly = true).ToStr() + "|" + (request.detailed = true).ToStr()
     if startIndex = 0 or m.nonAlphabeticCache = invalid or m.nonAlphabeticCache.key <> cacheKey then
         baseParams = {}
         for each key in params

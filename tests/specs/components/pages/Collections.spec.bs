@@ -68,6 +68,18 @@ namespace tests
             m.assertEqual(Number.ToInteger(grid.itemSize[0], -1), 465)
         end function
 
+        @it("uses jumbo layout for jumbo settings")
+        function _()
+            m.top.settings = { "collection-cards-image-type": "jumbo" }
+
+            grid = m.top.findNode("collectionsGrid")
+            m.assertEqual(grid.numColumns, 2)
+            m.assertEqual(grid.numRows, 2)
+            m.assertEqual(grid.itemSize, [936.0, 591.0])
+            m.assertEqual(grid.itemSpacing, [0.0, 18.0])
+            m.assertEqual(grid.focusBitmapUri, "pkg:/images/library/jumbo-focus-936x591.png")
+        end function
+
         @it("renders collection image URLs from the request")
         function _()
             m.setPosterSettings()
@@ -81,6 +93,23 @@ namespace tests
             m.assertTrue(Instr(1, m.top.findNode("collectionsGrid").content.getChild(0).HDPosterUrl, "collection-1") > 0)
         end function
 
+        @it("prefers backdrop artwork and includes a logo for jumbo cards")
+        function _()
+            m.top.settings = { "collection-cards-image-type": "jumbo" }
+            m.node.pageState.request = { server: "http://server", token: "token" }
+            item = m.createCollection("collection-1", "Collection")
+            item.ImageTags.Primary = "primary-tag"
+            item.ImageTags.Logo = "logo-tag"
+            item.BackdropImageTags = ["backdrop-tag"]
+
+            'bs:disable-next-line 1140
+            renderCollections([item])
+
+            child = m.top.findNode("collectionsGrid").content.getChild(0)
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/Images/Backdrop?") > 0)
+            m.assertTrue(Instr(1, child.logoUrl, "/Images/Logo?") > 0)
+        end function
+
         @it("centers two top collections")
         function _()
             m.setPosterSettings()
@@ -90,6 +119,17 @@ namespace tests
             renderCollections([m.createCollection("one", "One"), m.createCollection("two", "Two")])
 
             m.assertEqual(Number.ToInteger(m.top.findNode("collectionsGrid").translation[0], -1), 672)
+        end function
+
+        @it("retains the jumbo grid translation for two top collections")
+        function _()
+            m.top.settings = { "collection-cards-image-type": "jumbo" }
+            m.node.pageState.usingTopCollections = true
+
+            'bs:disable-next-line 1140
+            renderCollections([m.createCollection("one", "One"), m.createCollection("two", "Two")])
+
+            m.assertEqual(m.top.findNode("collectionsGrid").translation, [24.0, 207.0])
         end function
 
         @describe("selection and drilldown")

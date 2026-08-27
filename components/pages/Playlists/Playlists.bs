@@ -217,6 +217,12 @@ function specializationImageUrl(item as object, imageAspect as string) as string
     artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
     artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
     if imageAspect = "wide" then return ItemImage.GetWideUrl(request.server, item, artworkWidth, artworkHeight)
+    if imageAspect = "jumbo" then
+        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
+        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
+    end if
     return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
 end function
 
@@ -226,7 +232,10 @@ end function
 function specializationImageAspect() as string
     settingKey = SettingsStore.Key.PlaylistItemsImageType
     if isPlaylistLibraryRequest() then settingKey = SettingsStore.Key.PlaylistCardsImageType
-    if LCase(Format.SafeString(m.top.settings[settingKey], "poster")) = "thumbnail" then return "wide"
+    settingValue = LCase(Format.SafeString(m.top.settings[settingKey], "poster"))
+    if settingValue = "detailed" and isPlaylistContentRequest() then return "detailed"
+    if settingValue = "jumbo" then return "jumbo"
+    if settingValue = "thumbnail" then return "wide"
     return "poster"
 end function
 
@@ -526,6 +535,13 @@ function getPlaylistEpisodeImageUrl(item as object, imageAspect as string) as st
     artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
     artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
     if imageAspect = "wide" then
+        return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
+    end if
+    if imageAspect = "jumbo" then
+        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
+        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
         return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
     end if
     seriesId = Format.SafeString(item.SeriesId, "")

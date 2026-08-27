@@ -1,0 +1,95 @@
+namespace tests
+
+    @SGNode("VideoDetailedCard")
+    @suite("VideoDetailedCard component")
+    class VideoDetailedCardTests extends rooibos.BaseTestSuite
+
+        @describe("mask geometry")
+
+        @it("uses a dedicated full-card mask")
+        function _()
+            cardMask = m.top.findNode("cardMask")
+
+            m.assertNotInvalid(cardMask)
+            m.assertTrue(Instr(1, cardMask.maskUri, "detailed-card-mask.png") > 0)
+        end function
+
+        @it("uses a dedicated poster mask")
+        function _()
+            posterMask = m.top.findNode("posterMask")
+
+            m.assertNotInvalid(posterMask)
+            m.assertTrue(Instr(1, posterMask.maskUri, "detailed-poster-mask.png") > 0)
+        end function
+
+        @describe("detailed rendering")
+
+        @it("renders poster title compact metadata and overview")
+        function _()
+            item = m.createItem({
+                Name: "Detailed Movie"
+                ProductionYear: 2025
+                RunTimeTicks: 75000000000&
+                OfficialRating: "PG-13"
+                Overview: "A detailed description."
+                UserData: {}
+            })
+            item.HDPosterUrl = "http://server/poster.jpg"
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("poster").uri, "http://server/poster.jpg")
+            m.assertEqual(m.top.findNode("title").text, "Detailed Movie")
+            m.assertTrue(Instr(1, m.top.findNode("metadataLabel").text, "2025") > 0)
+            m.assertTrue(Instr(1, m.top.findNode("metadataLabel").text, "2h 5m") > 0)
+            m.assertTrue(Instr(1, m.top.findNode("metadataLabel").text, "PG-13") > 0)
+            m.assertEqual(m.top.findNode("overviewLabel").text, "A detailed description.")
+        end function
+
+        @it("uses fallbacks when artwork and overview are missing")
+        function _()
+            m.top.itemContent = m.createItem({ Name: "Movie", UserData: {} })
+
+            m.assertEqual(m.top.findNode("poster").uri, "pkg:/images/media-card/poster-placeholder-252x378.png")
+            m.assertEqual(m.top.findNode("overviewLabel").text, "No description available.")
+        end function
+
+        @it("omits runtime for TV series")
+        function _()
+            m.top.itemContent = m.createItem({
+                Type: "Series"
+                Name: "Series"
+                ProductionYear: 2024
+                RunTimeTicks: 75000000000&
+                OfficialRating: "TV-14"
+                UserData: {}
+            })
+
+            metadata = m.top.findNode("metadataLabel").text
+            m.assertTrue(Instr(1, metadata, "2024") > 0)
+            m.assertTrue(Instr(1, metadata, "TV-14") > 0)
+            m.assertEqual(Instr(1, metadata, "2h 5m"), 0)
+        end function
+
+        @it("renders watched and progress state")
+        function _()
+            m.top.itemContent = m.createItem({ Name: "Movie", RunTimeTicks: 1000, UserData: { Played: false, PlayedPercentage: 50 } })
+
+            m.assertTrue(m.top.findNode("progressBar").visible)
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").progressWidth, -1), 135)
+
+            m.top.itemContent = m.createItem({ Name: "Movie", UserData: { Played: true } })
+
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
+            m.assertFalse(m.top.findNode("progressBar").visible)
+        end function
+
+        function createItem(raw as object) as object
+            item = CreateObject("roSGNode", "ContentNode")
+            item.AddFields({ raw: raw })
+            return item
+        end function
+
+    end class
+
+end namespace

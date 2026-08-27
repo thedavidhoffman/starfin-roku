@@ -344,8 +344,65 @@ namespace tests
             applyGridLayout("jumbo")
 
             m.assertEqual(m.node.itemsGrid.itemSize, [936.0, 591.0])
+            m.assertEqual(m.node.itemsGrid.itemSpacing, [0.0, 18.0])
             m.assertEqual(m.node.itemsGrid.numColumns, 2)
             m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/jumbo-focus-936x591.png")
+        end function
+
+        @describe("detailed layout")
+
+        @it("uses the jumbo grid geometry with the stable media card renderer")
+        function _()
+            'bs:disable-next-line 1140
+            applyGridLayout("detailed")
+
+            m.assertEqual(m.node.itemsGrid.itemSize, [936.0, 591.0])
+            m.assertEqual(m.node.itemsGrid.itemSpacing, [0.0, -39.0])
+            m.assertEqual(m.node.itemsGrid.numColumns, 2)
+            m.assertEqual(m.node.itemsGrid.itemComponentName, "VideoMediaCard")
+            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/jumbo-focus-936x591.png")
+        end function
+
+        @it("resolves jumbo and detailed collection item settings")
+        function _()
+            m.node.pageState.request = { collectionType: "collection" }
+            m.top.settings = { "collection-items-image-type": "jumbo" }
+
+            'bs:disable-next-line 1140
+            m.assertEqual(getVideoLibraryImageAspect(), "jumbo")
+
+            m.top.settings = { "collection-items-image-type": "detailed" }
+
+            'bs:disable-next-line 1140
+            m.assertEqual(getVideoLibraryImageAspect(), "detailed")
+        end function
+
+        @it("keeps the same item renderer when leaving detailed layout")
+        function _()
+            'bs:disable-next-line 1140
+            applyGridLayout("detailed")
+
+            'bs:disable-next-line 1140
+            applyGridLayout("jumbo")
+
+            m.assertEqual(m.node.itemsGrid.itemComponentName, "VideoMediaCard")
+        end function
+
+        @it("uses primary poster artwork for detailed cards")
+        function _()
+            m.node.pageState.request = { server: "http://server" }
+            item = {
+                Id: "movie-1"
+                ImageTags: { Primary: "poster-tag", Thumb: "thumb-tag" }
+                BackdropImageTags: ["backdrop-tag"]
+            }
+
+            'bs:disable-next-line 1140
+            imageUrl = getItemImageUrl(item, "detailed")
+
+            m.assertTrue(Instr(1, imageUrl, "/Images/Primary") > 0)
+            m.assertTrue(Instr(1, imageUrl, "maxWidth=288") > 0)
+            m.assertTrue(Instr(1, imageUrl, "maxHeight=432") > 0)
         end function
 
         @describe("browse control alignment")
@@ -591,6 +648,18 @@ namespace tests
             m.assertEqual(request.pageStartIndex, 100)
             m.assertEqual(request.genre, "Drama")
             m.assertEqual(request.startsWith, "B")
+            m.assertFalse(request.detailed)
+        end function
+
+        @it("requests detailed metadata only for detailed pages")
+        function _()
+            m.configurePaging(0, 0, 0)
+            m.node.pageState.imageAspect = "detailed"
+
+            'bs:disable-next-line 1140
+            request = buildVideoLibraryPageRequest(0)
+
+            m.assertTrue(request.detailed)
         end function
 
         @it("omits Random from Browse By")

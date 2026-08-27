@@ -28,6 +28,8 @@ $assets = @(
     @{ Source = "images\media-card\poster-mask-252x378.png"; Name = "media-card-poster-mask.png"; Width = 252; Height = 378 },
     @{ Source = "images\media-card\thumbnail-mask-441x249.png"; Name = "media-card-thumbnail-mask.png"; Width = 441; Height = 249 },
     @{ Source = "images\media-card\jumbo-mask-882x496.png"; Name = "media-card-jumbo-mask.png"; Width = 882; Height = 496 },
+    @{ Source = "images\media-card\detailed-poster-mask-288x432.png"; Name = "detailed-poster-mask.png"; Width = 288; Height = 432 },
+    @{ Source = "images\media-card\detailed-card-mask-882x496.png"; Name = "detailed-card-mask.png"; Width = 882; Height = 496 },
     @{ Source = "images\music\album-mask-300x300.png"; Name = "album-mask-300.png"; Width = 300; Height = 300 },
     @{ Source = "images\music\album-mask-342x342.png"; Name = "album-mask-342.png"; Width = 342; Height = 342 },
     @{ Source = "images\music\audio-player-album-mask-651x651.png"; Name = "audio-player-album-mask.png"; Width = 651; Height = 651 },

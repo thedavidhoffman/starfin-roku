@@ -1,0 +1,91 @@
+import "pkg:/source/String.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/MaskAssets.bs"
+import "pkg:/source/MediaMetadata.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackProgress.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    MaskAssets.Apply(m.top.findNode("cardMask"), "detailed-card-mask.png", [882, 496], [588, 331])
+    MaskAssets.Apply(m.top.findNode("posterMask"), "detailed-poster-mask.png", [288, 432], [192, 288])
+    m.poster = m.top.findNode("poster")
+    m.progressBar = m.top.findNode("progressBar")
+    m.watchedIndicator = m.top.findNode("watchedIndicator")
+    m.title = m.top.findNode("title")
+    m.metadataLabel = m.top.findNode("metadataLabel")
+    m.overviewLabel = m.top.findNode("overviewLabel")
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemContentChanged
+'-------------------------------------------------------------------------------
+sub onItemContentChanged()
+    content = m.top.itemContent
+    if content = invalid then return
+
+    item = content.raw
+    if item = invalid then return
+
+    m.poster.uri = getDetailedImageUrl(content)
+    m.title.text = Format.FirstNonEmpty([item.Name], "Untitled")
+    m.metadataLabel.text = getDetailedMetadata(item)
+    m.overviewLabel.text = Format.FirstNonEmpty([item.Overview], "No description available.")
+    updateDetailedProgress(item)
+    m.watchedIndicator.visible = item.UserData <> invalid and item.UserData.Played = true
+end sub
+
+'-------------------------------------------------------------------------------
+' getDetailedImageUrl
+'-------------------------------------------------------------------------------
+function getDetailedImageUrl(content as object) as string
+    imageUrl = Format.SafeString(content.HDPosterUrl, "")
+    if imageUrl <> "" then return imageUrl
+    return "pkg:/images/media-card/poster-placeholder-252x378.png"
+end function
+
+'-------------------------------------------------------------------------------
+' getDetailedMetadata
+'-------------------------------------------------------------------------------
+function getDetailedMetadata(item as object) as string
+    parts = []
+    appendDetailedPart(parts, Format.SafeString(item.ProductionYear, ""))
+    if LCase(Format.SafeString(item.Type, "")) <> "series" then
+        appendDetailedPart(parts, MediaMetadata.FormatRuntime(item.RunTimeTicks))
+    end if
+    appendDetailedPart(parts, Format.SafeString(item.OfficialRating, ""))
+
+    return parts.Join(MediaMetadata.BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' appendDetailedPart
+'-------------------------------------------------------------------------------
+sub appendDetailedPart(parts as object, value as string)
+    if value <> "" then parts.Push(value)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateDetailedProgress
+'-------------------------------------------------------------------------------
+sub updateDetailedProgress(item as object)
+    progressPercent = 0.0
+    if item.UserData <> invalid and item.UserData.Played <> true then
+        if item.UserData.PlayedPercentage <> invalid then
+            progressPercent = item.UserData.PlayedPercentage
+        else if item.RunTimeTicks <> invalid and item.RunTimeTicks > 0 then
+            progressTicks = PlaybackProgress.GetTicksFromItem(item)
+            progressPercent = PlaybackProgress.GetPercentage(progressTicks, item.RunTimeTicks)
+        end if
+    end if
+
+    if progressPercent < 0 then progressPercent = 0
+    if progressPercent > 100 then progressPercent = 100
+    m.progressBar.barWidth = 270
+    m.progressBar.progressWidth = Number.ToInteger(270 * (progressPercent / 100), 0)
+    m.progressBar.visible = m.progressBar.progressWidth > 0
+end sub

@@ -22,5 +22,5 @@ const updatedManifest = manifest.replace(
   `build_version=${nextBuildVersion}`
 );
 
-// await fs.writeFile(manifestPath, updatedManifest, 'utf8');
-console.log(`Build version increment disabled (${currentBuildVersion} -> ${nextBuildVersion})`);
+await fs.writeFile(manifestPath, updatedManifest, 'utf8');
+console.log(`Incremented build version (${currentBuildVersion} -> ${nextBuildVersion})`);

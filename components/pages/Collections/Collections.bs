@@ -236,6 +236,7 @@ sub renderCollections(collections as object)
         child.HDPosterUrl = getItemImageUrl(item, imageAspect)
         child.AddFields({
             imageAspect: imageAspect
+            logoUrl: getItemLogoUrl(item, imageAspect)
             showMetadata: false
             raw: item
         })
@@ -291,17 +292,35 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if imageAspect = "wide" then
         return ItemImage.GetWideUrl(request.server, item, artworkWidth, artworkHeight)
     end if
+    if imageAspect = "jumbo" then
+        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
+        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
+    end if
 
     return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
+end function
+
+'-------------------------------------------------------------------------------
+' getItemLogoUrl
+'-------------------------------------------------------------------------------
+function getItemLogoUrl(item as dynamic, imageAspect as string) as string
+    if imageAspect <> "jumbo" then return ""
+    if Arrays.IsAssocArray(item) = false then return ""
+    request = m.pageState.request
+    if request = invalid then return ""
+    return ItemImage.GetUrl(request.server, item, "Logo", 360, 140)
 end function
 
 '-------------------------------------------------------------------------------
 ' getCollectionImageAspect
 '-------------------------------------------------------------------------------
 function getCollectionImageAspect() as string
-    value = m.top.settings[SettingsStore.Key.CollectionCardsImageType]
+    value = LCase(Format.SafeString(m.top.settings[SettingsStore.Key.CollectionCardsImageType], "poster"))
 
-    if LCase(value) = "thumbnail" then return "wide"
+    if value = "jumbo" then return "jumbo"
+    if value = "thumbnail" then return "wide"
     return "poster"
 end function
 
@@ -330,6 +349,8 @@ sub applyGridTranslation(imageAspect as string, itemCount as integer)
 
     if imageAspect = "wide" then
         m.collectionsGrid.translation = [495, 207]
+    else if imageAspect = "jumbo" then
+        m.collectionsGrid.translation = LibraryGridLayout.GetSpec(imageAspect, "cards").translation
     else
         m.collectionsGrid.translation = [672, 207]
     end if
