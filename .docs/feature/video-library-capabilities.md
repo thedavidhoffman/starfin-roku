@@ -38,9 +38,11 @@ items ordered by title:
   filter reset behavior.
 
 Collection contents support Title, Release Date, Date Added, and Favorites
-browsing plus ascending or descending sort order. Their selection is persisted
-per collection. Genre and Decade choices are omitted because collection contents
-do not load filter options, and the letter grid remains unavailable.
+browsing plus ascending or descending sort order while the collection remains
+open. Collection browse state is not persisted, so reopening a collection uses
+the request's ordering or the Title ascending default. Genre and Decade choices
+are omitted because collection contents do not load filter options, and the
+letter grid remains unavailable.
 
 Behavioral tests are the executable specification for this matrix. Update them
 with this document whenever a library surface or browsing capability changes.

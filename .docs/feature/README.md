@@ -12,6 +12,7 @@ individual Starfin features.
 - [Music Video Playback](music-videos.md)
 - [Playback Safeguards and Diagnostics](playback-safeguards.md)
 - [Playback Skip Controls](playback-skip-controls.md)
+- [Playlist Artwork](playlist-artwork.md)
 - [Preview Sheets](preview-sheets.md)
 - [Theme Songs](theme-songs.md)
 - [Filmography](filmography.md)
