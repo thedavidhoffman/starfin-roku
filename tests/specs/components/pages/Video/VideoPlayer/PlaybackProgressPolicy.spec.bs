@@ -1,0 +1,173 @@
+namespace tests
+
+    @SGNode("VideoPlayer")
+    @suite("VideoPlayer playback progress policy")
+    class VideoPlayerPlaybackProgressPolicyTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            item = { Id: "music-video-1", Type: "MusicVideo", Name: "Song", UserData: { Played: false, PlayedPercentage: 25, PlaybackPositionTicks: 250 } }
+            m.top.playRequest = { itemId: "music-video-1", item: item }
+            m.node.context = { item: item, series: invalid, season: invalid }
+            m.node.session = {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                itemId: "music-video-1"
+                playSessionId: "session"
+                playbackIdentity: {}
+            }
+            m.node.playback.hasEmittedFinalProgress = false
+            m.node.playback.hasReportedStart = false
+            m.node.videoPlayer = { state: "playing", position: 2, duration: 100 }
+            m.node.playstateTask = { request: invalid, control: "stop" }
+        end function
+
+        @describe("music-video suppression")
+
+        @it("does not emit a local playback progress change")
+        function _()
+            m.top.playbackProgressChanged = invalid
+
+            'bs:disable-next-line 1140
+            emitPlaybackProgress(false)
+
+            m.assertInvalid(m.top.playbackProgressChanged)
+            m.assertFalse(m.node.playback.hasEmittedFinalProgress)
+            m.assertEqual(m.node.context.item.UserData.PlaybackPositionTicks, 250)
+        end function
+
+        @it("starts the Jellyfin lifecycle with zero position")
+        function _()
+            'bs:disable-next-line 1140
+            reportPlaystateStart()
+
+            m.assertTrue(m.node.playback.hasReportedStart)
+            m.assertEqual(m.node.playstateTask.control, "run")
+            m.assertEqual(m.node.playstateTask.request.status, "start")
+            m.assertEqual(m.node.playstateTask.request.position, 0)
+            m.assertEqual(m.node.playstateTask.request.playSessionId, "session")
+        end function
+
+        @it("does not report periodic music-video updates")
+        function _()
+            m.node.playback.hasReportedStart = true
+
+            'bs:disable-next-line 1140
+            reportPlaystateUpdate()
+
+            m.assertEqual(m.node.playstateTask.control, "stop")
+            m.assertInvalid(m.node.playstateTask.request)
+        end function
+
+        @it("stops the Jellyfin lifecycle with zero position")
+        function _()
+            m.node.playback.hasReportedStart = true
+
+            'bs:disable-next-line 1140
+            reportPlaystateStop()
+
+            m.assertFalse(m.node.playback.hasReportedStart)
+            m.assertEqual(m.node.playstateTask.control, "run")
+            m.assertEqual(m.node.playstateTask.request.status, "stop")
+            m.assertEqual(m.node.playstateTask.request.position, 0)
+            m.assertEqual(m.node.playstateTask.request.playSessionId, "session")
+        end function
+
+        @it("preserves actual positions for ordinary video lifecycle reports")
+        function _()
+            movie = { Id: "movie-1", Type: "Movie", Name: "Movie", UserData: {} }
+            m.top.playRequest = { itemId: "movie-1", item: movie }
+            m.node.context.item = movie
+            m.node.session.itemId = "movie-1"
+
+            'bs:disable-next-line 1140
+            reportPlaystateStart()
+
+            m.assertEqual(m.node.playstateTask.request.position, 2.0)
+        end function
+
+        @it("reports actual movie positions during periodic updates")
+        function _()
+            m.setCurrentItem({ Id: "movie-1", Type: "Movie", Name: "Movie", UserData: {} })
+            m.node.playback.hasReportedStart = true
+
+            'bs:disable-next-line 1140
+            reportPlaystateUpdate()
+
+            m.assertEqual(m.node.playstateTask.request.status, "update")
+            m.assertEqual(m.node.playstateTask.request.position, 2.0)
+        end function
+
+        @it("reports actual episode positions when playback stops")
+        function _()
+            m.setCurrentItem({ Id: "episode-1", Type: "Episode", Name: "Episode", UserData: {} })
+            m.node.playback.hasReportedStart = true
+
+            'bs:disable-next-line 1140
+            reportPlaystateStop()
+
+            m.assertEqual(m.node.playstateTask.request.status, "stop")
+            m.assertEqual(m.node.playstateTask.request.position, 2.0)
+        end function
+
+        @it("keeps episodes eligible for periodic progress reporting")
+        function _()
+            m.setCurrentItem({ Id: "episode-1", Type: "Episode", Name: "Episode", UserData: {} })
+
+            'bs:disable-next-line 1140
+            eligible = tracksCurrentPlaybackProgress()
+
+            m.assertTrue(eligible)
+        end function
+
+        @it("emits and applies local movie progress")
+        function _()
+            item = { Id: "movie-1", Type: "Movie", Name: "Movie", RunTimeTicks: 1000000000&, UserData: { Played: false, PlaybackPositionTicks: 0 } }
+            m.setCurrentItem(item)
+            m.top.playbackProgressChanged = invalid
+
+            'bs:disable-next-line 1140
+            emitPlaybackProgress(false)
+
+            m.assertNotInvalid(m.top.playbackProgressChanged)
+            m.assertEqual(m.top.playbackProgressChanged.positionTicks, 20000000&)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 20000000&)
+        end function
+
+        @it("emits and applies local episode progress")
+        function _()
+            item = { Id: "episode-1", Type: "Episode", Name: "Episode", RunTimeTicks: 1000000000&, UserData: { Played: false, PlaybackPositionTicks: 0 } }
+            m.setCurrentItem(item)
+            m.top.playbackProgressChanged = invalid
+
+            'bs:disable-next-line 1140
+            emitPlaybackProgress(false)
+
+            m.assertNotInvalid(m.top.playbackProgressChanged)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 20000000&)
+        end function
+
+        @it("emits and applies local Home Media video progress")
+        function _()
+            item = { Id: "video-1", Type: "Video", Name: "Video", RunTimeTicks: 1000000000&, UserData: { Played: false, PlaybackPositionTicks: 0 } }
+            m.setCurrentItem(item)
+            m.top.playbackProgressChanged = invalid
+
+            'bs:disable-next-line 1140
+            emitPlaybackProgress(false)
+
+            m.assertNotInvalid(m.top.playbackProgressChanged)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 20000000&)
+        end function
+
+        function setCurrentItem(item as object)
+            m.top.playRequest = { itemId: item.Id, item: item }
+            m.node.context.item = item
+            m.node.session.itemId = item.Id
+            m.node.playback.hasEmittedFinalProgress = false
+            m.node.playstateTask = { request: invalid, control: "stop" }
+        end function
+
+    end class
+
+end namespace
