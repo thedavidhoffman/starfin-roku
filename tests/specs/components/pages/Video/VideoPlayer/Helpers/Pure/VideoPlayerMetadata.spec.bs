@@ -40,6 +40,46 @@ namespace tests
             m.assertFalse(VideoPlayerMetadata_IsEpisode({}, invalid))
         end function
 
+        @it("classifies music videos explicitly")
+        function _()
+            m.assertTrue(VideoPlayerMetadata_IsMusicVideo({ Type: "MusicVideo" }))
+            m.assertFalse(VideoPlayerMetadata_IsMusicVideo({ Type: "Video" }))
+        end function
+
+        @it("formats populated music-video artists")
+        function _()
+            m.assertEqual(VideoPlayerMetadata_GetMusicVideoArtists({ Artists: ["Artist One", "Artist Two"] }), "Artist One, Artist Two")
+        end function
+
+        @it("omits missing and empty music-video artists")
+        function _()
+            m.assertEqual(VideoPlayerMetadata_GetMusicVideoArtists({}), "")
+            m.assertEqual(VideoPlayerMetadata_GetMusicVideoArtists({ Artists: ["", invalid] }), "")
+        end function
+
+        @it("offers random music-video skip before five seconds")
+        function _()
+            m.assertTrue(VideoPlayerMetadata_ShouldShowRandomMusicVideoSkip({ Type: "MusicVideo" }, "random", "random", true, 4.99, false))
+        end function
+
+        @it("hides random music-video skip at five seconds")
+        function _()
+            m.assertFalse(VideoPlayerMetadata_ShouldShowRandomMusicVideoSkip({ Type: "MusicVideo" }, "random", "random", true, 5, false))
+        end function
+
+        @it("requires random queue identity and a next item for skip")
+        function _()
+            item = { Type: "MusicVideo" }
+            m.assertFalse(VideoPlayerMetadata_ShouldShowRandomMusicVideoSkip(item, "sequential", "random", true, 1, false))
+            m.assertFalse(VideoPlayerMetadata_ShouldShowRandomMusicVideoSkip(item, "random", "library", true, 1, false))
+            m.assertFalse(VideoPlayerMetadata_ShouldShowRandomMusicVideoSkip(item, "random", "random", false, 1, false))
+        end function
+
+        @it("honors random music-video skip dismissal")
+        function _()
+            m.assertFalse(VideoPlayerMetadata_ShouldShowRandomMusicVideoSkip({ Type: "MusicVideo" }, "random", "random", true, 1, true))
+        end function
+
         @it("uses request series title before item fallbacks")
         function _()
             request = { server: "server.local", series: { Id: "s1", Name: "Request Series" } }

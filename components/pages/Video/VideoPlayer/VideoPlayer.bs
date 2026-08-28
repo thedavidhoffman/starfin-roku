@@ -30,6 +30,7 @@ import "pkg:/components/pages/Video/VideoPlayer/Helpers/EpisodeQueueController.b
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackRecovery.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackChaosMonkey.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/MediaSegments.bs"
+import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackActions.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackInformation.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackDiagnostics.bs"
 
@@ -51,7 +52,10 @@ sub initReferences()
     m.clock = m.top.findNode("clock")
     m.castGradient = m.top.findNode("castGradient")
     m.cast = m.top.findNode("cast")
-    m.skipIntroButton = m.top.findNode("skipIntroButton")
+    m.musicVideoIntroMetadata = m.top.findNode("musicVideoIntroMetadata")
+    m.musicVideoArtistLabel = m.top.findNode("musicVideoArtistLabel")
+    m.musicVideoTitleLabel = m.top.findNode("musicVideoTitleLabel")
+    m.playbackActionButton = m.top.findNode("playbackActionButton")
     m.playbackInfoTask = m.top.findNode("playbackInfoTask")
     m.episodeQueueTask = m.top.findNode("episodeQueueTask")
     m.mediaSegmentsTask = m.top.findNode("mediaSegmentsTask")
@@ -154,6 +158,7 @@ sub initReferences()
     m.trickplay = invalid
     m.trickplayPreloadRequest = invalid
     initMediaSegments()
+    initPlaybackActions()
     initPlaybackRecovery()
     initPlaybackDiagnostics()
 #if playbackChaosMonkey
@@ -231,7 +236,7 @@ sub onVideoStateChanged()
 #endif
     m.playback.isPlaying = state = "playing" or state = "buffering"
     m.playbackControls.isPlaying = m.playback.isPlaying
-    updateSkipIntroButton(m.playback.position)
+    updatePlaybackActionButton(m.playback.position)
     if state = "error" then
         reportPlaystateStop()
         if handlePlaybackRecoveryFailure("videoError", Format.SafeString(m.videoPlayer.errorStr, "")) then return
@@ -291,7 +296,7 @@ sub onVideoPositionChanged()
     diagnosePlaybackPosition(position)
     m.playback.position = position
     recordPlaybackRecoveryPosition(position)
-    updateSkipIntroButton(position)
+    updatePlaybackActionButton(position)
     if m.playback.isSeeking <> true then
         m.playbackControls.position = m.playback.position
     end if
@@ -341,6 +346,7 @@ sub stopPlayback(preserveRecovery = false as boolean)
     cleanupSubtitlePlayback()
     m.videoPlayer.control = "stop"
     if preserveRecovery <> true then resetMediaSegments()
+    if preserveRecovery <> true then hidePlaybackIntroPresentation()
     if preserveRecovery <> true then resetPlaybackRecovery()
 #if playbackChaosMonkey
     if preserveRecovery <> true then stopPlaybackChaosMonkey()
@@ -352,6 +358,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub updatePlaybackControlsMetadata(request as object, item as dynamic)
     if item = invalid then
+        m.playbackControls.musicVideoMetadata = false
         m.playbackControls.title = "Video"
         m.playbackControls.subtitle = ""
         m.playbackControls.hasSubtitleOptions = false
@@ -360,7 +367,12 @@ sub updatePlaybackControlsMetadata(request as object, item as dynamic)
         return
     end if
 
-    if VideoPlayerMetadata_IsEpisode(request, item) then
+    isMusicVideo = VideoPlayerMetadata_IsMusicVideo(item)
+    m.playbackControls.musicVideoMetadata = isMusicVideo
+    if isMusicVideo then
+        m.playbackControls.title = VideoPlayerMetadata_GetItemTitle(item)
+        m.playbackControls.subtitle = VideoPlayerMetadata_GetMusicVideoArtists(item)
+    else if VideoPlayerMetadata_IsEpisode(request, item) then
         m.playbackControls.title = VideoPlayerMetadata_GetSeriesTitle(request, item)
         m.playbackControls.subtitle = VideoPlayerMetadata_GetEpisodeText(item)
     else
@@ -373,7 +385,8 @@ end sub
 ' showControls
 '-------------------------------------------------------------------------------
 sub showControls(restartTimer as boolean)
-    hideSkipIntroButton()
+    hidePlaybackActionButton()
+    hideMusicVideoIntroMetadata()
     hideCast()
     m.controlsAnimation.hiding = false
     m.controlsAnimation.node.control = "stop"
@@ -432,7 +445,7 @@ sub hideControls()
     m.playbackControls.callFunc("deactivate")
     if m.overlay.area = "controls" then m.overlay.area = "none"
     m.top.setFocus(true)
-    updateSkipIntroButton(m.playback.position)
+    updatePlaybackActionButton(m.playback.position)
 
     if m.controlsAnimation.hiding = true then return
 
@@ -507,8 +520,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "back" then
-        if m.skipIntroButton.visible = true then
-            dismissCurrentIntroSegment()
+        if m.playbackActionButton.visible = true or m.musicVideoIntroMetadata.visible = true then
+            dismissPlaybackAction()
             return true
         end if
 
@@ -549,8 +562,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
         handleProgressSeekInput("fastforward")
         return true
     else if key = "OK" then
-        if m.skipIntroButton.visible = true then
-            onSkipIntroSelected()
+        if m.playbackActionButton.visible = true then
+            onPlaybackActionSelected()
         else if m.playback.isSeeking = true then
             commitSeek()
         else if m.playbackControls.visible = true then

@@ -1,0 +1,241 @@
+namespace tests
+
+    @SGNode("VideoPlayer")
+    @suite("VideoPlayer playback actions")
+    class VideoPlayerPlaybackActionsTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            scene = m.node.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                spinnerNode = CreateObject("roSGNode", "Spinner")
+                spinnerNode.id = "loadingSpinner"
+                scene.appendChild(spinnerNode)
+            end if
+            m.top.playRequest = {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                itemId: "music-video-1"
+                item: { Id: "music-video-1", Type: "MusicVideo", Name: "First" }
+                subtitleBurnInMode: "automatic"
+            }
+            m.node.session = {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                itemId: "music-video-1"
+                playSessionId: "session"
+                playbackIdentity: {}
+            }
+            m.node.context = {
+                item: { Id: "music-video-1", Type: "MusicVideo", Name: "First" }
+                series: invalid
+                season: invalid
+            }
+            m.node.queue = {
+                items: [
+                    { itemId: "music-video-1", item: m.node.context.item, startPositionTicks: 0 }
+                    { itemId: "music-video-2", item: { Id: "music-video-2", Type: "MusicVideo", Name: "Second" }, startPositionTicks: 0 }
+                ]
+                index: 0
+                mode: "random"
+                scope: "random"
+            }
+            m.node.playbackAction.itemId = "music-video-1"
+            m.node.playbackAction.mode = "none"
+            m.node.playbackAction.randomSkipDismissed = false
+            m.node.playbackAction.musicVideoMetadataDismissed = false
+        end function
+
+        @describe("music-video presentation and queue actions")
+
+        @it("renders the random queue action as Skip")
+        function _()
+            'bs:disable-next-line 1140
+            showPlaybackActionButton("randomSkip", "Skip")
+
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackActionButton.text, "Skip")
+            m.assertEqual(m.node.playbackAction.mode, "randomSkip")
+        end function
+
+        @it("shows music-video metadata at the bottom left before five seconds")
+        function _()
+            'bs:disable-next-line 1140
+            updateMusicVideoIntroMetadata(m.node.context.item, 4.99)
+
+            m.assertTrue(m.node.musicVideoIntroMetadata.visible)
+            m.assertEqual(m.node.musicVideoTitleLabel.text, "First")
+            m.assertEqual(Number.ToInteger(m.node.musicVideoTitleLabel.translation[0], -1), 103)
+            titleBottom = Number.ToInteger(m.node.musicVideoTitleLabel.translation[1], 0) + Number.ToInteger(m.node.musicVideoTitleLabel.height, 0)
+            buttonBottom = Number.ToInteger(m.node.playbackActionButton.translation[1], 0) + Number.ToInteger(m.node.playbackActionButton.buttonHeight, 0)
+            m.assertEqual(titleBottom, buttonBottom)
+        end function
+
+        @it("shows artists above the introductory music-video title")
+        function _()
+            item = { Id: "music-video-1", Type: "MusicVideo", Name: "First", Artists: ["Artist One", "Artist Two"] }
+
+            'bs:disable-next-line 1140
+            updateMusicVideoIntroMetadata(item, 1)
+
+            m.assertEqual(m.node.musicVideoArtistLabel.text, "Artist One, Artist Two")
+            m.assertEqual(m.node.musicVideoTitleLabel.text, "First")
+            m.assertTrue(Number.ToInteger(m.node.musicVideoArtistLabel.translation[1], 0) < Number.ToInteger(m.node.musicVideoTitleLabel.translation[1], 0))
+        end function
+
+        @it("omits the introductory artist line when artists are absent")
+        function _()
+            'bs:disable-next-line 1140
+            updateMusicVideoIntroMetadata(m.node.context.item, 1)
+
+            m.assertEqual(m.node.musicVideoArtistLabel.text, "")
+            m.assertEqual(m.node.musicVideoTitleLabel.text, "First")
+        end function
+
+        @it("hides introductory music-video metadata at five seconds")
+        function _()
+            'bs:disable-next-line 1140
+            updateMusicVideoIntroMetadata(m.node.context.item, 1)
+
+            'bs:disable-next-line 1140
+            updateMusicVideoIntroMetadata(m.node.context.item, 5)
+
+            m.assertFalse(m.node.musicVideoIntroMetadata.visible)
+        end function
+
+        @it("shows the introductory presentation through the canonical update while playing")
+        function _()
+            m.node.videoPlayer = { state: "playing" }
+            m.node.playback.isSeeking = false
+            m.node.overlay.area = "none"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(1)
+
+            m.assertTrue(m.node.musicVideoIntroMetadata.visible)
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackAction.mode, "randomSkip")
+        end function
+
+        @it("temporarily suppresses and restores the introductory presentation around controls")
+        function _()
+            m.node.videoPlayer = { state: "playing" }
+            m.node.playback.isSeeking = false
+            m.node.overlay.area = "controls"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(1)
+
+            m.assertFalse(m.node.musicVideoIntroMetadata.visible)
+            m.assertFalse(m.node.playbackActionButton.visible)
+
+            m.node.overlay.area = "none"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(1)
+
+            m.assertTrue(m.node.musicVideoIntroMetadata.visible)
+            m.assertTrue(m.node.playbackActionButton.visible)
+        end function
+
+        @it("expires the introductory presentation through the canonical update at five seconds")
+        function _()
+            m.node.videoPlayer = { state: "playing" }
+            m.node.playback.isSeeking = false
+            m.node.overlay.area = "none"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(1)
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(5)
+
+            m.assertFalse(m.node.musicVideoIntroMetadata.visible)
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("renders artists above the music-video title")
+        function _()
+            item = { Id: "music-video-1", Type: "MusicVideo", Name: "Video Title", Artists: ["Artist One", "Artist Two"] }
+
+            'bs:disable-next-line 1140
+            updatePlaybackControlsMetadata({}, item)
+
+            m.assertTrue(m.node.playbackControls.musicVideoMetadata)
+            m.assertEqual(m.node.playbackControls.subtitle, "Artist One, Artist Two")
+            m.assertEqual(m.node.playbackControls.title, "Video Title")
+        end function
+
+        @it("renders only the title when music-video artists are absent")
+        function _()
+            item = { Id: "music-video-1", Type: "MusicVideo", Name: "Video Title" }
+
+            'bs:disable-next-line 1140
+            updatePlaybackControlsMetadata({}, item)
+
+            m.assertEqual(m.node.playbackControls.subtitle, "")
+            m.assertEqual(m.node.playbackControls.title, "Video Title")
+        end function
+
+        @it("dismisses random Skip for the current item")
+        function _()
+            'bs:disable-next-line 1140
+            showPlaybackActionButton("randomSkip", "Skip")
+            'bs:disable-next-line 1140
+            updateMusicVideoIntroMetadata(m.node.context.item, 1)
+
+            'bs:disable-next-line 1140
+            dismissPlaybackAction()
+
+            m.assertTrue(m.node.playbackAction.randomSkipDismissed)
+            m.assertTrue(m.node.playbackAction.musicVideoMetadataDismissed)
+            m.assertFalse(m.node.playbackActionButton.visible)
+            m.assertFalse(m.node.musicVideoIntroMetadata.visible)
+        end function
+
+        @it("resets random Skip dismissal for the next item")
+        function _()
+            m.node.playbackAction.randomSkipDismissed = true
+
+            'bs:disable-next-line 1140
+            resetPlaybackActionsForItem("music-video-2")
+
+            m.assertFalse(m.node.playbackAction.randomSkipDismissed)
+            m.assertFalse(m.node.playbackAction.musicVideoMetadataDismissed)
+            m.assertEqual(m.node.playbackAction.itemId, "music-video-2")
+        end function
+
+        @it("advances to the next random queue item when Skip is selected")
+        function _()
+            m.node.playbackAction.mode = "randomSkip"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.assertEqual(m.top.playRequest.itemId, "music-video-2")
+            m.assertEqual(m.top.playRequest.playbackQueueIndex, 1)
+            m.assertEqual(m.top.playRequest.playbackQueueMode, "random")
+            m.assertEqual(m.top.playRequest.playbackQueueScope, "random")
+        end function
+
+        @it("dismisses music-video metadata before selecting Skip Intro")
+        function _()
+            m.node.playbackAction.mode = "skipIntro"
+            m.node.mediaSegments.activeEndSeconds = 3
+            m.node.musicVideoIntroMetadata.visible = true
+            m.node.playbackActionButton.visible = true
+            m.node.videoPlayer = { seek: 0, control: "" }
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.assertTrue(m.node.playbackAction.musicVideoMetadataDismissed)
+            m.assertFalse(m.node.musicVideoIntroMetadata.visible)
+            m.assertFalse(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playback.position, 3)
+        end function
+
+    end class
+
+end namespace

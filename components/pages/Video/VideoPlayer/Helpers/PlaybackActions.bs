@@ -1,0 +1,146 @@
+'-------------------------------------------------------------------------------
+' initPlaybackActions
+'-------------------------------------------------------------------------------
+sub initPlaybackActions()
+    m.playbackAction = {
+        itemId: ""
+        mode: "none"
+        randomSkipDismissed: false
+        musicVideoMetadataDismissed: false
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' resetPlaybackActionsForItem
+'-------------------------------------------------------------------------------
+sub resetPlaybackActionsForItem(itemId as string)
+    if m.playbackAction.itemId = itemId then return
+    hidePlaybackActionButton()
+    m.playbackAction.itemId = itemId
+    m.playbackAction.randomSkipDismissed = false
+    m.playbackAction.musicVideoMetadataDismissed = false
+end sub
+
+'-------------------------------------------------------------------------------
+' updatePlaybackActionButton
+'-------------------------------------------------------------------------------
+sub updatePlaybackActionButton(position as dynamic)
+    resetPlaybackActionsForItem(m.session.itemId)
+    if canShowPlaybackActionButton() <> true then
+        hidePlaybackIntroPresentation()
+        return
+    end if
+
+    item = getCurrentPlaybackItem(m.top.playRequest)
+    updateMusicVideoIntroMetadata(item, position)
+    showRandomSkip = VideoPlayerMetadata_ShouldShowRandomMusicVideoSkip(item, m.queue.mode, m.queue.scope, hasQueueItemAtOffset(1), position, m.playbackAction.randomSkipDismissed)
+    if showRandomSkip then
+        showPlaybackActionButton("randomSkip", "Skip")
+        return
+    end if
+
+    activeIntro = getActiveIntroSegment(Number.ToFloat(position, 0))
+    if activeIntro = invalid then
+        hidePlaybackActionButton()
+        return
+    end if
+
+    m.mediaSegments.activeEndSeconds = activeIntro.endSeconds
+    showPlaybackActionButton("skipIntro", "Skip Intro")
+end sub
+
+'-------------------------------------------------------------------------------
+' updateMusicVideoIntroMetadata
+'-------------------------------------------------------------------------------
+sub updateMusicVideoIntroMetadata(item as dynamic, position as dynamic)
+    playbackPosition = Number.ToFloat(position, 0)
+    visible = VideoPlayerMetadata_IsMusicVideo(item) and playbackPosition >= 0 and playbackPosition < 5 and m.playbackAction.musicVideoMetadataDismissed <> true
+    if visible <> true then
+        hideMusicVideoIntroMetadata()
+        return
+    end if
+
+    m.musicVideoArtistLabel.text = VideoPlayerMetadata_GetMusicVideoArtists(item)
+    m.musicVideoTitleLabel.text = VideoPlayerMetadata_GetItemTitle(item)
+    m.musicVideoIntroMetadata.visible = true
+end sub
+
+'-------------------------------------------------------------------------------
+' canShowPlaybackActionButton
+'-------------------------------------------------------------------------------
+function canShowPlaybackActionButton() as boolean
+    if m.playback.isSeeking = true then return false
+    if m.overlay.area <> "none" then return false
+    return LCase(Format.SafeString(m.videoPlayer.state, "")) = "playing"
+end function
+
+'-------------------------------------------------------------------------------
+' showPlaybackActionButton
+'-------------------------------------------------------------------------------
+sub showPlaybackActionButton(mode as string, text as string)
+    m.playbackAction.mode = mode
+    m.playbackActionButton.text = text
+    if m.playbackActionButton.visible = true then return
+
+    m.playbackActionButton.visible = true
+    m.playbackActionButton.hasFocusVisual = true
+    m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' hidePlaybackActionButton
+'-------------------------------------------------------------------------------
+sub hidePlaybackActionButton()
+    m.playbackAction.mode = "none"
+    m.playbackActionButton.visible = false
+    m.playbackActionButton.hasFocusVisual = false
+end sub
+
+'-------------------------------------------------------------------------------
+' hideMusicVideoIntroMetadata
+'-------------------------------------------------------------------------------
+sub hideMusicVideoIntroMetadata()
+    m.musicVideoIntroMetadata.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' hidePlaybackIntroPresentation
+'-------------------------------------------------------------------------------
+sub hidePlaybackIntroPresentation()
+    hidePlaybackActionButton()
+    hideMusicVideoIntroMetadata()
+end sub
+
+'-------------------------------------------------------------------------------
+' dismissPlaybackAction
+'-------------------------------------------------------------------------------
+sub dismissPlaybackAction()
+    dismissPlaybackActionPresentation(m.playbackAction.mode)
+    m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' dismissPlaybackActionPresentation
+'-------------------------------------------------------------------------------
+sub dismissPlaybackActionPresentation(mode as string)
+    if mode = "randomSkip" then
+        m.playbackAction.randomSkipDismissed = true
+    else if mode = "skipIntro" and m.mediaSegments.activeEndSeconds >= 0 then
+        m.mediaSegments.dismissedEndSeconds = m.mediaSegments.activeEndSeconds
+    end if
+    m.playbackAction.musicVideoMetadataDismissed = true
+    hidePlaybackIntroPresentation()
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaybackActionSelected
+'-------------------------------------------------------------------------------
+sub onPlaybackActionSelected()
+    mode = m.playbackAction.mode
+    dismissPlaybackActionPresentation(mode)
+    if mode = "randomSkip" then
+        startQueueItemAtOffset(1)
+    else if mode = "skipIntro" then
+        skipActiveIntro()
+    end if
+end sub
