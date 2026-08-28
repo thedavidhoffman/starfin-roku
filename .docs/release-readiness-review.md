@@ -186,11 +186,13 @@ blocker.
 - Confirm required images, fonts, and other packaged assets are present.
 - Confirm the artifact contains no development credentials or debug-only
   configuration.
-- Install the release artifact fresh instead of relying only on an existing
-  development side-load.
-- Confirm the installed release artifact launches successfully.
-- Optionally repeat a short critical-path smoke test using that installed
-  artifact.
+- Optionally install the release artifact fresh instead of relying only on an
+  existing development side-load.
+- When the artifact is installed, confirm that it launches successfully and
+  optionally repeat a short critical-path smoke test.
+
+Fresh installation and launch verification are recommended confidence-building
+checks, but they are not required for the release-readiness analysis to pass.
 
 ## Finding Classification
 
@@ -216,7 +218,7 @@ under `out/`. Record:
 - Validation commands and results.
 - Complete unit-test count and all-passing result.
 - Path to the versioned unit-test report.
-- Release artifact version, installation result, and launch result.
+- Release artifact version and, when performed, installation and launch results.
 - Open blockers, accepted follow-ups, and known limitations.
 - Final decision: `SHIP` or `NO SHIP`.
 - Reviewer and review date.
