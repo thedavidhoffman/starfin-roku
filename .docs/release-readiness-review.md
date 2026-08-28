@@ -1,0 +1,156 @@
+# Release Readiness Review
+
+This document defines a bounded review for deciding whether the current
+development effort is ready to release. It is a release confidence check, not a
+complete audit of the codebase, and should not reopen settled architecture
+unless the review uncovers a release-blocking problem.
+
+## Review Outcome
+
+The review should produce a clear ship or no-ship recommendation supported by:
+
+- A review of changes since the last known-good release.
+- Automated validation of the complete application.
+- A complete unit-test run with all tests passing.
+- Manual verification of critical workflows on a Roku device.
+- Verification of the exact package and configuration intended for release.
+
+This process provides reasonable confidence but cannot prove that the release
+contains no defects.
+
+## 1. Establish the Release Scope
+
+- Identify the last known-good release tag, commit, or branch.
+- Review the diff from that baseline to the proposed release commit.
+- List the user workflows, shared helpers, components, tasks, configuration,
+  and assets affected by those changes.
+- Confirm that the diff does not contain accidental files, generated output,
+  development credentials, debug-only behavior, abandoned feature flags, or
+  unfinished work intended for a later release.
+- Treat unrelated working-tree changes as user-owned and keep them outside the
+  review scope.
+- Do not use `.to-do.md` as release scope unless its owner explicitly requests
+  it.
+
+## 2. Perform a Risk-Focused Code Review
+
+Review changed production code and the directly connected callers, consumers,
+and tests. Do not inspect unrelated historical code solely for completeness.
+
+Give additional attention to changes involving:
+
+- Authentication, session expiry, and persisted session data.
+- API request construction, response handling, and error paths.
+- Asynchronous request correlation and stale responses.
+- Playback lifecycle, progress reporting, queues, and recovery.
+- Navigation, focus movement, focus restoration, and Back-button behavior.
+- Dialog and overlay opening, dismissal, selection, and returned focus.
+- Persistence, restoration, and transitions between application modes.
+
+For stateful workflows, trace the complete event sequence and confirm that
+state and side effects have clear owners. Look for obsolete workarounds or
+alternate paths that bypass the current implementation.
+
+## 3. Reconcile Behavior and Documentation
+
+- Compare changed behavior with its feature document under `.docs/feature/`.
+- Update or create the applicable feature document when release behavior has
+  changed.
+- Confirm every feature document is listed in `.docs/feature/README.md`.
+- Verify that documented limitations and deferred issues still describe the
+  proposed release accurately.
+
+## 4. Run Automated Verification
+
+Run the complete project validation rather than only the tests nearest to the
+latest changes:
+
+```text
+npm run validate
+npm run test:build
+git diff --check
+```
+
+`npm run test:build` confirms that the complete unit-test project compiles, but
+it does not execute the tests. Review warnings, unexpected output, and test
+coverage of changed behavior instead of relying only on a successful exit code.
+A successful build does not verify SceneGraph runtime behavior.
+
+## 5. Run a Roku Device Smoke Test
+
+Install and test on the configured development device. Run the complete Rooibos
+unit-test suite for every release candidate:
+
+```text
+npm test -- --host <roku-host> --password "<developer-password>"
+```
+
+Every unit test must execute and pass. Treat any failed test, incomplete run,
+unexpectedly skipped test, device disconnect, or test-runner error as a release
+blocker until it is understood and resolved. Rerun the complete suite after the
+resolution; a partial or targeted rerun is not sufficient for the final release
+decision.
+
+Record the total test count and passing result in the release decision record.
+Do not store the developer password in the repository or command examples.
+
+Manually exercise the critical paths applicable to the release:
+
+- Cold launch and launch with a persisted authenticated session.
+- Login, logout, and expired-session handling.
+- Navigation between major surfaces and focus recovery.
+- Home and library loading, empty states, and API failures.
+- Item selection and drill-down navigation.
+- Playback start, pause, resume, seek, exit, and progress restoration.
+- Playback queue advancement when applicable.
+- Dialog opening, dismissal, selection, and returned focus.
+- Back-button behavior from every major surface.
+- Application relaunch after persisted state has been created.
+
+Record the device model, Roku OS version, server version, and release commit so
+the result can be reproduced.
+
+## 6. Verify the Release Artifact
+
+- Build the exact package intended for distribution.
+- Confirm its version and channel configuration.
+- Confirm production endpoints and release configuration are selected.
+- Confirm required images, fonts, and other packaged assets are present.
+- Confirm the artifact contains no development credentials or debug-only
+  configuration.
+- Install the release artifact fresh instead of relying only on an existing
+  development side-load.
+- Repeat a short critical-path smoke test using that installed artifact.
+
+## Finding Classification
+
+Classify each finding before making the release decision:
+
+- **Release blocker:** A crash, broken primary workflow, data or session
+  corruption, security issue, unusable navigation or focus, failed validation,
+  or invalid release package. The release should not ship until resolved and
+  reverified.
+- **Follow-up:** A confirmed issue that is safe to defer. Document its impact,
+  workaround, and intended follow-up before release.
+- **Observation:** A maintainability, consistency, or style concern that does
+  not affect the release decision.
+
+Avoid expanding observations into unrelated cleanup during the release review.
+
+## Ship Decision Record
+
+Record the following when the review is complete:
+
+- Baseline and proposed release commit.
+- Validation commands and results.
+- Complete unit-test count and all-passing result.
+- Device, Roku OS, and server versions used for runtime verification.
+- Critical workflows tested and their results.
+- Release artifact version and installation result.
+- Open blockers, accepted follow-ups, and known limitations.
+- Final decision: `SHIP` or `NO SHIP`.
+- Reviewer and review date.
+
+A `SHIP` decision requires no unresolved release blockers. Any accepted
+follow-up should have a documented owner and enough detail to be actionable
+after release.

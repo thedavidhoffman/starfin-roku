@@ -1,0 +1,24 @@
+# Video Playback Lifecycle
+
+## Back Navigation
+
+Pressing Back while the playback controls and other dismissible playback UI are
+hidden exits video playback immediately. The player publishes final progress,
+starts the Jellyfin playback-stop report, stops the local Roku `Video` node, and
+requests navigation back to the originating detail page without waiting for the
+HTTP response.
+
+The stop response has no UI or navigation side effects. This prevents server
+response time, including the extra time Jellyfin may need to terminate an HLS
+transcode, from delaying the local player close.
+
+## Rapid Replay
+
+A user may start playback again from the detail page while the prior stop report
+is still completing. The new `VideoPlayer` component owns a separate
+`PlaystateTask` and receives a new Jellyfin `PlaySessionId`; reports from the old
+player retain the old session identity. New playback therefore starts
+immediately and does not wait for the prior stop response.
+
+Late stop responses are intentionally ignored. They cannot close, stop, or
+otherwise mutate the replacement player.

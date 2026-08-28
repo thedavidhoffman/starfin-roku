@@ -1,0 +1,49 @@
+namespace tests
+
+    @SGNode("VideoPlayer")
+    @suite("VideoPlayer component")
+    class VideoPlayerTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.node.playback.hasReportedStart = true
+            m.node.playback.hasEmittedFinalProgress = false
+            m.node.session.server = "http://server"
+            m.node.session.token = "token"
+            m.node.session.itemId = "movie-1"
+            m.node.session.playSessionId = "old-session"
+            m.node.session.playbackIdentity = {
+                mediaSourceId: "source-1"
+                liveStreamId: ""
+                playMethod: "Transcode"
+                canSeek: true
+            }
+            m.node.playstateTask = { request: invalid, control: "" }
+            m.top.closeRequested = false
+            m.top.findNode("playbackControls").visible = false
+            m.top.findNode("playbackActionButton").visible = false
+            m.top.findNode("musicVideoIntroMetadata").visible = false
+        end function
+
+        @describe("Back navigation")
+
+        @it("stops and closes immediately without waiting for a stop response")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.findNode("videoPlayer").control, "stop")
+            m.assertFalse(m.node.playback.hasReportedStart)
+            m.assertTrue(m.top.closeRequested)
+            m.assertEqual(m.node.playstateTask.request.status, "stop")
+            m.assertEqual(m.node.playstateTask.request.itemId, "movie-1")
+            m.assertEqual(m.node.playstateTask.request.playSessionId, "old-session")
+            m.assertEqual(m.node.playstateTask.request.mediaSourceId, "source-1")
+            m.assertEqual(m.node.playstateTask.request.playMethod, "Transcode")
+            m.assertTrue(m.node.playstateTask.request.canSeek)
+            m.assertEqual(m.node.playstateTask.control, "run")
+        end function
+
+    end class
+
+end namespace
