@@ -6,4 +6,5 @@ individual Starfin features.
 
 ## Table of Contents
 
+- [Home Media Playback](home-media.md)
 - [Music Video Playback](music-videos.md)

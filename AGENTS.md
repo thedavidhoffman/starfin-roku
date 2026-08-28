@@ -13,6 +13,12 @@
 
 - Treat `.to-do.md` as user-owned scratch content. Do not modify it, and ignore its working-tree changes during status checks and code reviews unless the user explicitly asks to review or edit it.
 
+## Feature documentation
+
+- Track feature behavior and design decisions in feature-specific Markdown files under `.docs/feature/`.
+- When adding or changing feature behavior, update the corresponding feature document. If no document exists, create one that documents the behavior being added or changed.
+- Keep `.docs/feature/README.md` updated with a table-of-contents entry for every feature document.
+
 ## Roku XML style
 
 - Prefix literal XML color values with `0x`, such as `color="0xF3F7FBFF"`.

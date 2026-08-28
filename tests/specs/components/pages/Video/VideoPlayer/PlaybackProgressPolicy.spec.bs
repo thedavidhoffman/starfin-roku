@@ -147,7 +147,47 @@ namespace tests
             m.assertEqual(item.UserData.PlaybackPositionTicks, 20000000&)
         end function
 
-        @it("emits and applies local Home Media video progress")
+        @it("does not emit or apply local Home Media video progress")
+        function _()
+            item = { Id: "video-1", Type: "Video", Name: "Video", RunTimeTicks: 1000000000&, UserData: { Played: false, PlaybackPositionTicks: 0 } }
+            m.setCurrentItem(item, false)
+            m.top.playbackProgressChanged = invalid
+
+            'bs:disable-next-line 1140
+            emitPlaybackProgress(false)
+
+            m.assertInvalid(m.top.playbackProgressChanged)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 0)
+        end function
+
+        @it("uses lifecycle-only reports for Home Media videos")
+        function _()
+            item = { Id: "video-1", Type: "Video", Name: "Video", UserData: {} }
+            m.setCurrentItem(item, false)
+
+            'bs:disable-next-line 1140
+            reportPlaystateStart()
+
+            m.assertEqual(m.node.playstateTask.request.status, "start")
+            m.assertEqual(m.node.playstateTask.request.position, 0)
+
+            m.node.playback.hasReportedStart = true
+            m.node.playstateTask.request = invalid
+            m.node.playstateTask.control = "stop"
+            'bs:disable-next-line 1140
+            reportPlaystateUpdate()
+
+            m.assertInvalid(m.node.playstateTask.request)
+            m.assertEqual(m.node.playstateTask.control, "stop")
+
+            'bs:disable-next-line 1140
+            reportPlaystateStop()
+
+            m.assertEqual(m.node.playstateTask.request.status, "stop")
+            m.assertEqual(m.node.playstateTask.request.position, 0)
+        end function
+
+        @it("emits and applies local ordinary video progress")
         function _()
             item = { Id: "video-1", Type: "Video", Name: "Video", RunTimeTicks: 1000000000&, UserData: { Played: false, PlaybackPositionTicks: 0 } }
             m.setCurrentItem(item)
@@ -160,8 +200,32 @@ namespace tests
             m.assertEqual(item.UserData.PlaybackPositionTicks, 20000000&)
         end function
 
-        function setCurrentItem(item as object)
-            m.top.playRequest = { itemId: item.Id, item: item }
+        @it("preserves the Home Media opt-out in stream restart requests")
+        function _()
+            item = { Id: "video-1", Type: "Video", Name: "Video", UserData: {} }
+            m.setCurrentItem(item, false)
+
+            'bs:disable-next-line 1140
+            restartRequest = buildStreamRestartPlayRequest()
+
+            m.assertFalse(restartRequest.tracksPlaybackProgress)
+        end function
+
+        @it("does not introduce an opt-out in ordinary stream restart requests")
+        function _()
+            item = { Id: "video-1", Type: "Video", Name: "Video", UserData: {} }
+            m.setCurrentItem(item)
+
+            'bs:disable-next-line 1140
+            restartRequest = buildStreamRestartPlayRequest()
+
+            m.assertInvalid(restartRequest.tracksPlaybackProgress)
+        end function
+
+        function setCurrentItem(item as object, tracksPlaybackProgress = invalid as dynamic)
+            request = { itemId: item.Id, item: item }
+            if tracksPlaybackProgress <> invalid then request.tracksPlaybackProgress = tracksPlaybackProgress
+            m.top.playRequest = request
             m.node.context.item = item
             m.node.session.itemId = item.Id
             m.node.playback.hasEmittedFinalProgress = false
