@@ -26,7 +26,7 @@ If applicable, attach screenshots or a short video showing the problem.
 
 ## Starfin/Roku Device Information
 
-The following information is all available in the Starfin `System Information` dialog. Found under the `Account` menu.
+The following information is all available in the Starfin `System Information` dialog. Found under the `System` menu.
 
 **Starfin Version:**
 The version of Starfin where you encountered the problem.

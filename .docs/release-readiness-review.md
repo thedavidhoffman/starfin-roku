@@ -140,6 +140,17 @@ Record the total test count, passing result, and unit-test report path in the
 release decision record. Do not store the developer password in the repository,
 release evidence, or command examples.
 
+Do not copy Roku device output or device-identifying details into the release-
+readiness report. Record only the aggregate unit-test result and counts. Exclude:
+
+- Roku model and model number.
+- Roku OS version and build number.
+- IP addresses, ports, socket endpoints, and connection details.
+- Device uptime.
+- Application or developer-channel ID.
+- Jellyfin server version.
+- Deployment, launch, debug-console, and device-query transcripts.
+
 ## Optional Manual Roku Smoke Test
 
 The manual smoke test is a recommended confidence-building activity, especially
@@ -162,8 +173,10 @@ Manually exercise the critical paths applicable to the release:
 - Application relaunch after persisted state has been created.
 
 Record the device model, Roku OS version, server version, and release commit so
-the result can be reproduced when a manual smoke test is performed. An absent or
-incomplete manual smoke-test record is not a release blocker.
+the result can be reproduced locally when a manual smoke test is performed, but
+do not include those device or server details in the generated release-readiness
+report. An absent or incomplete manual smoke-test record is not a release
+blocker.
 
 ## 6. Verify the Release Artifact
 
@@ -203,15 +216,19 @@ under `out/`. Record:
 - Validation commands and results.
 - Complete unit-test count and all-passing result.
 - Path to the versioned unit-test report.
-- Device and Roku OS version used for required unit tests and artifact launch.
-- Release artifact version and installation result.
+- Release artifact version, installation result, and launch result.
 - Open blockers, accepted follow-ups, and known limitations.
 - Final decision: `SHIP` or `NO SHIP`.
 - Reviewer and review date.
 
+Summarize required Roku execution only as pass or fail. Do not include device
+identity, environment details, connection output, deployment output, launch
+output, or device-query output in the release-readiness report.
+
 When an optional manual smoke test is performed, also record the server version,
-critical workflows tested, and their results. These optional fields may be
-omitted without blocking a `SHIP` decision.
+critical workflows tested, and their results in local test notes if useful. Do
+not copy device or server identity into the release-readiness report. These
+optional fields may be omitted without blocking a `SHIP` decision.
 
 A `SHIP` decision requires no unresolved release blockers. Any accepted
 follow-up should have a documented owner and enough detail to be actionable
