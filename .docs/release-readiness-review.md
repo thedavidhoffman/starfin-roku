@@ -20,6 +20,27 @@ is not required for the release-readiness analysis to pass.
 This process provides reasonable confidence but cannot prove that the release
 contains no defects.
 
+## Release Evidence Files
+
+Store the completed review evidence under `out/`, using the version embedded in
+the release artifact:
+
+```text
+out/v<major>.<minor>.<build>-release-readiness-report.md
+out/v<major>.<minor>.<build>-unit-test-report.txt
+```
+
+For example, release `2.0.3` produces:
+
+```text
+out/v2.0.3-release-readiness-report.md
+out/v2.0.3-unit-test-report.txt
+```
+
+These are generated release outputs and should not be treated as source files.
+Replace existing reports for the same version when the complete verification is
+rerun so the files always describe the latest run of that candidate.
+
 ## 1. Establish the Release Scope
 
 - Identify the last known-good release tag, commit, or branch.
@@ -93,8 +114,31 @@ blocker until it is understood and resolved. Rerun the complete suite after the
 resolution; a partial or targeted rerun is not sufficient for the final release
 decision.
 
-Record the total test count and passing result in the release decision record.
-Do not store the developer password in the repository or command examples.
+Capture the complete console output from the final full-suite run in the
+versioned unit-test report under `out/`. Sanitize the report before saving it:
+
+- Normalize the displayed device-test arguments to:
+
+  ```text
+  -- --host <ip_redacted> --password "<password_redacted>"
+  ```
+
+- Replace every IPv4 address anywhere in the report with `<ip_redacted>`,
+  including the Roku address, local addresses, socket endpoints, and addresses
+  repeated in deployment or connection messages.
+- Replace the password argument value with `<password_redacted>` without
+  replacing occurrences of the password text inside unrelated words, test
+  names, or application output. Do not use an unrestricted global replacement
+  of the raw password value.
+- Redact any other credentials discovered in the output.
+
+After sanitizing, verify that the report contains no IPv4 addresses or raw
+credentials. The report must retain the final test totals, result, warnings,
+crashes, failures, and ignored-test count.
+
+Record the total test count, passing result, and unit-test report path in the
+release decision record. Do not store the developer password in the repository,
+release evidence, or command examples.
 
 ## Optional Manual Roku Smoke Test
 
@@ -152,11 +196,13 @@ Avoid expanding observations into unrelated cleanup during the release review.
 
 ## Ship Decision Record
 
-Record the following when the review is complete:
+Write the completed decision record to the versioned release-readiness report
+under `out/`. Record:
 
 - Baseline and proposed release commit.
 - Validation commands and results.
 - Complete unit-test count and all-passing result.
+- Path to the versioned unit-test report.
 - Device and Roku OS version used for required unit tests and artifact launch.
 - Release artifact version and installation result.
 - Open blockers, accepted follow-ups, and known limitations.
