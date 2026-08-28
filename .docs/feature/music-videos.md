@@ -61,6 +61,11 @@ tracking:
 This is controlled by the shared `MediaPlaybackPolicy.TracksProgress()` policy.
 Other video types retain their existing resume, progress, and watched behavior.
 
+The Home page's Continue Watching request excludes `MusicVideo` items at the
+Jellyfin API boundary. This also keeps music videos with stale or pre-existing
+resume data out of the row without deleting that server-side data. Continue
+Listening, Next Up, and library browsing are not affected by this exclusion.
+
 ## Jellyfin Playback Lifecycle
 
 Music videos still report the minimum Jellyfin playback lifecycle needed for
