@@ -1,0 +1,168 @@
+'===============================================================================
+' HomeMediaLibrary
+'===============================================================================
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleHomeSelected
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleHomeSelected()
+    selection = m.homePage.selectedHomeMediaLibrary
+    if selection = invalid or Format.SafeString(selection.libraryId, "") = "" then return
+
+    resetDynamicPages()
+    page = CreateObject("roSGNode", "HomeMediaLibrary")
+    page.observeField("closeRequested", "homeMediaLibraryHandleCloseRequested")
+    page.observeField("selectedVideo", "homeMediaLibraryHandleVideoSelected")
+    page.observeField("selectedPhoto", "homeMediaLibraryHandlePhotoSelected")
+    page.observeField("overlayRequested", "homeMediaLibraryHandleOverlayRequested")
+    page.observeField("focusExitUp", "homeMediaLibraryHandleFocusExitUp")
+    page.observeField("thumbnailLayoutActive", "homeMediaLibraryHandleThumbnailLayoutChanged")
+    page.settings = m.settings
+    page.loadRequest = {
+        server: m.session.server
+        token: m.session.token
+        userId: m.session.userId
+        accountKey: m.session.accountKey
+        libraryId: selection.libraryId
+        title: Format.SafeString(selection.item.Name, "Home Media")
+        settings: m.settings
+    }
+    m.homeMediaLibraryPage = page
+    m.homePage.visible = false
+    m.header.visible = true
+    m.header.thumbnailLibraryLayout = true
+    authAppendDynamicPage(page)
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleHomeVideoSelected
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleHomeVideoSelected()
+    selection = m.homePage.selectedHomeMediaVideo
+    if selection = invalid or Format.SafeString(selection.itemId, "") = "" then return
+    resetDynamicPages()
+    m.homePage.visible = false
+    playerShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleHomePhotoSelected
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleHomePhotoSelected()
+    selection = m.homePage.selectedHomeMediaPhoto
+    if selection = invalid then return
+    resetDynamicPages()
+    showHomeMediaPhotoViewer(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleVideoSelected
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleVideoSelected()
+    if m.homeMediaLibraryPage = invalid then return
+    selection = m.homeMediaLibraryPage.selectedVideo
+    if selection = invalid or Format.SafeString(selection.itemId, "") = "" then return
+    m.homeMediaLibraryPage.callFunc("deactivate")
+    m.homeMediaLibraryPage.visible = false
+    playerShow(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandlePhotoSelected
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandlePhotoSelected()
+    if m.homeMediaLibraryPage = invalid then return
+    selection = m.homeMediaLibraryPage.selectedPhoto
+    if selection = invalid or Type(selection.items) <> "roArray" or selection.items.Count() = 0 then return
+
+    showHomeMediaPhotoViewer(selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' showHomeMediaPhotoViewer
+'-------------------------------------------------------------------------------
+sub showHomeMediaPhotoViewer(selection as object)
+    viewer = CreateObject("roSGNode", "PhotoViewer")
+    viewer.observeField("closeRequested", "homeMediaLibraryHandlePhotoViewerClosed")
+    viewer.loadRequest = {
+        server: m.session.server
+        token: m.session.token
+        items: selection.items
+        index: Number.ToInteger(selection.index, 0)
+        sourceFolderId: Format.SafeString(selection.sourceFolderId, "")
+    }
+    if m.homeMediaLibraryPage <> invalid then
+        m.homeMediaLibraryPage.callFunc("deactivate")
+        m.homeMediaLibraryPage.visible = false
+    end if
+    m.photoViewerPage = viewer
+    authAppendDynamicPage(viewer)
+    m.header.visible = false
+    viewer.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandlePhotoViewerClosed
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandlePhotoViewerClosed()
+    clearStatus()
+    if m.photoViewerPage <> invalid then
+        m.photoViewerPage.callFunc("deactivate")
+        m.dynamicPageHost.removeChild(m.photoViewerPage)
+        m.photoViewerPage = invalid
+    end if
+    if m.homeMediaLibraryPage <> invalid then
+        m.homeMediaLibraryPage.visible = true
+        m.header.visible = true
+        m.homeMediaLibraryPage.callFunc("activate")
+    else
+        showHome()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleOverlayRequested
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleOverlayRequested()
+    if m.homeMediaLibraryPage = invalid then return
+    request = m.homeMediaLibraryPage.overlayRequested
+    if request <> invalid then m.overlayHost.callFunc("openOverlay", request)
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleBrowseOverlayClosed
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleBrowseOverlayClosed(closed as object)
+    if m.homeMediaLibraryPage = invalid then return
+    selection = invalid
+    if closed.overlay <> invalid then selection = closed.overlay.sortSelected
+    m.homeMediaLibraryPage.callFunc("handleBrowseOverlayClosed", selection)
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleFocusExitUp
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleFocusExitUp()
+    if m.header <> invalid and m.header.visible = true then m.header.callFunc("focusHeader")
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleThumbnailLayoutChanged
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleThumbnailLayoutChanged()
+    if m.homeMediaLibraryPage <> invalid then m.header.thumbnailLibraryLayout = m.homeMediaLibraryPage.thumbnailLayoutActive
+end sub
+
+'-------------------------------------------------------------------------------
+' homeMediaLibraryHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub homeMediaLibraryHandleCloseRequested()
+    clearStatus()
+    if m.homeMediaLibraryPage <> invalid then
+        m.homeMediaLibraryPage.callFunc("deactivate")
+        m.dynamicPageHost.removeChild(m.homeMediaLibraryPage)
+        m.homeMediaLibraryPage = invalid
+    end if
+    showHome()
+end sub

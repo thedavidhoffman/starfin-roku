@@ -1,0 +1,95 @@
+import "pkg:/source/ApiPayload.bs"
+import "pkg:/source/Encode.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    validationError = TaskRequest.ValidateRequest(request, "homeMediaLibrary", ["userId", "parentId"])
+    if validationError <> invalid then
+        if request <> invalid then validationError.AddReplace("parentId", Format.SafeString(request.parentId, ""))
+        m.top.response = validationError
+        return
+    end if
+
+    startIndex = Number.ToInteger(request.startIndex, 0)
+    pageSize = 100
+    params = buildHomeMediaParams(request, startIndex, pageSize)
+
+    requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+    httpResponse = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    if httpResponse.ok <> true then
+        httpResponse.AddReplace("action", "homeMediaLibrary")
+        httpResponse.AddReplace("parentId", Format.SafeString(request.parentId, ""))
+        httpResponse.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
+        m.top.response = httpResponse
+        return
+    end if
+
+    items = ApiPayload.GetItems(httpResponse.data)
+    totalCount = getTotalRecordCount(httpResponse.data)
+    m.top.response = {
+        ok: true
+        action: "homeMediaLibrary"
+        parentId: Format.SafeString(request.parentId, "")
+        queryId: Number.ToInteger(request.queryId, -1)
+        payload: httpResponse.data
+        startIndex: startIndex
+        nextStartIndex: startIndex + items.Count()
+        totalRecordCount: totalCount
+        hasMore: items.Count() = pageSize and (totalCount < 0 or startIndex + items.Count() < totalCount)
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' buildHomeMediaParams
+'-------------------------------------------------------------------------------
+function buildHomeMediaParams(request as object, startIndex as integer, pageSize as integer) as object
+    params = {
+        userId: Format.SafeString(request.userId, "")
+        parentId: Format.SafeString(request.parentId, "")
+        recursive: request.recursive = true
+        includeItemTypes: Format.SafeString(request.includeItemTypes, "Folder,PhotoAlbum,Photo,Video")
+        fields: "SortName,DateCreated,PremiereDate,ProductionYear,Overview,OfficialRating,ChildCount"
+        enableImageTypes: "Primary,Thumb"
+        imageTypeLimit: 1
+        enableTotalRecordCount: true
+        sortBy: Format.SafeString(request.sortBy, "SortName")
+        sortOrder: normalizeSortOrder(request.sortOrder)
+        startIndex: startIndex
+        limit: pageSize
+    }
+    if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
+    return params
+end function
+
+'-------------------------------------------------------------------------------
+' normalizeSortOrder
+'-------------------------------------------------------------------------------
+function normalizeSortOrder(value as dynamic) as string
+    if Format.SafeString(value, "") = "Descending" then return "Descending"
+    return "Ascending"
+end function
+
+'-------------------------------------------------------------------------------
+' getTotalRecordCount
+'-------------------------------------------------------------------------------
+function getTotalRecordCount(payload as dynamic) as integer
+    if payload = invalid then return -1
+    return Number.ToInteger(payload.TotalRecordCount, -1)
+end function

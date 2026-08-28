@@ -1,0 +1,616 @@
+namespace tests
+
+    @SGNode("HomeMediaLibrary")
+    @suite("HomeMediaLibrary component")
+    class HomeMediaLibraryTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.node.itemsGrid = m.node.top.findNode("itemsGrid")
+            m.node.libraryTask = m.node.top.findNode("homeMediaLibraryTask")
+            m.node.state.request = {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                accountKey: ""
+                libraryId: "root"
+                title: "Photos"
+            }
+            selection = LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+            'bs:disable-next-line 1140
+            m.node.state.stack = [createLevel("root", "Photos", selection)]
+            m.node.state.activeRequest = invalid
+            m.node.state.lifecycle = AsyncLifecycle.Create()
+            scene = m.node.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                spinnerNode = CreateObject("roSGNode", "Spinner")
+                spinnerNode.id = "loadingSpinner"
+                scene.appendChild(spinnerNode)
+            end if
+            if scene.findNode("statusLabel") = invalid then
+                status = CreateObject("roSGNode", "StatusLabel")
+                status.id = "statusLabel"
+                scene.appendChild(status)
+            end if
+        end function
+
+        @describe("hierarchy")
+
+        @it("creates levels with independent paging and browse state")
+        function _()
+            selection = LibraryBrowse.CreateSortSelection("DateCreated", "DateCreated", "Date Added", "Descending")
+
+            'bs:disable-next-line 1140
+            level = createLevel("folder", "Vacation", selection)
+
+            m.assertEqual(level.folderId, "folder")
+            m.assertEqual(level.title, "Vacation")
+            m.assertEqual(level.nextStartIndex, 0)
+            m.assertFalse(level.requestInFlight)
+            m.assertEqual(level.selection.sortOrder, "Descending")
+        end function
+
+        @it("pops a nested folder and restores its parent")
+        function _()
+            root = m.node.state.stack[0]
+            root.items = [{ Id: "folder", Type: "Folder", Name: "Vacation", ImageTags: {} }]
+            'bs:disable-next-line 1140
+            m.node.state.stack.Push(createLevel("folder", "Vacation", root.selection))
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.state.stack.Count(), 1)
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            m.assertEqual(level.folderId, "root")
+        end function
+
+        @it("requests close when Back is pressed at the root")
+        function _()
+            m.top.closeRequested = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("clears a parent request when a child folder becomes active")
+        function _()
+            root = m.node.state.stack[0]
+            root.items = [{ Id: "folder", Type: "Folder", Name: "Vacation", ImageTags: {} }]
+            root.requestInFlight = true
+            m.node.state.queryId = 10
+            m.node.state.activeRequest = { level: root, queryId: 10 }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, 10)
+            m.node.itemsGrid.content = m.buildContent(root.items)
+            m.node.itemsGrid.itemSelected = 0
+
+            'bs:disable-next-line 1140
+            child = getCurrentLevel()
+            m.assertFalse(root.requestInFlight)
+            m.assertTrue(child.requestInFlight)
+            m.assertEqual(m.node.state.activeRequest.level.folderId, "folder")
+        end function
+
+        @it("clears a child request before restoring its parent")
+        function _()
+            root = m.node.state.stack[0]
+            'bs:disable-next-line 1140
+            child = createLevel("folder", "Vacation", root.selection)
+            child.requestInFlight = true
+            m.node.state.stack.Push(child)
+            m.node.state.queryId = 20
+            m.node.state.activeRequest = { level: child, queryId: 20 }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, 20)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertFalse(child.requestInFlight)
+            m.assertEqual(m.node.state.stack.Count(), 1)
+            m.assertFalse(root.requestInFlight)
+        end function
+
+        @describe("mixed item selection")
+
+        @it("opens folders as a new non-recursive level")
+        function _()
+            item = { Id: "folder", Type: "Folder", Name: "Vacation", ImageTags: {} }
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            level.items = [item]
+            m.node.itemsGrid.content = m.buildContent([item])
+            m.node.itemsGrid.itemSelected = 0
+
+            m.assertEqual(m.node.state.stack.Count(), 2)
+            'bs:disable-next-line 1140
+            current = getCurrentLevel()
+            m.assertEqual(current.folderId, "folder")
+        end function
+
+        @it("emits the photo-only sequence and selected index")
+        function _()
+            first = { Id: "photo-1", Type: "Photo", Name: "One", ImageTags: {} }
+            video = { Id: "video-1", Type: "Video", Name: "Video", ImageTags: {} }
+            second = { Id: "photo-2", Type: "Photo", Name: "Two", ImageTags: {} }
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            level.items = [first, video, second]
+            m.node.itemsGrid.content = m.buildContent(level.items)
+            m.node.itemsGrid.itemSelected = 2
+
+            m.assertEqual(m.top.selectedPhoto.items.Count(), 2)
+            m.assertEqual(m.top.selectedPhoto.index, 1)
+            m.assertEqual(m.top.selectedPhoto.sourceFolderId, "root")
+        end function
+
+        @it("emits videos for direct playback")
+        function _()
+            video = { Id: "video-1", Type: "Video", Name: "Video", ImageTags: {} }
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            level.items = [video]
+            m.node.itemsGrid.content = m.buildContent(level.items)
+            m.node.itemsGrid.itemSelected = 0
+
+            m.assertEqual(m.top.selectedVideo.itemId, "video-1")
+        end function
+
+        @describe("browse modes")
+
+        @it("keeps normal folder browsing mixed and non-recursive")
+        function _()
+            'bs:disable-next-line 1140
+            itemTypes = getIncludeItemTypes(false)
+
+            m.assertEqual(itemTypes, "Folder,PhotoAlbum,Photo,Video")
+        end function
+
+        @it("limits Favorites to playable and viewable media")
+        function _()
+            'bs:disable-next-line 1140
+            itemTypes = getIncludeItemTypes(true)
+
+            m.assertEqual(itemTypes, "Photo,Video")
+        end function
+
+        @it("enters Favorites as a recursive library-wide level")
+        function _()
+            favorites = LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites")
+
+            'bs:disable-next-line 1140
+            handleBrowseOverlayClosed(favorites)
+
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            m.assertTrue(level.isFavorites)
+            m.assertEqual(level.folderId, "root")
+            m.assertTrue(m.node.libraryTask.request.favoriteOnly)
+            m.assertTrue(m.node.libraryTask.request.recursive)
+            m.assertEqual(m.node.libraryTask.request.includeItemTypes, "Photo,Video")
+        end function
+
+        @it("clears the folder request owner before entering Favorites")
+        function _()
+            root = m.node.state.stack[0]
+            root.requestInFlight = true
+            m.node.state.queryId = 30
+            m.node.state.activeRequest = { level: root, queryId: 30 }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, 30)
+            favorites = LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites")
+
+            'bs:disable-next-line 1140
+            handleBrowseOverlayClosed(favorites)
+
+            m.assertFalse(root.requestInFlight)
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            m.assertTrue(level.isFavorites)
+            m.assertTrue(level.requestInFlight)
+        end function
+
+        @it("leaves Favorites without discarding the prior folder level")
+        function _()
+            folderSelection = LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+            'bs:disable-next-line 1140
+            folderLevel = createLevel("folder", "Vacation", folderSelection)
+            folderLevel.focusedIndex = 3
+            folderLevel.items = [
+                { Id: "one", Type: "Photo", Name: "One", ImageTags: {} }
+                { Id: "two", Type: "Photo", Name: "Two", ImageTags: {} }
+                { Id: "three", Type: "Photo", Name: "Three", ImageTags: {} }
+                { Id: "four", Type: "Photo", Name: "Four", ImageTags: {} }
+            ]
+            m.node.state.stack.Push(folderLevel)
+            favorites = LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites")
+            'bs:disable-next-line 1140
+            m.node.state.stack.Push(createFavoritesLevel("root", favorites))
+
+            'bs:disable-next-line 1140
+            handleBrowseOverlayClosed(folderSelection)
+
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            m.assertEqual(level.folderId, "folder")
+            m.assertEqual(level.focusedIndex, 3)
+            m.assertEqual(level.items.Count(), 4)
+            m.assertFalse(level.isFavorites)
+        end function
+
+        @it("applies the emitted sort order instead of the previous button value")
+        function _()
+            m.node.sortButton.selectedSort = LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title", "Ascending")
+            m.node.sortButton.sortOrderChanged = { sortOrder: "Descending" }
+
+            'bs:disable-next-line 1140
+            onSortOrderChanged()
+
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            m.assertEqual(level.selection.sortOrder, "Descending")
+        end function
+
+        @it("supersedes an in-flight request when browse state resets")
+        function _()
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            level.requestInFlight = true
+            level.items = [{ Id: "old", Type: "Photo" }]
+            previousQueryId = m.node.state.queryId
+
+            'bs:disable-next-line 1140
+            loadCurrentLevel(true, true)
+
+            m.assertTrue(level.requestInFlight)
+            m.assertEqual(level.items.Count(), 0)
+            m.assertTrue(m.node.state.queryId > previousQueryId)
+            m.assertEqual(m.node.libraryTask.request.startIndex, 0)
+            m.assertEqual(m.node.libraryTask.request.queryId, m.node.state.queryId)
+        end function
+
+        @it("ignores a stale response without clearing the new request owner")
+        function _()
+            'bs:disable-next-line 1140
+            loadCurrentLevel(true)
+            staleQueryId = m.node.state.queryId
+
+            'bs:disable-next-line 1140
+            loadCurrentLevel(true)
+            currentQueryId = m.node.state.queryId
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+
+            m.node.libraryTask.response = { ok: true, action: "homeMediaLibrary", parentId: "root", queryId: staleQueryId, payload: { Items: [] }, startIndex: 0, nextStartIndex: 0, totalRecordCount: 0, hasMore: false }
+
+            m.assertTrue(level.requestInFlight)
+            m.assertEqual(m.node.state.activeRequest.queryId, currentQueryId)
+        end function
+
+        @it("cancellation clears the owner lifecycle spinner and task")
+        function _()
+            level = m.node.state.stack[0]
+            level.requestInFlight = true
+            m.node.state.activeRequest = { level: level, queryId: 41 }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, 41)
+            spinnerNode = m.node.top.getScene().findNode("loadingSpinner")
+            spinnerNode.control = "start"
+            m.node.libraryTask.control = "run"
+
+            'bs:disable-next-line 1140
+            cancelActiveLevelRequest()
+
+            m.assertFalse(level.requestInFlight)
+            m.assertInvalid(m.node.state.activeRequest)
+            m.assertFalse(m.node.state.lifecycle.isActive)
+            m.assertEqual(spinnerNode.control, "stop")
+            m.assertEqual(m.node.libraryTask.control, "stop")
+        end function
+
+        @it("advances the query only when starting a request")
+        function _()
+            m.node.state.queryId = 50
+            level = m.node.state.stack[0]
+            level.requestInFlight = true
+            m.node.state.activeRequest = { level: level, queryId: 50 }
+
+            'bs:disable-next-line 1140
+            cancelActiveLevelRequest()
+
+            m.assertEqual(m.node.state.queryId, 50)
+
+            'bs:disable-next-line 1140
+            loadCurrentLevel(true)
+
+            m.assertEqual(m.node.state.queryId, 51)
+        end function
+
+        @describe("view state")
+
+        @it("does not complete a level when its initial request fails")
+        function _()
+            'bs:disable-next-line 1140
+            loadCurrentLevel(true)
+            level = m.node.state.stack[0]
+
+            m.node.libraryTask.response = m.failedResponse(m.node.state.queryId, 0)
+
+            m.assertFalse(level.requestInFlight)
+            m.assertFalse(level.loadCompleted)
+        end function
+
+        @it("does not show an empty state after settings change follows an initial failure")
+        function _()
+            'bs:disable-next-line 1140
+            loadCurrentLevel(true)
+            m.node.libraryTask.response = m.failedResponse(m.node.state.queryId, 0)
+
+            m.top.settings = { "home-videos-image-type": "thumbnail" }
+
+            m.assertFalse(m.top.findNode("emptyLabel").visible)
+            m.assertFalse(m.node.itemsGrid.visible)
+        end function
+
+        @it("completes a successful empty level and shows its empty state")
+        function _()
+            'bs:disable-next-line 1140
+            loadCurrentLevel(true)
+            level = m.node.state.stack[0]
+            queryId = m.node.state.queryId
+
+            m.node.libraryTask.response = { ok: true, action: "homeMediaLibrary", parentId: "root", queryId: queryId, payload: { Items: [] }, startIndex: 0, nextStartIndex: 0, totalRecordCount: 0, hasMore: false }
+
+            m.assertTrue(level.loadCompleted)
+            m.assertTrue(m.top.findNode("emptyLabel").visible)
+        end function
+
+        @it("preserves completed content when pagination fails")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "photo", Type: "Photo", Name: "Photo", ImageTags: {} }]
+            level.nextStartIndex = 100
+            level.loadCompleted = true
+            'bs:disable-next-line 1140
+            renderItems(level.items, true)
+
+            'bs:disable-next-line 1140
+            loadCurrentLevel(false)
+            m.node.libraryTask.response = m.failedResponse(m.node.state.queryId, 100)
+
+            m.assertTrue(level.loadCompleted)
+            m.assertEqual(level.items.Count(), 1)
+            m.assertTrue(m.node.itemsGrid.visible)
+            m.assertFalse(m.top.findNode("emptyLabel").visible)
+        end function
+
+        @it("shows the empty label only for a completed empty level")
+        function _()
+            'bs:disable-next-line 1140
+            renderItems([], true)
+
+            m.assertFalse(m.node.itemsGrid.visible)
+            m.assertTrue(m.top.findNode("emptyLabel").visible)
+        end function
+
+        @it("hides an old empty label while a replacement load starts")
+        function _()
+            m.top.findNode("emptyLabel").visible = true
+
+            'bs:disable-next-line 1140
+            loadCurrentLevel(true)
+
+            m.assertFalse(m.top.findNode("emptyLabel").visible)
+            m.assertFalse(m.node.itemsGrid.visible)
+        end function
+
+        @it("restores a populated parent without retaining the child empty state")
+        function _()
+            root = m.node.state.stack[0]
+            root.items = [{ Id: "photo", Type: "Photo", Name: "Photo", ImageTags: {} }]
+            root.loadCompleted = true
+            'bs:disable-next-line 1140
+            child = createLevel("empty", "Empty", root.selection)
+            child.loadCompleted = true
+            m.node.state.stack.Push(child)
+            'bs:disable-next-line 1140
+            renderItems([], true)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertTrue(m.node.itemsGrid.visible)
+            m.assertFalse(m.top.findNode("emptyLabel").visible)
+        end function
+
+        @describe("artwork settings")
+
+        @it("formats Home Media metadata independently of shared cards")
+        function _()
+            'bs:disable-next-line 1140
+            photoText = getHomeMediaMetadata({ Type: "Photo", PremiereDate: "2022-08-14T15:30:00Z" })
+            'bs:disable-next-line 1140
+            createdText = getHomeMediaMetadata({ Type: "Photo", DateCreated: "2022-08-15T00:00:00Z" })
+
+            m.assertTrue(Instr(1, photoText, "Aug 14, 2022") > 0)
+            m.assertTrue(Instr(1, createdText, "Aug 15, 2022") > 0)
+            'bs:disable-next-line 1140
+            m.assertEqual(getHomeMediaMetadata({ Type: "Folder", ChildCount: 1 }), "1 item")
+            'bs:disable-next-line 1140
+            m.assertEqual(getHomeMediaMetadata({ Type: "PhotoAlbum", ChildCount: 24 }), "24 items")
+            'bs:disable-next-line 1140
+            m.assertEqual(getHomeMediaMetadata({ Type: "Folder" }), "")
+            'bs:disable-next-line 1140
+            m.assertEqual(getHomeMediaMetadata({ Type: "Video", ProductionYear: 2024 }), "2024")
+        end function
+
+        @it("maps the poster preference to the standard poster layout")
+        function _()
+            m.top.settings = { "home-videos-image-type": "poster" }
+
+            'bs:disable-next-line 1140
+            aspect = getHomeMediaImageAspect()
+
+            m.assertEqual(aspect, "poster")
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSize[0], 0), 297)
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSize[1], 0), 465)
+            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/poster-focus-297x465.png")
+        end function
+
+        @it("maps the thumbnail preference to the standard wide layout")
+        function _()
+            m.top.settings = { "home-videos-image-type": "thumbnail" }
+
+            'bs:disable-next-line 1140
+            aspect = getHomeMediaImageAspect()
+
+            m.assertEqual(aspect, "wide")
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSize[0], 0), 465)
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSize[1], 0), 348)
+            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/thumbnail-focus-465x348.png")
+            m.assertTrue(m.top.thumbnailLayoutActive)
+        end function
+
+        @it("maps the jumbo preference to the standard jumbo layout")
+        function _()
+            m.top.settings = { "home-videos-image-type": "jumbo" }
+
+            'bs:disable-next-line 1140
+            aspect = getHomeMediaImageAspect()
+
+            m.assertEqual(aspect, "jumbo")
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSize[0], 0), 936)
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSize[1], 0), 591)
+            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/jumbo-focus-936x591.png")
+        end function
+
+        @it("maps the detailed preference to the standard detailed layout")
+        function _()
+            m.top.settings = { "home-videos-image-type": "detailed" }
+
+            'bs:disable-next-line 1140
+            aspect = getHomeMediaImageAspect()
+
+            m.assertEqual(aspect, "detailed")
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSize[0], 0), 936)
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSize[1], 0), 591)
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSpacing[0], 0), 0)
+            m.assertEqual(Number.ToInteger(m.node.itemsGrid.itemSpacing[1], 0), -39)
+        end function
+
+        @it("marks photos for aspect-preserving rendering")
+        function _()
+            photo = { Id: "photo-1", Type: "Photo", Name: "Photo", ImageTags: {} }
+
+            'bs:disable-next-line 1140
+            renderItems([photo])
+
+            cardContent = m.node.itemsGrid.content.getChild(0)
+            m.assertTrue(cardContent.fitArtwork)
+            m.assertTrue(cardContent.showArtworkBackground)
+            m.assertEqual(cardContent.imageAspect, m.node.state.imageAspect)
+        end function
+
+        @it("does not request an artwork background for home videos")
+        function _()
+            video = { Id: "video-1", Type: "Video", Name: "Video", ImageTags: {} }
+
+            'bs:disable-next-line 1140
+            renderItems([video])
+
+            cardContent = m.node.itemsGrid.content.getChild(0)
+            m.assertFalse(cardContent.showArtworkBackground)
+        end function
+
+        @describe("focus navigation")
+
+        @it("moves right from Browse By to Sort")
+        function _()
+            m.node.browseByButton.setFocus(true)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.sortButton.isInFocusChain())
+        end function
+
+        @it("moves left from Sort to Browse By")
+        function _()
+            m.node.sortButton.setFocus(true)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
+        end function
+
+        @it("moves down from browse controls to the grid")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "video", Type: "Video", Name: "Video", ImageTags: {} }]
+            m.node.state.active = true
+            m.node.itemsGrid.content = m.buildContent(level.items)
+            m.node.browseByButton.setFocus(true)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.itemsGrid.isInFocusChain())
+        end function
+
+        @it("moves up from the first grid row to Browse By")
+        function _()
+            m.node.itemsGrid.itemFocused = 0
+            m.node.itemsGrid.setFocus(true)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
+        end function
+
+        @it("focuses Browse By when the grid emits its first-row exit")
+        function _()
+            m.node.itemsGrid.setFocus(true)
+
+            m.node.itemsGrid.focusExitUp = true
+
+            m.assertTrue(m.node.browseByButton.isInFocusChain())
+            m.assertTrue(m.node.itemsGrid.interceptFirstRowUp)
+        end function
+
+        @describe("playback state")
+
+        @it("applies returned video progress to the matching item")
+        function _()
+            video = { Id: "video-1", Type: "Video", RunTimeTicks: 1000, UserData: {} }
+            level = m.node.state.stack[0]
+            level.items = [video]
+            m.node.state.active = false
+            m.top.playbackProgressChange = { itemId: "video-1", positionTicks: 500, durationTicks: 1000, isFinished: false }
+
+            m.assertEqual(Number.ToInteger(video.UserData.PlaybackPositionTicks, 0), 500)
+            m.assertEqual(Number.ToInteger(video.UserData.PlayedPercentage, 0), 50)
+        end function
+
+        private function buildContent(items as object) as object
+            content = CreateObject("roSGNode", "ContentNode")
+            for each item in items
+                node = content.createChild("ContentNode")
+                node.AddFields({ raw: item })
+            end for
+            return content
+        end function
+
+        private function failedResponse(queryId as integer, startIndex as integer) as object
+            return { ok: false, action: "homeMediaLibrary", parentId: "root", queryId: queryId, startIndex: startIndex, errorMessage: "Unable to load home media." }
+        end function
+
+    end class
+
+end namespace

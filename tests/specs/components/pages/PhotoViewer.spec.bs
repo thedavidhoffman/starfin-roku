@@ -1,0 +1,376 @@
+namespace tests
+
+    @SGNode("PhotoViewer")
+    @suite("PhotoViewer component")
+    class PhotoViewerTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.node.viewerState.request = { server: "http://server", token: "token" }
+            m.node.viewerState.items = [
+                { Id: "photo-0", Type: "Photo", ImageTags: { Primary: "tag-0" } }
+                { Id: "photo-1", Type: "Photo", ImageTags: { Primary: "tag-1" } }
+                { Id: "photo-2", Type: "Photo", ImageTags: { Primary: "tag-2" } }
+                { Id: "photo-3", Type: "Photo", ImageTags: { Primary: "tag-3" } }
+            ]
+            'bs:disable-next-line 1140
+            resetPhotoSlots()
+        end function
+
+        @describe("buffer assignment")
+
+        @it("uses one resolution-derived size for Posters and image requests")
+        function _()
+            size = m.node.viewerState.displaySize
+            poster = m.top.findNode("photoSlot0")
+
+            'bs:disable-next-line 1140
+            uri = getPhotoUrl(0)
+
+            m.assertEqual(Number.ToInteger(poster.width, 0), Number.ToInteger(size[0], 0))
+            m.assertEqual(Number.ToInteger(poster.height, 0), Number.ToInteger(size[1], 0))
+            m.assertTrue(Instr(1, uri, "maxWidth=" + Number.ToInteger(size[0], 0).ToStr()) > 0)
+            m.assertTrue(Instr(1, uri, "maxHeight=" + Number.ToInteger(size[1], 0).ToStr()) > 0)
+        end function
+
+        @it("declares left and right navigation chevrons")
+        function _()
+            m.assertNotInvalid(m.top.findNode("leftChevron"))
+            m.assertNotInvalid(m.top.findNode("rightChevron"))
+        end function
+
+        @it("assigns the selected and adjacent photos on initial load")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", items: m.node.viewerState.items, index: 1 }
+
+            m.assertEqual(m.node.viewerState.pendingIndex, 1)
+            m.assertNotInvalid(m.findSlot(0))
+            m.assertNotInvalid(m.findSlot(1))
+            m.assertNotInvalid(m.findSlot(2))
+            m.assertInvalid(m.findSlot(3))
+        end function
+
+        @it("does not allocate indexes outside the sequence")
+        function _()
+            'bs:disable-next-line 1140
+            invalidSlot = ensurePhotoSlot(-1)
+            'bs:disable-next-line 1140
+            ensureAdjacentPhotoSlots(0)
+
+            m.assertInvalid(invalidSlot)
+            m.assertNotInvalid(m.findSlot(1))
+        end function
+
+        @describe("ready navigation")
+
+        @it("shows only the right chevron on the first photo")
+        function _()
+            m.prepareDisplayedPhoto(0)
+
+            m.assertFalse(m.top.findNode("leftChevron").visible)
+            m.assertTrue(m.top.findNode("rightChevron").visible)
+        end function
+
+        @it("shows both chevrons on a middle photo")
+        function _()
+            m.prepareDisplayedPhoto(1)
+
+            m.assertTrue(m.top.findNode("leftChevron").visible)
+            m.assertTrue(m.top.findNode("rightChevron").visible)
+        end function
+
+        @it("shows only the left chevron on the final photo")
+        function _()
+            m.prepareDisplayedPhoto(3)
+
+            m.assertTrue(m.top.findNode("leftChevron").visible)
+            m.assertFalse(m.top.findNode("rightChevron").visible)
+        end function
+
+        @it("keeps chevrons aligned with the displayed photo while navigation is pending")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            m.assignLoadingSlot(1)
+
+            'bs:disable-next-line 1140
+            movePhoto(1)
+
+            m.assertFalse(m.top.findNode("leftChevron").visible)
+            m.assertTrue(m.top.findNode("rightChevron").visible)
+        end function
+
+        @it("swaps immediately when the adjacent photo is ready")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            target = m.assignReadySlot(1)
+
+            'bs:disable-next-line 1140
+            moved = movePhoto(1)
+
+            m.assertTrue(moved)
+            m.assertEqual(m.node.viewerState.displayedIndex, 1)
+            m.assertTrue(target.poster.visible)
+            m.assertFalse(m.findSlot(0).poster.visible)
+        end function
+
+        @it("keeps the current photo visible while the target loads")
+        function _()
+            current = m.prepareDisplayedPhoto(0)
+            target = m.assignLoadingSlot(1)
+
+            'bs:disable-next-line 1140
+            moved = movePhoto(1)
+
+            m.assertTrue(moved)
+            m.assertEqual(m.node.viewerState.displayedIndex, 0)
+            m.assertEqual(m.node.viewerState.pendingIndex, 1)
+            m.assertTrue(current.poster.visible)
+            m.assertFalse(target.poster.visible)
+        end function
+
+        @it("commits a pending photo when its slot becomes ready")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            target = m.assignLoadingSlot(1)
+            m.node.viewerState.pendingIndex = 1
+            target.ready = true
+
+            'bs:disable-next-line 1140
+            commitPhotoSlot(target)
+
+            m.assertEqual(m.node.viewerState.displayedIndex, 1)
+            m.assertEqual(m.node.viewerState.pendingIndex, -1)
+            m.assertTrue(target.poster.visible)
+        end function
+
+        @it("honors the newest target during rapid navigation")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            m.assignLoadingSlot(1)
+            m.assignLoadingSlot(2)
+
+            'bs:disable-next-line 1140
+            movePhoto(1)
+            'bs:disable-next-line 1140
+            movePhoto(1)
+
+            m.assertEqual(m.node.viewerState.pendingIndex, 2)
+            m.assertEqual(m.node.viewerState.displayedIndex, 0)
+        end function
+
+        @it("recycles the distant slot for the new adjacent photo")
+        function _()
+            m.prepareDisplayedPhoto(1)
+            target = m.assignReadySlot(2)
+            m.assignLoadingSlot(0)
+
+            'bs:disable-next-line 1140
+            commitPhotoSlot(target)
+
+            m.assertNotInvalid(m.findSlot(1))
+            m.assertNotInvalid(m.findSlot(2))
+            m.assertNotInvalid(m.findSlot(3))
+            m.assertInvalid(m.findSlot(0))
+        end function
+
+        @it("ignores stale status from a prior slot assignment")
+        function _()
+            current = m.prepareDisplayedPhoto(0)
+            target = m.assignLoadingSlot(1)
+            m.node.viewerState.pendingIndex = 1
+
+            'bs:disable-next-line 1140
+            handlePhotoSlotLoadStatus(target, "http://server/old-photo", "ready")
+
+            m.assertFalse(target.ready)
+            m.assertEqual(m.node.viewerState.displayedIndex, 0)
+            m.assertTrue(current.poster.visible)
+        end function
+
+        @it("preserves the current photo when a pending target fails")
+        function _()
+            current = m.prepareDisplayedPhoto(0)
+            target = m.assignLoadingSlot(1)
+            m.node.viewerState.pendingIndex = 1
+
+            'bs:disable-next-line 1140
+            handlePhotoSlotLoadStatus(target, target.uri, "failed")
+
+            m.assertEqual(m.node.viewerState.pendingIndex, -1)
+            m.assertEqual(m.node.viewerState.displayedIndex, 0)
+            m.assertTrue(current.poster.visible)
+            m.assertFalse(target.poster.visible)
+        end function
+
+        @it("releases a failed preload so navigation retries it")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            target = m.assignLoadingSlot(1)
+
+            'bs:disable-next-line 1140
+            handlePhotoSlotLoadStatus(target, target.uri, "failed")
+            m.assertInvalid(m.findSlot(1))
+
+            'bs:disable-next-line 1140
+            moved = movePhoto(1)
+
+            m.assertTrue(moved)
+            m.assertNotInvalid(m.findSlot(1))
+            m.assertEqual(m.node.viewerState.pendingIndex, 1)
+        end function
+
+        @it("releases every slot field through the shared cleanup path")
+        function _()
+            slot = m.assignReadySlot(1)
+            slot.poster.visible = true
+
+            'bs:disable-next-line 1140
+            releasePhotoSlot(slot)
+
+            m.assertEqual(slot.index, -1)
+            m.assertEqual(slot.uri, "")
+            m.assertFalse(slot.ready)
+            m.assertEqual(slot.poster.uri, "")
+            m.assertFalse(slot.poster.visible)
+        end function
+
+        @describe("slideshow")
+
+        @it("starts only when the displayed photo is ready")
+        function _()
+            slot = m.assignLoadingSlot(0)
+            m.node.viewerState.displayedIndex = 0
+
+            'bs:disable-next-line 1140
+            setSlideshow(true)
+
+            m.assertTrue(m.node.viewerState.slideshow)
+            m.assertNotEqual(m.top.findNode("slideshowTimer").control, "start")
+
+            slot.ready = true
+            'bs:disable-next-line 1140
+            commitPhotoSlot(slot)
+
+            m.assertEqual(m.top.findNode("slideshowTimer").control, "start")
+        end function
+
+        @it("waits for a loading slideshow target before restarting the interval")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            m.assignLoadingSlot(1)
+            m.node.viewerState.slideshow = true
+            m.top.findNode("slideshowTimer").control = "stop"
+
+            'bs:disable-next-line 1140
+            onSlideshowTimerFire()
+
+            m.assertEqual(m.node.viewerState.pendingIndex, 1)
+            m.assertNotEqual(m.top.findNode("slideshowTimer").control, "start")
+        end function
+
+        @it("pauses the slideshow and restores the screensaver when its target fails")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            target = m.assignLoadingSlot(1)
+            m.node.viewerState.pendingIndex = 1
+            m.node.viewerState.slideshow = true
+            m.top.findNode("screenSaverControl").disableScreenSaver = true
+
+            'bs:disable-next-line 1140
+            handlePhotoSlotLoadStatus(target, target.uri, "failed")
+
+            m.assertFalse(m.node.viewerState.slideshow)
+            m.assertFalse(m.top.findNode("screenSaverControl").disableScreenSaver)
+            m.assertEqual(m.node.viewerState.pendingIndex, -1)
+            m.assertInvalid(m.findSlot(1))
+        end function
+
+        @it("stops at the end of the sequence")
+        function _()
+            m.prepareDisplayedPhoto(3)
+            m.node.viewerState.slideshow = true
+
+            'bs:disable-next-line 1140
+            onSlideshowTimerFire()
+
+            m.assertFalse(m.node.viewerState.slideshow)
+        end function
+
+        @it("manual navigation pauses the slideshow")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            m.assignReadySlot(1)
+            m.node.viewerState.slideshow = true
+            m.top.findNode("screenSaverControl").disableScreenSaver = true
+
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+
+            m.assertFalse(m.node.viewerState.slideshow)
+            m.assertFalse(m.top.findNode("screenSaverControl").disableScreenSaver)
+            m.assertTrue(m.top.findNode("leftChevron").visible)
+            m.assertTrue(m.top.findNode("rightChevron").visible)
+        end function
+
+        @it("silent pause resets slideshow state without showing feedback")
+        function _()
+            m.node.viewerState.slideshow = true
+            m.top.findNode("screenSaverControl").disableScreenSaver = true
+            m.top.findNode("statusBackground").visible = false
+
+            'bs:disable-next-line 1140
+            pauseSlideshow(false)
+
+            m.assertFalse(m.node.viewerState.slideshow)
+            m.assertFalse(m.top.findNode("screenSaverControl").disableScreenSaver)
+            m.assertEqual(m.top.findNode("slideshowTimer").control, "stop")
+            m.assertFalse(m.top.findNode("statusBackground").visible)
+        end function
+
+        @it("clears slots and timers when deactivated")
+        function _()
+            m.prepareDisplayedPhoto(0)
+            m.node.viewerState.slideshow = true
+            m.top.findNode("screenSaverControl").disableScreenSaver = true
+
+            'bs:disable-next-line 1140
+            deactivate()
+
+            m.assertFalse(m.node.viewerState.slideshow)
+            m.assertEqual(m.node.viewerState.displayedIndex, -1)
+            m.assertEqual(m.node.viewerState.pendingIndex, -1)
+            m.assertFalse(m.top.findNode("screenSaverControl").disableScreenSaver)
+            for each slot in m.node.viewerState.slots
+                m.assertEqual(slot.index, -1)
+                m.assertEqual(slot.poster.uri, "")
+                m.assertFalse(slot.poster.visible)
+            end for
+        end function
+
+        private function prepareDisplayedPhoto(index as integer) as object
+            slot = m.assignReadySlot(index)
+            'bs:disable-next-line 1140
+            commitPhotoSlot(slot)
+            return slot
+        end function
+
+        private function assignReadySlot(index as integer) as object
+            slot = m.assignLoadingSlot(index)
+            slot.ready = true
+            return slot
+        end function
+
+        private function assignLoadingSlot(index as integer) as object
+            'bs:disable-next-line 1140
+            slot = ensurePhotoSlot(index)
+            slot.ready = false
+            return slot
+        end function
+
+        private function findSlot(index as integer) as dynamic
+            'bs:disable-next-line 1140
+            return findPhotoSlotByIndex(index)
+        end function
+
+    end class
+
+end namespace

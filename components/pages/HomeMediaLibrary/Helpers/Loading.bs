@@ -1,0 +1,98 @@
+'-------------------------------------------------------------------------------
+' loadCurrentLevel
+'-------------------------------------------------------------------------------
+sub loadCurrentLevel(reset as boolean, preserveControlFocus = false as boolean)
+    level = getCurrentLevel()
+    if level = invalid then return
+    if level.requestInFlight = true then
+        if reset <> true then return
+    end if
+    cancelActiveLevelRequest()
+    if reset then
+        m.state.preserveControlFocus = preserveControlFocus
+        level.items = []
+        level.nextStartIndex = 0
+        level.hasMore = false
+        level.loadCompleted = false
+        renderItems([], false)
+    end if
+
+    m.state.queryId = m.state.queryId + 1
+    level.requestInFlight = true
+    m.state.activeRequest = { level: level, queryId: m.state.queryId }
+    request = m.state.request
+    m.libraryTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        parentId: level.folderId
+        queryId: m.state.queryId
+        startIndex: level.nextStartIndex
+        sortBy: level.selection.sortKey
+        sortOrder: level.selection.sortOrder
+        favoriteOnly: level.isFavorites = true
+        recursive: level.isFavorites = true
+        includeItemTypes: getIncludeItemTypes(level.isFavorites = true)
+    }
+    AsyncLifecycle.BeginFromField(m.state.lifecycle, m.libraryTask.request, "queryId")
+    AppStatus.ClearMessage()
+    Spinner.Show(0)
+    m.libraryTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelActiveLevelRequest
+'-------------------------------------------------------------------------------
+sub cancelActiveLevelRequest()
+    activeRequest = m.state.activeRequest
+    if activeRequest <> invalid then
+        owner = activeRequest.level
+        if owner <> invalid then owner.requestInFlight = false
+        m.state.activeRequest = invalid
+    end if
+    AsyncLifecycle.Deactivate(m.state.lifecycle)
+    Spinner.Hide()
+    m.libraryTask.control = "stop"
+end sub
+
+'-------------------------------------------------------------------------------
+' getIncludeItemTypes
+'-------------------------------------------------------------------------------
+function getIncludeItemTypes(favoritesOnly as boolean) as string
+    if favoritesOnly then return "Photo,Video"
+    return "Folder,PhotoAlbum,Photo,Video"
+end function
+
+'-------------------------------------------------------------------------------
+' onHomeMediaLibraryResponse
+'-------------------------------------------------------------------------------
+sub onHomeMediaLibraryResponse()
+    response = m.libraryTask.response
+    level = getCurrentLevel()
+    if level = invalid or response = invalid then return
+    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "queryId", "homeMediaLibrary") <> true then return
+    activeRequest = m.state.activeRequest
+    if activeRequest = invalid or Number.ToInteger(activeRequest.queryId, -1) <> Number.ToInteger(response.queryId, -1) then return
+
+    level.requestInFlight = false
+    m.state.activeRequest = invalid
+    AsyncLifecycle.Deactivate(m.state.lifecycle)
+    Spinner.Hide()
+    if response.ok <> true then
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load home media."))
+        return
+    end if
+
+    level.loadCompleted = true
+    pageItems = ApiPayload.GetItems(response.payload)
+    if Number.ToInteger(response.startIndex, 0) = 0 then level.items = []
+    for each item in pageItems
+        level.items.Push(item)
+    end for
+    level.nextStartIndex = Number.ToInteger(response.nextStartIndex, level.items.Count())
+    level.totalCount = Number.ToInteger(response.totalRecordCount, level.items.Count())
+    level.hasMore = response.hasMore = true
+    renderItems(level.items, true)
+    AppStatus.ClearMessage()
+    restoreFocusAfterLoad()
+end sub

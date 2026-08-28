@@ -22,6 +22,11 @@ namespace tests
             m.assertTrue(Instr(1, posterMask.maskUri, "detailed-poster-mask.png") > 0)
         end function
 
+        @it("declares the masked artwork background")
+        function _()
+            m.assertNotInvalid(m.top.findNode("artworkBackground"))
+        end function
+
         @describe("detailed rendering")
 
         @it("renders poster title compact metadata and overview")
@@ -52,6 +57,46 @@ namespace tests
 
             m.assertEqual(m.top.findNode("poster").uri, "pkg:/images/media-card/poster-placeholder-252x378.png")
             m.assertEqual(m.top.findNode("overviewLabel").text, "No description available.")
+        end function
+
+        @it("renders explicit Home Media metadata including an intentional blank")
+        function _()
+            photo = m.createItem({ Name: "Photo", Type: "Photo", UserData: {} })
+            photo.AddFields({ metadataText: "Aug 14, 2022 at 11:30 AM" })
+            m.top.itemContent = photo
+
+            m.assertEqual(m.top.findNode("metadataLabel").text, "Aug 14, 2022 at 11:30 AM")
+
+            folder = m.createItem({ Name: "Folder", Type: "Folder", UserData: {} })
+            folder.AddFields({ metadataText: "" })
+            m.top.itemContent = folder
+
+            m.assertEqual(m.top.findNode("metadataLabel").text, "")
+        end function
+
+        @it("preserves photo artwork aspect ratio when requested")
+        function _()
+            item = m.createItem({ Name: "Photo", Type: "Photo", UserData: {} })
+            item.fitArtwork = true
+
+            m.top.itemContent = item
+
+            m.assertEqual(LCase(m.top.findNode("poster").loadDisplayMode), "scaletofit")
+        end function
+
+        @it("shows and clears the artwork background from explicit content state")
+        function _()
+            photo = m.createItem({ Name: "Photo", Type: "Photo", UserData: {} })
+            photo.showArtworkBackground = true
+            m.top.itemContent = photo
+
+            m.assertTrue(m.top.findNode("artworkBackground").visible)
+            m.assertEqual(m.top.findNode("artworkBackground").uri, "pkg:/images/media-card/photo-artwork-background.png")
+
+            video = m.createItem({ Name: "Video", Type: "Video", UserData: {} })
+            m.top.itemContent = video
+
+            m.assertFalse(m.top.findNode("artworkBackground").visible)
         end function
 
         @it("omits runtime for TV series")
@@ -86,7 +131,7 @@ namespace tests
 
         function createItem(raw as object) as object
             item = CreateObject("roSGNode", "ContentNode")
-            item.AddFields({ raw: raw })
+            item.AddFields({ raw: raw, fitArtwork: false, showArtworkBackground: false })
             return item
         end function
 

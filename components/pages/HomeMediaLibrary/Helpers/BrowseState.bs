@@ -1,0 +1,82 @@
+'-------------------------------------------------------------------------------
+' createLevel
+'-------------------------------------------------------------------------------
+function createLevel(folderId as string, title as string, selection as object) as object
+    return {
+        folderId: folderId
+        title: title
+        focusedIndex: 0
+        items: []
+        nextStartIndex: 0
+        totalCount: -1
+        hasMore: false
+        requestInFlight: false
+        loadCompleted: false
+        selection: selection
+        isFavorites: false
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' createFavoritesLevel
+'-------------------------------------------------------------------------------
+function createFavoritesLevel(libraryId as string, selection as object) as object
+    level = createLevel(libraryId, "Favorites", selection)
+    level.isFavorites = true
+    return level
+end function
+
+'-------------------------------------------------------------------------------
+' getCurrentLevel
+'-------------------------------------------------------------------------------
+function getCurrentLevel() as dynamic
+    if m.state.stack.Count() = 0 then return invalid
+    return m.state.stack[m.state.stack.Count() - 1]
+end function
+
+'-------------------------------------------------------------------------------
+' loadRootBrowseSelection
+'-------------------------------------------------------------------------------
+function loadRootBrowseSelection(request as object) as object
+    selection = LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+    accountKey = Format.SafeString(request.accountKey, "")
+    saved = LibraryViewStateStore.Load(accountKey, Format.SafeString(request.libraryId, ""))
+    if saved = invalid then return selection
+
+    optionKey = Format.SafeString(saved.optionKey, "SortName")
+    if optionKey <> "SortName" and optionKey <> "DateCreated" and optionKey <> "IsFolder" then optionKey = "SortName"
+    label = "Title"
+    if optionKey = "DateCreated" then label = "Date Added"
+    if optionKey = "IsFolder" then label = "Folders First"
+    return LibraryBrowse.CreateSortSelection(optionKey, optionKey, label, Format.SafeString(saved.sortOrder, "Ascending"))
+end function
+
+'-------------------------------------------------------------------------------
+' getBrowseOptions
+'-------------------------------------------------------------------------------
+function getBrowseOptions() as object
+    return [
+        LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+        LibraryBrowse.CreateSortSelection("DateCreated", "DateCreated", "Date Added")
+        LibraryBrowse.CreateSortSelection("IsFolder", "IsFolder,SortName", "Folders First")
+        LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites")
+    ]
+end function
+
+'-------------------------------------------------------------------------------
+' persistRootBrowseSelection
+'-------------------------------------------------------------------------------
+sub persistRootBrowseSelection()
+    if m.state.stack.Count() <> 1 then return
+    request = m.state.request
+    level = getCurrentLevel()
+    LibraryViewStateStore.Save(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""), {
+        optionKey: level.selection.optionKey
+        sortKey: level.selection.sortKey
+        sortOrder: level.selection.sortOrder
+        selectedDecade: -1
+        selectedGenre: ""
+        libraryTitle: Format.SafeString(request.title, "")
+        collectionType: "homevideos"
+    })
+end sub

@@ -1,0 +1,432 @@
+import "pkg:/source/ApiPayload.bs"
+import "pkg:/source/Array.bs"
+import "pkg:/source/AsyncLifecycle.bs"
+import "pkg:/source/DateTime.bs"
+import "pkg:/source/Encode.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/ItemImage.bs"
+import "pkg:/source/Json.bs"
+import "pkg:/source/LibraryBrowse.bs"
+import "pkg:/source/LibraryGridLayout.bs"
+import "pkg:/source/MediaMetadata.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/Spinner.bs"
+import "pkg:/source/Status.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/store/LibraryViewStateStore.bs"
+import "pkg:/source/store/RegistryStore.bs"
+import "pkg:/source/store/SettingsStore.bs"
+import "pkg:/components/pages/HomeMediaLibrary/Helpers/Loading.bs"
+import "pkg:/components/pages/HomeMediaLibrary/Helpers/BrowseState.bs"
+import "pkg:/components/pages/HomeMediaLibrary/Helpers/ContentPresentation.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    m.state = {
+        request: invalid
+        stack: []
+        queryId: 0
+        activeRequest: invalid
+        lifecycle: AsyncLifecycle.Create()
+        active: false
+        imageAspect: "poster"
+        preserveControlFocus: false
+    }
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub onPlaybackProgressChange()
+    change = m.top.playbackProgressChange
+    level = getCurrentLevel()
+    if change = invalid or level = invalid then return
+    itemId = Format.SafeString(change.itemId, "")
+    if itemId = "" then return
+    didApply = false
+    for each item in level.items
+        if Format.SafeString(item.Id, "") = itemId and PlaybackProgress.ApplyChangeToItem(item, change) then didApply = true
+    end for
+    if didApply then renderItems(level.items, level.loadCompleted)
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.titleLabel = m.top.findNode("titleLabel")
+    m.browseByButton = m.top.findNode("browseByButton")
+    m.sortButton = m.top.findNode("sortButton")
+    m.emptyLabel = m.top.findNode("emptyLabel")
+    m.itemsGrid = m.top.findNode("itemsGrid")
+    m.libraryTask = m.top.findNode("homeMediaLibraryTask")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.libraryTask.observeField("response", "onHomeMediaLibraryResponse")
+    m.browseByButton.observeField("overlayRequested", "onBrowseOverlayRequested")
+    m.browseByButton.observeField("focusExitDown", "onBrowseControlsFocusExitDown")
+    m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
+    m.sortButton.observeField("focusExitDown", "onBrowseControlsFocusExitDown")
+    m.itemsGrid.observeField("itemSelected", "onItemSelected")
+    m.itemsGrid.observeField("itemFocused", "onItemFocused")
+    m.itemsGrid.observeField("focusExitUp", "focusBrowseControls")
+end sub
+
+'-------------------------------------------------------------------------------
+' onLoadRequestChanged
+'-------------------------------------------------------------------------------
+sub onLoadRequestChanged()
+    request = m.top.loadRequest
+    if request = invalid or Format.SafeString(request.libraryId, "") = "" then return
+
+    m.state.request = request
+    selection = loadRootBrowseSelection(request)
+    level = createLevel(request.libraryId, Format.SafeString(request.title, "Home Media"), selection)
+    m.state.stack = [level]
+    syncBrowseControls()
+    m.state.imageAspect = getHomeMediaImageAspect()
+    applyHomeMediaGridLayout()
+    loadCurrentLevel(true, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' renderItems
+'-------------------------------------------------------------------------------
+sub renderItems(items as object, showEmpty = false as boolean)
+    content = CreateObject("roSGNode", "ContentNode")
+    request = m.state.request
+    if request <> invalid then
+        for each item in items
+            node = content.createChild("ContentNode")
+            node.HDPosterUrl = getHomeMediaImageUrl(request.server, item)
+            itemType = LCase(Format.SafeString(item.Type, ""))
+            node.AddFields({
+                imageAspect: m.state.imageAspect
+                showMetadata: true
+                metadataText: getHomeMediaMetadata(item)
+                fitArtwork: itemType = "photo"
+                showArtworkBackground: itemType = "photo"
+                raw: item
+            })
+        end for
+    end if
+    m.itemsGrid.content = content
+    m.itemsGrid.visible = content.getChildCount() > 0
+    m.emptyLabel.visible = showEmpty and content.getChildCount() = 0
+end sub
+
+'-------------------------------------------------------------------------------
+' getHomeMediaImageUrl
+'-------------------------------------------------------------------------------
+function getHomeMediaImageUrl(server as string, item as object) as string
+    layoutSpec = LibraryGridLayout.GetSpec(m.state.imageAspect, "items")
+    artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
+    artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
+    if m.state.imageAspect = "wide" then
+        imageUrl = ItemImage.GetWideUrl(server, item, artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
+    end if
+    if m.state.imageAspect = "jumbo" then
+        imageUrl = ItemImage.GetUrl(server, item, "Backdrop", artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
+        imageUrl = ItemImage.GetUrl(server, item, "Thumb", artworkWidth, artworkHeight)
+        if imageUrl <> "" then return imageUrl
+    end if
+    return ItemImage.GetUrl(server, item, "Primary", artworkWidth, artworkHeight)
+end function
+
+'-------------------------------------------------------------------------------
+' getHomeMediaImageAspect
+'-------------------------------------------------------------------------------
+function getHomeMediaImageAspect() as string
+    settings = m.top.settings
+    settingValue = "poster"
+    if settings <> invalid then settingValue = LCase(Format.SafeString(settings[SettingsStore.Key.HomeVideosImageType], "poster"))
+    if settingValue = "thumbnail" then return "wide"
+    if settingValue = "jumbo" then return "jumbo"
+    if settingValue = "detailed" then return "detailed"
+    return "poster"
+end function
+
+'-------------------------------------------------------------------------------
+' applyHomeMediaGridLayout
+'-------------------------------------------------------------------------------
+sub applyHomeMediaGridLayout()
+    layoutSpec = LibraryGridLayout.GetSpec(m.state.imageAspect, "items")
+    m.itemsGrid.translation = layoutSpec.translation
+    m.itemsGrid.itemSize = layoutSpec.itemSize
+    m.itemsGrid.itemSpacing = layoutSpec.itemSpacing
+    m.itemsGrid.numColumns = layoutSpec.numColumns
+    m.itemsGrid.numRows = layoutSpec.numRows
+    m.itemsGrid.focusBitmapUri = layoutSpec.focusBitmapUri
+    m.top.thumbnailLayoutActive = m.state.imageAspect = "wide"
+
+    rightEdge = LibraryGridLayout.GetVisibleRightEdge(m.itemsGrid, layoutSpec)
+    sortX = rightEdge - 48
+    browseX = sortX - 8 - 190
+    m.sortButton.translation = [sortX, 120]
+    m.browseByButton.translation = [browseX, 120]
+    titleHalfWidth = browseX - 24 - 960
+    if titleHalfWidth > 480 then titleHalfWidth = 480
+    if titleHalfWidth < 0 then titleHalfWidth = 0
+    m.titleLabel.translation = [960 - titleHalfWidth, 120]
+    m.titleLabel.width = titleHalfWidth * 2
+end sub
+
+'-------------------------------------------------------------------------------
+' onBrowseControlsFocusExitDown
+'-------------------------------------------------------------------------------
+sub onBrowseControlsFocusExitDown()
+    focusGrid()
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemSelected
+'-------------------------------------------------------------------------------
+sub onItemSelected()
+    level = getCurrentLevel()
+    index = Number.ToInteger(m.itemsGrid.itemSelected, -1)
+    if level = invalid or index < 0 or index >= level.items.Count() then return
+    item = level.items[index]
+    itemType = LCase(Format.SafeString(item.Type, ""))
+    level.focusedIndex = index
+
+    if itemType = "folder" or itemType = "photoalbum" then
+        cancelActiveLevelRequest()
+        selection = LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+        m.state.stack.Push(createLevel(Format.SafeString(item.Id, ""), Format.SafeString(item.Name, "Folder"), selection))
+        syncBrowseControls()
+        loadCurrentLevel(true, false)
+    else if itemType = "photo" then
+        photos = []
+        selectedPhotoIndex = -1
+        for each candidate in level.items
+            if LCase(Format.SafeString(candidate.Type, "")) = "photo" then
+                if Format.SafeString(candidate.Id, "") = Format.SafeString(item.Id, "") then selectedPhotoIndex = photos.Count()
+                photos.Push(candidate)
+            end if
+        end for
+        m.top.selectedPhoto = { items: photos, index: selectedPhotoIndex, sourceFolderId: level.folderId }
+    else if itemType = "video" then
+        m.top.selectedVideo = { itemId: Format.SafeString(item.Id, ""), item: item }
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemFocused
+'-------------------------------------------------------------------------------
+sub onItemFocused()
+    level = getCurrentLevel()
+    if level = invalid then return
+    index = Number.ToInteger(m.itemsGrid.itemFocused, -1)
+    if index >= 0 then level.focusedIndex = index
+    if level.hasMore = true and level.requestInFlight <> true and level.items.Count() - index <= 10 then loadCurrentLevel(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' onBrowseOverlayRequested
+'-------------------------------------------------------------------------------
+sub onBrowseOverlayRequested()
+    request = m.browseByButton.overlayRequested
+    if request = invalid then return
+    level = getCurrentLevel()
+    request.sourcePage = "homeMediaLibrary"
+    request.selectedSortKey = level.selection.optionKey
+    request.sortOptions = getBrowseOptions()
+    m.top.overlayRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' handleBrowseOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleBrowseOverlayClosed(selection as dynamic)
+    if selection = invalid then
+        activate()
+        return
+    end if
+    if Format.SafeString(selection.optionKey, "") = "Favorites" then
+        level = getCurrentLevel()
+        if level.isFavorites <> true then
+            cancelActiveLevelRequest()
+            m.state.stack.Push(createFavoritesLevel(m.state.request.libraryId, selection))
+        else
+            level.selection = selection
+        end if
+        syncBrowseControls()
+        loadCurrentLevel(true, true)
+        return
+    end if
+    leavingFavorites = getCurrentLevel().isFavorites = true
+    if leavingFavorites then
+        cancelActiveLevelRequest()
+        m.state.stack.Pop()
+    end if
+    level = getCurrentLevel()
+    selectionUnchanged = leavingFavorites and Format.SafeString(level.selection.optionKey, "") = Format.SafeString(selection.optionKey, "") and Format.SafeString(level.selection.sortOrder, "Ascending") = Format.SafeString(selection.sortOrder, "Ascending")
+    level.selection = selection
+    persistRootBrowseSelection()
+    syncBrowseControls()
+    if selectionUnchanged then
+        renderItems(level.items, level.loadCompleted)
+        restoreLevelFocus()
+        return
+    end if
+    loadCurrentLevel(true, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onSortOrderChanged
+'-------------------------------------------------------------------------------
+sub onSortOrderChanged()
+    level = getCurrentLevel()
+    if level = invalid then return
+    changed = m.sortButton.sortOrderChanged
+    if changed = invalid then return
+    level.selection.sortOrder = Format.SafeString(changed.sortOrder, "Ascending")
+    persistRootBrowseSelection()
+    syncBrowseControls()
+    loadCurrentLevel(true, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' syncBrowseControls
+'-------------------------------------------------------------------------------
+sub syncBrowseControls()
+    level = getCurrentLevel()
+    if level = invalid then return
+    m.titleLabel.text = level.title
+    m.browseByButton.selectedSort = level.selection
+    m.sortButton.selectedSort = level.selection
+    applyHomeMediaGridLayout()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    imageAspect = getHomeMediaImageAspect()
+    if imageAspect = m.state.imageAspect then return
+    m.state.imageAspect = imageAspect
+    applyHomeMediaGridLayout()
+    level = getCurrentLevel()
+    if level <> invalid then renderItems(level.items, level.loadCompleted)
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreFocusAfterLoad
+'-------------------------------------------------------------------------------
+sub restoreFocusAfterLoad()
+    preserveControls = m.state.preserveControlFocus
+    m.state.preserveControlFocus = false
+    if preserveControls and (m.browseByButton.isInFocusChain() or m.sortButton.isInFocusChain()) then return
+    restoreLevelFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    m.state.active = true
+    restoreLevelFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    m.state.active = false
+    cancelActiveLevelRequest()
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreLevelFocus
+'-------------------------------------------------------------------------------
+sub restoreLevelFocus()
+    if m.state.active <> true then return
+    level = getCurrentLevel()
+    if level = invalid or level.items.Count() = 0 then
+        m.browseByButton.setFocus(true)
+        return
+    end if
+    index = level.focusedIndex
+    if index >= level.items.Count() then index = level.items.Count() - 1
+    m.itemsGrid.jumpToItem = index
+    m.itemsGrid.itemFocused = index
+    m.itemsGrid.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusGrid
+'-------------------------------------------------------------------------------
+sub focusGrid()
+    restoreLevelFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusBrowseControls
+'-------------------------------------------------------------------------------
+sub focusBrowseControls()
+    m.top.setFocus(true)
+    m.browseByButton.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' isGridAtFirstRow
+'-------------------------------------------------------------------------------
+function isGridAtFirstRow() as boolean
+    if m.itemsGrid.isInFocusChain() <> true then return false
+    index = Number.ToInteger(m.itemsGrid.itemFocused, 0)
+    return index < Number.ToInteger(m.itemsGrid.numColumns, 1)
+end function
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+    if key = "up" and (m.browseByButton.isInFocusChain() or m.sortButton.isInFocusChain()) then
+        m.top.focusExitUp = true
+        return true
+    end if
+    if key = "right" and m.browseByButton.isInFocusChain() then
+        m.top.setFocus(true)
+        m.sortButton.setFocus(true)
+        return true
+    end if
+    if key = "left" and m.sortButton.isInFocusChain() then
+        focusBrowseControls()
+        return true
+    end if
+    if key = "down" and (m.browseByButton.isInFocusChain() or m.sortButton.isInFocusChain()) then
+        focusGrid()
+        return true
+    end if
+    if key = "up" and isGridAtFirstRow() then
+        focusBrowseControls()
+        return true
+    end if
+    if key = "back" then
+        if m.state.stack.Count() > 1 then
+            cancelActiveLevelRequest()
+            m.state.stack.Pop()
+            syncBrowseControls()
+            level = getCurrentLevel()
+            renderItems(level.items, level.loadCompleted)
+            restoreLevelFocus()
+        else
+            m.top.closeRequested = true
+        end if
+        return true
+    end if
+    return false
+end function

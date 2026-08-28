@@ -1,0 +1,78 @@
+namespace tests
+
+    @SGNode("HomeMediaLibraryTask")
+    @suite("HomeMediaLibraryTask component")
+    class HomeMediaLibraryTaskTests extends rooibos.BaseTestSuite
+
+        @describe("request behavior")
+
+        @it("rejects a missing request")
+        function _()
+            m.node.top.request = invalid
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.action, "homeMediaLibrary")
+        end function
+
+        @it("rejects a missing parent ID")
+        function _()
+            m.node.top.request = { server: "server", token: "token", userId: "user" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.errorMessage, "Invalid request parentId.")
+            m.assertEqual(m.node.top.response.parentId, "")
+        end function
+
+        @it("normalizes sort order")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(normalizeSortOrder("Descending"), "Descending")
+            'bs:disable-next-line 1140
+            m.assertEqual(normalizeSortOrder("invalid"), "Ascending")
+        end function
+
+        @it("reads total record counts safely")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getTotalRecordCount({ TotalRecordCount: 120 }), 120)
+            'bs:disable-next-line 1140
+            m.assertEqual(getTotalRecordCount(invalid), -1)
+        end function
+
+        @it("builds a non-recursive mixed folder request")
+        function _()
+            request = { userId: "user", parentId: "folder", recursive: false, includeItemTypes: "Folder,PhotoAlbum,Photo,Video", sortBy: "SortName", sortOrder: "Ascending" }
+
+            'bs:disable-next-line 1140
+            params = buildHomeMediaParams(request, 100, 100)
+
+            m.assertEqual(params.parentId, "folder")
+            m.assertFalse(params.recursive)
+            m.assertEqual(params.includeItemTypes, "Folder,PhotoAlbum,Photo,Video")
+            m.assertEqual(params.startIndex, 100)
+            m.assertEqual(params.limit, 100)
+            m.assertEqual(params.fields, "SortName,DateCreated,PremiereDate,ProductionYear,Overview,OfficialRating,ChildCount")
+        end function
+
+        @it("builds a recursive Favorites request")
+        function _()
+            request = { userId: "user", parentId: "root", recursive: true, favoriteOnly: true, includeItemTypes: "Photo,Video", sortBy: "DateCreated", sortOrder: "Descending" }
+
+            'bs:disable-next-line 1140
+            params = buildHomeMediaParams(request, 0, 100)
+
+            m.assertTrue(params.recursive)
+            m.assertEqual(params.filters, "IsFavorite")
+            m.assertEqual(params.sortBy, "DateCreated")
+            m.assertEqual(params.sortOrder, "Descending")
+        end function
+
+    end class
+
+end namespace

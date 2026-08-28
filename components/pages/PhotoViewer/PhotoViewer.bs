@@ -1,0 +1,385 @@
+import "pkg:/source/Array.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/Encode.bs"
+import "pkg:/source/ItemImage.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/Status.bs"
+import "pkg:/source/Url.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.statusBackground = m.top.findNode("statusBackground")
+    m.statusLabel = m.top.findNode("statusLabel")
+    m.leftChevron = m.top.findNode("leftChevron")
+    m.rightChevron = m.top.findNode("rightChevron")
+    m.slideshowTimer = m.top.findNode("slideshowTimer")
+    m.statusTimer = m.top.findNode("statusTimer")
+    m.screenSaverControl = m.top.findNode("screenSaverControl")
+    m.viewerState = {
+        request: invalid
+        items: []
+        displaySize: getPhotoDisplaySize()
+        displayedIndex: -1
+        pendingIndex: -1
+        slideshow: false
+        slots: [
+            createPhotoSlot(m.top.findNode("photoSlot0"))
+            createPhotoSlot(m.top.findNode("photoSlot1"))
+            createPhotoSlot(m.top.findNode("photoSlot2"))
+        ]
+    }
+    configurePhotoSlotDimensions()
+    m.slideshowTimer.observeField("fire", "onSlideshowTimerFire")
+    m.statusTimer.observeField("fire", "onStatusTimerFire")
+    for each slot in m.viewerState.slots
+        slot.poster.observeField("loadStatus", "onPhotoLoadStatusChanged")
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' createPhotoSlot
+'-------------------------------------------------------------------------------
+function createPhotoSlot(poster as object) as object
+    return { poster: poster, index: -1, uri: "", ready: false }
+end function
+
+'-------------------------------------------------------------------------------
+' getPhotoDisplaySize
+'-------------------------------------------------------------------------------
+function getPhotoDisplaySize() as object
+    if ResolutionProfile.IsHd() then return [1280, 720]
+    return [1920, 1080]
+end function
+
+'-------------------------------------------------------------------------------
+' configurePhotoSlotDimensions
+'-------------------------------------------------------------------------------
+sub configurePhotoSlotDimensions()
+    width = m.viewerState.displaySize[0]
+    height = m.viewerState.displaySize[1]
+    for each slot in m.viewerState.slots
+        slot.poster.width = width
+        slot.poster.height = height
+        slot.poster.loadWidth = width
+        slot.poster.loadHeight = height
+    end for
+    chevronSize = 48
+    edgeInset = 24
+    if ResolutionProfile.IsHd() then
+        chevronSize = 32
+        edgeInset = 16
+    end if
+    chevronY = Number.ToInteger((height - chevronSize) / 2, 0)
+    m.leftChevron.width = chevronSize
+    m.leftChevron.height = chevronSize
+    m.leftChevron.translation = [edgeInset, chevronY]
+    m.rightChevron.width = chevronSize
+    m.rightChevron.height = chevronSize
+    m.rightChevron.translation = [width - edgeInset - chevronSize, chevronY]
+end sub
+
+'-------------------------------------------------------------------------------
+' onLoadRequestChanged
+'-------------------------------------------------------------------------------
+sub onLoadRequestChanged()
+    request = m.top.loadRequest
+    if request = invalid or Type(request.items) <> "roArray" then return
+    m.viewerState.request = request
+    m.viewerState.items = request.items
+    pauseSlideshow(false)
+    resetPhotoSlots()
+    targetIndex = clampPhotoIndex(Number.ToInteger(request.index, 0))
+    if targetIndex < 0 then return
+    m.viewerState.pendingIndex = targetIndex
+    ensurePhotoSlot(targetIndex)
+    ensureAdjacentPhotoSlots(targetIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' clampPhotoIndex
+'-------------------------------------------------------------------------------
+function clampPhotoIndex(index as integer) as integer
+    if m.viewerState.items.Count() = 0 then return -1
+    if index < 0 then return 0
+    if index >= m.viewerState.items.Count() then return m.viewerState.items.Count() - 1
+    return index
+end function
+
+'-------------------------------------------------------------------------------
+' getPhotoUrl
+'-------------------------------------------------------------------------------
+function getPhotoUrl(index as integer) as string
+    if index < 0 or index >= m.viewerState.items.Count() then return ""
+    return ItemImage.GetUrl(m.viewerState.request.server, m.viewerState.items[index], "Primary", m.viewerState.displaySize[0], m.viewerState.displaySize[1])
+end function
+
+'-------------------------------------------------------------------------------
+' findPhotoSlotByIndex
+'-------------------------------------------------------------------------------
+function findPhotoSlotByIndex(index as integer) as dynamic
+    for each slot in m.viewerState.slots
+        if slot.index = index then return slot
+    end for
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' findPhotoSlotByPoster
+'-------------------------------------------------------------------------------
+function findPhotoSlotByPoster(poster as dynamic) as dynamic
+    if poster = invalid then return invalid
+    for each slot in m.viewerState.slots
+        if slot.poster.id = poster.id then return slot
+    end for
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' getReusablePhotoSlot
+'-------------------------------------------------------------------------------
+function getReusablePhotoSlot(targetIndex as integer) as dynamic
+    for each slot in m.viewerState.slots
+        if slot.index < 0 then return slot
+    end for
+    farthestSlot = invalid
+    farthestDistance = -1
+    for each slot in m.viewerState.slots
+        if slot.index <> m.viewerState.displayedIndex then
+            distance = Abs(slot.index - targetIndex)
+            if distance > farthestDistance then
+                farthestDistance = distance
+                farthestSlot = slot
+            end if
+        end if
+    end for
+    return farthestSlot
+end function
+
+'-------------------------------------------------------------------------------
+' ensurePhotoSlot
+'-------------------------------------------------------------------------------
+function ensurePhotoSlot(index as integer) as dynamic
+    if index < 0 or index >= m.viewerState.items.Count() then return invalid
+    existing = findPhotoSlotByIndex(index)
+    if existing <> invalid then return existing
+    slot = getReusablePhotoSlot(index)
+    if slot = invalid then return invalid
+    assignPhotoSlot(slot, index)
+    return slot
+end function
+
+'-------------------------------------------------------------------------------
+' assignPhotoSlot
+'-------------------------------------------------------------------------------
+sub assignPhotoSlot(slot as object, index as integer)
+    uri = getPhotoUrl(index)
+    releasePhotoSlot(slot)
+    if uri = "" then
+        if index = m.viewerState.pendingIndex then
+            m.viewerState.pendingIndex = -1
+            if m.viewerState.slideshow then pauseSlideshow(false)
+            AppStatus.SetMessage("This image could not be loaded.")
+        end if
+        return
+    end if
+    slot.index = index
+    slot.uri = uri
+    slot.poster.uri = uri
+end sub
+
+'-------------------------------------------------------------------------------
+' releasePhotoSlot
+'-------------------------------------------------------------------------------
+sub releasePhotoSlot(slot as object)
+    slot.poster.visible = false
+    slot.poster.uri = ""
+    slot.index = -1
+    slot.uri = ""
+    slot.ready = false
+end sub
+
+'-------------------------------------------------------------------------------
+' ensureAdjacentPhotoSlots
+'-------------------------------------------------------------------------------
+sub ensureAdjacentPhotoSlots(centerIndex as integer)
+    if centerIndex > 0 then ensurePhotoSlot(centerIndex - 1)
+    if centerIndex + 1 < m.viewerState.items.Count() then ensurePhotoSlot(centerIndex + 1)
+end sub
+
+'-------------------------------------------------------------------------------
+' commitPhotoSlot
+'-------------------------------------------------------------------------------
+sub commitPhotoSlot(slot as object)
+    if slot = invalid or slot.ready <> true then return
+    for each candidate in m.viewerState.slots
+        candidate.poster.visible = candidate.poster.id = slot.poster.id
+    end for
+    m.viewerState.displayedIndex = slot.index
+    m.viewerState.pendingIndex = -1
+    updateNavigationChevrons()
+    AppStatus.ClearMessage()
+    ensureAdjacentPhotoSlots(slot.index)
+    if m.viewerState.slideshow then m.slideshowTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' movePhoto
+'-------------------------------------------------------------------------------
+function movePhoto(offset as integer) as boolean
+    baseIndex = m.viewerState.displayedIndex
+    if m.viewerState.pendingIndex >= 0 then baseIndex = m.viewerState.pendingIndex
+    target = baseIndex + offset
+    if target < 0 or target >= m.viewerState.items.Count() then return false
+    m.viewerState.pendingIndex = target
+    slot = ensurePhotoSlot(target)
+    if slot = invalid then return false
+    if slot.ready then commitPhotoSlot(slot)
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' updateNavigationChevrons
+'-------------------------------------------------------------------------------
+sub updateNavigationChevrons()
+    displayedIndex = m.viewerState.displayedIndex
+    itemCount = m.viewerState.items.Count()
+    m.leftChevron.visible = displayedIndex > 0 and displayedIndex < itemCount
+    m.rightChevron.visible = displayedIndex >= 0 and displayedIndex + 1 < itemCount
+end sub
+
+'-------------------------------------------------------------------------------
+' setSlideshow
+'-------------------------------------------------------------------------------
+sub setSlideshow(enabled as boolean)
+    if enabled then
+        m.viewerState.slideshow = true
+        m.screenSaverControl.disableScreenSaver = true
+        displayedSlot = findPhotoSlotByIndex(m.viewerState.displayedIndex)
+        if displayedSlot <> invalid and displayedSlot.ready then m.slideshowTimer.control = "start"
+        showStatus("Slideshow playing")
+    else
+        pauseSlideshow(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' pauseSlideshow
+'-------------------------------------------------------------------------------
+sub pauseSlideshow(showFeedback as boolean)
+    m.slideshowTimer.control = "stop"
+    m.viewerState.slideshow = false
+    m.screenSaverControl.disableScreenSaver = false
+    if showFeedback then showStatus("Slideshow paused")
+end sub
+
+'-------------------------------------------------------------------------------
+' onSlideshowTimerFire
+'-------------------------------------------------------------------------------
+sub onSlideshowTimerFire()
+    if m.viewerState.slideshow <> true then return
+    if movePhoto(1) <> true then setSlideshow(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' showStatus
+'-------------------------------------------------------------------------------
+sub showStatus(message as string)
+    m.statusLabel.text = message
+    m.statusBackground.visible = true
+    m.statusTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' onStatusTimerFire
+'-------------------------------------------------------------------------------
+sub onStatusTimerFire()
+    m.statusBackground.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' onPhotoLoadStatusChanged
+'-------------------------------------------------------------------------------
+sub onPhotoLoadStatusChanged(event as object)
+    poster = event.getRoSGNode()
+    slot = findPhotoSlotByPoster(poster)
+    if slot = invalid then return
+    handlePhotoSlotLoadStatus(slot, poster.uri, poster.loadStatus)
+end sub
+
+'-------------------------------------------------------------------------------
+' handlePhotoSlotLoadStatus
+'-------------------------------------------------------------------------------
+sub handlePhotoSlotLoadStatus(slot as object, observedUri as string, status as dynamic)
+    if slot.uri = "" or observedUri <> slot.uri then return
+    loadStatus = LCase(Format.SafeString(status, ""))
+    if loadStatus = "failed" then
+        wasPending = slot.index = m.viewerState.pendingIndex
+        releasePhotoSlot(slot)
+        if wasPending then
+            m.viewerState.pendingIndex = -1
+            if m.viewerState.slideshow then pauseSlideshow(false)
+            AppStatus.SetMessage("This image could not be loaded.")
+        end if
+    else if loadStatus = "ready" then
+        slot.ready = true
+        if slot.index = m.viewerState.pendingIndex then commitPhotoSlot(slot)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' resetPhotoSlots
+'-------------------------------------------------------------------------------
+sub resetPhotoSlots()
+    m.viewerState.displayedIndex = -1
+    m.viewerState.pendingIndex = -1
+    updateNavigationChevrons()
+    for each slot in m.viewerState.slots
+        releasePhotoSlot(slot)
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    pauseSlideshow(false)
+    m.statusTimer.control = "stop"
+    m.statusBackground.visible = false
+    resetPhotoSlots()
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+    if key = "right" then
+        pauseSlideshow(false)
+        movePhoto(1)
+        return true
+    else if key = "left" then
+        pauseSlideshow(false)
+        movePhoto(-1)
+        return true
+    else if key = "play" or key = "playpause" then
+        setSlideshow(m.viewerState.slideshow <> true)
+        return true
+    else if key = "back" then
+        deactivate()
+        m.top.closeRequested = true
+        return true
+    else if key = "options" then
+        return true
+    end if
+    return false
+end function

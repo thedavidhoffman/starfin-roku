@@ -11,6 +11,10 @@ namespace tests
             m.node.homeState.playbackRows.nextUpItems = []
             m.node.homeState.focusedShelfIndex = 0
             m.top.overlayRequested = invalid
+            m.top.selectedLibrary = invalid
+            m.top.selectedHomeMediaLibrary = invalid
+            m.top.selectedHomeMediaVideo = invalid
+            m.top.selectedHomeMediaPhoto = invalid
 
             scene = m.top.getScene()
             if scene.findNode("loadingSpinner") = invalid then
@@ -116,6 +120,39 @@ namespace tests
             selectHomeItem(item)
 
             m.assertEqual(m.top.selectedLibrary.libraryId, "movies-1")
+        end function
+
+        @it("routes home media libraries separately from video libraries")
+        function _()
+            item = m.createLibrary("home-media-1", "homevideos")
+
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedHomeMediaLibrary.libraryId, "home-media-1")
+            m.assertInvalid(m.top.selectedLibrary)
+        end function
+
+        @it("routes latest home media videos directly to playback")
+        function _()
+            item = { Id: "video-1", Type: "Video" }
+
+            'bs:disable-next-line 1140
+            selectHomeMediaLatestItem(item)
+
+            m.assertEqual(m.top.selectedHomeMediaVideo.itemId, "video-1")
+            m.assertInvalid(m.top.selectedMovie)
+        end function
+
+        @it("routes latest home media photos to the photo viewer")
+        function _()
+            item = { Id: "photo-1", Type: "Photo", ParentId: "folder-1" }
+
+            'bs:disable-next-line 1140
+            selectHomeMediaLatestItem(item)
+
+            m.assertEqual(m.top.selectedHomeMediaPhoto.items.Count(), 1)
+            m.assertEqual(m.top.selectedHomeMediaPhoto.sourceFolderId, "folder-1")
         end function
 
         @it("routes music video libraries by collection type")

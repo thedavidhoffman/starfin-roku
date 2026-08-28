@@ -59,10 +59,29 @@ sub onHomeShelfSelected(event as object)
     if selection = invalid then return
 
     item = selection.item
-    if isMusicLatestRow(Format.SafeString(selection.rowKey, "")) then
+    rowKey = Format.SafeString(selection.rowKey, "")
+    if isMusicLatestRow(rowKey) then
         selectHomeAlbum(item)
+    else if isHomeMediaLatestRow(rowKey) then
+        selectHomeMediaLatestItem(item)
     else
         selectHomeItem(item)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' selectHomeMediaLatestItem
+'-------------------------------------------------------------------------------
+sub selectHomeMediaLatestItem(item as dynamic)
+    itemId = Format.SafeString(item.Id, "")
+    if itemId = "" then return
+    itemType = LCase(Format.SafeString(item.Type, ""))
+    if itemType = "folder" or itemType = "photoalbum" then
+        m.top.selectedHomeMediaLibrary = { libraryId: itemId, collectionType: "homevideos", item: item }
+    else if itemType = "photo" then
+        m.top.selectedHomeMediaPhoto = { items: [item], index: 0, sourceFolderId: Format.SafeString(item.ParentId, "") }
+    else if itemType = "video" then
+        m.top.selectedHomeMediaVideo = { itemId: itemId, item: item }
     end if
 end sub
 
@@ -98,6 +117,12 @@ sub selectHomeItem(item as dynamic)
         }
     else if isMusicLibrary(item) then
         m.top.selectedMusicLibrary = {
+            libraryId: itemId
+            collectionType: item.CollectionType
+            item: item
+        }
+    else if isHomeMediaLibrary(item) then
+        m.top.selectedHomeMediaLibrary = {
             libraryId: itemId
             collectionType: item.CollectionType
             item: item
@@ -900,6 +925,25 @@ end function
 function isMediaLibrary(item as dynamic) as boolean
     collectionType = LCase(Format.SafeString(item.CollectionType, ""))
     return collectionType = "movies" or collectionType = "tvshows" or collectionType = "musicvideos" or collectionType = "playlists"
+end function
+
+'-------------------------------------------------------------------------------
+' isHomeMediaLibrary
+'-------------------------------------------------------------------------------
+function isHomeMediaLibrary(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false then return false
+    return LCase(Format.SafeString(item.CollectionType, "")) = "homevideos"
+end function
+
+'-------------------------------------------------------------------------------
+' isHomeMediaLatestRow
+'-------------------------------------------------------------------------------
+function isHomeMediaLatestRow(rowKey as string) as boolean
+    prefix = "latest:"
+    if Left(rowKey, Len(prefix)) <> prefix then return false
+    libraryId = Mid(rowKey, Len(prefix) + 1)
+    if m.homeState.latestLibraries.DoesExist(libraryId) = false then return false
+    return Format.SafeString(m.homeState.latestLibraries[libraryId].collectionType, "") = "homevideos"
 end function
 
 '-------------------------------------------------------------------------------

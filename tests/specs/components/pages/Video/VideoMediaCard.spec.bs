@@ -23,6 +23,11 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("poster"))
         end function
 
+        @it("declares the masked artwork background")
+        function _()
+            m.assertNotInvalid(m.top.findNode("artworkBackground"))
+        end function
+
         @it("declares the progressBar node")
         function _()
             m.assertNotInvalid(m.top.findNode("progressBar"))
@@ -77,6 +82,85 @@ namespace tests
             m.assertEqual(m.top.findNode("metadataLabel").text, "2024")
         end function
 
+        @it("renders a photo capture date instead of its parent folder")
+        function _()
+            item = m.createItem({
+                Type: "Photo"
+                Name: "IMG_0001.jpg"
+                PremiereDate: "2022-08-14T15:30:00Z"
+                DateCreated: "2022-08-15T00:00:00Z"
+                Album: "Vacation"
+                UserData: {}
+            })
+            item.AddFields({ metadataText: "Aug 14, 2022" + MediaMetadata.BulletSeparator() + DateTime.ToLocalShortTime("2022-08-14T15:30:00Z") })
+
+            m.top.itemContent = item
+
+            expected = "Aug 14, 2022" + MediaMetadata.BulletSeparator() + DateTime.ToLocalShortTime("2022-08-14T15:30:00Z")
+            m.assertEqual(m.top.findNode("metadataLabel").text, expected)
+        end function
+
+        @it("falls back to the photo created date when capture premiere date is absent")
+        function _()
+            item = m.createItem({ Type: "Photo", Name: "IMG_0001.jpg", DateCreated: "2022-08-15T00:00:00Z", Album: "Vacation", UserData: {} })
+            item.AddFields({ metadataText: "Aug 15, 2022" + MediaMetadata.BulletSeparator() + DateTime.ToLocalShortTime("2022-08-15T00:00:00Z") })
+
+            m.top.itemContent = item
+
+            expected = "Aug 15, 2022" + MediaMetadata.BulletSeparator() + DateTime.ToLocalShortTime("2022-08-15T00:00:00Z")
+            m.assertEqual(m.top.findNode("metadataLabel").text, expected)
+        end function
+
+        @it("leaves photo metadata blank when no capture date is available")
+        function _()
+            item = m.createItem({ Type: "Photo", Name: "IMG_0001.jpg", Album: "Vacation", UserData: {} })
+            item.AddFields({ metadataText: "" })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("metadataLabel").text, "")
+        end function
+
+        @it("renders the immediate item count for a home media folder")
+        function _()
+            item = m.createItem({ Type: "Folder", Name: "Vacation", ChildCount: 24, UserData: {} })
+            item.AddFields({ metadataText: "24 items" })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("metadataLabel").text, "24 items")
+        end function
+
+        @it("renders a singular item count for a photo album")
+        function _()
+            item = m.createItem({ Type: "PhotoAlbum", Name: "Vacation", ChildCount: 1, UserData: {} })
+            item.AddFields({ metadataText: "1 item" })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("metadataLabel").text, "1 item")
+        end function
+
+        @it("renders an empty item count for an empty folder")
+        function _()
+            item = m.createItem({ Type: "Folder", Name: "Empty", ChildCount: 0, UserData: {} })
+            item.AddFields({ metadataText: "0 items" })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("metadataLabel").text, "0 items")
+        end function
+
+        @it("hides internal folder types when child count is unavailable")
+        function _()
+            item = m.createItem({ Type: "PhotoAlbum", Name: "Vacation", UserData: {} })
+            item.AddFields({ metadataText: "" })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("metadataLabel").text, "")
+        end function
+
         @it("renders episode season and number metadata")
         function _()
             item = m.createItem({ Type: "Episode", Name: "Pilot", SeriesName: "Series", ParentIndexNumber: 1, IndexNumber: 2, UserData: {} })
@@ -96,6 +180,49 @@ namespace tests
             m.top.itemContent = item
 
             m.assertEqual(m.top.findNode("poster").uri, "http://server/poster.jpg")
+        end function
+
+        @it("preserves photo artwork aspect ratio when requested")
+        function _()
+            item = m.createItem({ Type: "Photo", Name: "Photo", UserData: {} })
+            item.fitArtwork = true
+
+            m.top.itemContent = item
+
+            m.assertEqual(LCase(m.top.findNode("poster").loadDisplayMode), "scaletofit")
+        end function
+
+        @it("shows the artwork background only when explicitly requested")
+        function _()
+            item = m.createItem({ Type: "Photo", Name: "Photo", UserData: {} })
+            item.showArtworkBackground = true
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("artworkBackground").visible)
+            m.assertEqual(m.top.findNode("artworkBackground").uri, "pkg:/images/media-card/photo-artwork-background.png")
+            m.assertEqual(LCase(m.top.findNode("artworkBackground").loadDisplayMode), "scaletofill")
+        end function
+
+        @it("clears the artwork background when a card is recycled for video")
+        function _()
+            photo = m.createItem({ Type: "Photo", Name: "Photo", UserData: {} })
+            photo.showArtworkBackground = true
+            m.top.itemContent = photo
+
+            video = m.createItem({ Type: "Video", Name: "Video", UserData: {} })
+            m.top.itemContent = video
+
+            m.assertFalse(m.top.findNode("artworkBackground").visible)
+        end function
+
+        @it("fills the standard mask for ordinary video artwork")
+        function _()
+            item = m.createItem({ Type: "Video", Name: "Video", UserData: {} })
+
+            m.top.itemContent = item
+
+            m.assertEqual(LCase(m.top.findNode("poster").loadDisplayMode), "scaletozoom")
         end function
 
         @it("uses a poster placeholder for missing poster artwork")
@@ -157,6 +284,8 @@ namespace tests
 
             m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 441)
             m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 249)
+            m.assertEqual(Number.ToInteger(m.top.findNode("artworkBackground").width, -1), 441)
+            m.assertEqual(Number.ToInteger(m.top.findNode("artworkBackground").height, -1), 249)
         end function
 
         @it("applies jumbo dimensions")
@@ -168,6 +297,8 @@ namespace tests
 
             m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 882)
             m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 496)
+            m.assertEqual(Number.ToInteger(m.top.findNode("artworkBackground").width, -1), 882)
+            m.assertEqual(Number.ToInteger(m.top.findNode("artworkBackground").height, -1), 496)
         end function
 
         @it("switches from detailed presentation back to jumbo presentation")
@@ -249,7 +380,7 @@ namespace tests
 
         function createItem(raw as object) as object
             item = CreateObject("roSGNode", "ContentNode")
-            item.addFields({ raw: raw, imageAspect: "poster", showMetadata: true, logoUrl: "" })
+            item.addFields({ raw: raw, imageAspect: "poster", showMetadata: true, logoUrl: "", fitArtwork: false, showArtworkBackground: false })
             return item
         end function
 
