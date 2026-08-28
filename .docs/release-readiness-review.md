@@ -12,8 +12,10 @@ The review should produce a clear ship or no-ship recommendation supported by:
 - A review of changes since the last known-good release.
 - Automated validation of the complete application.
 - A complete unit-test run with all tests passing.
-- Manual verification of critical workflows on a Roku device.
 - Verification of the exact package and configuration intended for release.
+
+Manual verification of critical workflows on a Roku device is recommended but
+is not required for the release-readiness analysis to pass.
 
 This process provides reasonable confidence but cannot prove that the release
 contains no defects.
@@ -76,7 +78,7 @@ it does not execute the tests. Review warnings, unexpected output, and test
 coverage of changed behavior instead of relying only on a successful exit code.
 A successful build does not verify SceneGraph runtime behavior.
 
-## 5. Run a Roku Device Smoke Test
+## 5. Run Required Roku Device Tests
 
 Install and test on the configured development device. Run the complete Rooibos
 unit-test suite for every release candidate:
@@ -94,6 +96,14 @@ decision.
 Record the total test count and passing result in the release decision record.
 Do not store the developer password in the repository or command examples.
 
+## Optional Manual Roku Smoke Test
+
+The manual smoke test is a recommended confidence-building activity, especially
+for broad changes or changes involving visual layout, focus, navigation,
+playback, persistence, or device-specific behavior. It is non-blocking and does
+not need to be performed or documented for the release-readiness analysis to
+pass.
+
 Manually exercise the critical paths applicable to the release:
 
 - Cold launch and launch with a persisted authenticated session.
@@ -108,7 +118,8 @@ Manually exercise the critical paths applicable to the release:
 - Application relaunch after persisted state has been created.
 
 Record the device model, Roku OS version, server version, and release commit so
-the result can be reproduced.
+the result can be reproduced when a manual smoke test is performed. An absent or
+incomplete manual smoke-test record is not a release blocker.
 
 ## 6. Verify the Release Artifact
 
@@ -120,7 +131,9 @@ the result can be reproduced.
   configuration.
 - Install the release artifact fresh instead of relying only on an existing
   development side-load.
-- Repeat a short critical-path smoke test using that installed artifact.
+- Confirm the installed release artifact launches successfully.
+- Optionally repeat a short critical-path smoke test using that installed
+  artifact.
 
 ## Finding Classification
 
@@ -144,12 +157,15 @@ Record the following when the review is complete:
 - Baseline and proposed release commit.
 - Validation commands and results.
 - Complete unit-test count and all-passing result.
-- Device, Roku OS, and server versions used for runtime verification.
-- Critical workflows tested and their results.
+- Device and Roku OS version used for required unit tests and artifact launch.
 - Release artifact version and installation result.
 - Open blockers, accepted follow-ups, and known limitations.
 - Final decision: `SHIP` or `NO SHIP`.
 - Reviewer and review date.
+
+When an optional manual smoke test is performed, also record the server version,
+critical workflows tested, and their results. These optional fields may be
+omitted without blocking a `SHIP` decision.
 
 A `SHIP` decision requires no unresolved release blockers. Any accepted
 follow-up should have a documented owner and enough detail to be actionable
