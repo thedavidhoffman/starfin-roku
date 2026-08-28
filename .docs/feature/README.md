@@ -6,6 +6,7 @@ individual Starfin features.
 
 ## Table of Contents
 
+- [Account Badge](account-badge.md)
 - [Home Media Playback](home-media.md)
 - [Library Genre Browsing](library-genre-browsing.md)
 - [Music Video Playback](music-videos.md)

@@ -1,0 +1,88 @@
+import "pkg:/source/Number.bs"
+
+namespace tests
+
+    @SGNode("AccountBadge")
+    @suite("AccountBadge component")
+    class AccountBadgeTests extends rooibos.BaseTestSuite
+
+        @describe("rendering")
+
+        @it("uses Poster compositing without a MaskGroup")
+        function _()
+            visual = m.top.findNode("badgeVisual")
+
+            m.assertEqual(visual.getChild(0).id, "badgeImage")
+            m.assertEqual(visual.getChild(1).id, "badgeMatte")
+            m.assertEqual(visual.getChild(2).id, "badgeRing")
+            m.assertEqual(visual.getChild(3).id, "badgeGlass")
+            m.assertFalse(m.top.findNode("badgeImage").isSubtype("MaskGroup"))
+        end function
+
+        @it("keeps the account name outside the scaled badge visual")
+        function _()
+            m.assertEqual(m.top.getChild(0).id, "badgeVisual")
+            m.assertEqual(m.top.getChild(1).id, "badgeName")
+        end function
+
+        @it("applies identity and palette fields")
+        function _()
+            m.top.username = "User"
+            m.top.imageUri = "http://server/user.jpg"
+            m.top.backgroundColor = &h010D29FF
+            m.top.ringColor = &h010D29FF
+            m.top.glassColor = &hE1E8F7FF
+
+            m.assertEqual(m.top.findNode("badgeName").text, "User")
+            m.assertEqual(m.top.findNode("badgeImage").uri, "http://server/user.jpg")
+            m.assertEqual(m.top.findNode("badgeMatte").blendColor, &h010D29FF)
+            m.assertEqual(m.top.findNode("badgeRing").blendColor, &h010D29FF)
+            m.assertEqual(m.top.findNode("badgeGlass").blendColor, &hE1E8F7FF)
+        end function
+
+        @it("uses one FHD scene geometry on a 720p display")
+        function _()
+            originalProfile = m.global.resolutionProfile
+            m.global.resolutionProfile = { resolution: "hd" }
+
+            'bs:disable-next-line 1140
+            configureGeometry()
+
+            m.global.resolutionProfile = originalProfile
+            visual = m.top.findNode("badgeVisual")
+            image = m.top.findNode("badgeImage")
+            matte = m.top.findNode("badgeMatte")
+            ring = m.top.findNode("badgeRing")
+            m.assertEqual(visual.scale, [1.0, 1.0])
+            m.assertEqual(Number.ToInteger(image.width, 0), 96)
+            m.assertEqual(Number.ToInteger(image.loadWidth, 0), 192)
+            m.assertEqual(Number.ToInteger(matte.width, 0), 96)
+            m.assertEqual(Number.ToInteger(ring.width, 0), 102)
+            m.assertTrue(Instr(1, matte.uri, "/fhd/account-badge-matte.png") > 0)
+            m.assertTrue(Instr(1, ring.uri, "/fhd/account-badge-ring-overlay.png") > 0)
+        end function
+
+        @it("preserves native FHD geometry")
+        function _()
+            originalProfile = m.global.resolutionProfile
+            m.global.resolutionProfile = { resolution: "fhd" }
+
+            'bs:disable-next-line 1140
+            configureGeometry()
+
+            m.global.resolutionProfile = originalProfile
+            visual = m.top.findNode("badgeVisual")
+            image = m.top.findNode("badgeImage")
+            matte = m.top.findNode("badgeMatte")
+            ring = m.top.findNode("badgeRing")
+            m.assertEqual(visual.scale, [1.0, 1.0])
+            m.assertEqual(Number.ToInteger(image.width, 0), 96)
+            m.assertEqual(Number.ToInteger(image.loadWidth, 0), 192)
+            m.assertEqual(Number.ToInteger(matte.width, 0), 96)
+            m.assertEqual(Number.ToInteger(ring.width, 0), 102)
+            m.assertTrue(Instr(1, matte.uri, "/fhd/account-badge-matte.png") > 0)
+        end function
+
+    end class
+
+end namespace

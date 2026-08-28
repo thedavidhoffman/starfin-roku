@@ -7,7 +7,7 @@ The capability matrix below documents the intended behavior for each surface.
 | --- | --- | --- | --- | --- | --- |
 | Movie library | Yes | Yes | Selection-dependent | Yes | User-selected |
 | TV library | Yes | Yes | Selection-dependent | Yes | User-selected |
-| Collection contents | No | No | No | No | Title ascending |
+| Collection contents | Yes | Yes | No | No | User-selected |
 | Playlist library | No | No | No | No | Title ascending |
 | Playlist contents | No | No | No | No | Playlist order |
 
@@ -30,11 +30,17 @@ items ordered by title:
 - `isPlaylistsView()` identifies the specialized `Playlists` component.
 - `isPlaylistLibraryRequest()`, `isPlaylistContentRequest()`, and
   `isCollectionContentRequest(request)` identify request modes.
-- `getVideoLibraryBrowseCapabilities()` owns Browse By and Sort availability.
+- `getVideoLibraryBrowseCapabilities()` owns Browse By, Sort, letter-navigation,
+  and filter-option availability.
 - `supportsLetterNavigation(selection)` determines whether the active selection
   is compatible with the letter grid.
 - Request preparation owns fixed ordering, persisted view-state restoration, and
   filter reset behavior.
+
+Collection contents support Title, Release Date, Date Added, and Favorites
+browsing plus ascending or descending sort order. Their selection is persisted
+per collection. Genre and Decade choices are omitted because collection contents
+do not load filter options, and the letter grid remains unavailable.
 
 Behavioral tests are the executable specification for this matrix. Update them
 with this document whenever a library surface or browsing capability changes.

@@ -18,24 +18,74 @@ namespace tests
 
         @describe("buffer assignment")
 
-        @it("uses one resolution-derived size for Posters and image requests")
+        @it("uses the FHD scene canvas for Poster geometry")
         function _()
-            size = m.node.viewerState.displaySize
+            canvasSize = m.node.viewerState.canvasSize
             poster = m.top.findNode("photoSlot0")
+
+            m.assertEqual(Number.ToInteger(poster.width, 0), 1920)
+            m.assertEqual(Number.ToInteger(poster.height, 0), 1080)
+            m.assertEqual(Number.ToInteger(poster.loadWidth, 0), 1920)
+            m.assertEqual(Number.ToInteger(poster.loadHeight, 0), 1080)
+            m.assertEqual(canvasSize, [1920, 1080])
+        end function
+
+        @it("requests an image sized for the active resolution")
+        function _()
+            requestSize = m.node.viewerState.imageRequestSize
 
             'bs:disable-next-line 1140
             uri = getPhotoUrl(0)
 
-            m.assertEqual(Number.ToInteger(poster.width, 0), Number.ToInteger(size[0], 0))
-            m.assertEqual(Number.ToInteger(poster.height, 0), Number.ToInteger(size[1], 0))
-            m.assertTrue(Instr(1, uri, "maxWidth=" + Number.ToInteger(size[0], 0).ToStr()) > 0)
-            m.assertTrue(Instr(1, uri, "maxHeight=" + Number.ToInteger(size[1], 0).ToStr()) > 0)
+            m.assertTrue(Instr(1, uri, "maxWidth=" + Number.ToInteger(requestSize[0], 0).ToStr()) > 0)
+            m.assertTrue(Instr(1, uri, "maxHeight=" + Number.ToInteger(requestSize[1], 0).ToStr()) > 0)
+        end function
+
+        @it("selects 720p image requests without shrinking scene geometry")
+        function _()
+            originalProfile = m.global.resolutionProfile
+            m.global.resolutionProfile = { resolution: "hd" }
+
+            'bs:disable-next-line 1140
+            requestSize = getPhotoImageRequestSize()
+
+            m.global.resolutionProfile = originalProfile
+            poster = m.top.findNode("photoSlot0")
+            m.assertEqual(requestSize, [1280, 720])
+            m.assertEqual(Number.ToInteger(poster.width, 0), 1920)
+            m.assertEqual(Number.ToInteger(poster.height, 0), 1080)
         end function
 
         @it("declares left and right navigation chevrons")
         function _()
             m.assertNotInvalid(m.top.findNode("leftChevron"))
             m.assertNotInvalid(m.top.findNode("rightChevron"))
+        end function
+
+        @it("uses a 24 pixel chevron inset on a 1080p display")
+        function _()
+            originalProfile = m.global.resolutionProfile
+            m.global.resolutionProfile = { resolution: "fhd" }
+
+            'bs:disable-next-line 1140
+            configurePhotoSlotDimensions()
+
+            m.global.resolutionProfile = originalProfile
+            m.assertEqual(m.top.findNode("leftChevron").translation, [24, 516])
+            m.assertEqual(m.top.findNode("rightChevron").translation, [1848, 516])
+        end function
+
+        @it("preserves a 24 physical pixel chevron inset on a 720p display")
+        function _()
+            originalProfile = m.global.resolutionProfile
+            m.global.resolutionProfile = { resolution: "hd" }
+
+            'bs:disable-next-line 1140
+            configurePhotoSlotDimensions()
+
+            m.global.resolutionProfile = originalProfile
+            m.assertEqual(m.top.findNode("leftChevron").translation, [36, 516])
+            m.assertEqual(m.top.findNode("rightChevron").translation, [1836, 516])
         end function
 
         @it("assigns the selected and adjacent photos on initial load")
