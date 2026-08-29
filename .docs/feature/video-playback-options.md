@@ -12,6 +12,11 @@ Changing the mode there restarts the current title at its current position and
 retains the selected audio and subtitle tracks. The selected mode is reflected
 on the title's MediaShell page when playback stops.
 
+Subtitle burn-in is requested only when a real subtitle stream is selected.
+Restarting a title with subtitles Off, including a switch to either Force
+Transcode mode, preserves the Off selection and does not allow the server to
+introduce or burn in a subtitle track.
+
 ## Playback Mode Matrix
 
 | Option | Direct Play | Direct Stream | Transcoding | Video stream copy | Audio stream copy |
