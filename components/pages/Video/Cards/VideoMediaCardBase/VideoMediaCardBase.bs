@@ -1,0 +1,144 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/MaskAssets.bs"
+import "pkg:/source/MediaPlaybackPolicy.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initBase()
+end sub
+
+'-------------------------------------------------------------------------------
+' initBase
+'-------------------------------------------------------------------------------
+sub initBase()
+    m.cardNodes = {
+        contentGroup: m.top.findNode("contentGroup")
+        cardMask: m.top.findNode("cardMask")
+        cardBackground: m.top.findNode("cardBackground")
+        posterMask: m.top.findNode("posterMask")
+        artworkBackground: m.top.findNode("artworkBackground")
+        poster: m.top.findNode("poster")
+        progressBar: m.top.findNode("progressBar")
+        titleLogo: m.top.findNode("titleLogo")
+        watchedIndicator: m.top.findNode("watchedIndicator")
+        title: m.top.findNode("title")
+        metadataLabel: m.top.findNode("metadataLabel")
+        overviewLabel: m.top.findNode("overviewLabel")
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' renderPresentation
+'-------------------------------------------------------------------------------
+sub renderPresentation(content as object)
+    ' No-op fallback required by the base interface. Concrete card components
+    ' override this template-method hook to render presentation-specific content.
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemContentChanged
+'-------------------------------------------------------------------------------
+sub onItemContentChanged()
+    content = m.top.itemContent
+    if content = invalid then return
+
+    item = content.raw
+    m.cardNodes.artworkBackground.visible = content.showArtworkBackground = true
+    m.cardNodes.poster.loadDisplayMode = "scaleToZoom"
+    if content.fitArtwork = true then m.cardNodes.poster.loadDisplayMode = "scaleToFit"
+    m.cardNodes.poster.uri = getImageUrl(content)
+    updateProgress(item, content.tracksPlaybackProgress)
+    updateWatchedIndicator(item, content.tracksPlaybackProgress)
+    m.top.callFunc("renderPresentation", content)
+end sub
+
+'-------------------------------------------------------------------------------
+' getImageUrl
+'-------------------------------------------------------------------------------
+function getImageUrl(content as object) as string
+    imageUrl = Format.SafeString(content.HDPosterUrl, "")
+    if imageUrl <> "" then return imageUrl
+    return m.top.placeholderUri
+end function
+
+'-------------------------------------------------------------------------------
+' updateWatchedIndicator
+'-------------------------------------------------------------------------------
+sub updateWatchedIndicator(item as dynamic, explicitPolicy as dynamic)
+    m.cardNodes.watchedIndicator.visible = item <> invalid and MediaPlaybackPolicy.TracksProgress(item, explicitPolicy) and item.UserData <> invalid and item.UserData.Played = true
+end sub
+
+'-------------------------------------------------------------------------------
+' updateProgress
+'-------------------------------------------------------------------------------
+sub updateProgress(item as dynamic, explicitPolicy as dynamic)
+    progressPercent = getProgressPercent(item, explicitPolicy)
+    trackWidth = Number.ToInteger(m.cardNodes.progressBar.barWidth, 0)
+    progressWidth = Number.ToInteger(trackWidth * (progressPercent / 100), 0)
+    if progressPercent > 0 and progressWidth < 1 then progressWidth = 1
+    if progressWidth > trackWidth then progressWidth = trackWidth
+    m.cardNodes.progressBar.progressWidth = progressWidth
+    m.cardNodes.progressBar.visible = progressWidth > 0
+end sub
+
+'-------------------------------------------------------------------------------
+' getProgressPercent
+'-------------------------------------------------------------------------------
+function getProgressPercent(item as dynamic, explicitPolicy as dynamic) as float
+    if item = invalid then return 0
+    if MediaPlaybackPolicy.TracksProgress(item, explicitPolicy) <> true then return 0
+    if item.UserData <> invalid and item.UserData.Played = true then return 0
+    if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
+        playedPercentage = Number.ToFloat(item.UserData.PlayedPercentage, 0)
+        if playedPercentage <= 0 then return 0
+        if playedPercentage > 100 then return 100
+        return playedPercentage
+    end if
+    if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
+    progressTicks = PlaybackProgress.GetTicksFromItem(item)
+    if progressTicks <= 0 then return 0
+    return PlaybackProgress.GetPercentage(progressTicks, item.RunTimeTicks)
+end function
+
+'-------------------------------------------------------------------------------
+' applyCardLayout
+'-------------------------------------------------------------------------------
+sub applyCardLayout(layout as object)
+    m.cardNodes.contentGroup.translation = layout.contentTranslation
+    MaskAssets.Apply(m.cardNodes.posterMask, layout.posterMaskName, layout.posterSize, layout.hdPosterSize)
+    setNodeSize(m.cardNodes.artworkBackground, layout.posterSize)
+    setNodeSize(m.cardNodes.poster, layout.posterSize)
+    m.cardNodes.posterMask.translation = layout.posterTranslation
+    m.cardNodes.progressBar.translation = layout.progressTranslation
+    m.cardNodes.progressBar.barWidth = layout.progressWidth
+    m.cardNodes.progressBar.barHeight = layout.progressHeight
+    m.cardNodes.watchedIndicator.translation = layout.watchedTranslation
+    setNodeSize(m.cardNodes.watchedIndicator, [layout.watchedSize, layout.watchedSize])
+    applyLabelLayout(m.cardNodes.title, layout.title)
+    applyLabelLayout(m.cardNodes.metadataLabel, layout.metadata)
+end sub
+
+'-------------------------------------------------------------------------------
+' setNodeSize
+'-------------------------------------------------------------------------------
+sub setNodeSize(node as object, size as object)
+    node.width = size[0]
+    node.height = size[1]
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLabelLayout
+'-------------------------------------------------------------------------------
+sub applyLabelLayout(label as object, layout as object)
+    label.translation = layout.translation
+    label.width = layout.width
+    label.height = layout.height
+    label.numLines = layout.numLines
+end sub

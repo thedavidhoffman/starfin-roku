@@ -18,5 +18,6 @@ individual Starfin features.
 - [Theme Songs](theme-songs.md)
 - [Filmography](filmography.md)
 - [Video Library Capabilities](video-library-capabilities.md)
+- [Video Media Cards](video-media-cards.md)
 - [Video Playback Lifecycle](video-playback-lifecycle.md)
 - [Video Playback Options](video-playback-options.md)

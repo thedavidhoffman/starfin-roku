@@ -231,13 +231,12 @@ export const focusSourceChecks = {
   "components/pages/HomePage/HomeShelf/HomeShelf.brs": [
     "focusBitmapFilename = \"home-page-my-media-first-focus.png\"",
   ],
-  "components/pages/Video/VideoMediaCard/VideoMediaCard.xml": [
-    "translation=\"[21,0]\"",
-    "maskSize=\"[252,378]\"",
+  "components/pages/Video/Cards/VideoPosterCard/VideoPosterCard.bs": [
+    "contentTranslation: [21, 0]",
+    "posterSize: [252, 378]",
   ],
-  "components/pages/Video/VideoMediaCard/VideoMediaCard.brs": [
-    "m.poster.width = 441",
-    "m.poster.height = 249",
+  "components/pages/Video/Cards/VideoThumbnailCard/VideoThumbnailCard.bs": [
+    "posterSize: [441, 249]",
   ],
   "components/pages/Video/Cast/Person/Person.xml": [
     "rowItemSize=\"[[486,348]]\"",

@@ -1,0 +1,94 @@
+import "pkg:/source/DateTime.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/MediaMetadata.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initBase()
+    m.top.callFunc("applyCardLayout", posterCardLayout())
+end sub
+
+'-------------------------------------------------------------------------------
+' posterCardLayout
+'-------------------------------------------------------------------------------
+function posterCardLayout() as object
+    return {
+        contentTranslation: [21, 0], posterMaskName: "media-card-poster-mask.png"
+        posterSize: [252, 378], hdPosterSize: [168, 252], posterTranslation: [0, 0]
+        progressTranslation: [9, 360], progressWidth: 234, progressHeight: 9
+        watchedTranslation: [201, 9], watchedSize: 42
+        title: { translation: [0, 390], width: 252, height: 48, numLines: 2 }
+        metadata: { translation: [0, 429], width: 252, height: 42, numLines: 2 }
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' renderPresentation
+'-------------------------------------------------------------------------------
+sub renderPresentation(content as object)
+    renderStandardText(content)
+end sub
+
+'-------------------------------------------------------------------------------
+' renderStandardText
+'-------------------------------------------------------------------------------
+sub renderStandardText(content as object)
+    m.cardNodes.title.text = getDisplayTitle(content)
+    m.cardNodes.metadataLabel.text = getDisplayMetadata(content)
+    m.cardNodes.metadataLabel.visible = content.showMetadata <> false
+    m.cardNodes.titleLogo.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' getDisplayTitle
+'-------------------------------------------------------------------------------
+function getDisplayTitle(content as object) as string
+    item = content.raw
+    if item = invalid then return Format.FirstNonEmpty([content.title], "Untitled")
+    if LCase(Format.SafeString(item.Type, "")) = "episode" then return Format.FirstNonEmpty([item.SeriesName, item.Name], "Untitled")
+    return Format.FirstNonEmpty([item.Name], "Untitled")
+end function
+
+'-------------------------------------------------------------------------------
+' getDisplayMetadata
+'-------------------------------------------------------------------------------
+function getDisplayMetadata(content as object) as string
+    if content.hasField("metadataText") then return Format.SafeString(content.metadataText, "")
+    item = content.raw
+    if item = invalid then return Format.FirstNonEmpty([content.description], "")
+    mediaType = LCase(Format.SafeString(item.Type, ""))
+    if mediaType = "movie" or mediaType = "video" then return Format.SafeString(item.ProductionYear, "")
+    if mediaType = "series" then return getSeriesYearRange(item)
+    if mediaType = "episode" then return getEpisodeMetadata(item)
+    return Format.FirstNonEmpty([item.SeriesName, item.AlbumArtist, item.Album, item.CollectionType, item.Type], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getSeriesYearRange
+'-------------------------------------------------------------------------------
+function getSeriesYearRange(item as object) as string
+    productionYear = Format.SafeString(item.ProductionYear, "")
+    if productionYear = "" then return ""
+    status = LCase(Format.SafeString(item.Status, ""))
+    if status = "continuing" then return productionYear + " - Present"
+    if status = "ended" then
+        endYear = DateTime.ToYear(item.EndDate)
+        if endYear = productionYear then return productionYear
+        if endYear <> "" then return productionYear + " - " + endYear
+    end if
+    return productionYear
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeMetadata
+'-------------------------------------------------------------------------------
+function getEpisodeMetadata(item as object) as string
+    episodeTitle = Format.SafeString(item.Name, "")
+    seasonNumber = Format.SafeString(item.ParentIndexNumber, "")
+    episodeNumber = Format.SafeString(item.IndexNumber, "")
+    if seasonNumber = "" or episodeNumber = "" then return episodeTitle
+    return "S" + seasonNumber + MediaMetadata.BulletSeparator() + "E" + episodeNumber + " - " + episodeTitle
+end function

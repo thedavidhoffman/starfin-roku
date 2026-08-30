@@ -1,0 +1,64 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/MaskAssets.bs"
+import "pkg:/source/MediaMetadata.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initBase()
+    m.top.callFunc("applyCardLayout", {
+        contentTranslation: [27, 0], posterMaskName: "detailed-poster-mask.png"
+        posterSize: [288, 432], hdPosterSize: [192, 288], posterTranslation: [24, 32]
+        progressTranslation: [9, 414], progressWidth: 270, progressHeight: 9
+        watchedTranslation: [258, 44], watchedSize: 42
+        title: { translation: [336, 28], width: 516, height: 48, numLines: 1 }
+        metadata: { translation: [336, 76], width: 516, height: 34, numLines: 1 }
+    })
+    MaskAssets.Apply(m.cardNodes.cardMask, "detailed-card-mask.png", [882, 496], [588, 331])
+    m.cardNodes.cardMask.visible = true
+    m.cardNodes.cardBackground.width = 882
+    m.cardNodes.cardBackground.height = 496
+    m.cardNodes.overviewLabel.translation = [336, 142]
+    m.cardNodes.overviewLabel.width = 516
+    m.cardNodes.overviewLabel.height = 354
+    m.cardNodes.overviewLabel.numLines = 8
+    m.cardNodes.overviewLabel.visible = true
+end sub
+
+'-------------------------------------------------------------------------------
+' renderPresentation
+'-------------------------------------------------------------------------------
+sub renderPresentation(content as object)
+    item = content.raw
+    if item = invalid then return
+    m.cardNodes.title.text = Format.FirstNonEmpty([item.Name], "Untitled")
+    if content.hasField("metadataText") then
+        m.cardNodes.metadataLabel.text = Format.SafeString(content.metadataText, "")
+    else
+        m.cardNodes.metadataLabel.text = getDetailedMetadata(item)
+    end if
+    m.cardNodes.metadataLabel.visible = content.showMetadata <> false
+    m.cardNodes.overviewLabel.text = Format.FirstNonEmpty([item.Overview], "No description available.")
+end sub
+
+'-------------------------------------------------------------------------------
+' getDetailedMetadata
+'-------------------------------------------------------------------------------
+function getDetailedMetadata(item as object) as string
+    parts = []
+    appendDetailedPart(parts, Format.SafeString(item.ProductionYear, ""))
+    if LCase(Format.SafeString(item.Type, "")) <> "series" then appendDetailedPart(parts, MediaMetadata.FormatRuntime(item.RunTimeTicks))
+    appendDetailedPart(parts, Format.SafeString(item.OfficialRating, ""))
+    return parts.Join(MediaMetadata.BulletSeparator())
+end function
+
+'-------------------------------------------------------------------------------
+' appendDetailedPart
+'-------------------------------------------------------------------------------
+sub appendDetailedPart(parts as object, value as string)
+    if value <> "" then parts.Push(value)
+end sub

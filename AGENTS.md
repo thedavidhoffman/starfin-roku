@@ -87,6 +87,9 @@
 
 ## Commenting Style
 
+- Add an inline code comment when an operation's purpose or intent is not readily
+  apparent from the code itself and the comment would materially improve
+  understanding. Do not add comments that merely restate self-evident operations.
 - Add a three-line comment header immediately above each function definition in `src/config.js`.
 - Line 1 must be `'` followed immediately by dashes, extending to the 80th column with no space before the first dash.
 - Line 2 must be `' ` followed by the exact function name.
