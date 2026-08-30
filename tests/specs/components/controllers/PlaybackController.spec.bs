@@ -1,0 +1,178 @@
+namespace tests
+
+    @SGNode("PlaybackController")
+    @suite("PlaybackController component")
+    class PlaybackControllerTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.node.callFunc("removePlayer")
+            m.top.playRequest = invalid
+            m.top.playerOpened = false
+            m.top.playbackProgressChanged = invalid
+            m.top.upNextRequested = invalid
+            m.top.overlayRequested = invalid
+            m.top.selectedPerson = invalid
+            m.top.closed = invalid
+        end function
+
+        @describe("playback lifecycle")
+
+        @it("ignores invalid playback requests")
+        function _()
+            m.top.playRequest = invalid
+
+            'bs:disable-next-line 1140
+            onPlayRequestChanged()
+
+            m.assertInvalid(m.node.player)
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+        @it("creates and owns a VideoPlayer for a valid request")
+        function _()
+            request = { itemId: "item-1", item: { Id: "item-1" } }
+
+            m.top.playRequest = request
+
+            m.assertTrue(m.top.callFunc("hasPlayer"))
+            m.assertNotInvalid(m.node.player)
+            m.assertTrue(m.node.player.isSubtype("VideoPlayer"))
+            m.assertEqual(m.node.player.playRequest, request)
+            m.assertEqual(m.top.getChildCount(), 1)
+        end function
+
+        @it("ignores playback requests without an item ID")
+        function _()
+            m.top.playRequest = { item: { Name: "Missing ID" } }
+
+            m.assertFalse(m.top.callFunc("hasPlayer"))
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+        @it("publishes playerOpened after attaching a player")
+        function _()
+            m.top.playerOpened = false
+
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+
+            m.assertTrue(m.top.playerOpened)
+            m.assertEqual(m.top.getChildCount(), 1)
+        end function
+
+        @it("replaces the active player for a new playback request")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+            firstPlayer = m.node.player
+
+            m.top.playRequest = { itemId: "item-2", item: { Id: "item-2" } }
+
+            m.assertEqual(firstPlayer.findNode("videoPlayer").control, "stop")
+            m.assertFalse(m.node.player.isSameNode(firstPlayer))
+            m.assertEqual(m.node.player.playRequest.itemId, "item-2")
+            m.assertEqual(m.top.getChildCount(), 1)
+        end function
+
+        @it("forwards playback progress from the active player")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+            change = { itemId: "item-1", positionTicks: 123 }
+            m.node.player.playbackProgressChanged = change
+
+            m.assertEqual(m.top.playbackProgressChanged, change)
+        end function
+
+        @it("forwards up-next requests from the active player")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+            request = { nextItem: { itemId: "item-2" } }
+            m.node.player.upNextRequested = request
+
+            m.assertEqual(m.top.upNextRequested, request)
+        end function
+
+        @it("forwards general overlay requests from the active player")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+            request = { id: "playbackInfo", sourcePage: "videoPlayer" }
+            m.node.player.overlayRequested = request
+
+            m.assertEqual(m.top.overlayRequested, request)
+        end function
+
+        @it("forwards stream-option requests through the shared overlay event")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+            request = { id: "subtitleOptions", sourcePage: "videoPlayer" }
+            m.node.player.streamOptionsRequested = request
+
+            m.assertEqual(m.top.overlayRequested, request)
+        end function
+
+        @it("forwards person selections from the active player")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+            selection = { itemId: "person-1" }
+            m.node.player.selectedPerson = selection
+
+            m.assertEqual(m.top.selectedPerson, selection)
+        end function
+
+        @it("captures restoration and up-next state before removing a closed player")
+        function _()
+            request = { itemId: "item-1", item: { Id: "item-1" } }
+            upNextRequest = { nextItem: { itemId: "item-2" } }
+            m.top.playRequest = request
+            m.node.player.upNextRequested = upNextRequest
+
+            m.node.player.closeRequested = true
+
+            m.assertInvalid(m.node.player)
+            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.top.closed.restorePlayRequest.itemId, "item-1")
+            m.assertEqual(m.top.closed.upNextRequest, upNextRequest)
+        end function
+
+        @it("ignores events from a detached player after replacement")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+            detachedPlayer = m.node.player
+            m.top.playRequest = { itemId: "item-2", item: { Id: "item-2" } }
+            activePlayer = m.node.player
+            m.top.playbackProgressChanged = invalid
+
+            detachedPlayer.playbackProgressChanged = { itemId: "item-1", positionTicks: 999 }
+            detachedPlayer.closeRequested = true
+
+            m.assertInvalid(m.top.playbackProgressChanged)
+            m.assertTrue(m.node.player.isSameNode(activePlayer))
+            m.assertEqual(m.node.player.playRequest.itemId, "item-2")
+        end function
+
+        @it("hides and restores the active player across navigation")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+
+            m.top.callFunc("hidePlayer")
+            m.assertFalse(m.top.callFunc("isPlayerVisible"))
+            m.top.callFunc("restoreAfterNavigation")
+
+            m.assertTrue(m.top.callFunc("isPlayerVisible"))
+        end function
+
+        @it("removes the active player without publishing navigation state")
+        function _()
+            m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
+            player = m.node.player
+
+            m.top.callFunc("removePlayer")
+
+            m.assertEqual(player.findNode("videoPlayer").control, "stop")
+            m.assertFalse(m.top.callFunc("hasPlayer"))
+            m.assertInvalid(m.node.player)
+            m.assertInvalid(m.top.closed)
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+    end class
+
+end namespace

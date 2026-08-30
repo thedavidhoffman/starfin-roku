@@ -22,7 +22,7 @@ keeping the `MainScene` component context.
 - `components/controls/`: Reusable SceneGraph UI controls. Controls expose narrow
   fields and interface functions and should not own page-specific API behavior.
 - `components/controllers/`: Long-lived coordinators used across page changes,
-  such as authentication, media actions, and theme audio.
+  such as authentication, media actions, playback lifecycle, and theme audio.
 - `components/tasks/`: SceneGraph task nodes for API and background work. Tasks
   accept explicit request data and publish correlated response data; they do not
   reach into page or scene state.
@@ -84,6 +84,13 @@ Playback is launched using a selection payload containing the item identity,
 media context, resume position, selected streams/mode, and any applicable queue.
 Progress and watched-state results flow back as narrow events so the originating
 surface can update its data.
+
+`PlaybackController` owns the app-shell lifecycle of the active `VideoPlayer`
+node: creation, event wiring, delegated shell commands, restoration snapshot
+capture, and teardown. `VideoPlayer` remains the canonical owner of accepted
+playback state, Jellyfin playback tasks, queue transitions, and Roku runtime
+mechanics. `MainScene` retains page visibility, navigation, focus restoration,
+and routing decisions and does not access the player node directly.
 
 ## Build and test boundaries
 

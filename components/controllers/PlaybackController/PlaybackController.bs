@@ -1,0 +1,259 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = new Logger("PlaybackController", m.global.logService)
+    m.log.write("init")
+    m.player = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlayRequestChanged
+'-------------------------------------------------------------------------------
+sub onPlayRequestChanged()
+
+    request = m.top.playRequest
+    
+    if request = invalid then
+        m.log.write("Ignored invalid playback request.")
+        return
+    end if
+    
+    if request.itemId = invalid or request.itemId = "" then
+        m.log.write("Ignored playback request without an itemId.")
+        return
+    end if
+
+    itemId = Format.SafeString(request.itemId, "")
+    m.log.write("Opening player itemId=" + itemId)
+    removePlayer("replacement")
+
+    m.player = createPlayer()
+    m.top.appendChild(m.player)
+    m.log.write("Player attached itemId=" + itemId)
+    m.top.playerOpened = true
+    m.player.playRequest = request
+    m.player.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' createPlayer
+'-------------------------------------------------------------------------------
+function createPlayer() as object
+    player = CreateObject("roSGNode", "VideoPlayer")
+    player.observeField("closeRequested", "onPlayerCloseRequested")
+    player.observeField("playbackProgressChanged", "onPlayerPlaybackProgressChanged")
+    player.observeField("upNextRequested", "onPlayerUpNextRequested")
+    player.observeField("streamOptionsRequested", "onPlayerStreamOptionsRequested")
+    player.observeField("overlayRequested", "onPlayerOverlayRequested")
+    player.observeField("selectedPerson", "onPlayerPersonSelected")
+    return player
+end function
+
+'-------------------------------------------------------------------------------
+' onPlayerPlaybackProgressChanged
+'-------------------------------------------------------------------------------
+sub onPlayerPlaybackProgressChanged(event as object)
+    if isActivePlayerEvent(event) <> true then return
+    change = m.player.playbackProgressChanged
+    if change <> invalid then m.top.playbackProgressChanged = change
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlayerUpNextRequested
+'-------------------------------------------------------------------------------
+sub onPlayerUpNextRequested(event as object)
+    if isActivePlayerEvent(event) <> true then return
+    request = m.player.upNextRequested
+    if request <> invalid then m.top.upNextRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlayerStreamOptionsRequested
+'-------------------------------------------------------------------------------
+sub onPlayerStreamOptionsRequested(event as object)
+    if isActivePlayerEvent(event) <> true then return
+    request = m.player.streamOptionsRequested
+    if request <> invalid then m.top.overlayRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlayerOverlayRequested
+'-------------------------------------------------------------------------------
+sub onPlayerOverlayRequested(event as object)
+    if isActivePlayerEvent(event) <> true then return
+    request = m.player.overlayRequested
+    if request <> invalid then m.top.overlayRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlayerPersonSelected
+'-------------------------------------------------------------------------------
+sub onPlayerPersonSelected(event as object)
+    if isActivePlayerEvent(event) <> true then return
+    selection = m.player.selectedPerson
+    if selection <> invalid then m.top.selectedPerson = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlayerCloseRequested
+'-------------------------------------------------------------------------------
+sub onPlayerCloseRequested(event as object)
+    ' Only the currently owned player may close the active playback session.
+    ' A detached player can still have a queued SceneGraph notification, so
+    ' reject events whose source no longer matches m.player.
+    if isActivePlayerEvent(event) <> true then return
+
+    ' Capture everything MainScene will need before detaching the player. These
+    ' values live on the player and are no longer reachable through the
+    ' controller once detachPlayer() clears m.player.
+    player = m.player
+    restorePlayRequest = player.callFunc("getRestorePlaybackRequest")
+    upNextRequest = player.upNextRequested
+
+    ' Build diagnostic values separately from the event payload. Logging should
+    ' never alter the original requests that will be forwarded to MainScene.
+    restoredItemId = ""
+    if restorePlayRequest <> invalid then restoredItemId = Format.SafeString(restorePlayRequest.itemId, "")
+    hasUpNext = "false"
+    if upNextRequest <> invalid then hasUpNext = "true"
+    m.log.write("Player close requested itemId=" + restoredItemId + " hasUpNext=" + hasUpNext)
+
+    ' A player-originated close has already completed the player's playback-stop
+    ' lifecycle, so detach it directly instead of calling removePlayer(), which
+    ' would invoke stopForRemoval() and finalize the session a second time.
+    detachPlayer("playerClose")
+
+    ' Publish the close only after controller ownership and scene-graph cleanup
+    ' are complete. Consumers can therefore treat this event as confirmation
+    ' that no active player remains and safely decide what surface to restore.
+    m.top.closed = {
+        restorePlayRequest: restorePlayRequest
+        upNextRequest: upNextRequest
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' suspendForNavigation
+'-------------------------------------------------------------------------------
+sub suspendForNavigation()
+    if m.player = invalid then
+        m.log.write("Ignored navigation suspension without an active player.")
+        return
+    end if
+    m.player.callFunc("suspendForNavigation")
+end sub
+
+'-------------------------------------------------------------------------------
+' hidePlayer
+'-------------------------------------------------------------------------------
+sub hidePlayer()
+    if m.player <> invalid then m.player.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreAfterNavigation
+'-------------------------------------------------------------------------------
+sub restoreAfterNavigation()
+    if m.player = invalid then
+        m.log.write("Ignored navigation restoration without an active player.")
+        return
+    end if
+    m.player.visible = true
+    m.player.callFunc("restoreAfterNavigation")
+end sub
+
+'-------------------------------------------------------------------------------
+' handlePlaybackInfoOverlayClosed
+'-------------------------------------------------------------------------------
+sub handlePlaybackInfoOverlayClosed()
+    if m.player <> invalid then m.player.callFunc("handlePlaybackInfoOverlayClosed")
+end sub
+
+'-------------------------------------------------------------------------------
+' handleStreamOptionsOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleStreamOptionsOverlayClosed(closed as object)
+    if m.player <> invalid then m.player.callFunc("handleStreamOptionsOverlayClosed", closed)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusPlayer
+'-------------------------------------------------------------------------------
+sub focusPlayer()
+    if isPlayerVisible() then m.player.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' hasPlayer
+'-------------------------------------------------------------------------------
+function hasPlayer() as boolean
+    return m.player <> invalid
+end function
+
+'-------------------------------------------------------------------------------
+' isPlayerVisible
+'-------------------------------------------------------------------------------
+function isPlayerVisible() as boolean
+    return hasPlayer() and m.player.visible = true
+end function
+
+'-------------------------------------------------------------------------------
+' isActivePlayerEvent
+'-------------------------------------------------------------------------------
+function isActivePlayerEvent(event as dynamic) as boolean
+    if event = invalid or m.player = invalid then return false
+    source = event.getRoSGNode()
+    return source <> invalid and source.isSameNode(m.player)
+end function
+
+'-------------------------------------------------------------------------------
+' removePlayer
+'-------------------------------------------------------------------------------
+sub removePlayer(reason = "requested" as string)
+    if m.player = invalid then return
+    m.player.callFunc("stopForRemoval")
+    detachPlayer(reason)
+end sub
+
+'-------------------------------------------------------------------------------
+' detachPlayer
+'-------------------------------------------------------------------------------
+sub detachPlayer(reason as string)
+    ' Retain the departing node locally so controller ownership can be cleared
+    ' before SceneGraph detachment. Any callbacks raised during removal will then
+    ' see that there is no active player instead of acting on the departing node.
+    player = m.player
+    if player = invalid then return
+    
+    ' Capture the request while the node is still attached so the removal log can
+    ' identify the playback session that is ending. The request is diagnostic
+    ' only; lifecycle state has already been finalized by the caller.
+    request = player.playRequest
+    itemId = ""
+    if request <> invalid then itemId = Format.SafeString(request.itemId, "")
+    m.log.write("Removing player reason=" + reason + " itemId=" + itemId)
+
+    ' The controller owns these subscriptions, so release every one before the
+    ' child leaves the scene graph. This prevents queued or late notifications
+    ' from a departing player from being forwarded as current playback events.
+    player.unobserveField("closeRequested")
+    player.unobserveField("playbackProgressChanged")
+    player.unobserveField("upNextRequested")
+    player.unobserveField("streamOptionsRequested")
+    player.unobserveField("overlayRequested")
+    player.unobserveField("selectedPerson")
+
+    ' Clear the canonical active-player reference before removeChild(). Event
+    ' handlers also verify their source against m.player, providing a second
+    ' guard if SceneGraph delivers a notification during or after detachment.
+    m.player = invalid
+
+    ' Removing the child is the final structural cleanup. The local reference is
+    ' intentionally kept until this call so the exact departing node is removed.
+    m.top.removeChild(player)
+end sub

@@ -18,6 +18,10 @@ MainScene
     |
     | playRequest command
     v
+PlaybackController
+    |
+    | owned player lifecycle
+    v
 VideoPlayer
     |
     | owned PlaybackRequest snapshot
@@ -56,6 +60,12 @@ recovery retries derive new snapshots with `PlaybackRequest.WithChanges()`
 rather than modifying the submitted request. Snapshot creation copies the
 mutable current-item progress and queue container while treating large nested
 media and navigation metadata as read-only.
+
+`PlaybackController` is the app-shell boundary for the active `VideoPlayer` node.
+It creates and wires the player, forwards narrow player events, delegates shell
+commands such as focus and overlay completion, captures the restoration snapshot,
+and removes the player after close. It does not own `ActivePlayback`, Roku runtime
+state, playback tasks, page visibility, focus-restoration decisions, or navigation.
 
 `VideoPlayer` assigns a local incrementing `requestId` by deriving another
 snapshot with `PlaybackRequest.WithRequestId()`. The correlated snapshot becomes

@@ -4,6 +4,24 @@ namespace tests
     @suite("MainScene component")
     class MainSceneTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            'bs:disable-next-line 1140
+            resetDynamicPages()
+            m.node.session = {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                accountKey: "account-1"
+            }
+            m.node.settings = SettingsStore.Defaults()
+            m.node.homePage.visible = false
+            m.node.header.visible = false
+            m.node.playbackController.playRequest = invalid
+            m.node.playbackController.playerOpened = false
+            m.node.playbackController.selectedPerson = invalid
+            m.node.playbackController.closed = invalid
+        end function
+
         @describe("declarative component contract")
 
         @it("declares the bg node")
@@ -71,6 +89,11 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("mediaActionsController"))
         end function
 
+        @it("declares the playbackController node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("playbackController"))
+        end function
+
         @describe("video library routing")
 
         @it("uses music video items for music video libraries")
@@ -102,9 +125,113 @@ namespace tests
             videoLibraryHandleVideoSelected()
 
             m.assertFalse(page.visible)
-            m.assertNotInvalid(m.node.videoPlayer)
-            m.assertEqual(m.node.videoPlayer.playRequest.itemId, "music-video-1")
-            m.assertEqual(m.node.dynamicPageHost.getChildCount(), 2)
+            m.assertTrue(m.node.playbackController.callFunc("hasPlayer"))
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "music-video-1")
+            m.assertEqual(m.node.dynamicPageHost.getChildCount(), 1)
+        end function
+
+        @describe("playback controller integration")
+
+        @it("observes authentication failures from tasks in an opened player")
+        function _()
+            m.openPlayback("movie-1")
+            task = m.node.playbackController.findNode("playbackInfoTask")
+            task.request = { token: "token" }
+
+            task.response = {
+                authExpired: true
+                errorMessage: "Session expired"
+            }
+
+            request = m.node.authController.expireActiveSessionRequested
+            m.assertNotInvalid(request)
+            m.assertEqual(request.accountKey, "account-1")
+            m.assertEqual(request.message, "Session expired")
+        end function
+
+        @it("opens Person from playback and records playback as its source")
+        function _()
+            m.openPlayback("movie-1")
+
+            m.node.playbackController.selectedPerson = {
+                itemId: "person-1"
+                item: { Id: "person-1", Name: "Person" }
+            }
+
+            m.assertNotInvalid(m.node.personPage)
+            m.assertTrue(m.node.personPage.visible)
+            m.assertTrue(m.node.personSource.playback)
+            m.assertFalse(m.node.playbackController.callFunc("isPlayerVisible"))
+        end function
+
+        @it("restores playback and clears its source when Person closes")
+        function _()
+            m.openPlayback("movie-1")
+            m.node.playbackController.selectedPerson = {
+                itemId: "person-1"
+                item: { Id: "person-1", Name: "Person" }
+            }
+
+            m.node.personPage.closeRequested = true
+
+            m.assertInvalid(m.node.personPage)
+            m.assertTrue(m.node.playbackController.callFunc("isPlayerVisible"))
+            m.assertFalse(m.node.personSource.playback)
+            m.assertInvalid(m.node.personSource.moviePage)
+            m.assertInvalid(m.node.personSource.tvShowPage)
+            m.assertInvalid(m.node.personSource.tvSeasonPage)
+            m.assertInvalid(m.node.personSource.tvEpisodePage)
+        end function
+
+        @it("restores the underlying surface from a player close payload")
+        function _()
+            m.node.homePage.visible = false
+
+            m.node.playbackController.closed = {
+                restorePlayRequest: { itemId: "movie-1" }
+                upNextRequest: invalid
+            }
+
+            m.assertTrue(m.node.homePage.visible)
+            m.assertTrue(m.node.header.visible)
+            m.assertInvalid(m.node.pendingUpNextAutoPlayRequest)
+        end function
+
+        @it("opens up-next autoplay from a player close payload")
+        function _()
+            request = {
+                currentItem: { itemId: "episode-1", title: "Finished" }
+                nextItem: { itemId: "episode-2", title: "Next" }
+                series: { title: "Series" }
+            }
+
+            m.node.playbackController.closed = {
+                restorePlayRequest: { itemId: "episode-1" }
+                upNextRequest: request
+            }
+
+            m.assertNotInvalid(m.node.tvEpisodeUpNextAutoPlayPage)
+            m.assertEqual(m.node.tvEpisodeUpNextAutoPlayPage.autoPlayRequest, request)
+            m.assertFalse(m.node.homePage.visible)
+            m.assertFalse(m.node.header.visible)
+            m.assertInvalid(m.node.pendingUpNextAutoPlayRequest)
+        end function
+
+        @it("removes playback and clears navigation state during a dynamic reset")
+        function _()
+            m.openPlayback("movie-1")
+            page = CreateObject("roSGNode", "Group")
+            m.node.dynamicPageHost.appendChild(page)
+            m.node.personSource.playback = true
+            m.node.personSource.moviePage = page
+
+            'bs:disable-next-line 1140
+            resetDynamicPages()
+
+            m.assertFalse(m.node.playbackController.callFunc("hasPlayer"))
+            m.assertEqual(m.node.dynamicPageHost.getChildCount(), 0)
+            m.assertFalse(m.node.personSource.playback)
+            m.assertInvalid(m.node.personSource.moviePage)
         end function
 
         @describe("construction")
@@ -190,6 +317,16 @@ namespace tests
             controller.addField("resumeRequested", "boolean", false)
             controller.savedSession = savedSession
             return controller
+        end function
+
+        function openPlayback(itemId as string)
+            m.node.playbackController.playRequest = {
+                server: m.node.session.server
+                token: m.node.session.token
+                userId: m.node.session.userId
+                itemId: itemId
+                item: { Id: itemId, Type: "Movie", Name: "Movie" }
+            }
         end function
 
     end class
