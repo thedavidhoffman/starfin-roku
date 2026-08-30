@@ -84,8 +84,8 @@ end function
 '-------------------------------------------------------------------------------
 sub recordPlaybackRecoveryPosition(position as dynamic)
     if position = invalid then return
-    state = LCase(Format.SafeString(m.videoPlayer.state, ""))
-    if state <> "playing" and state <> "paused" then return
+    state = VideoPlayerState.Normalize(m.videoPlayer.state)
+    if state <> VideoPlayerState.Value.Playing and state <> VideoPlayerState.Value.Paused then return
 
     value = Number.ToFloat(position, 0)
     if value >= 0 then m.recovery.lastSafePosition = value
@@ -95,7 +95,7 @@ end sub
 ' onPlaybackRecoveryStateChanged
 '-------------------------------------------------------------------------------
 sub onPlaybackRecoveryStateChanged(state as string)
-    if state = "buffering" then
+    if state = VideoPlayerState.Value.Buffering then
         m.recovery.restartInProgress = false
         m.recovery.isStable = false
         m.recoveryStableTimer.control = "stop"
@@ -104,15 +104,15 @@ sub onPlaybackRecoveryStateChanged(state as string)
     end if
 
     stopPlaybackRecoveryBufferMonitor()
-    if state = "playing" then
+    if state = VideoPlayerState.Value.Playing then
         m.recovery.restartInProgress = false
         m.recovery.hasEverPlayed = true
         m.recovery.isStable = false
         m.recoveryStableTimer.control = "stop"
         m.recoveryStableTimer.control = "start"
-    else if state = "paused" then
+    else if state = VideoPlayerState.Value.Paused then
         m.recoveryStableTimer.control = "stop"
-    else if state = "finished" then
+    else if state = VideoPlayerState.Value.Finished then
         m.recoveryStableTimer.control = "stop"
     end if
 end sub
@@ -153,7 +153,7 @@ end sub
 ' onPlaybackRecoveryBufferTimerFire
 '-------------------------------------------------------------------------------
 sub onPlaybackRecoveryBufferTimerFire()
-    if LCase(Format.SafeString(m.videoPlayer.state, "")) <> "buffering" then
+    if VideoPlayerState.Normalize(m.videoPlayer.state) <> VideoPlayerState.Value.Buffering then
         stopPlaybackRecoveryBufferMonitor()
         return
     end if
@@ -203,7 +203,7 @@ end function
 ' onPlaybackRecoveryStableTimerFire
 '-------------------------------------------------------------------------------
 sub onPlaybackRecoveryStableTimerFire()
-    if LCase(Format.SafeString(m.videoPlayer.state, "")) <> "playing" then return
+    if VideoPlayerState.Normalize(m.videoPlayer.state) <> VideoPlayerState.Value.Playing then return
     m.recovery.isStable = true
     m.recovery.sameModeRetryUsed = false
     m.log.write("Playback stable for 30 seconds; recovery retry state reset")

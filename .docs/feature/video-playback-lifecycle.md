@@ -8,6 +8,10 @@ starts the Jellyfin playback-stop report, stops the local Roku `Video` node, and
 requests navigation back to the originating detail page without waiting for the
 HTTP response.
 
+Production code references Roku `Video.state` strings through
+`VideoPlayerState.Value`. `VideoPlayerState.Normalize()` lowercases values at
+the SceneGraph boundary and maps absent or unknown states to `None`.
+
 The stop response has no UI or navigation side effects. This prevents server
 response time, including the extra time Jellyfin may need to terminate an HLS
 transcode, from delaying the local player close.

@@ -11,6 +11,7 @@ import "pkg:/source/PlaybackRequest.bs"
 import "pkg:/source/ActivePlayback.bs"
 import "pkg:/source/MediaPlaybackPolicy.bs"
 import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/VideoPlayerState.bs"
 import "pkg:/source/SubtitlePlayback.bs"
 import "pkg:/source/SubtitleSelection.bs"
 import "pkg:/source/SubtitleBurnIn.bs"
@@ -210,21 +211,21 @@ end sub
 ' onVideoStateChanged
 '-------------------------------------------------------------------------------
 sub onVideoStateChanged()
-    state = LCase(Format.SafeString(m.videoPlayer.state, ""))
+    state = VideoPlayerState.Normalize(m.videoPlayer.state)
     diagnosePlaybackState(state)
     updateBufferingSpinner(state)
     onPlaybackRecoveryStateChanged(state)
 #if playbackChaosMonkey
     onPlaybackChaosMonkeyStateChanged(state)
 #endif
-    m.playback.isPlaying = state = "playing" or state = "buffering"
+    m.playback.isPlaying = state = VideoPlayerState.Value.Playing or state = VideoPlayerState.Value.Buffering
     m.playbackControls.isPlaying = m.playback.isPlaying
     updatePlaybackActionButton(m.playback.position)
-    if state = "error" then
+    if state = VideoPlayerState.Value.Error then
         reportPlaystateStop()
         if handlePlaybackRecoveryFailure("videoError", Format.SafeString(m.videoPlayer.errorStr, "")) then return
         finalizePlaybackRecoveryFailure("Unable to play this video after recovery attempts.")
-    else if state = "finished" then
+    else if state = VideoPlayerState.Value.Finished then
         stopPlaybackRecoveryTimers()
         reportPlaystateStop()
         emitPlaybackProgress(true)
@@ -235,7 +236,7 @@ sub onVideoStateChanged()
         end if
         if beginEpisodeQueueFinishResolution() then return
         finishEpisodePlayback()
-    else if state = "playing" then
+    else if state = VideoPlayerState.Value.Playing then
         if m.playback.hasReportedStart = true then
             if tracksCurrentPlaybackProgress() then
                 reportPlaystateUpdate()
@@ -248,10 +249,10 @@ sub onVideoStateChanged()
         else
             m.playstateTimer.control = "stop"
         end if
-    else if state = "paused" then
+    else if state = VideoPlayerState.Value.Paused then
         m.playstateTimer.control = "stop"
         reportPlaystateUpdate()
-    else if state = "stopped" then
+    else if state = VideoPlayerState.Value.Stopped then
         if isPlaybackRecoveryRestarting() then return
         emitPlaybackProgress(false)
         reportPlaystateStop()
@@ -263,10 +264,10 @@ end sub
 ' updateBufferingSpinner
 '-------------------------------------------------------------------------------
 sub updateBufferingSpinner(state as string)
-    if state = "buffering" then
+    if state = VideoPlayerState.Value.Buffering then
         m.playback.startupPending = false
         Spinner.Show(0)
-    else if state = "stopped" and m.playback.startupPending = true then
+    else if state = VideoPlayerState.Value.Stopped and m.playback.startupPending = true then
         return
     else
         m.playback.startupPending = false
