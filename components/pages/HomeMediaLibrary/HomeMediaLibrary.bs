@@ -8,6 +8,7 @@ import "pkg:/source/ItemImage.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/LibraryBrowse.bs"
 import "pkg:/source/VideoCardGridLayout.bs"
+import "pkg:/source/VideoCardPresentation.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/PlaybackMode.bs"
@@ -34,7 +35,7 @@ sub init()
         activeRequest: invalid
         lifecycle: AsyncLifecycle.Create()
         active: false
-        imageAspect: "poster"
+        imageAspect: VideoCardPresentation.Type.Poster
         preserveControlFocus: false
     }
     initHandlers()
@@ -133,11 +134,11 @@ function getHomeMediaImageUrl(server as string, item as object) as string
     layoutSpec = VideoCardGridLayout.GetSpec(m.state.imageAspect, "items")
     artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
     artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
-    if m.state.imageAspect = "thumbnail" then
+    if m.state.imageAspect = VideoCardPresentation.Type.Thumbnail then
         imageUrl = ItemImage.GetThumbnailUrl(server, item, artworkWidth, artworkHeight)
         if imageUrl <> "" then return imageUrl
     end if
-    if m.state.imageAspect = "jumbo" then
+    if m.state.imageAspect = VideoCardPresentation.Type.Jumbo then
         imageUrl = ItemImage.GetUrl(server, item, "Backdrop", artworkWidth, artworkHeight)
         if imageUrl <> "" then return imageUrl
         imageUrl = ItemImage.GetUrl(server, item, "Thumb", artworkWidth, artworkHeight)
@@ -151,12 +152,9 @@ end function
 '-------------------------------------------------------------------------------
 function getHomeMediaImageAspect() as string
     settings = m.top.settings
-    settingValue = "poster"
-    if settings <> invalid then settingValue = LCase(Format.SafeString(settings[SettingsStore.Key.HomeVideosImageType], "poster"))
-    if settingValue = "thumbnail" then return "thumbnail"
-    if settingValue = "jumbo" then return "jumbo"
-    if settingValue = "detailed" then return "detailed"
-    return "poster"
+    settingValue = VideoCardPresentation.Type.Poster
+    if settings <> invalid then settingValue = Format.SafeString(settings[SettingsStore.Key.HomeVideosImageType], VideoCardPresentation.Type.Poster)
+    return VideoCardPresentation.Normalize(settingValue)
 end function
 
 '-------------------------------------------------------------------------------
@@ -170,7 +168,7 @@ sub applyHomeMediaGridLayout()
     m.itemsGrid.numColumns = layoutSpec.numColumns
     m.itemsGrid.numRows = layoutSpec.numRows
     m.itemsGrid.focusBitmapUri = layoutSpec.focusBitmapUri
-    m.top.thumbnailLayoutActive = m.state.imageAspect = "thumbnail"
+    m.top.thumbnailLayoutActive = m.state.imageAspect = VideoCardPresentation.Type.Thumbnail
 
     rightEdge = VideoCardGridLayout.GetVisibleRightEdge(m.itemsGrid, layoutSpec)
     sortX = rightEdge - 48

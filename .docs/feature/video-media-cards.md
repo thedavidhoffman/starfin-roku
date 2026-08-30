@@ -16,6 +16,11 @@ The supported presentation mapping is:
 - `jumbo`: `VideoJumboCard`
 - `detailed`: `VideoDetailedCard`
 
+Production code references these persisted string values through
+`VideoCardPresentation.Type`. `VideoCardPresentation.Normalize()` is the
+canonical boundary for settings or other dynamic input and falls back to Poster
+for absent or unknown values.
+
 `VideoMediaCardBase` owns the shared artwork, artwork background, watched
 indicator, playback progress, placeholder, and shared node layout contract.
 Concrete presentation components inherit that behavior and own their fixed
