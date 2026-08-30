@@ -3,6 +3,71 @@ namespace tests
     @suite("Playback request helpers")
     class PlaybackRequestTests extends rooibos.BaseTestSuite
 
+        @describe("PlaybackRequest.Create")
+
+        @it("creates a new request snapshot")
+        function _()
+            source = { itemId: "item-1", videoMode: "automatic" }
+
+            result = PlaybackRequest.Create(source)
+            result.videoMode = "transcode-no-remux"
+
+            m.assertEqual(source.videoMode, "automatic")
+            m.assertEqual(result.itemId, "item-1")
+        end function
+
+        @it("isolates mutable current-item progress and the queue container")
+        function _()
+            source = {
+                item: { UserData: { PlaybackPositionTicks: 10 } }
+                playbackQueue: [{ itemId: "item-1" }]
+            }
+
+            result = PlaybackRequest.Create(source)
+            result.item.UserData.PlaybackPositionTicks = 20
+            result.playbackQueue.Push({ itemId: "item-2" })
+
+            m.assertEqual(source.item.UserData.PlaybackPositionTicks, 10)
+            m.assertEqual(source.playbackQueue.Count(), 1)
+        end function
+
+        @describe("PlaybackRequest.WithRequestId")
+
+        @it("correlates a copy without changing the source request")
+        function _()
+            source = { itemId: "item-1" }
+
+            result = PlaybackRequest.WithRequestId(source, 7)
+
+            m.assertInvalid(source.requestId)
+            m.assertEqual(result.requestId, 7)
+            m.assertEqual(result.itemId, "item-1")
+        end function
+
+        @describe("PlaybackRequest.WithChanges")
+
+        @it("derives a changed request without changing the source request")
+        function _()
+            source = { itemId: "item-1", videoMode: "automatic" }
+
+            result = PlaybackRequest.WithChanges(source, { videoMode: "transcode-no-remux", startPositionTicks: 50 })
+
+            m.assertEqual(source.videoMode, "automatic")
+            m.assertInvalid(source.startPositionTicks)
+            m.assertEqual(result.videoMode, "transcode-no-remux")
+            m.assertEqual(result.startPositionTicks, 50)
+        end function
+
+        @it("isolates nested replacement values")
+        function _()
+            changes = { playbackQueue: [{ itemId: "item-2" }] }
+
+            result = PlaybackRequest.WithChanges({ itemId: "item-1" }, changes)
+            result.playbackQueue.Push({ itemId: "item-3" })
+
+            m.assertEqual(changes.playbackQueue.Count(), 1)
+        end function
+
         @describe("PlaybackRequest.FirstMediaSource")
 
         @it("returns the first media source")

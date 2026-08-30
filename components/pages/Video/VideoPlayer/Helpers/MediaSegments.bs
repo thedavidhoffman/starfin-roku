@@ -25,18 +25,18 @@ end sub
 '-------------------------------------------------------------------------------
 sub loadMediaSegments(playbackResponse as dynamic)
     if playbackResponse = invalid then return
-    if m.session.itemId = "" then return
-    if m.mediaSegments.itemId = m.session.itemId and m.mediaSegments.loaded = true then return
+    if m.activePlayback.session.itemId = "" then return
+    if m.mediaSegments.itemId = m.activePlayback.session.itemId and m.mediaSegments.loaded = true then return
 
-    if m.mediaSegments.itemId <> m.session.itemId then resetMediaSegments()
+    if m.mediaSegments.itemId <> m.activePlayback.session.itemId then resetMediaSegments()
     if VideoPlayerMediaSegments_HasSegments(playbackResponse.payload) <> true then return
 
-    m.mediaSegments.itemId = m.session.itemId
-    m.log.write("Loading media segments itemId=" + m.session.itemId)
+    m.mediaSegments.itemId = m.activePlayback.session.itemId
+    m.log.write("Loading media segments itemId=" + m.activePlayback.session.itemId)
     m.mediaSegmentsTask.request = {
-        server: m.session.server
-        token: m.session.token
-        itemId: m.session.itemId
+        server: m.activePlayback.session.server
+        token: m.activePlayback.session.token
+        itemId: m.activePlayback.session.itemId
     }
     m.mediaSegmentsTask.control = "run"
 end sub
@@ -47,16 +47,16 @@ end sub
 sub onMediaSegmentsResponse()
     response = m.mediaSegmentsTask.response
     if response = invalid then return
-    if Format.SafeString(response.itemId, "") <> m.session.itemId then return
+    if Format.SafeString(response.itemId, "") <> m.activePlayback.session.itemId then return
 
     if response.ok <> true then
-        m.log.write("Unable to load media segments itemId=" + m.session.itemId + " error=" + Format.SafeString(response.errorMessage, ""))
+        m.log.write("Unable to load media segments itemId=" + m.activePlayback.session.itemId + " error=" + Format.SafeString(response.errorMessage, ""))
         return
     end if
 
     m.mediaSegments.intros = VideoPlayerMediaSegments_BuildIntros(response.segments)
     m.mediaSegments.loaded = true
-    m.log.write("Media segments loaded itemId=" + m.session.itemId + " introCount=" + m.mediaSegments.intros.Count().ToStr())
+    m.log.write("Media segments loaded itemId=" + m.activePlayback.session.itemId + " introCount=" + m.mediaSegments.intros.Count().ToStr())
     updatePlaybackActionButton(m.playback.position)
 end sub
 
@@ -77,7 +77,7 @@ sub skipActiveIntro()
     targetPosition = m.mediaSegments.activeEndSeconds
     if targetPosition < 0 then return
 
-    m.log.write("Skipping intro itemId=" + m.session.itemId + " position=" + Format.SafeString(m.playback.position, "") + " target=" + Format.SafeString(targetPosition, ""))
+    m.log.write("Skipping intro itemId=" + m.activePlayback.session.itemId + " position=" + Format.SafeString(m.playback.position, "") + " target=" + Format.SafeString(targetPosition, ""))
     m.mediaSegments.dismissedEndSeconds = targetPosition
     stopSeekTimers()
     m.playback.isSeeking = false

@@ -5,6 +5,7 @@ import "pkg:/source/Number.bs"
 import "pkg:/source/PlaybackProgress.bs"
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/PlaybackRequest.bs"
+import "pkg:/source/PlaybackResponse.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/DeviceCapabilities.bs"
@@ -15,7 +16,7 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskRequest.bs"
-import "pkg:/components/tasks/Video/VideoPlaybackInfoTask/Helpers/PlaybackIdentity.bs"
+import "pkg:/components/tasks/Video/VideoPlaybackInfoTask/Helpers/PlaybackResolution.bs"
 import "pkg:/components/tasks/Video/VideoPlaybackInfoTask/Helpers/PlaybackLogging.bs"
 import "pkg:/components/tasks/Video/VideoPlaybackInfoTask/Helpers/StreamSelection.bs"
 import "pkg:/components/tasks/Video/VideoPlaybackInfoTask/Helpers/PlaybackRequest.bs"
@@ -32,11 +33,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    requestId = getPlaybackRequestId(request)
     validationError = TaskRequest.ValidateRequest(request, "playbackInfo", ["itemId"])
     if validationError <> invalid then
-        validationError.AddReplace("requestId", requestId)
-        m.top.response = validationError
+        m.top.response = PlaybackResponse.Failure(request, validationError)
         return
     end if
 
@@ -92,9 +91,7 @@ sub executeRequest()
     result = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token))
     if result.ok <> true then
         logPlaybackError(result)
-        result.AddReplace("action", "playbackInfo")
-        result.AddReplace("requestId", requestId)
-        m.top.response = result
+        m.top.response = PlaybackResponse.Failure(request, result)
         return
     end if
 
@@ -103,32 +100,37 @@ sub executeRequest()
     streamInfo = buildStreamInfo(request, result.data, requestedAudioStreamIndex, requestedSubtitleStreamIndex, playbackFlags)
     if streamInfo.ok <> true then
         m.log.error(streamInfo.errorMessage)
-        streamInfo.AddReplace("requestId", requestId)
-        m.top.response = streamInfo
+        m.top.response = PlaybackResponse.Failure(request, streamInfo)
         return
     end if
 
     m.log.write("Selected stream URL: " + PlaybackRequest.MaskUrl(streamInfo.streamUrl))
 
-    externalSubtitleTrack = SubtitlePlayback.BuildExternalTrack(result.data, streamInfo.subtitleStreamIndex, request.server, request.token)
     externalSubtitleTracks = SubtitlePlayback.BuildExternalTracks(result.data, request.server, request.token)
-    subtitleDeliveryMethod = SubtitlePlayback.GetDeliveryMethod(result.data, streamInfo.subtitleStreamIndex)
-    if subtitleDeliveryMethod = "" then subtitleDeliveryMethod = "none"
+    if shouldUseEncodedSubtitleDelivery(alwaysBurnInSubtitleWhenTranscoding, streamInfo.playbackMethod, streamInfo.subtitleStreamIndex) then
+        externalSubtitleTrack = invalid
+        subtitleDeliveryMethod = "encode"
+    else
+        externalSubtitleTrack = SubtitlePlayback.BuildExternalTrack(result.data, streamInfo.subtitleStreamIndex, request.server, request.token)
+        subtitleDeliveryMethod = SubtitlePlayback.GetDeliveryMethod(result.data, streamInfo.subtitleStreamIndex)
+        if subtitleDeliveryMethod = "" then subtitleDeliveryMethod = "none"
+    end if
     m.log.write("Resolved subtitle stream index=" + Format.SafeString(streamInfo.subtitleStreamIndex, "") + " deliveryMethod=" + subtitleDeliveryMethod + " externalTrackAttached=" + boolToText(externalSubtitleTrack <> invalid))
 
-    m.top.response = {
-        ok: true
-        action: "playbackInfo"
-        requestId: requestId
+    responseData = {
         payload: result.data
         item: request.item
         streamUrl: streamInfo.streamUrl
         streamFormat: streamInfo.streamFormat
         playSessionId: streamInfo.playSessionId
-        playbackIdentity: buildPlaybackIdentity(request, streamInfo, PlaybackRequest.FirstMediaSource(result.data))
         startPositionTicks: getStartPositionTicks(request)
         externalSubtitleTrack: externalSubtitleTrack
         externalSubtitleTracks: externalSubtitleTracks
         subtitleDeliveryMethod: subtitleDeliveryMethod
     }
+    playbackResolution = buildPlaybackResolution(request, streamInfo, PlaybackRequest.FirstMediaSource(result.data))
+    for each key in playbackResolution
+        responseData[key] = playbackResolution[key]
+    end for
+    m.top.response = PlaybackResponse.Success(request, responseData)
 end sub

@@ -4,10 +4,10 @@
 sub initializeEpisodeQueue(request as object, item as dynamic)
     seriesId = episodeQueueGetSeriesId(request, item)
     scope = Format.SafeString(request.playbackQueueScope, "")
-    if scope = "" and m.queue.mode = "sequential" and VideoPlayerMetadata_IsEpisode(request, item) and seriesId <> "" then scope = "series"
+    if scope = "" and m.activePlayback.queue.mode = "sequential" and VideoPlayerMetadata_IsEpisode(request, item) and seriesId <> "" then scope = "series"
 
-    m.queue.scope = scope
-    m.episodeQueue.eligible = scope = "series" and m.queue.mode = "sequential" and isPlaylistPlaybackQueue() <> true and seriesId <> ""
+    m.activePlayback.queue.scope = scope
+    m.episodeQueue.eligible = scope = "series" and m.activePlayback.queue.mode = "sequential" and isPlaylistPlaybackQueue() <> true and seriesId <> ""
 
     episodeQueueCancelPending()
     if m.episodeQueue.eligible <> true then
@@ -62,7 +62,7 @@ sub normalizeSeriesPlaybackQueue(request as object, item as dynamic)
     seenIds = {}
     currentAdded = false
 
-    for each queueItem in m.queue.items
+    for each queueItem in m.activePlayback.queue.items
         if queueItem = invalid then continue for
         itemId = Format.SafeString(queueItem.itemId, "")
         if itemId = "" or seenIds.DoesExist(itemId) then continue for
@@ -77,8 +77,8 @@ sub normalizeSeriesPlaybackQueue(request as object, item as dynamic)
     end for
 
     if currentAdded <> true and currentItemId <> "" then normalized.Push(currentQueueItem)
-    m.queue.items = normalized
-    m.queue.index = episodeQueueFindItemIndex(currentItemId)
+    m.activePlayback.queue.items = normalized
+    m.activePlayback.queue.index = episodeQueueFindItemIndex(currentItemId)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -88,12 +88,12 @@ sub ensureCurrentPlaybackQueueItem(request as object, item as dynamic)
     itemId = Format.SafeString(request.itemId, "")
     existingIndex = episodeQueueFindItemIndex(itemId)
     if existingIndex >= 0 then
-        m.queue.index = existingIndex
+        m.activePlayback.queue.index = existingIndex
         return
     end if
 
-    m.queue.items.Push(buildCurrentPlaybackQueueItem(request, item))
-    m.queue.index = m.queue.items.Count() - 1
+    m.activePlayback.queue.items.Push(buildCurrentPlaybackQueueItem(request, item))
+    m.activePlayback.queue.index = m.activePlayback.queue.items.Count() - 1
 end sub
 
 '-------------------------------------------------------------------------------
@@ -113,9 +113,9 @@ end function
 ' episodeQueueHasItemAtOffset
 '-------------------------------------------------------------------------------
 function episodeQueueHasItemAtOffset(offset as integer) as boolean
-    if m.queue = invalid or m.queue.items = invalid then return false
-    targetIndex = m.queue.index + offset
-    return targetIndex >= 0 and targetIndex < m.queue.items.Count()
+    if m.activePlayback = invalid or m.activePlayback.queue.items = invalid then return false
+    targetIndex = m.activePlayback.queue.index + offset
+    return targetIndex >= 0 and targetIndex < m.activePlayback.queue.items.Count()
 end function
 
 '-------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ end function
 '-------------------------------------------------------------------------------
 function episodeQueueGetItemAtOffset(offset as integer) as dynamic
     if episodeQueueHasItemAtOffset(offset) <> true then return invalid
-    return m.queue.items[m.queue.index + offset]
+    return m.activePlayback.queue.items[m.activePlayback.queue.index + offset]
 end function
 
 '-------------------------------------------------------------------------------
@@ -131,7 +131,7 @@ end function
 '-------------------------------------------------------------------------------
 sub maintainEpisodeQueueWindow()
     if m.episodeQueue.eligible <> true or m.episodeQueue.pendingRequest <> invalid then return
-    if m.queue.index < m.episodeQueue.targetLookback and m.episodeQueue.reachedSeriesStart <> true then
+    if m.activePlayback.queue.index < m.episodeQueue.targetLookback and m.episodeQueue.reachedSeriesStart <> true then
         firstItemId = episodeQueueGetBoundaryItemId(false)
         if firstItemId <> "" then
             beginEpisodeQueueRequest("adjacent", firstItemId, 0, "maintain", 0)
@@ -139,7 +139,7 @@ sub maintainEpisodeQueueWindow()
         end if
     end if
 
-    successorsAvailable = m.queue.items.Count() - m.queue.index - 1
+    successorsAvailable = m.activePlayback.queue.items.Count() - m.activePlayback.queue.index - 1
     if successorsAvailable >= m.episodeQueue.targetLookahead or m.episodeQueue.reachedSeriesEnd = true then return
     tailItemId = episodeQueueGetBoundaryItemId(true)
     if tailItemId = "" then return
@@ -168,9 +168,9 @@ function beginEpisodeQueueRequest(operation as string, anchorItemId as string, s
         operation: operation
         anchorItemId: anchorItemId
         successorCount: successorCount
-        server: m.session.server
-        token: m.session.token
-        userId: m.session.userId
+        server: m.activePlayback.session.server
+        token: m.activePlayback.session.token
+        userId: m.activePlayback.session.userId
         seriesId: m.episodeQueue.seriesId
         playbackRequestId: pendingRequest.playbackRequestId
         taskRequestId: pendingRequest.taskRequestId
@@ -233,7 +233,7 @@ function episodeQueueApplySuccessfulResponse(response as object, pendingRequest 
     end if
     if response.payload.reachedSeriesEnd = true then m.episodeQueue.reachedSeriesEnd = true
     episodeQueueSyncRequest()
-    updatePlaybackSkipAvailability(m.top.playRequest, m.context.item)
+    updatePlaybackSkipAvailability(m.activePlayback.request, m.activePlayback.context.item)
     return true
 end function
 
@@ -287,10 +287,10 @@ function episodeQueueMergeAtAnchor(anchorItemId as string, predecessors as dynam
     end for
 
     activeItemId = ""
-    if m.queue.index >= 0 and m.queue.index < m.queue.items.Count() then activeItemId = Format.SafeString(m.queue.items[m.queue.index].itemId, "")
+    if m.activePlayback.queue.index >= 0 and m.activePlayback.queue.index < m.activePlayback.queue.items.Count() then activeItemId = Format.SafeString(m.activePlayback.queue.items[m.activePlayback.queue.index].itemId, "")
     merged = []
     emittedIds = {}
-    for each queueItem in m.queue.items
+    for each queueItem in m.activePlayback.queue.items
         if queueItem = invalid then continue for
         itemId = Format.SafeString(queueItem.itemId, "")
         if itemId = "" or emittedIds.DoesExist(itemId) then continue for
@@ -305,8 +305,8 @@ function episodeQueueMergeAtAnchor(anchorItemId as string, predecessors as dynam
         end if
     end for
 
-    m.queue.items = merged
-    m.queue.index = episodeQueueFindItemIndex(activeItemId)
+    m.activePlayback.queue.items = merged
+    m.activePlayback.queue.index = episodeQueueFindItemIndex(activeItemId)
     return true
 end function
 
@@ -344,8 +344,8 @@ end sub
 '-------------------------------------------------------------------------------
 function episodeQueueFindItemIndex(itemId as string) as integer
     if itemId = "" then return -1
-    for i = 0 to m.queue.items.Count() - 1
-        queueItem = m.queue.items[i]
+    for i = 0 to m.activePlayback.queue.items.Count() - 1
+        queueItem = m.activePlayback.queue.items[i]
         if queueItem <> invalid and Format.SafeString(queueItem.itemId, "") = itemId then return i
     end for
     return -1
@@ -355,10 +355,10 @@ end function
 ' episodeQueueGetBoundaryItemId
 '-------------------------------------------------------------------------------
 function episodeQueueGetBoundaryItemId(useTail as boolean) as string
-    if m.queue.items.Count() = 0 then return ""
+    if m.activePlayback.queue.items.Count() = 0 then return ""
     index = 0
-    if useTail then index = m.queue.items.Count() - 1
-    queueItem = m.queue.items[index]
+    if useTail then index = m.activePlayback.queue.items.Count() - 1
+    queueItem = m.activePlayback.queue.items[index]
     if queueItem = invalid then return ""
     return Format.SafeString(queueItem.itemId, "")
 end function
@@ -392,10 +392,14 @@ end function
 ' episodeQueueSyncRequest
 '-------------------------------------------------------------------------------
 sub episodeQueueSyncRequest()
-    request = m.top.playRequest
-    if request = invalid then return
-    request.AddReplace("playbackQueue", m.queue.items)
-    request.AddReplace("playbackQueueIndex", m.queue.index)
-    request.AddReplace("playbackQueueScope", m.queue.scope)
-    EpisodeQueueIdentity.Apply(request, m.queue.scope, m.episodeQueue.id)
+    if m.activePlayback = invalid then return
+    changes = {
+        playbackQueue: m.activePlayback.queue.items
+        playbackQueueIndex: m.activePlayback.queue.index
+        playbackQueueScope: m.activePlayback.queue.scope
+    }
+    request = PlaybackRequest.WithChanges(m.activePlayback.request, changes)
+    EpisodeQueueIdentity.Apply(request, m.activePlayback.queue.scope, m.episodeQueue.id)
+    m.activePlayback.request = request
+    m.pendingPlaybackRequest = request
 end sub

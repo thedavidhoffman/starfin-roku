@@ -17,6 +17,7 @@ namespace tests
             m.assertFalse(response.ok)
             m.assertEqual(response.action, "playbackInfo")
             m.assertEqual(response.errorMessage, "Invalid request.")
+            m.assertEqual(response.requestId, -1)
         end function
 
         @it("rejects a missing item ID")
@@ -166,12 +167,40 @@ namespace tests
             m.assertFalse(shouldBurn)
         end function
 
-        @it("correlates validation failures and normalizes request values")
+        @it("uses encoded delivery for a selected subtitle burned into a transcode")
         function _()
             'bs:disable-next-line 1140
-            m.assertEqual(getPlaybackRequestId({ requestId: 12 }), 12)
+            isEncoded = shouldUseEncodedSubtitleDelivery(true, "Transcode", 5)
+
+            m.assertTrue(isEncoded)
+        end function
+
+        @it("does not use encoded delivery for direct play")
+        function _()
             'bs:disable-next-line 1140
-            m.assertEqual(getPlaybackRequestId(invalid), -1)
+            isEncoded = shouldUseEncodedSubtitleDelivery(true, "DirectPlay", 5)
+
+            m.assertFalse(isEncoded)
+        end function
+
+        @it("does not use encoded delivery when external subtitles are preferred")
+        function _()
+            'bs:disable-next-line 1140
+            isEncoded = shouldUseEncodedSubtitleDelivery(false, "Transcode", 5)
+
+            m.assertFalse(isEncoded)
+        end function
+
+        @it("does not use encoded delivery when subtitles are off")
+        function _()
+            'bs:disable-next-line 1140
+            isEncoded = shouldUseEncodedSubtitleDelivery(true, "Transcode", SubtitleSelection.None)
+
+            m.assertFalse(isEncoded)
+        end function
+
+        @it("correlates validation failures and normalizes request values")
+        function _()
             'bs:disable-next-line 1140
             m.assertEqual(getStartPositionTicks({ startPositionTicks: 55 }), 55&)
         end function

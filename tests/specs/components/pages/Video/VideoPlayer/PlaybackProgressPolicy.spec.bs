@@ -7,14 +7,21 @@ namespace tests
         protected override function beforeEach()
             item = { Id: "music-video-1", Type: "MusicVideo", Name: "Song", UserData: { Played: false, PlayedPercentage: 25, PlaybackPositionTicks: 250 } }
             m.top.playRequest = { itemId: "music-video-1", item: item }
-            m.node.context = { item: item, series: invalid, season: invalid }
-            m.node.session = {
-                server: "http://server"
-                token: "token"
-                userId: "user"
-                itemId: "music-video-1"
+            m.node.activePlayback = {
+                request: m.top.playRequest
+                context: { item: item, series: invalid, season: invalid }
+                queue: { items: [], index: -1, mode: "sequential", scope: "" }
+                session: {
+                    server: "http://server"
+                    token: "token"
+                    userId: "user"
+                    itemId: "music-video-1"
+                }
                 playSessionId: "session"
-                playbackIdentity: {}
+                mediaSourceId: ""
+                liveStreamId: ""
+                playMethod: "DirectPlay"
+                canSeek: true
             }
             m.node.playback.hasEmittedFinalProgress = false
             m.node.playback.hasReportedStart = false
@@ -33,7 +40,7 @@ namespace tests
 
             m.assertInvalid(m.top.playbackProgressChanged)
             m.assertFalse(m.node.playback.hasEmittedFinalProgress)
-            m.assertEqual(m.node.context.item.UserData.PlaybackPositionTicks, 250)
+            m.assertEqual(m.node.activePlayback.context.item.UserData.PlaybackPositionTicks, 250)
         end function
 
         @it("starts the Jellyfin lifecycle with zero position")
@@ -77,8 +84,8 @@ namespace tests
         function _()
             movie = { Id: "movie-1", Type: "Movie", Name: "Movie", UserData: {} }
             m.top.playRequest = { itemId: "movie-1", item: movie }
-            m.node.context.item = movie
-            m.node.session.itemId = "movie-1"
+            m.node.activePlayback.context.item = movie
+            m.node.activePlayback.session.itemId = "movie-1"
 
             'bs:disable-next-line 1140
             reportPlaystateStart()
@@ -226,8 +233,9 @@ namespace tests
             request = { itemId: item.Id, item: item }
             if tracksPlaybackProgress <> invalid then request.tracksPlaybackProgress = tracksPlaybackProgress
             m.top.playRequest = request
-            m.node.context.item = item
-            m.node.session.itemId = item.Id
+            m.node.activePlayback.request = request
+            m.node.activePlayback.context.item = item
+            m.node.activePlayback.session.itemId = item.Id
             m.node.playback.hasEmittedFinalProgress = false
             m.node.playstateTask = { request: invalid, control: "stop" }
         end function

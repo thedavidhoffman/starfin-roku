@@ -4,6 +4,16 @@ namespace tests
     @suite("VideoPlayer episode queue controller")
     class EpisodeQueueControllerTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.activePlayback = {
+                request: {}
+                session: { server: "http://server", token: "token", userId: "user", itemId: "" }
+                context: { item: invalid, series: invalid, season: invalid }
+                queue: { items: [], index: -1, mode: "sequential", scope: "series" }
+            }
+            m.node.pendingPlaybackRequest = {}
+        end function
+
         @describe("identity and normalization")
 
         @it("resets boundaries for a fresh same-series launch")
@@ -48,7 +58,7 @@ namespace tests
             current = { Id: "current", SeriesId: "series", Type: "Episode" }
             m.node.episodeQueue = __EpisodeQueueState()
             m.node.episodeQueue.seriesId = "series"
-            m.node.queue = {
+            m.node.activePlayback.queue = {
                 items: [
                     __EpisodeQueueItem("previous", "series")
                     __EpisodeQueueItem("other", "another-series")
@@ -64,15 +74,15 @@ namespace tests
             'bs:disable-next-line 1140
             normalizeSeriesPlaybackQueue({ itemId: "current", series: { Id: "series" }, season: { Id: "season" } }, current)
 
-            m.assertEqual(__EpisodeQueueIds(m.node.queue.items), ["previous", "current"])
-            m.assertEqual(m.node.queue.index, 1)
+            m.assertEqual(__EpisodeQueueIds(m.node.activePlayback.queue.items), ["previous", "current"])
+            m.assertEqual(m.node.activePlayback.queue.index, 1)
         end function
 
         @describe("anchor-based merging")
 
         @it("positions neighbors around their anchor and preserves the active item")
         function _()
-            m.node.queue = {
+            m.node.activePlayback.queue = {
                 items: [__EpisodeQueueItem("s3e1", "series"), __EpisodeQueueItem("s3e3", "series"), __EpisodeQueueItem("s3e2", "series")]
                 index: 0
             }
@@ -81,22 +91,22 @@ namespace tests
             merged = episodeQueueMergeAtAnchor("s3e1", [__EpisodeQueueItem("s2e21", "series")], [__EpisodeQueueItem("s3e2", "series"), __EpisodeQueueItem("s3e2", "series")])
 
             m.assertTrue(merged)
-            m.assertEqual(__EpisodeQueueIds(m.node.queue.items), ["s2e21", "s3e1", "s3e2", "s3e3"])
-            m.assertEqual(m.node.queue.items[m.node.queue.index].itemId, "s3e1")
+            m.assertEqual(__EpisodeQueueIds(m.node.activePlayback.queue.items), ["s2e21", "s3e1", "s3e2", "s3e3"])
+            m.assertEqual(m.node.activePlayback.queue.items[m.node.activePlayback.queue.index].itemId, "s3e1")
         end function
 
         @it("supports repeated backward replenishment")
         function _()
-            m.node.queue = { items: [__EpisodeQueueItem("s3e1", "series")], index: 0 }
+            m.node.activePlayback.queue = { items: [__EpisodeQueueItem("s3e1", "series")], index: 0, mode: "sequential", scope: "series" }
 
             'bs:disable-next-line 1140
             episodeQueueMergeAtAnchor("s3e1", [__EpisodeQueueItem("s2e21", "series")], [])
-            m.node.queue.index = 0
+            m.node.activePlayback.queue.index = 0
             'bs:disable-next-line 1140
             episodeQueueMergeAtAnchor("s2e21", [__EpisodeQueueItem("s2e20", "series")], [__EpisodeQueueItem("s3e1", "series")])
 
-            m.assertEqual(__EpisodeQueueIds(m.node.queue.items), ["s2e20", "s2e21", "s3e1"])
-            m.assertEqual(m.node.queue.items[m.node.queue.index].itemId, "s2e21")
+            m.assertEqual(__EpisodeQueueIds(m.node.activePlayback.queue.items), ["s2e20", "s2e21", "s3e1"])
+            m.assertEqual(m.node.activePlayback.queue.items[m.node.activePlayback.queue.index].itemId, "s2e21")
         end function
 
         @describe("asynchronous state")
@@ -127,7 +137,7 @@ namespace tests
         @it("does not update boundaries when the response anchor cannot merge")
         function _()
             m.node.episodeQueue = __EpisodeQueueState()
-            m.node.queue = { items: [__EpisodeQueueItem("current", "series")], index: 0, scope: "series" }
+            m.node.activePlayback.queue = { items: [__EpisodeQueueItem("current", "series")], index: 0, mode: "sequential", scope: "series" }
             response = __EpisodeQueueResponse()
             response.payload.reachedSeriesStart = true
             response.payload.reachedSeriesEnd = true
@@ -142,7 +152,7 @@ namespace tests
             m.assertFalse(m.node.episodeQueue.initialized)
             m.assertFalse(m.node.episodeQueue.reachedSeriesStart)
             m.assertFalse(m.node.episodeQueue.reachedSeriesEnd)
-            m.assertEqual(__EpisodeQueueIds(m.node.queue.items), ["current"])
+            m.assertEqual(__EpisodeQueueIds(m.node.activePlayback.queue.items), ["current"])
         end function
 
         @it("allows exactly one boundary retry")

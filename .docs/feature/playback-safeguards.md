@@ -16,6 +16,10 @@ Each playback request receives an incrementing `requestId` before it is sent to
 `VideoPlaybackInfoTask`. The task copies that ID into every success or error
 response.
 
+The ID is added by deriving a pending `PlaybackRequest` snapshot. A matching
+successful `PlaybackResponse` is the only path that commits `ActivePlayback`;
+failed and stale responses leave the currently active state unchanged.
+
 `VideoPlayer` accepts a playback-info response only when its `requestId`
 matches the current request. Older responses are ignored and logged:
 

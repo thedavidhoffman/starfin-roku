@@ -1,0 +1,77 @@
+namespace tests
+
+    @suite("Active playback helpers")
+    class ActivePlaybackTests extends rooibos.BaseTestSuite
+
+        @describe("ActivePlayback.Create")
+
+        @it("creates canonical session context and queue state")
+        function _()
+            item = { Id: "item-1" }
+            request = {
+                requestId: 4
+                server: "http://server"
+                token: "token"
+                userId: "user-1"
+                itemId: "item-1"
+                item: item
+                series: { Id: "series-1" }
+                season: { Id: "season-1" }
+                playbackQueue: [{ itemId: "item-1", item: item }]
+                playbackQueueIndex: 0
+                playbackQueueMode: "sequential"
+                playbackQueueScope: "series"
+            }
+            response = {
+                requestId: 4
+                item: item
+                playSessionId: "session-1"
+                mediaSourceId: "source-1"
+                playMethod: "DirectPlay"
+                canSeek: true
+            }
+
+            active = ActivePlayback.Create(request, response)
+
+            m.assertEqual(active.requestId, 4)
+            m.assertEqual(active.session.itemId, "item-1")
+            m.assertEqual(active.playSessionId, "session-1")
+            m.assertEqual(active.mediaSourceId, "source-1")
+            m.assertEqual(active.playMethod, "DirectPlay")
+            m.assertTrue(active.canSeek)
+            m.assertEqual(active.context.series.Id, "series-1")
+            m.assertEqual(active.queue.index, 0)
+            m.assertEqual(active.queue.scope, "series")
+        end function
+
+        @it("copies the accepted request snapshot")
+        function _()
+            request = { requestId: 2, itemId: "item-1" }
+
+            active = ActivePlayback.Create(request, { requestId: 2 })
+            active.request.itemId = "item-2"
+
+            m.assertEqual(request.itemId, "item-1")
+        end function
+
+        @it("owns queue and context data without changing the submitted request")
+        function _()
+            request = {
+                requestId: 3
+                itemId: "item-1"
+                item: { UserData: { Played: false } }
+                playbackQueue: [{ itemId: "item-1" }]
+            }
+
+            active = ActivePlayback.Create(request, { requestId: 3, item: request.item })
+            active.context.item.UserData.Played = true
+            active.queue.items.Push({ itemId: "item-2" })
+
+            m.assertFalse(request.item.UserData.Played)
+            m.assertEqual(request.playbackQueue.Count(), 1)
+            m.assertEqual(active.request.playbackQueue.Count(), 2)
+        end function
+
+    end class
+
+end namespace

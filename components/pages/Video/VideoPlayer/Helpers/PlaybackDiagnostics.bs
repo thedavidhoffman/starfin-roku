@@ -27,7 +27,7 @@ sub logPlaybackContentAssignment(response as dynamic, startPosition as dynamic)
     m.playbackDiagnostics.expectedPosition = Number.ToFloat(startPosition, 0)
     m.playbackDiagnostics.expectedReason = "contentAssignment"
 
-    m.log.write("Playback content assignment method=" + Format.SafeString(response.playbackIdentity.playMethod, "") + " format=" + Format.SafeString(response.streamFormat, "") + " startPosition=" + Format.SafeString(startPosition, ""))
+    m.log.write("Playback content assignment method=" + Format.SafeString(response.playMethod, "") + " format=" + Format.SafeString(response.streamFormat, "") + " startPosition=" + Format.SafeString(startPosition, ""))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -39,7 +39,8 @@ sub logPlaybackSeekRequest(reason as string, targetPosition as dynamic)
     m.playbackDiagnostics.expectedPosition = target
     m.playbackDiagnostics.expectedReason = reason
 
-    m.log.write("Playback seek requested reason=" + reason + " from=" + Format.SafeString(sourcePosition, "") + " to=" + Format.SafeString(target, "") + " delta=" + Format.SafeString(target - sourcePosition, "") + " state=" + LCase(Format.SafeString(m.videoPlayer.state, "")) + " itemId=" + m.session.itemId + " playSessionId=" + m.session.playSessionId)
+    identity = getPlaybackDiagnosticIdentity()
+    m.log.write("Playback seek requested reason=" + reason + " from=" + Format.SafeString(sourcePosition, "") + " to=" + Format.SafeString(target, "") + " delta=" + Format.SafeString(target - sourcePosition, "") + " state=" + LCase(Format.SafeString(m.videoPlayer.state, "")) + " itemId=" + identity.itemId + " playSessionId=" + identity.playSessionId)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -52,7 +53,8 @@ sub diagnosePlaybackPosition(position as float)
         severity = "UNEXPECTED"
         if expected then severity = "expected"
 
-        m.log.write("Playback position moved backward classification=" + severity + " from=" + Format.SafeString(previousPosition, "") + " to=" + Format.SafeString(position, "") + " delta=" + Format.SafeString(position - previousPosition, "") + " expectedReason=" + m.playbackDiagnostics.expectedReason + " expectedPosition=" + Format.SafeString(m.playbackDiagnostics.expectedPosition, "") + " state=" + LCase(Format.SafeString(m.videoPlayer.state, "")) + " bufferPercent=" + Format.SafeString(getPlaybackBufferPercent(), "") + " itemId=" + m.session.itemId + " playSessionId=" + m.session.playSessionId)
+        identity = getPlaybackDiagnosticIdentity()
+        m.log.write("Playback position moved backward classification=" + severity + " from=" + Format.SafeString(previousPosition, "") + " to=" + Format.SafeString(position, "") + " delta=" + Format.SafeString(position - previousPosition, "") + " expectedReason=" + m.playbackDiagnostics.expectedReason + " expectedPosition=" + Format.SafeString(m.playbackDiagnostics.expectedPosition, "") + " state=" + LCase(Format.SafeString(m.videoPlayer.state, "")) + " bufferPercent=" + Format.SafeString(getPlaybackBufferPercent(), "") + " itemId=" + identity.itemId + " playSessionId=" + identity.playSessionId)
     end if
 
     if isExpectedPlaybackPosition(position) then
@@ -61,6 +63,17 @@ sub diagnosePlaybackPosition(position as float)
     end if
     m.playbackDiagnostics.lastObservedPosition = position
 end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackDiagnosticIdentity
+'-------------------------------------------------------------------------------
+function getPlaybackDiagnosticIdentity() as object
+    if m.activePlayback = invalid then return { itemId: "", playSessionId: "" }
+    return {
+        itemId: Format.SafeString(m.activePlayback.session.itemId, "")
+        playSessionId: Format.SafeString(m.activePlayback.playSessionId, "")
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' diagnosePlaybackState

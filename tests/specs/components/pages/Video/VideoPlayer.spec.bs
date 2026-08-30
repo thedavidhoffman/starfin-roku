@@ -7,11 +7,16 @@ namespace tests
         protected override function beforeEach()
             m.node.playback.hasReportedStart = true
             m.node.playback.hasEmittedFinalProgress = false
-            m.node.session.server = "http://server"
-            m.node.session.token = "token"
-            m.node.session.itemId = "movie-1"
-            m.node.session.playSessionId = "old-session"
-            m.node.session.playbackIdentity = {
+            m.node.activePlayback = {
+                request: { itemId: "movie-1" }
+                context: { item: { Id: "movie-1" }, series: invalid, season: invalid }
+                queue: { items: [], index: -1, mode: "sequential", scope: "" }
+                session: {
+                    server: "http://server"
+                    token: "token"
+                    itemId: "movie-1"
+                }
+                playSessionId: "old-session"
                 mediaSourceId: "source-1"
                 liveStreamId: ""
                 playMethod: "Transcode"
@@ -22,6 +27,128 @@ namespace tests
             m.top.findNode("playbackControls").visible = false
             m.top.findNode("playbackActionButton").visible = false
             m.top.findNode("musicVideoIntroMetadata").visible = false
+        end function
+
+        @describe("Playback restoration")
+
+        @it("returns the accepted active request before a newer pending request")
+        function _()
+            m.node.activePlayback.request = { itemId: "active-item" }
+            m.node.pendingPlaybackRequest = { itemId: "pending-item" }
+
+            'bs:disable-next-line 1140
+            request = getRestorePlaybackRequest()
+
+            m.assertEqual(request.itemId, "active-item")
+        end function
+
+        @it("returns the pending request when playback has not become active")
+        function _()
+            m.node.activePlayback = invalid
+            m.node.pendingPlaybackRequest = { itemId: "pending-item" }
+
+            'bs:disable-next-line 1140
+            request = getRestorePlaybackRequest()
+
+            m.assertEqual(request.itemId, "pending-item")
+        end function
+
+        @describe("Playback request correlation")
+
+        @it("adds correlation to a pending snapshot without mutating the input request")
+        function _()
+            request = { itemId: "movie-2", item: { Id: "movie-2" } }
+            m.top.playRequest = request
+
+            'bs:disable-next-line 1140
+            onPlayRequestChanged()
+
+            m.assertInvalid(request.requestId)
+            m.assertEqual(m.node.pendingPlaybackRequest.itemId, "movie-2")
+            m.assertTrue(m.node.pendingPlaybackRequest.requestId > 0)
+        end function
+
+        @it("ignores a stale response without replacing active playback")
+        function _()
+            m.node.playback.requestId = 4
+            m.node.activePlayback.request = { itemId: "active-item" }
+            m.node.playbackInfoTask = { response: { ok: true, requestId: 3 } }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.node.activePlayback.request.itemId, "active-item")
+        end function
+
+        @it("constructs active playback from a matching request and response")
+        function _()
+            item = { Id: "movie-2", Type: "Movie", UserData: {} }
+            request = {
+                requestId: 5
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                itemId: "movie-2"
+                item: item
+                playbackQueue: []
+                playbackQueueIndex: -1
+            }
+            response = {
+                requestId: 5
+                item: item
+                playSessionId: "session-2"
+                mediaSourceId: "source-2"
+                playMethod: "DirectPlay"
+                canSeek: true
+            }
+
+            'bs:disable-next-line 1140
+            applyPlaybackSessionState(response, request, item)
+
+            m.assertEqual(m.node.activePlayback.requestId, 5)
+            m.assertEqual(m.node.activePlayback.session.itemId, "movie-2")
+            m.assertEqual(m.node.activePlayback.playSessionId, "session-2")
+            m.assertEqual(m.node.activePlayback.mediaSourceId, "source-2")
+        end function
+
+        @it("preserves accepted playback when a matching response fails")
+        function _()
+            m.node.playback.requestId = 6
+            m.node.pendingPlaybackRequest = { requestId: 6, itemId: "failed-item" }
+            m.node.playbackInfoTask = { response: { ok: false, requestId: 6, errorMessage: "Failed" } }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.node.activePlayback.session.itemId, "movie-1")
+            m.assertEqual(m.node.activePlayback.playSessionId, "old-session")
+        end function
+
+        @it("uses the accepted request for active playback readers")
+        function _()
+            m.node.activePlayback.request = { itemId: "active-item" }
+            m.node.pendingPlaybackRequest = { itemId: "rejected-item" }
+
+            'bs:disable-next-line 1140
+            request = getAcceptedOrPendingPlaybackRequest()
+
+            m.assertEqual(request.itemId, "active-item")
+        end function
+
+        @it("commits a local subtitle selection consistently")
+        function _()
+            m.node.activePlayback.request = { itemId: "movie-1", subtitleStreamIndex: 2 }
+            m.node.activePlayback.subtitleStreamIndex = 2
+            m.node.activePlayback.subtitleStreamTitle = "Old"
+            m.node.streamOptions.selectedSubtitleStreamIndex = 2
+
+            'bs:disable-next-line 1140
+            applySubtitleSelection({ streamIndex: -1, label: "Off" })
+
+            m.assertEqual(m.node.activePlayback.request.subtitleStreamIndex, -1)
+            m.assertEqual(m.node.activePlayback.subtitleStreamIndex, -1)
+            m.assertEqual(m.node.activePlayback.subtitleStreamTitle, "Off")
+            m.assertEqual(m.node.pendingPlaybackRequest.subtitleStreamIndex, -1)
         end function
 
         @describe("Back navigation")

@@ -9,8 +9,9 @@ sub updatePlaybackControlsOptions(item as dynamic)
     m.streamOptions.audioStreams = audioStreams
     m.streamOptions.chapters = chapters
     m.streamOptions.selectedChapterKey = ""
-    m.streamOptions.selectedSubtitleStreamIndex = VideoPlayerStreamSelection_GetSubtitleIndex(m.top.playRequest)
-    m.streamOptions.selectedAudioStreamIndex = VideoPlayerStreamSelection_GetAudioIndex(m.top.playRequest, audioStreams)
+    request = getAcceptedOrPendingPlaybackRequest()
+    m.streamOptions.selectedSubtitleStreamIndex = VideoPlayerStreamSelection_GetSubtitleIndex(request)
+    m.streamOptions.selectedAudioStreamIndex = VideoPlayerStreamSelection_GetAudioIndex(request, audioStreams)
     m.playbackControls.hasSubtitleOptions = subtitleStreams.Count() > 0
     m.playbackControls.hasAudioOptions = audioStreams.Count() > 1
     m.playbackControls.hasChapterOptions = chapters.Count() > 0
@@ -68,7 +69,7 @@ end sub
 ' onVideoOptionsPressed
 '-------------------------------------------------------------------------------
 sub onVideoOptionsPressed()
-    request = m.top.playRequest
+    request = getAcceptedOrPendingPlaybackRequest()
     if request = invalid then return
 
     m.controlsHideTimer.control = "stop"
@@ -149,7 +150,7 @@ sub applyVideoModeSelection(selection as dynamic)
     if selection = invalid then return
 
     videoMode = PlaybackMode.Normalize(selection.key)
-    request = m.top.playRequest
+    request = getAcceptedOrPendingPlaybackRequest()
     if request = invalid then return
     if videoMode = PlaybackMode.Normalize(request.videoMode) then return
 
@@ -172,7 +173,7 @@ sub onVideoModeApplyTimerFire()
     restartRequest = buildStreamRestartPlayRequest()
     if restartRequest = invalid then return
 
-    restartRequest.AddReplace("videoMode", videoMode)
+    restartRequest = PlaybackRequest.WithChanges(restartRequest, { videoMode: videoMode })
     m.log.write("Restarting playback with video mode=" + videoMode)
     m.top.playRequest = restartRequest
 end sub
@@ -198,11 +199,12 @@ sub applySubtitleSelection(selection as dynamic)
 
     previousDeliveryMethod = m.streamOptions.activeSubtitleDeliveryMethod
     m.streamOptions.selectedSubtitleStreamIndex = streamIndex
-    m.top.playRequest.AddReplace("subtitleStreamIndex", streamIndex)
+    updatedRequest = PlaybackRequest.WithChanges(getAcceptedOrPendingPlaybackRequest(), { subtitleStreamIndex: streamIndex })
     if streamIndex = SubtitleSelection.None then
         setSubtitleCaptionMode("Off")
         m.videoPlayer.subtitleTrack = ""
         m.streamOptions.activeSubtitleDeliveryMethod = "none"
+        commitLocalSubtitleSelection(updatedRequest, streamIndex, Format.SafeString(selection.label, "Off"))
         return
     end if
     externalTrack = SubtitlePlayback.FindExternalTrack(m.streamOptions.externalSubtitleTracks, streamIndex)
@@ -214,10 +216,24 @@ sub applySubtitleSelection(selection as dynamic)
             setSubtitleCaptionMode("On")
             m.videoPlayer.subtitleTrack = trackName
             m.streamOptions.activeSubtitleDeliveryMethod = "external"
+            commitLocalSubtitleSelection(updatedRequest, streamIndex, Format.SafeString(selection.label, ""))
             return
         end if
     end if
     restartPlaybackWithStreamOptions()
+end sub
+
+'-------------------------------------------------------------------------------
+' commitLocalSubtitleSelection
+'-------------------------------------------------------------------------------
+sub commitLocalSubtitleSelection(request as object, streamIndex as integer, streamTitle as string)
+    if m.activePlayback = invalid then return
+
+    acceptedRequest = PlaybackRequest.Create(request)
+    m.activePlayback.request = acceptedRequest
+    m.activePlayback.subtitleStreamIndex = streamIndex
+    m.activePlayback.subtitleStreamTitle = streamTitle
+    m.pendingPlaybackRequest = acceptedRequest
 end sub
 
 '-------------------------------------------------------------------------------
@@ -226,7 +242,7 @@ end sub
 sub applyAudioSelection(selection as dynamic)
     if selection = invalid or selection.streamIndex = invalid then return
 
-    streamIndex = int(selection.streamIndex)
+    streamIndex = Number.ToInteger(selection.streamIndex, -1)
     if streamIndex = m.streamOptions.selectedAudioStreamIndex then return
 
     m.streamOptions.selectedAudioStreamIndex = streamIndex
@@ -278,30 +294,15 @@ end sub
 ' buildStreamRestartPlayRequest
 '-------------------------------------------------------------------------------
 function buildStreamRestartPlayRequest() as dynamic
-    request = m.top.playRequest
+    request = getAcceptedOrPendingPlaybackRequest()
     if request = invalid then return invalid
 
-    restartRequest = {
-        server: request.server
-        token: request.token
-        userId: request.userId
-        itemId: request.itemId
-        item: request.item
-        series: request.series
-        season: request.season
+    changes = {
         startPositionTicks: secondsToTicks(m.playback.position)
-        playbackQueue: request.playbackQueue
-        playbackQueueIndex: request.playbackQueueIndex
-        playbackQueueMode: request.playbackQueueMode
-        playbackQueueScope: request.playbackQueueScope
-        tracksPlaybackProgress: request.tracksPlaybackProgress
         audioStreamIndex: m.streamOptions.selectedAudioStreamIndex
         subtitleStreamIndex: m.streamOptions.selectedSubtitleStreamIndex
         subtitleBurnInMode: SubtitleBurnIn.Normalize(request.subtitleBurnInMode)
+        videoMode: getOriginalPlaybackMode()
     }
-    if request.mediaSourceId <> invalid then restartRequest.AddReplace("mediaSourceId", request.mediaSourceId)
-    restartRequest.AddReplace("videoMode", getOriginalPlaybackMode())
-    EpisodeQueueIdentity.Apply(restartRequest, request.playbackQueueScope, request.episodeQueueId)
-
-    return restartRequest
+    return PlaybackRequest.WithChanges(request, changes)
 end function

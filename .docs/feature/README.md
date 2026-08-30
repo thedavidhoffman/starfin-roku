@@ -11,6 +11,7 @@ individual Starfin features.
 - [Library Genre Browsing](library-genre-browsing.md)
 - [Music Video Playback](music-videos.md)
 - [Playback Safeguards and Diagnostics](playback-safeguards.md)
+- [Playback Workflow and State Ownership](playback-workflow.md)
 - [Playback Skip Controls](playback-skip-controls.md)
 - [Playlist Artwork](playlist-artwork.md)
 - [Preview Sheets](preview-sheets.md)

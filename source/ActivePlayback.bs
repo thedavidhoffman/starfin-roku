@@ -1,0 +1,105 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackRequest.bs"
+
+namespace ActivePlayback
+
+    '-------------------------------------------------------------------------------
+    ' ActivePlayback.Create
+    '-------------------------------------------------------------------------------
+    function Create(request as object, response as object) as object
+        acceptedRequest = PlaybackRequest.Create(request)
+        queueItems = ActivePlayback.__GetQueue(acceptedRequest.playbackQueue)
+        queueIndex = Number.ToInteger(acceptedRequest.playbackQueueIndex, -1)
+        ActivePlayback.__OwnCurrentQueueItem(queueItems, queueIndex, acceptedRequest)
+        acceptedRequest.playbackQueue = queueItems
+        return {
+            request: acceptedRequest
+            requestId: Number.ToInteger(response.requestId, -1)
+            itemId: Format.SafeString(acceptedRequest.itemId, "")
+            title: Format.SafeString(response.title, "")
+            playSessionId: Format.SafeString(response.playSessionId, "")
+            mediaSourceId: Format.SafeString(response.mediaSourceId, "")
+            liveStreamId: Format.SafeString(response.liveStreamId, "")
+            playbackMode: Format.SafeString(response.playbackMode, "")
+            playMethod: Format.SafeString(response.playMethod, "")
+            canSeek: response.canSeek = true
+            transcodeReason: Format.SafeString(response.transcodeReason, "")
+            streamFormat: Format.SafeString(response.streamFormat, "")
+            container: Format.SafeString(response.container, "")
+            videoStreamIndex: Number.ToInteger(response.videoStreamIndex, -1)
+            audioStreamIndex: Number.ToInteger(response.audioStreamIndex, -1)
+            subtitleStreamIndex: Number.ToInteger(response.subtitleStreamIndex, -1)
+            videoStreamTitle: Format.SafeString(response.videoStreamTitle, "")
+            audioStreamTitle: Format.SafeString(response.audioStreamTitle, "")
+            subtitleStreamTitle: Format.SafeString(response.subtitleStreamTitle, "")
+            videoCodec: Format.SafeString(response.videoCodec, "")
+            audioCodec: Format.SafeString(response.audioCodec, "")
+            width: Number.ToInteger(response.width, 0)
+            height: Number.ToInteger(response.height, 0)
+            videoBitrate: Number.ToInteger(response.videoBitrate, 0)
+            audioBitrate: Number.ToInteger(response.audioBitrate, 0)
+            audioChannels: Number.ToInteger(response.audioChannels, 0)
+            session: {
+                server: Format.SafeString(acceptedRequest.server, "")
+                token: Format.SafeString(acceptedRequest.token, "")
+                userId: Format.SafeString(acceptedRequest.userId, "")
+                itemId: Format.SafeString(acceptedRequest.itemId, "")
+            }
+            context: {
+                item: acceptedRequest.item
+                series: acceptedRequest.series
+                season: acceptedRequest.season
+            }
+            queue: {
+                items: queueItems
+                index: queueIndex
+                mode: Format.SafeString(acceptedRequest.playbackQueueMode, "sequential")
+                scope: Format.SafeString(acceptedRequest.playbackQueueScope, "")
+            }
+        }
+    end function
+
+    '-------------------------------------------------------------------------------
+    ' ActivePlayback.__OwnCurrentQueueItem
+    '-------------------------------------------------------------------------------
+    sub __OwnCurrentQueueItem(queueItems as object, queueIndex as integer, request as object)
+        itemId = Format.SafeString(request.itemId, "")
+        targetIndex = queueIndex
+        indexMatches = false
+        if targetIndex >= 0 and targetIndex < queueItems.Count() then
+            indexedItem = queueItems[targetIndex]
+            if indexedItem <> invalid then indexMatches = Format.SafeString(indexedItem.itemId, "") = itemId
+        end if
+        if indexMatches <> true then
+            targetIndex = -1
+            for i = 0 to queueItems.Count() - 1
+                queueItem = queueItems[i]
+                if queueItem <> invalid and Format.SafeString(queueItem.itemId, "") = itemId then
+                    targetIndex = i
+                    exit for
+                end if
+            end for
+        end if
+        if targetIndex < 0 then return
+
+        source = queueItems[targetIndex]
+        if Type(source) <> "roAssociativeArray" then return
+
+        queueItem = {}
+        for each key in source
+            queueItem[key] = source[key]
+        end for
+        queueItem.item = request.item
+        queueItems[targetIndex] = queueItem
+    end sub
+
+    '-------------------------------------------------------------------------------
+    ' ActivePlayback.__GetQueue
+    '-------------------------------------------------------------------------------
+    function __GetQueue(value as dynamic) as object
+        if value = invalid or Type(value) <> "roArray" then return []
+        return value
+    end function
+
+end namespace

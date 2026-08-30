@@ -22,3 +22,10 @@ immediately and does not wait for the prior stop response.
 
 Late stop responses are intentionally ignored. They cannot close, stop, or
 otherwise mutate the replacement player.
+
+## Playback Close State
+
+The `playRequest` field is an input command rather than shared active state.
+When `VideoPlayer` closes, `MainScene` requests a restoration snapshot through
+`getRestorePlaybackRequest()`. The accepted `ActivePlayback` request is preferred;
+the pending request is used only when playback never became active.
