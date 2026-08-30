@@ -583,22 +583,22 @@ namespace tests
             m.assertEqual(m.node.pageState.filterSelection.genre, "Drama")
         end function
 
-        @describe("jumbo layout")
+        @describe("responsive poster layout")
 
-        @it("lays out two jumbo items across the screen")
+        @it("lays out three poster items across the screen")
         function _()
+            m.node.pageState.layoutColumns = 3
             'bs:disable-next-line 1140
-            applyGridLayout("jumbo")
+            applyGridLayout("poster")
 
-            m.assertEqual(m.node.itemsGrid.itemSize, [936.0, 591.0])
-            m.assertEqual(m.node.itemsGrid.itemSpacing, [0.0, 18.0])
-            m.assertEqual(m.node.itemsGrid.numColumns, 2)
-            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/jumbo-focus-936x591.png")
+            m.assertEqual(m.node.itemsGrid.itemSize, [582.0, 893.0])
+            m.assertEqual(m.node.itemsGrid.numColumns, 3)
+            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/fhd/poster-3-col-focus.png")
         end function
 
         @describe("detailed layout")
 
-        @it("uses the jumbo grid geometry with the stable media card renderer")
+        @it("uses the detailed grid geometry with the stable media card renderer")
         function _()
             'bs:disable-next-line 1140
             applyGridLayout("detailed")
@@ -607,18 +607,13 @@ namespace tests
             m.assertEqual(m.node.itemsGrid.itemSpacing, [0.0, -39.0])
             m.assertEqual(m.node.itemsGrid.numColumns, 2)
             m.assertEqual(m.node.itemsGrid.itemComponentName, "VideoMediaCard")
-            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/jumbo-focus-936x591.png")
+            m.assertEqual(m.node.itemsGrid.focusBitmapUri, "pkg:/images/library/detailed-focus-936x591.png")
         end function
 
-        @it("resolves jumbo and detailed collection item settings")
+        @it("resolves detailed collection settings")
         function _()
             m.node.pageState.request = { collectionType: "collection" }
-            m.top.settings = { "collection-items-image-type": "jumbo" }
-
-            'bs:disable-next-line 1140
-            m.assertEqual(getVideoLibraryImageAspect(), "jumbo")
-
-            m.top.settings = { "collection-items-image-type": "detailed" }
+            m.top.settings = { "collection-items-layout": "detailed;2" }
 
             'bs:disable-next-line 1140
             m.assertEqual(getVideoLibraryImageAspect(), "detailed")
@@ -627,7 +622,7 @@ namespace tests
         @it("resolves the music video artwork setting")
         function _()
             m.node.pageState.request = { collectionType: "musicvideos" }
-            m.top.settings = { "music-videos-image-type": "thumbnail" }
+            m.top.settings = { "music-videos-layout": "thumbnail;4" }
 
             'bs:disable-next-line 1140
             m.assertEqual(getVideoLibraryImageAspect(), "thumbnail")
@@ -669,7 +664,7 @@ namespace tests
             applyGridLayout("detailed")
 
             'bs:disable-next-line 1140
-            applyGridLayout("jumbo")
+            applyGridLayout("poster")
 
             m.assertEqual(m.node.itemsGrid.itemComponentName, "VideoMediaCard")
         end function
@@ -878,7 +873,7 @@ namespace tests
 
         @it("supports movie-library browsing from every movie card layout")
         function _()
-            for each imageAspect in ["poster", "thumbnail", "jumbo"]
+            for each imageAspect in ["poster", "thumbnail", "detailed"]
                 m.configurePaging(20, 20, 0)
                 'bs:disable-next-line 1140
                 applyGridLayout(imageAspect)
@@ -1765,7 +1760,8 @@ namespace tests
         @it("passes loaded and total counts separately to the progress indicator")
         function _()
             m.node.pageState.paging.totalCount = 1000
-            m.node.videoLibraryProgressIndicator = { itemCount: 0, totalItemCount: -1 }
+            m.node.videoLibraryProgressIndicator.itemCount = 0
+            m.node.videoLibraryProgressIndicator.totalItemCount = -1
 
             'bs:disable-next-line 1140
             updateVideoLibraryProgressItemCount(100)
@@ -1850,6 +1846,28 @@ namespace tests
                 sortBy: "SortName"
                 sortOrder: "Ascending"
             }
+        end function
+
+        @describe("live library layout changes")
+
+        @it("rebuilds cached card geometry when only the column count changes")
+        function _()
+            item = { Id: "movie-1", Type: "Movie", Name: "Movie", ImageTags: {}, UserData: {} }
+            m.node.pageState.request = { server: "http://server", collectionType: "movies" }
+            m.node.pageState.imageAspect = "poster"
+            m.node.pageState.layoutColumns = 5
+            m.node.pageState.allItems = [item]
+            m.top.settings = { "movie-library-layout": "poster;5" }
+            'bs:disable-next-line 1140
+            renderItems([item])
+
+            m.top.settings = { "movie-library-layout": "poster;4" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            card = m.node.itemsGrid.content.getChild(0)
+            m.assertEqual(m.node.itemsGrid.numColumns, 4)
+            m.assertEqual(card.cardLayout.artworkSize, [393, 590])
         end function
 
         private sub saveRestoreState(request as object, optionKey as string, selectedDecade as integer, selectedGenre as string, sortOrder as string)

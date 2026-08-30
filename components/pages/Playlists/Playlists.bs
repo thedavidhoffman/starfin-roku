@@ -1,4 +1,5 @@
 import "pkg:/source/VideoCardPresentation.bs"
+import "pkg:/source/LibraryLayoutSetting.bs"
 
 '-------------------------------------------------------------------------------
 ' specializationInitialize
@@ -163,7 +164,7 @@ end function
 sub specializationApplyLayout(imageAspect as string)
     contentRole = "items"
     if isPlaylistLibraryRequest() then contentRole = "cards"
-    layoutSpec = VideoCardGridLayout.GetSpec(imageAspect, contentRole)
+    layoutSpec = VideoCardGridLayout.GetSpec(imageAspect, contentRole, m.pageState.layoutColumns)
     applyVideoLibraryGridSpec(layoutSpec, getFilterButtonRowOffset())
 end sub
 
@@ -215,16 +216,10 @@ function specializationImageUrl(item as object, imageAspect as string) as string
     if isTVEpisode(item) then return getPlaylistEpisodeImageUrl(item, imageAspect)
     contentRole = "items"
     if isPlaylistLibraryRequest() then contentRole = "cards"
-    layoutSpec = VideoCardGridLayout.GetSpec(imageAspect, contentRole)
+    layoutSpec = VideoCardGridLayout.GetSpec(imageAspect, contentRole, m.pageState.layoutColumns)
     artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
     artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
     if imageAspect = VideoCardPresentation.Type.Thumbnail then return ItemImage.GetThumbnailUrl(request.server, item, artworkWidth, artworkHeight)
-    if imageAspect = VideoCardPresentation.Type.Jumbo then
-        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", artworkWidth, artworkHeight)
-        if imageUrl <> "" then return imageUrl
-        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", artworkWidth, artworkHeight)
-        if imageUrl <> "" then return imageUrl
-    end if
     return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
 end function
 
@@ -232,10 +227,11 @@ end function
 ' specializationImageAspect
 '-------------------------------------------------------------------------------
 function specializationImageAspect() as string
-    settingKey = SettingsStore.Key.PlaylistItemsImageType
-    if isPlaylistLibraryRequest() then settingKey = SettingsStore.Key.PlaylistCardsImageType
-    settingValue = Format.SafeString(m.top.settings[settingKey], VideoCardPresentation.Type.Poster)
-    return VideoCardPresentation.Normalize(settingValue)
+    settingKey = SettingsStore.Key.PlaylistItemsLayout
+    if isPlaylistLibraryRequest() then settingKey = SettingsStore.Key.PlaylistCardsLayout
+    layout = LibraryLayoutSetting.Parse(m.top.settings[settingKey])
+    m.pageState.layoutColumns = layout.columns
+    return layout.presentation
 end function
 
 '-------------------------------------------------------------------------------
@@ -530,17 +526,10 @@ end function
 function getPlaylistEpisodeImageUrl(item as object, imageAspect as string) as string
     request = m.pageState.request
     if request = invalid then return ""
-    layoutSpec = VideoCardGridLayout.GetSpec(imageAspect, "items")
+    layoutSpec = VideoCardGridLayout.GetSpec(imageAspect, "items", m.pageState.layoutColumns)
     artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
     artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
     if imageAspect = VideoCardPresentation.Type.Thumbnail then
-        return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
-    end if
-    if imageAspect = VideoCardPresentation.Type.Jumbo then
-        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", artworkWidth, artworkHeight)
-        if imageUrl <> "" then return imageUrl
-        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", artworkWidth, artworkHeight)
-        if imageUrl <> "" then return imageUrl
         return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
     end if
     seriesId = Format.SafeString(item.SeriesId, "")

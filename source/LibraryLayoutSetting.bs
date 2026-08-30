@@ -1,0 +1,79 @@
+import "pkg:/source/Number.bs"
+import "pkg:/source/VideoCardPresentation.bs"
+
+namespace LibraryLayoutSetting
+
+    '---------------------------------------------------------------------------
+    ' LibraryLayoutSetting.Parse
+    '---------------------------------------------------------------------------
+    function Parse(value as dynamic) as object
+        defaultLayout = { presentation: VideoCardPresentation.Type.Poster, columns: 6 }
+        if value = invalid then return defaultLayout
+        valueType = Type(value)
+        if valueType <> "String" and valueType <> "roString" then return defaultLayout
+
+        parts = value.Split(";")
+        if parts.Count() <> 2 then return defaultLayout
+
+        presentation = parts[0]
+        columnText = parts[1]
+        columns = Number.ToInteger(columnText, -1)
+
+        ' Comparing the canonical string rejects whitespace, leading zeroes, and
+        ' other values that Number.ToInteger() could otherwise accept.
+        if columnText <> columns.ToStr() then return defaultLayout
+        if LibraryLayoutSetting.IsValidColumns(presentation, columns) <> true then return defaultLayout
+
+        return { presentation: presentation, columns: columns }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryLayoutSetting.Format
+    '---------------------------------------------------------------------------
+    function Format(presentation as dynamic, columns as dynamic) as string
+        if presentation <> VideoCardPresentation.Type.Poster and presentation <> VideoCardPresentation.Type.Thumbnail and presentation <> VideoCardPresentation.Type.Detailed then return "poster;6"
+        resolvedColumns = Number.ToInteger(columns, -1)
+        if LibraryLayoutSetting.IsValidColumns(presentation, resolvedColumns) <> true then return "poster;6"
+        return presentation + ";" + resolvedColumns.ToStr()
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryLayoutSetting.Normalize
+    '---------------------------------------------------------------------------
+    function Normalize(value as dynamic) as string
+        parsed = LibraryLayoutSetting.Parse(value)
+        return LibraryLayoutSetting.Format(parsed.presentation, parsed.columns)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryLayoutSetting.DefaultColumns
+    '---------------------------------------------------------------------------
+    function DefaultColumns(presentation as string) as integer
+        if presentation = VideoCardPresentation.Type.Thumbnail then return 4
+        if presentation = VideoCardPresentation.Type.Detailed then return 2
+        return 6
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryLayoutSetting.AvailableColumns
+    '---------------------------------------------------------------------------
+    function AvailableColumns(presentation as string) as object
+        if presentation = VideoCardPresentation.Type.Thumbnail then return [2, 3, 4]
+        if presentation = VideoCardPresentation.Type.Detailed then return [2]
+        return [3, 4, 5, 6]
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryLayoutSetting.IsValidColumns
+    '---------------------------------------------------------------------------
+    function IsValidColumns(presentation as string, columns as integer) as boolean
+        ' Do not replace these explicit checks with a for-each loop. BrighterScript
+        ' incorrectly namespace-qualifies local for-each variables in this file,
+        ' producing invalid BrightScript such as LibraryLayoutSetting_available.
+        if presentation = VideoCardPresentation.Type.Poster then return columns >= 3 and columns <= 6
+        if presentation = VideoCardPresentation.Type.Thumbnail then return columns >= 2 and columns <= 4
+        if presentation = VideoCardPresentation.Type.Detailed then return columns = 2
+        return false
+    end function
+
+end namespace

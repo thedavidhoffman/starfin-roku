@@ -4,16 +4,6 @@
 // after the desired outline is placed around the visible image rectangle.
 export const focusGeometry = [
   {
-    name: "video-library-jumbo-grid",
-    asset: "images/library/jumbo-focus-936x591.png",
-    owner: "components/pages/Video/VideoLibrary/VideoLibrary.xml",
-    surface: "MarkupGrid",
-    canvas: [936, 591],
-    image: [27, 0, 882, 496],
-    outline: [0, 0, 0, 0],
-    anchorCompensation: [0, 0, 0, 0],
-  },
-  {
     name: "cast-row",
     asset: "images/cast/cast-focus-246x264.png",
     owner: "components/pages/Video/Cast/Cast/Cast.xml",
@@ -134,26 +124,6 @@ export const focusGeometry = [
     anchorCompensation: [17, 0, 18, -2],
   },
   {
-    name: "library-poster-grid",
-    asset: "images/library/poster-focus-297x465.png",
-    owner: "components/pages/Collections/Collections.xml",
-    surface: "MarkupGrid",
-    canvas: [297, 465],
-    image: [21, 0, 252, 378],
-    outline: [3, 0, 3, 0],
-    anchorCompensation: [-2, 0, 2, 0],
-  },
-  {
-    name: "library-thumbnail-grid",
-    asset: "images/library/thumbnail-focus-465x348.png",
-    owner: "components/pages/Collections/Collections.xml",
-    surface: "MarkupGrid",
-    canvas: [465, 348],
-    image: [21, 0, 441, 249],
-    outline: [4, 0, 2, 2],
-    anchorCompensation: [0, 0, 0, 0],
-  },
-  {
     name: "music-card-grid",
     asset: "images/music/music-card-focus-360x432.png",
     owner: "components/pages/Music/MusicLibrary/MusicLibrary.xml",
@@ -171,7 +141,7 @@ export const focusGeometry = [
     canvas: [360, 399],
     image: [30, 0, 300, 300],
     outline: [2, 0, 2, 2],
-    anchorCompensation: [19, 0, 18, 0],
+    anchorCompensation: [23, 1, 26, 3],
   },
   {
     name: "episode-row",
@@ -216,7 +186,7 @@ export const focusSourceChecks = {
   "components/pages/Video/Cast/CastItem/CastItem.xml": [
     "translation=\"[6,6]\" maskUri=\"pkg:/images/masks/fhd/cast-mask.png\" maskSize=\"[195,195]\"",
   ],
-  "components/pages/HomePage/HomePage.brs": [
+  "components/pages/HomePage/HomePage.bs": [
     "width: 345, height: 423",
     "width: 486, height: 306",
     "width: 486, height: 348",
@@ -228,7 +198,7 @@ export const focusSourceChecks = {
     "translation=\"[21,0]\"",
     "translation=\"[0,33]\" maskUri=\"pkg:/images/masks/fhd/album-mask-300.png\" maskSize=\"[300,300]\"",
   ],
-  "components/pages/HomePage/HomeShelf/HomeShelf.brs": [
+  "components/pages/HomePage/HomeShelf/HomeShelf.bs": [
     "focusBitmapFilename = \"home-page-my-media-first-focus.png\"",
   ],
   "components/pages/Video/Cards/VideoPosterCard/VideoPosterCard.bs": [
@@ -242,17 +212,13 @@ export const focusSourceChecks = {
     "rowItemSize=\"[[486,348]]\"",
     "focusBitmapUri=\"pkg:/images/homepage/fhd/person-episode-focus.png\"",
   ],
-  "components/pages/Video/Cast/Person/Person.brs": [
-    "m.relatedRows.focusBitmapUri = HomepageAssets_GetUri(\"home-page-poster-focus.png\")",
-    "m.relatedEpisodeRows.focusBitmapUri = HomepageAssets_GetUri(\"person-episode-focus.png\")",
+  "components/pages/Video/Cast/Person/Person.bs": [
+    "m.relatedRows.focusBitmapUri = ResolutionAssets.GetHomepageImageUri(\"home-page-poster-focus.png\")",
+    "m.relatedEpisodeRows.focusBitmapUri = ResolutionAssets.GetHomepageImageUri(\"person-episode-focus.png\")",
   ],
-  "components/pages/Collections/Collections.xml": [
-    "itemSize=\"[297,465]\"",
-    "focusBitmapUri=\"pkg:/images/library/poster-focus-297x465.png\"",
-  ],
-  "components/pages/Collections/Collections.brs": [
-    "m.collectionsGrid.itemSize = [465, 348]",
-    "m.collectionsGrid.focusBitmapUri = \"pkg:/images/library/thumbnail-focus-465x348.png\"",
+  "source/VideoCardGridLayout.bs": [
+    "ResolutionAssets.GetLibraryImageUri(\"poster-\" + columns.ToStr() + \"-col-focus.png\")",
+    "ResolutionAssets.GetLibraryImageUri(\"thumbnail-\" + columns.ToStr() + \"-col-focus.png\")",
   ],
   "components/pages/Music/MusicLibrary/MusicLibrary.xml": [
     "itemSize=\"[360,432]\"",

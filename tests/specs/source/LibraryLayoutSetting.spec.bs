@@ -1,0 +1,73 @@
+namespace tests
+
+    @suite("Library layout setting helpers")
+    class LibraryLayoutSettingTests extends rooibos.BaseTestSuite
+
+        @describe("LibraryLayoutSetting.Parse")
+
+        @it("parses a valid compound poster layout")
+        function _()
+            layout = LibraryLayoutSetting.Parse("poster;4")
+
+            m.assertEqual(layout.presentation, "poster")
+            m.assertEqual(layout.columns, 4)
+        end function
+
+        @it("parses every supported compound layout")
+        function _()
+            validValues = ["poster;3", "poster;4", "poster;5", "poster;6", "thumbnail;2", "thumbnail;3", "thumbnail;4", "detailed;2"]
+
+            for each value in validValues
+                m.assertEqual(LibraryLayoutSetting.Normalize(value), value)
+            end for
+        end function
+
+        @it("uses the global default for a simple presentation")
+        function _()
+            m.assertEqual(LibraryLayoutSetting.Normalize("thumbnail"), "poster;6")
+        end function
+
+        @it("uses the global default for an unknown presentation")
+        function _()
+            m.assertEqual(LibraryLayoutSetting.Normalize("banner;3"), "poster;6")
+        end function
+
+        @it("uses the global default for an incompatible count")
+        function _()
+            m.assertEqual(LibraryLayoutSetting.Normalize("thumbnail;6"), "poster;6")
+        end function
+
+        @it("uses the global default for missing or extra fields")
+        function _()
+            m.assertEqual(LibraryLayoutSetting.Normalize("poster"), "poster;6")
+            m.assertEqual(LibraryLayoutSetting.Normalize("poster;4;extra"), "poster;6")
+        end function
+
+        @it("uses the global default when whitespace is present")
+        function _()
+            m.assertEqual(LibraryLayoutSetting.Normalize(" poster;4"), "poster;6")
+            m.assertEqual(LibraryLayoutSetting.Normalize("poster;4 "), "poster;6")
+            m.assertEqual(LibraryLayoutSetting.Normalize("poster; 4"), "poster;6")
+        end function
+
+        @it("uses the global default for non-string values")
+        function _()
+            m.assertEqual(LibraryLayoutSetting.Normalize(invalid), "poster;6")
+            m.assertEqual(LibraryLayoutSetting.Normalize(4), "poster;6")
+        end function
+
+        @describe("LibraryLayoutSetting.Format")
+
+        @it("formats a valid thumbnail selection")
+        function _()
+            m.assertEqual(LibraryLayoutSetting.Format("thumbnail", 2), "thumbnail;2")
+        end function
+
+        @it("uses the global default for an invalid formatted selection")
+        function _()
+            m.assertEqual(LibraryLayoutSetting.Format("detailed", 6), "poster;6")
+        end function
+
+    end class
+
+end namespace

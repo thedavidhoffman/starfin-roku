@@ -2,6 +2,8 @@ import "pkg:/source/DateTime.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/Number.bs"
 
+import "pkg:/source/VideoCardGridLayout.bs"
+
 namespace tests
 
     @SGNode("VideoMediaCard")
@@ -33,11 +35,6 @@ namespace tests
         @it("declares the progressBar node")
         function _()
             m.assertNotInvalid(m.top.findNode("progressBar"))
-        end function
-
-        @it("declares the titleLogo node")
-        function _()
-            m.assertNotInvalid(m.top.findNode("titleLogo"))
         end function
 
         @it("declares the watchedIndicator node")
@@ -293,21 +290,70 @@ namespace tests
             m.assertEqual(Number.ToInteger(m.top.findNode("artworkBackground").height, -1), 249)
         end function
 
-        @it("applies jumbo dimensions")
+        @it("applies responsive poster dimensions from the resolved card layout")
         function _()
             item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
-            item.imageAspect = "jumbo"
+            item.imageAspect = "poster"
+            item.addFields({ cardLayout: VideoCardGridLayout.GetSpec("poster", "items", 3) })
 
             m.top.itemContent = item
 
-            m.assertEqual(m.top.findNode("presentation").subtype(), "VideoJumboCard")
-            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 882)
-            m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 496)
-            m.assertEqual(Number.ToInteger(m.top.findNode("artworkBackground").width, -1), 882)
-            m.assertEqual(Number.ToInteger(m.top.findNode("artworkBackground").height, -1), 496)
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 537)
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 806)
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").barWidth, -1), 519)
+            m.assertTrue(Instr(1, m.top.findNode("posterMask").maskUri, "poster-3-col-mask.png") > 0)
         end function
 
-        @it("switches from detailed presentation back to jumbo presentation")
+        @it("hides poster metadata in the three-column layout")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", ProductionYear: 2026, UserData: {} })
+            item.imageAspect = "poster"
+            item.addFields({ cardLayout: VideoCardGridLayout.GetSpec("poster", "items", 3) })
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("title").visible)
+            m.assertFalse(m.top.findNode("metadataLabel").visible)
+        end function
+
+        @it("keeps poster metadata in layouts with more than three columns")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", ProductionYear: 2026, UserData: {} })
+            item.imageAspect = "poster"
+            item.addFields({ cardLayout: VideoCardGridLayout.GetSpec("poster", "items", 4) })
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("metadataLabel").visible)
+        end function
+
+        @it("applies responsive thumbnail dimensions from the resolved card layout")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
+            item.imageAspect = "thumbnail"
+            item.addFields({ cardLayout: VideoCardGridLayout.GetSpec("thumbnail", "items", 2) })
+
+            m.top.itemContent = item
+
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 906)
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 510)
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").barWidth, -1), 888)
+            m.assertTrue(Instr(1, m.top.findNode("posterMask").maskUri, "thumbnail-2-col-mask.png") > 0)
+        end function
+
+        @it("keeps thumbnail metadata in the three-column layout")
+        function _()
+            item = m.createItem({ Type: "Movie", Name: "Movie", ProductionYear: 2026, UserData: {} })
+            item.imageAspect = "thumbnail"
+            item.addFields({ cardLayout: VideoCardGridLayout.GetSpec("thumbnail", "items", 3) })
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("metadataLabel").visible)
+            m.assertEqual(m.top.findNode("metadataLabel").text, "2026")
+        end function
+
+        @it("switches from detailed presentation back to poster")
         function _()
             detailedItem = m.createItem({ Type: "Movie", Name: "Detailed", Overview: "Overview", UserData: {} })
             detailedItem.imageAspect = "detailed"
@@ -315,24 +361,11 @@ namespace tests
 
             m.assertEqual(m.top.findNode("presentation").subtype(), "VideoDetailedCard")
 
-            jumboItem = m.createItem({ Type: "Movie", Name: "Jumbo", UserData: {} })
-            jumboItem.imageAspect = "jumbo"
-            m.top.itemContent = jumboItem
+            posterItem = m.createItem({ Type: "Movie", Name: "Poster", UserData: {} })
+            m.top.itemContent = posterItem
 
-            m.assertEqual(m.top.findNode("presentation").subtype(), "VideoJumboCard")
-            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 882)
-        end function
-
-        @it("shows a supplied logo only for jumbo cards")
-        function _()
-            item = m.createItem({ Type: "Movie", Name: "Movie", UserData: {} })
-            item.imageAspect = "jumbo"
-            item.logoUrl = "http://server/logo.png"
-
-            m.top.itemContent = item
-
-            m.assertTrue(m.top.findNode("titleLogo").visible)
-            m.assertEqual(m.top.findNode("titleLogo").uri, "http://server/logo.png")
+            m.assertEqual(m.top.findNode("presentation").subtype(), "VideoPosterCard")
+            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 252)
         end function
 
         @describe("playback state")
@@ -466,7 +499,7 @@ namespace tests
 
         function createItem(raw as object) as object
             item = CreateObject("roSGNode", "ContentNode")
-            item.addFields({ raw: raw, imageAspect: "poster", showMetadata: true, logoUrl: "", fitArtwork: false, showArtworkBackground: false })
+            item.addFields({ raw: raw, imageAspect: "poster", showMetadata: true, fitArtwork: false, showArtworkBackground: false })
             return item
         end function
 

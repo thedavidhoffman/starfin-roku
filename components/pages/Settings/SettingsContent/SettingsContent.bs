@@ -1,6 +1,7 @@
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/Format.bs"
+import "pkg:/source/LibraryLayoutSetting.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
@@ -27,20 +28,20 @@ sub initReferences()
     m.videoStreamingModeDescription = m.top.findNode("videoStreamingModeDescription")
     m.subtitleBurnInDescription = m.top.findNode("subtitleBurnInDescription")
     m.categoryPanels = [
+        m.top.findNode("libraryPanel")
+        m.top.findNode("mediaShellPanel")
+        m.top.findNode("tvPanel")
+        m.top.findNode("screensaverPanel")
         m.top.findNode("systemPanel")
         m.top.findNode("videoPanel")
         m.top.findNode("subtitlesPanel")
         m.top.findNode("advancedPanel")
-        m.top.findNode("mediaShellPanel")
-        m.top.findNode("artworkPanel")
-        m.top.findNode("tvPanel")
-        m.top.findNode("screensaverPanel")
     ]
     m.settingsControls = {
         displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
         mediaShellBackgroundOptions: m.top.findNode("mediaShellBackgroundOptions")
         themeMusicOptions: m.top.findNode("themeMusicOptions")
-        artworkSettingsGrid: m.top.findNode("artworkSettingsGrid")
+        librarySettingsGrid: m.top.findNode("librarySettingsGrid")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         videoStreamingModeOptions: m.top.findNode("videoStreamingModeOptions")
         subtitleBurnInOptions: m.top.findNode("subtitleBurnInOptions")
@@ -57,14 +58,14 @@ sub initReferences()
         confirmationGroup: m.top.findNode("resetConfirmation")
     }
     m.categoryControls = [
+        [m.settingsControls.librarySettingsGrid]
+        [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
+        [m.settingsControls.tvEpisodeListDisplayOptions]
+        [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
         [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
         [m.settingsControls.videoStreamingModeOptions]
         [m.settingsControls.subtitleBurnInOptions]
         [m.settingsControls.resetStarfinButton]
-        [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
-        [m.settingsControls.artworkSettingsGrid]
-        [m.settingsControls.tvEpisodeListDisplayOptions]
-        [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
     ]
     m.focusState = {
         categoryIndex: 0
@@ -85,8 +86,8 @@ sub initHandlers()
     m.userCategoryList.observeField("itemFocused", "onUserCategoryFocused")
     m.userCategoryList.observeField("itemSelected", "onUserCategorySelected")
     m.settingsControls.displayAccountBadgeOptions.observeField("itemSelected", "onDisplayAccountBadgeSelected")
-    m.settingsControls.artworkSettingsGrid.observeField("selectionChanged", "onArtworkSelectionChanged")
-    m.settingsControls.artworkSettingsGrid.observeField("focusExitLeft", "onArtworkFocusExitLeft")
+    m.settingsControls.librarySettingsGrid.observeField("selectionChanged", "onLibrarySelectionChanged")
+    m.settingsControls.librarySettingsGrid.observeField("focusExitLeft", "onLibraryFocusExitLeft")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
     m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
@@ -106,7 +107,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initCategoryList()
     setOptionTitles(m.deviceCategoryList, ["General", "Video", "Subtitles", "Advanced"])
-    setOptionTitles(m.userCategoryList, ["Media Shell", "Artwork", "TV", "Screensaver"])
+    setOptionTitles(m.userCategoryList, ["Libraries", "Media Shell", "TV", "Screensaver"])
 end sub
 
 '-------------------------------------------------------------------------------
@@ -143,14 +144,14 @@ sub loadSettingsValues()
     if settings = invalid then return
 
     m.settingsState.values = {}
-    m.settingsState.values[SettingsStore.Key.TvLibraryDisplay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvLibraryDisplay)
-    m.settingsState.values[SettingsStore.Key.MovieLibraryDisplay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MovieLibraryDisplay)
-    m.settingsState.values[SettingsStore.Key.CollectionCardsImageType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.CollectionCardsImageType)
-    m.settingsState.values[SettingsStore.Key.CollectionItemsImageType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.CollectionItemsImageType)
-    m.settingsState.values[SettingsStore.Key.PlaylistCardsImageType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.PlaylistCardsImageType)
-    m.settingsState.values[SettingsStore.Key.PlaylistItemsImageType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.PlaylistItemsImageType)
-    m.settingsState.values[SettingsStore.Key.MusicVideosImageType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MusicVideosImageType)
-    m.settingsState.values[SettingsStore.Key.HomeVideosImageType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.HomeVideosImageType)
+    m.settingsState.values[SettingsStore.Key.TvLibraryLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvLibraryLayout)
+    m.settingsState.values[SettingsStore.Key.MovieLibraryLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MovieLibraryLayout)
+    m.settingsState.values[SettingsStore.Key.CollectionCardsLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.CollectionCardsLayout)
+    m.settingsState.values[SettingsStore.Key.CollectionItemsLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.CollectionItemsLayout)
+    m.settingsState.values[SettingsStore.Key.PlaylistCardsLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.PlaylistCardsLayout)
+    m.settingsState.values[SettingsStore.Key.PlaylistItemsLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.PlaylistItemsLayout)
+    m.settingsState.values[SettingsStore.Key.MusicVideosLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MusicVideosLayout)
+    m.settingsState.values[SettingsStore.Key.HomeVideosLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.HomeVideosLayout)
     m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvEpisodeListDisplay)
     m.settingsState.values[SettingsStore.Key.MediaShellBackground] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
     m.settingsState.values[SettingsStore.Key.ThemeMusic] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ThemeMusic)
@@ -161,7 +162,7 @@ sub loadSettingsValues()
     m.settingsState.values[SettingsStore.Key.DisplayAccountBadge] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.DisplayAccountBadge)
     m.settingsState.values[SettingsStore.Key.TmdbApiKey] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TmdbApiKey)
 
-    m.settingsControls.artworkSettingsGrid.selections = getArtworkSettingsValues()
+    m.settingsControls.librarySettingsGrid.selections = getLibrarySettingsValues()
     setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[SettingsStore.Key.MediaShellBackground])
     setOnOffOption(m.settingsControls.themeMusicOptions, m.settingsState.values[SettingsStore.Key.ThemeMusic])
@@ -179,11 +180,11 @@ end sub
 sub focusFirstField()
     clearResetStarfinButtonFocus()
     if m.focusState.categoryIndex < 4 then
-        m.deviceCategoryList.jumpToItem = m.focusState.categoryIndex
-        m.deviceCategoryList.setFocus(true)
-    else
-        m.userCategoryList.jumpToItem = m.focusState.categoryIndex - 4
+        m.userCategoryList.jumpToItem = m.focusState.categoryIndex
         m.userCategoryList.setFocus(true)
+    else
+        m.deviceCategoryList.jumpToItem = m.focusState.categoryIndex - 4
+        m.deviceCategoryList.setFocus(true)
     end if
     updateTextInputFocusVisual()
 end sub
@@ -206,33 +207,33 @@ end function
 ' onCategoryFocused
 '-------------------------------------------------------------------------------
 sub onDeviceCategoryFocused()
-    showCategory(getListIndex(m.deviceCategoryList.itemFocused, 4))
+    showCategory(4 + getListIndex(m.deviceCategoryList.itemFocused, 4))
 end sub
 
 '-------------------------------------------------------------------------------
-' getArtworkSettingsValues
+' getLibrarySettingsValues
 '-------------------------------------------------------------------------------
-function getArtworkSettingsValues() as object
+function getLibrarySettingsValues() as object
     values = {}
-    for each key in getArtworkSettingKeys()
+    for each key in getLibrarySettingKeys()
         values[key] = SettingsStore.GetSettingValue(m.settingsState.values, key)
     end for
     return values
 end function
 
 '-------------------------------------------------------------------------------
-' getArtworkSettingKeys
+' getLibrarySettingKeys
 '-------------------------------------------------------------------------------
-function getArtworkSettingKeys() as object
+function getLibrarySettingKeys() as object
     return [
-        SettingsStore.Key.TvLibraryDisplay
-        SettingsStore.Key.MovieLibraryDisplay
-        SettingsStore.Key.CollectionCardsImageType
-        SettingsStore.Key.CollectionItemsImageType
-        SettingsStore.Key.PlaylistCardsImageType
-        SettingsStore.Key.PlaylistItemsImageType
-        SettingsStore.Key.MusicVideosImageType
-        SettingsStore.Key.HomeVideosImageType
+        SettingsStore.Key.TvLibraryLayout
+        SettingsStore.Key.MovieLibraryLayout
+        SettingsStore.Key.CollectionCardsLayout
+        SettingsStore.Key.CollectionItemsLayout
+        SettingsStore.Key.PlaylistCardsLayout
+        SettingsStore.Key.PlaylistItemsLayout
+        SettingsStore.Key.MusicVideosLayout
+        SettingsStore.Key.HomeVideosLayout
     ]
 end function
 
@@ -240,16 +241,16 @@ end function
 ' onCategorySelected
 '-------------------------------------------------------------------------------
 sub onDeviceCategorySelected()
-    showCategory(getListIndex(m.deviceCategoryList.itemSelected, 4))
+    showCategory(4 + getListIndex(m.deviceCategoryList.itemSelected, 4))
     focusCategoryControl(0, 0)
 end sub
 
 sub onUserCategoryFocused()
-    showCategory(4 + getListIndex(m.userCategoryList.itemFocused, 4))
+    showCategory(getListIndex(m.userCategoryList.itemFocused, 4))
 end sub
 
 sub onUserCategorySelected()
-    showCategory(4 + getListIndex(m.userCategoryList.itemSelected, 4))
+    showCategory(getListIndex(m.userCategoryList.itemSelected, 4))
     focusCategoryControl(0, 0)
 end sub
 
@@ -261,7 +262,7 @@ sub showCategory(index as integer)
 
     m.focusState.categoryIndex = index
     m.focusState.controlIndex = 0
-    if index <> 3 and m.resetStarfinState.confirmationVisible then showResetStarfinState()
+    if index <> 7 and m.resetStarfinState.confirmationVisible then showResetStarfinState()
     for i = 0 to m.categoryPanels.Count() - 1
         m.categoryPanels[i].visible = (i = index)
     end for
@@ -274,15 +275,15 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
     if m.deviceCategoryList.isInFocusChain() or m.userCategoryList.isInFocusChain() then
-        if key = "down" and m.deviceCategoryList.isInFocusChain() and getListIndex(m.deviceCategoryList.itemFocused, 4) = 3 then
-            m.userCategoryList.jumpToItem = 0
-            m.userCategoryList.setFocus(true)
+        if key = "down" and m.userCategoryList.isInFocusChain() and getListIndex(m.userCategoryList.itemFocused, 4) = 3 then
+            m.deviceCategoryList.jumpToItem = 0
+            m.deviceCategoryList.setFocus(true)
             showCategory(4)
             return true
         end if
-        if key = "up" and m.userCategoryList.isInFocusChain() and getListIndex(m.userCategoryList.itemFocused, 4) = 0 then
-            m.deviceCategoryList.jumpToItem = 3
-            m.deviceCategoryList.setFocus(true)
+        if key = "up" and m.deviceCategoryList.isInFocusChain() and getListIndex(m.deviceCategoryList.itemFocused, 4) = 0 then
+            m.userCategoryList.jumpToItem = 3
+            m.userCategoryList.setFocus(true)
             showCategory(3)
             return true
         end if
@@ -328,7 +329,7 @@ sub onResetStarfinSelected()
     m.settingsControls.resetStarfinButton.visible = false
     m.resetStarfinState.description.visible = false
     m.resetStarfinState.confirmationGroup.visible = true
-    m.categoryControls[3] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
+    m.categoryControls[7] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
     focusCategoryControl(0, invalid)
 end sub
 
@@ -355,7 +356,7 @@ sub showResetStarfinState()
     m.settingsControls.resetStarfinButton.visible = true
     m.resetStarfinState.description.visible = true
     m.resetStarfinState.confirmationGroup.visible = false
-    m.categoryControls[3] = [m.settingsControls.resetStarfinButton]
+    m.categoryControls[7] = [m.settingsControls.resetStarfinButton]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -367,7 +368,7 @@ function focusCategoryControl(index as integer, itemIndex as dynamic) as boolean
 
     node = controls[index]
     m.focusState.controlIndex = index
-    if node.subtype() = "ArtworkSettingsGrid" then
+    if node.subtype() = "LibrarySettingsGrid" then
         if itemIndex = invalid then
             node.callFunc("focusLast")
         else
@@ -396,26 +397,26 @@ function getSettingsValues() as object
 end function
 
 '-------------------------------------------------------------------------------
-' onArtworkSelectionChanged
+' onLibrarySelectionChanged
 '-------------------------------------------------------------------------------
-sub onArtworkSelectionChanged()
-    change = m.settingsControls.artworkSettingsGrid.selectionChanged
+sub onLibrarySelectionChanged()
+    change = m.settingsControls.librarySettingsGrid.selectionChanged
     if change = invalid then return
     key = Format.SafeString(change.settingKey, "")
     if key = "" then return
 
-    for each artworkKey in getArtworkSettingKeys()
-        if artworkKey = key then
-            m.settingsState.values[key] = Format.SafeString(change.value, VideoCardPresentation.Type.Poster)
+    for each libraryKey in getLibrarySettingKeys()
+        if libraryKey = key then
+            m.settingsState.values[key] = LibraryLayoutSetting.Normalize(change.value)
             return
         end if
     end for
 end sub
 
 '-------------------------------------------------------------------------------
-' onArtworkFocusExitLeft
+' onLibraryFocusExitLeft
 '-------------------------------------------------------------------------------
-sub onArtworkFocusExitLeft()
+sub onLibraryFocusExitLeft()
     focusFirstField()
 end sub
 

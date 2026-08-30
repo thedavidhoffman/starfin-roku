@@ -1,6 +1,7 @@
 import "pkg:/source/DateTime.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/MediaMetadata.bs"
+import "pkg:/source/Number.bs"
 import "pkg:/source/String.bs"
 
 '-------------------------------------------------------------------------------
@@ -16,7 +17,7 @@ end sub
 '-------------------------------------------------------------------------------
 function posterCardLayout() as object
     return {
-        contentTranslation: [21, 0], posterMaskName: "media-card-poster-mask.png"
+        contentTranslation: [21, 0], posterMaskName: "poster-6-col-mask.png"
         posterSize: [252, 378], hdPosterSize: [168, 252], posterTranslation: [0, 0]
         progressTranslation: [9, 360], progressWidth: 234, progressHeight: 9
         watchedTranslation: [201, 9], watchedSize: 42
@@ -29,8 +30,25 @@ end function
 ' renderPresentation
 '-------------------------------------------------------------------------------
 sub renderPresentation(content as object)
+    if content.cardLayout <> invalid then m.top.callFunc("applyCardLayout", posterCardLayoutForSize(content.cardLayout.artworkSize, content.cardLayout.numColumns))
     renderStandardText(content)
+    if content.cardLayout <> invalid and Number.ToInteger(content.cardLayout.numColumns, 6) = 3 then m.cardNodes.metadataLabel.visible = false
 end sub
+
+function posterCardLayoutForSize(size as object, columns as dynamic) as object
+    width = Number.ToInteger(size[0], 252)
+    height = Number.ToInteger(size[1], 378)
+    columnCount = Number.ToInteger(columns, 6)
+    watchedSize = Number.ToInteger(width / 6, 42)
+    return {
+        contentTranslation: [21, 0], posterMaskName: "poster-" + columnCount.ToStr() + "-col-mask.png"
+        posterSize: [width, height], hdPosterSize: [Number.ToInteger(width * 0.6667, 168), Number.ToInteger(height * 0.6667, 252)], posterTranslation: [0, 0]
+        progressTranslation: [9, height - 18], progressWidth: width - 18, progressHeight: 9
+        watchedTranslation: [width - watchedSize - 9, 9], watchedSize: watchedSize
+        title: { translation: [0, height + 12], width: width, height: 48, numLines: 2 }
+        metadata: { translation: [0, height + 51], width: width, height: 42, numLines: 2 }
+    }
+end function
 
 '-------------------------------------------------------------------------------
 ' renderStandardText
@@ -39,7 +57,6 @@ sub renderStandardText(content as object)
     m.cardNodes.title.text = getDisplayTitle(content)
     m.cardNodes.metadataLabel.text = getDisplayMetadata(content)
     m.cardNodes.metadataLabel.visible = content.showMetadata <> false
-    m.cardNodes.titleLogo.visible = false
 end sub
 
 '-------------------------------------------------------------------------------

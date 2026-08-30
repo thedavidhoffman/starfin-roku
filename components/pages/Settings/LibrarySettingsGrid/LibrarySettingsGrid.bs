@@ -1,0 +1,193 @@
+import "pkg:/source/LibraryLayoutSetting.bs"
+import "pkg:/source/LibrarySettingsNavigation.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/store/SettingsStore.bs"
+import "pkg:/source/VideoCardPresentation.bs"
+
+sub init()
+    m.libraryLabels = m.top.findNode("libraryLabels")
+    m.presentationLists = [m.top.findNode("posterOptions"), m.top.findNode("thumbnailOptions"), m.top.findNode("detailedOptions")]
+    m.columnsGroups = m.top.findNode("columnsGroups")
+    m.presentationValues = [VideoCardPresentation.Type.Poster, VideoCardPresentation.Type.Thumbnail, VideoCardPresentation.Type.Detailed]
+    m.rows = [
+        { title: "TV", settingKey: SettingsStore.Key.TvLibraryLayout }
+        { title: "Movie", settingKey: SettingsStore.Key.MovieLibraryLayout }
+        { title: "Collection Cards", settingKey: SettingsStore.Key.CollectionCardsLayout }
+        { title: "Collection Items", settingKey: SettingsStore.Key.CollectionItemsLayout }
+        { title: "Playlist Cards", settingKey: SettingsStore.Key.PlaylistCardsLayout }
+        { title: "Playlist Items", settingKey: SettingsStore.Key.PlaylistItemsLayout }
+        { title: "Music Videos", settingKey: SettingsStore.Key.MusicVideosLayout }
+        { title: "Home Videos", settingKey: SettingsStore.Key.HomeVideosLayout }
+    ]
+    m.gridState = { syncing: false, focusedRow: 0, focusedPosition: 0, columnButtons: [] }
+    initializeContent()
+    initializeHandlers()
+    onSelectionsChanged()
+end sub
+
+sub initializeContent()
+    labels = CreateObject("roSGNode", "ContentNode")
+    for each row in m.rows
+        labels.createChild("ContentNode").title = row.title
+    end for
+    m.libraryLabels.content = labels
+    for each options in m.presentationLists
+        content = CreateObject("roSGNode", "ContentNode")
+        for each row in m.rows
+            content.createChild("ContentNode").title = ""
+        end for
+        options.content = content
+    end for
+    for rowIndex = 0 to m.rows.Count() - 1
+        group = CreateObject("roSGNode", "Group")
+        group.translation = [0, rowIndex * 68]
+        m.columnsGroups.appendChild(group)
+        m.gridState.columnButtons.Push([])
+    end for
+end sub
+
+sub initializeHandlers()
+    m.presentationLists[0].observeField("itemSelected", "onPosterSelected")
+    m.presentationLists[1].observeField("itemSelected", "onThumbnailSelected")
+    m.presentationLists[2].observeField("itemSelected", "onDetailedSelected")
+    for columnIndex = 0 to m.presentationLists.Count() - 1
+        m.presentationLists[columnIndex].addFields({ columnIndex: columnIndex })
+        m.presentationLists[columnIndex].observeField("itemFocused", "onPresentationFocused")
+    end for
+end sub
+
+sub onPresentationFocused(event as object)
+    options = event.getRoSGNode()
+    m.gridState.focusedRow = Number.ToInteger(options.itemFocused, 0)
+    m.gridState.focusedPosition = Number.ToInteger(options.columnIndex, 0)
+end sub
+
+sub onSelectionsChanged()
+    selections = m.top.selections
+    if selections = invalid then selections = {}
+    wasFocused = m.top.isInFocusChain()
+    checkedStates = [[], [], []]
+    m.gridState.syncing = true
+    for rowIndex = 0 to m.rows.Count() - 1
+        layout = LibraryLayoutSetting.Parse(selections[m.rows[rowIndex].settingKey])
+        for columnIndex = 0 to checkedStates.Count() - 1
+            checkedStates[columnIndex].Push(m.presentationValues[columnIndex] = layout.presentation)
+        end for
+        renderColumnButtons(rowIndex, layout)
+    end for
+    for columnIndex = 0 to m.presentationLists.Count() - 1
+        m.presentationLists[columnIndex].checkedState = checkedStates[columnIndex]
+    end for
+    m.gridState.syncing = false
+    if m.gridState.focusedPosition >= 3 and wasFocused then focusPosition(m.gridState.focusedRow, m.gridState.focusedPosition)
+end sub
+
+sub renderColumnButtons(rowIndex as integer, layout as object)
+    group = m.columnsGroups.getChild(rowIndex)
+    group.removeChildrenIndex(group.getChildCount(), 0)
+    buttons = []
+    available = LibraryLayoutSetting.AvailableColumns(layout.presentation)
+    for buttonIndex = 0 to available.Count() - 1
+        button = CreateObject("roSGNode", "LibraryColumnButton")
+        itemContent = CreateObject("roSGNode", "ContentNode")
+        itemContent.title = available[buttonIndex].ToStr()
+        button.itemContent = itemContent
+        button.translation = [buttonIndex * 72, 2]
+        button.isSelected = available[buttonIndex] = layout.columns
+        button.addFields({ rowIndex: rowIndex, buttonIndex: buttonIndex, columnValue: available[buttonIndex] })
+        button.observeField("buttonSelected", "onColumnSelected")
+        group.appendChild(button)
+        buttons.Push(button)
+    end for
+    m.gridState.columnButtons[rowIndex] = buttons
+end sub
+
+sub onPosterSelected()
+    commitPresentation(0)
+end sub
+
+sub onThumbnailSelected()
+    commitPresentation(1)
+end sub
+
+sub onDetailedSelected()
+    commitPresentation(2)
+end sub
+
+sub commitPresentation(columnIndex as integer)
+    if m.gridState.syncing then return
+    rowIndex = Number.ToInteger(m.presentationLists[columnIndex].itemSelected, -1)
+    if rowIndex < 0 or rowIndex >= m.rows.Count() then return
+    presentation = m.presentationValues[columnIndex]
+    commitSelection(rowIndex, LibraryLayoutSetting.Format(presentation, LibraryLayoutSetting.DefaultColumns(presentation)))
+end sub
+
+sub onColumnSelected(event as object)
+    button = event.getRoSGNode()
+    rowIndex = Number.ToInteger(button.rowIndex, -1)
+    if rowIndex < 0 or rowIndex >= m.rows.Count() then return
+    buttonIndex = Number.ToInteger(button.buttonIndex, 0)
+    layout = getRowLayout(rowIndex)
+    commitSelection(rowIndex, LibraryLayoutSetting.Format(layout.presentation, button.columnValue))
+    focusPosition(rowIndex, 3 + buttonIndex)
+end sub
+
+sub commitSelection(rowIndex as integer, value as string)
+    selections = {}
+    if m.top.selections <> invalid then
+        for each key in m.top.selections
+            selections[key] = m.top.selections[key]
+        end for
+    end if
+    settingKey = m.rows[rowIndex].settingKey
+    selections[settingKey] = value
+    m.top.selections = selections
+    m.top.selectionChanged = { settingKey: settingKey, value: value }
+end sub
+
+function getRowLayout(rowIndex as integer) as object
+    selections = m.top.selections
+    if selections = invalid then selections = {}
+    return LibraryLayoutSetting.Parse(selections[m.rows[rowIndex].settingKey])
+end function
+
+sub focusFirst()
+    focusPosition(0, 0)
+end sub
+
+sub focusLast()
+    rowIndex = m.rows.Count() - 1
+    focusPosition(rowIndex, 3 + m.gridState.columnButtons[rowIndex].Count() - 1)
+end sub
+
+sub focusPosition(rowIndex as integer, position as integer)
+    if rowIndex < 0 or rowIndex >= m.rows.Count() then return
+    maxPosition = 3 + m.gridState.columnButtons[rowIndex].Count() - 1
+    if position > maxPosition then position = maxPosition
+    if position < 0 then position = 0
+    m.gridState.focusedRow = rowIndex
+    m.gridState.focusedPosition = position
+    if position < 3 then
+        options = m.presentationLists[position]
+        options.jumpToItem = rowIndex
+        options.setFocus(true)
+    else
+        m.gridState.columnButtons[rowIndex][position - 3].setFocus(true)
+    end if
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+    positionCounts = []
+    for each buttons in m.gridState.columnButtons
+        positionCounts.Push(3 + buttons.Count())
+    end for
+    movement = LibrarySettingsNavigation.Move(m.gridState.focusedRow, m.gridState.focusedPosition, key, positionCounts)
+    if movement.handled <> true then return false
+    if movement.exit then
+        m.top.focusExitLeft = true
+    else
+        focusPosition(movement.row, movement.position)
+    end if
+    return true
+end function

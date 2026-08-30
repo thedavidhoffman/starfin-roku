@@ -1,5 +1,7 @@
 import "pkg:/source/SubtitleBurnIn.bs"
-import "pkg:/source/VideoCardPresentation.bs"
+import "pkg:/source/LibraryLayoutSetting.bs"
+import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/store/RegistryStore.bs"
 
 namespace SettingsStore
 
@@ -7,14 +9,14 @@ namespace SettingsStore
     ' SettingsStore.Key
     '---------------------------------------------------------------------------
     enum Key
-        TvLibraryDisplay = "tv-library-image-type"
-        MovieLibraryDisplay = "movie-library-image-type"
-        CollectionCardsImageType = "collection-cards-image-type"
-        CollectionItemsImageType = "collection-items-image-type"
-        PlaylistCardsImageType = "playlist-cards-image-type"
-        PlaylistItemsImageType = "playlist-items-image-type"
-        MusicVideosImageType = "music-videos-image-type"
-        HomeVideosImageType = "home-videos-image-type"
+        TvLibraryLayout = "tv-library-layout"
+        MovieLibraryLayout = "movie-library-layout"
+        CollectionCardsLayout = "collection-cards-layout"
+        CollectionItemsLayout = "collection-items-layout"
+        PlaylistCardsLayout = "playlist-cards-layout"
+        PlaylistItemsLayout = "playlist-items-layout"
+        MusicVideosLayout = "music-videos-layout"
+        HomeVideosLayout = "home-videos-layout"
         TvEpisodeListDisplay = "tv-ep-list-scroll"
         MediaShellBackground = "media-shell-background"
         ThemeMusic = "theme-music"
@@ -31,14 +33,14 @@ namespace SettingsStore
     '---------------------------------------------------------------------------
     function Defaults() as object
         defaultSettings = {}
-        defaultSettings[Key.TvLibraryDisplay] = VideoCardPresentation.Type.Poster
-        defaultSettings[Key.MovieLibraryDisplay] = VideoCardPresentation.Type.Poster
-        defaultSettings[Key.CollectionCardsImageType] = VideoCardPresentation.Type.Poster
-        defaultSettings[Key.CollectionItemsImageType] = VideoCardPresentation.Type.Poster
-        defaultSettings[Key.PlaylistCardsImageType] = VideoCardPresentation.Type.Poster
-        defaultSettings[Key.PlaylistItemsImageType] = VideoCardPresentation.Type.Poster
-        defaultSettings[Key.MusicVideosImageType] = VideoCardPresentation.Type.Poster
-        defaultSettings[Key.HomeVideosImageType] = VideoCardPresentation.Type.Poster
+        defaultSettings[Key.TvLibraryLayout] = "poster;6"
+        defaultSettings[Key.MovieLibraryLayout] = "poster;6"
+        defaultSettings[Key.CollectionCardsLayout] = "poster;6"
+        defaultSettings[Key.CollectionItemsLayout] = "poster;6"
+        defaultSettings[Key.PlaylistCardsLayout] = "poster;6"
+        defaultSettings[Key.PlaylistItemsLayout] = "poster;6"
+        defaultSettings[Key.MusicVideosLayout] = "poster;6"
+        defaultSettings[Key.HomeVideosLayout] = "poster;6"
         defaultSettings[Key.TvEpisodeListDisplay] = "vertical"
         defaultSettings[Key.MediaShellBackground] = "full-screen"
         defaultSettings[Key.ThemeMusic] = "off"
@@ -55,7 +57,11 @@ namespace SettingsStore
     ' SettingsStore.AccountKeys
     '---------------------------------------------------------------------------
     function AccountKeys() as object
-        return [Key.TvLibraryDisplay, Key.MovieLibraryDisplay, Key.CollectionCardsImageType, Key.CollectionItemsImageType, Key.PlaylistCardsImageType, Key.PlaylistItemsImageType, Key.MusicVideosImageType, Key.HomeVideosImageType, Key.TvEpisodeListDisplay, Key.MediaShellBackground, Key.ThemeMusic, Key.ScreensaverType, Key.ScreensaverDelay]
+        return [Key.TvLibraryLayout, Key.MovieLibraryLayout, Key.CollectionCardsLayout, Key.CollectionItemsLayout, Key.PlaylistCardsLayout, Key.PlaylistItemsLayout, Key.MusicVideosLayout, Key.HomeVideosLayout, Key.TvEpisodeListDisplay, Key.MediaShellBackground, Key.ThemeMusic, Key.ScreensaverType, Key.ScreensaverDelay]
+    end function
+
+    function LibraryKeys() as object
+        return [Key.TvLibraryLayout, Key.MovieLibraryLayout, Key.CollectionCardsLayout, Key.CollectionItemsLayout, Key.PlaylistCardsLayout, Key.PlaylistItemsLayout, Key.MusicVideosLayout, Key.HomeVideosLayout]
     end function
 
     '---------------------------------------------------------------------------
@@ -74,6 +80,9 @@ namespace SettingsStore
         for each key in SettingsStore.AccountKeys()
             settings[key] = SettingsStore.GetValue(values, key, defaultSettings[key])
         end for
+        for each key in SettingsStore.LibraryKeys()
+            settings[key] = LibraryLayoutSetting.Normalize(settings[key])
+        end for
         settings[Key.DisplayAccountBadge] = SettingsStore.LoadGlobal(Key.DisplayAccountBadge)
         settings[Key.VideoStreamingMode] = PlaybackMode.Normalize(SettingsStore.LoadGlobal(Key.VideoStreamingMode))
         settings[Key.SubtitleBurnInMode] = SubtitleBurnIn.Normalize(SettingsStore.LoadGlobal(Key.SubtitleBurnInMode))
@@ -88,7 +97,9 @@ namespace SettingsStore
         if accountKey <> "" then
             accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
             for each key in SettingsStore.AccountKeys()
-                accountStore.Write(key, SettingsStore.GetSettingValue(settings, key))
+                value = SettingsStore.GetSettingValue(settings, key)
+                if SettingsStore.__IsLibraryKey(key) then value = LibraryLayoutSetting.Normalize(value)
+                accountStore.Write(key, value)
             end for
             accountStore.Flush()
         end if
@@ -97,6 +108,13 @@ namespace SettingsStore
         SettingsStore.SaveGlobal(Key.SubtitleBurnInMode, SubtitleBurnIn.Normalize(SettingsStore.GetSettingValue(settings, Key.SubtitleBurnInMode)))
         SettingsStore.SaveIntegration(Key.TmdbApiKey, SettingsStore.GetSettingValue(settings, Key.TmdbApiKey))
     end sub
+
+    function __IsLibraryKey(key as string) as boolean
+        for each libraryKey in SettingsStore.LibraryKeys()
+            if libraryKey = key then return true
+        end for
+        return false
+    end function
 
     '---------------------------------------------------------------------------
     ' SettingsStore.LoadGlobal

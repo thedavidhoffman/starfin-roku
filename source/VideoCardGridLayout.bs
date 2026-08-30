@@ -1,4 +1,6 @@
 import "pkg:/source/Number.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/ResolutionProfile.bs"
 import "pkg:/source/VideoCardPresentation.bs"
 
 namespace VideoCardGridLayout
@@ -6,11 +8,10 @@ namespace VideoCardGridLayout
     '---------------------------------------------------------------------------
     ' VideoCardGridLayout.GetSpec
     '---------------------------------------------------------------------------
-    function GetSpec(imageAspect as string, contentRole as string) as object
+    function GetSpec(imageAspect as string, contentRole as string, columns = invalid as dynamic) as object
         if imageAspect = VideoCardPresentation.Type.Detailed then return VideoCardGridLayout.__DetailedSpec()
-        if imageAspect = VideoCardPresentation.Type.Jumbo then return VideoCardGridLayout.__JumboSpec()
-        if imageAspect = VideoCardPresentation.Type.Thumbnail then return VideoCardGridLayout.__ThumbnailSpec(contentRole)
-        return VideoCardGridLayout.__PosterSpec(contentRole)
+        if imageAspect = VideoCardPresentation.Type.Thumbnail then return VideoCardGridLayout.__ThumbnailSpec(contentRole, Number.ToInteger(columns, 4))
+        return VideoCardGridLayout.__PosterSpec(contentRole, Number.ToInteger(columns, 6))
     end function
 
     '---------------------------------------------------------------------------
@@ -23,26 +24,8 @@ namespace VideoCardGridLayout
             itemSpacing: [0, -39]
             numColumns: 2
             numRows: 2
-            focusBitmapUri: "pkg:/images/library/jumbo-focus-936x591.png"
+            focusBitmapUri: "pkg:/images/library/detailed-focus-936x591.png"
             artworkSize: [288, 432]
-            visibleArtworkOffsetX: 27
-            visibleArtworkWidth: 882
-            visibleRightAdjustment: 0
-        }
-    end function
-
-    '---------------------------------------------------------------------------
-    ' VideoCardGridLayout.__JumboSpec
-    '---------------------------------------------------------------------------
-    function __JumboSpec() as object
-        return {
-            translation: [24, 207]
-            itemSize: [936, 591]
-            itemSpacing: [0, 18]
-            numColumns: 2
-            numRows: 2
-            focusBitmapUri: "pkg:/images/library/jumbo-focus-936x591.png"
-            artworkSize: [882, 496]
             visibleArtworkOffsetX: 27
             visibleArtworkWidth: 882
             visibleRightAdjustment: 0
@@ -52,19 +35,27 @@ namespace VideoCardGridLayout
     '---------------------------------------------------------------------------
     ' VideoCardGridLayout.__ThumbnailSpec
     '---------------------------------------------------------------------------
-    function __ThumbnailSpec(contentRole as string) as object
+    function __ThumbnailSpec(contentRole as string, columns as integer) as object
+        widths = { "2": 906, "3": 596, "4": 441 }
+        heights = { "2": 510, "3": 335, "4": 249 }
+        artworkWidth = widths[columns.ToStr()]
+        if artworkWidth = invalid then
+            columns = 4
+            artworkWidth = 441
+        end if
+        artworkHeight = heights[columns.ToStr()]
         spacing = [0, 12]
         if contentRole = "cards" then spacing = [0, -24]
         return {
             translation: [24, 207]
-            itemSize: [465, 348]
+            itemSize: [artworkWidth + 24, artworkHeight + 99]
             itemSpacing: spacing
-            numColumns: 4
+            numColumns: columns
             numRows: 3
-            focusBitmapUri: "pkg:/images/library/thumbnail-focus-465x348.png"
-            artworkSize: [441, 249]
+            focusBitmapUri: ResolutionAssets.GetLibraryImageUri("thumbnail-" + columns.ToStr() + "-col-focus.png")
+            artworkSize: [artworkWidth, artworkHeight]
             visibleArtworkOffsetX: 21
-            visibleArtworkWidth: 441
+            visibleArtworkWidth: artworkWidth
             visibleRightAdjustment: -1
         }
     end function
@@ -72,19 +63,29 @@ namespace VideoCardGridLayout
     '---------------------------------------------------------------------------
     ' VideoCardGridLayout.__PosterSpec
     '---------------------------------------------------------------------------
-    function __PosterSpec(contentRole as string) as object
+    function __PosterSpec(contentRole as string, columns as integer) as object
+        widths = { "3": 537, "4": 393, "5": 309, "6": 252 }
+        heights = { "3": 806, "4": 590, "5": 464, "6": 378 }
+        artworkWidth = widths[columns.ToStr()]
+        if artworkWidth = invalid then
+            columns = 6
+            artworkWidth = 252
+        end if
+        artworkHeight = heights[columns.ToStr()]
         spacing = [-12, 27]
+        if columns = 4 then spacing[0] = -10
         if contentRole = "cards" then spacing = [-12, -12]
+        if contentRole = "cards" and columns = 4 then spacing[0] = -10
         return {
             translation: [96, 207]
-            itemSize: [297, 465]
+            itemSize: [artworkWidth + 45, artworkHeight + 87]
             itemSpacing: spacing
-            numColumns: 6
+            numColumns: columns
             numRows: 2
-            focusBitmapUri: "pkg:/images/library/poster-focus-297x465.png"
-            artworkSize: [252, 378]
+            focusBitmapUri: ResolutionAssets.GetLibraryImageUri("poster-" + columns.ToStr() + "-col-focus.png")
+            artworkSize: [artworkWidth, artworkHeight]
             visibleArtworkOffsetX: 21
-            visibleArtworkWidth: 252
+            visibleArtworkWidth: artworkWidth
             visibleRightAdjustment: 0
         }
     end function

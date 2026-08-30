@@ -17,9 +17,8 @@ const assets = {
   "images/masks/fhd/cast-mask.png": [195, 195, [0, 0, 194, 194]],
   "images/masks/fhd/person-mask.png": [399, 600, [0, 0, 398, 599]],
   "images/masks/fhd/filmography-movie-mask.png": [342, 513, [0, 0, 341, 512]],
-  "images/masks/fhd/media-card-poster-mask.png": [252, 378, [0, 0, 251, 377]],
-  "images/masks/fhd/media-card-thumbnail-mask.png": [441, 249, [0, 0, 440, 248]],
-  "images/masks/fhd/media-card-jumbo-mask.png": [882, 496, [0, 0, 881, 495]],
+  "images/masks/fhd/detailed-poster-mask.png": [288, 432, [0, 0, 286, 430]],
+  "images/masks/fhd/detailed-card-mask.png": [882, 496, [0, 0, 880, 494]],
   "images/masks/fhd/album-mask-300.png": [300, 300, [0, 0, 299, 299]],
   "images/masks/fhd/album-mask-342.png": [342, 342, [0, 0, 341, 341]],
   "images/masks/fhd/audio-player-album-mask.png": [651, 651, [0, 0, 650, 650]],
@@ -34,10 +33,9 @@ const assets = {
   "images/cast/person-placeholder-399x600.png": [399, 600, [0, 0, 398, 599]],
   "images/cast/person-mask-399x600.png": [399, 600, [0, 0, 398, 599]],
   "images/media-card/poster-placeholder-252x378.png": [252, 378, [0, 0, 251, 377]],
-  "images/media-card/poster-mask-252x378.png": [252, 378, [0, 0, 251, 377]],
   "images/media-card/thumbnail-placeholder-441x249.png": [441, 249, [0, 0, 440, 248]],
-  "images/media-card/thumbnail-mask-441x249.png": [441, 249, [0, 0, 440, 248]],
-  "images/media-card/jumbo-mask-882x496.png": [882, 496, [0, 0, 881, 495]],
+  "images/media-card/detailed-poster-mask-288x432.png": [288, 432, [0, 0, 286, 430]],
+  "images/media-card/detailed-card-mask-882x496.png": [882, 496, [0, 0, 880, 494]],
   "images/music/album-mask-300x300.png": [300, 300, [0, 0, 299, 299]],
   "images/music/album-placeholder-300x300.png": [300, 300, [0, 0, 299, 299]],
   "images/music/album-mask-342x342.png": [342, 342, [0, 0, 341, 341]],
@@ -57,9 +55,8 @@ const hdMaskAssets = {
   "images/masks/hd/cast-mask.png": [130, 130, [0, 0, 129, 129], 195, 195],
   "images/masks/hd/person-mask.png": [266, 400, [0, 0, 265, 399], 399, 600],
   "images/masks/hd/filmography-movie-mask.png": [228, 342, [0, 0, 227, 341], 342, 513],
-  "images/masks/hd/media-card-poster-mask.png": [168, 252, [0, 0, 167, 251], 252, 378],
-  "images/masks/hd/media-card-thumbnail-mask.png": [294, 166, [0, 0, 293, 165], 441, 249],
-  "images/masks/hd/media-card-jumbo-mask.png": [588, 331, [0, 0, 587, 330], 882, 496],
+  "images/masks/hd/detailed-poster-mask.png": [192, 288, [0, 0, 191, 287], 288, 432],
+  "images/masks/hd/detailed-card-mask.png": [588, 331, [0, 0, 587, 330], 882, 496],
   "images/masks/hd/album-mask-300.png": [200, 200, [0, 0, 199, 199], 300, 300],
   "images/masks/hd/album-mask-342.png": [228, 228, [0, 0, 227, 227], 342, 342],
   "images/masks/hd/audio-player-album-mask.png": [434, 434, [0, 0, 433, 433], 651, 651],
@@ -82,9 +79,8 @@ const generatedMaskSources = {
   "cast-mask.png": "images/cast/cast-mask-195x195.png",
   "person-mask.png": "images/cast/person-mask-399x600.png",
   "filmography-movie-mask.png": "images/cast/filmography-movie-mask-342x513.png",
-  "media-card-poster-mask.png": "images/media-card/poster-mask-252x378.png",
-  "media-card-thumbnail-mask.png": "images/media-card/thumbnail-mask-441x249.png",
-  "media-card-jumbo-mask.png": "images/media-card/jumbo-mask-882x496.png",
+  "detailed-poster-mask.png": "images/media-card/detailed-poster-mask-288x432.png",
+  "detailed-card-mask.png": "images/media-card/detailed-card-mask-882x496.png",
   "album-mask-300.png": "images/music/album-mask-300x300.png",
   "album-mask-342.png": "images/music/album-mask-342x342.png",
   "audio-player-album-mask.png": "images/music/audio-player-album-mask-651x651.png",
@@ -95,31 +91,48 @@ const generatedMaskSources = {
   "season-poster-mask.png": "images/tv-show/season-poster-mask-207x312.png",
 };
 
+const libraryMaskAssets = {
+  "poster-3-col-mask.png": { fhd: [537, 806], hd: [358, 537] },
+  "poster-4-col-mask.png": { fhd: [393, 590], hd: [262, 393] },
+  "poster-5-col-mask.png": { fhd: [309, 464], hd: [206, 309] },
+  "poster-6-col-mask.png": { fhd: [252, 378], hd: [168, 252] },
+  "thumbnail-2-col-mask.png": { fhd: [906, 510], hd: [604, 340] },
+  "thumbnail-3-col-mask.png": { fhd: [596, 335], hd: [397, 223] },
+  "thumbnail-4-col-mask.png": { fhd: [441, 249], hd: [294, 166] },
+};
+
+const libraryFocusAssets = {
+  "poster-3-col-focus.png": [582, 893, [15, 0, 564, 810]],
+  "poster-4-col-focus.png": [438, 677, [15, 0, 420, 594]],
+  "poster-5-col-focus.png": [354, 551, [15, 0, 336, 468]],
+  "poster-6-col-focus.png": [297, 465, [15, 0, 279, 382]],
+  "thumbnail-2-col-focus.png": [930, 609, [15, 0, 929, 514]],
+  "thumbnail-3-col-focus.png": [620, 434, [15, 0, 619, 339]],
+  "thumbnail-4-col-focus.png": [465, 348, [15, 0, 464, 253]],
+};
+
 const geometryChecks = {
-  "components/pages/Header/Header.brs": ["MaskAssets_Apply(m.accountBadgeNodes.imageMask, \"account-badge-user-mask.png\", [96, 96], [64, 64])", "ResolutionProfile_IsHd()", "HeaderAssets_GetUri(\"account-badge-ring.png\")", "HeaderAssets_GetUri(\"account-badge-glass.png\")"],
-  "components/pages/Video/Cast/CastItem/CastItem.brs": ["MaskAssets_GetProfile(\"cast-mask.png\", [195, 195], [130, 130])"],
-  "components/pages/Video/Cast/Person/Person.brs": ["MaskAssets_Apply(m.top.findNode(\"personImageMask\"), \"person-mask.png\", [399, 600], [266, 400])"],
-  "components/pages/Video/Cast/Filmography/Filmography.brs": ["MaskAssets_Apply(m.top.findNode(\"previewPosterMask\"), \"filmography-movie-mask.png\", [342, 513], [228, 342])"],
-  "components/pages/Video/Cards/VideoPosterCard/VideoPosterCard.bs": ["posterMaskName: \"media-card-poster-mask.png\"", "posterSize: [252, 378]", "hdPosterSize: [168, 252]"],
-  "components/pages/Video/Cards/VideoThumbnailCard/VideoThumbnailCard.bs": ["posterMaskName: \"media-card-thumbnail-mask.png\"", "posterSize: [441, 249]", "hdPosterSize: [294, 166]"],
-  "components/pages/Video/Cards/VideoJumboCard/VideoJumboCard.bs": ["posterMaskName: \"media-card-jumbo-mask.png\"", "posterSize: [882, 496]", "hdPosterSize: [588, 331]"],
-  "components/controls/Spinner/Spinner.brs": ["m.spinner.uri = IconAssets_GetUri(\"busy-spinner.png\")"],
-  "source/ResolutionAssets.brs": ["ResolutionAssets_GetUri(category as string, filename as string)", "ResolutionProfile_GetName()"],
-  "source/ButtonAssets.brs": ["return ResolutionAssets_GetUri(\"buttons\", filename)"],
-  "components/pages/Video/TVShow/TVSeasonCard/TVSeasonCard.brs": ["MaskAssets_Apply(m.top.findNode(\"seasonPosterMask\"), \"season-poster-mask.png\", [207, 312], [138, 208])"],
-  "components/pages/Video/TVSeason/TVEpisodePoster/TVEpisodePoster.brs": ["MaskAssets_Apply(m.posterMask, \"episode-thumbnail-mask.png\", [width, height], [hdWidth, hdHeight])"],
-  "components/pages/Video/VideoPlayer/TrickplayPreviewStrip/TrickplayPreviewStrip.brs": ["MaskAssets_Apply(slot.imageMask, maskFilename, [tileWidth, tileHeight], [hdTileWidth, hdTileHeight])"],
-  "components/pages/Music/MusicAlbumCard/MusicAlbumCard.brs": ["MaskAssets_Apply(m.albumMask, \"album-mask-300.png\", [300, 300], [200, 200])", "MaskAssets_Apply(m.albumMask, \"album-mask-342.png\", [342, 342], [228, 228])"],
-  "components/pages/Music/MusicArtistCard/MusicArtistCard.brs": ["MaskAssets_Apply(m.top.findNode(\"artistMask\"), \"album-mask-342.png\", [342, 342], [228, 228])"],
-  "components/pages/Music/ArtistAlbumRowItem/ArtistAlbumRowItem.brs": ["MaskAssets_Apply(m.top.findNode(\"albumMask\"), \"album-mask-300.png\", [300, 300], [200, 200])"],
-  "components/pages/Music/AudioPlayer/AudioPlayer.brs": ["MaskAssets_Apply(m.top.findNode(\"albumArtworkMask\"), \"audio-player-album-mask.png\", [651, 651], [434, 434])"],
+  "components/pages/Video/Cast/CastItem/CastItem.bs": ["MaskAssets.GetProfile(\"cast-mask.png\", [195, 195], [130, 130])"],
+  "components/pages/Video/Cast/Person/Person.bs": ["MaskAssets.Apply(m.top.findNode(\"personImageMask\"), \"person-mask.png\", [399, 600], [266, 400])"],
+  "components/pages/Video/Cast/Filmography/Filmography.bs": ["MaskAssets.Apply(m.top.findNode(\"previewPosterMask\"), \"filmography-movie-mask.png\", [342, 513], [228, 342])"],
+  "components/pages/Video/Cards/VideoPosterCard/VideoPosterCard.bs": ["posterMaskName: \"poster-6-col-mask.png\"", "posterSize: [252, 378]", "hdPosterSize: [168, 252]"],
+  "components/pages/Video/Cards/VideoThumbnailCard/VideoThumbnailCard.bs": ["posterMaskName: \"thumbnail-4-col-mask.png\"", "posterSize: [441, 249]", "hdPosterSize: [294, 166]"],
+  "components/controls/Spinner/Spinner.bs": ["m.spinner.uri = ResolutionAssets.GetIconImageUri(\"busy-spinner.png\")"],
+  "source/ResolutionAssets.bs": ["function __GetImageUri(category as string, filename as string)", "ResolutionProfile.GetName()"],
+  "components/pages/Video/TVShow/TVSeasonCard/TVSeasonCard.bs": ["MaskAssets.Apply(m.top.findNode(\"seasonPosterMask\"), \"season-poster-mask.png\", [207, 312], [138, 208])"],
+  "components/pages/Video/TVSeason/TVEpisodePoster/TVEpisodePoster.bs": ["MaskAssets.Apply(m.posterMask, \"episode-thumbnail-mask.png\", [width, height], [hdWidth, hdHeight])"],
+  "components/pages/Video/VideoPlayer/TrickplayPreviewStrip/TrickplayPreviewStrip.bs": ["MaskAssets.Apply(slot.imageMask, maskFilename, [tileWidth, tileHeight], [hdTileWidth, hdTileHeight])"],
+  "components/pages/Music/MusicAlbumCard/MusicAlbumCard.bs": ["MaskAssets.Apply(m.albumMask, \"album-mask-300.png\", [300, 300], [200, 200])", "MaskAssets.Apply(m.albumMask, \"album-mask-342.png\", [342, 342], [228, 228])"],
+  "components/pages/Music/MusicArtistCard/MusicArtistCard.bs": ["MaskAssets.Apply(m.top.findNode(\"artistMask\"), \"album-mask-342.png\", [342, 342], [228, 228])"],
+  "components/pages/Music/ArtistAlbumRowItem/ArtistAlbumRowItem.bs": ["MaskAssets.Apply(m.top.findNode(\"albumMask\"), \"album-mask-300.png\", [300, 300], [200, 200])"],
+  "components/pages/Music/AudioPlayer/AudioPlayer.bs": ["MaskAssets.Apply(m.top.findNode(\"albumArtworkMask\"), \"audio-player-album-mask.png\", [651, 651], [434, 434])"],
   "components/pages/Video/TVSeason/TVSeason.xml": ["rowItemSize=\"[[576,591]]\"", "itemSize=\"[576,591]\""],
   "components/pages/Video/TVShow/TVShow.xml": ["itemSize=\"[207,381]\""],
   "components/pages/Music/MusicLibrary/MusicLibrary.xml": ["itemSize=\"[360,432]\""],
-  "components/pages/MediaShell/MediaShell.brs": ["MaskAssets_Apply(m.mediaBackgroundPartialGroup, \"media-shell-backdrop-mask.png\", [1152, 648], [768, 432])"],
-  "source/main.brs": ["screen.GetGlobalNode().AddFields({ resolutionProfile: ResolutionProfile_Create() })"],
-  "source/MaskAssets.brs": ["if ResolutionProfile_IsHd() then", "ResolutionAssets_GetUri(\"masks\", filename)"],
-  "source/ResolutionProfile.brs": ["deviceInfo.GetUIResolution()", "uiResolution.height <= 720", "profile = m.global.resolutionProfile", "return ResolutionProfile_GetName() = \"hd\""],
+  "components/pages/MediaShell/MediaShell.bs": ["MaskAssets.Apply(m.mediaBackgroundPartialGroup, \"media-shell-backdrop-mask.png\", [1152, 648], [768, 432])"],
+  "source/main.bs": ["globalNode.AddFields({ resolutionProfile: ResolutionProfile.Create() })"],
+  "source/MaskAssets.bs": ["if ResolutionProfile.IsHd() then", "ResolutionAssets.GetMaskImageUri(filename)"],
+  "source/ResolutionProfile.bs": ["deviceInfo.GetUIResolution()", "uiResolution.height <= 720", "profile = m.global.resolutionProfile", "return ResolutionProfile.GetName() = \"hd\""],
 };
 
 function decodePng(filePath) {
@@ -276,7 +289,6 @@ for (const [relativePath, [expectedWidth, expectedHeight, expectedBounds]] of Ob
   try {
     const actual = decodePng(path.join(root, relativePath));
     if (actual.width !== expectedWidth || actual.height !== expectedHeight) failures.push(`${relativePath}: expected ${expectedWidth}x${expectedHeight}, found ${actual.width}x${actual.height}`);
-    if ((expectedWidth % 3 !== 0 || expectedHeight % 3 !== 0) && !relativePath.includes("jumbo-mask-882x496.png")) failures.push(`${relativePath}: FHD canvas must divide evenly by 3`);
     if (actual.bounds.join(",") !== expectedBounds.join(",")) failures.push(`${relativePath}: expected alpha bounds ${expectedBounds}, found ${actual.bounds}`);
     if (relativePath.startsWith("images/masks/fhd/")) verifyMaskAlphaSignature(relativePath, actual);
   } catch (error) {
@@ -310,7 +322,37 @@ for (const [relativePath, [expectedWidth, expectedHeight, expectedBounds, fhdWid
   }
 }
 
-const expectedMaskNames = Object.keys(generatedMaskSources).sort();
+for (const [filename, profiles] of Object.entries(libraryMaskAssets)) {
+  for (const resolution of ["fhd", "hd"]) {
+    const [expectedWidth, expectedHeight] = profiles[resolution];
+    const relativePath = `images/masks/${resolution}/${filename}`;
+    try {
+      const actual = decodePng(path.join(root, relativePath));
+      if (actual.width !== expectedWidth || actual.height !== expectedHeight) failures.push(`${relativePath}: expected ${expectedWidth}x${expectedHeight}, found ${actual.width}x${actual.height}`);
+      if (actual.bounds.join(",") !== `0,0,${expectedWidth - 1},${expectedHeight - 1}`) failures.push(`${relativePath}: expected full alpha bounds, found ${actual.bounds}`);
+      verifyMaskAlphaSignature(relativePath, actual);
+    } catch (error) {
+      failures.push(`${relativePath}: ${error.message}`);
+    }
+  }
+}
+
+for (const [filename, [expectedWidth, expectedHeight, expectedBounds]] of Object.entries(libraryFocusAssets)) {
+  for (const resolution of ["fhd", "hd"]) {
+    const relativePath = `images/library/${resolution}/${filename}`;
+    try {
+      const actual = decodePng(path.join(root, relativePath));
+      if (actual.width !== expectedWidth || actual.height !== expectedHeight) failures.push(`${relativePath}: expected ${expectedWidth}x${expectedHeight}, found ${actual.width}x${actual.height}`);
+      if (actual.bounds.join(",") !== expectedBounds.join(",")) failures.push(`${relativePath}: expected alpha bounds ${expectedBounds}, found ${actual.bounds}`);
+    } catch (error) {
+      failures.push(`${relativePath}: ${error.message}`);
+    }
+  }
+}
+
+const sharedMaskNames = Object.keys(generatedMaskSources).sort();
+const libraryMaskNames = Object.keys(libraryMaskAssets).sort();
+const expectedMaskNames = [...sharedMaskNames, ...libraryMaskNames].sort();
 for (const resolution of ["fhd", "hd"]) {
   const directory = path.join(root, "images", "masks", resolution);
   const actualNames = fs.readdirSync(directory).filter((name) => name.endsWith(".png")).sort();
@@ -342,7 +384,7 @@ const scanImageReferences = (directory) => {
     const entryPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       scanImageReferences(entryPath);
-    } else if (entry.name.endsWith(".brs") || entry.name.endsWith(".xml")) {
+    } else if (entry.name.endsWith(".bs") || entry.name.endsWith(".brs") || entry.name.endsWith(".xml")) {
       const contents = fs.readFileSync(entryPath, "utf8");
       for (const match of contents.matchAll(/pkg:\/images\/[^"'\s+]+\.png/g)) {
         const relativeImagePath = match[0].substring("pkg:/".length);
@@ -353,6 +395,9 @@ const scanImageReferences = (directory) => {
         addHomepageAssetReference(match[1], path.relative(root, entryPath));
       }
       for (const match of contents.matchAll(/HomepageAssets_GetUri\("([^"]+)"\)/g)) {
+        addHomepageAssetReference(match[1], path.relative(root, entryPath));
+      }
+      for (const match of contents.matchAll(/ResolutionAssets\.GetHomepageImageUri\("([^"]+)"\)/g)) {
         addHomepageAssetReference(match[1], path.relative(root, entryPath));
       }
     }
@@ -377,7 +422,7 @@ try {
     failures.push(`temporary mask generation failed: ${generation.stderr || generation.stdout}`);
   } else {
     for (const resolution of ["fhd", "hd"]) {
-      for (const filename of expectedMaskNames) {
+      for (const filename of sharedMaskNames) {
         const expected = fs.readFileSync(path.join(root, "images", "masks", resolution, filename));
         const regenerated = fs.readFileSync(path.join(temporaryRoot, "images", "masks", resolution, filename));
         if (!expected.equals(regenerated)) failures.push(`images/masks/${resolution}/${filename}: differs from regenerated output`);
@@ -386,6 +431,34 @@ try {
   }
 } finally {
   fs.rmSync(temporaryRoot, { recursive: true, force: true });
+}
+
+const temporaryLibraryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "starfin-library-geometry-"));
+try {
+  const generation = spawnSync("powershell", [
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", path.join(root, "scripts", "generate-library-card-assets.ps1"),
+    "-Root", temporaryLibraryRoot,
+  ], { encoding: "utf8" });
+  if (generation.status !== 0) {
+    failures.push(`temporary library asset generation failed: ${generation.stderr || generation.stdout}`);
+  } else {
+    for (const resolution of ["fhd", "hd"]) {
+      for (const filename of libraryMaskNames) {
+        const expected = fs.readFileSync(path.join(root, "images", "masks", resolution, filename));
+        const regenerated = fs.readFileSync(path.join(temporaryLibraryRoot, "images", "masks", resolution, filename));
+        if (!expected.equals(regenerated)) failures.push(`images/masks/${resolution}/${filename}: differs from regenerated output`);
+      }
+      for (const filename of Object.keys(libraryFocusAssets)) {
+        const expected = fs.readFileSync(path.join(root, "images", "library", resolution, filename));
+        const regenerated = fs.readFileSync(path.join(temporaryLibraryRoot, "images", "library", resolution, filename));
+        if (!expected.equals(regenerated)) failures.push(`images/library/${resolution}/${filename}: differs from regenerated output`);
+      }
+    }
+  }
+} finally {
+  fs.rmSync(temporaryLibraryRoot, { recursive: true, force: true });
 }
 
 for (const [relativePath, fragments] of Object.entries(geometryChecks)) {

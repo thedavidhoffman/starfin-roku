@@ -1,0 +1,68 @@
+namespace tests
+
+    @suite("Library settings navigation")
+    class LibrarySettingsNavigationTests extends rooibos.BaseTestSuite
+
+        @describe("LibrarySettingsNavigation.Move")
+
+        @it("moves right and left between controls")
+        function _()
+            right = LibrarySettingsNavigation.Move(0, 0, "right", [7, 6])
+            left = LibrarySettingsNavigation.Move(0, 1, "left", [7, 6])
+
+            m.assertEqual(right.position, 1)
+            m.assertEqual(left.position, 0)
+        end function
+
+        @it("consumes the right boundary without wrapping")
+        function _()
+            movement = LibrarySettingsNavigation.Move(0, 6, "right", [7, 6])
+
+            m.assertTrue(movement.handled)
+            m.assertEqual(movement.row, 0)
+            m.assertEqual(movement.position, 6)
+        end function
+
+        @it("moves vertically while preserving the horizontal position")
+        function _()
+            down = LibrarySettingsNavigation.Move(0, 5, "down", [7, 7])
+            up = LibrarySettingsNavigation.Move(1, 5, "up", [7, 7])
+
+            m.assertEqual(down, { row: 1, position: 5, exit: false, handled: true })
+            m.assertEqual(up, { row: 0, position: 5, exit: false, handled: true })
+        end function
+
+        @it("clamps the position when the destination row has fewer controls")
+        function _()
+            movement = LibrarySettingsNavigation.Move(0, 6, "down", [7, 4])
+
+            m.assertEqual(movement.row, 1)
+            m.assertEqual(movement.position, 3)
+        end function
+
+        @it("exits from the left presentation boundary")
+        function _()
+            movement = LibrarySettingsNavigation.Move(0, 0, "left", [7])
+
+            m.assertTrue(movement.handled)
+            m.assertTrue(movement.exit)
+        end function
+
+        @it("exits when Back is pressed")
+        function _()
+            movement = LibrarySettingsNavigation.Move(3, 4, "back", [7, 7, 7, 7])
+
+            m.assertTrue(movement.handled)
+            m.assertTrue(movement.exit)
+        end function
+
+        @it("does not handle unrelated keys")
+        function _()
+            movement = LibrarySettingsNavigation.Move(0, 0, "OK", [7])
+
+            m.assertFalse(movement.handled)
+        end function
+
+    end class
+
+end namespace

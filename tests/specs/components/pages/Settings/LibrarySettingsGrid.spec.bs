@@ -1,0 +1,96 @@
+namespace tests
+
+    @SGNode("LibrarySettingsGrid")
+    @suite("LibrarySettingsGrid component")
+    class LibrarySettingsGridTests extends rooibos.BaseTestSuite
+
+        @describe("rendering")
+
+        @it("renders all eight library rows")
+        function _()
+            m.assertEqual(m.node.libraryLabels.content.getChildCount(), 8)
+        end function
+
+        @it("checks the saved presentation for every row")
+        function _()
+            selections = SettingsStore.Defaults()
+            selections[SettingsStore.Key.MovieLibraryLayout] = "thumbnail;3"
+            selections[SettingsStore.Key.HomeVideosLayout] = "detailed;2"
+
+            m.top.selections = selections
+
+            m.assertTrue(m.node.presentationLists[0].checkedState[0])
+            m.assertTrue(m.node.presentationLists[1].checkedState[1])
+            m.assertTrue(m.node.presentationLists[2].checkedState[7])
+        end function
+
+        @it("renders the column choices supported by the selected presentation")
+        function _()
+            selections = SettingsStore.Defaults()
+            selections[SettingsStore.Key.MovieLibraryLayout] = "thumbnail;3"
+            selections[SettingsStore.Key.HomeVideosLayout] = "detailed;2"
+
+            m.top.selections = selections
+
+            m.assertEqual(m.node.gridState.columnButtons[0].Count(), 4)
+            m.assertEqual(m.node.gridState.columnButtons[1].Count(), 3)
+            m.assertEqual(m.node.gridState.columnButtons[7].Count(), 1)
+        end function
+
+        @describe("selection")
+
+        @it("selecting thumbnail commits its default count atomically")
+        function _()
+            m.top.selections = SettingsStore.Defaults()
+            m.node.presentationLists[1].itemSelected = 0
+
+            m.assertEqual(m.top.selectionChanged.settingKey, SettingsStore.Key.TvLibraryLayout)
+            m.assertEqual(m.top.selectionChanged.value, "thumbnail;4")
+        end function
+
+        @it("selecting a column preserves the current presentation")
+        function _()
+            selections = SettingsStore.Defaults()
+            selections[SettingsStore.Key.TvLibraryLayout] = "poster;6"
+            m.top.selections = selections
+
+            button = m.node.gridState.columnButtons[0][0]
+            button.buttonSelected = true
+
+            m.assertEqual(m.top.selections[SettingsStore.Key.TvLibraryLayout], "poster;3")
+        end function
+
+        @describe("focus navigation")
+
+        @it("focusFirst targets the first presentation cell")
+        function _()
+            m.top.callFunc("focusFirst")
+
+            m.assertEqual(m.node.gridState.focusedRow, 0)
+            m.assertEqual(m.node.gridState.focusedPosition, 0)
+        end function
+
+        @it("focusLast targets the final row rightmost column choice")
+        function _()
+            m.top.callFunc("focusLast")
+
+            m.assertEqual(m.node.gridState.focusedRow, 7)
+            m.assertEqual(m.node.gridState.focusedPosition, 6)
+        end function
+
+        @it("preserves and clamps focus when selections update externally")
+        function _()
+            m.top.setFocus(true)
+            m.top.callFunc("focusLast")
+            selections = SettingsStore.Defaults()
+            selections[SettingsStore.Key.HomeVideosLayout] = "detailed;2"
+
+            m.top.selections = selections
+
+            m.assertEqual(m.node.gridState.focusedRow, 7)
+            m.assertEqual(m.node.gridState.focusedPosition, 3)
+        end function
+
+    end class
+
+end namespace

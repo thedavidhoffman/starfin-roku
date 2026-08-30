@@ -7,6 +7,7 @@ import "pkg:/source/Format.bs"
 import "pkg:/source/ItemImage.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/LibraryBrowse.bs"
+import "pkg:/source/LibraryLayoutSetting.bs"
 import "pkg:/source/VideoCardGridLayout.bs"
 import "pkg:/source/VideoCardPresentation.bs"
 import "pkg:/source/MediaMetadata.bs"
@@ -36,6 +37,7 @@ sub init()
         lifecycle: AsyncLifecycle.Create()
         active: false
         imageAspect: VideoCardPresentation.Type.Poster
+        layoutColumns: 6
         preserveControlFocus: false
     }
     initHandlers()
@@ -113,6 +115,7 @@ sub renderItems(items as object, showEmpty = false as boolean)
             itemType = LCase(Format.SafeString(item.Type, ""))
             node.AddFields({
                 imageAspect: m.state.imageAspect
+                cardLayout: VideoCardGridLayout.GetSpec(m.state.imageAspect, "items", m.state.layoutColumns)
                 showMetadata: true
                 metadataText: getHomeMediaMetadata(item)
                 fitArtwork: itemType = "photo"
@@ -131,17 +134,11 @@ end sub
 ' getHomeMediaImageUrl
 '-------------------------------------------------------------------------------
 function getHomeMediaImageUrl(server as string, item as object) as string
-    layoutSpec = VideoCardGridLayout.GetSpec(m.state.imageAspect, "items")
+    layoutSpec = VideoCardGridLayout.GetSpec(m.state.imageAspect, "items", m.state.layoutColumns)
     artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
     artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
     if m.state.imageAspect = VideoCardPresentation.Type.Thumbnail then
         imageUrl = ItemImage.GetThumbnailUrl(server, item, artworkWidth, artworkHeight)
-        if imageUrl <> "" then return imageUrl
-    end if
-    if m.state.imageAspect = VideoCardPresentation.Type.Jumbo then
-        imageUrl = ItemImage.GetUrl(server, item, "Backdrop", artworkWidth, artworkHeight)
-        if imageUrl <> "" then return imageUrl
-        imageUrl = ItemImage.GetUrl(server, item, "Thumb", artworkWidth, artworkHeight)
         if imageUrl <> "" then return imageUrl
     end if
     return ItemImage.GetUrl(server, item, "Primary", artworkWidth, artworkHeight)
@@ -152,16 +149,18 @@ end function
 '-------------------------------------------------------------------------------
 function getHomeMediaImageAspect() as string
     settings = m.top.settings
-    settingValue = VideoCardPresentation.Type.Poster
-    if settings <> invalid then settingValue = Format.SafeString(settings[SettingsStore.Key.HomeVideosImageType], VideoCardPresentation.Type.Poster)
-    return VideoCardPresentation.Normalize(settingValue)
+    settingValue = invalid
+    if settings <> invalid then settingValue = settings[SettingsStore.Key.HomeVideosLayout]
+    layout = LibraryLayoutSetting.Parse(settingValue)
+    m.state.layoutColumns = layout.columns
+    return layout.presentation
 end function
 
 '-------------------------------------------------------------------------------
 ' applyHomeMediaGridLayout
 '-------------------------------------------------------------------------------
 sub applyHomeMediaGridLayout()
-    layoutSpec = VideoCardGridLayout.GetSpec(m.state.imageAspect, "items")
+    layoutSpec = VideoCardGridLayout.GetSpec(m.state.imageAspect, "items", m.state.layoutColumns)
     m.itemsGrid.translation = layoutSpec.translation
     m.itemsGrid.itemSize = layoutSpec.itemSize
     m.itemsGrid.itemSpacing = layoutSpec.itemSpacing
@@ -313,8 +312,9 @@ end sub
 ' onSettingsChanged
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
+    previousColumns = m.state.layoutColumns
     imageAspect = getHomeMediaImageAspect()
-    if imageAspect = m.state.imageAspect then return
+    if imageAspect = m.state.imageAspect and m.state.layoutColumns = previousColumns then return
     m.state.imageAspect = imageAspect
     applyHomeMediaGridLayout()
     level = getCurrentLevel()

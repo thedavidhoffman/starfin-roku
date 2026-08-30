@@ -302,7 +302,7 @@ end function
 '-------------------------------------------------------------------------------
 sub clearVideoLibraryItemNodeCache()
     m.pageState.itemNodeCache = {}
-    m.pageState.itemNodeCacheAspect = ""
+    m.pageState.itemNodeCacheLayout = ""
 end sub
 
 '-------------------------------------------------------------------------------
@@ -317,11 +317,12 @@ end sub
 ' ensureVideoLibraryItemNodeCache
 '-------------------------------------------------------------------------------
 sub ensureVideoLibraryItemNodeCache()
-    if m.pageState.itemNodeCacheAspect = m.pageState.imageAspect then
+    layoutKey = m.pageState.imageAspect + ";" + m.pageState.layoutColumns.ToStr()
+    if m.pageState.itemNodeCacheLayout = layoutKey then
         return
     end if
     m.pageState.itemNodeCache = {}
-    m.pageState.itemNodeCacheAspect = m.pageState.imageAspect
+    m.pageState.itemNodeCacheLayout = layoutKey
 end sub
 
 '-------------------------------------------------------------------------------
@@ -353,7 +354,7 @@ function createVideoLibraryItemNode(item as dynamic) as dynamic
     node.HDPosterUrl = getItemImageUrl(item, imageAspect)
     node.AddFields({
         imageAspect: imageAspect
-        logoUrl: getItemLogoUrl(item, imageAspect)
+        cardLayout: VideoCardGridLayout.GetSpec(imageAspect, "items", m.pageState.layoutColumns)
         showMetadata: getVideoLibraryItemMetadataVisibility(item)
         raw: item
     })
@@ -369,17 +370,6 @@ function getVideoLibraryItemMetadataVisibility(item as object) as boolean
         return m.top.callFunc("specializationShowsItemMetadata", item)
     end if
     return true
-end function
-
-'-------------------------------------------------------------------------------
-' getItemLogoUrl
-'-------------------------------------------------------------------------------
-function getItemLogoUrl(item as dynamic, imageAspect as string) as string
-    if imageAspect <> VideoCardPresentation.Type.Jumbo then return ""
-    if Arrays.IsAssocArray(item) = false then return ""
-    request = m.pageState.request
-    if request = invalid then return ""
-    return ItemImage.GetUrl(request.server, item, "Logo", 360, 140)
 end function
 
 '-------------------------------------------------------------------------------
@@ -416,18 +406,11 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
     if request = invalid then
         return ""
     end if
-    layoutSpec = VideoCardGridLayout.GetSpec(imageAspect, "items")
+    layoutSpec = VideoCardGridLayout.GetSpec(imageAspect, "items", m.pageState.layoutColumns)
     artworkWidth = Number.ToInteger(layoutSpec.artworkSize[0], 0)
     artworkHeight = Number.ToInteger(layoutSpec.artworkSize[1], 0)
     if imageAspect = VideoCardPresentation.Type.Thumbnail then
         return ItemImage.GetThumbnailUrl(request.server, item, artworkWidth, artworkHeight)
-    end if
-    if imageAspect = VideoCardPresentation.Type.Jumbo then
-        imageUrl = ItemImage.GetUrl(request.server, item, "Backdrop", artworkWidth, artworkHeight)
-        if imageUrl <> "" then return imageUrl
-        imageUrl = ItemImage.GetUrl(request.server, item, "Thumb", artworkWidth, artworkHeight)
-        if imageUrl <> "" then return imageUrl
-        return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
     end if
     if imageAspect = VideoCardPresentation.Type.Detailed then
         return ItemImage.GetUrl(request.server, item, "Primary", artworkWidth, artworkHeight)
@@ -443,21 +426,22 @@ function getVideoLibraryImageAspect() as string
         return m.top.callFunc("specializationImageAspect")
     end if
     settings = m.top.settings
-    settingKey = SettingsStore.Key.MovieLibraryDisplay
+    settingKey = SettingsStore.Key.MovieLibraryLayout
     request = m.pageState.request
     collectionType = ""
     if request <> invalid then
         collectionType = Format.SafeString(request.collectionType, "")
     end if
     if collectionType = "tvshows" then
-        settingKey = SettingsStore.Key.TvLibraryDisplay
+        settingKey = SettingsStore.Key.TvLibraryLayout
     else if collectionType = "collection" then
-        settingKey = SettingsStore.Key.CollectionItemsImageType
+        settingKey = SettingsStore.Key.CollectionItemsLayout
     else if collectionType = "musicvideos" then
-        settingKey = SettingsStore.Key.MusicVideosImageType
+        settingKey = SettingsStore.Key.MusicVideosLayout
     end if
-    settingValue = Format.SafeString(settings[settingKey], VideoCardPresentation.Type.Poster)
-    return VideoCardPresentation.Normalize(settingValue)
+    layout = LibraryLayoutSetting.Parse(settings[settingKey])
+    m.pageState.layoutColumns = layout.columns
+    return layout.presentation
 end function
 
 '-------------------------------------------------------------------------------
