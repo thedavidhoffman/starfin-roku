@@ -6,7 +6,7 @@ namespace tests
 
         @describe("playback state changes")
 
-        @it("enables custom screensaver suppression while playing")
+        @it("suppresses the native Roku screensaver while playing")
         function _()
             m.configurePlayer("playing", "bounce")
 
@@ -15,6 +15,17 @@ namespace tests
 
             m.assertTrue(m.node.player.disableScreenSaver)
             m.assertFalse(m.node.playerState.changingTrack)
+        end function
+
+        @it("suppresses the native Roku screensaver without starting a Starfin overlay")
+        function _()
+            m.configurePlayer("playing", "none")
+
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+
+            m.assertTrue(m.node.player.disableScreenSaver)
+            m.assertEqual(m.node.screensaverOverlay.findNode("screensaverDelayTimer").control, "stop")
         end function
 
         @it("restores Roku screensaver behavior while paused and resumes custom mode")
@@ -120,12 +131,70 @@ namespace tests
             m.assertEqual(m.node.player.control, "stop")
         end function
 
+        @it("resumes paused playback")
+        function _()
+            m.configurePlayer("paused", "bounce")
+
+            'bs:disable-next-line 1140
+            togglePlayback()
+
+            m.assertEqual(m.node.player.control, "resume")
+        end function
+
+        @it("requests a fresh stream when restarting stopped playback")
+        function _()
+            m.configurePlayer("playing", "bounce")
+            m.node.player.position = 42.0
+            m.node.playerState.tracks = [{ Id: "track-1", Name: "Track" }]
+            m.node.playerState.currentIndex = 0
+            m.node.playbackInfoTask = { request: invalid, control: "" }
+
+            'bs:disable-next-line 1140
+            onPlaybackProgressChanged()
+            m.node.player.state = "stopped"
+            m.node.player.position = 0.0
+            'bs:disable-next-line 1140
+            onPlaybackProgressChanged()
+
+            'bs:disable-next-line 1140
+            togglePlayback()
+
+            m.assertEqual(m.node.playbackInfoTask.request.itemId, "track-1")
+            m.assertEqual(m.node.playerState.restartPosition, 42.0)
+        end function
+
+        @it("updates the recovery position when seeking to the beginning")
+        function _()
+            m.configurePlayer("paused", "bounce")
+            m.node.player.position = 7.0
+            m.node.playerState.lastPosition = 7.0
+            m.node.playerState.tracks = [{ Id: "track-1", RunTimeTicks: 600000000 }]
+            m.node.playerState.currentIndex = 0
+
+            'bs:disable-next-line 1140
+            seekBy(-10.0)
+
+            m.assertEqual(m.node.playerState.lastPosition, 0.0)
+        end function
+
+        @it("restores the interrupted position when restarted playback begins")
+        function _()
+            m.configurePlayer("playing", "bounce")
+            m.node.playerState.restartPosition = 42.0
+
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+
+            m.assertEqual(m.node.player.seek, 42.0)
+            m.assertEqual(m.node.playerState.restartPosition, 0.0)
+        end function
+
         private sub configurePlayer(state as string, screensaverType as string)
             settings = {}
             settings[SettingsStore.Key.ScreensaverType] = screensaverType
             settings[SettingsStore.Key.ScreensaverDelay] = "1"
-            m.node.player = { state: state, control: "", disableScreenSaver: false }
-            m.node.playerState.request = { settings: settings }
+            m.node.player = { state: state, control: "", disableScreenSaver: false, position: 0.0, duration: 0.0, seek: 0.0, errorCode: 0, errorMsg: "" }
+            m.node.playerState.request = { settings: settings, server: "server", token: "token", userId: "user" }
             m.node.playerState.changingTrack = true
         end sub
 

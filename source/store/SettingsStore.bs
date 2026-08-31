@@ -44,7 +44,7 @@ namespace SettingsStore
         defaultSettings[Key.TvEpisodeListDisplay] = "vertical"
         defaultSettings[Key.MediaShellBackground] = "full-screen"
         defaultSettings[Key.ThemeMusic] = "off"
-        defaultSettings[Key.ScreensaverType] = "roku"
+        defaultSettings[Key.ScreensaverType] = "none"
         defaultSettings[Key.ScreensaverDelay] = "1"
         defaultSettings[Key.VideoStreamingMode] = PlaybackMode.Mode.Automatic
         defaultSettings[Key.SubtitleBurnInMode] = SubtitleBurnIn.Mode.DuringTranscoding
@@ -83,6 +83,7 @@ namespace SettingsStore
         for each key in SettingsStore.LibraryKeys()
             settings[key] = LibraryLayoutSetting.Normalize(settings[key])
         end for
+        settings[Key.ScreensaverType] = SettingsStore.NormalizeScreensaverType(settings[Key.ScreensaverType])
         settings[Key.DisplayAccountBadge] = SettingsStore.LoadGlobal(Key.DisplayAccountBadge)
         settings[Key.VideoStreamingMode] = PlaybackMode.Normalize(SettingsStore.LoadGlobal(Key.VideoStreamingMode))
         settings[Key.SubtitleBurnInMode] = SubtitleBurnIn.Normalize(SettingsStore.LoadGlobal(Key.SubtitleBurnInMode))
@@ -99,6 +100,7 @@ namespace SettingsStore
             for each key in SettingsStore.AccountKeys()
                 value = SettingsStore.GetSettingValue(settings, key)
                 if SettingsStore.__IsLibraryKey(key) then value = LibraryLayoutSetting.Normalize(value)
+                if key = Key.ScreensaverType then value = SettingsStore.NormalizeScreensaverType(value)
                 accountStore.Write(key, value)
             end for
             accountStore.Flush()
@@ -180,6 +182,17 @@ namespace SettingsStore
     '---------------------------------------------------------------------------
     function IsThemeMusicEnabled(settings as dynamic) as boolean
         return LCase(SettingsStore.GetSettingValue(settings, Key.ThemeMusic)) = "on"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.NormalizeScreensaverType
+    '---------------------------------------------------------------------------
+    function NormalizeScreensaverType(value as dynamic) as string
+        normalized = ""
+        if value <> invalid then normalized = LCase(value.ToStr())
+        if normalized = "bounce" then return normalized
+        if normalized = "starfield" then return normalized
+        return "none"
     end function
 
     '---------------------------------------------------------------------------

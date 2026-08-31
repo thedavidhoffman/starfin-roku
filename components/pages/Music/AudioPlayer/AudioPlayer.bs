@@ -7,6 +7,7 @@ import "pkg:/source/Number.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/Logger.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
 
@@ -14,6 +15,7 @@ import "pkg:/source/store/SettingsStore.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = new Logger("AudioPlayer", m.global.logService)
     MaskAssets.Apply(m.top.findNode("albumArtworkMask"), "audio-player-album-mask.png", [651, 651], [434, 434])
     m.albumArtwork = m.top.findNode("albumArtwork")
     m.backdrop = m.top.findNode("backdrop")
@@ -45,6 +47,8 @@ sub init()
         seeking: false
         seekPosition: 0.0
         changingTrack: false
+        restartPosition: 0.0
+        lastPosition: 0.0
     }
     configureButtons()
     m.tracksTask.observeField("response", "onTracksResponse")
@@ -151,12 +155,14 @@ end sub
 '-------------------------------------------------------------------------------
 ' playTrack
 '-------------------------------------------------------------------------------
-sub playTrack(index as integer)
+sub playTrack(index as integer, restartPosition = 0.0 as float)
     if index < 0 or index >= m.playerState.tracks.Count() then return
     m.playerState.changingTrack = true
+    m.playerState.restartPosition = restartPosition
     m.player.control = "stop"
     m.playerState.currentIndex = index
     m.playerState.seeking = false
+    m.playerState.lastPosition = 0.0
     renderTracks()
     m.trackList.jumpToItem = index
     track = m.playerState.tracks[index]
@@ -212,15 +218,17 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlayerStateChanged()
     state = LCase(Format.SafeString(m.player.state, ""))
+    track = getCurrentTrack()
+    itemId = ""
+    if track <> invalid then itemId = Format.SafeString(track.Id, "")
+    m.log.write("Playback state changed state=" + state + " itemId=" + itemId + " position=" + Number.ToFloat(m.player.position, 0.0).ToStr() + " changingTrack=" + m.playerState.changingTrack.ToStr() + " errorCode=" + Number.ToInteger(m.player.errorCode, 0).ToStr() + " errorMessage=" + Format.SafeString(m.player.errorMsg, ""))
     updatePlayPauseIcon()
     if state = "playing" then
         m.playerState.changingTrack = false
-        if isCustomScreensaverEnabled(m.playerState.request.settings) then
-            m.player.disableScreenSaver = true
-            if m.screensaverOverlay.callFunc("isVisible") <> true then m.screensaverOverlay.callFunc("startDelay")
-        else
-            m.player.disableScreenSaver = false
-        end if
+        if m.playerState.restartPosition > 0 then m.player.seek = m.playerState.restartPosition
+        m.playerState.restartPosition = 0.0
+        m.player.disableScreenSaver = true
+        if m.screensaverOverlay.callFunc("isVisible") <> true then m.screensaverOverlay.callFunc("startDelay")
     else if state = "finished" then
         if m.playerState.currentIndex < m.playerState.tracks.Count() - 1 then
             playNext()
@@ -239,8 +247,15 @@ sub togglePlayback()
     state = LCase(Format.SafeString(m.player.state, ""))
     if state = "playing" then
         m.player.control = "pause"
-    else
+    else if state = "paused" then
         m.player.control = "resume"
+    else if state = "stopped" or state = "error" or state = "finished" then
+        index = m.playerState.currentIndex
+        if index >= 0 and index < m.playerState.tracks.Count() then
+            restartPosition = 0.0
+            if state <> "finished" then restartPosition = m.playerState.lastPosition
+            playTrack(index, restartPosition)
+        end if
     end if
     updatePlayPauseIcon()
 end sub
@@ -278,6 +293,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlaybackProgressChanged()
     if m.playerState.seeking = true then return
+    position = Number.ToFloat(m.player.position, 0.0)
+    if position > 0 then m.playerState.lastPosition = position
     updateTimeline(m.player.position, m.player.duration)
 end sub
 
@@ -307,6 +324,7 @@ sub seekBy(seconds as float)
     position = Number.ToFloat(m.player.position, 0.0) + seconds
     if position < 0 then position = 0
     if duration > 0 and position > duration then position = duration
+    m.playerState.lastPosition = position
     m.player.seek = position
     updateTimeline(position, duration)
 end sub
@@ -471,14 +489,6 @@ end function
 sub onScreensaverDismissed()
     focusArea(m.playerState.focusArea)
 end sub
-
-'-------------------------------------------------------------------------------
-' isCustomScreensaverEnabled
-'-------------------------------------------------------------------------------
-function isCustomScreensaverEnabled(settings as dynamic) as boolean
-    screensaverType = LCase(SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverType))
-    return screensaverType = "bounce" or screensaverType = "starfield"
-end function
 
 '-------------------------------------------------------------------------------
 ' stopScreensaverSession
