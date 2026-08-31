@@ -37,8 +37,8 @@ sub persistVideoLibraryViewState()
         return
     end if
     LibraryViewStateStore.Save(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""), {
-        optionKey: Format.SafeString(m.pageState.selectedSortKey, "SortName")
-        sortKey: Format.SafeString(selection.sortKey, "SortName")
+        optionKey: LibraryBrowse.NormalizeVideoOption(m.pageState.selectedSortKey)
+        sortKey: Format.SafeString(selection.sortKey, LibraryBrowse.SortKey.Title)
         sortOrder: LibraryBrowse.NormalizeSortOrder(selection.sortOrder)
         selectedDecade: m.pageState.filterSelection.decade
         selectedGenre: m.pageState.filterSelection.genre
@@ -52,22 +52,22 @@ end sub
 '-------------------------------------------------------------------------------
 sub applySavedVideoLibraryViewState(request as object, state as object)
     m.pageState.request = request
-    optionKey = Format.SafeString(state.optionKey, "")
+    optionKey = LibraryBrowse.NormalizeVideoOption(state.optionKey)
     sortOrder = LibraryBrowse.NormalizeSortOrder(state.sortOrder)
-    if optionKey = "Favorites" then
-        selection = LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites", sortOrder)
-    else if optionKey = "Decade" or optionKey = "Genre" then
+    if optionKey = LibraryBrowse.Option.Favorites then
+        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Favorites, LibraryBrowse.SortKey.Title, "Favorites", sortOrder)
+    else if optionKey = LibraryBrowse.Option.Decade or optionKey = LibraryBrowse.Option.Genre then
         m.pageState.filterSelection.decade = Number.ToInteger(state.selectedDecade, -1)
         m.pageState.filterSelection.genre = Format.SafeString(state.selectedGenre, "")
-        selection = LibraryBrowse.CreateSortSelection(optionKey, "SortName", optionKey, sortOrder)
-    else if optionKey = "PremiereDate" or optionKey = "DateCreated" or optionKey = "SortName" then
+        selection = LibraryBrowse.CreateSortSelection(optionKey, LibraryBrowse.SortKey.Title, optionKey, sortOrder)
+    else if optionKey = LibraryBrowse.Option.ReleaseDate or optionKey = LibraryBrowse.Option.DateAdded or optionKey = LibraryBrowse.Option.Title then
         selection = buildSortSelection(optionKey, sortOrder)
     else
-        selection = LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Title, LibraryBrowse.SortKey.Title, "Title")
     end if
 
     commitVideoLibraryBrowseState(selection)
-    request.sortBy = Format.SafeString(selection.sortKey, "SortName")
+    request.sortBy = Format.SafeString(selection.sortKey, LibraryBrowse.SortKey.Title)
     request.sortOrder = LibraryBrowse.NormalizeSortOrder(selection.sortOrder)
 end sub
 
@@ -80,7 +80,7 @@ sub showDecadeFilterRow()
         options = []
     end if
     m.pageState.filterSelection.decade = LibraryBrowse.ResolveDecade(options, m.pageState.filterSelection.decade)
-    m.filterButtonRow.filterType = "Decade"
+    m.filterButtonRow.filterType = LibraryBrowse.Option.Decade
     m.filterButtonRow.items = options
     m.filterButtonRow.selectedValue = m.pageState.filterSelection.decade.ToStr()
     m.filterButtonRow.visible = options.Count() > 0
@@ -96,7 +96,7 @@ sub showGenreFilterRow()
         options = []
     end if
     m.pageState.filterSelection.genre = LibraryBrowse.ResolveGenre(options, m.pageState.filterSelection.genre)
-    m.filterButtonRow.filterType = "Genre"
+    m.filterButtonRow.filterType = LibraryBrowse.Option.Genre
     m.filterButtonRow.items = options
     m.filterButtonRow.selectedValue = m.pageState.filterSelection.genre
     m.filterButtonRow.visible = options.Count() > 0
@@ -122,7 +122,7 @@ sub onFilterButtonRowSelected()
         return
     end if
     filterType = Format.SafeString(selected.type, "")
-    if filterType = "Decade" then
+    if filterType = LibraryBrowse.Option.Decade then
         selectedDecade = Number.ToInteger(selected.value, -1)
         if selectedDecade = m.pageState.filterSelection.decade then
             m.filterButtonRow.setFocus(true)
@@ -130,7 +130,7 @@ sub onFilterButtonRowSelected()
         end if
         m.pageState.filterSelection.decade = selectedDecade
         m.filterButtonRow.selectedValue = m.pageState.filterSelection.decade.ToStr()
-    else if filterType = "Genre" then
+    else if filterType = LibraryBrowse.Option.Genre then
         selectedGenre = Format.SafeString(selected.value, "")
         if selectedGenre = m.pageState.filterSelection.genre then
             m.filterButtonRow.setFocus(true)
@@ -332,26 +332,26 @@ end sub
 function getVideoSortOptions() as object
     options = [
         {
-            optionKey: "SortName"
-            sortKey: "SortName"
+            optionKey: LibraryBrowse.Option.Title
+            sortKey: LibraryBrowse.SortKey.Title
             sortOrder: ""
             label: "Title"
         }
         {
-            optionKey: "PremiereDate"
-            sortKey: "PremiereDate"
+            optionKey: LibraryBrowse.Option.ReleaseDate
+            sortKey: LibraryBrowse.SortKey.ReleaseDate
             sortOrder: ""
             label: "Release Date"
         }
         {
-            optionKey: "DateCreated"
-            sortKey: "DateCreated"
+            optionKey: LibraryBrowse.Option.DateAdded
+            sortKey: LibraryBrowse.SortKey.DateAdded
             sortOrder: ""
             label: "Date Added"
         }
         {
-            optionKey: "Favorites"
-            sortKey: "SortName"
+            optionKey: LibraryBrowse.Option.Favorites
+            sortKey: LibraryBrowse.SortKey.Title
             sortOrder: ""
             label: "Favorites"
         }
@@ -359,7 +359,7 @@ function getVideoSortOptions() as object
     capabilities = getVideoLibraryBrowseCapabilities()
     if capabilities.filters = true and m.pageState.filterOptions.decadeOptions.Count() > 0 then
         options.Push({
-            optionKey: "Decade"
+            optionKey: LibraryBrowse.Option.Decade
             sortKey: ""
             sortOrder: ""
             label: "Decade"
@@ -367,7 +367,7 @@ function getVideoSortOptions() as object
     end if
     if capabilities.filters = true and m.pageState.filterOptions.genreOptions.Count() > 0 then
         options.Push({
-            optionKey: "Genre"
+            optionKey: LibraryBrowse.Option.Genre
             sortKey: ""
             sortOrder: ""
             label: "Genre"
@@ -401,30 +401,30 @@ sub applySortSelection(selection as object)
 
     filterRowAction = ""
     reloadTarget = "items"
-    if selectedSortKey = "Favorites" then
+    if selectedSortKey = LibraryBrowse.Option.Favorites then
         if isFavoriteBrowseActive() then return
 
-        selection = LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites")
+        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Favorites, LibraryBrowse.SortKey.Title, "Favorites")
         filterRowAction = "hide"
-    else if selectedSortKey = "Decade" then
-        if Format.SafeString(m.pageState.selectedSortKey, "") = "Decade" then return
+    else if selectedSortKey = LibraryBrowse.Option.Decade then
+        if Format.SafeString(m.pageState.selectedSortKey, "") = LibraryBrowse.Option.Decade then return
 
-        selection = LibraryBrowse.CreateSortSelection("Decade", "SortName", Format.SafeString(selection.label, "Decade"))
+        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Decade, LibraryBrowse.SortKey.Title, Format.SafeString(selection.label, "Decade"))
         m.pageState.filterSelection.decade = LibraryBrowse.ResolveDecade(m.pageState.filterOptions.decadeOptions, m.pageState.filterSelection.decade)
-        filterRowAction = "Decade"
+        filterRowAction = LibraryBrowse.Option.Decade
         reloadTarget = "filter"
-    else if selectedSortKey = "Genre" then
-        if Format.SafeString(m.pageState.selectedSortKey, "") = "Genre" then return
+    else if selectedSortKey = LibraryBrowse.Option.Genre then
+        if Format.SafeString(m.pageState.selectedSortKey, "") = LibraryBrowse.Option.Genre then return
 
-        selection = LibraryBrowse.CreateSortSelection("Genre", "SortName", Format.SafeString(selection.label, "Genre"))
+        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Genre, LibraryBrowse.SortKey.Title, Format.SafeString(selection.label, "Genre"))
         m.pageState.filterSelection.genre = LibraryBrowse.ResolveGenre(m.pageState.filterOptions.genreOptions, m.pageState.filterSelection.genre)
-        filterRowAction = "Genre"
+        filterRowAction = LibraryBrowse.Option.Genre
         reloadTarget = "filter"
     else
         if LibraryBrowse.IsDecadeActive(m.pageState.activeFilterType) or LibraryBrowse.IsGenreActive(m.pageState.activeFilterType) then filterRowAction = "hide"
         if selectedSortKey = m.pageState.selectedSortKey then
             if m.pageState.selectedSort = invalid then return
-            if Format.SafeString(m.pageState.selectedSort.sortOrder, "Ascending") <> "Descending" then return
+            if Format.SafeString(m.pageState.selectedSort.sortOrder, LibraryBrowse.SortOrder.Ascending) <> LibraryBrowse.SortOrder.Descending then return
 
             current = m.pageState.selectedSort
             selection = LibraryBrowse.CreateSortSelection(current.optionKey, current.sortKey, current.label)
@@ -432,15 +432,15 @@ sub applySortSelection(selection as object)
     end if
 
     commitVideoLibraryBrowseState(selection)
-    if filterRowAction = "Decade" then
+    if filterRowAction = LibraryBrowse.Option.Decade then
         showDecadeFilterRow()
-    else if filterRowAction = "Genre" then
+    else if filterRowAction = LibraryBrowse.Option.Genre then
         showGenreFilterRow()
     else if filterRowAction = "hide" then
         hideFilterButtonRow()
     end if
     persistVideoLibraryViewState()
-    if filterRowAction = "Decade" or filterRowAction = "Genre" then
+    if filterRowAction = LibraryBrowse.Option.Decade or filterRowAction = LibraryBrowse.Option.Genre then
         scheduleVideoFilterRefresh()
     else
         reloadVideoLibraryForSort(reloadTarget)
@@ -572,7 +572,7 @@ end function
 function getVideoFilterLogValue() as string
     if LibraryBrowse.IsDecadeActive(m.pageState.activeFilterType) then return "Decade:" + m.pageState.filterSelection.decade.ToStr()
     if LibraryBrowse.IsGenreActive(m.pageState.activeFilterType) then return "Genre:" + m.pageState.filterSelection.genre
-    return Format.SafeString(m.pageState.selectedSortKey, "SortName")
+    return LibraryBrowse.NormalizeVideoOption(m.pageState.selectedSortKey)
 end function
 
 '-------------------------------------------------------------------------------
@@ -585,11 +585,8 @@ function applySortOrderSelection(selection as object) as boolean
     if m.pageState.selectedSort = invalid then
         return false
     end if
-    sortOrder = Format.SafeString(selection.sortOrder, "Ascending")
-    if sortOrder <> "Descending" then
-        sortOrder = "Ascending"
-    end if
-    if Format.SafeString(m.pageState.selectedSort.sortOrder, "Ascending") = sortOrder then
+    sortOrder = LibraryBrowse.NormalizeSortOrder(selection.sortOrder)
+    if Format.SafeString(m.pageState.selectedSort.sortOrder, LibraryBrowse.SortOrder.Ascending) = sortOrder then
         return false
     end if
     current = m.pageState.selectedSort
@@ -632,7 +629,7 @@ sub reloadVideoLibraryForSort(refocusTarget = invalid as dynamic)
     cancelMusicVideoRandomPlayback()
     m.filterRefreshTimer.control = "stop"
     LibraryBrowseRefresh.Cancel(m.pageState.filterRefresh)
-    request.sortBy = Format.SafeString(m.pageState.selectedSort.sortKey, "SortName")
+    request.sortBy = Format.SafeString(m.pageState.selectedSort.sortKey, LibraryBrowse.SortKey.Title)
     request.sortOrder = LibraryBrowse.NormalizeSortOrder(m.pageState.selectedSort.sortOrder)
     m.pageState.request = request
     AsyncLifecycle.Begin(m.pageState.lifecycle, request.libraryId)
@@ -661,16 +658,16 @@ end sub
 function isFavoriteBrowseActive() as boolean
     if m.pageState.selectedSort = invalid then return false
 
-    return Format.SafeString(m.pageState.selectedSort.optionKey, "") = "Favorites"
+    return Format.SafeString(m.pageState.selectedSort.optionKey, "") = LibraryBrowse.Option.Favorites
 end function
 
 '-------------------------------------------------------------------------------
 ' buildSortSelection
 '-------------------------------------------------------------------------------
 function buildSortSelection(sortKey as string, sortOrder as string) as object
-    normalizedSortKey = Format.SafeString(sortKey, "SortName")
+    normalizedSortKey = Format.SafeString(sortKey, LibraryBrowse.SortKey.Title)
     if normalizedSortKey = "Random" then
-        normalizedSortKey = "SortName"
+        normalizedSortKey = LibraryBrowse.SortKey.Title
     end if
     return LibraryBrowse.CreateSortSelection(normalizedSortKey, normalizedSortKey, getSortSelectionLabel(normalizedSortKey), sortOrder)
 end function
@@ -679,10 +676,10 @@ end function
 ' getSortSelectionLabel
 '-------------------------------------------------------------------------------
 function getSortSelectionLabel(sortKey as string) as string
-    if sortKey = "PremiereDate" then
+    if sortKey = LibraryBrowse.SortKey.ReleaseDate then
         return "Release Date"
     end if
-    if sortKey = "DateCreated" then
+    if sortKey = LibraryBrowse.SortKey.DateAdded then
         return "Date Added"
     end if
     return "Title"

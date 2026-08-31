@@ -3,6 +3,18 @@
 The Music Library owns album and artist loading, server-side browse filters,
 paging, rendering, and local focus recovery.
 
+## Browse vocabulary
+
+Music supports Album, Artist/Album (`ArtistAlbum`), Artist, Favorites, Decade,
+and Genre through the shared `LibraryBrowse.Option` enum. Semantic ordering uses
+`LibraryBrowse.SortKey`, and direction uses `LibraryBrowse.SortOrder`. Persisted
+values keep their existing strings and are normalized on restoration, with an
+unsupported value falling back to Album.
+
+The Artist/Album semantic sort is translated in one shared path to Jellyfin's
+`AlbumArtist,SortName` expression. UI labels remain separate from identifiers
+so wording can change without altering persisted state or API requests.
+
 ## Album requests
 
 Ordinary album browsing requests 100 items per page. Decade browsing supplies a

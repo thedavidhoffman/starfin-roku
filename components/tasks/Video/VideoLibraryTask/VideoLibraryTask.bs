@@ -2,6 +2,7 @@ import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/Logger.bs"
+import "pkg:/source/LibraryBrowse.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
@@ -151,7 +152,7 @@ function loadNonAlphabeticPage(request as object, params as object, startIndex a
             name = UCase(Format.SafeString(item.Name, ""))
             if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
         end for
-        items = sortNonAlphabeticItems(items, Format.SafeString(request.sortBy, "SortName"), Format.SafeString(request.sortOrder, "Ascending"))
+        items = sortNonAlphabeticItems(items, Format.SafeString(request.sortBy, LibraryBrowse.SortKey.Title), LibraryBrowse.NormalizeSortOrder(request.sortOrder))
         m.nonAlphabeticCache = { key: cacheKey, items: items }
     end if
 
@@ -175,13 +176,13 @@ function sortNonAlphabeticItems(items as object, sortBy as string, sortOrder as 
     for each item in items
         title = LCase(Format.SafeString(item.SortName, Format.SafeString(item.Name, "")))
         sortValue = title
-        if sortBy = "PremiereDate" then sortValue = Format.SafeString(item.PremiereDate, "") + "|" + title
-        if sortBy = "DateCreated" then sortValue = Format.SafeString(item.DateCreated, "") + "|" + title
+        if sortBy = LibraryBrowse.SortKey.ReleaseDate then sortValue = Format.SafeString(item.PremiereDate, "") + "|" + title
+        if sortBy = LibraryBrowse.SortKey.DateAdded then sortValue = Format.SafeString(item.DateCreated, "") + "|" + title
         entries.Push({ item: item, sortKey: sortValue })
     end for
     entries.SortBy("sortKey")
     result = []
-    if sortOrder = "Descending" then
+    if sortOrder = LibraryBrowse.SortOrder.Descending then
         for i = entries.Count() - 1 to 0 step -1
             result.Push(entries[i].item)
         end for
@@ -217,7 +218,7 @@ function getSortBy(request as dynamic) as string
     sortBy = Format.SafeString(request.sortBy, "")
     if sortBy <> "" then return sortBy
 
-    return "SortName"
+    return LibraryBrowse.SortKey.Title
 end function
 
 '-------------------------------------------------------------------------------
@@ -225,7 +226,7 @@ end function
 '-------------------------------------------------------------------------------
 function getSortOrder(request as dynamic) as string
     sortOrder = Format.SafeString(request.sortOrder, "")
-    if sortOrder = "Descending" then return "Descending"
+    if sortOrder = LibraryBrowse.SortOrder.Descending then return LibraryBrowse.SortOrder.Descending
 
-    return "Ascending"
+    return LibraryBrowse.SortOrder.Ascending
 end function

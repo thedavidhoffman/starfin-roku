@@ -46,3 +46,21 @@ letter grid remains unavailable.
 
 Behavioral tests are the executable specification for this matrix. Update them
 with this document whenever a library surface or browsing capability changes.
+
+## Browse vocabulary
+
+Shared browse identifiers are defined by `LibraryBrowse.Option`, semantic sort
+keys by `LibraryBrowse.SortKey`, and directions by `LibraryBrowse.SortOrder`.
+Video supports Title (`SortName`), Release Date (`PremiereDate`), Date Added
+(`DateCreated`), Favorites, Decade, and Genre. Persisted identifiers retain
+these existing string values and are normalized when restored, defaulting
+unsupported values to Title.
+
+Labels such as "Release Date" remain presentation text rather than enum values.
+This keeps user-facing wording separate from Jellyfin and persisted-state
+contracts.
+
+Changing Browse By selects the new option's semantic sort key and resets its
+direction to ascending. The committed selection synchronizes both controls and
+the request snapshot so filtered reloads cannot retain a direction from the
+previous browse option.

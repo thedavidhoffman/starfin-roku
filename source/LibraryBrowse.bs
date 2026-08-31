@@ -4,6 +4,38 @@ import "pkg:/source/Number.bs"
 
 namespace LibraryBrowse
 
+    enum Option
+        Title = "SortName"
+        ReleaseDate = "PremiereDate"
+        DateAdded = "DateCreated"
+        Album = "Album"
+        ArtistAlbum = "ArtistAlbum"
+        Artist = "Artist"
+        Favorites = "Favorites"
+        Decade = "Decade"
+        Genre = "Genre"
+    end enum
+
+    enum SortKey
+        Title = "SortName"
+        ReleaseDate = "PremiereDate"
+        DateAdded = "DateCreated"
+        Album = "Album"
+        ArtistAlbum = "ArtistAlbum"
+        Artist = "Artist"
+    end enum
+
+    enum SortOrder
+        Ascending = "Ascending"
+        Descending = "Descending"
+    end enum
+
+    enum ApiSortBy
+        Title = "SortName"
+        ArtistAlbum = "AlbumArtist,SortName"
+        ReleaseYear = "ProductionYear,SortName"
+    end enum
+
     '---------------------------------------------------------------------------
     ' LibraryBrowse.NormalizeFilterOptions
     '---------------------------------------------------------------------------
@@ -23,14 +55,14 @@ namespace LibraryBrowse
     ' LibraryBrowse.IsDecadeActive
     '---------------------------------------------------------------------------
     function IsDecadeActive(filterType as dynamic) as boolean
-        return Format.SafeString(filterType, "") = "Decade"
+        return Format.SafeString(filterType, "") = LibraryBrowse.Option.Decade
     end function
 
     '---------------------------------------------------------------------------
     ' LibraryBrowse.IsGenreActive
     '---------------------------------------------------------------------------
     function IsGenreActive(filterType as dynamic) as boolean
-        return Format.SafeString(filterType, "") = "Genre"
+        return Format.SafeString(filterType, "") = LibraryBrowse.Option.Genre
     end function
 
     '---------------------------------------------------------------------------
@@ -38,8 +70,8 @@ namespace LibraryBrowse
     '---------------------------------------------------------------------------
     function ContainsOptionValue(options as dynamic, value as string) as boolean
         if Type(options) <> "roArray" or value = "" then return false
-        for each option in options
-            if Arrays.IsAssocArray(option) and Format.SafeString(option.value, "") = value then return true
+        for each browseOption in options
+            if Arrays.IsAssocArray(browseOption) and Format.SafeString(browseOption.value, "") = value then return true
         end for
 
         return false
@@ -73,14 +105,48 @@ namespace LibraryBrowse
     ' LibraryBrowse.NormalizeSortOrder
     '---------------------------------------------------------------------------
     function NormalizeSortOrder(sortOrder as dynamic) as string
-        if Format.SafeString(sortOrder, "") = "Descending" then return "Descending"
-        return "Ascending"
+        if Format.SafeString(sortOrder, "") = LibraryBrowse.SortOrder.Descending then return LibraryBrowse.SortOrder.Descending
+        return LibraryBrowse.SortOrder.Ascending
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.NormalizeVideoOption
+    '---------------------------------------------------------------------------
+    function NormalizeVideoOption(value as dynamic) as string
+        optionKey = Format.SafeString(value, "")
+        if optionKey = LibraryBrowse.Option.ReleaseDate then return optionKey
+        if optionKey = LibraryBrowse.Option.DateAdded then return optionKey
+        if optionKey = LibraryBrowse.Option.Favorites then return optionKey
+        if optionKey = LibraryBrowse.Option.Decade then return optionKey
+        if optionKey = LibraryBrowse.Option.Genre then return optionKey
+        return LibraryBrowse.Option.Title
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.NormalizeMusicOption
+    '---------------------------------------------------------------------------
+    function NormalizeMusicOption(value as dynamic) as string
+        optionKey = Format.SafeString(value, "")
+        if optionKey = LibraryBrowse.Option.ArtistAlbum then return optionKey
+        if optionKey = LibraryBrowse.Option.Artist then return optionKey
+        if optionKey = LibraryBrowse.Option.Favorites then return optionKey
+        if optionKey = LibraryBrowse.Option.Decade then return optionKey
+        if optionKey = LibraryBrowse.Option.Genre then return optionKey
+        return LibraryBrowse.Option.Album
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LibraryBrowse.GetMusicAlbumSortBy
+    '---------------------------------------------------------------------------
+    function GetMusicAlbumSortBy(sortKey as dynamic) as string
+        if Format.SafeString(sortKey, "") = LibraryBrowse.SortKey.ArtistAlbum then return LibraryBrowse.ApiSortBy.ArtistAlbum
+        return LibraryBrowse.ApiSortBy.Title
     end function
 
     '---------------------------------------------------------------------------
     ' LibraryBrowse.CreateSortSelection
     '---------------------------------------------------------------------------
-    function CreateSortSelection(optionKey as string, sortKey as string, label as string, sortOrder = "Ascending" as dynamic) as object
+    function CreateSortSelection(optionKey as string, sortKey as string, label as string, sortOrder = LibraryBrowse.SortOrder.Ascending as dynamic) as object
         return {
             optionKey: optionKey
             sortKey: sortKey

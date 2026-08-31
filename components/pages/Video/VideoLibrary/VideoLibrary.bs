@@ -56,7 +56,7 @@ sub init()
             y: 208
         }
         isThumbnailLayout: false
-        selectedSortKey: "SortName"
+        selectedSortKey: LibraryBrowse.Option.Title
         selectedSort: invalid
         activeFilterType: ""
         filterSelection: {
@@ -95,7 +95,7 @@ sub init()
         lifecycle: AsyncLifecycle.Create()
     }
     initHandlers()
-    commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+    commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Title, LibraryBrowse.SortKey.Title, "Title"))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -232,12 +232,16 @@ sub commitVideoLibraryBrowseState(selection as object)
 
     m.pageState.selectedSortKey = optionKey
     m.pageState.selectedSort = selection
-    if optionKey = "Decade" or optionKey = "Genre" then
+    if m.pageState.request <> invalid then
+        m.pageState.request.sortBy = Format.SafeString(selection.sortKey, LibraryBrowse.SortKey.Title)
+        m.pageState.request.sortOrder = LibraryBrowse.NormalizeSortOrder(selection.sortOrder)
+    end if
+    if optionKey = LibraryBrowse.Option.Decade or optionKey = LibraryBrowse.Option.Genre then
         m.pageState.activeFilterType = optionKey
     else
         clearFilterSelections()
     end if
-    if m.pageState.request <> invalid then m.pageState.request.favoriteOnly = optionKey = "Favorites"
+    if m.pageState.request <> invalid then m.pageState.request.favoriteOnly = optionKey = LibraryBrowse.Option.Favorites
     syncSortControls()
 end sub
 
@@ -276,8 +280,8 @@ end sub
 function supportsLetterNavigation(selection as dynamic) as boolean
     if selection = invalid then return true
 
-    sortKey = Format.SafeString(selection.sortKey, "SortName")
-    return sortKey <> "PremiereDate" and sortKey <> "DateCreated"
+    sortKey = Format.SafeString(selection.sortKey, LibraryBrowse.SortKey.Title)
+    return sortKey <> LibraryBrowse.SortKey.ReleaseDate and sortKey <> LibraryBrowse.SortKey.DateAdded
 end function
 
 '-------------------------------------------------------------------------------
