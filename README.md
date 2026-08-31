@@ -59,10 +59,7 @@ After installation, Starfin will be available from the Roku home screen.
 
 ## AI Usage Disclaimer
 
-This app was built with Codex, but it was not simply "vibe coded." As a senior software engineer, I used AI to accelerate development while staying deeply involved in the implementation. The commit history on this repository reflects an active, hands-on process of guiding the work, refining generated code, making design decisions, and shaping the project toward a deliberate standard within the constraints of Roku’s BrightScript ecosystem.
-
-# Caveats
-- I've tested a library with around 2,000 movies and performance is great. I don't know how this thing will hold up with a library of 10,000 movies. That being said, if anyone out there tries this app and has a huge library, let me know how it goes.
+This app was built with Codex, but it was not simply "vibe coded." As a senior software engineer, I keep a good eye on what Codex spits out, because there are certainly times when it spits out garbage. But when it nails it, it nails it. As a side note for all those that think that any AI projects like this are simply "AI Slop"... have you seen some of the code that people write ;) Anywhos, the code here is open-source for all to view and inspect.
 
 # Development
 
