@@ -158,6 +158,9 @@ sub onMusicLibraryResponse()
         m.log.write("Library response ignored stale libraryId=" + getLibraryId() + " mediaType=music queryId=" + Number.ToInteger(response.queryId, -1).ToStr())
         return
     end if
+    if m.state.loadingUi.foreground.kind = "albums" then
+        m.foregroundAlbumLoadTimer.control = "stop"
+    end if
     if response.ok <> true then
         if m.state.filterRefresh.phase = "loading" then
             m.filteredRefreshTimer.control = "stop"
@@ -261,6 +264,11 @@ sub loadAlbumPage(startIndex as integer)
     m.musicLibraryTask.control = "stop"
     m.musicLibraryTask.request = request
     m.musicLibraryTask.control = "run"
+    if m.state.loadingUi.foreground.kind = "albums" and LibraryBrowseRefresh.IsActive(m.state.filterRefresh) <> true then
+        m.foregroundAlbumLoadTimer.control = "stop"
+        m.foregroundAlbumLoadTimer.duration = LibraryBrowseRefresh.RequestTimeoutSeconds()
+        m.foregroundAlbumLoadTimer.control = "start"
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -315,6 +323,7 @@ sub reloadMusicLibrary()
     if request = invalid then return
 
     m.filteredRefreshTimer.control = "stop"
+    m.foregroundAlbumLoadTimer.control = "stop"
     LibraryBrowseRefresh.Cancel(m.state.filterRefresh)
     m.state.content.albums.items = []
     m.state.content.artists.items = []
@@ -374,6 +383,32 @@ sub onFilteredRefreshTimerFired()
     loadAlbumPage(0)
     m.filteredRefreshTimer.duration = LibraryBrowseRefresh.RequestTimeoutSeconds()
     m.filteredRefreshTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' onForegroundAlbumLoadTimerFired
+'-------------------------------------------------------------------------------
+sub onForegroundAlbumLoadTimerFired()
+    if m.state.loadingUi.foreground.kind <> "albums" then return
+    if m.state.content.albums.load.requestInFlight <> true then return
+
+    handleForegroundAlbumTimeout()
+end sub
+
+'-------------------------------------------------------------------------------
+' handleForegroundAlbumTimeout
+'-------------------------------------------------------------------------------
+sub handleForegroundAlbumTimeout()
+    m.musicLibraryTask.control = "stop"
+    m.state.content.albums.load.queryId = m.state.content.albums.load.queryId + 1
+    m.state.content.albums.load.requestInFlight = false
+    m.state.content.albums.load.status = "failed"
+    m.state.content.albums.load.hasMore = false
+    AppStatus.SetMessage("Music library request timed out.")
+    if finishForegroundLoad("albums") then
+        if focusAfterForegroundLoad() <> true then focusBrowseByButton()
+    end if
+    m.log.error("Foreground album load timed out libraryId=" + getLibraryId())
 end sub
 
 '-------------------------------------------------------------------------------

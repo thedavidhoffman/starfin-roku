@@ -105,12 +105,13 @@ namespace tests
             m.node.state.filters.options.decadeOptions = [{ label: "1970s", value: 1970 }, { label: "1980s", value: 1980 }]
 
             'bs:disable-next-line 1140
-            changed = applySortSelection({ optionKey: "Decade" })
+            focusDeferred = applySortSelection({ optionKey: "Decade" })
 
-            m.assertTrue(changed)
+            m.assertFalse(focusDeferred)
             m.assertEqual(m.node.state.browse.filterType, "Decade")
             m.assertEqual(m.node.state.browse.decade, 1970)
             m.assertEqual(m.node.filterButtonRow.selectedValue, "1970")
+            m.assertTrue(m.node.filterButtonRow.visible)
         end function
 
         @it("switches to the first genre filter")
@@ -118,12 +119,99 @@ namespace tests
             m.node.state.filters.options.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
 
             'bs:disable-next-line 1140
-            changed = applySortSelection({ optionKey: "Genre" })
+            focusDeferred = applySortSelection({ optionKey: "Genre" })
 
-            m.assertTrue(changed)
+            m.assertFalse(focusDeferred)
             m.assertEqual(m.node.state.browse.filterType, "Genre")
             m.assertEqual(m.node.state.browse.genre, "Comedy")
             m.assertEqual(m.node.filterButtonRow.selectedValue, "Comedy")
+            m.assertTrue(m.node.filterButtonRow.visible)
+        end function
+
+        @it("switches to album browse and defers focus")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.browse.selection = LibraryBrowse.CreateSortSelection("Artist", "Artist", "Artist")
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            focusDeferred = applySortSelection({ optionKey: "Album" })
+
+            m.assertTrue(focusDeferred)
+            m.assertEqual(m.node.state.browse.selection, LibraryBrowse.CreateSortSelection("Album", "Album", "Album"))
+            m.assertEqual(m.node.state.browse.filterType, "")
+        end function
+
+        @it("switches to artist album browse and defers focus")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            focusDeferred = applySortSelection({ optionKey: "ArtistAlbum" })
+
+            m.assertTrue(focusDeferred)
+            m.assertEqual(m.node.state.browse.selection, LibraryBrowse.CreateSortSelection("ArtistAlbum", "ArtistAlbum", "Artist/Album"))
+            m.assertEqual(m.node.state.browse.filterType, "")
+        end function
+
+        @it("switches to artist browse and defers focus")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.musicArtistsTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            focusDeferred = applySortSelection({ optionKey: "Artist" })
+
+            m.assertTrue(focusDeferred)
+            m.assertEqual(m.node.state.browse.selection, LibraryBrowse.CreateSortSelection("Artist", "Artist", "Artist"))
+            m.assertEqual(m.node.state.content.artists.load.status, "loading")
+        end function
+
+        @it("switches to favorites browse and defers focus")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            focusDeferred = applySortSelection({ optionKey: "Favorites" })
+
+            m.assertTrue(focusDeferred)
+            m.assertEqual(m.node.state.browse.selection, LibraryBrowse.CreateSortSelection("Favorites", "Album", "Favorites"))
+            m.assertEqual(m.node.state.browse.filterType, "")
+        end function
+
+        @it("retries failed current artist browse and defers focus")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.browse.selection = LibraryBrowse.CreateSortSelection("Artist", "Artist", "Artist")
+            m.node.state.content.artists.load.status = "failed"
+            m.node.musicArtistsTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            focusDeferred = applySortSelection({ optionKey: "Artist" })
+
+            m.assertTrue(focusDeferred)
+            m.assertEqual(m.node.musicArtistsTask.request.pageStartIndex, 0)
+            m.assertEqual(m.node.musicArtistsTask.control, "run")
+        end function
+
+        @it("retries failed current decade browse and defers focus")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.browse.selection = LibraryBrowse.CreateSortSelection("Decade", "Album", "Decade")
+            m.node.state.browse.filterType = "Decade"
+            m.node.state.browse.decade = 1990
+            m.node.state.content.albums.load.status = "failed"
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            focusDeferred = applySortSelection({ optionKey: "Decade" })
+
+            m.assertTrue(focusDeferred)
+            m.assertEqual(m.node.state.loadingUi.foreground.focusAfterLoad, "filter")
+            m.assertEqual(m.node.musicLibraryTask.request.years[0], "1990")
+            m.assertEqual(m.node.musicLibraryTask.control, "run")
         end function
 
         @it("preserves an available saved decade")
@@ -158,6 +246,7 @@ namespace tests
             m.node.state.browse.genre = "Missing"
             m.node.state.filters.options.genreOptions = [{ label: "Comedy", value: "Comedy" }, { label: "Drama", value: "Drama" }]
             m.node.state.committedFilterView = { filterType: "Genre", genre: "Missing" }
+            m.node.musicLibraryTask = { control: "", request: invalid }
 
             'bs:disable-next-line 1140
             reconciled = reconcileActiveFilterSelection()
@@ -166,6 +255,27 @@ namespace tests
             m.assertEqual(m.node.state.browse.genre, "Comedy")
             m.assertInvalid(m.node.state.committedFilterView)
             m.assertEqual(m.node.musicLibraryTask.request.genre, "Comedy")
+            m.assertEqual(m.node.musicLibraryTask.request.pageStartIndex, 0)
+        end function
+
+        @it("foreground reloads a resolved saved decade without a stale rollback view")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.browse.selection = LibraryBrowse.CreateSortSelection("Decade", "Album", "Decade")
+            m.node.state.browse.filterType = "Decade"
+            m.node.state.browse.decade = 1980
+            m.node.state.filters.options.decadeOptions = [{ label: "1990", value: 1990 }, { label: "2000", value: 2000 }]
+            m.node.state.committedFilterView = { filterType: "Decade", decade: 1980 }
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            reconciled = reconcileActiveFilterSelection()
+
+            m.assertTrue(reconciled)
+            m.assertEqual(m.node.state.browse.decade, 1990)
+            m.assertInvalid(m.node.state.committedFilterView)
+            m.assertEqual(m.node.musicLibraryTask.request.years[0], "1990")
+            m.assertEqual(m.node.musicLibraryTask.request.years[9], "1999")
             m.assertEqual(m.node.musicLibraryTask.request.pageStartIndex, 0)
         end function
 
@@ -194,6 +304,100 @@ namespace tests
             m.assertEqual(m.node.musicLibraryTask.request.years[0], "2020")
             m.assertEqual(m.node.musicLibraryTask.request.years[9], "2029")
             m.assertEqual(m.node.state.filterRefresh.phase, "loading")
+        end function
+
+        @it("recovers a foreground album load when no response arrives")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.loadingUi.foreground.kind = "albums"
+            m.node.state.content.albums.load.queryId = 4
+            m.node.state.content.albums.load.status = "loading"
+            m.node.state.content.albums.load.requestInFlight = true
+            m.node.state.content.albums.load.hasMore = true
+
+            'bs:disable-next-line 1140
+            onForegroundAlbumLoadTimerFired()
+
+            m.assertEqual(m.node.musicLibraryTask.control, "stop")
+            m.assertEqual(m.node.state.content.albums.load.queryId, 5)
+            m.assertFalse(m.node.state.content.albums.load.requestInFlight)
+            m.assertEqual(m.node.state.content.albums.load.status, "failed")
+            m.assertFalse(m.node.state.content.albums.load.hasMore)
+            m.assertEqual(m.node.state.loadingUi.foreground.kind, "")
+        end function
+
+        @it("arms the foreground watchdog for an album page")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.loadingUi.foreground.kind = "albums"
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            loadAlbumPage(0)
+
+            m.assertEqual(m.node.foregroundAlbumLoadTimer.control, "start")
+            m.assertTrue(m.node.foregroundAlbumLoadTimer.duration = LibraryBrowseRefresh.RequestTimeoutSeconds())
+        end function
+
+        @it("keeps waiting when a stale foreground response arrives")
+        function _()
+            m.prepareForegroundAlbumResponse(5)
+            m.node.musicLibraryTask.response = {
+                ok: true
+                action: "musicLibrary"
+                libraryId: "music-1"
+                queryId: 4
+                startIndex: 0
+                payload: { Items: [] }
+            }
+
+            'bs:disable-next-line 1140
+            onMusicLibraryResponse()
+
+            m.assertTrue(m.node.state.content.albums.load.requestInFlight)
+            m.assertEqual(m.node.state.content.albums.load.status, "loading")
+            m.assertEqual(m.node.state.loadingUi.foreground.kind, "albums")
+        end function
+
+        @it("releases a foreground album load when its replacement request fails")
+        function _()
+            m.prepareForegroundAlbumResponse(5)
+            m.node.musicLibraryTask.response = {
+                ok: false
+                action: "musicLibrary"
+                libraryId: "music-1"
+                queryId: 5
+                errorMessage: "failed"
+            }
+
+            'bs:disable-next-line 1140
+            onMusicLibraryResponse()
+
+            m.assertFalse(m.node.state.content.albums.load.requestInFlight)
+            m.assertEqual(m.node.state.content.albums.load.status, "failed")
+            m.assertFalse(m.node.state.content.albums.load.hasMore)
+            m.assertEqual(m.node.state.loadingUi.foreground.kind, "")
+        end function
+
+        @it("releases a foreground album load after an unexpected page")
+        function _()
+            m.prepareForegroundAlbumResponse(5)
+            m.node.musicLibraryTask.response = {
+                ok: true
+                action: "musicLibrary"
+                libraryId: "music-1"
+                queryId: 5
+                startIndex: 50
+                payload: { Items: [] }
+            }
+
+            'bs:disable-next-line 1140
+            onMusicLibraryResponse()
+
+            m.assertFalse(m.node.state.content.albums.load.requestInFlight)
+            m.assertEqual(m.node.state.content.albums.load.status, "failed")
+            m.assertFalse(m.node.state.content.albums.load.hasMore)
+            m.assertEqual(m.node.state.loadingUi.foreground.kind, "")
         end function
 
         @it("rolls a failed filter refresh back to the committed view")
@@ -312,6 +516,19 @@ namespace tests
             m.node.state.content[kind].load.requestInFlight = false
             m.node.state.content[kind].load.nextStartIndex = nextStartIndex
             m.node.musicGrid = { itemFocused: focusedIndex, numColumns: 5 }
+        end sub
+
+        private sub prepareForegroundAlbumResponse(queryId as integer)
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, "music-1")
+            m.node.musicLibraryTask = { control: "", response: invalid }
+            m.node.state.filterRefresh.phase = "idle"
+            m.node.state.loadingUi.foreground.kind = "albums"
+            m.node.state.content.albums.load.queryId = queryId
+            m.node.state.content.albums.load.status = "loading"
+            m.node.state.content.albums.load.requestInFlight = true
+            m.node.state.content.albums.load.hasMore = true
+            m.node.state.content.albums.load.nextStartIndex = 0
         end sub
 
     end class
