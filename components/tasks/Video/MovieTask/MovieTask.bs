@@ -6,6 +6,7 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -21,6 +22,7 @@ sub executeRequest()
     request = m.top.request
     validationError = TaskRequest.ValidateRequest(request, "movie", ["itemId"])
     if validationError <> invalid then
+        validationError.AddReplace("requestId", getRequestId(request))
         if request <> invalid then validationError.AddReplace("itemId", Format.SafeString(request.itemId, ""))
         m.top.response = validationError
         return
@@ -36,6 +38,7 @@ sub executeRequest()
     if result.ok <> true then
         result.AddReplace("action", "movie")
         result.AddReplace("itemId", Format.SafeString(request.itemId, ""))
+        result.AddReplace("requestId", getRequestId(request))
         m.top.response = result
         return
     end if
@@ -44,6 +47,15 @@ sub executeRequest()
         ok: true
         action: "movie"
         itemId: Format.SafeString(request.itemId, "")
+        requestId: getRequestId(request)
         payload: result.data
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' getRequestId
+'-------------------------------------------------------------------------------
+function getRequestId(request as dynamic) as integer
+    if request = invalid then return -1
+    return Number.ToInteger(request.requestId, -1)
+end function

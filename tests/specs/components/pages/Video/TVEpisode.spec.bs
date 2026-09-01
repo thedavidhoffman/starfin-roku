@@ -273,6 +273,7 @@ namespace tests
             loadItemDetails()
 
             m.assertEqual(m.node.episodeDetailsTask.request.itemId, "episode-1")
+            m.assertEqual(m.node.episodeDetailsTask.request.requestId, 1)
             m.assertFalse(m.node.episodeDetailsTask.request.loadPlaybackQueue)
             firstRequest = m.node.episodeDetailsTask.request
             'bs:disable-next-line 1140
@@ -289,7 +290,53 @@ namespace tests
 
             m.assertTrue(m.node.state.playbackRefreshPending)
             m.assertEqual(m.node.episodeDetailsTask.request.itemId, "episode-2")
+            m.assertEqual(m.node.episodeDetailsTask.request.requestId, 1)
             m.assertFalse(m.node.episodeDetailsTask.request.loadPlaybackQueue)
+        end function
+
+        @it("declares the alternate episode details task")
+        function _()
+            m.assertNotInvalid(m.top.findNode("episodeDetailsTaskAlternate"))
+        end function
+
+        @it("coalesces rapid episode loads and starts the newest request after a stale response")
+        function _()
+            pendingRequest = { server: "server", token: "token", userId: "user", itemId: "episode-3", loadPlaybackQueue: false }
+            m.node.state.itemId = "episode-3"
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "episode-1" }, { isPlaybackRefresh: false })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, pendingRequest, { isPlaybackRefresh: false })
+            m.node.state.detailsTaskPool.nextIndex = 1
+            completedTask = {
+                response: { ok: true, action: "tvEpisodeDetails", itemId: "episode-1", requestId: 1, payload: { Id: "episode-1" } }
+            }
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse(completedTask)
+
+            m.assertEqual(m.node.state.detailsLoad.active.request.itemId, "episode-3")
+            m.assertInvalid(m.node.state.detailsLoad.pending)
+            m.assertEqual(m.node.episodeDetailsTaskAlternate.request.itemId, "episode-3")
+            m.assertEqual(m.node.episodeDetailsTaskAlternate.control, "run")
+        end function
+
+        @it("does not let an unrelated episode response release the active request")
+        function _()
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "episode-2" })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "episode-3" })
+            unrelatedTask = {
+                response: { ok: true, action: "tvEpisodeDetails", itemId: "episode-1", requestId: 99, payload: { Id: "episode-1" } }
+            }
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse(unrelatedTask)
+
+            m.assertEqual(m.node.state.detailsLoad.active.request.itemId, "episode-2")
+            m.assertEqual(m.node.state.detailsLoad.pending.request.itemId, "episode-3")
+            m.assertInvalid(m.node.episodeDetailsTaskAlternate.request)
         end function
 
         @it("navigates to the requested episode while preserving queue context")

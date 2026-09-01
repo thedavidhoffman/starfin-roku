@@ -16,33 +16,87 @@ sub loadItemDetails()
     m.state.itemId = itemId
     m.cast.people = []
 
-    m.episodeDetailsTask.control = "stop"
-    m.episodeDetailsTask.request = {
+    queueEpisodeDetailsLoad({
         server: request.server
         token: request.token
         userId: request.userId
         itemId: itemId
         loadPlaybackQueue: Format.SafeString(request.playbackQueueScope, "") <> "series"
-    }
-    m.episodeDetailsTask.control = "run"
+    }, false)
 end sub
+
+'-------------------------------------------------------------------------------
+' queueEpisodeDetailsLoad
+'-------------------------------------------------------------------------------
+sub queueEpisodeDetailsLoad(request as object, isPlaybackRefresh as boolean)
+    LatestRequestLifecycle.Queue(m.state.detailsLoad, request, { isPlaybackRefresh: isPlaybackRefresh })
+    startPendingEpisodeDetailsLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingEpisodeDetailsLoad
+'-------------------------------------------------------------------------------
+sub startPendingEpisodeDetailsLoad()
+    entry = LatestRequestLifecycle.TakeNext(m.state.detailsLoad)
+    if entry = invalid then return
+
+    task = takeNextEpisodeDetailsTask()
+    task.request = entry.request
+    task.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' takeNextEpisodeDetailsTask
+'-------------------------------------------------------------------------------
+function takeNextEpisodeDetailsTask() as object
+    task = m.state.detailsTaskPool.nodes[m.state.detailsTaskPool.nextIndex]
+    m.state.detailsTaskPool.nextIndex = (m.state.detailsTaskPool.nextIndex + 1) mod m.state.detailsTaskPool.nodes.Count()
+    return task
+end function
 
 '-------------------------------------------------------------------------------
 ' onEpisodeDetailsResponse
 '-------------------------------------------------------------------------------
 sub onEpisodeDetailsResponse()
-    response = m.episodeDetailsTask.response
+    handleEpisodeDetailsResponse(m.episodeDetailsTask)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternateEpisodeDetailsResponse
+'-------------------------------------------------------------------------------
+sub onAlternateEpisodeDetailsResponse()
+    handleEpisodeDetailsResponse(m.episodeDetailsTaskAlternate)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleEpisodeDetailsResponse
+'-------------------------------------------------------------------------------
+sub handleEpisodeDetailsResponse(task as dynamic)
+    if task = invalid then return
+
+    response = task.response
     if response = invalid then return
-    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "itemId", "tvEpisodeDetails") <> true then return
+
+    completion = LatestRequestLifecycle.Complete(m.state.detailsLoad, response, "tvEpisodeDetails")
+    if completion.matched <> true then return
+    if completion.isCurrent <> true then
+        startPendingEpisodeDetailsLoad()
+        return
+    end if
+
+    isPlaybackRefresh = completion.context <> invalid and completion.context.isPlaybackRefresh = true
+
     if response.ok <> true then
-        m.state.playbackRefreshPending = false
+        if isPlaybackRefresh then m.state.playbackRefreshPending = false
         renderEpisodeContent(m.state.itemContent, false)
+        Spinner.Hide()
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load this episode."))
+        startPendingEpisodeDetailsLoad()
         return
     end if
     if Format.SafeString(response.itemId, "") <> m.state.itemId then return
 
-    isPlaybackRefresh = m.state.playbackRefreshPending = true
-    m.state.playbackRefreshPending = false
+    if isPlaybackRefresh then m.state.playbackRefreshPending = false
     if isPlaybackRefresh then m.state.request.startPositionTicks = invalid
 
     applySeriesDetails(response.series)
@@ -50,6 +104,9 @@ sub onEpisodeDetailsResponse()
     applyEpisodeDetails(response.payload, false)
     m.cast.people = getPeople(response.payload)
     if isPlaybackRefresh then notifyRefreshedWatchedState(response.payload)
+    Spinner.Hide()
+    AppStatus.ClearMessage()
+    startPendingEpisodeDetailsLoad()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -63,14 +120,13 @@ sub refreshPlaybackState()
     if itemId = "" then return
 
     m.state.playbackRefreshPending = true
-    m.episodeDetailsTask.request = {
+    queueEpisodeDetailsLoad({
         server: request.server
         token: request.token
         userId: request.userId
         itemId: itemId
         loadPlaybackQueue: false
-    }
-    m.episodeDetailsTask.control = "run"
+    }, true)
 end sub
 
 '-------------------------------------------------------------------------------

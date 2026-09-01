@@ -12,7 +12,9 @@ import "pkg:/source/PlaybackProgress.bs"
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/MediaOptions.bs"
 import "pkg:/source/Status.bs"
+import "pkg:/source/Spinner.bs"
 import "pkg:/source/AsyncLifecycle.bs"
+import "pkg:/source/LatestRequestLifecycle.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/EpisodeQueueIdentity.bs"
@@ -44,6 +46,7 @@ sub initReferences()
     m.cast = m.top.findNode("cast")
     m.chevronFooter = m.top.findNode("chevronFooter")
     m.episodeDetailsTask = m.top.findNode("episodeDetailsTask")
+    m.episodeDetailsTaskAlternate = m.top.findNode("episodeDetailsTaskAlternate")
     m.watchedTask = m.top.findNode("watchedTask")
     m.state = {
         request: invalid
@@ -67,6 +70,11 @@ sub initReferences()
             index: -1
             count: 0
         }
+        detailsLoad: LatestRequestLifecycle.Create()
+        detailsTaskPool: {
+            nodes: [m.episodeDetailsTask, m.episodeDetailsTaskAlternate]
+            nextIndex: 0
+        }
         lifecycle: AsyncLifecycle.Create()
     }
 end sub
@@ -76,6 +84,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.episodeDetailsTask.observeField("response", "onEpisodeDetailsResponse")
+    m.episodeDetailsTaskAlternate.observeField("response", "onAlternateEpisodeDetailsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.mediaToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
@@ -147,6 +156,7 @@ sub onLoadRequestChanged()
     clearPageState()
     if m.state.request <> invalid then
         m.cast.server = m.state.request.server
+        Spinner.Show()
         renderInitialEpisodeContent()
     end if
     loadItemDetails()

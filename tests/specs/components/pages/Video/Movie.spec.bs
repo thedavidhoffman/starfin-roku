@@ -59,6 +59,11 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("movieTask"))
         end function
 
+        @it("declares the alternate movieTask node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("movieTaskAlternate"))
+        end function
+
         @it("declares the themeSongsTask node")
         function _()
             m.assertNotInvalid(m.top.findNode("themeSongsTask"))
@@ -247,6 +252,56 @@ namespace tests
 
         @describe("events and lifecycle")
 
+        @it("coalesces rapid movie loads and starts the newest request after a stale response")
+        function _()
+            firstRequest = m.createRequest()
+            firstRequest.itemId = "movie-1"
+            secondRequest = m.createRequest()
+            secondRequest.itemId = "movie-2"
+            thirdRequest = m.createRequest()
+            thirdRequest.itemId = "movie-3"
+
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, firstRequest)
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, secondRequest)
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, thirdRequest)
+            m.node.state.detailsTaskPool.nextIndex = 1
+            completedTask = {
+                response: { ok: true, action: "movie", itemId: "movie-1", requestId: 1, payload: m.createMovie() }
+            }
+
+            'bs:disable-next-line 1140
+            handleMovieResponse(completedTask)
+
+            m.assertEqual(m.node.state.detailsLoad.active.request.itemId, "movie-3")
+            m.assertInvalid(m.node.state.detailsLoad.pending)
+            m.assertEqual(m.node.movieTaskAlternate.request.itemId, "movie-3")
+            m.assertEqual(m.node.movieTaskAlternate.control, "run")
+        end function
+
+        @it("does not let an unrelated response release the active movie request")
+        function _()
+            activeRequest = m.createRequest()
+            activeRequest.itemId = "movie-2"
+            pendingRequest = m.createRequest()
+            pendingRequest.itemId = "movie-3"
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, activeRequest)
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, pendingRequest)
+            unrelatedTask = {
+                response: { ok: true, action: "movie", itemId: "movie-1", requestId: 99, payload: m.createMovie() }
+            }
+
+            'bs:disable-next-line 1140
+            handleMovieResponse(unrelatedTask)
+
+            m.assertEqual(m.node.state.detailsLoad.active.request.itemId, "movie-2")
+            m.assertEqual(m.node.state.detailsLoad.pending.request.itemId, "movie-3")
+            m.assertInvalid(m.node.movieTaskAlternate.request)
+        end function
+
         @it("routes MediaShell overlays with movie source")
         function _()
             m.top.findNode("mediaShell").overlayRequested = { id: "description" }
@@ -274,6 +329,7 @@ namespace tests
             m.top.callFunc("deactivate")
 
             m.assertEqual(m.top.findNode("movieTask").control, "stop")
+            m.assertEqual(m.top.findNode("movieTaskAlternate").control, "stop")
             m.assertEqual(m.top.findNode("themeSongsTask").control, "stop")
             m.assertEqual(m.top.findNode("watchedTask").control, "stop")
         end function

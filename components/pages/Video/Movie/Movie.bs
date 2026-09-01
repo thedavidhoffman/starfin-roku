@@ -14,15 +14,25 @@ import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/SubtitleSelection.bs"
 import "pkg:/source/MediaOptions.bs"
 import "pkg:/source/AsyncLifecycle.bs"
+import "pkg:/source/LatestRequestLifecycle.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/Number.bs"
+import "pkg:/components/pages/Video/Movie/Helpers/Loading.bs"
 
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.log = new Logger("Movie", m.global.logService)
     m.mediaShell = m.top.findNode("mediaShell")
     m.mediaToolbar = m.top.findNode("mediaToolbar")
@@ -31,10 +41,45 @@ sub init()
     m.cast = m.top.findNode("cast")
     m.chevronFooter = m.top.findNode("chevronFooter")
     m.movieTask = m.top.findNode("movieTask")
+    m.movieTaskAlternate = m.top.findNode("movieTaskAlternate")
     m.themeSongsTask = m.top.findNode("themeSongsTask")
     m.watchedTask = m.top.findNode("watchedTask")
+    m.state = {
+        request: invalid
+        item: invalid
+        selectedStreams: {
+            audio: invalid
+            subtitle: invalid
+            subtitleOff: false
+        }
+        selectedChapterKey: ""
+        videoMode: PlaybackMode.Mode.Automatic
+        focusArea: "toolbar"
+        layout: {
+            isCinematic: false
+            isFromLibrary: false
+        }
+        libraryBrowse: {
+            index: -1
+            loadedCount: 0
+            totalCount: 0
+        }
+        themeLookupActive: false
+        detailsLoad: LatestRequestLifecycle.Create()
+        detailsTaskPool: {
+            nodes: [m.movieTask, m.movieTaskAlternate]
+            nextIndex: 0
+        }
+        lifecycle: AsyncLifecycle.Create()
+    }
+end sub
 
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.movieTask.observeField("response", "onMovieResponse")
+    m.movieTaskAlternate.observeField("response", "onAlternateMovieResponse")
     m.themeSongsTask.observeField("response", "onThemeSongsResponse")
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
@@ -59,150 +104,6 @@ sub init()
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
-    m.state = {
-        request: invalid
-        item: invalid
-        selectedStreams: {
-            audio: invalid
-            subtitle: invalid
-            subtitleOff: false
-        }
-        selectedChapterKey: ""
-        videoMode: PlaybackMode.Mode.Automatic
-        focusArea: "toolbar"
-        layout: {
-            isCinematic: false
-            isFromLibrary: false
-        }
-        libraryBrowse: {
-            index: -1
-            loadedCount: 0
-            totalCount: 0
-        }
-        themeLookupActive: false
-        lifecycle: AsyncLifecycle.Create()
-    }
-end sub
-
-'-------------------------------------------------------------------------------
-' onLoadRequestChanged
-'-------------------------------------------------------------------------------
-sub onLoadRequestChanged()
-    request = m.top.loadRequest
-    if request = invalid then return
-
-    m.state.request = request
-    m.state.layout.isFromLibrary = request.sourcePage = "library" and request.libraryBrowseState <> invalid
-    m.top.settings = request.settings
-    applyMediaShellBackgroundSetting(request.settings)
-    applyLibraryBrowseState(request.libraryBrowseState)
-    m.state.item = request.item
-    m.state.themeLookupActive = false
-    AsyncLifecycle.Begin(m.state.lifecycle, request.itemId)
-    m.state.selectedStreams = {
-        audio: invalid
-        subtitle: invalid
-        subtitleOff: false
-    }
-    m.state.selectedChapterKey = ""
-    applyPlaybackVideoMode(request.videoMode)
-    m.cast.server = request.server
-    Spinner.Show()
-    renderMovie(request.item, true)
-
-    m.movieTask.request = request
-    m.movieTask.control = "run"
-end sub
-
-'-------------------------------------------------------------------------------
-' onMovieResponse
-'-------------------------------------------------------------------------------
-sub onMovieResponse()
-    response = m.movieTask.response
-    if response = invalid then return
-    if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "itemId", "movie") <> true then return
-
-    if response.ok <> true then
-        renderMovie(m.state.item, false)
-        Spinner.Hide()
-        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load this movie."))
-        return
-    end if
-
-    m.state.item = response.payload
-    renderMovie(response.payload, false)
-    Spinner.Hide()
-    AppStatus.ClearMessage()
-    loadThemeSong(response.payload)
-end sub
-
-'-------------------------------------------------------------------------------
-' loadThemeSong
-'-------------------------------------------------------------------------------
-sub loadThemeSong(item as dynamic)
-    request = m.state.request
-    if request = invalid then return
-    if SettingsStore.IsThemeMusicEnabled(m.top.settings) <> true then
-        m.log.write("Theme music playback is disabled")
-        return
-    end if
-
-    m.log.write("Theme music playback is enabled")
-
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id, request.itemId], ""), "")
-    if itemId = "" then return
-
-    m.state.themeLookupActive = true
-    m.themeSongsTask.control = "stop"
-    m.themeSongsTask.request = {
-        server: request.server
-        token: request.token
-        userId: request.userId
-        itemId: itemId
-    }
-    m.themeSongsTask.control = "run"
-end sub
-
-'-------------------------------------------------------------------------------
-' onThemeSongsResponse
-'-------------------------------------------------------------------------------
-sub onThemeSongsResponse()
-    response = m.themeSongsTask.response
-    if response = invalid then return
-    if m.state.lifecycle.isActive <> true then return
-    if m.state.themeLookupActive <> true then return
-    if response.ok <> true then
-        m.log.write("Theme song lookup failed: " + Format.SafeString(response.errorMessage, "Unknown error."))
-        return
-    end if
-
-    themeSong = response.payload
-    if Arrays.IsAssocArray(themeSong) = false then
-        m.state.themeLookupActive = false
-        m.log.write("Theme music enabled, but no theme song was found")
-        return
-    end if
-
-    request = m.state.request
-    if request = invalid then return
-    if Format.SafeString(response.itemId, "") <> Format.SafeString(request.itemId, "") then return
-
-    m.state.themeLookupActive = false
-    themeSongId = Format.SafeString(themeSong.Id, "")
-    if themeSongId = "" then
-        m.state.themeLookupActive = false
-        return
-    end if
-
-    m.log.write("Theme song found itemId=" + themeSongId)
-    m.top.themeRequested = {
-        server: request.server
-        token: request.token
-        userId: request.userId
-        itemId: themeSongId
-        title: Format.FirstNonEmpty([themeSong.Name, m.state.item.Name], "Theme Music")
-        sourceItemId: Format.SafeString(request.itemId, "")
-    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -236,6 +137,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub activate()
     AsyncLifecycle.BeginFromField(m.state.lifecycle, m.state.request, "itemId")
+    LatestRequestLifecycle.Activate(m.state.detailsLoad)
     if m.state.focusArea = "cast" and m.cast.hasItems = true then
         focusCast()
     else if m.state.focusArea = "libraryBrowse" and m.previousNextButton.visible = true then
@@ -250,10 +152,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub deactivate()
     AsyncLifecycle.Deactivate(m.state.lifecycle)
+    LatestRequestLifecycle.Deactivate(m.state.detailsLoad)
     m.state.themeLookupActive = false
     m.movieTask.control = "stop"
+    m.movieTaskAlternate.control = "stop"
     m.themeSongsTask.control = "stop"
     m.watchedTask.control = "stop"
+    m.cast.callFunc("deactivate")
+    m.previousNextButton.callFunc("deactivate")
+    Spinner.Hide()
+    m.top.setFocus(false)
 end sub
 
 '-------------------------------------------------------------------------------

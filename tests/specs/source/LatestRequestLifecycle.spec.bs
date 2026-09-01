@@ -1,0 +1,85 @@
+namespace tests
+
+    @suite("Latest request lifecycle helpers")
+    class LatestRequestLifecycleTests extends rooibos.BaseTestSuite
+
+        @describe("generation correlation and coalescing")
+
+        @it("assigns increasing request IDs without mutating the source request")
+        function _()
+            state = LatestRequestLifecycle.Create()
+            sourceRequest = { itemId: "item-1" }
+
+            firstId = LatestRequestLifecycle.Queue(state, sourceRequest)
+            first = LatestRequestLifecycle.TakeNext(state)
+            secondId = LatestRequestLifecycle.Queue(state, { itemId: "item-2" })
+
+            m.assertEqual(firstId, 1)
+            m.assertEqual(secondId, 2)
+            m.assertInvalid(sourceRequest.requestId)
+            m.assertEqual(first.request.requestId, 1)
+        end function
+
+        @it("replaces pending work with the newest request")
+        function _()
+            state = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(state, { itemId: "item-1" })
+            LatestRequestLifecycle.TakeNext(state)
+            LatestRequestLifecycle.Queue(state, { itemId: "item-2" })
+            LatestRequestLifecycle.Queue(state, { itemId: "item-3" })
+
+            completed = LatestRequestLifecycle.Complete(state, { requestId: 1, action: "load" }, "load")
+            nextEntry = LatestRequestLifecycle.TakeNext(state)
+
+            m.assertTrue(completed.matched)
+            m.assertFalse(completed.isCurrent)
+            m.assertEqual(nextEntry.request.itemId, "item-3")
+            m.assertEqual(nextEntry.request.requestId, 3)
+        end function
+
+        @it("accepts only the matching latest generation as current")
+        function _()
+            state = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(state, { itemId: "item-1" }, { refresh: true })
+            LatestRequestLifecycle.TakeNext(state)
+
+            unrelated = LatestRequestLifecycle.Complete(state, { requestId: 9, action: "load" }, "load")
+            current = LatestRequestLifecycle.Complete(state, { requestId: 1, action: "load" }, "load")
+
+            m.assertFalse(unrelated.matched)
+            m.assertTrue(current.matched)
+            m.assertTrue(current.isCurrent)
+            m.assertTrue(current.context.refresh)
+        end function
+
+        @it("deactivation discards active and pending work")
+        function _()
+            state = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(state, { itemId: "item-1" })
+            LatestRequestLifecycle.TakeNext(state)
+            LatestRequestLifecycle.Queue(state, { itemId: "item-2" })
+
+            LatestRequestLifecycle.Deactivate(state)
+
+            m.assertFalse(state.isActive)
+            m.assertInvalid(state.active)
+            m.assertInvalid(state.pending)
+            m.assertInvalid(LatestRequestLifecycle.TakeNext(state))
+        end function
+
+        @it("reactivates a lifecycle without restoring discarded work")
+        function _()
+            state = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(state, { itemId: "item-1" })
+            LatestRequestLifecycle.Deactivate(state)
+
+            LatestRequestLifecycle.Activate(state)
+
+            m.assertTrue(state.isActive)
+            m.assertInvalid(state.active)
+            m.assertInvalid(state.pending)
+        end function
+
+    end class
+
+end namespace

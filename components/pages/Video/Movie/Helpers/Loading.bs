@@ -1,0 +1,162 @@
+'-------------------------------------------------------------------------------
+' onLoadRequestChanged
+'-------------------------------------------------------------------------------
+sub onLoadRequestChanged()
+    request = m.top.loadRequest
+    if request = invalid then return
+
+    m.state.request = request
+    m.state.layout.isFromLibrary = request.sourcePage = "library" and request.libraryBrowseState <> invalid
+    m.top.settings = request.settings
+    applyMediaShellBackgroundSetting(request.settings)
+    applyLibraryBrowseState(request.libraryBrowseState)
+    m.state.item = request.item
+    m.state.themeLookupActive = false
+    AsyncLifecycle.Begin(m.state.lifecycle, request.itemId)
+    m.state.selectedStreams = {
+        audio: invalid
+        subtitle: invalid
+        subtitleOff: false
+    }
+    m.state.selectedChapterKey = ""
+    applyPlaybackVideoMode(request.videoMode)
+    m.cast.server = request.server
+    Spinner.Show()
+    renderMovie(request.item, true)
+    LatestRequestLifecycle.Queue(m.state.detailsLoad, request)
+    startPendingMovieLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingMovieLoad
+'-------------------------------------------------------------------------------
+sub startPendingMovieLoad()
+    entry = LatestRequestLifecycle.TakeNext(m.state.detailsLoad)
+    if entry = invalid then return
+
+    task = takeNextMovieDetailsTask()
+    task.request = entry.request
+    task.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' takeNextMovieDetailsTask
+'-------------------------------------------------------------------------------
+function takeNextMovieDetailsTask() as object
+    task = m.state.detailsTaskPool.nodes[m.state.detailsTaskPool.nextIndex]
+    m.state.detailsTaskPool.nextIndex = (m.state.detailsTaskPool.nextIndex + 1) mod m.state.detailsTaskPool.nodes.Count()
+    return task
+end function
+
+'-------------------------------------------------------------------------------
+' onMovieResponse
+'-------------------------------------------------------------------------------
+sub onMovieResponse()
+    handleMovieResponse(m.movieTask)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternateMovieResponse
+'-------------------------------------------------------------------------------
+sub onAlternateMovieResponse()
+    handleMovieResponse(m.movieTaskAlternate)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleMovieResponse
+'-------------------------------------------------------------------------------
+sub handleMovieResponse(task as dynamic)
+    if task = invalid then return
+
+    response = task.response
+    if response = invalid then return
+
+    completion = LatestRequestLifecycle.Complete(m.state.detailsLoad, response, "movie")
+    if completion.matched <> true then return
+    if completion.isCurrent <> true then
+        startPendingMovieLoad()
+        return
+    end if
+
+    if response.ok <> true then
+        renderMovie(m.state.item, false)
+        Spinner.Hide()
+        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load this movie."))
+        return
+    end if
+
+    m.state.item = response.payload
+    renderMovie(response.payload, false)
+    Spinner.Hide()
+    AppStatus.ClearMessage()
+    loadThemeSong(response.payload)
+end sub
+
+'-------------------------------------------------------------------------------
+' loadThemeSong
+'-------------------------------------------------------------------------------
+sub loadThemeSong(item as dynamic)
+    request = m.state.request
+    if request = invalid then return
+    if SettingsStore.IsThemeMusicEnabled(m.top.settings) <> true then
+        m.log.write("Theme music playback is disabled")
+        return
+    end if
+
+    m.log.write("Theme music playback is enabled")
+
+    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id, request.itemId], ""), "")
+    if itemId = "" then return
+
+    m.state.themeLookupActive = true
+    m.themeSongsTask.control = "stop"
+    m.themeSongsTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+    }
+    m.themeSongsTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onThemeSongsResponse
+'-------------------------------------------------------------------------------
+sub onThemeSongsResponse()
+    response = m.themeSongsTask.response
+    if response = invalid then return
+    if m.state.lifecycle.isActive <> true then return
+    if m.state.themeLookupActive <> true then return
+    if response.ok <> true then
+        m.log.write("Theme song lookup failed: " + Format.SafeString(response.errorMessage, "Unknown error."))
+        return
+    end if
+
+    themeSong = response.payload
+    if Arrays.IsAssocArray(themeSong) = false then
+        m.state.themeLookupActive = false
+        m.log.write("Theme music enabled, but no theme song was found")
+        return
+    end if
+
+    request = m.state.request
+    if request = invalid then return
+    if Format.SafeString(response.itemId, "") <> Format.SafeString(request.itemId, "") then return
+
+    m.state.themeLookupActive = false
+    themeSongId = Format.SafeString(themeSong.Id, "")
+    if themeSongId = "" then
+        m.state.themeLookupActive = false
+        return
+    end if
+
+    m.log.write("Theme song found itemId=" + themeSongId)
+    m.top.themeRequested = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: themeSongId
+        title: Format.FirstNonEmpty([themeSong.Name, m.state.item.Name], "Theme Music")
+        sourceItemId: Format.SafeString(request.itemId, "")
+    }
+end sub

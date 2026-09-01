@@ -68,8 +68,12 @@ result and restores focus.
   values such as `server`, `token`, `userId`, library IDs, and item IDs.
 - Task responses should include a success field, correlation identity such as
   `itemId` or query ID, payload data on success, and an error message on failure.
-- Use `AsyncLifecycle` when responses can arrive after a page changes or a newer
-  request supersedes an older one.
+- Use `AsyncLifecycle` when responses can arrive after a page changes. Use
+  `LatestRequestLifecycle` when Task work must serialize replaceable requests:
+  it assigns request generations, coalesces pending work, and rejects stale
+  responses even when two generations target the same item. When a response
+  observer needs to start pending work immediately, alternate between a bounded
+  pair of Task nodes instead of restarting the node still publishing a response.
 - API response data uses Jellyfin's PascalCase field names. Component-owned view
   models may use locally defined lower-camel-case fields.
 - Group related component state under a named state object rather than adding

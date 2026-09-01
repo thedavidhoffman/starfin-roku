@@ -1,0 +1,107 @@
+' Coordinates latest-request-wins work for SceneGraph Task execution. A Task
+' cannot reliably queue another run while its current execution is still
+' finishing, so callers keep one active request and replace one pending request
+' with the newest user intent. Callers may alternate between Task nodes so a
+' pending request never starts on the node still publishing its prior response.
+'
+' Each queued request receives a generation ID that the Task must echo in its
+' response. Item identity alone is insufficient because separate generations
+' may request the same item, such as an episode load followed by a progress
+' refresh. Only the latest generation is allowed to commit UI state.
+namespace LatestRequestLifecycle
+
+    '---------------------------------------------------------------------------
+    ' LatestRequestLifecycle.Create
+    '---------------------------------------------------------------------------
+    function Create() as object
+        return {
+            isActive: false
+            nextRequestId: 0
+            latestRequestId: -1
+            active: invalid
+            pending: invalid
+        }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LatestRequestLifecycle.Activate
+    '---------------------------------------------------------------------------
+    sub Activate(state as object)
+        if state = invalid then return
+        state.isActive = true
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' LatestRequestLifecycle.Queue
+    '---------------------------------------------------------------------------
+    function Queue(state as object, request as object, context = invalid as dynamic) as integer
+        if state = invalid or request = invalid then return -1
+
+        state.isActive = true
+        state.nextRequestId = Number.ToInteger(state.nextRequestId, 0) + 1
+        state.latestRequestId = state.nextRequestId
+
+        ' Copy before adding requestId so page-owned request data is not mutated.
+        correlatedRequest = {}
+        for each key in request
+            correlatedRequest[key] = request[key]
+        end for
+        correlatedRequest.requestId = state.latestRequestId
+
+        ' Replacing pending work coalesces rapid input to its final destination.
+        state.pending = {
+            request: correlatedRequest
+            context: context
+        }
+        return state.latestRequestId
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LatestRequestLifecycle.TakeNext
+    '---------------------------------------------------------------------------
+    function TakeNext(state as object) as dynamic
+        if state = invalid or state.isActive <> true then return invalid
+        if state.active <> invalid or state.pending = invalid then return invalid
+
+        state.active = state.pending
+        state.pending = invalid
+        return state.active
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LatestRequestLifecycle.Complete
+    '---------------------------------------------------------------------------
+    function Complete(state as object, response as dynamic, expectedAction = invalid as dynamic) as object
+        result = {
+            matched: false
+            isCurrent: false
+            context: invalid
+        }
+        if state = invalid or response = invalid or state.active = invalid then return result
+        if expectedAction <> invalid and Format.SafeString(response.action, "") <> expectedAction then return result
+
+        activeRequestId = Number.ToInteger(state.active.request.requestId, -1)
+        responseRequestId = Number.ToInteger(response.requestId, -1)
+        if activeRequestId < 0 or responseRequestId <> activeRequestId then return result
+
+        result.matched = true
+        ' A matched response can still be stale when newer work was queued while
+        ' the active Task was running.
+        result.isCurrent = state.isActive = true and responseRequestId = Number.ToInteger(state.latestRequestId, -1)
+        result.context = state.active.context
+        state.active = invalid
+        return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LatestRequestLifecycle.Deactivate
+    '---------------------------------------------------------------------------
+    sub Deactivate(state as object)
+        if state = invalid then return
+
+        state.isActive = false
+        state.active = invalid
+        state.pending = invalid
+    end sub
+
+end namespace
