@@ -44,6 +44,28 @@ the request's ordering or the Title ascending default. Genre and Decade choices
 are omitted because collection contents do not load filter options, and the
 letter grid remains unavailable.
 
+When Jellyfin groups movies or shows into collections, the corresponding movie
+or TV library can contain `BoxSet` items alongside its normal media cards. These
+cards display `Collection` as their secondary metadata label and open through
+the same collection-content surface described above. Closing that surface
+restores the originating library instance, including its loaded content, browse
+state, scroll position, and focused card. Collections opened from the dedicated
+Collections browser continue to return to that browser.
+
+Movie detail Previous/Next browsing follows playable movie neighbors rather
+than raw grid adjacency. Grouped collection cards are skipped, and paging
+continues when necessary until another movie is loaded or the library ends.
+Movie detail pages opened from collection contents use the same behavior,
+skipping Series entries in mixed collections. TV Show detail navigation is not
+changed.
+
+Top-level Movie and TV library requests allow up to 120 seconds because Jellyfin
+collection-query performance can degrade sharply when grouped collections are
+enabled in large libraries. Starfin keeps the normal request payload, including
+user data for progress and watched rendering. The shared HTTP default remains 60
+seconds for collection contents, playlists, music videos, filters, detail pages,
+and unrelated API requests.
+
 Behavioral tests are the executable specification for this matrix. Update them
 with this document whenever a library surface or browsing capability changes.
 

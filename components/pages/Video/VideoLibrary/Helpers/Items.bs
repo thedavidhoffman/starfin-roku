@@ -28,7 +28,9 @@ sub onItemSelected()
         item: item
         libraryIndex: selected
     }
-    if isMusicVideo(item) then
+    if isCollectionItem(item) then
+        m.top.selectedCollection = selection
+    else if isMusicVideo(item) then
         m.top.selectedVideo = selection
     else if isPlayableMovie(item) then
         m.top.selectedMovie = selection
@@ -53,7 +55,9 @@ end function
 '-------------------------------------------------------------------------------
 function beginMovieLibraryBrowse(index as integer) as dynamic
     if m.pageState.request = invalid then return invalid
-    if LCase(Format.SafeString(m.pageState.request.includeItemTypes, "")) <> "movie" then return invalid
+    includeItemTypes = LCase(Format.SafeString(m.pageState.request.includeItemTypes, ""))
+    collectionType = LCase(Format.SafeString(m.pageState.request.collectionType, ""))
+    if includeItemTypes <> "movie" and collectionType <> "collection" then return invalid
 
     m.pageState.movieLibraryBrowse.active = true
     AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
@@ -87,10 +91,26 @@ sub requestNextMovieLibraryBrowsePageIfNeeded(index as integer)
     if m.pageState.paging.hasMore <> true or m.pageState.paging.requestInFlight = true then return
 
     loadedCount = m.pageState.allItems.Count()
-    if loadedCount <= 0 or loadedCount - index > 10 then return
+    if loadedCount <= 0 then return
+    nextMovieIndex = findPlayableMovieIndex(index + 1, 1)
+    if nextMovieIndex >= 0 and loadedCount - index > 10 then return
 
     loadVideoLibraryPage(m.pageState.paging.nextStartIndex)
 end sub
+
+'-------------------------------------------------------------------------------
+' findPlayableMovieIndex
+'-------------------------------------------------------------------------------
+function findPlayableMovieIndex(startIndex as integer, stepValue as integer) as integer
+    if stepValue <> -1 then stepValue = 1
+
+    index = startIndex
+    while index >= 0 and index < m.pageState.allItems.Count()
+        if isPlayableMovie(m.pageState.allItems[index]) then return index
+        index = index + stepValue
+    end while
+    return -1
+end function
 
 '-------------------------------------------------------------------------------
 ' buildMovieLibraryBrowseState
@@ -108,6 +128,8 @@ function buildMovieLibraryBrowseState() as dynamic
 
     return {
         index: index
+        previousIndex: findPlayableMovieIndex(index - 1, -1)
+        nextIndex: findPlayableMovieIndex(index + 1, 1)
         itemId: Format.SafeString(item.Id, "")
         item: item
         loadedCount: loadedCount
@@ -326,6 +348,15 @@ sub ensureVideoLibraryItemNodeCache()
 end sub
 
 '-------------------------------------------------------------------------------
+' isCollectionItem
+'-------------------------------------------------------------------------------
+function isCollectionItem(item as dynamic) as boolean
+    if Arrays.IsAssocArray(item) = false then return false
+
+    return LCase(Format.SafeString(item.Type, "")) = "boxset"
+end function
+
+'-------------------------------------------------------------------------------
 ' getCachedVideoLibraryItemNode
 '-------------------------------------------------------------------------------
 function getCachedVideoLibraryItemNode(item as dynamic, occurrenceIndex = invalid as dynamic) as dynamic
@@ -358,7 +389,21 @@ function createVideoLibraryItemNode(item as dynamic) as dynamic
         showMetadata: getVideoLibraryItemMetadataVisibility(item)
         raw: item
     })
+    if isGroupedCollectionCard(item) then node.AddFields({ metadataText: "Collection" })
     return node
+end function
+
+'-------------------------------------------------------------------------------
+' isGroupedCollectionCard
+'-------------------------------------------------------------------------------
+function isGroupedCollectionCard(item as dynamic) as boolean
+    if isCollectionItem(item) <> true then return false
+
+    request = m.pageState.request
+    if request = invalid then return false
+
+    collectionType = LCase(Format.SafeString(request.collectionType, ""))
+    return collectionType = "movies" or collectionType = "tvshows"
 end function
 
 '-------------------------------------------------------------------------------

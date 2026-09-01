@@ -55,6 +55,87 @@ namespace tests
             m.assertEqual(m.top.selectedMovie.itemId, "movie-1")
         end function
 
+        @it("emits grouped collections with their library position")
+        function _()
+            item = { Id: "collection-1", Type: "BoxSet", Name: "Collection", ImageTags: {} }
+            'bs:disable-next-line 1140
+            m.node.itemsGrid.content = buildVideoLibraryContent([item])
+            m.top.selectedCollection = invalid
+            m.node.itemsGrid.itemSelected = 0
+
+            m.assertEqual(m.top.selectedCollection.itemId, "collection-1")
+            m.assertEqual(m.top.selectedCollection.item, item)
+            m.assertEqual(m.top.selectedCollection.libraryIndex, 0)
+        end function
+
+        @it("does not route grouped collections as movies or series")
+        function _()
+            item = { Id: "collection-1", Type: "BoxSet", Name: "Collection", ImageTags: {} }
+            'bs:disable-next-line 1140
+            m.node.itemsGrid.content = buildVideoLibraryContent([item])
+            m.top.selectedMovie = invalid
+            m.top.selectedSeries = invalid
+            m.node.itemsGrid.itemSelected = 0
+
+            m.assertInvalid(m.top.selectedMovie)
+            m.assertInvalid(m.top.selectedSeries)
+        end function
+
+        @describe("grouped collection card metadata")
+
+        @it("labels grouped collections in movie libraries as Collection")
+        function _()
+            m.node.pageState.request = { collectionType: "movies" }
+
+            'bs:disable-next-line 1140
+            node = createVideoLibraryItemNode({ Id: "collection-1", Type: "BoxSet", ImageTags: {} })
+
+            m.assertEqual(node.metadataText, "Collection")
+        end function
+
+        @it("labels grouped collections in TV libraries as Collection")
+        function _()
+            m.node.pageState.request = { collectionType: "tvshows" }
+
+            'bs:disable-next-line 1140
+            node = createVideoLibraryItemNode({ Id: "collection-1", Type: "BoxSet", ImageTags: {} })
+
+            m.assertEqual(node.metadataText, "Collection")
+        end function
+
+        @it("leaves ordinary movie and series metadata implicit")
+        function _()
+            m.node.pageState.request = { collectionType: "movies" }
+
+            'bs:disable-next-line 1140
+            movieNode = createVideoLibraryItemNode({ Id: "movie-1", Type: "Movie", ImageTags: {} })
+            'bs:disable-next-line 1140
+            seriesNode = createVideoLibraryItemNode({ Id: "series-1", Type: "Series", ImageTags: {} })
+
+            m.assertFalse(movieNode.hasField("metadataText"))
+            m.assertFalse(seriesNode.hasField("metadataText"))
+        end function
+
+        @it("does not relabel BoxSet cards inside collection contents")
+        function _()
+            m.node.pageState.request = { collectionType: "collection" }
+
+            'bs:disable-next-line 1140
+            node = createVideoLibraryItemNode({ Id: "collection-1", Type: "BoxSet", ImageTags: {} })
+
+            m.assertFalse(node.hasField("metadataText"))
+        end function
+
+        @it("does not relabel BoxSet cards in unrelated library modes")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos" }
+
+            'bs:disable-next-line 1140
+            node = createVideoLibraryItemNode({ Id: "collection-1", Type: "BoxSet", ImageTags: {} })
+
+            m.assertFalse(node.hasField("metadataText"))
+        end function
+
         @describe("view-state persistence")
 
         @it("applies Browse visibility independently from Sort visibility")
@@ -1048,6 +1129,86 @@ namespace tests
             m.assertEqual(m.node.sortButton.selectedSort.sortOrder, LibraryBrowse.SortOrder.Ascending)
             m.assertEqual(m.node.pageState.request.sortOrder, LibraryBrowse.SortOrder.Ascending)
             m.assertEqual(m.node.videoLibraryTask.request.sortOrder, LibraryBrowse.SortOrder.Ascending)
+        end function
+
+        @it("skips grouped collections when building movie browse neighbors")
+        function _()
+            m.configurePaging(5, 5, 0)
+            m.node.pageState.allItems[2] = { Id: "collection-1", Type: "BoxSet" }
+
+            'bs:disable-next-line 1140
+            state = beginMovieLibraryBrowse(1)
+
+            m.assertEqual(state.previousIndex, 0)
+            m.assertEqual(state.nextIndex, 3)
+        end function
+
+        @it("enables movie browsing inside mixed collection contents")
+        function _()
+            m.configurePaging(5, 5, 0)
+            m.node.pageState.request.includeItemTypes = "Movie,Series"
+            m.node.pageState.request.collectionType = "collection"
+            m.node.pageState.allItems[1] = { Id: "series-1", Type: "Series" }
+            m.node.pageState.allItems[3] = { Id: "series-3", Type: "Series" }
+
+            'bs:disable-next-line 1140
+            state = beginMovieLibraryBrowse(2)
+
+            m.assertEqual(state.index, 2)
+            m.assertEqual(state.previousIndex, 0)
+            m.assertEqual(state.nextIndex, 4)
+        end function
+
+        @it("does not enable movie browsing for unrelated mixed libraries")
+        function _()
+            m.configurePaging(5, 5, 0)
+            m.node.pageState.request.includeItemTypes = "Movie,Series"
+            m.node.pageState.request.collectionType = "playlist"
+
+            'bs:disable-next-line 1140
+            state = beginMovieLibraryBrowse(2)
+
+            m.assertInvalid(state)
+        end function
+
+        @it("selects a playable movie after a grouped collection")
+        function _()
+            m.configurePaging(5, 5, 0)
+            m.node.pageState.allItems[2] = { Id: "collection-1", Type: "BoxSet" }
+
+            'bs:disable-next-line 1140
+            state = selectMovieLibraryBrowseIndex(3)
+
+            m.assertEqual(state.index, 3)
+            m.assertEqual(state.itemId, "3")
+            m.assertEqual(m.node.itemsGrid.itemFocused, 3)
+        end function
+
+        @it("continues paging when only grouped collections follow the current movie")
+        function _()
+            m.configurePaging(100, 100, 0)
+            for i = 1 to 99
+                m.node.pageState.allItems[i] = { Id: "collection-" + i.ToStr(), Type: "BoxSet" }
+            end for
+
+            'bs:disable-next-line 1140
+            state = beginMovieLibraryBrowse(0)
+
+            m.assertEqual(state.nextIndex, -1)
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 100)
+        end function
+
+        @it("finds the next movie across a loaded page boundary")
+        function _()
+            m.configurePaging(102, 102, 0)
+            for i = 1 to 100
+                m.node.pageState.allItems[i] = { Id: "collection-" + i.ToStr(), Type: "BoxSet" }
+            end for
+
+            'bs:disable-next-line 1140
+            state = beginMovieLibraryBrowse(0)
+
+            m.assertEqual(state.nextIndex, 101)
         end function
 
         @it("debounces rapid decade movement and requests only the final value")

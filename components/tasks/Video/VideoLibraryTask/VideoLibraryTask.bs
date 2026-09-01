@@ -72,7 +72,7 @@ sub executeRequest()
         else
             requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
         end if
-        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), true, getVideoLibraryTimeoutMs(request))
     end if
     if response.ok <> true then
         response.AddReplace("action", "videoLibrary")
@@ -106,6 +106,16 @@ function getVideoLibraryRequestMode(request as object, startsWith as string) as 
 end function
 
 '-------------------------------------------------------------------------------
+' getVideoLibraryTimeoutMs
+'-------------------------------------------------------------------------------
+function getVideoLibraryTimeoutMs(request as dynamic) as integer
+    collectionType = LCase(Format.SafeString(request.collectionType, ""))
+    if collectionType = "movies" or collectionType = "tvshows" then return 120000
+
+    return 60000
+end function
+
+'-------------------------------------------------------------------------------
 ' getVideoLibraryFields
 '-------------------------------------------------------------------------------
 function getVideoLibraryFields(request as dynamic) as string
@@ -135,7 +145,7 @@ function loadNonAlphabeticPage(request as object, params as object, startIndex a
         end for
         lowerParams.AddReplace("nameLessThan", "A")
         lowerUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(lowerParams)
-        lowerResponse = HttpClient.Request(lowerUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        lowerResponse = HttpClient.Request(lowerUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), true, getVideoLibraryTimeoutMs(request))
         if lowerResponse.ok <> true then return lowerResponse
 
         upperParams = {}
@@ -144,7 +154,7 @@ function loadNonAlphabeticPage(request as object, params as object, startIndex a
         end for
         upperParams.AddReplace("nameStartsWithOrGreater", "Z")
         upperUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(upperParams)
-        upperResponse = HttpClient.Request(upperUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        upperResponse = HttpClient.Request(upperUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), true, getVideoLibraryTimeoutMs(request))
         if upperResponse.ok <> true then return upperResponse
 
         items = ApiPayload.GetItems(lowerResponse.data)

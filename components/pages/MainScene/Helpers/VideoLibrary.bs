@@ -33,6 +33,7 @@ sub videoLibraryShow(selection as object, fromCollections as boolean)
     page.observeField("overlayRequested", "videoLibraryHandleOverlayRequested")
     page.observeField("selectedMovie", "videoLibraryHandleMovieSelected")
     page.observeField("selectedVideo", "videoLibraryHandleVideoSelected")
+    page.observeField("selectedCollection", "videoLibraryHandleCollectionSelected")
     page.observeField("selectedSeries", "videoLibraryHandleSeriesSelected")
     page.observeField("selectedEpisode", "videoLibraryHandleEpisodeSelected")
     if pageComponentName = "Playlists" then page.observeField("playbackSelected", "videoLibraryHandlePlaybackSelected")
@@ -188,6 +189,28 @@ function getVideoLibraryIncludeItemTypes(collectionType as string) as string
 end function
 
 '-------------------------------------------------------------------------------
+' videoLibraryHandleCollectionSelected
+'-------------------------------------------------------------------------------
+sub videoLibraryHandleCollectionSelected()
+    if m.videoLibraryPage = invalid then return
+
+    selection = m.videoLibraryPage.selectedCollection
+    if selection = invalid or Format.SafeString(selection.itemId, "") = "" then return
+
+    parentPage = m.videoLibraryPage
+    parentPage.callFunc("deactivate")
+    parentPage.visible = false
+    m.videoLibraryNavigation.parentPage = parentPage
+    m.videoLibraryNavigation.settingsDirty = false
+    videoLibraryShow({
+        libraryId: selection.itemId
+        collectionType: "collection"
+        title: Format.FirstNonEmpty([selection.item.Name], "Collection")
+        item: selection.item
+    }, true)
+end sub
+
+'-------------------------------------------------------------------------------
 ' videoLibraryHandleMovieSelected
 '-------------------------------------------------------------------------------
 sub videoLibraryHandleMovieSelected()
@@ -247,7 +270,15 @@ sub videoLibraryHandleCloseRequested()
         m.videoLibraryPage = invalid
     end if
 
-    if m.collectionsPage <> invalid then
+    if m.videoLibraryNavigation.parentPage <> invalid then
+        m.videoLibraryPage = m.videoLibraryNavigation.parentPage
+        m.videoLibraryNavigation.parentPage = invalid
+        m.videoLibraryPage.visible = true
+        m.videoLibraryPage.callFunc("activate")
+        if m.videoLibraryNavigation.settingsDirty then m.videoLibraryPage.settings = m.settings
+        m.videoLibraryNavigation.settingsDirty = false
+        m.header.thumbnailLibraryLayout = m.videoLibraryPage.thumbnailLayoutActive
+    else if m.collectionsPage <> invalid then
         m.collectionsPage.visible = true
         m.collectionsPage.callFunc("activate")
     else

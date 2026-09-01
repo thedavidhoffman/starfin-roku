@@ -130,6 +130,94 @@ namespace tests
             m.assertEqual(m.node.dynamicPageHost.getChildCount(), 1)
         end function
 
+        @it("opens grouped collections in collection-content mode")
+        function _()
+            parentPage = CreateObject("roSGNode", "VideoLibrary")
+            parentPage.visible = true
+            parentPage.selectedCollection = {
+                itemId: "collection-1"
+                item: { Id: "collection-1", Type: "BoxSet", Name: "Grouped Collection" }
+                libraryIndex: 4
+            }
+            m.node.videoLibraryPage = parentPage
+            m.node.dynamicPageHost.appendChild(parentPage)
+
+            'bs:disable-next-line 1140
+            videoLibraryHandleCollectionSelected()
+
+            m.assertEqual(m.node.videoLibraryPage.loadRequest.libraryId, "collection-1")
+            m.assertEqual(m.node.videoLibraryPage.loadRequest.collectionType, "collection")
+            m.assertEqual(m.node.videoLibraryPage.loadRequest.includeItemTypes, "Movie,Series")
+            m.assertEqual(m.node.videoLibraryPage.loadRequest.title, "Grouped Collection")
+        end function
+
+        @it("retains and hides the originating video library")
+        function _()
+            parentPage = CreateObject("roSGNode", "VideoLibrary")
+            parentPage.visible = true
+            parentPage.selectedCollection = {
+                itemId: "collection-1"
+                item: { Id: "collection-1", Type: "BoxSet", Name: "Grouped Collection" }
+            }
+            m.node.videoLibraryPage = parentPage
+            m.node.dynamicPageHost.appendChild(parentPage)
+
+            'bs:disable-next-line 1140
+            videoLibraryHandleCollectionSelected()
+
+            m.assertEqual(m.node.videoLibraryNavigation.parentPage, parentPage)
+            m.assertFalse(parentPage.visible)
+            m.assertEqual(m.node.dynamicPageHost.getChildCount(), 2)
+        end function
+
+        @it("restores the originating video library when collection contents close")
+        function _()
+            parentPage = CreateObject("roSGNode", "VideoLibrary")
+            parentPage.visible = true
+            parentItems = CreateObject("roSGNode", "ContentNode")
+            for i = 0 to 4
+                parentItems.createChild("ContentNode")
+            end for
+            parentGrid = parentPage.findNode("itemsGrid")
+            parentGrid.content = parentItems
+            parentGrid.itemFocused = 4
+            parentPage.selectedCollection = {
+                itemId: "collection-1"
+                item: { Id: "collection-1", Type: "BoxSet", Name: "Grouped Collection" }
+            }
+            m.node.videoLibraryPage = parentPage
+            m.node.dynamicPageHost.appendChild(parentPage)
+            'bs:disable-next-line 1140
+            videoLibraryHandleCollectionSelected()
+
+            'bs:disable-next-line 1140
+            videoLibraryHandleCloseRequested()
+
+            m.assertEqual(m.node.videoLibraryPage, parentPage)
+            m.assertInvalid(m.node.videoLibraryNavigation.parentPage)
+            m.assertTrue(parentPage.visible)
+            m.assertEqual(m.node.dynamicPageHost.getChildCount(), 1)
+            m.assertEqual(parentGrid.itemFocused, 4)
+            m.assertTrue(parentGrid.isInFocusChain())
+        end function
+
+        @it("clears a retained video library during dynamic reset")
+        function _()
+            parentPage = CreateObject("roSGNode", "VideoLibrary")
+            childPage = CreateObject("roSGNode", "VideoLibrary")
+            m.node.videoLibraryNavigation.parentPage = parentPage
+            m.node.videoLibraryPage = childPage
+            m.node.dynamicPageHost.appendChild(parentPage)
+            m.node.dynamicPageHost.appendChild(childPage)
+
+            'bs:disable-next-line 1140
+            resetDynamicPages()
+
+            m.assertInvalid(m.node.videoLibraryNavigation.parentPage)
+            m.assertInvalid(m.node.videoLibraryPage)
+            m.assertEqual(m.node.dynamicPageHost.getChildCount(), 0)
+        end function
+
         @describe("music library routing")
 
         @it("focuses the filter row immediately after selecting decade browse")
@@ -296,6 +384,40 @@ namespace tests
             m.assertEqual(collectionsPage.settings[SettingsStore.Key.CollectionCardsLayout], "detailed;2")
             m.assertEqual(videoLibraryPage.settings[SettingsStore.Key.MusicVideosLayout], "thumbnail;4")
             m.assertEqual(homeMediaLibraryPage.settings[SettingsStore.Key.HomeVideosLayout], "poster;5")
+        end function
+
+        @it("defers saved settings for a retained video library")
+        function _()
+            retainedVideoLibraryPage = CreateObject("roSGNode", "Group")
+            retainedVideoLibraryPage.addField("settings", "assocarray", false)
+            m.node.videoLibraryNavigation.parentPage = retainedVideoLibraryPage
+            savedSettings = SettingsStore.Defaults()
+            savedSettings[SettingsStore.Key.MovieLibraryLayout] = "thumbnail;4"
+
+            'bs:disable-next-line 1140
+            applySettingsFromOverlay({ settingsSaved: true, savedSettings: savedSettings })
+
+            m.assertInvalid(retainedVideoLibraryPage.settings)
+            m.assertTrue(m.node.videoLibraryNavigation.settingsDirty)
+        end function
+
+        @it("applies deferred settings after restoring the retained video library")
+        function _()
+            retainedVideoLibraryPage = CreateObject("roSGNode", "VideoLibrary")
+            retainedVideoLibraryPage.settings = SettingsStore.Defaults()
+            activeCollectionPage = CreateObject("roSGNode", "VideoLibrary")
+            m.node.dynamicPageHost.appendChild(retainedVideoLibraryPage)
+            m.node.dynamicPageHost.appendChild(activeCollectionPage)
+            m.node.videoLibraryNavigation.parentPage = retainedVideoLibraryPage
+            m.node.videoLibraryNavigation.settingsDirty = true
+            m.node.videoLibraryPage = activeCollectionPage
+            m.node.settings[SettingsStore.Key.MovieLibraryLayout] = "thumbnail;4"
+
+            'bs:disable-next-line 1140
+            videoLibraryHandleCloseRequested()
+
+            m.assertEqual(retainedVideoLibraryPage.settings[SettingsStore.Key.MovieLibraryLayout], "thumbnail;4")
+            m.assertFalse(m.node.videoLibraryNavigation.settingsDirty)
         end function
 
         @describe("application startup")
