@@ -30,8 +30,10 @@ keeping the `MainScene` component context.
 - `components/screensavers/`: Screensaver surfaces and lifecycle behavior.
 - `source/`: Shared BrighterScript namespaces and application startup. Put reused
   pure logic, formatting, state helpers, API utilities, and stores here.
-- `tests/specs/`: Rooibos unit and component tests, organized to mirror production
-  ownership.
+- `tests/rooibos/`: Rooibos entry point, fixtures, and unit/component specs. The
+  specs mirror production ownership.
+- `tests/automation/`: Off-device RTA smoke tests, support helpers, and local
+  automation environment configuration.
 
 ## Component-local helpers versus shared source
 
@@ -106,12 +108,23 @@ import them through a shared package path.
 package's `source/tests` tree and also includes component scripts so `@SGNode`
 tests execute against real SceneGraph nodes.
 
+`bsconfig-automation.json` builds the real Starfin channel with RTA's
+OnDeviceComponent included and `enableRta` enabled. The off-device tests under
+`tests/automation/` deploy and control that package, reset the sideloaded
+development channel registry before the suite, authenticate with its local test
+account, inspect the running scene, and write HTML reports and screenshot
+evidence under `out/automation-results/`.
+The shared manifest disables RTA by default, and only the automation build
+overrides that value. Automation components and runtime initialization are not
+shipped in the production or Rooibos packages.
+
 Use these checks:
 
 1. `npm run validate` for the production build.
 2. `npm run test:build` for test compilation and packaging.
 3. `npm test -- --host <roku-host> --password "<developer-password>"` for the
    full runtime suite on a Roku development device.
+4. `npm run automation:test` for the RTA device smoke suite and evidence report.
 
 Run the device suite for component, observer, focus, field-type, and Roku runtime
 behavior. Compilation alone cannot validate those semantics. Keep credentials out
@@ -119,6 +132,7 @@ of version control and command examples with real values.
 
 ## Generated and local files
 
-`build/`, `out/`, `node_modules/`, local deployment configuration, and logs are
-not application source. Preserve unrelated working-tree changes and follow the
-special handling for user-owned files documented in `AGENTS.md`.
+`build/`, `out/`, `node_modules/`, local deployment configuration,
+`tests/automation/.env.automation`, and logs are not application source. Preserve
+unrelated working-tree changes and follow the special handling for user-owned
+files documented in `AGENTS.md`.

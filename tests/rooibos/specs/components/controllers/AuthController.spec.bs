@@ -273,6 +273,10 @@ namespace tests
 
         @it("commits an authenticated Quick Connect user through AuthStore")
         function _()
+            originalAuthState = {
+                activeAccountKey: AuthStore.GetActiveAccountKey()
+                server: AuthStore.GetLastServer()
+            }
             state = m.node.authState.quickConnect
             state.active = true
             state.generation = 4
@@ -297,6 +301,10 @@ namespace tests
 
             AuthStore.ClearActiveAccount()
             AuthStore.ForgetAccount(accountKey)
+            m.restoreAuthStoreState(originalAuthState)
+
+            m.assertEqual(AuthStore.GetActiveAccountKey(), originalAuthState.activeAccountKey)
+            m.assertEqual(AuthStore.GetLastServer(), originalAuthState.server)
         end function
 
         @it("requests login when no saved session can be resumed")
@@ -366,6 +374,21 @@ namespace tests
                 tasks.Push(task)
             end for
             m.node.quickConnectTasks = tasks
+        end function
+
+        function restoreAuthStoreState(state as object)
+            store = AuthStore.__GetStore()
+            if state.activeAccountKey = "" then
+                store.Delete("active-account-key")
+            else
+                store.Write("active-account-key", state.activeAccountKey)
+            end if
+            if state.server = "" then
+                store.Delete("server")
+            else
+                store.Write("server", state.server)
+            end if
+            store.Flush()
         end function
 
     end class

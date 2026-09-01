@@ -1,0 +1,53 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import rta from 'roku-test-automation';
+import { EcpClient } from '@danecodes/roku-ecp';
+
+const { device, ecp, odc, utils } = rta;
+
+let environment;
+
+export async function getAutomationEnvironment() {
+  if (environment) return environment;
+
+  const configText = process.env.STARFIN_AUTOMATION_CONFIG;
+  const resultsDir = process.env.STARFIN_AUTOMATION_RESULTS;
+  if (!configText || !resultsDir) {
+    throw new Error('Run automation through npm run automation:test so configuration and result paths are initialized.');
+  }
+
+  const config = JSON.parse(configText);
+  const testAccount = JSON.parse(process.env.STARFIN_AUTOMATION_ACCOUNT ?? '{}');
+  if (!testAccount.server || !testAccount.username || !testAccount.password) {
+    throw new Error('Automation login credentials were not provided by the runner.');
+  }
+  utils.setupEnvironmentFromConfig(config);
+  const selectedDevice = device.getCurrentDeviceConfig();
+  const screenshotClient = new EcpClient(selectedDevice.host, {
+    devPassword: selectedDevice.password,
+    timeout: selectedDevice.defaultTimeout ?? 15000
+  });
+  const manifest = await fs.readFile(path.resolve('manifest'), 'utf8');
+  const version = ['major_version', 'minor_version', 'build_version']
+    .map(key => manifest.match(new RegExp(`^${key}=(\\d+)$`, 'm'))?.[1] ?? 'unknown')
+    .join('.');
+
+  environment = {
+    config,
+    device,
+    ecp,
+    odc,
+    resultsDir,
+    screenshotClient,
+    selectedDevice,
+    testAccount,
+    version
+  };
+  return environment;
+}
+
+export async function closeAutomationEnvironment() {
+  if (!environment) return;
+  await environment.odc.shutdown();
+  environment = undefined;
+}

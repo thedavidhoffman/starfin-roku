@@ -98,7 +98,7 @@ RESULT: Success
 
 Rooibos framework warnings about unused variables under `pkg:/source/rooibos/`
 come from the injected test framework and do not indicate failures in Starfin.
-Test specifications live under `tests/specs/` and mirror the corresponding
+Test specifications live under `tests/rooibos/specs/` and mirror the corresponding
 production paths. `bsconfig-test.json` maps them into the test channel's
 executable source scope without including them in production packages.
 Feature-owned pure helpers remain beside their owning component in the

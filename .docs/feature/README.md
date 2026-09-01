@@ -8,6 +8,7 @@ individual Starfin features.
 
 - [Account Badge](account-badge.md)
 - [Audio Playback](audio-playback.md)
+- [Automated Device Testing](automated-device-testing.md)
 - [Episode Detail Browsing](episode-detail-browsing.md)
 - [Home Media Playback](home-media.md)
 - [Library Genre Browsing](library-genre-browsing.md)
