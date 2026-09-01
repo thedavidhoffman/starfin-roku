@@ -1,0 +1,180 @@
+import "pkg:/source/Encode.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/Json.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    if request = invalid then
+        m.top.response = { ok: false, action: "", generation: 0, errorMessage: "Invalid Quick Connect request." }
+        return
+    end if
+
+    action = Format.SafeString(request.action, "")
+    if action = "initiate" then
+        m.top.response = initiateQuickConnect(request)
+    else if action = "poll" then
+        m.top.response = pollQuickConnect(request)
+    else if action = "authenticate" then
+        m.top.response = authenticateQuickConnect(request)
+    else
+        m.top.response = quickConnectError(request, "Unknown Quick Connect action.")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' initiateQuickConnect
+'-------------------------------------------------------------------------------
+function initiateQuickConnect(request as object) as object
+    if Format.SafeString(request.server, "") = "" then return quickConnectError(request, "Enter a Jellyfin server before using Quick Connect.")
+
+    httpRequest = buildInitiateHttpRequest(request.server)
+    result = HttpClient.Request(httpRequest.url, httpRequest.method, invalid, httpRequest.body, httpRequest.headers)
+    return buildInitiateResponse(request, result)
+end function
+
+'-------------------------------------------------------------------------------
+' buildInitiateHttpRequest
+'-------------------------------------------------------------------------------
+function buildInitiateHttpRequest(server as string) as object
+    return {
+        url: server + "/QuickConnect/Initiate"
+        method: "POST"
+        body: invalid
+        headers: { Authorization: JellyfinAuth.BuildClientHeader() }
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildInitiateResponse
+'-------------------------------------------------------------------------------
+function buildInitiateResponse(request as object, result as object) as object
+    if result.ok <> true then return quickConnectHttpError(request, result)
+    if result.data = invalid or Format.SafeString(result.data.Code, "") = "" or Format.SafeString(result.data.Secret, "") = "" then
+        return quickConnectError(request, "The server returned an invalid Quick Connect response.")
+    end if
+
+    return {
+        ok: true
+        action: "initiate"
+        generation: request.generation
+        code: result.data.Code
+        secret: result.data.Secret
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' pollQuickConnect
+'-------------------------------------------------------------------------------
+function pollQuickConnect(request as object) as object
+    secret = Format.SafeString(request.secret, "")
+    if secret = "" then return quickConnectError(request, "The Quick Connect request is missing its secret.")
+
+    httpRequest = buildPollHttpRequest(request.server, secret)
+    result = HttpClient.Request(httpRequest.url, httpRequest.method, invalid, httpRequest.body, httpRequest.headers)
+    return buildPollResponse(request, result)
+end function
+
+'-------------------------------------------------------------------------------
+' buildPollHttpRequest
+'-------------------------------------------------------------------------------
+function buildPollHttpRequest(server as string, secret as string) as object
+    return {
+        url: server + "/QuickConnect/Connect?secret=" + Encode.Url(secret)
+        method: "GET"
+        body: invalid
+        headers: { Authorization: JellyfinAuth.BuildClientHeader() }
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildPollResponse
+'-------------------------------------------------------------------------------
+function buildPollResponse(request as object, result as object) as object
+    if result.ok <> true then return quickConnectHttpError(request, result)
+
+    authenticated = false
+    if result.data <> invalid and result.data.Authenticated = true then authenticated = true
+    return {
+        ok: true
+        action: "poll"
+        generation: request.generation
+        authenticated: authenticated
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' authenticateQuickConnect
+'-------------------------------------------------------------------------------
+function authenticateQuickConnect(request as object) as object
+    secret = Format.SafeString(request.secret, "")
+    if secret = "" then return quickConnectError(request, "The Quick Connect request is missing its secret.")
+
+    httpRequest = buildAuthenticationHttpRequest(request.server, secret)
+    result = HttpClient.Request(httpRequest.url, httpRequest.method, invalid, httpRequest.body, httpRequest.headers)
+    return buildAuthenticationResponse(request, result)
+end function
+
+'-------------------------------------------------------------------------------
+' buildAuthenticationHttpRequest
+'-------------------------------------------------------------------------------
+function buildAuthenticationHttpRequest(server as string, secret as string) as object
+    return {
+        url: server + "/Users/AuthenticateWithQuickConnect"
+        method: "POST"
+        body: Json.Object([Json.Pair("Secret", secret)])
+        headers: { Authorization: JellyfinAuth.BuildClientHeader() }
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildAuthenticationResponse
+'-------------------------------------------------------------------------------
+function buildAuthenticationResponse(request as object, result as object) as object
+    if result.ok <> true then return quickConnectHttpError(request, result)
+    if result.data = invalid or Format.SafeString(result.data.AccessToken, "") = "" or result.data.User = invalid then
+        return quickConnectError(request, "The server returned an invalid authentication response.")
+    end if
+
+    return {
+        ok: true
+        action: "authenticate"
+        generation: request.generation
+        server: request.server
+        payload: result.data
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' quickConnectHttpError
+'-------------------------------------------------------------------------------
+function quickConnectHttpError(request as object, result as object) as object
+    response = quickConnectError(request, Format.SafeString(result.errorMessage, "Quick Connect failed."))
+    response.status = result.status
+    return response
+end function
+
+'-------------------------------------------------------------------------------
+' quickConnectError
+'-------------------------------------------------------------------------------
+function quickConnectError(request as object, message as string) as object
+    return {
+        ok: false
+        action: Format.SafeString(request.action, "")
+        generation: request.generation
+        errorMessage: message
+    }
+end function

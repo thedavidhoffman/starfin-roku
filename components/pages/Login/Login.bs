@@ -11,20 +11,29 @@ sub init()
     m.usernameInput = m.top.findNode("usernameInput")
     m.passwordInput = m.top.findNode("passwordInput")
     m.loginButton = m.top.findNode("loginButton")
+    m.quickConnectButton = m.top.findNode("quickConnectButton")
     m.savedAccountsButton = m.top.findNode("savedAccountsButton")
     m.loginStatus = m.top.findNode("loginStatus")
+    m.loginForm = m.top.findNode("loginForm")
+    m.quickConnectPanel = m.top.findNode("quickConnectPanel")
+    m.quickConnectCode = m.top.findNode("quickConnectCode")
+    m.quickConnectMessage = m.top.findNode("quickConnectMessage")
+    m.quickConnectCancelButton = m.top.findNode("quickConnectCancelButton")
 
     m.loginFocusNodes = [
         m.serverInput
         m.usernameInput
         m.passwordInput
         m.loginButton
+        m.quickConnectButton
         m.savedAccountsButton
     ]
    
     m.activeKeyboardField = invalid
     m.loginButton.observeField("buttonSelected", "onLoginPressed")
+    m.quickConnectButton.observeField("buttonSelected", "onQuickConnectPressed")
     m.savedAccountsButton.observeField("buttonSelected", "onSavedAccountsPressed")
+    m.quickConnectCancelButton.observeField("buttonSelected", "onQuickConnectCancelled")
     
     preloadSavedSession()
     syncFieldsFromState()
@@ -74,6 +83,68 @@ sub onStatusMessageChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' onQuickConnectStateChanged
+'-------------------------------------------------------------------------------
+sub onQuickConnectStateChanged()
+    state = m.top.quickConnectState
+    phase = "idle"
+    if state <> invalid then phase = Format.SafeString(state.phase, phase)
+    isActive = phase <> "idle" and phase <> "failed"
+
+    m.loginForm.visible = not isActive
+    m.quickConnectPanel.visible = isActive
+    if isActive then
+        m.quickConnectCode.text = Format.SafeString(state.code, "")
+        m.quickConnectMessage.text = Format.SafeString(state.message, "")
+        focusQuickConnectCancel()
+    else if phase = "failed" then
+        m.quickConnectCancelButton.hasFocusVisual = false
+        m.top.statusMessage = Format.SafeString(state.message, "Quick Connect failed.")
+        focusLoginField(4)
+    else
+        m.quickConnectCancelButton.hasFocusVisual = false
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onQuickConnectPressed
+'-------------------------------------------------------------------------------
+sub onQuickConnectPressed()
+    server = Url.NormalizeServer(m.top.serverValue)
+    if server = "" then
+        m.top.statusMessage = "Server address is required for Quick Connect."
+        focusLoginField(0)
+        return
+    end if
+
+    m.top.statusMessage = ""
+    m.top.quickConnectRequested = { server: server }
+end sub
+
+'-------------------------------------------------------------------------------
+' onQuickConnectCancelled
+'-------------------------------------------------------------------------------
+sub onQuickConnectCancelled()
+    m.top.quickConnectCancelled = true
+    m.top.quickConnectState = { phase: "idle", code: "", message: "" }
+    focusLoginField(4)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusQuickConnectCancel
+'-------------------------------------------------------------------------------
+sub focusQuickConnectCancel()
+    m.serverInput.hasFocusVisual = false
+    m.usernameInput.hasFocusVisual = false
+    m.passwordInput.hasFocusVisual = false
+    m.loginButton.hasFocusVisual = false
+    m.quickConnectButton.hasFocusVisual = false
+    m.savedAccountsButton.hasFocusVisual = false
+    m.quickConnectCancelButton.hasFocusVisual = true
+    m.quickConnectCancelButton.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
@@ -120,7 +191,7 @@ sub updateSavedAccountsButton()
     accounts = m.top.savedAccounts
     if accounts = invalid then accounts = []
     m.savedAccountsButton.visible = (accounts.Count() > 0)
-    m.loginFocusNodes = [m.serverInput, m.usernameInput, m.passwordInput, m.loginButton]
+    m.loginFocusNodes = [m.serverInput, m.usernameInput, m.passwordInput, m.loginButton, m.quickConnectButton]
     if m.savedAccountsButton.visible then m.loginFocusNodes.Push(m.savedAccountsButton)
 end sub
 
@@ -261,7 +332,8 @@ sub focusLoginField(index as integer)
     if m.usernameInput <> invalid then m.usernameInput.hasFocusVisual = (index = 1)
     if m.passwordInput <> invalid then m.passwordInput.hasFocusVisual = (index = 2)
     if m.loginButton <> invalid then m.loginButton.hasFocusVisual = (index = 3)
-    if m.savedAccountsButton <> invalid then m.savedAccountsButton.hasFocusVisual = (index = 4)
+    if m.quickConnectButton <> invalid then m.quickConnectButton.hasFocusVisual = (index = 4)
+    if m.savedAccountsButton <> invalid then m.savedAccountsButton.hasFocusVisual = (index = 5)
     node = m.loginFocusNodes[index]
     if node <> invalid then
         node.setFocus(true)
@@ -295,12 +367,18 @@ function handleLoginNavigation(key as string) as boolean
     end if
 
     if key = "down" then
-        if focusedIndex < 3 then focusLoginField(focusedIndex + 1)
+        if focusedIndex < 3 then
+            focusLoginField(focusedIndex + 1)
+        else if (focusedIndex = 3 or focusedIndex = 4) and m.savedAccountsButton.visible then
+            focusLoginField(5)
+        end if
         return true
     end if
 
     if key = "up" then
-        if focusedIndex = 3 or focusedIndex = 4 then
+        if focusedIndex = 5 then
+            focusLoginField(3)
+        else if focusedIndex = 3 or focusedIndex = 4 then
             focusLoginField(2)
         else if focusedIndex > 0 then
             focusLoginField(focusedIndex - 1)
@@ -308,7 +386,7 @@ function handleLoginNavigation(key as string) as boolean
         return true
     end if
 
-    if key = "right" and focusedIndex = 3 and m.savedAccountsButton.visible then
+    if key = "right" and focusedIndex = 3 then
         focusLoginField(4)
         return true
     end if
@@ -332,6 +410,9 @@ function handleLoginNavigation(key as string) as boolean
             onLoginPressed()
             return true
         else if focusedIndex = 4 then
+            onQuickConnectPressed()
+            return true
+        else if focusedIndex = 5 then
             onSavedAccountsPressed()
             return true
         end if
@@ -345,5 +426,16 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if m.quickConnectPanel.visible = true then
+        if key = "back" then
+            onQuickConnectCancelled()
+            return true
+        end if
+        if key = "up" or key = "down" or key = "left" or key = "right" then
+            focusQuickConnectCancel()
+            return true
+        end if
+        return false
+    end if
     return handleLoginNavigation(key)
 end function

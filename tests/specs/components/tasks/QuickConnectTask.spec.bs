@@ -1,0 +1,170 @@
+namespace tests
+
+    @SGNode("QuickConnectTask")
+    @suite("QuickConnectTask component")
+    class QuickConnectTaskTests extends rooibos.BaseTestSuite
+
+        @describe("request validation")
+
+        @it("rejects an invalid request without performing network work")
+        function _()
+            m.node.top.request = invalid
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.node.top.response.ok)
+        end function
+
+        @it("rejects an unknown action")
+        function _()
+            m.node.top.request = { action: "unknown", generation: 7 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.generation, 7)
+        end function
+
+        @it("requires a server when initiating")
+        function _()
+            request = { action: "initiate", generation: 3, server: "" }
+
+            'bs:disable-next-line 1140
+            response = initiateQuickConnect(request)
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "initiate")
+        end function
+
+        @it("requires a secret when polling")
+        function _()
+            request = { action: "poll", generation: 3, server: "https://server", secret: "" }
+
+            'bs:disable-next-line 1140
+            response = pollQuickConnect(request)
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "poll")
+        end function
+
+        @it("requires a secret when authenticating")
+        function _()
+            request = { action: "authenticate", generation: 3, server: "https://server", secret: "" }
+
+            'bs:disable-next-line 1140
+            response = authenticateQuickConnect(request)
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "authenticate")
+        end function
+
+        @describe("response handling")
+
+        @it("accepts a complete initiation response")
+        function _()
+            request = { action: "initiate", generation: 2, server: "https://server" }
+
+            'bs:disable-next-line 1140
+            response = buildInitiateResponse(request, { ok: true, data: { Code: "ABC123", Secret: "secret" } })
+
+            m.assertTrue(response.ok)
+            m.assertEqual(response.code, "ABC123")
+            m.assertEqual(response.secret, "secret")
+            m.assertEqual(response.generation, 2)
+        end function
+
+        @it("rejects an incomplete initiation response")
+        function _()
+            request = { action: "initiate", generation: 2, server: "https://server" }
+
+            'bs:disable-next-line 1140
+            response = buildInitiateResponse(request, { ok: true, data: { Code: "ABC123" } })
+
+            m.assertFalse(response.ok)
+        end function
+
+        @it("reports a pending poll response")
+        function _()
+            request = { action: "poll", generation: 2, server: "https://server", secret: "secret" }
+
+            'bs:disable-next-line 1140
+            response = buildPollResponse(request, { ok: true, data: { Authenticated: false } })
+
+            m.assertTrue(response.ok)
+            m.assertFalse(response.authenticated)
+        end function
+
+        @it("reports an approved poll response")
+        function _()
+            request = { action: "poll", generation: 2, server: "https://server", secret: "secret" }
+
+            'bs:disable-next-line 1140
+            response = buildPollResponse(request, { ok: true, data: { Authenticated: true } })
+
+            m.assertTrue(response.authenticated)
+        end function
+
+        @it("accepts a complete authentication response")
+        function _()
+            request = { action: "authenticate", generation: 2, server: "https://server", secret: "secret" }
+            payload = { AccessToken: "token", User: { Id: "user-id", Name: "River" } }
+
+            'bs:disable-next-line 1140
+            response = buildAuthenticationResponse(request, { ok: true, data: payload })
+
+            m.assertTrue(response.ok)
+            m.assertEqual(response.server, "https://server")
+            m.assertEqual(response.payload, payload)
+        end function
+
+        @it("preserves HTTP failure status for retry decisions")
+        function _()
+            request = { action: "poll", generation: 2, server: "https://server", secret: "secret" }
+
+            'bs:disable-next-line 1140
+            response = buildPollResponse(request, { ok: false, status: 503, errorMessage: "unavailable" })
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.status, 503)
+            m.assertEqual(response.errorMessage, "unavailable")
+        end function
+
+        @describe("HTTP request contracts")
+
+        @it("builds the Quick Connect initiation request")
+        function _()
+            'bs:disable-next-line 1140
+            request = buildInitiateHttpRequest("https://server")
+
+            m.assertEqual(request.url, "https://server/QuickConnect/Initiate")
+            m.assertEqual(request.method, "POST")
+            m.assertInvalid(request.body)
+            m.assertTrue(Instr(1, request.headers.Authorization, "Client=") > 0)
+        end function
+
+        @it("builds an encoded Quick Connect polling request")
+        function _()
+            'bs:disable-next-line 1140
+            request = buildPollHttpRequest("https://server", "a b/c")
+
+            m.assertEqual(request.url, "https://server/QuickConnect/Connect?secret=a%20b%2Fc")
+            m.assertEqual(request.method, "GET")
+            m.assertInvalid(request.body)
+        end function
+
+        @it("builds a case-sensitive Quick Connect authentication body")
+        function _()
+            'bs:disable-next-line 1140
+            request = buildAuthenticationHttpRequest("https://server", "secret")
+
+            m.assertEqual(request.url, "https://server/Users/AuthenticateWithQuickConnect")
+            m.assertEqual(request.method, "POST")
+            m.assertEqual(request.body, Chr(123) + Chr(34) + "Secret" + Chr(34) + ":" + Chr(34) + "secret" + Chr(34) + Chr(125))
+            m.assertTrue(Instr(1, request.headers.Authorization, "Client=") > 0)
+        end function
+
+    end class
+
+end namespace

@@ -98,6 +98,207 @@ namespace tests
             })
         end function
 
+        @it("initializes Quick Connect workflow ownership")
+        function _()
+            m.assertEqual(m.node.quickConnectTasks.Count(), 2)
+            m.assertNotInvalid(m.node.quickConnectTimer)
+            m.assertFalse(m.node.authState.quickConnect.active)
+        end function
+
+        @it("starts Quick Connect with a new generation")
+        function _()
+            m.useQuickConnectTaskMocks()
+            m.node.authState.quickConnect.taskBusy = [true, true]
+            m.top.quickConnectRequest = { server: "https://server" }
+
+            m.assertTrue(m.node.authState.quickConnect.active)
+            m.assertEqual(m.node.authState.quickConnect.server, "https://server")
+            m.assertEqual(m.top.quickConnectState.phase, "starting")
+            m.assertEqual(m.node.authState.quickConnect.pendingRequest.action, "initiate")
+        end function
+
+        @it("cancels Quick Connect and invalidates late responses")
+        function _()
+            m.node.authState.quickConnect.active = true
+            originalGeneration = m.node.authState.quickConnect.generation
+
+            'bs:disable-next-line 1140
+            onQuickConnectCancelRequested()
+
+            m.assertFalse(m.node.authState.quickConnect.active)
+            m.assertTrue(m.node.authState.quickConnect.generation > originalGeneration)
+            m.assertEqual(m.top.quickConnectState.phase, "idle")
+        end function
+
+        @it("coalesces the latest request while both Quick Connect tasks are busy")
+        function _()
+            m.useQuickConnectTaskMocks()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 8
+            state.server = "https://server"
+            state.secret = "secret"
+            state.taskBusy = [true, true]
+
+            'bs:disable-next-line 1140
+            runQuickConnectRequest("initiate")
+            'bs:disable-next-line 1140
+            runQuickConnectRequest("poll")
+
+            m.assertEqual(state.pendingRequest.action, "poll")
+            m.assertEqual(state.pendingRequest.generation, 8)
+        end function
+
+        @it("dispatches pending Quick Connect work when a task slot becomes available")
+        function _()
+            m.useQuickConnectTaskMocks()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 8
+            state.taskBusy = [false, true]
+            state.pendingRequest = { action: "initiate", generation: 8, server: "https://server" }
+
+            'bs:disable-next-line 1140
+            dispatchPendingQuickConnectRequest()
+
+            m.assertInvalid(state.pendingRequest)
+            m.assertTrue(state.taskBusy[0])
+            m.assertEqual(m.node.quickConnectTasks[0].request.action, "initiate")
+        end function
+
+        @it("ignores stale Quick Connect responses")
+        function _()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 9
+            m.top.quickConnectState = { phase: "starting" }
+
+            'bs:disable-next-line 1140
+            handleQuickConnectResponse({ ok: false, action: "initiate", generation: 8, errorMessage: "stale" })
+
+            m.assertTrue(state.active)
+            m.assertEqual(m.top.quickConnectState.phase, "starting")
+        end function
+
+        @it("stores initiation state and starts the polling timer")
+        function _()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 4
+
+            'bs:disable-next-line 1140
+            handleQuickConnectResponse({ ok: true, action: "initiate", generation: 4, secret: "secret", code: "ABC123" })
+
+            m.assertEqual(state.secret, "secret")
+            m.assertEqual(m.top.quickConnectState.phase, "waiting")
+            m.assertEqual(m.top.quickConnectState.code, "ABC123")
+            m.assertEqual(m.node.quickConnectTimer.control, "start")
+        end function
+
+        @it("starts authentication after Quick Connect approval")
+        function _()
+            m.useQuickConnectTaskMocks()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 4
+            state.server = "https://server"
+            state.secret = "secret"
+            state.nextTaskIndex = 0
+            state.taskBusy = [false, false]
+
+            'bs:disable-next-line 1140
+            handleQuickConnectResponse({ ok: true, action: "poll", generation: 4, authenticated: true })
+
+            m.assertEqual(m.top.quickConnectState.phase, "authenticating")
+            m.assertEqual(m.node.quickConnectTasks[0].request.action, "authenticate")
+            m.assertEqual(m.node.quickConnectTasks[0].request.secret, "secret")
+        end function
+
+        @it("defers authentication when the only available task is publishing")
+        function _()
+            m.useQuickConnectTaskMocks()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 4
+            state.server = "https://server"
+            state.secret = "secret"
+            state.taskBusy = [true, true]
+            priorRequest = m.node.quickConnectTasks[0].request
+
+            'bs:disable-next-line 1140
+            handleQuickConnectResponse({ ok: true, action: "poll", generation: 4, authenticated: true })
+            'bs:disable-next-line 1140
+            releaseQuickConnectTask(m.node.quickConnectTasks[0])
+
+            m.assertEqual(state.pendingRequest.action, "authenticate")
+            m.assertFalse(state.taskBusy[0])
+            m.assertEqual(m.node.quickConnectTasks[0].request, priorRequest)
+
+            'bs:disable-next-line 1140
+            onQuickConnectDispatchTimerFired()
+
+            m.assertTrue(state.taskBusy[0])
+            m.assertEqual(m.node.quickConnectTasks[0].request.action, "authenticate")
+        end function
+
+        @it("retries transient Quick Connect polling failures")
+        function _()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 4
+            state.code = "ABC123"
+
+            'bs:disable-next-line 1140
+            handleQuickConnectResponse({ ok: false, action: "poll", generation: 4, status: 0, errorMessage: "offline" })
+
+            m.assertTrue(state.active)
+            m.assertEqual(m.top.quickConnectState.phase, "waiting")
+            m.assertEqual(m.top.quickConnectState.code, "ABC123")
+            m.assertEqual(m.node.quickConnectTimer.control, "start")
+        end function
+
+        @it("ends Quick Connect after a terminal failure")
+        function _()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 4
+
+            'bs:disable-next-line 1140
+            handleQuickConnectResponse({ ok: false, action: "authenticate", generation: 4, status: 400, errorMessage: "expired" })
+
+            m.assertFalse(state.active)
+            m.assertEqual(m.top.quickConnectState.phase, "failed")
+            m.assertEqual(m.top.quickConnectState.message, "expired")
+        end function
+
+        @it("commits an authenticated Quick Connect user through AuthStore")
+        function _()
+            state = m.node.authState.quickConnect
+            state.active = true
+            state.generation = 4
+            response = {
+                ok: true
+                action: "authenticate"
+                generation: 4
+                server: "https://quick-connect-test.invalid"
+                payload: {
+                    AccessToken: "quick-connect-test-token"
+                    User: { Id: "quick-connect-test-user", Name: "Quick Connect Test" }
+                }
+            }
+
+            'bs:disable-next-line 1140
+            handleQuickConnectResponse(response)
+
+            accountKey = "quick-connect-test.invalid/quick-connect-test-user"
+            m.assertEqual(m.top.authenticatedSession.accountKey, accountKey)
+            m.assertEqual(m.top.authenticatedSession.username, "Quick Connect Test")
+            m.assertEqual(AuthStore.LoadAccount(accountKey, true).token, "quick-connect-test-token")
+
+            AuthStore.ClearActiveAccount()
+            AuthStore.ForgetAccount(accountKey)
+        end function
+
         @it("requests login when no saved session can be resumed")
         function _()
             m.node.savedSession = invalid
@@ -154,6 +355,17 @@ namespace tests
             handleAuthError({ authExpired: false, errorMessage: "Denied" }, "login")
 
             m.assertEqual(m.top.loginFailed, { message: "Login failed: Denied" })
+        end function
+
+        function useQuickConnectTaskMocks()
+            tasks = []
+            for i = 0 to 1
+                task = CreateObject("roSGNode", "Group")
+                task.addField("request", "assocarray", false)
+                task.addField("control", "string", false)
+                tasks.Push(task)
+            end for
+            m.node.quickConnectTasks = tasks
         end function
 
     end class

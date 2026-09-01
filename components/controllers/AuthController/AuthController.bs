@@ -15,15 +15,227 @@ sub init()
     m.log.write("init")
 
     m.authApiTask = m.top.findNode("authApiTask")
+    m.quickConnectTasks = [m.top.findNode("quickConnectTaskA"), m.top.findNode("quickConnectTaskB")]
+    m.quickConnectTimer = m.top.findNode("quickConnectTimer")
+    m.quickConnectDispatchTimer = m.top.findNode("quickConnectDispatchTimer")
     m.savedSession = AuthStore.Load()
     m.authState = {
         isResumingSession: false
         pendingSwitch: invalid
         logoutTasks: []
+        quickConnect: {
+            active: false
+            generation: 0
+            server: ""
+            secret: ""
+            code: ""
+            nextTaskIndex: 0
+            taskBusy: [false, false]
+            pendingRequest: invalid
+        }
     }
 
     m.authApiTask.observeField("response", "onAuthApiResponse")
+    m.quickConnectTasks[0].observeField("response", "onQuickConnectResponse")
+    m.quickConnectTasks[1].observeField("response", "onQuickConnectResponse")
+    m.quickConnectTimer.observeField("fire", "onQuickConnectTimerFired")
+    m.quickConnectDispatchTimer.observeField("fire", "onQuickConnectDispatchTimerFired")
     m.top.savedSession = m.savedSession
+end sub
+
+'-------------------------------------------------------------------------------
+' onQuickConnectRequestChanged
+'-------------------------------------------------------------------------------
+sub onQuickConnectRequestChanged()
+    request = m.top.quickConnectRequest
+    if request = invalid then return
+
+    cancelQuickConnect(false)
+    state = m.authState.quickConnect
+    state.active = true
+    state.server = Format.SafeString(request.server, "")
+    m.authState.isResumingSession = false
+    m.authState.pendingSwitch = invalid
+    publishQuickConnectState("starting", "", "Starting Quick Connect...")
+    runQuickConnectRequest("initiate")
+end sub
+
+'-------------------------------------------------------------------------------
+' onQuickConnectCancelRequested
+'-------------------------------------------------------------------------------
+sub onQuickConnectCancelRequested()
+    cancelQuickConnect(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onQuickConnectTimerFired
+'-------------------------------------------------------------------------------
+sub onQuickConnectTimerFired()
+    if m.authState.quickConnect.active <> true then return
+    runQuickConnectRequest("poll")
+end sub
+
+'-------------------------------------------------------------------------------
+' onQuickConnectDispatchTimerFired
+'-------------------------------------------------------------------------------
+sub onQuickConnectDispatchTimerFired()
+    dispatchPendingQuickConnectRequest()
+end sub
+
+'-------------------------------------------------------------------------------
+' runQuickConnectRequest
+'-------------------------------------------------------------------------------
+sub runQuickConnectRequest(action as string)
+    state = m.authState.quickConnect
+    request = {
+        action: action
+        generation: state.generation
+        server: state.server
+    }
+    if action <> "initiate" then request.secret = state.secret
+    dispatchQuickConnectRequest(request)
+end sub
+
+'-------------------------------------------------------------------------------
+' dispatchQuickConnectRequest
+'-------------------------------------------------------------------------------
+sub dispatchQuickConnectRequest(request as object)
+    state = m.authState.quickConnect
+    taskIndex = -1
+    for offset = 0 to 1
+        candidate = (state.nextTaskIndex + offset) mod 2
+        if state.taskBusy[candidate] <> true then
+            taskIndex = candidate
+            exit for
+        end if
+    end for
+
+    if taskIndex < 0 then
+        ' Keep only the newest intent while both bounded Task nodes finish.
+        state.pendingRequest = request
+        return
+    end if
+
+    state.taskBusy[taskIndex] = true
+    state.nextTaskIndex = 1 - taskIndex
+    task = m.quickConnectTasks[taskIndex]
+    task.request = request
+    task.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onQuickConnectResponse
+'-------------------------------------------------------------------------------
+sub onQuickConnectResponse(event as object)
+    response = event.getData()
+    if response <> invalid then handleQuickConnectResponse(response)
+    releaseQuickConnectTask(event.getRoSGNode())
+    if m.authState.quickConnect.pendingRequest <> invalid then m.quickConnectDispatchTimer.control = "start"
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseQuickConnectTask
+'-------------------------------------------------------------------------------
+sub releaseQuickConnectTask(task as object)
+    for i = 0 to m.quickConnectTasks.Count() - 1
+        if m.quickConnectTasks[i].isSameNode(task) then
+            m.authState.quickConnect.taskBusy[i] = false
+            return
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' dispatchPendingQuickConnectRequest
+'-------------------------------------------------------------------------------
+sub dispatchPendingQuickConnectRequest()
+    state = m.authState.quickConnect
+    request = state.pendingRequest
+    if request = invalid then return
+    if state.active <> true or request.generation <> state.generation then
+        state.pendingRequest = invalid
+        return
+    end if
+
+    state.pendingRequest = invalid
+    m.quickConnectDispatchTimer.control = "stop"
+    dispatchQuickConnectRequest(request)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleQuickConnectResponse
+'-------------------------------------------------------------------------------
+sub handleQuickConnectResponse(response as object)
+    state = m.authState.quickConnect
+    if state.active <> true or response.generation <> state.generation then return
+
+    if response.ok <> true then
+        if response.action = "poll" and (response.status = 0 or response.status >= 500) then
+            publishQuickConnectState("waiting", "", "Connection interrupted. Retrying...")
+            m.quickConnectTimer.control = "start"
+            return
+        end if
+        failQuickConnect(Format.SafeString(response.errorMessage, "Quick Connect failed."))
+        return
+    end if
+
+    if response.action = "initiate" then
+        state.secret = response.secret
+        publishQuickConnectState("waiting", response.code, "Approve this code in Jellyfin.")
+        m.quickConnectTimer.control = "start"
+    else if response.action = "poll" and response.authenticated = true then
+        publishQuickConnectState("authenticating", "", "Quick Connect approved. Signing in...")
+        runQuickConnectRequest("authenticate")
+    else if response.action = "poll" then
+        m.quickConnectTimer.control = "start"
+    else if response.action = "authenticate" then
+        state.active = false
+        state.secret = ""
+        state.code = ""
+        state.pendingRequest = invalid
+        m.quickConnectTimer.control = "stop"
+        m.quickConnectDispatchTimer.control = "stop"
+        publishQuickConnectState("idle", "", "")
+        storeAuthenticatedSession(response)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' publishQuickConnectState
+'-------------------------------------------------------------------------------
+sub publishQuickConnectState(phase as string, code as string, message as string)
+    if code <> "" then m.authState.quickConnect.code = code
+    m.top.quickConnectState = { phase: phase, code: m.authState.quickConnect.code, message: message }
+end sub
+
+'-------------------------------------------------------------------------------
+' failQuickConnect
+'-------------------------------------------------------------------------------
+sub failQuickConnect(message as string)
+    state = m.authState.quickConnect
+    state.active = false
+    state.secret = ""
+    state.code = ""
+    state.pendingRequest = invalid
+    m.quickConnectTimer.control = "stop"
+    m.quickConnectDispatchTimer.control = "stop"
+    publishQuickConnectState("failed", "", message)
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelQuickConnect
+'-------------------------------------------------------------------------------
+sub cancelQuickConnect(publishState as boolean)
+    state = m.authState.quickConnect
+    state.generation++
+    state.active = false
+    state.secret = ""
+    state.code = ""
+    state.server = ""
+    state.pendingRequest = invalid
+    m.quickConnectTimer.control = "stop"
+    m.quickConnectDispatchTimer.control = "stop"
+    if publishState then publishQuickConnectState("idle", "", "")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -32,6 +244,7 @@ end sub
 sub onResumeRequested()
 
     m.log.write("onResumeRequested")
+    cancelQuickConnect(false)
 
     if hasSavedSession() then
         m.authState.isResumingSession = true
@@ -56,6 +269,7 @@ sub onLoginRequestChanged()
     request = m.top.loginRequest
     if request = invalid then return
 
+    cancelQuickConnect(false)
     m.authState.isResumingSession = false
     m.authState.pendingSwitch = invalid
     runAuthApiRequest(request)
@@ -69,6 +283,7 @@ sub onLogoutRequestChanged()
     m.log.write("onLogoutRequestChanged")
 
     request = m.top.logoutRequest
+    cancelQuickConnect(false)
 
     if request <> invalid and request.server <> invalid and request.server <> "" and request.token <> invalid and request.token <> "" then
         runLogoutApiRequest({
@@ -87,6 +302,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onResetStarfinRequested()
     m.log.write("onResetStarfinRequested")
+    cancelQuickConnect(false)
 
     if m.savedSession <> invalid then
         server = Format.SafeString(m.savedSession.server, "")

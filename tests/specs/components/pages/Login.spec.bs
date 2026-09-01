@@ -60,6 +60,38 @@ namespace tests
             m.assertEqual(m.top.findNode("serverInput").text, "http://server")
         end function
 
+        @it("declares the Quick Connect controls")
+        function _()
+            m.assertNotInvalid(m.top.findNode("quickConnectButton"))
+            m.assertNotInvalid(m.top.findNode("quickConnectPanel"))
+            m.assertNotInvalid(m.top.findNode("quickConnectCancelButton"))
+        end function
+
+        @it("uses balanced horizontal panel margins")
+        function _()
+            m.assertEqual(m.top.findNode("loginLogo").translation[0], 225.0)
+            m.assertEqual(m.top.findNode("loginBody").translation[0], 225.0)
+            m.assertEqual(m.top.findNode("loginForm").translation[0], 995.0)
+            m.assertEqual(m.top.findNode("quickConnectPanel").translation[0], 995.0)
+            m.assertEqual(m.top.findNode("loginLogo").translation[1], 214.0)
+            m.assertEqual(m.top.findNode("loginForm").translation[1], 214.0)
+            m.assertEqual(m.top.findNode("quickConnectPanel").translation[1], 214.0)
+        end function
+
+        @it("lays out login actions in two full-width rows")
+        function _()
+            loginButton = m.top.findNode("loginButton")
+            quickConnectButton = m.top.findNode("quickConnectButton")
+            savedAccountsButton = m.top.findNode("savedAccountsButton")
+
+            m.assertEqual(loginButton.translation, [0.0, 615.0])
+            m.assertEqual(loginButton.buttonWidth, 340.0)
+            m.assertEqual(quickConnectButton.translation, [360.0, 615.0])
+            m.assertEqual(quickConnectButton.buttonWidth, 340.0)
+            m.assertEqual(savedAccountsButton.translation, [0.0, 691.0])
+            m.assertEqual(savedAccountsButton.buttonWidth, 700.0)
+        end function
+
         @it("renders the username value")
         function _()
             m.top.usernameValue = "user"
@@ -90,6 +122,63 @@ namespace tests
         end function
 
         @describe("login validation")
+
+        @it("requires a server for Quick Connect")
+        function _()
+            m.top.serverValue = ""
+
+            m.top.findNode("quickConnectButton").buttonSelected = true
+
+            m.assertInvalid(m.top.quickConnectRequested)
+            m.assertEqual(m.top.statusMessage, "Server address is required for Quick Connect.")
+        end function
+
+        @it("emits a normalized Quick Connect request")
+        function _()
+            m.top.serverValue = "http://server/"
+
+            m.top.findNode("quickConnectButton").buttonSelected = true
+
+            m.assertEqual(m.top.quickConnectRequested, { server: "http://server" })
+        end function
+
+        @it("shows the Quick Connect code panel while waiting")
+        function _()
+            m.top.quickConnectState = { phase: "waiting", code: "ABCD12", message: "Approve this code." }
+
+            m.assertFalse(m.top.findNode("loginForm").visible)
+            m.assertTrue(m.top.findNode("quickConnectPanel").visible)
+            m.assertEqual(m.top.findNode("quickConnectCode").text, "ABCD12")
+            m.assertEqual(m.top.findNode("quickConnectMessage").text, "Approve this code.")
+            m.assertTrue(m.top.findNode("quickConnectCancelButton").hasFocus())
+            m.assertTrue(m.top.findNode("quickConnectCancelButton").hasFocusVisual)
+        end function
+
+        @it("restores Cancel focus from directional input while Quick Connect is active")
+        function _()
+            m.top.quickConnectState = { phase: "waiting", code: "ABCD12", message: "Waiting" }
+            m.top.findNode("quickConnectCancelButton").hasFocusVisual = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("quickConnectCancelButton").hasFocus())
+            m.assertTrue(m.top.findNode("quickConnectCancelButton").hasFocusVisual)
+        end function
+
+        @it("cancels Quick Connect and restores the login form")
+        function _()
+            m.top.quickConnectState = { phase: "waiting", code: "ABCD12", message: "Waiting" }
+
+            m.top.findNode("quickConnectCancelButton").buttonSelected = true
+
+            m.assertTrue(m.top.quickConnectCancelled)
+            m.assertTrue(m.top.findNode("loginForm").visible)
+            m.assertFalse(m.top.findNode("quickConnectPanel").visible)
+            m.assertTrue(m.top.findNode("quickConnectButton").hasFocus())
+            m.assertFalse(m.top.findNode("quickConnectCancelButton").hasFocusVisual)
+        end function
 
         @it("rejects a missing server")
         function _()
@@ -210,13 +299,27 @@ namespace tests
             m.assertTrue(m.top.findNode("usernameInput").hasFocus())
         end function
 
-        @it("moves right from Sign In to Saved Accounts")
+        @it("moves right from Sign In to Quick Connect")
         function _()
             m.top.savedAccounts = [{ accountKey: "account-1" }]
             m.top.callFunc("focusLoginButton")
 
             'bs:disable-next-line 1140
             handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("quickConnectButton").hasFocus())
+        end function
+
+        @it("moves down from Quick Connect to Saved Accounts")
+        function _()
+            m.top.savedAccounts = [{ accountKey: "account-1" }]
+            m.top.callFunc("focusLoginButton")
+
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
 
             m.assertTrue(handled)
             m.assertTrue(m.top.findNode("savedAccountsButton").hasFocus())

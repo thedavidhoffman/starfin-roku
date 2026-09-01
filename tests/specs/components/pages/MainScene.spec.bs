@@ -423,6 +423,45 @@ namespace tests
 
         @describe("application startup")
 
+        @it("routes Quick Connect requests from Login to AuthController")
+        function _()
+            request = { server: "https://server" }
+            m.node.authController = m.createQuickConnectAuthControllerMock()
+
+            m.node.login.quickConnectRequested = request
+
+            m.assertEqual(m.node.authController.quickConnectRequest, request)
+        end function
+
+        @it("forwards Quick Connect presentation state to Login")
+        function _()
+            state = { phase: "waiting", code: "ABC123", message: "Approve this code." }
+            m.node.authController = m.createQuickConnectAuthControllerMock()
+
+            m.node.authController.quickConnectState = state
+            'bs:disable-next-line 1140
+            authHandleQuickConnectState()
+
+            m.assertEqual(m.node.login.quickConnectState, state)
+        end function
+
+        @it("routes Quick Connect cancellation to AuthController")
+        function _()
+            m.node.authController = m.createQuickConnectAuthControllerMock()
+
+            m.node.login.quickConnectCancelled = true
+
+            m.assertTrue(m.node.authController.quickConnectCancelRequested)
+        end function
+
+        function createQuickConnectAuthControllerMock() as object
+            controller = CreateObject("roSGNode", "Group")
+            controller.addField("quickConnectRequest", "assocarray", false)
+            controller.addField("quickConnectCancelRequested", "boolean", false)
+            controller.addField("quickConnectState", "assocarray", false)
+            return controller
+        end function
+
         @it("copies the saved session into Login")
         function _()
             m.node.appLifecycle.started = false
