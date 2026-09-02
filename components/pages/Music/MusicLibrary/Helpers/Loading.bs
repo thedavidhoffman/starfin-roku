@@ -159,11 +159,11 @@ sub onMusicLibraryResponse()
         return
     end if
     if m.state.loadingUi.foreground.kind = "albums" then
-        m.foregroundAlbumLoadTimer.control = "stop"
+        m.foregroundAlbumLoadTimer.control = TimerControl.Command.Stop
     end if
     if response.ok <> true then
         if m.state.filterRefresh.phase = "loading" then
-            m.filteredRefreshTimer.control = "stop"
+            m.filteredRefreshTimer.control = TimerControl.Command.Stop
             m.filteredRefreshTimer.duration = 0.2
             rollbackMusicFilterRefresh(Format.SafeString(response.errorMessage, "Unable to load music library."))
             return
@@ -183,7 +183,7 @@ sub onMusicLibraryResponse()
     expectedStartIndex = m.state.content.albums.load.nextStartIndex
     if startIndex <> expectedStartIndex then
         if m.state.filterRefresh.phase = "loading" then
-            m.filteredRefreshTimer.control = "stop"
+            m.filteredRefreshTimer.control = TimerControl.Command.Stop
             m.filteredRefreshTimer.duration = 0.2
             rollbackMusicFilterRefresh("Music filter returned an unexpected page.")
             return
@@ -205,7 +205,7 @@ sub onMusicLibraryResponse()
     pageAlbums = getValidMusicItems(response.payload, "album")
     isFilteredRefresh = m.state.filterRefresh.phase = "loading" and startIndex = 0
     if isFilteredRefresh then
-        m.filteredRefreshTimer.control = "stop"
+        m.filteredRefreshTimer.control = TimerControl.Command.Stop
         m.filteredRefreshTimer.duration = 0.2
         m.state.content.albums.items = pageAlbums
     else
@@ -264,9 +264,9 @@ sub loadAlbumPage(startIndex as integer)
     m.musicLibraryTask.request = request
     m.musicLibraryTask.control = "run"
     if m.state.loadingUi.foreground.kind = "albums" and LibraryBrowseRefresh.IsActive(m.state.filterRefresh) <> true then
-        m.foregroundAlbumLoadTimer.control = "stop"
+        m.foregroundAlbumLoadTimer.control = TimerControl.Command.Stop
         m.foregroundAlbumLoadTimer.duration = LibraryBrowseRefresh.RequestTimeoutSeconds()
-        m.foregroundAlbumLoadTimer.control = "start"
+        m.foregroundAlbumLoadTimer.control = TimerControl.Command.Start
     end if
 end sub
 
@@ -321,8 +321,8 @@ sub reloadMusicLibrary()
     request = m.state.context
     if request = invalid then return
 
-    m.filteredRefreshTimer.control = "stop"
-    m.foregroundAlbumLoadTimer.control = "stop"
+    m.filteredRefreshTimer.control = TimerControl.Command.Stop
+    m.foregroundAlbumLoadTimer.control = TimerControl.Command.Stop
     LibraryBrowseRefresh.Cancel(m.state.filterRefresh)
     m.state.content.albums.items = []
     m.state.content.artists.items = []
@@ -349,7 +349,7 @@ sub scheduleFilteredRefresh()
     request = m.state.context
     if request = invalid then return
 
-    m.filteredRefreshTimer.control = "stop"
+    m.filteredRefreshTimer.control = TimerControl.Command.Stop
     if m.state.filterRefresh.phase = "idle" and m.state.committedFilterView = invalid then rememberCommittedMusicFilterView()
     queryId = LibraryBrowseRefresh.Queue(m.state.filterRefresh, m.state.content.albums.load.queryId)
     m.state.content.albums.load.queryId = queryId
@@ -357,7 +357,7 @@ sub scheduleFilteredRefresh()
     m.state.content.albums.load.requestInFlight = false
     m.log.write("Filter refresh queued libraryId=" + getLibraryId() + " mediaType=music filter=" + getMusicFilterLogValue() + " queryId=" + queryId.ToStr())
     m.filteredRefreshTimer.duration = 0.2
-    m.filteredRefreshTimer.control = "start"
+    m.filteredRefreshTimer.control = TimerControl.Command.Start
 end sub
 
 '-------------------------------------------------------------------------------
@@ -381,7 +381,7 @@ sub onFilteredRefreshTimerFired()
     m.log.write("Filter refresh started libraryId=" + getLibraryId() + " mediaType=music filter=" + getMusicFilterLogValue() + " queryId=" + m.state.content.albums.load.queryId.ToStr())
     loadAlbumPage(0)
     m.filteredRefreshTimer.duration = LibraryBrowseRefresh.RequestTimeoutSeconds()
-    m.filteredRefreshTimer.control = "start"
+    m.filteredRefreshTimer.control = TimerControl.Command.Start
 end sub
 
 '-------------------------------------------------------------------------------

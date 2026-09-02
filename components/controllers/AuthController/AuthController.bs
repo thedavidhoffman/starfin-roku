@@ -3,6 +3,7 @@ import "pkg:/source/Format.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Url.bs"
+import "pkg:/source/TimerControl.bs"
 import "pkg:/source/store/AuthStore.bs"
 import "pkg:/source/store/RegistryStore.bs"
 
@@ -130,7 +131,7 @@ sub onQuickConnectResponse(event as object)
     response = event.getData()
     if response <> invalid then handleQuickConnectResponse(response)
     releaseQuickConnectTask(event.getRoSGNode())
-    if m.authState.quickConnect.pendingRequest <> invalid then m.quickConnectDispatchTimer.control = "start"
+    if m.authState.quickConnect.pendingRequest <> invalid then m.quickConnectDispatchTimer.control = TimerControl.Command.Start
 end sub
 
 '-------------------------------------------------------------------------------
@@ -158,7 +159,7 @@ sub dispatchPendingQuickConnectRequest()
     end if
 
     state.pendingRequest = invalid
-    m.quickConnectDispatchTimer.control = "stop"
+    m.quickConnectDispatchTimer.control = TimerControl.Command.Stop
     dispatchQuickConnectRequest(request)
 end sub
 
@@ -172,7 +173,7 @@ sub handleQuickConnectResponse(response as object)
     if response.ok <> true then
         if response.action = "poll" and (response.status = 0 or response.status >= 500) then
             publishQuickConnectState("waiting", "", "Connection interrupted. Retrying...")
-            m.quickConnectTimer.control = "start"
+            m.quickConnectTimer.control = TimerControl.Command.Start
             return
         end if
         failQuickConnect(Format.SafeString(response.errorMessage, "Quick Connect failed."))
@@ -182,19 +183,19 @@ sub handleQuickConnectResponse(response as object)
     if response.action = "initiate" then
         state.secret = response.secret
         publishQuickConnectState("waiting", response.code, "Approve this code in Jellyfin.")
-        m.quickConnectTimer.control = "start"
+        m.quickConnectTimer.control = TimerControl.Command.Start
     else if response.action = "poll" and response.authenticated = true then
         publishQuickConnectState("authenticating", "", "Quick Connect approved. Signing in...")
         runQuickConnectRequest("authenticate")
     else if response.action = "poll" then
-        m.quickConnectTimer.control = "start"
+        m.quickConnectTimer.control = TimerControl.Command.Start
     else if response.action = "authenticate" then
         state.active = false
         state.secret = ""
         state.code = ""
         state.pendingRequest = invalid
-        m.quickConnectTimer.control = "stop"
-        m.quickConnectDispatchTimer.control = "stop"
+        m.quickConnectTimer.control = TimerControl.Command.Stop
+        m.quickConnectDispatchTimer.control = TimerControl.Command.Stop
         publishQuickConnectState("idle", "", "")
         storeAuthenticatedSession(response)
     end if
@@ -217,8 +218,8 @@ sub failQuickConnect(message as string)
     state.secret = ""
     state.code = ""
     state.pendingRequest = invalid
-    m.quickConnectTimer.control = "stop"
-    m.quickConnectDispatchTimer.control = "stop"
+    m.quickConnectTimer.control = TimerControl.Command.Stop
+    m.quickConnectDispatchTimer.control = TimerControl.Command.Stop
     publishQuickConnectState("failed", "", message)
 end sub
 
@@ -233,8 +234,8 @@ sub cancelQuickConnect(publishState as boolean)
     state.code = ""
     state.server = ""
     state.pendingRequest = invalid
-    m.quickConnectTimer.control = "stop"
-    m.quickConnectDispatchTimer.control = "stop"
+    m.quickConnectTimer.control = TimerControl.Command.Stop
+    m.quickConnectDispatchTimer.control = TimerControl.Command.Stop
     if publishState then publishQuickConnectState("idle", "", "")
 end sub
 

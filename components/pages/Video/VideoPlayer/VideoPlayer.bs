@@ -12,6 +12,7 @@ import "pkg:/source/ActivePlayback.bs"
 import "pkg:/source/MediaPlaybackPolicy.bs"
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/PlaybackAction.bs"
+import "pkg:/source/TimerControl.bs"
 import "pkg:/source/VideoPlayerState.bs"
 import "pkg:/source/SubtitlePlayback.bs"
 import "pkg:/source/SubtitleSelection.bs"
@@ -244,12 +245,12 @@ sub onVideoStateChanged()
             reportPlaystateStart()
         end if
         if tracksCurrentPlaybackProgress() then
-            m.playstateTimer.control = "start"
+            m.playstateTimer.control = TimerControl.Command.Start
         else
-            m.playstateTimer.control = "stop"
+            m.playstateTimer.control = TimerControl.Command.Stop
         end if
     else if state = VideoPlayerState.Value.Paused then
-        m.playstateTimer.control = "stop"
+        m.playstateTimer.control = TimerControl.Command.Stop
         reportPlaystateUpdate()
     else if state = VideoPlayerState.Value.Stopped then
         if isPlaybackRecoveryRestarting() then return
@@ -321,7 +322,7 @@ sub stopPlayback(preserveRecovery = false as boolean)
     if m.playback <> invalid then m.playback.startupPending = false
     m.playbackInfoTask.control = "stop"
     m.mediaSegmentsTask.control = "stop"
-    m.videoModeApplyTimer.control = "stop"
+    m.videoModeApplyTimer.control = TimerControl.Command.Stop
     stopPlaybackRecoveryTimers()
 #if playbackChaosMonkey
     stopPlaybackChaosMonkeyTimer()
@@ -395,10 +396,10 @@ sub showControls(restartTimer as boolean)
     m.playbackControls.callFunc("resetFocus")
     m.playbackControls.callFunc("activate")
     if restartTimer = true then
-        m.controlsHideTimer.control = "stop"
-        m.controlsHideTimer.control = "start"
+        m.controlsHideTimer.control = TimerControl.Command.Stop
+        m.controlsHideTimer.control = TimerControl.Command.Start
     else
-        m.controlsHideTimer.control = "stop"
+        m.controlsHideTimer.control = TimerControl.Command.Stop
     end if
 end sub
 
@@ -417,8 +418,8 @@ sub restartControlsHideTimerIfVisible()
     if m.playbackControls.visible <> true then return
     if m.playback.isSeeking = true then return
 
-    m.controlsHideTimer.control = "stop"
-    m.controlsHideTimer.control = "start"
+    m.controlsHideTimer.control = TimerControl.Command.Stop
+    m.controlsHideTimer.control = TimerControl.Command.Start
 end sub
 
 '-------------------------------------------------------------------------------
@@ -427,15 +428,15 @@ end sub
 sub restartCastHideTimerIfVisible()
     if m.overlay.area <> "cast" then return
 
-    m.controlsHideTimer.control = "stop"
-    m.controlsHideTimer.control = "start"
+    m.controlsHideTimer.control = TimerControl.Command.Stop
+    m.controlsHideTimer.control = TimerControl.Command.Start
 end sub
 
 '-------------------------------------------------------------------------------
 ' hideControls
 '-------------------------------------------------------------------------------
 sub hideControls()
-    m.controlsHideTimer.control = "stop"
+    m.controlsHideTimer.control = TimerControl.Command.Stop
     stopSeekTimers()
     m.playback.isSeeking = false
     m.playbackControls.isSeeking = false
