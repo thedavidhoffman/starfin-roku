@@ -18,6 +18,7 @@ export async function getAutomationEnvironment() {
 
   const config = JSON.parse(configText);
   const testAccount = JSON.parse(process.env.STARFIN_AUTOMATION_ACCOUNT ?? '{}');
+  const searchCases = JSON.parse(process.env.STARFIN_AUTOMATION_SEARCH_CASES ?? '[]');
   if (!testAccount.server || !testAccount.username || !testAccount.password) {
     throw new Error('Automation login credentials were not provided by the runner.');
   }
@@ -39,6 +40,7 @@ export async function getAutomationEnvironment() {
     odc,
     resultsDir,
     screenshotClient,
+    searchCases,
     selectedDevice,
     testAccount,
     version

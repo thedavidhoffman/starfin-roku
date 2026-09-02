@@ -17,15 +17,32 @@ builds are written to `build/automation/` and
 
 Copy `tests/automation/.env.example` to `tests/automation/.env.automation` and
 enter the host and developer password for one Roku development device, plus the
-Jellyfin server and test-account credentials used by the authenticated smoke
-test. All values are required. The local environment file is ignored by Git and
-its secrets must not be printed, committed, or included in reports.
+Jellyfin server, test-account credentials, and Search expectations used by the
+authenticated smoke tests. All values are required. Search expectations are a
+JSON array of cases containing a query and optional `moviesAndSeries`, `episodes`,
+and `people` title arrays. Every case must configure at least one expected title.
+The local environment file is ignored by Git and its values must not be printed,
+committed, or included in reports.
 
 Run the harness with:
 
 ```sh
 npm run automation:test
 ```
+
+This normal command produces the complete private report and does not redact or
+package it. For release-readiness evidence, run:
+
+```sh
+npm run automation:test:release
+```
+
+Release mode runs the same complete suite, requires every registered test to
+pass with no pending, skipped, or unexpected results, and then creates a
+credential-safe ZIP. It preserves the private report while masking the server
+field in copied Login screenshots. The public copy excludes logs and is scanned
+for the configured Jellyfin server, Roku host, Roku developer password, and
+Jellyfin password. Fixed loopback and synthetic test values are not secrets.
 
 The runner builds and sideloads the automation package before executing Mocha.
 Before any test runs, the suite launches channel `dev`, connects to the
@@ -56,6 +73,14 @@ which RTA cannot inspect directly. A short rendering-settle delay follows those
 conditions before capture. Secrets are not added to report metadata, though screenshots can show
 the configured server and username.
 
+The Search automation spec opens the production Search page and runs every case
+from `JELLYFIN_SEARCH_CASES`. It waits for the real Jellyfin requests and rendered
+rows to stabilize, then checks that each configured title appears exactly in its
+expected Movies & TV Shows, Episodes, or People section. Additional results and
+their ordering are intentionally ignored so unrelated library changes do not
+make the assertions brittle. Tests, screenshots, and metadata use case numbers
+instead of configured queries or titles.
+
 The library-settings automation spec opens the production Settings overlay and
 checks all eight valid presentation-and-column layouts against all eight library
 rows. Each layout is selected through the real matrix controls, captured as
@@ -85,7 +110,15 @@ entries contain relative links to checkpoint images. A failed test attempts an
 additional screenshot, but screenshot failure does not replace the original test
 error.
 
+A successful release-mode run also creates a `public-report/` copy and a
+versioned ZIP in the same timestamped directory. The ZIP contains only the HTML
+and JSON reports, screenshots, and a non-sensitive `verification.json` with the
+Starfin version, completion time, and aggregate passing counts. Only this ZIP is
+suitable for attachment to a public release; the original report and logs remain
+private.
+
 Screenshots are supporting evidence rather than pixel-diff assertions. They may
 not faithfully capture DRM video planes, animation smoothness, overscan, or HDMI
 output. Treat result directories as private test artifacts because they may show
-server names, account names, Quick Connect codes, or personal media.
+server names, account names, Quick Connect codes, configured Search terms, or
+personal media titles and artwork.

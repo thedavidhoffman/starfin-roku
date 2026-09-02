@@ -114,6 +114,20 @@ blocker until it is understood and resolved. Rerun the complete suite after the
 resolution; a partial or targeted rerun is not sufficient for the final release
 decision.
 
+After the complete Rooibos suite passes, run the complete RTA device-automation
+suite in release-report mode:
+
+```text
+npm run automation:test:release
+```
+
+The command must report at least one executed automation test, equal test and
+pass counts, and no failed, pending, skipped, or unexpected results. It must also
+produce a verified credential-safe ZIP. A failed or incomplete automation run,
+or failure to create the sanitized archive, is a release blocker. Record only
+the aggregate result counts and sanitized ZIP path in the decision record. Do
+not attach the private automation report or its logs to a public release.
+
 Capture the complete console output from the final full-suite run in the
 versioned unit-test report under `out/`. Sanitize the report before saving it:
 
@@ -218,6 +232,7 @@ under `out/`. Record:
 - Validation commands and results.
 - Complete unit-test count and all-passing result.
 - Path to the versioned unit-test report.
+- Aggregate device-automation result and credential-safe report ZIP path.
 - Release artifact version and, when performed, installation and launch results.
 - Open blockers, accepted follow-ups, and known limitations.
 - Final decision: `SHIP` or `NO SHIP`.
