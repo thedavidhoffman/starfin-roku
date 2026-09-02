@@ -209,6 +209,7 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         playbackQueueMode: m.activePlayback.queue.mode
         playbackQueueScope: m.activePlayback.queue.scope
         tracksPlaybackProgress: m.activePlayback.request.tracksPlaybackProgress
+        nextItemPlayback: NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback)
         videoMode: getOriginalPlaybackMode()
         subtitleBurnInMode: SubtitleBurnIn.Normalize(m.activePlayback.request.subtitleBurnInMode)
     }
@@ -471,10 +472,6 @@ end function
 ' requestUpNextAutoPlay
 '-------------------------------------------------------------------------------
 function requestUpNextAutoPlay() as boolean
-    if isPlaylistPlaybackQueue() then
-        m.log.write("Skipping up-next overlay for playlist playback queue")
-        return false
-    end if
     if m.activePlayback = invalid then
         m.log.write("Skipping up-next autoplay: queue is invalid")
         return false
@@ -509,6 +506,10 @@ function requestUpNextAutoPlay() as boolean
         playbackQueueIndex: nextIndex
         playbackQueueMode: m.activePlayback.queue.mode
         playbackQueueScope: m.activePlayback.queue.scope
+        tracksPlaybackProgress: m.activePlayback.request.tracksPlaybackProgress
+        nextItemPlayback: NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback)
+        videoMode: getOriginalPlaybackMode()
+        subtitleBurnInMode: SubtitleBurnIn.Normalize(m.activePlayback.request.subtitleBurnInMode)
         server: m.activePlayback.session.server
     }
     EpisodeQueueIdentity.Apply(upNextRequest, m.activePlayback.queue.scope, m.episodeQueue.id)
@@ -517,9 +518,90 @@ function requestUpNextAutoPlay() as boolean
 end function
 
 '-------------------------------------------------------------------------------
-' finishEpisodePlayback
+' finalizeCurrentPlaybackItem
 '-------------------------------------------------------------------------------
-sub finishEpisodePlayback()
+sub finalizeCurrentPlaybackItem()
+    reportPlaystateStop(true)
+    emitPlaybackProgress(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' continueAfterCompletedItem
+'-------------------------------------------------------------------------------
+function continueAfterCompletedItem(completionMode = "" as string) as boolean
+    if hasQueueItemAtOffset(1) <> true then return false
+
+    playImmediately = completionMode = "playNext"
+    if completionMode = "" then playImmediately = NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback) = NextItemPlayback.Mode.PlayNextImmediately
+    if playImmediately then
+        return startQueueItemAtOffset(1)
+    end if
+
+    if requestUpNextAutoPlay() <> true then return false
+    finishCompletedPlayback()
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' completeCurrentItemFromPlaybackAction
+'-------------------------------------------------------------------------------
+sub completeCurrentItemFromPlaybackAction(mode as string)
+    if m.activePlayback = invalid then return
+
+    itemId = Format.SafeString(m.activePlayback.session.itemId, "")
+    if itemId = "" then return
+
+    m.playbackAction.pendingCompletion = {
+        itemId: itemId
+        mode: mode
+    }
+    m.videoPlayer.control = "pause"
+    Spinner.Show()
+    finalizeCurrentPlaybackItem()
+    m.playbackCompletionTask.request = {
+        action: "MarkAsWatched"
+        server: m.activePlayback.session.server
+        token: m.activePlayback.session.token
+        userId: m.activePlayback.session.userId
+        itemId: itemId
+    }
+    m.playbackCompletionTask.control = "run"
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaybackCompletionResponse
+'-------------------------------------------------------------------------------
+sub onPlaybackCompletionResponse()
+    pending = m.playbackAction.pendingCompletion
+    if pending = invalid then return
+
+    response = m.playbackCompletionTask.response
+    if response = invalid then return
+    if Format.SafeString(response.itemId, "") <> pending.itemId then return
+
+    m.playbackAction.pendingCompletion = invalid
+    Spinner.Hide()
+    if response.ok <> true then
+        m.log.error("Unable to persist completed playback itemId=" + pending.itemId + " error=" + Format.SafeString(response.errorMessage, ""))
+    end if
+    if continueAfterCompletedItem(pending.mode) <> true then finishCompletedPlayback()
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelPlaybackActionCompletion
+'-------------------------------------------------------------------------------
+sub cancelPlaybackActionCompletion()
+    if m.playbackAction = invalid or m.playbackAction.pendingCompletion = invalid then return
+
+    m.playbackCompletionTask.control = "stop"
+    m.playbackAction.pendingCompletion = invalid
+    Spinner.Hide()
+end sub
+
+'-------------------------------------------------------------------------------
+' finishCompletedPlayback
+'-------------------------------------------------------------------------------
+sub finishCompletedPlayback()
     stopPlayback()
     m.top.closeRequested = true
 end sub
@@ -565,22 +647,28 @@ end sub
 '-------------------------------------------------------------------------------
 ' reportPlaystateStop
 '-------------------------------------------------------------------------------
-sub reportPlaystateStop()
+sub reportPlaystateStop(isFinished = false as boolean)
     if m.playback.hasReportedStart <> true then return
 
     m.playstateTimer.control = "stop"
-    reportPlaystate("stop")
+    positionOverride = invalid
+    if isFinished then
+        positionOverride = m.playback.duration
+        if positionOverride = invalid or positionOverride <= 0 then positionOverride = m.videoPlayer.duration
+    end if
+    reportPlaystate("stop", positionOverride)
     m.playback.hasReportedStart = false
 end sub
 
 '-------------------------------------------------------------------------------
 ' reportPlaystate
 '-------------------------------------------------------------------------------
-sub reportPlaystate(status as string)
+sub reportPlaystate(status as string, positionOverride = invalid as dynamic)
     if m.activePlayback = invalid then return
     if m.activePlayback.session.server = "" or m.activePlayback.session.token = "" or m.activePlayback.session.itemId = "" then return
 
     position = getCurrentPlaybackPosition()
+    if positionOverride <> invalid and positionOverride > 0 then position = positionOverride
     if tracksCurrentPlaybackProgress() <> true then position = 0
     isPaused = VideoPlayerState.Normalize(m.videoPlayer.state) = VideoPlayerState.Value.Paused
     m.log.write("Playstate " + status + " itemId=" + m.activePlayback.session.itemId + " position=" + Format.SafeString(position, "") + " paused=" + boolToText(isPaused))

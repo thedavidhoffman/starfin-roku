@@ -16,6 +16,10 @@ The capability matrix below documents the intended behavior for each surface.
 The letter grid is available only when the active Browse By selection keeps
 items ordered by title:
 
+The active letter tile uses the same text color as a focused tile. `ALL` is
+active when the grid first opens, and selecting another letter transfers the
+active visual to that tile.
+
 | Browse By selection | Letter grid | Reason |
 | --- | --- | --- |
 | Title | Yes | Items are ordered by title. |

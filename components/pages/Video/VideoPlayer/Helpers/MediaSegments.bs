@@ -5,8 +5,10 @@ sub initMediaSegments()
     m.mediaSegments = {
         itemId: ""
         intros: []
+        outros: []
         loaded: false
-        dismissedEndSeconds: -1
+        introDismissedEndSeconds: -1
+        outroDismissedEndSeconds: -1
         activeEndSeconds: -1
     }
 end sub
@@ -55,8 +57,9 @@ sub onMediaSegmentsResponse()
     end if
 
     m.mediaSegments.intros = VideoPlayerMediaSegments_BuildIntros(response.segments)
+    m.mediaSegments.outros = VideoPlayerMediaSegments_BuildOutros(response.segments)
     m.mediaSegments.loaded = true
-    m.log.write("Media segments loaded itemId=" + m.activePlayback.session.itemId + " introCount=" + m.mediaSegments.intros.Count().ToStr())
+    m.log.write("Media segments loaded itemId=" + m.activePlayback.session.itemId + " introCount=" + m.mediaSegments.intros.Count().ToStr() + " outroCount=" + m.mediaSegments.outros.Count().ToStr())
     updatePlaybackActionButton(m.playback.position)
 end sub
 
@@ -65,9 +68,19 @@ end sub
 '-------------------------------------------------------------------------------
 function getActiveIntroSegment(position as float) as dynamic
     if m.mediaSegments = invalid then return invalid
-    result = VideoPlayerMediaSegments_EvaluateIntro(m.mediaSegments.intros, position, m.mediaSegments.dismissedEndSeconds)
-    m.mediaSegments.dismissedEndSeconds = result.dismissedEndSeconds
+    result = VideoPlayerMediaSegments_EvaluateIntro(m.mediaSegments.intros, position, m.mediaSegments.introDismissedEndSeconds)
+    m.mediaSegments.introDismissedEndSeconds = result.dismissedEndSeconds
     return result.activeIntro
+end function
+
+'-------------------------------------------------------------------------------
+' getActiveOutroSegment
+'-------------------------------------------------------------------------------
+function getActiveOutroSegment(position as float) as dynamic
+    if m.mediaSegments = invalid then return invalid
+    result = VideoPlayerMediaSegments_EvaluateOutro(m.mediaSegments.outros, position, m.mediaSegments.outroDismissedEndSeconds)
+    m.mediaSegments.outroDismissedEndSeconds = result.dismissedEndSeconds
+    return result.activeOutro
 end function
 
 '-------------------------------------------------------------------------------
@@ -78,7 +91,7 @@ sub skipActiveIntro()
     if targetPosition < 0 then return
 
     m.log.write("Skipping intro itemId=" + m.activePlayback.session.itemId + " position=" + Format.SafeString(m.playback.position, "") + " target=" + Format.SafeString(targetPosition, ""))
-    m.mediaSegments.dismissedEndSeconds = targetPosition
+    m.mediaSegments.introDismissedEndSeconds = targetPosition
     stopSeekTimers()
     m.playback.isSeeking = false
     m.playback.position = targetPosition

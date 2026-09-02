@@ -13,6 +13,7 @@ individual Starfin features.
 - [Home Media Playback](home-media.md)
 - [Library Genre Browsing](library-genre-browsing.md)
 - [Music Video Playback](music-videos.md)
+- [Next Item Playback](next-item-playback.md)
 - [Music Library](music-library.md)
 - [Movie Detail Browsing](movie-detail-browsing.md)
 - [Playback Safeguards and Diagnostics](playback-safeguards.md)

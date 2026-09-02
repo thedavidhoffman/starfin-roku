@@ -11,16 +11,38 @@ end function
 ' VideoPlayerMediaSegments_BuildIntros
 '-------------------------------------------------------------------------------
 function VideoPlayerMediaSegments_BuildIntros(segments as dynamic) as object
-    intros = []
-    if segments = invalid then return intros
+    return VideoPlayerMediaSegments_BuildRanges(segments, "intro")
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerMediaSegments_BuildOutros
+'-------------------------------------------------------------------------------
+function VideoPlayerMediaSegments_BuildOutros(segments as dynamic) as object
+    return VideoPlayerMediaSegments_BuildRanges(segments, "outro")
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerMediaSegments_BuildRanges
+'-------------------------------------------------------------------------------
+function VideoPlayerMediaSegments_BuildRanges(segments as dynamic, segmentType as string) as object
+    ranges = []
+    if segments = invalid then return ranges
     for each segment in segments
-        if segment <> invalid and LCase(Format.SafeString(segment.Type, "")) = "intro" then
+        if segment <> invalid and LCase(Format.SafeString(segment.Type, "")) = segmentType then
             startSeconds = Number.ToFloat(segment.StartTicks, 0.0) / 10000000
             endSeconds = Number.ToFloat(segment.EndTicks, 0.0) / 10000000
-            if endSeconds > startSeconds then intros.Push({ startSeconds: startSeconds, endSeconds: endSeconds })
+            if endSeconds > startSeconds then ranges.Push({ startSeconds: startSeconds, endSeconds: endSeconds })
         end if
     end for
-    return intros
+    return ranges
+end function
+
+'-------------------------------------------------------------------------------
+' VideoPlayerMediaSegments_EvaluateOutro
+'-------------------------------------------------------------------------------
+function VideoPlayerMediaSegments_EvaluateOutro(outros as dynamic, position as float, dismissedEndSeconds as float) as object
+    result = VideoPlayerMediaSegments_EvaluateIntro(outros, position, dismissedEndSeconds)
+    return { activeOutro: result.activeIntro, dismissedEndSeconds: result.dismissedEndSeconds }
 end function
 
 '-------------------------------------------------------------------------------

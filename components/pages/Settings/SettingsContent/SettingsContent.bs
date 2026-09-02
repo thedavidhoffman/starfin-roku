@@ -2,6 +2,7 @@ import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/LibraryLayoutSetting.bs"
+import "pkg:/source/NextItemPlayback.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
@@ -26,10 +27,12 @@ sub initReferences()
     m.deviceCategoryList = m.top.findNode("deviceCategoryList")
     m.userCategoryList = m.top.findNode("userCategoryList")
     m.videoStreamingModeDescription = m.top.findNode("videoStreamingModeDescription")
+    m.nextItemPlaybackDescription = m.top.findNode("nextItemPlaybackDescription")
     m.subtitleBurnInDescription = m.top.findNode("subtitleBurnInDescription")
     m.categoryPanels = [
         m.top.findNode("libraryPanel")
         m.top.findNode("mediaShellPanel")
+        m.top.findNode("playbackPanel")
         m.top.findNode("tvPanel")
         m.top.findNode("screensaverPanel")
         m.top.findNode("systemPanel")
@@ -41,6 +44,7 @@ sub initReferences()
         displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
         mediaShellBackgroundOptions: m.top.findNode("mediaShellBackgroundOptions")
         themeMusicOptions: m.top.findNode("themeMusicOptions")
+        nextItemPlaybackOptions: m.top.findNode("nextItemPlaybackOptions")
         librarySettingsGrid: m.top.findNode("librarySettingsGrid")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         videoStreamingModeOptions: m.top.findNode("videoStreamingModeOptions")
@@ -60,6 +64,7 @@ sub initReferences()
     m.categoryControls = [
         [m.settingsControls.librarySettingsGrid]
         [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
+        [m.settingsControls.nextItemPlaybackOptions]
         [m.settingsControls.tvEpisodeListDisplayOptions]
         [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
         [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
@@ -67,6 +72,15 @@ sub initReferences()
         [m.settingsControls.subtitleBurnInOptions]
         [m.settingsControls.resetStarfinButton]
     ]
+    m.categoryState = {
+        userTitles: ["Libraries", "Media Shell", "Playback", "TV", "Screensaver"]
+        deviceTitles: ["General", "Video", "Subtitles", "Advanced"]
+    }
+    m.categoryState.userCount = m.categoryState.userTitles.Count()
+    m.categoryState.deviceCount = m.categoryState.deviceTitles.Count()
+    m.categoryState.deviceOffset = m.categoryState.userCount
+    m.categoryState.lastUserIndex = m.categoryState.userCount - 1
+    m.categoryState.resetIndex = m.categoryPanels.Count() - 1
     m.focusState = {
         categoryIndex: 0
         controlIndex: 0
@@ -91,6 +105,8 @@ sub initHandlers()
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
     m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
+    m.settingsControls.nextItemPlaybackOptions.observeField("itemSelected", "onNextItemPlaybackSelected")
+    m.settingsControls.nextItemPlaybackOptions.observeField("itemFocused", "onNextItemPlaybackFocused")
     m.settingsControls.screensaverTypeOptions.observeField("itemSelected", "onScreensaverTypeSelected")
     m.settingsControls.screensaverDelayOptions.observeField("itemSelected", "onScreensaverDelaySelected")
     m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
@@ -106,8 +122,8 @@ end sub
 ' initCategoryList
 '-------------------------------------------------------------------------------
 sub initCategoryList()
-    setOptionTitles(m.deviceCategoryList, ["General", "Video", "Subtitles", "Advanced"])
-    setOptionTitles(m.userCategoryList, ["Libraries", "Media Shell", "TV", "Screensaver"])
+    setOptionTitles(m.deviceCategoryList, m.categoryState.deviceTitles)
+    setOptionTitles(m.userCategoryList, m.categoryState.userTitles)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -118,6 +134,7 @@ sub initOptionContent()
     setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
     setOptionTitles(m.settingsControls.mediaShellBackgroundOptions, ["Full Screen", "Partial Screen", "Cinematic"])
     setOptionTitles(m.settingsControls.themeMusicOptions, ["Off", "On"])
+    setOptionTitles(m.settingsControls.nextItemPlaybackOptions, ["Show Up Next", "Play Next Immediately"])
     setOptionTitles(m.settingsControls.screensaverTypeOptions, ["None", "Bouncing artwork", "Starfield"])
     setOptionTitles(m.settingsControls.screensaverDelayOptions, ["1 minute", "5 minutes", "15 minutes", "30 minutes"])
     setOptionTitles(m.settingsControls.videoStreamingModeOptions, ["Automatic", "Automatic (Remux Disabled)", "Force Transcode (Allow Remux)", "Force Transcode (Remux Disabled)"])
@@ -155,6 +172,7 @@ sub loadSettingsValues()
     m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvEpisodeListDisplay)
     m.settingsState.values[SettingsStore.Key.MediaShellBackground] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
     m.settingsState.values[SettingsStore.Key.ThemeMusic] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ThemeMusic)
+    m.settingsState.values[SettingsStore.Key.NextItemPlayback] = NextItemPlayback.Normalize(SettingsStore.GetSettingValue(settings, SettingsStore.Key.NextItemPlayback))
     m.settingsState.values[SettingsStore.Key.ScreensaverType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverType)
     m.settingsState.values[SettingsStore.Key.ScreensaverDelay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverDelay)
     m.settingsState.values[SettingsStore.Key.VideoStreamingMode] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.VideoStreamingMode)
@@ -166,6 +184,7 @@ sub loadSettingsValues()
     setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[SettingsStore.Key.MediaShellBackground])
     setOnOffOption(m.settingsControls.themeMusicOptions, m.settingsState.values[SettingsStore.Key.ThemeMusic])
+    setNextItemPlaybackOption(m.settingsState.values[SettingsStore.Key.NextItemPlayback])
     setScreensaverTypeOption(m.settingsState.values[SettingsStore.Key.ScreensaverType])
     setScreensaverDelayOption(m.settingsState.values[SettingsStore.Key.ScreensaverDelay])
     setVideoStreamingModeOption(m.settingsState.values[SettingsStore.Key.VideoStreamingMode])
@@ -179,11 +198,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusFirstField()
     clearResetStarfinButtonFocus()
-    if m.focusState.categoryIndex < 4 then
+    if m.focusState.categoryIndex < m.categoryState.deviceOffset then
         m.userCategoryList.jumpToItem = m.focusState.categoryIndex
         m.userCategoryList.setFocus(true)
     else
-        m.deviceCategoryList.jumpToItem = m.focusState.categoryIndex - 4
+        m.deviceCategoryList.jumpToItem = m.focusState.categoryIndex - m.categoryState.deviceOffset
         m.deviceCategoryList.setFocus(true)
     end if
     updateTextInputFocusVisual()
@@ -207,7 +226,7 @@ end function
 ' onCategoryFocused
 '-------------------------------------------------------------------------------
 sub onDeviceCategoryFocused()
-    showCategory(4 + getListIndex(m.deviceCategoryList.itemFocused, 4))
+    showCategory(m.categoryState.deviceOffset + getListIndex(m.deviceCategoryList.itemFocused, m.categoryState.deviceCount))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -241,16 +260,16 @@ end function
 ' onCategorySelected
 '-------------------------------------------------------------------------------
 sub onDeviceCategorySelected()
-    showCategory(4 + getListIndex(m.deviceCategoryList.itemSelected, 4))
+    showCategory(m.categoryState.deviceOffset + getListIndex(m.deviceCategoryList.itemSelected, m.categoryState.deviceCount))
     focusCategoryControl(0, 0)
 end sub
 
 sub onUserCategoryFocused()
-    showCategory(getListIndex(m.userCategoryList.itemFocused, 4))
+    showCategory(getListIndex(m.userCategoryList.itemFocused, m.categoryState.userCount))
 end sub
 
 sub onUserCategorySelected()
-    showCategory(getListIndex(m.userCategoryList.itemSelected, 4))
+    showCategory(getListIndex(m.userCategoryList.itemSelected, m.categoryState.userCount))
     focusCategoryControl(0, 0)
 end sub
 
@@ -262,7 +281,7 @@ sub showCategory(index as integer)
 
     m.focusState.categoryIndex = index
     m.focusState.controlIndex = 0
-    if index <> 7 and m.resetStarfinState.confirmationVisible then showResetStarfinState()
+    if index <> m.categoryState.resetIndex and m.resetStarfinState.confirmationVisible then showResetStarfinState()
     for i = 0 to m.categoryPanels.Count() - 1
         m.categoryPanels[i].visible = (i = index)
     end for
@@ -275,16 +294,16 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
 
     if m.deviceCategoryList.isInFocusChain() or m.userCategoryList.isInFocusChain() then
-        if key = "down" and m.userCategoryList.isInFocusChain() and getListIndex(m.userCategoryList.itemFocused, 4) = 3 then
+        if key = "down" and m.userCategoryList.isInFocusChain() and getListIndex(m.userCategoryList.itemFocused, m.categoryState.userCount) = m.categoryState.lastUserIndex then
             m.deviceCategoryList.jumpToItem = 0
             m.deviceCategoryList.setFocus(true)
-            showCategory(4)
+            showCategory(m.categoryState.deviceOffset)
             return true
         end if
-        if key = "up" and m.deviceCategoryList.isInFocusChain() and getListIndex(m.deviceCategoryList.itemFocused, 4) = 0 then
-            m.userCategoryList.jumpToItem = 3
+        if key = "up" and m.deviceCategoryList.isInFocusChain() and getListIndex(m.deviceCategoryList.itemFocused, m.categoryState.deviceCount) = 0 then
+            m.userCategoryList.jumpToItem = m.categoryState.lastUserIndex
             m.userCategoryList.setFocus(true)
-            showCategory(3)
+            showCategory(m.categoryState.lastUserIndex)
             return true
         end if
         if key = "right" then return focusCategoryControl(0, 0)
@@ -329,7 +348,7 @@ sub onResetStarfinSelected()
     m.settingsControls.resetStarfinButton.visible = false
     m.resetStarfinState.description.visible = false
     m.resetStarfinState.confirmationGroup.visible = true
-    m.categoryControls[7] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
+    m.categoryControls[m.categoryState.resetIndex] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
     focusCategoryControl(0, invalid)
 end sub
 
@@ -356,7 +375,7 @@ sub showResetStarfinState()
     m.settingsControls.resetStarfinButton.visible = true
     m.resetStarfinState.description.visible = true
     m.resetStarfinState.confirmationGroup.visible = false
-    m.categoryControls[7] = [m.settingsControls.resetStarfinButton]
+    m.categoryControls[m.categoryState.resetIndex] = [m.settingsControls.resetStarfinButton]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -412,6 +431,48 @@ sub onLibrarySelectionChanged()
         end if
     end for
 end sub
+
+'-------------------------------------------------------------------------------
+' onNextItemPlaybackSelected
+'-------------------------------------------------------------------------------
+sub onNextItemPlaybackSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.nextItemPlaybackOptions)
+    if selectedIndex < 0 then return
+
+    m.settingsControls.nextItemPlaybackOptions.checkedItem = selectedIndex
+    if selectedIndex = 1 then
+        m.settingsState.values[SettingsStore.Key.NextItemPlayback] = NextItemPlayback.Mode.PlayNextImmediately
+    else
+        m.settingsState.values[SettingsStore.Key.NextItemPlayback] = NextItemPlayback.Mode.ShowUpNext
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onNextItemPlaybackFocused
+'-------------------------------------------------------------------------------
+sub onNextItemPlaybackFocused()
+    index = getListIndex(m.settingsControls.nextItemPlaybackOptions.itemFocused, 2)
+    m.nextItemPlaybackDescription.text = getNextItemPlaybackDescription(index)
+end sub
+
+'-------------------------------------------------------------------------------
+' setNextItemPlaybackOption
+'-------------------------------------------------------------------------------
+sub setNextItemPlaybackOption(value as dynamic)
+    selectedIndex = 0
+    if NextItemPlayback.Normalize(value) = NextItemPlayback.Mode.PlayNextImmediately then selectedIndex = 1
+    m.settingsControls.nextItemPlaybackOptions.checkedItem = selectedIndex
+    m.settingsControls.nextItemPlaybackOptions.jumpToItem = selectedIndex
+    m.nextItemPlaybackDescription.text = getNextItemPlaybackDescription(selectedIndex)
+end sub
+
+'-------------------------------------------------------------------------------
+' getNextItemPlaybackDescription
+'-------------------------------------------------------------------------------
+function getNextItemPlaybackDescription(index as integer) as string
+    if index = 1 then return "When a queued item, such as a TV episode or playlist item, finishes playing, Starfin starts the next item immediately without showing the Up Next screen."
+    return "When a queued item, such as a TV episode or playlist item, finishes playing, Starfin shows the Up Next screen. The next item starts when selected or when the 15-second countdown expires."
+end function
 
 '-------------------------------------------------------------------------------
 ' onLibraryFocusExitLeft

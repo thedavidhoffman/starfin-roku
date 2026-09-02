@@ -30,6 +30,7 @@ namespace tests
             segments = [
                 { Type: "Intro", StartTicks: 100000000, EndTicks: 300000000 }
                 { Type: "Credits", StartTicks: 300000000, EndTicks: 400000000 }
+                { Type: "Outro", StartTicks: 400000000, EndTicks: 500000000 }
                 { Type: "Intro", StartTicks: 500000000, EndTicks: 400000000 }
                 invalid
             ]
@@ -37,6 +38,39 @@ namespace tests
             m.assertEqual(intros.Count(), 1)
             m.assertTrue(intros[0].startSeconds = 10)
             m.assertTrue(intros[0].endSeconds = 30)
+        end function
+
+        @it("builds only valid official outro ranges")
+        function _()
+            segments = [
+                { Type: "Outro", StartTicks: 300000000, EndTicks: 500000000 }
+                { Type: "Credits", StartTicks: 500000000, EndTicks: 600000000 }
+                { Type: "Outro", StartTicks: 700000000, EndTicks: 600000000 }
+            ]
+
+            outros = VideoPlayerMediaSegments_BuildOutros(segments)
+
+            m.assertEqual(outros.Count(), 1)
+            m.assertTrue(outros[0].startSeconds = 30)
+            m.assertTrue(outros[0].endSeconds = 50)
+        end function
+
+        @it("selects an outro only during its actionable range")
+        function _()
+            outros = [{ startSeconds: 30.0, endSeconds: 50.0 }]
+
+            m.assertInvalid(VideoPlayerMediaSegments_EvaluateOutro(outros, 29.9, -1).activeOutro)
+            m.assertNotInvalid(VideoPlayerMediaSegments_EvaluateOutro(outros, 30, -1).activeOutro)
+            m.assertNotInvalid(VideoPlayerMediaSegments_EvaluateOutro(outros, 44.9, -1).activeOutro)
+            m.assertInvalid(VideoPlayerMediaSegments_EvaluateOutro(outros, 45, -1).activeOutro)
+        end function
+
+        @it("honors dismissed outros")
+        function _()
+            result = VideoPlayerMediaSegments_EvaluateOutro([{ startSeconds: 30.0, endSeconds: 50.0 }], 35, 50)
+
+            m.assertInvalid(result.activeOutro)
+            m.assertTrue(result.dismissedEndSeconds = 50)
         end function
 
         @it("handles missing segment collections")

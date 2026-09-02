@@ -21,13 +21,16 @@ sub playerShow(selection as object)
         playbackQueueMode: selection.playbackQueueMode
         playbackQueueScope: selection.playbackQueueScope
         tracksPlaybackProgress: selection.tracksPlaybackProgress
+        nextItemPlayback: NextItemPlayback.Normalize(SettingsStore.GetSettingValue(m.settings, SettingsStore.Key.NextItemPlayback))
         videoMode: SettingsStore.GetSettingValue(m.settings, SettingsStore.Key.VideoStreamingMode)
         subtitleBurnInMode: SubtitleBurnIn.Normalize(SettingsStore.GetSettingValue(m.settings, SettingsStore.Key.SubtitleBurnInMode))
     }
     EpisodeQueueIdentity.Apply(playRequest, selection.playbackQueueScope, selection.episodeQueueId)
+    if selection.nextItemPlayback <> invalid then playRequest.nextItemPlayback = NextItemPlayback.Normalize(selection.nextItemPlayback)
     if selection.audioStreamIndex <> invalid then playRequest.AddReplace("audioStreamIndex", selection.audioStreamIndex)
     if selection.subtitleStreamIndex <> invalid then playRequest.AddReplace("subtitleStreamIndex", selection.subtitleStreamIndex)
     if selection.videoMode <> invalid then playRequest.AddReplace("videoMode", selection.videoMode)
+    if selection.subtitleBurnInMode <> invalid then playRequest.subtitleBurnInMode = SubtitleBurnIn.Normalize(selection.subtitleBurnInMode)
     m.playbackController.playRequest = playRequest
 
     if m.moviePage <> invalid then m.moviePage.visible = false
@@ -166,6 +169,7 @@ sub playerHandleCloseRequested()
     capturePendingUpNextAutoPlayRequest(closed.upNextRequest)
 
     resetPlaybackVideoMode()
+    if showTVEpisodeUpNextAutoPlayPage(closedPlayRequest) then return
     if isPlaylistPlayRequest(closedPlayRequest) then
         m.pendingUpNextAutoPlayRequest = invalid
         if m.videoLibraryPage <> invalid then
@@ -179,8 +183,6 @@ sub playerHandleCloseRequested()
         end if
         return
     end if
-    if showTVEpisodeUpNextAutoPlayPage(closedPlayRequest) then return
-
     prepareTVEpisodePageForClosedPlayer(closedPlayRequest)
     if m.tvEpisodePage <> invalid then m.tvEpisodePage.callFunc("refreshPlaybackState")
     if m.moviePage <> invalid then
@@ -306,6 +308,10 @@ sub tvEpisodeUpNextHandlePlaySelected()
         playbackQueueIndex: request.playbackQueueIndex
         playbackQueueMode: request.playbackQueueMode
         playbackQueueScope: request.playbackQueueScope
+        tracksPlaybackProgress: request.tracksPlaybackProgress
+        nextItemPlayback: request.nextItemPlayback
+        videoMode: request.videoMode
+        subtitleBurnInMode: request.subtitleBurnInMode
     }
     EpisodeQueueIdentity.Apply(selection, request.playbackQueueScope, request.episodeQueueId)
     playerShow(selection)
@@ -400,7 +406,23 @@ end function
 ' tvEpisodeUpNextHandleCancelSelected
 '-------------------------------------------------------------------------------
 sub tvEpisodeUpNextHandleCancelSelected()
-    prepareTVEpisodePageForClosedPlayer(m.tvEpisodeUpNextRestorePlayRequest)
+    restoreRequest = m.tvEpisodeUpNextRestorePlayRequest
+    if isPlaylistPlayRequest(restoreRequest) then
+        m.tvEpisodeUpNextRestorePlayRequest = invalid
+        closeTVEpisodeUpNextAutoPlayPage(false)
+        if m.videoLibraryPage <> invalid then
+            playlistItemIndex = getPlaylistPlayRequestItemIndex(restoreRequest)
+            if playlistItemIndex >= 0 then m.videoLibraryPage.callFunc("restorePlaylistPlaybackFocus", playlistItemIndex)
+            m.videoLibraryPage.visible = true
+            m.header.visible = true
+            m.videoLibraryPage.callFunc("activate")
+        else
+            showHome()
+        end if
+        return
+    end if
+
+    prepareTVEpisodePageForClosedPlayer(restoreRequest)
     m.tvEpisodeUpNextRestorePlayRequest = invalid
     closeTVEpisodeUpNextAutoPlayPage(true)
 end sub
@@ -416,7 +438,11 @@ sub closeTVEpisodeUpNextAutoPlayPage(restorePreviousPage as boolean)
 
     if restorePreviousPage <> true then return
 
-    if m.tvEpisodePage <> invalid then
+    if m.moviePage <> invalid then
+        m.moviePage.visible = true
+        m.header.visible = false
+        m.moviePage.callFunc("activate")
+    else if m.tvEpisodePage <> invalid then
         m.tvEpisodePage.visible = true
         m.header.visible = false
         m.tvEpisodePage.callFunc("activate")
@@ -428,6 +454,18 @@ sub closeTVEpisodeUpNextAutoPlayPage(restorePreviousPage as boolean)
         m.tvShowPage.visible = true
         m.header.visible = false
         m.tvShowPage.callFunc("activate")
+    else if m.liveTvPage <> invalid then
+        m.liveTvPage.visible = true
+        m.header.visible = true
+        m.liveTvPage.callFunc("activate")
+    else if m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.visible = true
+        m.header.visible = true
+        m.videoLibraryPage.callFunc("activate")
+    else if m.homeMediaLibraryPage <> invalid then
+        m.homeMediaLibraryPage.visible = true
+        m.header.visible = true
+        m.homeMediaLibraryPage.callFunc("activate")
     else
         showHome()
     end if

@@ -239,6 +239,256 @@ namespace tests
             m.assertEqual(m.node.playback.position, 3)
         end function
 
+        @it("shows Skip Credits for an active outro with Show Up Next")
+        function _()
+            m.node.activePlayback.context.item = { Id: "movie-1", Type: "Movie", Name: "Movie" }
+            m.node.activePlayback.request.nextItemPlayback = NextItemPlayback.Mode.ShowUpNext
+            m.node.activePlayback.queue.mode = "sequential"
+            m.node.activePlayback.queue.scope = "playlist"
+            m.node.mediaSegments.intros = []
+            m.node.mediaSegments.outros = [{ startSeconds: 30.0, endSeconds: 60.0 }]
+            m.node.videoPlayer = { state: "playing" }
+            m.node.playback.isSeeking = false
+            m.node.overlay.area = "none"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(35)
+
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackActionButton.text, "Skip Credits")
+            m.assertEqual(m.node.playbackAction.mode, "skipCredits")
+        end function
+
+        @it("shows Play Next for immediate next-item playback")
+        function _()
+            m.node.activePlayback.context.item = { Id: "movie-1", Type: "Movie", Name: "Movie" }
+            m.node.activePlayback.request.nextItemPlayback = NextItemPlayback.Mode.PlayNextImmediately
+            m.node.activePlayback.queue.mode = "sequential"
+            m.node.activePlayback.queue.scope = "playlist"
+            m.node.mediaSegments.intros = []
+            m.node.mediaSegments.outros = [{ startSeconds: 30.0, endSeconds: 60.0 }]
+            m.node.videoPlayer = { state: "playing" }
+            m.node.playback.isSeeking = false
+            m.node.overlay.area = "none"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(35)
+
+            m.assertEqual(m.node.playbackActionButton.text, "Play Next")
+            m.assertEqual(m.node.playbackAction.mode, "playNext")
+        end function
+
+        @it("does not show an outro action without a next item")
+        function _()
+            m.node.activePlayback.context.item = { Id: "movie-1", Type: "Movie", Name: "Movie" }
+            m.node.activePlayback.queue.items = [m.node.activePlayback.queue.items[0]]
+            m.node.mediaSegments.intros = []
+            m.node.mediaSegments.outros = [{ startSeconds: 30.0, endSeconds: 60.0 }]
+            m.node.videoPlayer = { state: "playing" }
+            m.node.playback.isSeeking = false
+            m.node.overlay.area = "none"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(35)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("dismisses the active outro action for its current range")
+        function _()
+            m.node.playbackAction.mode = "skipCredits"
+            m.node.mediaSegments.activeEndSeconds = 60
+
+            'bs:disable-next-line 1140
+            dismissPlaybackAction()
+
+            m.assertEqual(m.node.mediaSegments.outroDismissedEndSeconds, 60)
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("completes the current item before immediate Play Next")
+        function _()
+            currentItem = { Id: "movie-1", Type: "Movie", Name: "First", UserData: {} }
+            nextItem = { Id: "movie-2", Type: "Movie", Name: "Second", UserData: {} }
+            m.node.activePlayback.context.item = currentItem
+            m.node.activePlayback.session.itemId = "movie-1"
+            m.node.activePlayback.request.item = currentItem
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.activePlayback.request.nextItemPlayback = NextItemPlayback.Mode.PlayNextImmediately
+            m.node.activePlayback.queue.items = [
+                { itemId: "movie-1", item: currentItem, startPositionTicks: 0 }
+                { itemId: "movie-2", item: nextItem, startPositionTicks: 0 }
+            ]
+            m.node.activePlayback.queue.index = 0
+            m.node.activePlayback.queue.mode = "sequential"
+            m.node.activePlayback.queue.scope = "playlist"
+            m.node.playback.duration = 100
+            m.node.playback.position = 80
+            m.node.playback.hasEmittedFinalProgress = false
+            m.node.playbackAction.mode = "playNext"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertTrue(currentItem.UserData.Played)
+            m.assertNotInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertEqual(m.node.playbackCompletionTask.request.action, "MarkAsWatched")
+            m.assertEqual(m.node.playbackCompletionTask.request.itemId, "movie-1")
+            m.assertNotEqual(m.top.playRequest.itemId, "movie-2")
+
+            m.node.playbackCompletionTask.response = { ok: true, action: "MarkAsWatched", itemId: "movie-1" }
+
+            m.assertEqual(m.top.playRequest.itemId, "movie-2")
+            m.assertEqual(m.top.playRequest.nextItemPlayback, NextItemPlayback.Mode.PlayNextImmediately)
+        end function
+
+        @it("completes the current item before opening Up Next")
+        function _()
+            currentItem = { Id: "movie-1", Type: "Movie", Name: "First", UserData: {} }
+            nextItem = { Id: "movie-2", Type: "Movie", Name: "Second", UserData: {} }
+            m.node.activePlayback.context.item = currentItem
+            m.node.activePlayback.session.itemId = "movie-1"
+            m.node.activePlayback.request.item = currentItem
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.activePlayback.request.nextItemPlayback = NextItemPlayback.Mode.ShowUpNext
+            m.node.activePlayback.queue.items = [
+                { itemId: "movie-1", item: currentItem, startPositionTicks: 0 }
+                { itemId: "movie-2", item: nextItem, startPositionTicks: 0 }
+            ]
+            m.node.activePlayback.queue.index = 0
+            m.node.activePlayback.queue.mode = "sequential"
+            m.node.activePlayback.queue.scope = "playlist"
+            m.node.playback.duration = 100
+            m.node.playback.position = 80
+            m.node.playback.hasEmittedFinalProgress = false
+            m.node.playbackAction.mode = "skipCredits"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertTrue(currentItem.UserData.Played)
+            m.assertNotInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertInvalid(m.top.upNextRequested)
+
+            m.node.playbackCompletionTask.response = { ok: true, action: "MarkAsWatched", itemId: "movie-1" }
+
+            m.assertEqual(m.top.upNextRequested.nextItem.itemId, "movie-2")
+            m.assertEqual(m.top.upNextRequested.nextItemPlayback, NextItemPlayback.Mode.ShowUpNext)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("ignores a stale watched response while completion is pending")
+        function _()
+            m.node.activePlayback.session.itemId = "music-video-1"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.activePlayback.request.nextItemPlayback = NextItemPlayback.Mode.PlayNextImmediately
+            m.node.playback.duration = 100
+            m.node.playbackAction.mode = "playNext"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.node.playbackCompletionTask.response = { ok: true, action: "MarkAsWatched", itemId: "stale-item" }
+
+            m.assertNotInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertNotEqual(m.top.playRequest.itemId, "music-video-2")
+        end function
+
+        @it("closes playback when the next item disappears before completion is confirmed")
+        function _()
+            m.node.activePlayback.session.itemId = "music-video-1"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.activePlayback.request.nextItemPlayback = NextItemPlayback.Mode.PlayNextImmediately
+            m.node.playback.duration = 100
+            m.node.playbackAction.mode = "playNext"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+            m.node.activePlayback.queue.items = [m.node.activePlayback.queue.items[0]]
+
+            m.node.playbackCompletionTask.response = { ok: true, action: "MarkAsWatched", itemId: "music-video-1" }
+
+            m.assertInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("continues after a matching watched failure")
+        function _()
+            m.node.activePlayback.session.itemId = "music-video-1"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.activePlayback.request.nextItemPlayback = NextItemPlayback.Mode.PlayNextImmediately
+            m.node.playback.duration = 100
+            m.node.playbackAction.mode = "playNext"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.node.playbackCompletionTask.response = { ok: false, action: "MarkAsWatched", itemId: "music-video-1", errorMessage: "failed" }
+
+            m.assertInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertEqual(m.top.playRequest.itemId, "music-video-2")
+        end function
+
+        @it("cancels a pending watched completion when playback stops")
+        function _()
+            m.node.activePlayback.session.itemId = "music-video-1"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.playback.duration = 100
+            m.node.playbackAction.mode = "playNext"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            'bs:disable-next-line 1140
+            cancelPlaybackActionCompletion()
+            m.node.playbackCompletionTask.response = { ok: true, action: "MarkAsWatched", itemId: "music-video-1" }
+
+            m.assertInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertEqual(m.node.playbackCompletionTask.control, "stop")
+            m.assertNotEqual(m.top.playRequest.itemId, "music-video-2")
+        end function
+
+        @it("ignores repeated action selections while completion is pending")
+        function _()
+            m.node.activePlayback.session.itemId = "music-video-1"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.playback.duration = 100
+            m.node.playbackAction.mode = "playNext"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+            firstRequest = m.node.playbackCompletionTask.request
+
+            m.node.playbackAction.mode = "playNext"
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.assertEqual(m.node.playbackCompletionTask.request, firstRequest)
+            m.assertNotInvalid(m.node.playbackAction.pendingCompletion)
+        end function
+
+        @it("ignores a duplicate watched response after continuation")
+        function _()
+            m.node.activePlayback.session.itemId = "music-video-1"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.activePlayback.request.nextItemPlayback = NextItemPlayback.Mode.PlayNextImmediately
+            m.node.playback.duration = 100
+            m.node.playbackAction.mode = "playNext"
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+            response = { ok: true, action: "MarkAsWatched", itemId: "music-video-1" }
+            m.node.playbackCompletionTask.response = response
+            continuedItemId = m.top.playRequest.itemId
+
+            m.node.playbackCompletionTask.response = response
+
+            m.assertInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertEqual(m.top.playRequest.itemId, continuedItemId)
+        end function
+
     end class
 
 end namespace

@@ -11,6 +11,7 @@ namespace tests
             expectedSize = m.node.videoStreamingModeDescription.font.size
 
             m.assertEqual(m.node.subtitleBurnInDescription.font.size, expectedSize)
+            m.assertEqual(m.node.nextItemPlaybackDescription.font.size, expectedSize)
             m.assertEqual(m.top.findNode("tmdbApiKeyDescription").font.size, expectedSize)
             m.assertEqual(m.top.findNode("resetStarfinDescription").font.size, expectedSize)
         end function
@@ -18,7 +19,7 @@ namespace tests
         @it("initializes every settings category and matching panel")
         function _()
             deviceTitles = ["General", "Video", "Subtitles", "Advanced"]
-            userTitles = ["Libraries", "Media Shell", "TV", "Screensaver"]
+            userTitles = ["Libraries", "Media Shell", "Playback", "TV", "Screensaver"]
 
             m.assertEqual(m.node.categoryPanels.Count(), deviceTitles.Count() + userTitles.Count())
             m.assertEqual(m.node.categoryControls.Count(), deviceTitles.Count() + userTitles.Count())
@@ -50,6 +51,36 @@ namespace tests
 
             m.assertEqual(m.node.settingsState.values[SettingsStore.Key.CollectionCardsLayout], "detailed;2")
             m.assertEqual(m.node.settingsState.values[SettingsStore.Key.CollectionItemsLayout], "poster;6")
+        end function
+
+        @it("describes the focused Next Item Playback option")
+        function _()
+            m.node.settingsControls.nextItemPlaybackOptions.itemFocused = 1
+            'bs:disable-next-line 1140
+            onNextItemPlaybackFocused()
+
+            m.assertTrue(Instr(1, m.node.nextItemPlaybackDescription.text, "starts the next item immediately") > 0)
+            m.assertTrue(Instr(1, m.node.nextItemPlaybackDescription.text, "Up Next") > 0)
+
+            m.node.settingsControls.nextItemPlaybackOptions.itemFocused = 0
+            'bs:disable-next-line 1140
+            onNextItemPlaybackFocused()
+
+            m.assertTrue(Instr(1, m.node.nextItemPlaybackDescription.text, "15-second countdown") > 0)
+            m.assertEqual(Instr(1, m.node.nextItemPlaybackDescription.text, "credits"), 0)
+        end function
+
+        @it("builds and stores Next Item Playback options")
+        function _()
+            options = m.node.settingsControls.nextItemPlaybackOptions.content
+            m.assertEqual(options.getChild(0).title, "Show Up Next")
+            m.assertEqual(options.getChild(1).title, "Play Next Immediately")
+
+            m.node.settingsControls.nextItemPlaybackOptions.itemSelected = 1
+            'bs:disable-next-line 1140
+            onNextItemPlaybackSelected()
+
+            m.assertEqual(m.node.settingsState.values[SettingsStore.Key.NextItemPlayback], NextItemPlayback.Mode.PlayNextImmediately)
         end function
 
         @it("loads all artwork values into the grid")
@@ -87,32 +118,36 @@ namespace tests
 
         @it("shows only the selected category panel")
         function _()
-            'bs:disable-next-line 1140
-            showCategory(7)
+            resetIndex = m.node.categoryState.resetIndex
 
-            m.assertEqual(m.node.focusState.categoryIndex, 7)
+            'bs:disable-next-line 1140
+            showCategory(resetIndex)
+
+            m.assertEqual(m.node.focusState.categoryIndex, resetIndex)
             for i = 0 to m.node.categoryPanels.Count() - 1
-                m.assertEqual(m.node.categoryPanels[i].visible, i = 7)
+                m.assertEqual(m.node.categoryPanels[i].visible, i = resetIndex)
             end for
         end function
 
         @it("updates the panel explicitly when crossing category-list boundaries")
         function _()
-            m.node.userCategoryList.jumpToItem = 3
+            lastUserIndex = m.node.categoryState.lastUserIndex
+            deviceOffset = m.node.categoryState.deviceOffset
+            m.node.userCategoryList.jumpToItem = lastUserIndex
             m.node.userCategoryList.setFocus(true)
             'bs:disable-next-line 1140
             handled = onKeyEvent("down", true)
             m.assertTrue(handled)
-            m.assertEqual(m.node.focusState.categoryIndex, 4)
-            m.assertTrue(m.node.categoryPanels[4].visible)
+            m.assertEqual(m.node.focusState.categoryIndex, deviceOffset)
+            m.assertTrue(m.node.categoryPanels[deviceOffset].visible)
 
             m.node.deviceCategoryList.jumpToItem = 0
             m.node.deviceCategoryList.setFocus(true)
             'bs:disable-next-line 1140
             handled = onKeyEvent("up", true)
             m.assertTrue(handled)
-            m.assertEqual(m.node.focusState.categoryIndex, 3)
-            m.assertTrue(m.node.categoryPanels[3].visible)
+            m.assertEqual(m.node.focusState.categoryIndex, lastUserIndex)
+            m.assertTrue(m.node.categoryPanels[lastUserIndex].visible)
         end function
 
         @describe("screensaver settings")
@@ -209,21 +244,22 @@ namespace tests
 
         @it("switches between reset confirmation and normal reset controls")
         function _()
-            m.node.focusState.categoryIndex = 7
+            resetIndex = m.node.categoryState.resetIndex
+            m.node.focusState.categoryIndex = resetIndex
 
             'bs:disable-next-line 1140
             onResetStarfinSelected()
             m.assertTrue(m.node.resetStarfinState.confirmationVisible)
             m.assertFalse(m.node.settingsControls.resetStarfinButton.visible)
             m.assertTrue(m.node.resetStarfinState.confirmationGroup.visible)
-            m.assertEqual(m.node.categoryControls[7].Count(), 2)
+            m.assertEqual(m.node.categoryControls[resetIndex].Count(), 2)
 
             'bs:disable-next-line 1140
             onAbortResetSelected()
             m.assertFalse(m.node.resetStarfinState.confirmationVisible)
             m.assertTrue(m.node.settingsControls.resetStarfinButton.visible)
             m.assertFalse(m.node.resetStarfinState.confirmationGroup.visible)
-            m.assertEqual(m.node.categoryControls[7].Count(), 1)
+            m.assertEqual(m.node.categoryControls[resetIndex].Count(), 1)
 
             ' The Abort selection event can continue bubbling after focus returns
             ' to the non-list Reset Starfin button.
