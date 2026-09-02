@@ -15,9 +15,18 @@ namespace tests
             m.node.pageState.episodeListScroll = "horizontal"
             m.node.pageState.allEpisodes = false
             m.node.pageState.focusArea = "episodes"
+            m.node.pageState.detailsLoad = LatestRequestLifecycle.Create()
+            m.node.pageState.detailsTaskPool.nextIndex = 0
             m.top.selectedEpisodeDetails = invalid
             m.top.seasonWatchedStateChanged = invalid
             m.top.closeRequested = false
+            scene = m.node.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                loadingSpinnerNode = CreateObject("roSGNode", "Spinner")
+                loadingSpinnerNode.id = "loadingSpinner"
+                scene.appendChild(loadingSpinnerNode)
+            end if
+            scene.findNode("loadingSpinner").control = "stop"
         end function
         @describe("declarative component contract")
 
@@ -59,6 +68,11 @@ namespace tests
         @it("declares the tvSeasonTask node")
         function _()
             m.assertNotInvalid(m.top.findNode("tvSeasonTask"))
+        end function
+
+        @it("declares the alternate tvSeasonTask node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("tvSeasonTaskAlternate"))
         end function
 
         @describe("season rendering and navigation")
@@ -131,6 +145,31 @@ namespace tests
 
             m.assertEqual(request.seasonId, "season-2")
             m.assertTrue(request.keepSeasonNavFocus)
+        end function
+
+        @it("optimistically renders season navigation while clearing stale episodes")
+        function _()
+            seasons = [m.createSeason("season-1", "Season 1"), m.createSeason("season-2", "Season 2"), m.createSeason("season-3", "Season 3")]
+            request = m.createRequest()
+            request.seasonId = "season-2"
+            request.season = seasons[1]
+            request.seasons = seasons
+            request.keepSeasonNavFocus = true
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, m.createRequest())
+            LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            m.top.loadRequest = request
+
+            loadingSpinner = m.top.getScene().findNode("loadingSpinner")
+            m.assertEqual(m.top.findNode("seasonLabel").text, "Season 2")
+            m.assertTrue(m.top.findNode("seasonNav").hasPrevious)
+            m.assertTrue(m.top.findNode("seasonNav").hasNext)
+            m.assertFalse(m.top.findNode("episodesList").visible)
+            m.assertEqual(m.top.findNode("episodesList").content.getChildCount(), 0)
+            m.assertEqual(loadingSpinner.showDelay, 2.0)
+            m.assertEqual(loadingSpinner.control, "start")
         end function
 
         @describe("episode rendering and lookup")
@@ -302,6 +341,117 @@ namespace tests
 
         @describe("focus and lifecycle")
 
+        @it("coalesces rapid season loads and starts the newest request after a stale response")
+        function _()
+            firstRequest = m.createRequest()
+            secondRequest = m.createRequest()
+            secondRequest.seasonId = "season-2"
+            thirdRequest = m.createRequest()
+            thirdRequest.seasonId = "season-3"
+
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, firstRequest)
+            LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, secondRequest)
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, thirdRequest)
+            m.node.pageState.detailsTaskPool.nextIndex = 1
+            completedTask = {
+                response: { ok: true, action: "tvSeasonComplete", seasonId: "season-1", requestId: 1 }
+            }
+            Spinner.Show()
+
+            'bs:disable-next-line 1140
+            handleTVSeasonResponse(completedTask)
+
+            m.assertEqual(m.node.pageState.detailsLoad.active.request.seasonId, "season-3")
+            m.assertInvalid(m.node.pageState.detailsLoad.pending)
+            m.assertEqual(m.node.tvSeasonTaskAlternate.request.seasonId, "season-3")
+            m.assertEqual(m.node.tvSeasonTaskAlternate.control, "run")
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+        end function
+
+        @it("preserves the optimistic season label when series metadata arrives first")
+        function _()
+            m.node.pageState.request.seriesMetadataPending = true
+            m.node.pageState.episodesLoaded = false
+            m.top.findNode("seasonLabel").text = "Season 1"
+            seriesTask = {
+                response: {
+                    ok: true
+                    action: "tvSeasonSeries"
+                    seasonId: "season-1"
+                    requestId: 1
+                    payload: { Id: "series-1", Name: "Series" }
+                }
+            }
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "season-1")
+
+            'bs:disable-next-line 1140
+            handleTVSeasonResponse(seriesTask)
+
+            m.assertEqual(m.top.findNode("seasonLabel").text, "Season 1")
+        end function
+
+        @it("renders and ends loading for the current season response")
+        function _()
+            request = m.createRequest()
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            episode = m.createEpisode("episode-2")
+            completedTask = {
+                response: {
+                    ok: true
+                    action: "tvSeason"
+                    seasonId: "season-1"
+                    requestId: 1
+                    payload: { season: request.season, seasons: invalid, episodes: [episode] }
+                }
+            }
+            Spinner.Show()
+
+            'bs:disable-next-line 1140
+            handleTVSeasonResponse(completedTask)
+
+            m.assertEqual(m.node.pageState.episodes.Count(), 1)
+            m.assertEqual(m.node.pageState.episodes[0].Id, "episode-2")
+            m.assertTrue(m.top.findNode("episodesList").visible)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            m.assertNotInvalid(m.node.pageState.detailsLoad.active)
+        end function
+
+        @it("releases the active request only after terminal completion")
+        function _()
+            request = m.createRequest()
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            completedTask = {
+                response: { ok: true, action: "tvSeasonComplete", seasonId: "season-1", requestId: 1 }
+            }
+
+            'bs:disable-next-line 1140
+            handleTVSeasonResponse(completedTask)
+
+            m.assertInvalid(m.node.pageState.detailsLoad.active)
+        end function
+
+        @it("does not let an unrelated response release the active season request")
+        function _()
+            activeRequest = m.createRequest()
+            pendingRequest = m.createRequest()
+            pendingRequest.seasonId = "season-2"
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, activeRequest)
+            LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, pendingRequest)
+            unrelatedTask = {
+                response: { ok: true, action: "tvSeason", seasonId: "season-9", requestId: 99, payload: {} }
+            }
+
+            'bs:disable-next-line 1140
+            handleTVSeasonResponse(unrelatedTask)
+
+            m.assertEqual(m.node.pageState.detailsLoad.active.request.seasonId, "season-1")
+            m.assertEqual(m.node.pageState.detailsLoad.pending.request.seasonId, "season-2")
+        end function
+
         @it("focuses episode content when available")
         function _()
             m.node.pageState.episodes = [m.createEpisode("episode-1")]
@@ -313,11 +463,12 @@ namespace tests
             m.assertTrue(m.top.findNode("episodesList").hasFocus())
         end function
 
-        @it("deactivation stops the season task")
+        @it("deactivation stops both season tasks")
         function _()
             m.top.callFunc("deactivate")
 
             m.assertEqual(m.top.findNode("tvSeasonTask").control, "stop")
+            m.assertEqual(m.top.findNode("tvSeasonTaskAlternate").control, "stop")
         end function
 
         @it("Back requests close")

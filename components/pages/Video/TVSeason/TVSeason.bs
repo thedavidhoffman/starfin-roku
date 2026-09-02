@@ -11,6 +11,7 @@ import "pkg:/source/Spinner.bs"
 import "pkg:/source/PlaybackProgress.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/AsyncLifecycle.bs"
+import "pkg:/source/LatestRequestLifecycle.bs"
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
@@ -39,6 +40,11 @@ sub init()
         focusedEpisodeGridIndex: -1
         focusArea: "episodes"
         lifecycle: AsyncLifecycle.Create()
+        detailsLoad: LatestRequestLifecycle.Create()
+        detailsTaskPool: {
+            nodes: [m.tvSeasonTask, m.tvSeasonTaskAlternate]
+            nextIndex: 0
+        }
     }
 end sub
 
@@ -54,6 +60,7 @@ sub initReferences()
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
     m.tvSeasonTask = m.top.findNode("tvSeasonTask")
+    m.tvSeasonTaskAlternate = m.top.findNode("tvSeasonTaskAlternate")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -61,6 +68,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.tvSeasonTask.observeField("response", "onTVSeasonResponse")
+    m.tvSeasonTaskAlternate.observeField("response", "onAlternateTVSeasonResponse")
     m.seasonNav.observeField("previousSelected", "onPreviousSeasonSelected")
     m.seasonNav.observeField("nextSelected", "onNextSeasonSelected")
     m.episodesList.observeField("rowItemFocused", "onEpisodeFocused")
@@ -132,15 +140,36 @@ sub onLoadRequestChanged()
     m.pageState.focusArea = "episodes"
     if request.keepSeasonNavFocus = true then m.pageState.focusArea = "seasonNav"
     clearEpisodes()
-    Spinner.Show(0)
+    Spinner.Show()
     updateAdjacentSeasons()
-    renderSeason(request.season, request.seriesMetadataPending <> true, false)
+    renderSeason(request.season, request.seriesMetadataPending <> true)
     m.seasonNav.visible = m.pageState.allEpisodes <> true
     if m.pageState.focusArea = "seasonNav" then focusSeasonNav()
 
-    m.tvSeasonTask.request = request
-    m.tvSeasonTask.control = TaskControl.Command.Run
+    LatestRequestLifecycle.Queue(m.pageState.detailsLoad, request)
+    startPendingTVSeasonLoad()
 end sub
+
+'-------------------------------------------------------------------------------
+' startPendingTVSeasonLoad
+'-------------------------------------------------------------------------------
+sub startPendingTVSeasonLoad()
+    entry = LatestRequestLifecycle.TakeNext(m.pageState.detailsLoad)
+    if entry = invalid then return
+
+    task = takeNextTVSeasonTask()
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' takeNextTVSeasonTask
+'-------------------------------------------------------------------------------
+function takeNextTVSeasonTask() as object
+    task = m.pageState.detailsTaskPool.nodes[m.pageState.detailsTaskPool.nextIndex]
+    m.pageState.detailsTaskPool.nextIndex = (m.pageState.detailsTaskPool.nextIndex + 1) mod m.pageState.detailsTaskPool.nodes.Count()
+    return task
+end function
 
 '-------------------------------------------------------------------------------
 ' onSettingsChanged
@@ -160,14 +189,30 @@ end sub
 ' onTVSeasonResponse
 '-------------------------------------------------------------------------------
 sub onTVSeasonResponse()
-    response = m.tvSeasonTask.response
+    handleTVSeasonResponse(m.tvSeasonTask)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternateTVSeasonResponse
+'-------------------------------------------------------------------------------
+sub onAlternateTVSeasonResponse()
+    handleTVSeasonResponse(m.tvSeasonTaskAlternate)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleTVSeasonResponse
+'-------------------------------------------------------------------------------
+sub handleTVSeasonResponse(task as dynamic)
+    if task = invalid then return
+
+    response = task.response
     if response = invalid then return
 
     if Format.SafeString(response.action, "") = "tvSeasonSeries" then
         if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeasonSeries") <> true then return
         m.pageState.request.seriesMetadataPending = false
         if response.ok = true and response.payload <> invalid then m.pageState.request.series = response.payload
-        renderSeason(m.pageState.season, true, m.pageState.episodesLoaded)
+        renderSeason(m.pageState.season, true, true)
         updateSeasonSummaryArtwork()
         return
     end if
@@ -180,13 +225,27 @@ sub onTVSeasonResponse()
         end if
         return
     end if
-    if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", "tvSeason") <> true then return
 
+    if Format.SafeString(response.action, "") = "tvSeasonComplete" then
+        completion = LatestRequestLifecycle.Complete(m.pageState.detailsLoad, response, "tvSeasonComplete")
+        if completion.matched = true then startPendingTVSeasonLoad()
+        return
+    end if
+
+    if Format.SafeString(response.action, "") <> "tvSeason" then return
     if response.ok <> true then
+        completion = LatestRequestLifecycle.Complete(m.pageState.detailsLoad, response, "tvSeason")
+        if completion.matched <> true then return
+        if completion.isCurrent <> true then
+            startPendingTVSeasonLoad()
+            return
+        end if
+
         Spinner.Hide()
         AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load tv season."))
         return
     end if
+    if isLatestTVSeasonResponse(response) <> true then return
 
     payload = response.payload
     if payload = invalid then
@@ -213,11 +272,26 @@ sub onTVSeasonResponse()
 end sub
 
 '-------------------------------------------------------------------------------
+' isLatestTVSeasonResponse
+'-------------------------------------------------------------------------------
+function isLatestTVSeasonResponse(response as dynamic) as boolean
+    if response = invalid then return false
+    if m.pageState.detailsLoad.isActive <> true then return false
+
+    responseRequestId = Number.ToInteger(response.requestId, -1)
+    latestRequestId = Number.ToInteger(m.pageState.detailsLoad.latestRequestId, -1)
+    return responseRequestId >= 0 and responseRequestId = latestRequestId
+end function
+
+'-------------------------------------------------------------------------------
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
     AsyncLifecycle.Deactivate(m.pageState.lifecycle)
+    LatestRequestLifecycle.Deactivate(m.pageState.detailsLoad)
     m.tvSeasonTask.control = TaskControl.Command.Stop
+    m.tvSeasonTaskAlternate.control = TaskControl.Command.Stop
+    Spinner.Hide()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -834,6 +908,7 @@ end function
 '-------------------------------------------------------------------------------
 sub activate()
     AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "seasonId")
+    LatestRequestLifecycle.Activate(m.pageState.detailsLoad)
     m.top.setFocus(true)
     refreshPlaybackProgressChange()
     focusEpisodesIfActive()

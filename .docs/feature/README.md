@@ -23,6 +23,7 @@ individual Starfin features.
 - [Preview Sheets](preview-sheets.md)
 - [Quick Connect](quick-connect.md)
 - [Theme Songs](theme-songs.md)
+- [TV Season Browsing](tv-season-browsing.md)
 - [Filmography](filmography.md)
 - [Video Library Capabilities](video-library-capabilities.md)
 - [Video Media Cards](video-media-cards.md)

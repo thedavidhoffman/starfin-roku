@@ -6,6 +6,7 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -21,6 +22,7 @@ sub executeRequest()
     request = m.top.request
     validationError = TaskRequest.ValidateRequest(request, "tvSeason", ["seriesId", "seasonId"])
     if validationError <> invalid then
+        validationError.AddReplace("requestId", getRequestId(request))
         if request <> invalid then
             validationError.AddReplace("seriesId", Format.SafeString(request.seriesId, ""))
             validationError.AddReplace("seasonId", Format.SafeString(request.seasonId, ""))
@@ -34,6 +36,7 @@ sub executeRequest()
         seasonResult.AddReplace("action", "tvSeason")
         seasonResult.AddReplace("seriesId", Format.SafeString(request.seriesId, ""))
         seasonResult.AddReplace("seasonId", Format.SafeString(request.seasonId, ""))
+        seasonResult.AddReplace("requestId", getRequestId(request))
         m.top.response = seasonResult
         return
     end if
@@ -45,21 +48,24 @@ sub executeRequest()
         episodesResult.AddReplace("action", "tvSeason")
         episodesResult.AddReplace("seriesId", Format.SafeString(request.seriesId, ""))
         episodesResult.AddReplace("seasonId", Format.SafeString(request.seasonId, ""))
+        episodesResult.AddReplace("requestId", getRequestId(request))
         m.top.response = episodesResult
         return
     end if
 
-    m.top.response = {
+    seasonResponse = {
         ok: true
         action: "tvSeason"
         seriesId: Format.SafeString(request.seriesId, "")
         seasonId: Format.SafeString(request.seasonId, "")
+        requestId: getRequestId(request)
         payload: {
             season: seasonResult.data
             episodes: episodesResult.data
             seasons: invalid
         }
     }
+    m.top.response = seasonResponse
 
     if request.seriesMetadataPending = true then
         seriesResult = loadSeries(request)
@@ -71,6 +77,7 @@ sub executeRequest()
             action: "tvSeasonSeries"
             seriesId: Format.SafeString(request.seriesId, "")
             seasonId: Format.SafeString(request.seasonId, "")
+            requestId: getRequestId(request)
             payload: seriesPayload
         }
     end if
@@ -83,11 +90,35 @@ sub executeRequest()
                 action: "tvSeasonSeasons"
                 seriesId: Format.SafeString(request.seriesId, "")
                 seasonId: Format.SafeString(request.seasonId, "")
+                requestId: getRequestId(request)
                 payload: seasonsResult.data
             }
         end if
     end if
+
+    publishCompletion(request)
 end sub
+
+'-------------------------------------------------------------------------------
+' publishCompletion
+'-------------------------------------------------------------------------------
+sub publishCompletion(request as object)
+    m.top.response = {
+        ok: true
+        action: "tvSeasonComplete"
+        seriesId: Format.SafeString(request.seriesId, "")
+        seasonId: Format.SafeString(request.seasonId, "")
+        requestId: getRequestId(request)
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' getRequestId
+'-------------------------------------------------------------------------------
+function getRequestId(request as dynamic) as integer
+    if request = invalid then return -1
+    return Number.ToInteger(request.requestId, -1)
+end function
 
 '-------------------------------------------------------------------------------
 ' loadSeason
