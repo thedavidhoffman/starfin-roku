@@ -4,7 +4,7 @@
 sub initPlaybackActions()
     m.playbackAction = {
         itemId: ""
-        mode: "none"
+        mode: PlaybackAction.Mode.None
         pendingCompletion: invalid
         randomSkipDismissed: false
         musicVideoMetadataDismissed: false
@@ -41,14 +41,14 @@ sub updatePlaybackActionButton(position as dynamic)
     updateMusicVideoIntroMetadata(item, position)
     showRandomSkip = VideoPlayerMetadata_ShouldShowRandomMusicVideoSkip(item, m.activePlayback.queue.mode, m.activePlayback.queue.scope, hasQueueItemAtOffset(1), position, m.playbackAction.randomSkipDismissed)
     if showRandomSkip then
-        showPlaybackActionButton("randomSkip", "Skip")
+        showPlaybackActionButton(PlaybackAction.Mode.RandomSkip, "Skip")
         return
     end if
 
     activeIntro = getActiveIntroSegment(Number.ToFloat(position, 0))
     if activeIntro <> invalid then
         m.mediaSegments.activeEndSeconds = activeIntro.endSeconds
-        showPlaybackActionButton("skipIntro", "Skip Intro")
+        showPlaybackActionButton(PlaybackAction.Mode.SkipIntro, "Skip Intro")
         return
     end if
 
@@ -56,9 +56,9 @@ sub updatePlaybackActionButton(position as dynamic)
     if activeOutro <> invalid and hasQueueItemAtOffset(1) then
         m.mediaSegments.activeEndSeconds = activeOutro.endSeconds
         if NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback) = NextItemPlayback.Mode.PlayNextImmediately then
-            showPlaybackActionButton("playNext", "Play Next")
+            showPlaybackActionButton(PlaybackAction.Mode.PlayNext, "Play Next")
         else
-            showPlaybackActionButton("skipCredits", "Skip Credits")
+            showPlaybackActionButton(PlaybackAction.Mode.SkipCredits, "Skip Credits")
         end if
         return
     end if
@@ -108,7 +108,7 @@ end sub
 ' hidePlaybackActionButton
 '-------------------------------------------------------------------------------
 sub hidePlaybackActionButton()
-    m.playbackAction.mode = "none"
+    m.playbackAction.mode = PlaybackAction.Mode.None
     m.playbackActionButton.visible = false
     m.playbackActionButton.hasFocusVisual = false
 end sub
@@ -140,11 +140,11 @@ end sub
 ' dismissPlaybackActionPresentation
 '-------------------------------------------------------------------------------
 sub dismissPlaybackActionPresentation(mode as string)
-    if mode = "randomSkip" then
+    if mode = PlaybackAction.Mode.RandomSkip then
         m.playbackAction.randomSkipDismissed = true
-    else if mode = "skipIntro" and m.mediaSegments.activeEndSeconds >= 0 then
+    else if mode = PlaybackAction.Mode.SkipIntro and m.mediaSegments.activeEndSeconds >= 0 then
         m.mediaSegments.introDismissedEndSeconds = m.mediaSegments.activeEndSeconds
-    else if (mode = "skipCredits" or mode = "playNext") and m.mediaSegments.activeEndSeconds >= 0 then
+    else if (mode = PlaybackAction.Mode.SkipCredits or mode = PlaybackAction.Mode.PlayNext) and m.mediaSegments.activeEndSeconds >= 0 then
         m.mediaSegments.outroDismissedEndSeconds = m.mediaSegments.activeEndSeconds
     end if
     m.playbackAction.musicVideoMetadataDismissed = true
@@ -159,11 +159,11 @@ sub onPlaybackActionSelected()
 
     mode = m.playbackAction.mode
     dismissPlaybackActionPresentation(mode)
-    if mode = "randomSkip" then
+    if mode = PlaybackAction.Mode.RandomSkip then
         startQueueItemAtOffset(1)
-    else if mode = "skipIntro" then
+    else if mode = PlaybackAction.Mode.SkipIntro then
         skipActiveIntro()
-    else if mode = "skipCredits" or mode = "playNext" then
+    else if mode = PlaybackAction.Mode.SkipCredits or mode = PlaybackAction.Mode.PlayNext then
         completeCurrentItemFromPlaybackAction(mode)
     end if
 end sub
