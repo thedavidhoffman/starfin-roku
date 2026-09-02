@@ -35,11 +35,20 @@ own `rokuTestAutomation` runtime section during this verification. The reset int
 saved Starfin servers, accounts, tokens, preferences, and navigation state from
 the sideloaded development channel so every automation run starts deterministically.
 
-The authenticated smoke test waits for the empty Login screen, captures evidence,
-populates the public server, username, and password fields from
-`.env.automation`, and captures the populated form with the password masked. It
-then selects Sign In, waits with bounded polling for Home, and captures final Home
-evidence. Home readiness requires all attached core tasks to finish, the loading
+The authenticated smoke test waits for the empty Login screen and captures
+evidence. In one ordered flow, it submits the empty form, attempts authentication
+against the intentionally unreachable loopback endpoint `127.0.0.1:1`, then checks the
+missing-username and missing-password states against the configured server. It also
+submits a deliberately incorrect password to verify the reachable server's rejected-
+credentials response. Each failed attempt verifies the rendered Login status,
+confirms Login remains visible and Home remains hidden, and captures screenshot
+evidence. The unreachable-server assertion includes the submitted IP and port while
+allowing the reported connection duration to vary.
+
+The test then populates the public server, username, and password fields from
+`.env.automation`, captures the populated form with the password masked, selects
+Sign In, waits with bounded polling for Home, and captures final Home evidence.
+Home readiness requires all attached core tasks to finish, the loading
 spinner to clear, at least one shelf to render, no shared status error to remain,
 and the rendered shelf/item fingerprint to stay unchanged for a two-second quiet
 window. That quiet window accounts for detached per-library Latest Media tasks,
