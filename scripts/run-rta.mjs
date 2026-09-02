@@ -145,6 +145,7 @@ try {
       './tests/automation/support/hooks.mjs',
       '--timeout',
       '90000',
+      '--sort',
       '--reporter',
       'mochawesome',
       '--reporter-options',

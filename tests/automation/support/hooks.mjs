@@ -1,6 +1,7 @@
 import { captureEvidence } from './evidence.mjs';
 import { closeAutomationEnvironment } from './environment.mjs';
 import { resetRegistryAndRelaunch } from './lifecycle.mjs';
+import { resetSettingsDefaults } from './settings.mjs';
 
 export const mochaHooks = {
   async beforeAll() {
@@ -18,6 +19,10 @@ export const mochaHooks = {
   },
 
   async afterAll() {
-    await closeAutomationEnvironment();
+    try {
+      await resetSettingsDefaults();
+    } finally {
+      await closeAutomationEnvironment();
+    }
   }
 };

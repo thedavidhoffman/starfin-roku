@@ -56,6 +56,27 @@ which RTA cannot inspect directly. A short rendering-settle delay follows those
 conditions before capture. Secrets are not added to report metadata, though screenshots can show
 the configured server and username.
 
+The library-settings automation spec opens the production Settings overlay and
+checks all eight valid presentation-and-column layouts against all eight library
+rows. Each layout is selected through the real matrix controls, captured as
+screenshot evidence, and saved by closing the dialog. The test then performs a
+targeted registry read of only the eight account-scoped library layout keys and
+verifies their compound values. Registry sections, tokens, and unrelated account
+values are not added to the report.
+
+Separate automation specs cover every selectable value in Media Shell, Playback,
+TV, Screensaver, General, Video, and Subtitles. They operate the production
+controls and dialog save lifecycle, then read only the affected account-scoped or
+global registry key. General includes the real TMDB API-key keyboard flow using a
+synthetic value. Advanced verifies that Reset Starfin can be opened and aborted
+without changing stored settings or authentication; automation does not confirm
+the destructive erase action.
+
+After any settings spec runs, suite teardown restores all eighteen settings to
+their canonical defaults and verifies the account and global registry values.
+This cleanup preserves authentication, saved accounts, and unrelated registry
+data.
+
 ## Evidence reports
 
 Each run creates a timestamped directory under `out/automation-results/` with a
