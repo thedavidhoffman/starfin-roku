@@ -31,6 +31,9 @@
 - API response fields are PascalCase; access API data with PascalCase field names such as `item.CollectionType`, not mixed fallback expressions like `FirstNonEmpty([item.CollectionType, item.collectionType], "")`.
 - For date or time formatting/parsing helpers, use the existing functions in `source/DateTime.bs`; add new shared date helpers there instead of creating component-local date formatting functions.
 - For numeric conversion, always use `Number.ToInteger(value, fallback)` and `Number.ToFloat(value, fallback)` from `source/Number.bs`. Do not use raw `int()`, `Val()`, or direct float casts in component or task code unless there is a specific documented reason.
+- Use a string-valued enum when repeated production literals form a closed set of modes, commands, states, statuses, or types, especially when the values cross component or request/response boundaries. Do not create enums for incidental prose, identifiers, one-off values, open-ended inputs, or unrelated strings that merely happen to repeat.
+- Preserve existing runtime values when replacing literals with enum members, and define the enum in a namespace named for its responsibility, such as `TaskControl.Command` or `Playstate.Status`. Keep unrelated contracts separate even when they share values such as `"start"` or `"stop"`.
+- Verify literal-to-enum refactors as exact one-to-one mappings. Keep literal test expectations when they independently validate an external Roku or API contract instead of changing those assertions to the enum under test.
 - Always invoke SceneGraph interface functions with `node.callFunc("functionName", ...)`.
 - Do not use BrighterScript's `node@.functionName(...)` syntax. Zero-argument calls have caused runtime argument and type failures despite passing compilation.
 
