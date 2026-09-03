@@ -19,6 +19,8 @@ export async function getAutomationEnvironment() {
   const config = JSON.parse(configText);
   const testAccount = JSON.parse(process.env.STARFIN_AUTOMATION_ACCOUNT ?? '{}');
   const searchCases = JSON.parse(process.env.STARFIN_AUTOMATION_SEARCH_CASES ?? '[]');
+  const letterGridCases = JSON.parse(process.env.STARFIN_AUTOMATION_LETTERGRID_CASES ?? '[]');
+  const letterGridSearchLibrary = process.env.STARFIN_AUTOMATION_LETTERGRID_SEARCH_LIBRARY ?? '';
   if (!testAccount.server || !testAccount.username || !testAccount.password) {
     throw new Error('Automation login credentials were not provided by the runner.');
   }
@@ -37,6 +39,8 @@ export async function getAutomationEnvironment() {
     config,
     device,
     ecp,
+    letterGridCases,
+    letterGridSearchLibrary,
     odc,
     resultsDir,
     screenshotClient,

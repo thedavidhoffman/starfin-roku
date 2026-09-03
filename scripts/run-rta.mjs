@@ -19,7 +19,7 @@ const releaseReportEnabled = process.argv.includes('--release-report');
 function readConfig() {
   const result = dotenv.config({ path: environmentPath, quiet: true });
   if (result.error) {
-    throw new Error('Missing tests/automation/.env.automation. Copy .env.example and add the local test environment values.');
+    throw new Error('Missing tests/automation/.env.automation. Copy .env.automation.example and add the local test environment values.');
   }
 
   const host = process.env.ROKU_HOST?.trim();
@@ -27,33 +27,53 @@ function readConfig() {
   const server = process.env.JELLYFIN_SERVER_URL?.trim();
   const username = process.env.JELLYFIN_USERNAME?.trim();
   const jellyfinPassword = process.env.JELLYFIN_PASSWORD;
-  const searchCasesText = process.env.JELLYFIN_SEARCH_CASES?.trim();
+  const searchCasesText = process.env.SEARCH_CASES?.trim();
+  const letterGridSearchLibrary = process.env.LETTERGRID_SEARCH_LIBRARY?.trim();
+  const letterGridCasesText = process.env.LETTERGRID_CASES?.trim();
   if (!host || !password) {
     throw new Error('tests/automation/.env.automation must define ROKU_HOST and ROKU_DEV_PASSWORD.');
   }
   if (!server || !username || !jellyfinPassword) {
     throw new Error('tests/automation/.env.automation must define JELLYFIN_SERVER_URL, JELLYFIN_USERNAME, and JELLYFIN_PASSWORD.');
   }
+  if (!letterGridSearchLibrary) {
+    throw new Error('tests/automation/.env.automation must define LETTERGRID_SEARCH_LIBRARY.');
+  }
+
+  let letterGridCases;
+  try {
+    letterGridCases = JSON.parse(letterGridCasesText ?? '');
+  } catch {
+    throw new Error('LETTERGRID_CASES must be a valid JSON array.');
+  }
+  if (
+    !Array.isArray(letterGridCases)
+    || letterGridCases.length === 0
+    || letterGridCases.some(letter => typeof letter !== 'string' || !/^[A-Z]$/i.test(letter.trim()))
+  ) {
+    throw new Error('LETTERGRID_CASES must contain at least one single letter.');
+  }
+  letterGridCases = letterGridCases.map(letter => letter.trim().toUpperCase());
 
   let searchCases;
   try {
     searchCases = JSON.parse(searchCasesText ?? '');
   } catch {
-    throw new Error('JELLYFIN_SEARCH_CASES must be a valid JSON array.');
+    throw new Error('SEARCH_CASES must be a valid JSON array.');
   }
   if (!Array.isArray(searchCases) || searchCases.length === 0) {
-    throw new Error('JELLYFIN_SEARCH_CASES must contain at least one search case.');
+    throw new Error('SEARCH_CASES must contain at least one search case.');
   }
 
   const sectionNames = ['moviesAndSeries', 'episodes', 'people'];
   searchCases = searchCases.map((searchCase, caseIndex) => {
     if (!searchCase || typeof searchCase !== 'object' || Array.isArray(searchCase)) {
-      throw new Error(`JELLYFIN_SEARCH_CASES case ${caseIndex + 1} must be an object.`);
+      throw new Error(`SEARCH_CASES case ${caseIndex + 1} must be an object.`);
     }
 
     const query = typeof searchCase.query === 'string' ? searchCase.query.trim() : '';
     if (query.length < 3) {
-      throw new Error(`JELLYFIN_SEARCH_CASES case ${caseIndex + 1} must have a query of at least three characters.`);
+      throw new Error(`SEARCH_CASES case ${caseIndex + 1} must have a query of at least three characters.`);
     }
 
     const normalizedCase = { query };
@@ -61,13 +81,13 @@ function readConfig() {
     for (const sectionName of sectionNames) {
       const values = searchCase[sectionName] ?? [];
       if (!Array.isArray(values) || values.some(value => typeof value !== 'string' || value.trim() === '')) {
-        throw new Error(`JELLYFIN_SEARCH_CASES case ${caseIndex + 1} ${sectionName} must be an array of non-empty strings.`);
+        throw new Error(`SEARCH_CASES case ${caseIndex + 1} ${sectionName} must be an array of non-empty strings.`);
       }
       normalizedCase[sectionName] = values.map(value => value.trim());
       expectedCount += values.length;
     }
     if (expectedCount === 0) {
-      throw new Error(`JELLYFIN_SEARCH_CASES case ${caseIndex + 1} must include at least one expected result.`);
+      throw new Error(`SEARCH_CASES case ${caseIndex + 1} must include at least one expected result.`);
     }
 
     return normalizedCase;
@@ -92,6 +112,8 @@ function readConfig() {
   };
   return {
     config,
+    letterGridCases,
+    letterGridSearchLibrary,
     searchCases,
     selectedDevice,
     testAccount: { server, username, password: jellyfinPassword }
@@ -160,7 +182,14 @@ window.addEventListener('load', () => setTimeout(() => {
 }
 
 try {
-  const { config, searchCases, selectedDevice, testAccount } = readConfig();
+  const {
+    config,
+    letterGridCases,
+    letterGridSearchLibrary,
+    searchCases,
+    selectedDevice,
+    testAccount
+  } = readConfig();
   await fs.mkdir(resultsDir, { recursive: true });
 
   console.log('Building the automation-only Starfin package...');
@@ -200,6 +229,8 @@ try {
         ...process.env,
         STARFIN_AUTOMATION_CONFIG: JSON.stringify(config),
         STARFIN_AUTOMATION_ACCOUNT: JSON.stringify(testAccount),
+        STARFIN_AUTOMATION_LETTERGRID_CASES: JSON.stringify(letterGridCases),
+        STARFIN_AUTOMATION_LETTERGRID_SEARCH_LIBRARY: letterGridSearchLibrary,
         STARFIN_AUTOMATION_SEARCH_CASES: JSON.stringify(searchCases),
         STARFIN_AUTOMATION_RESULTS: resultsDir
       },

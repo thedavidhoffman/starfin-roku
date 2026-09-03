@@ -15,7 +15,8 @@ builds are written to `build/automation/` and
 
 ## Local configuration
 
-Copy `tests/automation/.env.example` to `tests/automation/.env.automation` and
+Copy `tests/automation/.env.automation.example` to
+`tests/automation/.env.automation` and
 enter the host and developer password for one Roku development device, plus the
 Jellyfin server, test-account credentials, and Search expectations used by the
 authenticated smoke tests. All values are required. Search expectations are a
@@ -74,7 +75,7 @@ conditions before capture. Secrets are not added to report metadata, though scre
 the configured server and username.
 
 The Search automation spec opens the production Search page and runs every case
-from `JELLYFIN_SEARCH_CASES`. It waits for the real Jellyfin requests and rendered
+from `SEARCH_CASES`. It waits for the real Jellyfin requests and rendered
 rows to stabilize, then checks that each configured title appears exactly in its
 expected Movies & TV Shows, Episodes, or People section. Additional results and
 their ordering are intentionally ignored so unrelated library changes do not
