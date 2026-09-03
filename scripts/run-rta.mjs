@@ -15,6 +15,10 @@ const packagePath = path.join(rootDir, 'out', 'starfin-roku-automation.zip');
 const runId = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
 const resultsDir = path.join(rootDir, 'out', 'automation-results', runId);
 const releaseReportEnabled = process.argv.includes('--release-report');
+const grepArgumentIndex = process.argv.indexOf('--grep');
+const automationTestGrep = grepArgumentIndex >= 0 ? process.argv[grepArgumentIndex + 1]?.trim() : '';
+if (grepArgumentIndex >= 0 && !automationTestGrep) throw new Error('--grep requires a test-title pattern.');
+if (releaseReportEnabled && automationTestGrep) throw new Error('Release reports must run the complete automation suite.');
 
 function readConfig() {
   const result = dotenv.config({ path: environmentPath, quiet: true });
@@ -30,6 +34,8 @@ function readConfig() {
   const searchCasesText = process.env.SEARCH_CASES?.trim();
   const letterGridSearchLibrary = process.env.LETTERGRID_SEARCH_LIBRARY?.trim();
   const letterGridCasesText = process.env.LETTERGRID_CASES?.trim();
+  const tvSeriesLibrary = process.env.TVSERIES_LIBRARY?.trim();
+  const tvSeriesSmokeTestText = process.env.TVSERIES_SMOKE_TEST?.trim();
   if (!host || !password) {
     throw new Error('tests/automation/.env.automation must define ROKU_HOST and ROKU_DEV_PASSWORD.');
   }
@@ -38,6 +44,9 @@ function readConfig() {
   }
   if (!letterGridSearchLibrary) {
     throw new Error('tests/automation/.env.automation must define LETTERGRID_SEARCH_LIBRARY.');
+  }
+  if (!tvSeriesLibrary) {
+    throw new Error('tests/automation/.env.automation must define TVSERIES_LIBRARY.');
   }
 
   let letterGridCases;
@@ -54,6 +63,59 @@ function readConfig() {
     throw new Error('LETTERGRID_CASES must contain at least one single letter.');
   }
   letterGridCases = letterGridCases.map(letter => letter.trim().toUpperCase());
+
+  let tvSeriesSmokeTest;
+  try {
+    tvSeriesSmokeTest = JSON.parse(tvSeriesSmokeTestText ?? '');
+  } catch {
+    throw new Error('TVSERIES_SMOKE_TEST must be valid JSON.');
+  }
+  if (!tvSeriesSmokeTest || typeof tvSeriesSmokeTest !== 'object' || Array.isArray(tvSeriesSmokeTest)) {
+    throw new Error('TVSERIES_SMOKE_TEST must be a JSON object.');
+  }
+  const seriesName = typeof tvSeriesSmokeTest.seriesName === 'string'
+    ? tvSeriesSmokeTest.seriesName.trim()
+    : '';
+  const seasons = tvSeriesSmokeTest.seasons;
+  if (!seriesName) {
+    throw new Error('TVSERIES_SMOKE_TEST seriesName must be a non-empty string.');
+  }
+  if (
+    !Array.isArray(seasons)
+    || seasons.length === 0
+    || seasons.some(season => !season
+      || typeof season !== 'object'
+      || Array.isArray(season)
+      || !Number.isInteger(season.season)
+      || season.season < 0
+      || !Number.isInteger(season.year)
+      || season.year < 1
+      || !Number.isInteger(season.episodeCount)
+      || season.episodeCount < 0)
+  ) {
+    throw new Error('TVSERIES_SMOKE_TEST seasons must contain season, year, and episodeCount integers.');
+  }
+  const season1 = tvSeriesSmokeTest.season1;
+  if (
+    !Array.isArray(season1)
+    || season1.length === 0
+    || season1.some(episode => !episode
+      || typeof episode !== 'object'
+      || Array.isArray(episode)
+      || !Number.isInteger(episode.number)
+      || episode.number < 1
+      || typeof episode.title !== 'string'
+      || episode.title.trim() === ''
+      || typeof episode.date !== 'string'
+      || !/^\d{4}-\d{2}-\d{2}$/.test(episode.date))
+  ) {
+    throw new Error('TVSERIES_SMOKE_TEST season1 must contain number, title, and YYYY-MM-DD date values.');
+  }
+  tvSeriesSmokeTest = {
+    seriesName,
+    seasons,
+    season1: season1.map(episode => ({ ...episode, title: episode.title.trim() }))
+  };
 
   let searchCases;
   try {
@@ -116,7 +178,9 @@ function readConfig() {
     letterGridSearchLibrary,
     searchCases,
     selectedDevice,
-    testAccount: { server, username, password: jellyfinPassword }
+    testAccount: { server, username, password: jellyfinPassword },
+    tvSeriesLibrary,
+    tvSeriesSmokeTest
   };
 }
 
@@ -188,7 +252,9 @@ try {
     letterGridSearchLibrary,
     searchCases,
     selectedDevice,
-    testAccount
+    testAccount,
+    tvSeriesLibrary,
+    tvSeriesSmokeTest
   } = readConfig();
   await fs.mkdir(resultsDir, { recursive: true });
 
@@ -212,7 +278,7 @@ try {
   await fs.mkdir(logsDir, { recursive: true });
   let testError;
   try {
-    await run(process.execPath, [
+    const mochaArguments = [
       path.join(rootDir, 'node_modules', 'mocha', 'bin', 'mocha.js'),
       'tests/automation/specs/**/*.spec.mjs',
       '--require',
@@ -224,7 +290,10 @@ try {
       'mochawesome',
       '--reporter-options',
       `reportDir=${resultsDir},reportFilename=report,saveHtml=true,saveJson=true,overwrite=false,quiet=true`
-    ], {
+    ];
+    if (automationTestGrep) mochaArguments.push('--grep', automationTestGrep);
+
+    await run(process.execPath, mochaArguments, {
       env: {
         ...process.env,
         STARFIN_AUTOMATION_CONFIG: JSON.stringify(config),
@@ -232,6 +301,8 @@ try {
         STARFIN_AUTOMATION_LETTERGRID_CASES: JSON.stringify(letterGridCases),
         STARFIN_AUTOMATION_LETTERGRID_SEARCH_LIBRARY: letterGridSearchLibrary,
         STARFIN_AUTOMATION_SEARCH_CASES: JSON.stringify(searchCases),
+        STARFIN_AUTOMATION_TVSERIES_LIBRARY: tvSeriesLibrary,
+        STARFIN_AUTOMATION_TVSERIES_SMOKE_TEST: JSON.stringify(tvSeriesSmokeTest),
         STARFIN_AUTOMATION_RESULTS: resultsDir
       },
       logPath: path.join(logsDir, 'automation.log')

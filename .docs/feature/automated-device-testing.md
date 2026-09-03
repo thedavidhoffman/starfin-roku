@@ -31,6 +31,10 @@ Run the harness with:
 npm run automation:test
 ```
 
+During development, a focused test can be selected by title without running the
+complete suite, for example `npm run automation:test -- --grep "TV series library"`.
+Release-report mode rejects focused runs and always executes every test.
+
 This normal command produces the complete private report and does not redact or
 package it. For release-readiness evidence, run:
 
@@ -89,6 +93,15 @@ load the complete grid, and verify ascending and descending Title and Release
 Date order. Release Date assertions fall back from `PremiereDate` to
 `ProductionYear` and use `SortName` in the requested direction to resolve equal
 dates.
+
+The TV-series smoke test selects the `TVSERIES_LIBRARY` library from Home's My
+Media row, finds the first series whose title starts with the configured
+`TVSERIES_SMOKE_TEST.seriesName`, and opens its series page. It verifies that
+every configured season is represented by a rendered season card with the
+expected season number, production year, and episode count. The same JSON object
+provides a `season1` episode array with `number`, `title`, and ISO `date`
+values. After validating the series page, the test opens Season 1 and verifies
+every configured episode against the rendered episode list.
 
 Release Date browsing preserves normal server-backed pagination by requesting
 `PremiereDate,ProductionYear,SortName` from Jellyfin. The additional fields give
