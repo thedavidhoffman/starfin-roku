@@ -26,6 +26,7 @@ sub init()
     m.keyboard.observeField("text", "onKeyboardTextChanged")
     m.searchButton.observeField("buttonSelected", "onSearchButtonSelected")
     m.searchTask.observeField("response", "onSearchResponse")
+    m.searchTask.observeField("state", "onSearchTaskStateChanged")
 
     m.searchState = {
         request: invalid
@@ -36,6 +37,11 @@ sub init()
         rowHeights: []
         focusedRowIndex: 0
         resultsOffsetY: 0
+        loading: {
+            inFlight: false
+            stopping: false
+            spinner: invalid
+        }
         lifecycle: AsyncLifecycle.Create()
     }
 end sub
@@ -52,6 +58,7 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    bindSearchSpinner()
     m.top.setFocus(true)
     if hasRows() and m.searchState.focusedRowIndex >= 0 then
         focusRow(m.searchState.focusedRowIndex)
@@ -64,8 +71,32 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
-    AsyncLifecycle.Deactivate(m.searchState.lifecycle)
-    m.searchTask.control = TaskControl.Command.Stop
+    cancelSearch(false)
+    unbindSearchSpinner()
+end sub
+
+'-------------------------------------------------------------------------------
+' bindSearchSpinner
+'-------------------------------------------------------------------------------
+sub bindSearchSpinner()
+    if m.searchState.loading.spinner <> invalid then return
+
+    spinnerNode = m.top.getScene().findNode("loadingSpinner")
+    if spinnerNode = invalid then return
+
+    spinnerNode.observeField("cancelRequested", "onSearchCancelRequested")
+    m.searchState.loading.spinner = spinnerNode
+end sub
+
+'-------------------------------------------------------------------------------
+' unbindSearchSpinner
+'-------------------------------------------------------------------------------
+sub unbindSearchSpinner()
+    spinnerNode = m.searchState.loading.spinner
+    if spinnerNode = invalid then return
+
+    spinnerNode.unobserveField("cancelRequested")
+    m.searchState.loading.spinner = invalid
 end sub
 
 '-------------------------------------------------------------------------------
@@ -93,6 +124,8 @@ sub onKeyboardTextChanged()
     query = Strings.Trim(Format.SafeString(m.keyboard.text, ""))
     if query = m.searchState.query then return
 
+    if m.searchState.loading.inFlight then cancelSearch(false)
+
     m.searchState.query = query
     m.searchState.submittedQuery = ""
     AsyncLifecycle.Begin(m.searchState.lifecycle, "")
@@ -119,9 +152,10 @@ end sub
 ' runSearch
 '-------------------------------------------------------------------------------
 sub runSearch()
+    if m.searchState.loading.inFlight or m.searchState.loading.stopping then return
+
     query = Strings.Trim(Format.SafeString(m.keyboard.text, ""))
     m.searchState.query = query
-    m.searchTask.control = TaskControl.Command.Stop
 
     if Len(query) < m.searchState.minimumQueryLength then
         m.searchState.submittedQuery = ""
@@ -138,7 +172,10 @@ sub runSearch()
     request.query = query
     m.searchState.submittedQuery = query
     AsyncLifecycle.Begin(m.searchState.lifecycle, query)
-    Spinner.Show(0)
+    m.searchState.loading.inFlight = true
+    bindSearchSpinner()
+    Spinner.ShowBlocking()
+    if m.searchState.loading.spinner <> invalid then m.searchState.loading.spinner.cancelEnabled = true
     AppStatus.ClearMessage()
     m.searchTask.request = request
     m.searchTask.control = TaskControl.Command.Run
@@ -153,16 +190,57 @@ sub onSearchResponse()
     if AsyncLifecycle.IsCurrentResponse(m.searchState.lifecycle, response, "query", "search") <> true then return
     if Format.SafeString(response.query, "") <> m.searchState.submittedQuery then return
 
-    Spinner.Hide()
+    finishSearchLoading()
 
     if response.ok <> true then
         clearRows()
         AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Search failed."))
+        focusSearchButton()
         return
     end if
 
     AppStatus.ClearMessage()
     renderRows(response.payload)
+end sub
+
+'-------------------------------------------------------------------------------
+' onSearchCancelRequested
+'-------------------------------------------------------------------------------
+sub onSearchCancelRequested()
+    if m.searchState.loading.inFlight <> true then return
+
+    cancelSearch(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelSearch
+'-------------------------------------------------------------------------------
+sub cancelSearch(restoreFocus as boolean)
+    wasInFlight = m.searchState.loading.inFlight
+    AsyncLifecycle.Deactivate(m.searchState.lifecycle)
+    if wasInFlight then m.searchState.loading.stopping = true
+    m.searchTask.control = TaskControl.Command.Stop
+    m.searchState.submittedQuery = ""
+    if wasInFlight then finishSearchLoading()
+    if wasInFlight and restoreFocus then focusSearchButton()
+end sub
+
+'-------------------------------------------------------------------------------
+' onSearchTaskStateChanged
+'-------------------------------------------------------------------------------
+sub onSearchTaskStateChanged()
+    if m.searchState.loading.stopping <> true then return
+
+    taskState = LCase(Format.SafeString(m.searchTask.state, ""))
+    if taskState = "stop" or taskState = "done" or taskState = "init" then m.searchState.loading.stopping = false
+end sub
+
+'-------------------------------------------------------------------------------
+' finishSearchLoading
+'-------------------------------------------------------------------------------
+sub finishSearchLoading()
+    m.searchState.loading.inFlight = false
+    Spinner.HideBlocking()
 end sub
 
 '-------------------------------------------------------------------------------

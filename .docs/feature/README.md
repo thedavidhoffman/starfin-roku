@@ -22,6 +22,7 @@ individual Starfin features.
 - [Playlist Artwork](playlist-artwork.md)
 - [Preview Sheets](preview-sheets.md)
 - [Quick Connect](quick-connect.md)
+- [Search](search.md)
 - [Theme Songs](theme-songs.md)
 - [TV Season Browsing](tv-season-browsing.md)
 - [Filmography](filmography.md)

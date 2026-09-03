@@ -13,6 +13,15 @@ namespace tests
                 loadingSpinnerNode.id = "loadingSpinner"
                 scene.appendChild(loadingSpinnerNode)
             end if
+            m.node.searchState.loading.inFlight = false
+            m.node.searchState.loading.stopping = false
+            m.node.searchState.loading.spinner = invalid
+            scene.findNode("loadingSpinner").cancelEnabled = false
+            scene.findNode("loadingSpinner").control = "stop"
+        end function
+
+        protected override function afterEach()
+            m.top.callFunc("deactivate")
         end function
 
         @describe("declarative component contract")
@@ -89,6 +98,105 @@ namespace tests
             m.top.findNode("searchButton").buttonSelected = true
 
             m.assertEqual(m.top.findNode("searchTask").control, "stop")
+        end function
+
+        @it("blocks interaction while a valid search is running")
+        function _()
+            m.top.callFunc("activate")
+            m.top.findNode("keyboard").text = "movie"
+
+            m.top.findNode("searchButton").buttonSelected = true
+
+            loadingSpinner = m.top.getScene().findNode("loadingSpinner")
+            m.assertTrue(m.node.searchState.loading.inFlight)
+            m.assertTrue(loadingSpinner.blockInteraction)
+            m.assertTrue(loadingSpinner.cancelEnabled)
+            m.assertEqual(loadingSpinner.control, "start")
+        end function
+
+        @it("ignores duplicate submissions while a search is running")
+        function _()
+            m.node.searchState.loading.inFlight = true
+            m.top.findNode("searchTask").request = invalid
+            m.top.findNode("keyboard").text = "movie"
+
+            'bs:disable-next-line 1140
+            runSearch()
+
+            m.assertInvalid(m.top.findNode("searchTask").request)
+        end function
+
+        @it("ignores resubmission while a cancelled task is still stopping")
+        function _()
+            m.node.searchState.loading.stopping = true
+            m.top.findNode("searchTask").request = invalid
+            m.top.findNode("keyboard").text = "movie"
+
+            'bs:disable-next-line 1140
+            runSearch()
+
+            m.assertInvalid(m.top.findNode("searchTask").request)
+        end function
+
+        @it("allows submission after a cancelled task reaches stop")
+        function _()
+            m.node.searchState.loading.stopping = true
+            m.top.findNode("searchTask").control = "stop"
+
+            'bs:disable-next-line 1140
+            onSearchTaskStateChanged()
+
+            m.assertFalse(m.node.searchState.loading.stopping)
+        end function
+
+        @it("cancels an active search and restores Search button focus")
+        function _()
+            m.top.callFunc("activate")
+            m.node.searchState.loading.inFlight = true
+            loadingSpinner = m.top.getScene().findNode("loadingSpinner")
+            loadingSpinner.cancelEnabled = true
+            Spinner.ShowBlocking()
+
+            'bs:disable-next-line 1140
+            onSearchCancelRequested()
+
+            m.assertFalse(m.node.searchState.loading.inFlight)
+            m.assertEqual(m.top.findNode("searchTask").control, "stop")
+            m.assertFalse(loadingSpinner.blockInteraction)
+            m.assertFalse(loadingSpinner.cancelEnabled)
+            m.assertTrue(m.top.findNode("searchButton").hasFocus())
+        end function
+
+        @it("unblocks and focuses results after a successful search")
+        function _()
+            m.top.callFunc("activate")
+            m.node.searchState.loading.inFlight = true
+            m.node.searchState.submittedQuery = "movie"
+            AsyncLifecycle.Begin(m.node.searchState.lifecycle, "movie")
+            Spinner.ShowBlocking()
+
+            m.top.findNode("searchTask").response = { ok: true, action: "search", query: "movie", payload: m.createPayload() }
+
+            loadingSpinner = m.top.getScene().findNode("loadingSpinner")
+            m.assertFalse(m.node.searchState.loading.inFlight)
+            m.assertFalse(loadingSpinner.blockInteraction)
+            m.assertTrue(m.top.findNode("resultsGroup").getChild(0).isInFocusChain())
+        end function
+
+        @it("unblocks and restores Search button focus after a failed search")
+        function _()
+            m.top.callFunc("activate")
+            m.node.searchState.loading.inFlight = true
+            m.node.searchState.submittedQuery = "movie"
+            AsyncLifecycle.Begin(m.node.searchState.lifecycle, "movie")
+            Spinner.ShowBlocking()
+
+            m.top.findNode("searchTask").response = { ok: false, action: "search", query: "movie", errorMessage: "Failed" }
+
+            loadingSpinner = m.top.getScene().findNode("loadingSpinner")
+            m.assertFalse(m.node.searchState.loading.inFlight)
+            m.assertFalse(loadingSpinner.blockInteraction)
+            m.assertTrue(m.top.findNode("searchButton").hasFocus())
         end function
 
         @describe("result rendering")
