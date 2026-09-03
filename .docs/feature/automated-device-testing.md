@@ -82,6 +82,19 @@ their ordering are intentionally ignored so unrelated library changes do not
 make the assertions brittle. Tests, screenshots, and metadata use case numbers
 instead of configured queries or titles.
 
+The movie-library automation specs select the configured library from Home's
+My Media row. Letter-grid cases verify every paged result for each configured
+letter. Sorting cases use the production Browse dialog and sort-order control,
+load the complete grid, and verify ascending and descending Title and Release
+Date order. Release Date assertions fall back from `PremiereDate` to
+`ProductionYear` and use `SortName` in the requested direction to resolve equal
+dates.
+
+Release Date browsing preserves normal server-backed pagination by requesting
+`PremiereDate,ProductionYear,SortName` from Jellyfin. The additional fields give
+the API a production-year fallback and deterministic title tie-breaker without
+loading and sorting the complete library on the Roku.
+
 The library-settings automation spec opens the production Settings overlay and
 checks all eight valid presentation-and-column layouts against all eight library
 rows. Each layout is selected through the real matrix controls, captured as
