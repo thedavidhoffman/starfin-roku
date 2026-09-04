@@ -134,9 +134,11 @@ Separate automation specs cover every selectable value in Media Shell, Playback,
 TV, Screensaver, General, Video, and Subtitles. They operate the production
 controls and dialog save lifecycle, then read only the affected account-scoped or
 global registry key. General includes the real TMDB API-key keyboard flow using a
-synthetic value. Advanced verifies that Reset Starfin can be opened and aborted
-without changing stored settings or authentication; automation does not confirm
-the destructive erase action.
+synthetic value. Opening Roku's keyboard can display an OS-owned mobile-keyboard
+QR banner that outlives the dialog, so keyboard tests exit and relaunch Starfin in
+a `finally` block before later screenshots are captured. Advanced verifies that
+Reset Starfin can be opened and aborted without changing stored settings or
+authentication; automation does not confirm the destructive erase action.
 
 After any settings spec runs, suite teardown restores all eighteen settings to
 their canonical defaults and verifies the account and global registry values.

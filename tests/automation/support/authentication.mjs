@@ -1,5 +1,5 @@
 import { getAutomationEnvironment } from './environment.mjs';
-import { waitFor } from './lifecycle.mjs';
+import { relaunchStarfin, waitFor } from './lifecycle.mjs';
 
 async function getAuthenticationSurface(environment) {
   return environment.odc.getValues({
@@ -45,4 +45,11 @@ export async function ensureAuthenticated() {
   }, 'an authenticated Home surface', 45000);
 
   return environment;
+}
+
+export async function relaunchAuthenticatedStarfin() {
+  const environment = await getAutomationEnvironment();
+
+  await relaunchStarfin(environment);
+  return ensureAuthenticated();
 }

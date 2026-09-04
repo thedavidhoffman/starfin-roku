@@ -41,6 +41,17 @@ export async function waitForMainScene(environment) {
   }, 'the Starfin MainScene to become available');
 }
 
+export async function relaunchStarfin(environment) {
+  await environment.ecp.sendKeypress(environment.ecp.Key.Home);
+  await waitFor(async () => {
+    const response = await environment.ecp.getActiveApp();
+    return response.app?.id !== 'dev';
+  }, 'Starfin to exit before relaunch');
+
+  await launchStarfin(environment);
+  await waitForMainScene(environment);
+}
+
 export async function resetRegistryAndRelaunch() {
   const environment = await getAutomationEnvironment();
 
