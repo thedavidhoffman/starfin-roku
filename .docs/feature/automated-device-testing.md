@@ -101,13 +101,16 @@ every configured season is represented by a rendered season card with the
 expected season number, production year, and episode count. The same JSON object
 provides a `season1` episode array with `number`, `title`, and ISO `date`
 values. After validating the series page, the test opens Season 1 and verifies
-every configured episode against the rendered episode list. A separate playback
-case opens the configured `testEpisode`, verifies that playback starts, captures
-state, duration, and advancing position at 5, 10, 15, and 20 seconds, then stops
-playback and confirms the episode page and in-session progress are restored.
+every configured episode against the rendered episode list.
+
+The TV episode playback spec independently navigates to the configured
+`testEpisode`. Its smoke case verifies state, duration, and advancing position at
+5, 10, 15, and 20 seconds before confirming clean stop and restoration. Separate
+cases verify pause holds position before resume advances it, and that Next then
+Previous move from the configured episode to its adjacent successor and back.
 Navigation and restored-page screenshots remain as visual evidence; playback
 frames are not captured because Roku's hardware video plane is not reliably
-available to the screenshot API.
+available to the screenshot API. Every playback case uses failure-safe cleanup.
 
 Release Date browsing preserves normal server-backed pagination by requesting
 `PremiereDate,ProductionYear,SortName` from Jellyfin. The additional fields give
