@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { ensureAuthenticated } from '../support/authentication.mjs';
-import { captureEvidence } from '../support/evidence.mjs';
+import { addEvidenceMetadata, captureEvidence } from '../support/evidence.mjs';
 import { getAutomationEnvironment } from '../support/environment.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 
@@ -254,10 +254,235 @@ function assertExpectedEpisodes(cards, expectedEpisodes) {
   }
 }
 
+async function selectConfiguredEpisode(context, environment) {
+  const expected = environment.tvSeriesSmokeTest.testEpisode;
+  assert.equal(expected.season, 1, 'The current TV-series fixture provides episode data for Season 1.');
+
+  const counts = await environment.odc.getValues({
+    requests: {
+      horizontal: { base: 'scene', keyPath: '#episodesList.content.0.getChildCount()' },
+      vertical: { base: 'scene', keyPath: '#episodesGrid.content.getChildCount()' }
+    }
+  });
+  const horizontalCount = counts.results.horizontal?.value ?? 0;
+  const verticalCount = counts.results.vertical?.value ?? 0;
+  const isHorizontal = horizontalCount > 0;
+  const itemCount = isHorizontal ? horizontalCount : verticalCount;
+  const contentPath = isHorizontal ? '#episodesList.content.0' : '#episodesGrid.content';
+  const requests = {};
+  for (let itemIndex = 0; itemIndex < itemCount; itemIndex += 1) {
+    requests[itemIndex] = {
+      base: 'scene',
+      keyPath: `${contentPath}.${itemIndex}.episodeIndexNumber`
+    };
+  }
+  const response = await environment.odc.getValues({ requests });
+  const itemIndex = Array.from(
+    { length: itemCount },
+    (_, index) => Number(response.results[index]?.value) === expected.episode ? index : -1
+  ).find(index => index >= 0);
+  assert.notEqual(itemIndex, undefined, `Season 1 Episode ${expected.episode} should be selectable.`);
+
+  if (isHorizontal) {
+    await environment.odc.setValue({
+      base: 'scene',
+      keyPath: '#episodesList.rowItemFocused',
+      value: [0, itemIndex]
+    });
+  } else {
+    await environment.odc.setValue({
+      base: 'scene',
+      keyPath: '#episodesGrid.itemFocused',
+      value: itemIndex
+    });
+  }
+  await captureEvidence(context, 'tv-series-library-test-episode-focused');
+
+  await environment.odc.setValue({
+    base: 'scene',
+    keyPath: isHorizontal ? '#episodesList.rowItemSelected' : '#episodesGrid.itemSelected',
+    value: isHorizontal ? [0, itemIndex] : itemIndex
+  });
+
+  return waitFor(async () => {
+    const values = await environment.odc.getValues({
+      requests: {
+        childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
+        pageType: { base: 'scene', keyPath: '#dynamicPageHost.3.subtype()' },
+        pageVisible: { base: 'scene', keyPath: '#dynamicPageHost.3.visible' },
+        playItem: { base: 'scene', keyPath: '#mediaToolbar.playItem' }
+      }
+    });
+    const playItem = values.results.playItem?.value;
+    return values.results.childCount?.value === 4
+      && values.results.pageType?.value === 'TVEpisode'
+      && values.results.pageVisible?.value === true
+      && Number(playItem?.ParentIndexNumber) === expected.season
+      && Number(playItem?.IndexNumber) === expected.episode
+      ? playItem
+      : false;
+  }, `the Season ${expected.season} Episode ${expected.episode} detail page to load`, 120000);
+}
+
+async function startEpisodePlayback(environment, episode) {
+  const expected = environment.tvSeriesSmokeTest.testEpisode;
+
+  await environment.odc.setValue({
+    base: 'scene',
+    keyPath: '#mediaToolbar.playSelected',
+    value: true
+  });
+
+  return waitFor(async () => {
+    const values = await environment.odc.getValues({
+      requests: {
+        playerCount: { base: 'scene', keyPath: '#playbackController.getChildCount()' },
+        itemId: { base: 'scene', keyPath: '#playbackController.playRequest.itemId' },
+        requestSeason: { base: 'scene', keyPath: '#playbackController.playRequest.item.ParentIndexNumber' },
+        requestEpisode: { base: 'scene', keyPath: '#playbackController.playRequest.item.IndexNumber' },
+        playerState: { base: 'scene', keyPath: '#videoPlayer.state' },
+        position: { base: 'scene', keyPath: '#videoPlayer.position' },
+        duration: { base: 'scene', keyPath: '#videoPlayer.duration' }
+      }
+    });
+    const snapshot = {
+      state: String(values.results.playerState?.value ?? '').toLowerCase(),
+      position: Number(values.results.position?.value),
+      duration: Number(values.results.duration?.value)
+    };
+    return values.results.playerCount?.value === 1
+      && values.results.itemId?.value === episode.Id
+      && Number(values.results.requestSeason?.value) === expected.season
+      && Number(values.results.requestEpisode?.value) === expected.episode
+      && snapshot.state === 'playing'
+      && Number.isFinite(snapshot.position)
+      && snapshot.position >= 0
+      && Number.isFinite(snapshot.duration)
+      && snapshot.duration > 0
+      ? snapshot
+      : false;
+  }, 'the configured episode to start playing', 120000);
+}
+
+async function verifyPlaybackCheckpoints(environment, initialSnapshot) {
+  const playbackStartedAt = Date.now();
+  const checkpoints = [];
+  let previousPosition = initialSnapshot.position;
+
+  for (const seconds of [5, 10, 15, 20]) {
+    const checkpointAt = playbackStartedAt + (seconds * 1000);
+    let snapshot;
+    while (Date.now() < checkpointAt) {
+      snapshot = await readPlaybackSnapshot(environment, seconds);
+      assert.equal(snapshot.playerCount, 1, `The player detached before ${seconds} seconds; ${playbackDiagnostic(snapshot)}.`);
+      assert.ok(
+        !['error', 'finished', 'stopped'].includes(snapshot.state),
+        `Playback entered a terminal state before ${seconds} seconds; ${playbackDiagnostic(snapshot)}.`
+      );
+
+      const remaining = checkpointAt - Date.now();
+      if (remaining > 0) await new Promise(resolve => setTimeout(resolve, Math.min(500, remaining)));
+    }
+    snapshot = await readPlaybackSnapshot(environment, seconds);
+    const diagnostic = `state=${snapshot.state}, position=${snapshot.position}, duration=${snapshot.duration}`;
+
+    assert.equal(snapshot.playerCount, 1, `The player should remain attached at ${seconds} seconds; ${diagnostic}.`);
+    assert.equal(snapshot.state, 'playing', `Playback should remain active at ${seconds} seconds; ${diagnostic}.`);
+    assert.ok(Number.isFinite(snapshot.duration) && snapshot.duration > 0, `Duration should be positive at ${seconds} seconds; ${diagnostic}.`);
+    assert.ok(Number.isFinite(snapshot.position), `Position should be numeric at ${seconds} seconds; ${diagnostic}.`);
+    assert.ok(snapshot.position > previousPosition, `Position should advance at ${seconds} seconds; previous=${previousPosition}, ${diagnostic}.`);
+    assert.ok(snapshot.position < snapshot.duration, `Position should remain before duration at ${seconds} seconds; ${diagnostic}.`);
+
+    checkpoints.push(snapshot);
+    previousPosition = snapshot.position;
+  }
+
+  return checkpoints;
+}
+
+async function readPlaybackSnapshot(environment, checkpointSeconds) {
+  const values = await environment.odc.getValues({
+    requests: {
+      playerCount: { base: 'scene', keyPath: '#playbackController.getChildCount()' },
+      state: { base: 'scene', keyPath: '#videoPlayer.state' },
+      position: { base: 'scene', keyPath: '#videoPlayer.position' },
+      duration: { base: 'scene', keyPath: '#videoPlayer.duration' }
+    }
+  });
+  return {
+    checkpointSeconds,
+    playerCount: values.results.playerCount?.value,
+    state: String(values.results.state?.value ?? '').toLowerCase(),
+    position: Number(values.results.position?.value),
+    duration: Number(values.results.duration?.value)
+  };
+}
+
+function playbackDiagnostic(snapshot) {
+  return `state=${snapshot.state}, position=${snapshot.position}, duration=${snapshot.duration}`;
+}
+
+async function isPlayerAttached(environment) {
+  const response = await environment.odc.getValue({
+    base: 'scene',
+    keyPath: '#playbackController.getChildCount()'
+  });
+  return response.found && response.value > 0;
+}
+
+async function stopPlayback(context, environment, episode) {
+  await environment.ecp.sendKeypress(environment.ecp.Key.Back);
+  const restoredState = await waitFor(async () => {
+    const values = await environment.odc.getValues({
+      requests: {
+        playerCount: { base: 'scene', keyPath: '#playbackController.getChildCount()' },
+        episodeVisible: { base: 'scene', keyPath: '#dynamicPageHost.3.visible' },
+        restoredItemId: { base: 'scene', keyPath: '#dynamicPageHost.3.loadRequest.itemId' },
+        progressItemId: { base: 'scene', keyPath: '#dynamicPageHost.3.playbackProgressChanged.itemId' },
+        progressTicks: { base: 'scene', keyPath: '#dynamicPageHost.3.playbackProgressChanged.positionTicks' },
+        statusVisible: { base: 'scene', keyPath: '#statusLabel.visible' },
+        statusText: { base: 'scene', keyPath: '#statusLabel.text' }
+      }
+    });
+    const result = {
+      playerCount: values.results.playerCount?.value,
+      episodeVisible: values.results.episodeVisible?.value,
+      restoredItemId: values.results.restoredItemId?.value,
+      progressItemId: values.results.progressItemId?.value,
+      progressTicks: Number(values.results.progressTicks?.value),
+      statusVisible: values.results.statusVisible?.value,
+      statusText: values.results.statusText?.value ?? ''
+    };
+    return result.playerCount === 0
+      && result.episodeVisible === true
+      && result.restoredItemId === episode.Id
+      && result.progressItemId === episode.Id
+      && Number.isFinite(result.progressTicks)
+      && result.progressTicks > 0
+      ? result
+      : false;
+  }, 'playback to stop and return to the episode page', 30000);
+
+  assert.equal(restoredState.statusVisible, false, `No application error should be visible after playback: ${restoredState.statusText}`);
+  assert.equal(restoredState.statusText, '', 'No application error text should remain after playback.');
+  await captureEvidence(context, 'tv-series-library-episode-playback-stopped');
+}
+
+async function stopPlaybackForCleanup(environment) {
+  if (!await isPlayerAttached(environment)) return;
+
+  await environment.ecp.sendKeypress(environment.ecp.Key.Back);
+  await waitFor(
+    async () => !await isPlayerAttached(environment),
+    'failed playback assertion cleanup to remove the player',
+    30000
+  );
+}
+
 async function returnToHome() {
   const environment = await getAutomationEnvironment();
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     const state = await environment.odc.getValues({
       requests: {
         childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
@@ -302,5 +527,31 @@ describe('Starfin TV series library', function () {
 
     assertExpectedEpisodes(episodeCards, environment.tvSeriesSmokeTest.season1);
     await captureEvidence(this, 'tv-series-library-season-1-episodes');
+  });
+
+  it('plays the configured episode through the 20-second checkpoint', async function () {
+    const environment = await ensureAuthenticated();
+
+    await openConfiguredTVLibrary(environment);
+    const { item, itemIndex } = await findSeries(environment);
+    await openSeries(environment, itemIndex, item);
+    await captureEvidence(this, 'tv-series-library-playback-series-page');
+    const seasonCards = await readSeasonCards(environment);
+    await openSeasonOne(environment, seasonCards);
+    await captureEvidence(this, 'tv-series-library-playback-season-1-page');
+    const episode = await selectConfiguredEpisode(this, environment);
+    await captureEvidence(this, 'tv-series-library-test-episode-detail');
+
+    let playbackStopped = false;
+    try {
+      const initialSnapshot = await startEpisodePlayback(environment, episode);
+      const checkpoints = await verifyPlaybackCheckpoints(environment, initialSnapshot);
+      addEvidenceMetadata(this, { playback: { initial: initialSnapshot, checkpoints } });
+
+      await stopPlayback(this, environment, episode);
+      playbackStopped = true;
+    } finally {
+      if (!playbackStopped) await stopPlaybackForCleanup(environment);
+    }
   });
 });

@@ -111,10 +111,23 @@ function readConfig() {
   ) {
     throw new Error('TVSERIES_SMOKE_TEST season1 must contain number, title, and YYYY-MM-DD date values.');
   }
+  const testEpisode = tvSeriesSmokeTest.testEpisode;
+  if (
+    !testEpisode
+    || typeof testEpisode !== 'object'
+    || Array.isArray(testEpisode)
+    || !Number.isInteger(testEpisode.season)
+    || testEpisode.season < 0
+    || !Number.isInteger(testEpisode.episode)
+    || testEpisode.episode < 1
+  ) {
+    throw new Error('TVSERIES_SMOKE_TEST testEpisode must contain valid season and episode integers.');
+  }
   tvSeriesSmokeTest = {
     seriesName,
     seasons,
-    season1: season1.map(episode => ({ ...episode, title: episode.title.trim() }))
+    season1: season1.map(episode => ({ ...episode, title: episode.title.trim() })),
+    testEpisode
   };
 
   let searchCases;
