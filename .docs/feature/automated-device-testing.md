@@ -73,8 +73,8 @@ Sign In, waits with bounded polling for Home, and captures final Home evidence.
 Home readiness requires all attached core tasks to finish, the loading
 spinner to clear, at least one shelf to render, no shared status error to remain,
 and the rendered shelf/item fingerprint to stay unchanged for a two-second quiet
-window. That quiet window accounts for detached per-library Latest Media tasks,
-which RTA cannot inspect directly. A short rendering-settle delay follows those
+window. That quiet window accounts for per-library Latest Media tasks, which RTA
+does not inspect directly. A short rendering-settle delay follows those
 conditions before capture. Secrets are not added to report metadata, though screenshots can show
 the configured server and username.
 

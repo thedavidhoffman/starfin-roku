@@ -10,6 +10,7 @@ import "pkg:/source/Spinner.bs"
 import "pkg:/source/Status.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/VideoCardPresentation.bs"
+import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -19,22 +20,11 @@ sub init()
     m.shelvesAnimation = m.top.findNode("shelvesAnimation")
     m.shelvesTranslation = m.top.findNode("shelvesTranslation")
 
-    m.tasks = {
-        libraries: m.top.findNode("librariesTask")
-        continueWatching: m.top.findNode("continueWatchingTask")
-        continueListening: m.top.findNode("continueListeningTask")
-        nextUp: m.top.findNode("nextUpTask")
-        latestMedia: m.top.findNode("latestMediaTask")
-        liveTvOnNow: m.top.findNode("liveTvOnNowTask")
-    }
-
-    m.tasks.libraries.observeField("response", "onLibrariesResponse")
-    m.tasks.continueWatching.observeField("response", "onSectionResponse")
-    m.tasks.continueListening.observeField("response", "onSectionResponse")
-    m.tasks.nextUp.observeField("response", "onSectionResponse")
-    m.tasks.liveTvOnNow.observeField("response", "onSectionResponse")
+    m.tasks = {}
     m.homeState = {
         request: invalid
+        queryId: 0
+        sessionKey: ""
         rows: {}
         rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow"]
         latestLibraries: {}
@@ -183,10 +173,9 @@ end sub
 ' onLoadRequestChanged
 '-------------------------------------------------------------------------------
 sub onLoadRequestChanged()
-    request = m.top.loadRequest
-    if request = invalid then return
-
-    m.homeState.request = request
+    invalidateHomeRequests()
+    m.homeState.request = m.top.loadRequest
+    m.homeState.sessionKey = getHomeSessionKey(m.homeState.request)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -199,6 +188,7 @@ sub refreshHomeData(blocking = false as boolean)
         return
     end if
 
+    beginHomeRefresh()
     m.homeState.refresh = {
         blocking: blocking
         pendingCore: {
@@ -230,11 +220,11 @@ sub refreshHomeData(blocking = false as boolean)
     clearRows()
     Spinner.Show()
 
-    runTask(m.tasks.libraries, request)
-    runTask(m.tasks.continueWatching, request)
-    runTask(m.tasks.continueListening, request)
-    runTask(m.tasks.nextUp, request)
-    runTask(m.tasks.liveTvOnNow, request)
+    runHomeTask("libraries", "HomeLibrariesTask", "onLibrariesResponse", request)
+    runHomeTask("continueWatching", "ContinueWatchingTask", "onSectionResponse", request)
+    runHomeTask("continueListening", "ContinueListeningTask", "onSectionResponse", request)
+    runHomeTask("nextUp", "NextUpTask", "onSectionResponse", request)
+    runHomeTask("liveTvOnNow", "LiveTvOnNowTask", "onSectionResponse", request)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -247,6 +237,7 @@ sub refreshPlaybackRows(blocking = false as boolean)
         return
     end if
 
+    beginHomeRefresh()
     m.homeState.refresh = {
         blocking: blocking
         pendingCore: {
@@ -259,25 +250,129 @@ sub refreshPlaybackRows(blocking = false as boolean)
         Spinner.Show()
     end if
 
-    runTask(m.tasks.continueWatching, request)
-    runTask(m.tasks.nextUp, request)
+    runHomeTask("continueWatching", "ContinueWatchingTask", "onSectionResponse", request)
+    runHomeTask("nextUp", "NextUpTask", "onSectionResponse", request)
 end sub
 
 '-------------------------------------------------------------------------------
-' runTask
+' beginHomeRefresh
 '-------------------------------------------------------------------------------
-sub runTask(task as object, request as object)
+sub beginHomeRefresh()
+    invalidateHomeRequests()
+    m.homeState.sessionKey = getHomeSessionKey(m.homeState.request)
+end sub
+
+'-------------------------------------------------------------------------------
+' invalidateHomeRequests
+'-------------------------------------------------------------------------------
+sub invalidateHomeRequests()
+    if m.homeState = invalid then return
+
+    m.homeState.queryId = m.homeState.queryId + 1
+    cleanupHomeTasks()
+end sub
+
+'-------------------------------------------------------------------------------
+' runHomeTask
+'-------------------------------------------------------------------------------
+sub runHomeTask(action as string, componentName as string, responseHandler as string, request as object)
+    task = CreateObject("roSGNode", componentName)
+    if task = invalid then
+        markCoreTaskComplete(action)
+        return
+    end if
+
+    task.id = action + "Task"
+    m.top.appendChild(task)
+    m.tasks[action] = task
+    m.top.taskCreated = task
+    task.observeField("response", responseHandler)
+    task.request = buildHomeTaskRequest(request)
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' buildHomeTaskRequest
+'-------------------------------------------------------------------------------
+function buildHomeTaskRequest(request as object) as object
+    taskRequest = cloneRequest(request)
+    taskRequest.homeQueryId = m.homeState.queryId
+    taskRequest.homeSessionKey = m.homeState.sessionKey
+    return taskRequest
+end function
+
+'-------------------------------------------------------------------------------
+' getHomeSessionKey
+'-------------------------------------------------------------------------------
+function getHomeSessionKey(request as dynamic) as string
+    if request = invalid then return ""
+
+    accountKey = Format.SafeString(request.accountKey, "")
+    if accountKey <> "" then return accountKey
+    return LCase(Format.SafeString(request.server, "")) + "|" + Format.SafeString(request.userId, "")
+end function
+
+'-------------------------------------------------------------------------------
+' isCurrentHomeTask
+'-------------------------------------------------------------------------------
+function isCurrentHomeTask(task as dynamic, action as string) as boolean
+    if task = invalid or m.tasks.DoesExist(action) <> true then return false
+    if task.isSameNode(m.tasks[action]) <> true then return false
+
+    request = task.request
+    if request = invalid then return false
+    if Number.ToInteger(request.homeQueryId, -1) <> m.homeState.queryId then return false
+    return Format.SafeString(request.homeSessionKey, "") = m.homeState.sessionKey
+end function
+
+'-------------------------------------------------------------------------------
+' cleanupHomeTask
+'-------------------------------------------------------------------------------
+sub cleanupHomeTask(task as dynamic, action as string)
     if task = invalid then return
 
-    task.request = request
-    task.control = TaskControl.Command.Run
+    task.unobserveField("response")
+    task.control = TaskControl.Command.Stop
+    if m.tasks.DoesExist(action) and task.isSameNode(m.tasks[action]) then m.tasks.Delete(action)
+    m.top.removeChild(task)
+end sub
+
+'-------------------------------------------------------------------------------
+' completeHomeTask
+'-------------------------------------------------------------------------------
+sub completeHomeTask(task as object)
+    task.unobserveField("response")
+end sub
+
+'-------------------------------------------------------------------------------
+' cleanupHomeTasks
+'-------------------------------------------------------------------------------
+sub cleanupHomeTasks()
+    tasks = []
+    for each action in m.tasks
+        tasks.Push({ action: action, task: m.tasks[action] })
+    end for
+    for each entry in tasks
+        cleanupHomeTask(entry.task, entry.action)
+    end for
+    m.tasks = {}
+
+    for each task in m.homeState.latestTasks
+        task.unobserveField("response")
+        task.control = TaskControl.Command.Stop
+        m.top.removeChild(task)
+    end for
+    m.homeState.latestTasks = []
 end sub
 
 '-------------------------------------------------------------------------------
 ' onLibrariesResponse
 '-------------------------------------------------------------------------------
-sub onLibrariesResponse()
-    response = m.tasks.libraries.response
+sub onLibrariesResponse(event as object)
+    task = event.getRoSGNode()
+    if isCurrentHomeTask(task, "libraries") <> true then return
+    response = event.getData()
+    completeHomeTask(task)
     if shouldIgnoreResponse(response) then
         markCoreTaskComplete("libraries")
         return
@@ -295,9 +390,12 @@ end sub
 ' onSectionResponse
 '-------------------------------------------------------------------------------
 sub onSectionResponse(event as object)
+    task = event.getRoSGNode()
     response = event.getData()
     if response = invalid then return
     action = Format.SafeString(response.action, "")
+    if isCurrentHomeTask(task, action) <> true then return
+    completeHomeTask(task)
     if shouldIgnoreResponse(response) then
         markCoreTaskComplete(action)
         return
@@ -442,17 +540,18 @@ end sub
 ' runLatestMediaTasks
 '-------------------------------------------------------------------------------
 sub runLatestMediaTasks()
-    m.homeState.latestTasks = []
-
     for each libraryId in m.homeState.latestLibraries
         library = m.homeState.latestLibraries[libraryId]
         task = CreateObject("roSGNode", "LatestMediaTask")
-        task.observeField("response", "onDynamicLatestMediaResponse")
+        m.top.appendChild(task)
         m.homeState.latestTasks.Push(task)
+        m.top.taskCreated = task
+        task.observeField("response", "onDynamicLatestMediaResponse")
 
-        request = cloneRequest(m.homeState.request)
+        request = buildHomeTaskRequest(m.homeState.request)
         request.parentId = library.id
-        runTask(task, request)
+        task.request = request
+        task.control = TaskControl.Command.Run
     end for
 end sub
 
@@ -460,7 +559,10 @@ end sub
 ' onDynamicLatestMediaResponse
 '-------------------------------------------------------------------------------
 sub onDynamicLatestMediaResponse(event as object)
+    task = event.getRoSGNode()
     response = event.getData()
+    if isCurrentLatestMediaTask(task) <> true then return
+    cleanupLatestMediaTask(task)
     if shouldIgnoreResponse(response) then return
 
     parentId = Format.SafeString(response.parentId, "")
@@ -1075,4 +1177,39 @@ sub applyPlaybackProgressChange(change as object)
     for each shelf in m.homeState.shelfNodes
         shelf.callFunc("applyPlaybackProgressChange", change)
     end for
+end sub
+
+'-------------------------------------------------------------------------------
+' isCurrentLatestMediaTask
+'-------------------------------------------------------------------------------
+function isCurrentLatestMediaTask(task as dynamic) as boolean
+    if task = invalid then return false
+    isOwned = false
+    for each activeTask in m.homeState.latestTasks
+        if activeTask.isSameNode(task) then
+            isOwned = true
+            exit for
+        end if
+    end for
+    if isOwned <> true then return false
+
+    request = task.request
+    if request = invalid then return false
+    if Number.ToInteger(request.homeQueryId, -1) <> m.homeState.queryId then return false
+    return Format.SafeString(request.homeSessionKey, "") = m.homeState.sessionKey
+end function
+
+'-------------------------------------------------------------------------------
+' cleanupLatestMediaTask
+'-------------------------------------------------------------------------------
+sub cleanupLatestMediaTask(task as object)
+    task.unobserveField("response")
+    task.control = TaskControl.Command.Stop
+    for i = m.homeState.latestTasks.Count() - 1 to 0 step -1
+        if m.homeState.latestTasks[i].isSameNode(task) then
+            m.homeState.latestTasks.Delete(i)
+            exit for
+        end if
+    end for
+    m.top.removeChild(task)
 end sub

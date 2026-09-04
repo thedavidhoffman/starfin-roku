@@ -11,6 +11,7 @@ individual Starfin features.
 - [Automated Device Testing](automated-device-testing.md)
 - [Episode Detail Browsing](episode-detail-browsing.md)
 - [Home Media Playback](home-media.md)
+- [Home Refresh Lifecycle](home-refresh-lifecycle.md)
 - [Library Genre Browsing](library-genre-browsing.md)
 - [Music Video Playback](music-videos.md)
 - [Next Item Playback](next-item-playback.md)

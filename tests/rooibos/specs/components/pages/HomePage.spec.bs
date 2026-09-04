@@ -50,34 +50,9 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("shelvesTranslation"))
         end function
 
-        @it("declares the librariesTask node")
+        @it("declares the dynamic task registration field")
         function _()
-            m.assertNotInvalid(m.top.findNode("librariesTask"))
-        end function
-
-        @it("declares the continueWatchingTask node")
-        function _()
-            m.assertNotInvalid(m.top.findNode("continueWatchingTask"))
-        end function
-
-        @it("declares the continueListeningTask node")
-        function _()
-            m.assertNotInvalid(m.top.findNode("continueListeningTask"))
-        end function
-
-        @it("declares the nextUpTask node")
-        function _()
-            m.assertNotInvalid(m.top.findNode("nextUpTask"))
-        end function
-
-        @it("declares the latestMediaTask node")
-        function _()
-            m.assertNotInvalid(m.top.findNode("latestMediaTask"))
-        end function
-
-        @it("declares the liveTvOnNowTask node")
-        function _()
-            m.assertNotInvalid(m.top.findNode("liveTvOnNowTask"))
+            m.assertTrue(m.top.hasField("taskCreated"))
         end function
 
         @describe("selection routing")
@@ -325,6 +300,110 @@ namespace tests
 
             m.assertEqual(items.Count(), 1)
             m.assertEqual(items[0].Id, "episode-3")
+        end function
+
+        @describe("refresh lifecycle")
+
+        @it("adds the current generation and session identity to task requests")
+        function _()
+            m.node.homeState.queryId = 7
+            m.node.homeState.sessionKey = "account-1"
+
+            'bs:disable-next-line 1140
+            request = buildHomeTaskRequest(m.node.homeState.request)
+
+            m.assertEqual(request.homeQueryId, 7)
+            m.assertEqual(request.homeSessionKey, "account-1")
+        end function
+
+        @it("accepts only the currently owned task for the active refresh")
+        function _()
+            task = CreateObject("roSGNode", "HomeLibrariesTask")
+            task.request = { homeQueryId: 7, homeSessionKey: "account-1" }
+            m.top.appendChild(task)
+            m.node.tasks.libraries = task
+            m.node.homeState.queryId = 7
+            m.node.homeState.sessionKey = "account-1"
+
+            'bs:disable-next-line 1140
+            current = isCurrentHomeTask(task, "libraries")
+
+            m.assertTrue(current)
+            'bs:disable-next-line 1140
+            cleanupHomeTasks()
+        end function
+
+        @it("rejects a task from an earlier refresh generation")
+        function _()
+            task = CreateObject("roSGNode", "HomeLibrariesTask")
+            task.request = { homeQueryId: 6, homeSessionKey: "account-1" }
+            m.top.appendChild(task)
+            m.node.tasks.libraries = task
+            m.node.homeState.queryId = 7
+            m.node.homeState.sessionKey = "account-1"
+
+            'bs:disable-next-line 1140
+            current = isCurrentHomeTask(task, "libraries")
+
+            m.assertFalse(current)
+            'bs:disable-next-line 1140
+            cleanupHomeTasks()
+        end function
+
+        @it("does not complete the active refresh from a stale response")
+        function _()
+            task = CreateObject("roSGNode", "ContinueWatchingTask")
+            task.request = { homeQueryId: 6, homeSessionKey: "account-1" }
+            task.observeField("response", "onSectionResponse")
+            m.top.appendChild(task)
+            m.node.tasks.continueWatching = task
+            m.node.homeState.queryId = 7
+            m.node.homeState.sessionKey = "account-1"
+            m.node.homeState.refresh.pendingCore = { continueWatching: true }
+
+            task.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "stale-item" }] } }
+
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("continueWatching"))
+            m.assertEqual(m.node.homeState.playbackRows.continueWatchingItems.Count(), 0)
+            'bs:disable-next-line 1140
+            cleanupHomeTasks()
+        end function
+
+        @it("rejects a task from an earlier account session")
+        function _()
+            task = CreateObject("roSGNode", "HomeLibrariesTask")
+            task.request = { homeQueryId: 7, homeSessionKey: "account-1" }
+            m.top.appendChild(task)
+            m.node.tasks.libraries = task
+            m.node.homeState.queryId = 7
+            m.node.homeState.sessionKey = "account-2"
+
+            'bs:disable-next-line 1140
+            current = isCurrentHomeTask(task, "libraries")
+
+            m.assertFalse(current)
+            'bs:disable-next-line 1140
+            cleanupHomeTasks()
+        end function
+
+        @it("removes superseded core and latest-media tasks")
+        function _()
+            coreTask = CreateObject("roSGNode", "HomeLibrariesTask")
+            coreTask.id = "ownedCoreTask"
+            latestTask = CreateObject("roSGNode", "LatestMediaTask")
+            latestTask.id = "ownedLatestTask"
+            m.top.appendChild(coreTask)
+            m.top.appendChild(latestTask)
+            m.node.tasks.libraries = coreTask
+            m.node.homeState.latestTasks = [latestTask]
+
+            'bs:disable-next-line 1140
+            cleanupHomeTasks()
+
+            m.assertInvalid(m.top.findNode("ownedCoreTask"))
+            m.assertInvalid(m.top.findNode("ownedLatestTask"))
+            m.assertEqual(m.node.tasks.Count(), 0)
+            m.assertEqual(m.node.homeState.latestTasks.Count(), 0)
         end function
 
         @describe("focus and keyboard behavior")

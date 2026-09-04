@@ -268,6 +268,23 @@ namespace tests
             m.assertEqual(request.message, "Session expired")
         end function
 
+        @it("observes authentication failures from tasks created after page initialization")
+        function _()
+            task = CreateObject("roSGNode", "LatestMediaTask")
+            task.request = { token: "token" }
+
+            m.node.homePage.taskCreated = task
+            task.response = {
+                authExpired: true
+                errorMessage: "Dynamic session expired"
+            }
+
+            request = m.node.authController.expireActiveSessionRequested
+            m.assertNotInvalid(request)
+            m.assertEqual(request.accountKey, "account-1")
+            m.assertEqual(request.message, "Dynamic session expired")
+        end function
+
         @it("opens Person from playback and records playback as its source")
         function _()
             m.openPlayback("movie-1")
