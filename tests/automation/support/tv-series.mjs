@@ -503,8 +503,23 @@ async function returnToHome() {
     });
     if (state.results.childCount?.value === 0 && state.results.homeVisible?.value === true) return;
 
+    const previousChildCount = Number(state.results.childCount?.value ?? 0);
     await environment.ecp.sendKeypress(environment.ecp.Key.Back);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const navigationState = await waitFor(async () => {
+      const updated = await environment.odc.getValues({
+        requests: {
+          childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
+          homeVisible: { base: 'scene', keyPath: '#homePage.visible' }
+        }
+      });
+      const childCount = Number(updated.results.childCount?.value ?? 0);
+      const homeVisible = updated.results.homeVisible?.value === true;
+      return childCount < previousChildCount || (childCount === 0 && homeVisible)
+        ? { childCount, homeVisible }
+        : false;
+    }, 'a TV series page to close after Back', 5000);
+
+    if (navigationState.childCount === 0 && navigationState.homeVisible) return;
   }
 
   await waitFor(async () => {

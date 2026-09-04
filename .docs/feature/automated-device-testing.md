@@ -78,6 +78,11 @@ does not inspect directly. A short rendering-settle delay follows those
 conditions before capture. Secrets are not added to report metadata, though screenshots can show
 the configured server and username.
 
+Playback cleanup returns through the TV detail stack one page at a time. After
+each Back press, automation waits for the dynamic page count to decrease or for
+Home to become visible before sending another key, preventing delayed close
+transitions from turning an extra Back press into an application exit.
+
 The Search automation spec opens the production Search page and runs every case
 from `SEARCH_CASES`. It waits for the real Jellyfin requests and rendered
 rows to stabilize, then checks that each configured title appears exactly in its
