@@ -56,6 +56,9 @@ Starfin-owned section remains, and relaunches the channel. RTA may recreate its
 own `rokuTestAutomation` runtime section during this verification. The reset intentionally removes
 saved Starfin servers, accounts, tokens, preferences, and navigation state from
 the sideloaded development channel so every automation run starts deterministically.
+If the running channel rewrites account or global sections during deletion, the
+harness retries those specific Starfin sections with a bounded three-attempt
+delete-and-verify loop before failing startup.
 
 The authenticated smoke test waits for the empty Login screen and captures
 evidence. In one ordered flow, it submits the empty form, attempts authentication
@@ -147,6 +150,20 @@ data.
 
 ## Evidence reports
 
+For release evidence at both supported UI sizes, run:
+
+```sh
+npm run automation:test:release:resolutions
+```
+
+The coordinator prompts the operator to select the Roku's actual 1080p mode,
+verifies it through device info, runs and packages the complete suite, and then
+repeats for actual 720p mode. It prompts for and verifies restoration to 1080p
+even after a failure. It never navigates Roku OS Settings automatically. Each report suite
+heading includes the verified resolution, such as `(1080p)`; individual test
+titles are unchanged. A mismatch between requested and device-reported
+resolution stops the run before tests execute.
+
 Each run creates a timestamped directory under `out/automation-results/` with a
 Mochawesome `report.html`, report JSON, and a `screenshots/` directory. Report
 entries contain relative links to checkpoint images. The report header includes
@@ -156,9 +173,12 @@ presentation. A failed test attempts an additional screenshot, but screenshot
 failure does not replace the original test error.
 
 A successful release-mode run also creates a `public-report/` copy and a
-versioned ZIP in the same timestamped directory. The ZIP contains only the HTML
+versioned ZIP in the same timestamped directory. Resolution-specific runs append
+`(1080p)` or `(720p)` to that directory name, and their archives add `1080p` or
+`720p` before the run ID. The ZIP contains only the HTML
 and JSON reports, screenshots, and a non-sensitive `verification.json` with the
-Starfin version, completion time, and aggregate passing counts. Only this ZIP is
+Starfin version, completion time, aggregate passing counts, verified resolution,
+screenshot dimensions, Roku model, and Roku OS version. Only this ZIP is
 suitable for attachment to a public release; the original report and logs remain
 private.
 

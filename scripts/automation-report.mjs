@@ -182,13 +182,16 @@ export async function createReleaseAutomationReport({
   resultsDir,
   runId,
   version,
-  sensitiveValues
+  sensitiveValues,
+  resolution,
+  deviceInfo = {}
 }) {
   const reportJsonPath = path.join(resultsDir, 'report.json');
   const report = JSON.parse(await fs.readFile(reportJsonPath, 'utf8'));
   const summary = validateAutomationReport(report);
   const publicDir = path.join(resultsDir, 'public-report');
-  const archiveName = `starfin-automation-report-v${version}-${runId}.zip`;
+  const resolutionPart = resolution ? `-${resolution}` : '';
+  const archiveName = `starfin-automation-report-v${version}${resolutionPart}-${runId}.zip`;
   const archivePath = path.join(resultsDir, archiveName);
 
   await fs.rm(publicDir, { recursive: true, force: true });
@@ -201,6 +204,14 @@ export async function createReleaseAutomationReport({
   ]);
 
   const screenshots = await fs.readdir(path.join(publicDir, 'screenshots'));
+  const screenshotFiles = screenshots.filter(filename => /[.]png$/i.test(filename));
+  if (screenshotFiles.length === 0) throw new Error('Release report did not contain screenshot evidence.');
+  const dimensions = await Promise.all(screenshotFiles.map(async filename => {
+    const metadata = await sharp(path.join(publicDir, 'screenshots', filename)).metadata();
+    return `${metadata.width}x${metadata.height}`;
+  }));
+  const uniqueDimensions = [...new Set(dimensions)];
+  if (uniqueDimensions.length !== 1) throw new Error('Release screenshots do not have consistent dimensions.');
   const redactedScreenshots = screenshots.filter(shouldRedactLoginScreenshot);
   for (const screenshot of redactedScreenshots) {
     await redactLoginScreenshot(path.join(publicDir, 'screenshots', screenshot));
@@ -213,7 +224,12 @@ export async function createReleaseAutomationReport({
     starfinVersion: version,
     tests: summary.tests,
     passes: summary.passes,
-    completedAt: summary.completedAt
+    completedAt: summary.completedAt,
+    displayResolution: resolution,
+    screenshotWidth: Number(uniqueDimensions[0].split('x')[0]),
+    screenshotHeight: Number(uniqueDimensions[0].split('x')[1]),
+    rokuModel: deviceInfo.modelNumber,
+    rokuOsVersion: deviceInfo.softwareVersion
   };
   await fs.writeFile(
     path.join(publicDir, 'verification.json'),

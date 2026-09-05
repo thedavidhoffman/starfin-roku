@@ -9,13 +9,26 @@ import {
   createReleaseAutomationReport
 } from './automation-report.mjs';
 import { enhanceAutomationReport } from './automation-report-html.mjs';
+import {
+  buildResolutionResultsDirectoryName,
+  parseDisplayResolution,
+  readVerifiedDeviceResolution,
+  supportedDisplayResolutions
+} from './roku-display-resolution.mjs';
+import { EcpClient } from '@danecodes/roku-ecp';
 
 const rootDir = process.cwd();
 const environmentPath = path.join(rootDir, 'tests', 'automation', '.env.automation');
 const packagePath = path.join(rootDir, 'out', 'starfin-roku-automation.zip');
 const runId = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
-const resultsDir = path.join(rootDir, 'out', 'automation-results', runId);
 const releaseReportEnabled = process.argv.includes('--release-report');
+const requestedResolution = parseDisplayResolution();
+const resultsDir = path.join(
+  rootDir,
+  'out',
+  'automation-results',
+  buildResolutionResultsDirectoryName(runId, requestedResolution)
+);
 const grepArgumentIndex = process.argv.indexOf('--grep');
 const automationTestGrep = grepArgumentIndex >= 0 ? process.argv[grepArgumentIndex + 1]?.trim() : '';
 if (grepArgumentIndex >= 0 && !automationTestGrep) throw new Error('--grep requires a test-title pattern.');
@@ -183,7 +196,9 @@ function readConfig() {
       defaultBase: 'scene',
       restoreRegistry: false,
       disableTelnet: true,
-      uiResolution: 'fhd'
+      uiResolution: requestedResolution
+        ? supportedDisplayResolutions[requestedResolution].rtaResolution
+        : 'fhd'
     }
   };
   return {
@@ -246,6 +261,14 @@ try {
     tvSeriesLibrary,
     tvSeriesSmokeTest
   } = readConfig();
+  const deviceClient = new EcpClient(selectedDevice.host, {
+    devPassword: selectedDevice.password,
+    timeout: selectedDevice.defaultTimeout
+  });
+  const { info: deviceInfo } = await readVerifiedDeviceResolution(
+    deviceClient,
+    requestedResolution
+  );
   await fs.mkdir(resultsDir, { recursive: true });
 
   console.log('Building the automation-only Starfin package...');
@@ -293,7 +316,8 @@ try {
         STARFIN_AUTOMATION_SEARCH_CASES: JSON.stringify(searchCases),
         STARFIN_AUTOMATION_TVSERIES_LIBRARY: tvSeriesLibrary,
         STARFIN_AUTOMATION_TVSERIES_SMOKE_TEST: JSON.stringify(tvSeriesSmokeTest),
-        STARFIN_AUTOMATION_RESULTS: resultsDir
+        STARFIN_AUTOMATION_RESULTS: resultsDir,
+        STARFIN_AUTOMATION_RESOLUTION: requestedResolution ?? ''
       },
       logPath: path.join(logsDir, 'automation.log')
     });
@@ -319,7 +343,9 @@ try {
         rokuPassword: selectedDevice.password,
         server: testAccount.server,
         jellyfinPassword: testAccount.password
-      })
+      }),
+      resolution: requestedResolution,
+      deviceInfo
     });
     console.log(`Credential-safe release report: ${releaseReport.archivePath}`);
   }

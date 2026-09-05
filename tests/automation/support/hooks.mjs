@@ -2,9 +2,11 @@ import { captureEvidence } from './evidence.mjs';
 import { closeAutomationEnvironment } from './environment.mjs';
 import { resetRegistryAndRelaunch } from './lifecycle.mjs';
 import { resetSettingsDefaults } from './settings.mjs';
+import { qualifySuiteTitles } from './report-titles.mjs';
 
 export const mochaHooks = {
   async beforeAll() {
+    qualifySuiteTitles(this.test?.parent, process.env.STARFIN_AUTOMATION_RESOLUTION);
     await resetRegistryAndRelaunch();
   },
 

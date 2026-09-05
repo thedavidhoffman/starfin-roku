@@ -141,6 +141,8 @@ test('creates a sanitized archive without logs and preserves private evidence', 
     resultsDir: tempDir,
     runId: 'test-run',
     version: '1.2.3',
+    resolution: '1080p',
+    deviceInfo: { modelNumber: '4630X', softwareVersion: '15.3.4' },
     sensitiveValues: buildSensitiveValues({
       rokuHost: '10.0.0.8',
       rokuPassword: 'roku-secret',
@@ -152,6 +154,13 @@ test('creates a sanitized archive without logs and preserves private evidence', 
 
   assert.deepEqual(await fs.readFile(screenshotPath), privateBefore);
   assert.ok(archive.length > 0);
-  assert.equal(await fs.readFile(path.join(result.publicDir, 'verification.json'), 'utf8').then(JSON.parse).then(value => value.tests), 2);
+  const verification = await fs.readFile(path.join(result.publicDir, 'verification.json'), 'utf8').then(JSON.parse);
+  assert.equal(verification.tests, 2);
+  assert.equal(verification.displayResolution, '1080p');
+  assert.equal(verification.screenshotWidth, 1920);
+  assert.equal(verification.screenshotHeight, 1080);
+  assert.equal(verification.rokuModel, '4630X');
+  assert.equal(verification.rokuOsVersion, '15.3.4');
+  assert.match(path.basename(result.archivePath), /-1080p-test-run[.]zip$/);
   await assert.rejects(fs.access(path.join(result.publicDir, 'logs')));
 });

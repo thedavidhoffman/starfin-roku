@@ -52,6 +52,24 @@ export async function relaunchStarfin(environment) {
   await waitForMainScene(environment);
 }
 
+export async function clearStarfinRegistry(odc, maxAttempts = 3) {
+  let remainingSections = [];
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (attempt === 1) {
+      await odc.deleteEntireRegistry();
+    } else {
+      await odc.deleteRegistrySections({ sections: remainingSections });
+    }
+
+    const registry = await odc.readRegistry();
+    remainingSections = Object.keys(registry.values ?? {})
+      .filter(section => section !== 'rokuTestAutomation');
+    if (remainingSections.length === 0) return;
+  }
+
+  throw new Error(`Starfin registry sections remained after ${maxAttempts} reset attempts: ${remainingSections.join(', ')}.`);
+}
+
 export async function resetRegistryAndRelaunch() {
   const environment = await getAutomationEnvironment();
 
@@ -59,13 +77,7 @@ export async function resetRegistryAndRelaunch() {
   await waitForMainScene(environment);
 
   console.log('Resetting Starfin dev-channel registry for deterministic automation.');
-  await environment.odc.deleteEntireRegistry();
-  const registry = await environment.odc.readRegistry();
-  const remainingSections = Object.keys(registry.values ?? {})
-    .filter(section => section !== 'rokuTestAutomation');
-  if (remainingSections.length !== 0) {
-    throw new Error(`Starfin registry sections remained after the automation reset: ${remainingSections.join(', ')}.`);
-  }
+  await clearStarfinRegistry(environment.odc);
 
   await environment.ecp.sendKeypress(environment.ecp.Key.Home);
   await waitFor(async () => {

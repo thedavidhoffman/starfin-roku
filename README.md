@@ -59,8 +59,21 @@ After installation, Starfin will be available from the Roku home screen.
 
 ## AI Usage Disclaimer
 
-This app was built with Codex, but it was not simply "vibe coded." As a senior software engineer, I keep a good eye on what Codex spits out, because there are certainly times when it spits out garbage. But when it nails it, it nails it. As a side note for all those that think that any AI projects like this are simply "AI Slop"... have you seen some of the code that people write ;) Anywhos, the code here is open-source for all to view and inspect.
+This app was built with Codex, but it wasn't simply "vibe coded", nor is it "AI slop". The commit history shows that I am very hands-on.
 
-# Development
+## QA/Testing
+
+Each release has a [readiness assessment](.docs/release-readiness-review.md) that is performed that executes the following:
+1. Identifies the last known-good release tag and reviews the diff from that baseline to the proposed release commit, performing a high-level code review of that diff.
+2. Runs over 2,000 [rooibos](https://github.com/rokucommunity/rooibos) based unit tests.
+3. Runs [RTA](https://github.com/rokucommunity/roku-test-automation/) based automated tests at both 1080p and 720p.
+
+The readiness assessment generates the following artifacts that are bundled in the release.
+1. release-readiness-report.md
+2. unit-test-report.txt
+3. starfin-automation-report-1080p (with screenshots)
+4. starfin-automation-report-720p (with screenshots)
+
+## Development
 
 See [README.DEV.md](README.DEV.md) for contributing, setup, build, deployment, debugging, and logging instructions.
