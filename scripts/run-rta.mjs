@@ -8,6 +8,7 @@ import {
   buildSensitiveValues,
   createReleaseAutomationReport
 } from './automation-report.mjs';
+import { enhanceAutomationReport } from './automation-report-html.mjs';
 
 const rootDir = process.cwd();
 const environmentPath = path.join(rootDir, 'tests', 'automation', '.env.automation');
@@ -234,30 +235,6 @@ function run(command, args, options = {}) {
   });
 }
 
-async function addScreenshotLinksToReport(reportPath) {
-  const script = `<script>
-window.addEventListener('load', () => setTimeout(() => {
-  const pattern = /^screenshots\/[a-z0-9-]+\.png$/;
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  const matches = [];
-  while (walker.nextNode()) {
-    if (pattern.test(walker.currentNode.textContent.trim())) matches.push(walker.currentNode);
-  }
-  for (const textNode of matches) {
-    const href = textNode.textContent.trim();
-    const link = document.createElement('a');
-    link.href = href;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = href;
-    textNode.replaceWith(link);
-  }
-}, 0));
-</script>`;
-  const html = await fs.readFile(reportPath, 'utf8');
-  await fs.writeFile(reportPath, html.replace('</body>', `${script}</body>`));
-}
-
 try {
   const {
     config,
@@ -325,7 +302,7 @@ try {
   }
 
   const reportPath = path.join(resultsDir, 'report.html');
-  await addScreenshotLinksToReport(reportPath);
+  await enhanceAutomationReport(reportPath);
   if (testError) throw testError;
 
   console.log(`Automation report: ${reportPath}`);

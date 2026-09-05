@@ -149,9 +149,11 @@ data.
 
 Each run creates a timestamped directory under `out/automation-results/` with a
 Mochawesome `report.html`, report JSON, and a `screenshots/` directory. Report
-entries contain relative links to checkpoint images. A failed test attempts an
-additional screenshot, but screenshot failure does not replace the original test
-error.
+entries contain relative links to checkpoint images. The report header includes
+an Expand All/Collapse All control before the test summary so every suite and
+test can be opened for a continuous evidence review without changing screenshot
+presentation. A failed test attempts an additional screenshot, but screenshot
+failure does not replace the original test error.
 
 A successful release-mode run also creates a `public-report/` copy and a
 versioned ZIP in the same timestamped directory. The ZIP contains only the HTML

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { ensureAuthenticated } from '../support/authentication.mjs';
+import {
+  ensureAuthenticated,
+  relaunchAuthenticatedStarfin
+} from '../support/authentication.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
-import { getAutomationEnvironment } from '../support/environment.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 
 const searchCases = JSON.parse(process.env.STARFIN_AUTOMATION_SEARCH_CASES ?? '[]');
@@ -126,30 +128,9 @@ function assertExpectedResults(results, searchCase) {
   }
 }
 
-async function returnToHome() {
-  const environment = await getAutomationEnvironment();
-  const searchVisible = await environment.odc.getValue({
-    base: 'scene',
-    keyPath: '#dynamicPageHost.0.visible'
-  });
-  if (!searchVisible.found || searchVisible.value !== true) return;
-
-  await environment.ecp.sendKeypress(environment.ecp.Key.Back);
-  await waitFor(async () => {
-    const values = await environment.odc.getValues({
-      requests: {
-        childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
-        homeVisible: { base: 'scene', keyPath: '#homePage.visible' }
-      }
-    });
-    return values.results.childCount?.value === 0
-      && values.results.homeVisible?.value === true;
-  }, 'Search to return to Home');
-}
-
 describe('Starfin Search results', function () {
   afterEach(async function () {
-    await returnToHome();
+    await relaunchAuthenticatedStarfin();
   });
 
   for (let caseIndex = 0; caseIndex < searchCases.length; caseIndex += 1) {
