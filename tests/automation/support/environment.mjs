@@ -23,6 +23,7 @@ export async function getAutomationEnvironment() {
   const letterGridSearchLibrary = process.env.STARFIN_AUTOMATION_LETTERGRID_SEARCH_LIBRARY ?? '';
   const tvSeriesLibrary = process.env.STARFIN_AUTOMATION_TVSERIES_LIBRARY ?? '';
   const tvSeriesSmokeTest = JSON.parse(process.env.STARFIN_AUTOMATION_TVSERIES_SMOKE_TEST ?? '{}');
+  const deepLinkCases = JSON.parse(process.env.STARFIN_AUTOMATION_DEEP_LINK_CASES ?? '{}');
   if (!testAccount.server || !testAccount.username || !testAccount.password) {
     throw new Error('Automation login credentials were not provided by the runner.');
   }
@@ -39,6 +40,7 @@ export async function getAutomationEnvironment() {
 
   environment = {
     config,
+    deepLinkCases,
     device,
     ecp,
     letterGridCases,

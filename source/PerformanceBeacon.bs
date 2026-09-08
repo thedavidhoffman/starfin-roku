@@ -1,0 +1,62 @@
+' Roku performance beacons mark launch-timing milestones for the Roku OS. They
+' are production telemetry signals used by Roku to measure when a channel
+' becomes usable and to distinguish channel work from time spent waiting for the
+' user.
+'
+' AppLaunchComplete means Starfin has reached its usable initial destination.
+' For a normal launch that is Home. For a deep link it may be active playback or
+' a rendered season. A failed deep link completes launch when its Home fallback is
+' ready. Runtime input received after startup must not emit this signal again.
+'
+' AppDialogInitiate and AppDialogComplete surround launch-blocking interaction.
+' "Dialog" is Roku's terminology and does not require a SceneGraph Dialog node.
+' Starfin's full-screen login, saved-account selection, password entry, and
+' Quick Connect flow qualify because startup must wait for the user to finish
+' them.
+'
+' These signals contain no information about the UI, credentials, selection, or
+' authentication result; they only identify the waiting-time boundary.
+'
+' This namespace does not call Roku APIs, control navigation, or send Jellyfin
+' analytics. It owns only the state needed to return correctly paired Roku
+' beacon names and to return an empty string for duplicate or post-launch
+' signals.
+'
+' MainScene remains responsible for passing non-empty names to signalBeacon().
+namespace PerformanceBeacon
+
+    '---------------------------------------------------------------------------
+    ' PerformanceBeacon.Create
+    '---------------------------------------------------------------------------
+    function Create() as object
+        return { launchComplete: false, dialogOpen: false }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PerformanceBeacon.BeginDialog
+    '---------------------------------------------------------------------------
+    function BeginDialog(state as object) as string
+        if state.launchComplete or state.dialogOpen then return ""
+        state.dialogOpen = true
+        return "AppDialogInitiate"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PerformanceBeacon.CompleteDialog
+    '---------------------------------------------------------------------------
+    function CompleteDialog(state as object) as string
+        if state.dialogOpen <> true then return ""
+        state.dialogOpen = false
+        return "AppDialogComplete"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PerformanceBeacon.CompleteLaunch
+    '---------------------------------------------------------------------------
+    function CompleteLaunch(state as object) as string
+        if state.launchComplete then return ""
+        state.launchComplete = true
+        return "AppLaunchComplete"
+    end function
+
+end namespace

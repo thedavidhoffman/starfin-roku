@@ -1,0 +1,189 @@
+namespace tests
+
+    @SGNode("DeepLinkResolverTask")
+    @suite("DeepLinkResolverTask component")
+    class DeepLinkResolverTaskTests extends rooibos.BaseTestSuite
+
+        @describe("request validation")
+
+        @it("rejects a missing request")
+        function _()
+            'bs:disable-next-line 1140
+            response = validateResolverRequest(invalid)
+
+            m.assertFalse(response.ok)
+        end function
+
+        @it("rejects an unsupported media type")
+        function _()
+            request = { server: "server", token: "token", userId: "user", contentId: "id", mediaType: "album" }
+
+            'bs:disable-next-line 1140
+            response = validateResolverRequest(request)
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.errorMessage, "Invalid request mediaType.")
+        end function
+
+        @it("propagates an item API failure")
+        function _()
+            failure = { ok: false, errorMessage: "Server unavailable." }
+
+            'bs:disable-next-line 1140
+            response = validateDeepLinkItemResult(failure, DeepLink.MediaType.Movie)
+
+            m.assertEqual(response, failure)
+        end function
+
+        @it("rejects content whose API type does not match the requested media type")
+        function _()
+            'bs:disable-next-line 1140
+            response = validateDeepLinkItemResult({ ok: true, data: { Id: "movie-1", Type: "Movie" } }, DeepLink.MediaType.Episode)
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.errorMessage, "The content type does not match the launch request.")
+        end function
+
+        @describe("episode identity")
+
+        @it("builds series and season context")
+        function _()
+            episode = { Type: "Episode", SeriesId: "series-1", SeasonId: "season-1", SeasonName: "Season 1" }
+
+            'bs:disable-next-line 1140
+            result = buildEpisodeIdentity(episode)
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.seriesId, "series-1")
+            m.assertEqual(result.season.Id, "season-1")
+        end function
+
+        @it("rejects non-episode and incomplete context")
+        function _()
+            'bs:disable-next-line 1140
+            wrongType = buildEpisodeIdentity({ Type: "Movie" })
+            'bs:disable-next-line 1140
+            missingContext = buildEpisodeIdentity({ Type: "Episode", SeriesId: "series-1" })
+
+            m.assertFalse(wrongType.ok)
+            m.assertFalse(missingContext.ok)
+        end function
+
+        @it("rejects an invalid episode payload")
+        function _()
+            'bs:disable-next-line 1140
+            result = buildEpisodeIdentity(invalid)
+
+            m.assertFalse(result.ok)
+        end function
+
+        @describe("destination construction")
+
+        @it("builds movie playback without an episode queue")
+        function _()
+            movie = { Id: "movie-1", UserData: { Played: false } }
+
+            'bs:disable-next-line 1140
+            destination = buildPlaybackDestination(movie, invalid, invalid, invalid, 0, "")
+
+            m.assertEqual(destination.type, DeepLink.DestinationType.Playback)
+            m.assertInvalid(destination.playbackQueue)
+            m.assertEqual(destination.playbackQueueScope, "")
+        end function
+
+        @it("builds a cross-season episode queue")
+        function _()
+            episodes = [
+                { Id: "s1e1", Type: "Episode", SeriesId: "series", SeasonId: "s1", UserData: { Played: false } }
+                { Id: "s2e1", Type: "Episode", SeriesId: "series", SeasonId: "s2", UserData: { Played: false } }
+            ]
+
+            'bs:disable-next-line 1140
+            queue = buildPlaybackQueue(episodes)
+
+            m.assertEqual(queue.Count(), 2)
+            m.assertEqual(queue[0].season.Id, "s1")
+            m.assertEqual(queue[1].season.Id, "s2")
+        end function
+
+        @it("builds a season destination focused on the supplied episode")
+        function _()
+            'bs:disable-next-line 1140
+            destination = buildSeasonDestination({ Id: "episode-1" }, { Id: "series-1" }, { Id: "season-1" })
+
+            m.assertEqual(destination.type, DeepLink.DestinationType.Season)
+            m.assertEqual(destination.initialFocusEpisodeId, "episode-1")
+        end function
+
+        @it("preserves a validated movie API result")
+        function _()
+            movie = { Id: "movie-1", Type: "Movie", UserData: { PlaybackPositionTicks: 42 } }
+
+            'bs:disable-next-line 1140
+            response = validateDeepLinkItemResult({ ok: true, data: movie }, DeepLink.MediaType.Movie)
+
+            m.assertTrue(response.ok)
+            m.assertEqual(response.data, movie)
+        end function
+
+        @it("prefers a resumable series episode")
+        function _()
+            resumable = { ok: true, data: { Items: [m.episode("resume-episode", "season-2")] } }
+            nextUp = { ok: true, data: { Items: [m.episode("next-episode", "season-3")] } }
+
+            'bs:disable-next-line 1140
+            response = selectSeriesEpisodeFromResults(resumable, nextUp)
+
+            m.assertTrue(response.ok)
+            m.assertEqual(response.data.Id, "resume-episode")
+        end function
+
+        @it("uses Next Up when a series has no resumable episode")
+        function _()
+            resumable = { ok: true, data: { Items: [] } }
+            nextUp = { ok: true, data: { Items: [m.episode("next-episode", "season-3")] } }
+
+            'bs:disable-next-line 1140
+            response = selectSeriesEpisodeFromResults(resumable, nextUp)
+
+            m.assertTrue(response.ok)
+            m.assertEqual(response.data.Id, "next-episode")
+        end function
+
+        @it("propagates a failed Next Up request")
+        function _()
+            failure = { ok: false, errorMessage: "Next Up unavailable." }
+
+            'bs:disable-next-line 1140
+            response = selectSeriesEpisodeFromResults({ ok: true, data: { Items: [] } }, failure)
+
+            m.assertEqual(response, failure)
+        end function
+
+        @it("rejects a series without a playable episode")
+        function _()
+            'bs:disable-next-line 1140
+            response = selectSeriesEpisodeFromResults({ ok: true, data: { Items: [] } }, { ok: true, data: { Items: [] } })
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.errorMessage, "No playable episode is available for this series.")
+        end function
+
+        @it("adds a season filter only for a season-scoped queue")
+        function _()
+            'bs:disable-next-line 1140
+            seriesParams = buildDeepLinkEpisodesParams("user", "season-2")
+            'bs:disable-next-line 1140
+            episodeParams = buildDeepLinkEpisodesParams("user", "")
+
+            m.assertEqual(seriesParams.seasonId, "season-2")
+            m.assertFalse(episodeParams.DoesExist("seasonId"))
+        end function
+
+        function episode(id as string, seasonId as string) as object
+            return { Id: id, Type: "Episode", SeriesId: "series-1", SeriesName: "Series", SeasonId: seasonId, SeasonName: seasonId, UserData: { Played: false } }
+        end function
+
+    end class
+
+end namespace

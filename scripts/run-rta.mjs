@@ -50,6 +50,7 @@ function readConfig() {
   const letterGridCasesText = process.env.LETTERGRID_CASES?.trim();
   const tvSeriesLibrary = process.env.TVSERIES_LIBRARY?.trim();
   const tvSeriesSmokeTestText = process.env.TVSERIES_SMOKE_TEST?.trim();
+  const deepLinkCasesText = process.env.DEEP_LINK_CASES?.trim();
   if (!host || !password) {
     throw new Error('tests/automation/.env.automation must define ROKU_HOST and ROKU_DEV_PASSWORD.');
   }
@@ -61,6 +62,19 @@ function readConfig() {
   }
   if (!tvSeriesLibrary) {
     throw new Error('tests/automation/.env.automation must define TVSERIES_LIBRARY.');
+  }
+
+  let deepLinkCases;
+  try {
+    deepLinkCases = JSON.parse(deepLinkCasesText ?? '');
+  } catch {
+    throw new Error('DEEP_LINK_CASES must be valid JSON.');
+  }
+  for (const key of ['movieId', 'episodeId', 'invalidId']) {
+    if (typeof deepLinkCases?.[key] !== 'string' || deepLinkCases[key].trim() === '') {
+      throw new Error(`DEEP_LINK_CASES ${key} must be a non-empty string.`);
+    }
+    deepLinkCases[key] = deepLinkCases[key].trim();
   }
 
   let letterGridCases;
@@ -203,6 +217,7 @@ function readConfig() {
   };
   return {
     config,
+    deepLinkCases,
     letterGridCases,
     letterGridSearchLibrary,
     searchCases,
@@ -253,6 +268,7 @@ function run(command, args, options = {}) {
 try {
   const {
     config,
+    deepLinkCases,
     letterGridCases,
     letterGridSearchLibrary,
     searchCases,
@@ -316,6 +332,7 @@ try {
         STARFIN_AUTOMATION_SEARCH_CASES: JSON.stringify(searchCases),
         STARFIN_AUTOMATION_TVSERIES_LIBRARY: tvSeriesLibrary,
         STARFIN_AUTOMATION_TVSERIES_SMOKE_TEST: JSON.stringify(tvSeriesSmokeTest),
+        STARFIN_AUTOMATION_DEEP_LINK_CASES: JSON.stringify(deepLinkCases),
         STARFIN_AUTOMATION_RESULTS: resultsDir,
         STARFIN_AUTOMATION_RESOLUTION: requestedResolution ?? ''
       },

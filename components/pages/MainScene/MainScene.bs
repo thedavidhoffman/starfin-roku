@@ -9,6 +9,8 @@ import "pkg:/source/Spinner.bs"
 import "pkg:/source/Status.bs"
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/LibraryBrowse.bs"
+import "pkg:/source/PerformanceBeacon.bs"
+import "pkg:/source/DeepLink.bs"
 import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
@@ -29,6 +31,7 @@ import "pkg:/components/pages/MainScene/Helpers/Auth.bs"
 import "pkg:/components/pages/MainScene/Helpers/Navigation.bs"
 import "pkg:/components/pages/MainScene/Helpers/Playback.bs"
 import "pkg:/components/pages/MainScene/Helpers/ThemeAudioRouting.bs"
+import "pkg:/components/pages/MainScene/Helpers/DeepLink.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -48,9 +51,11 @@ end sub
 '-------------------------------------------------------------------------------
 ' startApp
 '-------------------------------------------------------------------------------
-sub startApp()
+sub startApp(launchArgs = invalid as dynamic)
     if m.appLifecycle.started then return
     m.appLifecycle.started = true
+
+    submitInput(launchArgs, true)
 
     authSyncSavedSessionToLogin()
     authRequestResumeSession()
@@ -64,6 +69,7 @@ sub initReferences()
     m.authController = m.top.findNode("authController")
     m.mediaActionsController = m.top.findNode("mediaActionsController")
     m.playbackController = m.top.findNode("playbackController")
+    m.deepLinkController = m.top.findNode("deepLinkController")
     m.header = m.top.findNode("header")
     m.homePage = m.top.findNode("homePage")
     m.login = m.top.findNode("login")
@@ -82,6 +88,15 @@ sub initValues()
     m.settings = SettingsStore.Load("")
     m.appLifecycle = {
         started: false
+    }
+    m.performanceBeaconState = PerformanceBeacon.Create()
+    m.deepLinkNavigation = {
+        destinationId: -1
+        destinationType: ""
+        launchAwaitingDestination: false
+        fallbackMessage: ""
+        seasonDestinationId: -1
+        seasonPage: invalid
     }
     m.homeRefreshState = {
         playbackRowsDirty: false
@@ -133,6 +148,12 @@ sub initHandlers()
     m.playbackController.observeField("overlayRequested", "playerHandleOverlayRequested")
     m.playbackController.observeField("selectedPerson", "playerHandlePersonSelected")
     m.playbackController.observeField("closed", "playerHandleCloseRequested")
+    m.playbackController.observeField("ready", "deepLinkHandlePlaybackReady")
+    m.playbackController.observeField("playbackFailed", "deepLinkHandlePlaybackFailed")
+    m.deepLinkController.observeField("destinationRequested", "deepLinkHandleDestinationRequested")
+    m.deepLinkController.observeField("launchGateChanged", "deepLinkHandleLaunchGateChanged")
+    m.deepLinkController.observeField("authenticationRequired", "deepLinkHandleAuthenticationRequired")
+    m.homePage.observeField("ready", "deepLinkHandleHomeReady")
     m.homePage.observeField("selectedMovie", "movieHandleHomeMovieSelected")
     m.homePage.observeField("selectedSeries", "tvShowHandleHomeSeriesSelected")
     m.homePage.observeField("selectedEpisode", "tvEpisodeHandleHomeEpisodeSelected")

@@ -242,7 +242,9 @@ sub handleTVSeasonResponse(task as dynamic)
         end if
 
         Spinner.Hide()
-        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load tv season."))
+        message = Format.SafeString(response.errorMessage, "Unable to load tv season.")
+        AppStatus.SetMessage(message)
+        m.top.loadFailed = message
         return
     end if
     if isLatestTVSeasonResponse(response) <> true then return
@@ -250,7 +252,9 @@ sub handleTVSeasonResponse(task as dynamic)
     payload = response.payload
     if payload = invalid then
         Spinner.Hide()
-        AppStatus.SetMessage("Unable to load tv season.")
+        message = "Unable to load tv season."
+        AppStatus.SetMessage(message)
+        m.top.loadFailed = message
         return
     end if
 
@@ -264,12 +268,51 @@ sub handleTVSeasonResponse(task as dynamic)
     Spinner.Hide()
     AppStatus.ClearMessage()
     updateChevrons()
-    if m.pageState.focusArea = "seasonNav" then
+    if m.top.initialFocusEpisodeId <> "" then
+        initialFocusEpisodeId = m.top.initialFocusEpisodeId
+        m.top.initialFocusEpisodeId = ""
+        if focusInitialEpisode(initialFocusEpisodeId) <> true then
+            message = "The requested episode is unavailable in this season."
+            AppStatus.SetMessage(message)
+            m.top.loadFailed = message
+            return
+        end if
+    else if m.pageState.focusArea = "seasonNav" then
         focusSeasonNav()
     else
         focusEpisodesIfActive()
     end if
+    m.top.ready = true
 end sub
+
+'-------------------------------------------------------------------------------
+' focusInitialEpisode
+'-------------------------------------------------------------------------------
+function focusInitialEpisode(itemId as string) as boolean
+    episodeIndex = -1
+    for i = 0 to m.pageState.episodes.Count() - 1
+        if Format.SafeString(m.pageState.episodes[i].Id, "") = itemId then
+            episodeIndex = i
+            exit for
+        end if
+    end for
+    if episodeIndex < 0 then
+        focusEpisodesIfActive()
+        return false
+    end if
+    contentIndex = episodeIndex
+    if m.pageState.allEpisodes <> true then contentIndex++
+    if isVerticalEpisodeList() then
+        m.episodesGrid.jumpToItem = contentIndex
+        m.episodesGrid.itemFocused = contentIndex
+        m.episodesGrid.setFocus(true)
+    else
+        m.episodesList.jumpToRowItem = [0, contentIndex]
+        m.episodesList.rowItemFocused = [0, contentIndex]
+        m.episodesList.setFocus(true)
+    end if
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' isLatestTVSeasonResponse

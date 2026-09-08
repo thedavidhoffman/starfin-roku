@@ -1,0 +1,255 @@
+import "pkg:/source/ApiPayload.bs"
+import "pkg:/source/DeepLink.bs"
+import "pkg:/source/Encode.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    response = validateResolverRequest(request)
+    if response = invalid then response = resolveDeepLink(request)
+    response.AddReplace("action", "deepLinkResolve")
+    response.AddReplace("requestId", getResolverRequestId(request))
+    response.AddReplace("accountKey", getResolverAccountKey(request))
+    m.top.response = response
+end sub
+
+'-------------------------------------------------------------------------------
+' validateResolverRequest
+'-------------------------------------------------------------------------------
+function validateResolverRequest(request as dynamic) as dynamic
+    errorResponse = TaskRequest.ValidateRequest(request, "deepLinkResolve", ["userId", "contentId", "mediaType"])
+    if errorResponse <> invalid then return errorResponse
+    if DeepLink.IsSupportedMediaType(request.mediaType) <> true then return resolverFailure("Invalid request mediaType.")
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' resolveDeepLink
+'-------------------------------------------------------------------------------
+function resolveDeepLink(request as object) as object
+    itemResult = validateDeepLinkItemResult(loadDeepLinkItem(request, request.contentId), request.mediaType)
+    if itemResult.ok <> true then return itemResult
+
+    item = itemResult.data
+    if request.mediaType = DeepLink.MediaType.Movie then return { ok: true, payload: buildPlaybackDestination(item, invalid, invalid, invalid, 0, "") }
+
+    contextResult = loadEpisodeContext(request, item)
+    if contextResult.ok <> true then return contextResult
+    series = contextResult.series
+    season = contextResult.season
+    if request.mediaType = DeepLink.MediaType.Season then return { ok: true, payload: buildSeasonDestination(item, series, season) }
+
+    selectedItem = item
+    queueSeasonId = ""
+    if request.mediaType = DeepLink.MediaType.Series then
+        selectionResult = selectSeriesEpisode(request, series.Id)
+        if selectionResult.ok <> true then return selectionResult
+        selectedItem = selectionResult.data
+        selectedContext = buildEpisodeIdentity(selectedItem)
+        if selectedContext.ok <> true then return selectedContext
+        season = selectedContext.season
+        queueSeasonId = season.Id
+    end if
+
+    queueResult = loadDeepLinkEpisodes(request, series.Id, queueSeasonId)
+    if queueResult.ok <> true then return queueResult
+    queue = buildPlaybackQueue(ApiPayload.GetItems(queueResult.data))
+    queueIndex = findPlaybackQueueIndex(queue, Format.SafeString(selectedItem.Id, ""))
+    if queueIndex < 0 then return resolverFailure("The selected episode is unavailable in its playback queue.")
+    return { ok: true, payload: buildPlaybackDestination(selectedItem, series, season, queue, queueIndex, "series") }
+end function
+
+'-------------------------------------------------------------------------------
+' validateDeepLinkItemResult
+'-------------------------------------------------------------------------------
+function validateDeepLinkItemResult(itemResult as object, mediaType as string) as object
+    if itemResult.ok <> true then return itemResult
+    requiredType = "Episode"
+    if mediaType = DeepLink.MediaType.Movie then requiredType = "Movie"
+    if Format.SafeString(itemResult.data.Type, "") <> requiredType then return resolverFailure("The content type does not match the launch request.")
+    return itemResult
+end function
+
+'-------------------------------------------------------------------------------
+' loadEpisodeContext
+'-------------------------------------------------------------------------------
+function loadEpisodeContext(request as object, episode as object) as object
+    identity = buildEpisodeIdentity(episode)
+    if identity.ok <> true then return identity
+    seriesResult = loadDeepLinkItem(request, identity.seriesId)
+    if seriesResult.ok <> true then return seriesResult
+    if Format.SafeString(seriesResult.data.Type, "") <> "Series" then return resolverFailure("The episode series context is invalid.")
+    return { ok: true, series: seriesResult.data, season: identity.season }
+end function
+
+'-------------------------------------------------------------------------------
+' buildEpisodeIdentity
+'-------------------------------------------------------------------------------
+function buildEpisodeIdentity(episode as dynamic) as object
+    if episode = invalid or GetInterface(episode, "ifAssociativeArray") = invalid then return resolverFailure("The selected series item is invalid.")
+    if Format.SafeString(episode.Type, "") <> "Episode" then return resolverFailure("The selected series item is not an episode.")
+    seriesId = Format.SafeString(episode.SeriesId, "")
+    seasonId = Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], "")
+    if seriesId = "" or seasonId = "" then return resolverFailure("The episode is missing its series or season context.")
+    return { ok: true, seriesId: seriesId, season: { Id: seasonId, Name: Format.SafeString(episode.SeasonName, "") } }
+end function
+
+'-------------------------------------------------------------------------------
+' selectSeriesEpisode
+'-------------------------------------------------------------------------------
+function selectSeriesEpisode(request as object, seriesId as string) as object
+    params = {
+        UserId: request.userId
+        ParentId: seriesId
+        Recursive: true
+        IncludeItemTypes: "Episode"
+        Filters: "IsResumable"
+        SortBy: "DatePlayed"
+        SortOrder: "Descending"
+        Limit: 1
+        Fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
+    }
+    result = HttpClient.Request(request.server + "/Items" + Url.BuildQueryString(params), "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    resumableResult = result
+    selection = selectSeriesEpisodeFromResults(result, invalid)
+    if selection <> invalid then return selection
+
+    params = {
+        UserId: request.userId
+        SeriesId: seriesId
+        EnableRewatching: false
+        DisableFirstEpisode: false
+        Limit: 1
+        Fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
+    }
+    result = HttpClient.Request(request.server + "/Shows/NextUp" + Url.BuildQueryString(params), "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    return selectSeriesEpisodeFromResults(resumableResult, result)
+end function
+
+'-------------------------------------------------------------------------------
+' selectSeriesEpisodeFromResults
+'-------------------------------------------------------------------------------
+function selectSeriesEpisodeFromResults(resumableResult as object, nextUpResult as dynamic) as dynamic
+    if resumableResult.ok <> true then return resumableResult
+    resumableItems = ApiPayload.GetItems(resumableResult.data)
+    if resumableItems.Count() > 0 then return { ok: true, data: resumableItems[0] }
+    if nextUpResult = invalid then return invalid
+    if nextUpResult.ok <> true then return nextUpResult
+    nextUpItems = ApiPayload.GetItems(nextUpResult.data)
+    if nextUpItems.Count() = 0 then return resolverFailure("No playable episode is available for this series.")
+    return { ok: true, data: nextUpItems[0] }
+end function
+
+'-------------------------------------------------------------------------------
+' loadDeepLinkItem
+'-------------------------------------------------------------------------------
+function loadDeepLinkItem(request as object, itemId as string) as object
+    params = { userId: request.userId, fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData" }
+    return HttpClient.Request(request.server + "/Items/" + itemId + Url.BuildQueryString(params), "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' loadDeepLinkEpisodes
+'-------------------------------------------------------------------------------
+function loadDeepLinkEpisodes(request as object, seriesId as string, seasonId as string) as object
+    params = buildDeepLinkEpisodesParams(request.userId, seasonId)
+    return HttpClient.Request(request.server + "/Shows/" + seriesId + "/Episodes" + Url.BuildQueryString(params), "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' buildDeepLinkEpisodesParams
+'-------------------------------------------------------------------------------
+function buildDeepLinkEpisodesParams(userId as string, seasonId as string) as object
+    params = { userId: userId, isMissing: false, fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData", enableTotalRecordCount: false }
+    if seasonId <> "" then params.seasonId = seasonId
+    return params
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaybackQueue
+'-------------------------------------------------------------------------------
+function buildPlaybackQueue(episodes as object) as object
+    queue = []
+    for each episode in episodes
+        identity = buildEpisodeIdentity(episode)
+        if identity.ok <> true then continue for
+        queue.Push({ itemId: episode.Id, item: episode, series: { Id: identity.seriesId, Name: Format.SafeString(episode.SeriesName, "") }, season: identity.season, startPositionTicks: DeepLink.GetStartPositionTicks(episode) })
+    end for
+    return queue
+end function
+
+'-------------------------------------------------------------------------------
+' findPlaybackQueueIndex
+'-------------------------------------------------------------------------------
+function findPlaybackQueueIndex(queue as object, itemId as string) as integer
+    for i = 0 to queue.Count() - 1
+        if queue[i].itemId = itemId then return i
+    end for
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaybackDestination
+'-------------------------------------------------------------------------------
+function buildPlaybackDestination(item as object, series as dynamic, season as dynamic, queue as dynamic, queueIndex as integer, queueScope as string) as object
+    return {
+        type: DeepLink.DestinationType.Playback
+        itemId: item.Id
+        item: item
+        series: series
+        season: season
+        startPositionTicks: DeepLink.GetStartPositionTicks(item)
+        playbackQueue: queue
+        playbackQueueIndex: queueIndex
+        playbackQueueScope: queueScope
+        tracksPlaybackProgress: true
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildSeasonDestination
+'-------------------------------------------------------------------------------
+function buildSeasonDestination(item as object, series as object, season as object) as object
+    return { type: DeepLink.DestinationType.Season, item: item, series: series, season: season, initialFocusEpisodeId: item.Id }
+end function
+
+'-------------------------------------------------------------------------------
+' getResolverRequestId
+'-------------------------------------------------------------------------------
+function getResolverRequestId(request as dynamic) as integer
+    if request = invalid then return -1
+    return Number.ToInteger(request.requestId, -1)
+end function
+
+'-------------------------------------------------------------------------------
+' getResolverAccountKey
+'-------------------------------------------------------------------------------
+function getResolverAccountKey(request as dynamic) as string
+    if request = invalid then return ""
+    return Format.SafeString(request.accountKey, "")
+end function
+
+'-------------------------------------------------------------------------------
+' resolverFailure
+'-------------------------------------------------------------------------------
+function resolverFailure(message as string) as object
+    return { ok: false, errorMessage: message }
+end function

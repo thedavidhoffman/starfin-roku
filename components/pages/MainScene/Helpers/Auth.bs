@@ -148,6 +148,7 @@ sub authHandleAccountPickerClosed(closed as object)
         return
     end if
 
+    if isAuthenticatedActiveAccount then m.deepLinkController.callFunc("cancel")
     Spinner.ShowBlocking()
     themeAudioStop()
     resetDynamicPages()
@@ -268,6 +269,7 @@ end function
 '-------------------------------------------------------------------------------
 sub authHandleLogoutPressed()
     themeAudioStop()
+    m.deepLinkController.callFunc("cancel")
     resetDynamicPages()
 
     request = {
@@ -289,6 +291,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub authHandleResetStarfinConfirmed()
     themeAudioStop()
+    m.deepLinkController.callFunc("cancel")
     resetDynamicPages()
     if m.authController <> invalid then m.authController.resetStarfinRequested = true
 
@@ -299,6 +302,7 @@ sub authHandleResetStarfinConfirmed()
     m.settings = SettingsStore.Load("")
 end sub
 
+'-------------------------------------------------------------------------------
 ' authHandleAuthenticatedSession
 '-------------------------------------------------------------------------------
 sub authHandleAuthenticatedSession()
@@ -307,6 +311,8 @@ sub authHandleAuthenticatedSession()
     if session = invalid then return
 
     m.session = session
+    completePerformanceDialog()
+    m.deepLinkController.callFunc("updateSession", buildSessionLoadRequest())
     AppStatus.ClearMessage()
     syncHeaderUserIdentity()
     navShowApp()
@@ -319,6 +325,8 @@ sub authHandleLoginRequired()
     Spinner.HideBlocking()
     request = m.authController.loginRequired
     if request = invalid then return
+
+    beginPerformanceDialog()
 
     authShowLogin(request.message)
     server = Format.SafeString(m.authController.savedSession.server, "")
@@ -362,6 +370,9 @@ sub authHandleSessionExpired()
     Spinner.HideBlocking()
     response = m.authController.sessionExpired
     if response = invalid then return
+
+    beginPerformanceDialog()
+    m.deepLinkController.callFunc("updateSession", invalid)
 
     if Format.SafeString(response.server, "") <> "" then m.login.serverValue = response.server
     if Format.SafeString(response.username, "") <> "" then m.login.usernameValue = response.username

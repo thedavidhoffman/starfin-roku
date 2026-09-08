@@ -1,0 +1,73 @@
+' Roku deep linking lets the OS launch Starfin directly into requested video
+' content instead of stopping at Home. Roku supplies contentId and mediaType
+' values either in the channel's cold-launch arguments or in a runtime roInput
+' event. Supporting this contract is required for certification of Roku channels
+' whose primary experience is video playback.
+'
+' This namespace defines Starfin's supported deep-link media and destination
+' types. It also owns pure input normalization and resume-position selection.
+' It does not authenticate, call Jellyfin, navigate pages, start playback, or
+' signal Roku performance beacons; those responsibilities remain with their
+' owning controller and app-shell components.
+namespace DeepLink
+
+    enum MediaType
+        Movie = "movie"
+        Episode = "episode"
+        Series = "series"
+        Season = "season"
+    end enum
+
+    enum DestinationType
+        Playback = "playback"
+        Season = "season"
+        HomeFallback = "homeFallback"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' DeepLink.NormalizeInput
+    '---------------------------------------------------------------------------
+    function NormalizeInput(inputData as dynamic, isColdLaunch as boolean) as object
+        if inputData = invalid or GetInterface(inputData, "ifAssociativeArray") = invalid then
+            return { ok: false, ignored: true, errorMessage: "" }
+        end if
+
+        contentIdValue = DeepLink.__GetCaseInsensitive(inputData, "contentId")
+        mediaTypeValue = DeepLink.__GetCaseInsensitive(inputData, "mediaType")
+        if contentIdValue = invalid and mediaTypeValue = invalid then return { ok: false, ignored: true, errorMessage: "" }
+
+        contentId = Strings.Trim(Format.SafeString(contentIdValue, ""))
+        mediaType = LCase(Strings.Trim(Format.SafeString(mediaTypeValue, "")))
+        if contentId = "" then return { ok: false, ignored: false, errorMessage: "The launch request is missing contentId." }
+        if DeepLink.IsSupportedMediaType(mediaType) <> true then return { ok: false, ignored: false, errorMessage: "The launch request has an unsupported mediaType." }
+
+        return { ok: true, ignored: false, input: { contentId: contentId, mediaType: mediaType, isColdLaunch: isColdLaunch } }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeepLink.IsSupportedMediaType
+    '---------------------------------------------------------------------------
+    function IsSupportedMediaType(mediaType as string) as boolean
+        return mediaType = MediaType.Movie or mediaType = MediaType.Episode or mediaType = MediaType.Series or mediaType = MediaType.Season
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeepLink.GetStartPositionTicks
+    '---------------------------------------------------------------------------
+    function GetStartPositionTicks(item as dynamic) as longinteger
+        if item = invalid or item.UserData = invalid then return 0
+        if item.UserData.Played = true then return 0
+        return PlaybackProgress.GetTicksFromItem(item)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeepLink.__GetCaseInsensitive
+    '---------------------------------------------------------------------------
+    function __GetCaseInsensitive(values as object, requestedKey as string) as dynamic
+        for each key in values
+            if LCase(key) = LCase(requestedKey) then return values[key]
+        end for
+        return invalid
+    end function
+
+end namespace

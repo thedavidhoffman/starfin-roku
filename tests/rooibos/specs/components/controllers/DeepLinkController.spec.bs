@@ -1,0 +1,166 @@
+namespace tests
+
+    @SGNode("DeepLinkController")
+    @suite("DeepLinkController component")
+    class DeepLinkControllerTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.destinationRequested = invalid
+            m.top.launchGateChanged = invalid
+            m.top.authenticationRequired = invalid
+            m.node.deepLinkState.session = invalid
+            m.node.deepLinkState.deferredInput = invalid
+            m.node.deepLinkState.awaitingDestinationId = -1
+            m.node.deepLinkState.coldLaunchPending = false
+            m.node.deepLinkState.lifecycle = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Activate(m.node.deepLinkState.lifecycle)
+        end function
+
+        @describe("input lifecycle")
+
+        @it("defers authenticated resolution while signed out")
+        function _()
+            m.top.callFunc("submitInput", { contentId: "episode-1", mediaType: "episode" }, true)
+
+            m.assertEqual(m.node.deepLinkState.deferredInput.contentId, "episode-1")
+            m.assertTrue(m.node.deepLinkState.coldLaunchPending)
+        end function
+
+        @it("replaces deferred input with the latest request")
+        function _()
+            m.top.callFunc("submitInput", { contentId: "episode-1", mediaType: "episode" }, true)
+            m.top.callFunc("submitInput", { contentId: "movie-1", mediaType: "movie" }, false)
+
+            m.assertEqual(m.node.deepLinkState.deferredInput.contentId, "movie-1")
+        end function
+
+        @it("routes invalid launch input to Home")
+        function _()
+            m.top.callFunc("submitInput", { contentId: "item-1", mediaType: "album" }, true)
+
+            m.assertEqual(m.top.destinationRequested.type, DeepLink.DestinationType.HomeFallback)
+            m.assertTrue(m.top.destinationRequested.isColdLaunch)
+        end function
+
+        @it("invalid input supersedes queued resolver work")
+        function _()
+            m.activateRequest({ contentId: "movie-1", mediaType: "movie", isColdLaunch: true })
+
+            m.top.callFunc("submitInput", { contentId: "item-1", mediaType: "album" }, true)
+
+            m.assertInvalid(m.node.deepLinkState.lifecycle.active)
+            m.assertInvalid(m.node.deepLinkState.deferredInput)
+            m.assertEqual(m.top.destinationRequested.type, DeepLink.DestinationType.HomeFallback)
+        end function
+
+        @describe("response correlation")
+
+        @it("publishes only the current successful resolution")
+        function _()
+            entry = m.activateRequest({ contentId: "movie-1", mediaType: "movie", isColdLaunch: false })
+
+            'bs:disable-next-line 1140
+            handleResolverResponse({ ok: true, action: "deepLinkResolve", requestId: entry.request.requestId, payload: { type: DeepLink.DestinationType.Playback, itemId: "movie-1" } })
+
+            m.assertEqual(m.top.destinationRequested.itemId, "movie-1")
+        end function
+
+        @it("ignores a stale response")
+        function _()
+            entry = m.activateRequest({ contentId: "old", mediaType: "movie", isColdLaunch: true })
+            m.node.deepLinkState.lifecycle.latestRequestId = entry.request.requestId + 1
+
+            'bs:disable-next-line 1140
+            handleResolverResponse({ ok: true, action: "deepLinkResolve", requestId: entry.request.requestId, payload: { type: DeepLink.DestinationType.Playback } })
+
+            m.assertInvalid(m.top.destinationRequested)
+        end function
+
+        @it("defers expired requests and asks the authentication owner to act")
+        function _()
+            input = { contentId: "episode-1", mediaType: "episode", isColdLaunch: true }
+            entry = m.activateRequest(input)
+
+            'bs:disable-next-line 1140
+            handleResolverResponse({ ok: false, authExpired: true, action: "deepLinkResolve", requestId: entry.request.requestId, errorMessage: "Expired", accountKey: "account-1" })
+
+            m.assertEqual(m.node.deepLinkState.deferredInput, input)
+            m.assertEqual(m.top.authenticationRequired.accountKey, "account-1")
+        end function
+
+        @it("routes current resolution failures to Home")
+        function _()
+            entry = m.activateRequest({ contentId: "missing", mediaType: "movie", isColdLaunch: true })
+
+            'bs:disable-next-line 1140
+            handleResolverResponse({ ok: false, action: "deepLinkResolve", requestId: entry.request.requestId, errorMessage: "Not found" })
+
+            m.assertEqual(m.top.destinationRequested.type, DeepLink.DestinationType.HomeFallback)
+            m.assertEqual(m.top.destinationRequested.message, "Not found")
+        end function
+
+        @describe("readiness and cancellation")
+
+        @it("ignores readiness for a superseded destination")
+        function _()
+            m.top.callFunc("submitInput", { contentId: "item", mediaType: "bad" }, true)
+            destinationId = m.top.destinationRequested.destinationId
+
+            m.top.callFunc("reportDestinationReady", destinationId + 1)
+
+            m.assertTrue(m.node.deepLinkState.coldLaunchPending)
+        end function
+
+        @it("releases the launch gate for the current destination")
+        function _()
+            m.top.callFunc("submitInput", { contentId: "item", mediaType: "bad" }, true)
+
+            m.top.callFunc("reportDestinationReady", m.top.destinationRequested.destinationId)
+
+            m.assertFalse(m.node.deepLinkState.coldLaunchPending)
+            m.assertFalse(m.top.launchGateChanged.awaitingDestination)
+        end function
+
+        @it("routes a current destination failure to Home")
+        function _()
+            m.top.callFunc("submitInput", { contentId: "item", mediaType: "bad" }, true)
+            failedDestinationId = m.top.destinationRequested.destinationId
+
+            m.top.callFunc("reportDestinationFailed", failedDestinationId, "Playback failed")
+
+            m.assertEqual(m.top.destinationRequested.type, DeepLink.DestinationType.HomeFallback)
+            m.assertEqual(m.top.destinationRequested.message, "Playback failed")
+            m.assertTrue(m.node.deepLinkState.coldLaunchPending)
+        end function
+
+        @it("preserves active input when authentication becomes unavailable")
+        function _()
+            input = { contentId: "episode-1", mediaType: "episode", isColdLaunch: true }
+            m.activateRequest(input)
+
+            m.top.callFunc("updateSession", invalid)
+
+            m.assertEqual(m.node.deepLinkState.deferredInput, input)
+            m.assertInvalid(m.node.deepLinkState.lifecycle.active)
+        end function
+
+        @it("cancels work and provides a cold-launch fallback")
+        function _()
+            m.node.deepLinkState.coldLaunchPending = true
+            m.activateRequest({ contentId: "episode-1", mediaType: "episode", isColdLaunch: true })
+
+            m.top.callFunc("cancel")
+
+            m.assertInvalid(m.node.deepLinkState.lifecycle.active)
+            m.assertInvalid(m.node.deepLinkState.deferredInput)
+            m.assertEqual(m.top.destinationRequested.type, DeepLink.DestinationType.HomeFallback)
+        end function
+
+        function activateRequest(input as object) as object
+            LatestRequestLifecycle.Queue(m.node.deepLinkState.lifecycle, { contentId: input.contentId }, input)
+            return LatestRequestLifecycle.TakeNext(m.node.deepLinkState.lifecycle)
+        end function
+
+    end class
+
+end namespace

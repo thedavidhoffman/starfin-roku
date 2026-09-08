@@ -15,6 +15,14 @@ top-level page hosting, the header, shared status and loading UI, global overlay
 and app-level controllers. Its local helper files divide routing by feature while
 keeping the `MainScene` component context.
 
+`DeepLinkController` owns the app-wide deep-link lifecycle. It normalizes launch
+and input events, retains the latest request while authentication is unavailable,
+serializes correlated resolver work, and publishes destination requests without
+holding page references. `MainScene` executes those destinations and reports
+readiness or failure back to the controller. This keeps Roku performance beacon
+signaling at the app-shell boundary while playback and season pages remain the
+owners of their own loading and rendering lifecycles.
+
 ## Directory responsibilities
 
 - `components/pages/`: User-facing screens and feature surfaces. A page owns its

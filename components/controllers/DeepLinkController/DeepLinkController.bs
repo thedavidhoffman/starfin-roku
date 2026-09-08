@@ -1,0 +1,260 @@
+' Roku deep linking lets the OS launch Starfin directly into requested video
+' content using contentId and mediaType values. Requests may arrive with a cold
+' channel launch or later through roInput. Supporting this behavior is required
+' for certification of Roku channels whose primary experience is video playback.
+'
+' DeepLinkController is the single owner of the deep-link workflow after input
+' normalization. It retains requests while authentication is unavailable,
+' serializes and correlates Jellyfin resolution work, supersedes stale requests,
+' tracks cold-launch readiness, and publishes destination requests for playback,
+' season navigation, or a bounded Home fallback.
+'
+' The controller deliberately has no page, player, login, status-label, or scene
+' references. MainScene executes published destinations and reports readiness or
+' failure through the controller's narrow interface.
+
+import "pkg:/source/DeepLink.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/LatestRequestLifecycle.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/TaskControl.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    resolverTask = m.top.findNode("resolverTask")
+    resolverTaskAlternate = m.top.findNode("resolverTaskAlternate")
+    resolverTask.observeField("response", "onResolverResponse")
+    resolverTaskAlternate.observeField("response", "onAlternateResolverResponse")
+    m.deepLinkState = {
+        session: invalid
+        deferredInput: invalid
+        lifecycle: LatestRequestLifecycle.Create()
+        taskPool: { nodes: [resolverTask, resolverTaskAlternate], nextIndex: 0 }
+        nextDestinationId: 0
+        awaitingDestinationId: -1
+        coldLaunchPending: false
+    }
+    LatestRequestLifecycle.Activate(m.deepLinkState.lifecycle)
+end sub
+
+'-------------------------------------------------------------------------------
+' submitInput
+'-------------------------------------------------------------------------------
+sub submitInput(inputData as dynamic, isColdLaunch as boolean)
+    normalized = DeepLink.NormalizeInput(inputData, isColdLaunch)
+    if normalized.ignored then return
+    if isColdLaunch then setDeepLinkLaunchGate(true)
+    supersedeAwaitingDestination()
+    if normalized.ok <> true then
+        resetDeepLinkResolution()
+        m.deepLinkState.deferredInput = invalid
+        requestHomeFallback(normalized.errorMessage, isColdLaunch)
+        return
+    end if
+
+    m.deepLinkState.deferredInput = normalized.input
+    queueDeferredInput()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSession
+'-------------------------------------------------------------------------------
+sub updateSession(sessionContext as dynamic)
+    if hasDeepLinkSession(sessionContext) <> true then
+        pauseForAuthentication()
+        return
+    end if
+
+    m.deepLinkState.session = sessionContext
+    queueDeferredInput()
+end sub
+
+'-------------------------------------------------------------------------------
+' cancel
+'-------------------------------------------------------------------------------
+sub cancel()
+    cancelDeepLinkWork("The launch request was cancelled.")
+end sub
+
+'-------------------------------------------------------------------------------
+' pauseForAuthentication
+'-------------------------------------------------------------------------------
+sub pauseForAuthentication()
+    lifecycle = m.deepLinkState.lifecycle
+    if lifecycle.pending <> invalid then
+        m.deepLinkState.deferredInput = lifecycle.pending.context
+    else if lifecycle.active <> invalid then
+        m.deepLinkState.deferredInput = lifecycle.active.context
+    end if
+    resetDeepLinkResolution()
+    m.deepLinkState.session = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' queueDeferredInput
+'-------------------------------------------------------------------------------
+sub queueDeferredInput()
+    if m.deepLinkState.deferredInput = invalid or hasDeepLinkSession(m.deepLinkState.session) <> true then return
+    input = m.deepLinkState.deferredInput
+    m.deepLinkState.deferredInput = invalid
+    request = {
+        server: m.deepLinkState.session.server
+        token: m.deepLinkState.session.token
+        userId: m.deepLinkState.session.userId
+        accountKey: m.deepLinkState.session.accountKey
+        contentId: input.contentId
+        mediaType: input.mediaType
+    }
+    LatestRequestLifecycle.Queue(m.deepLinkState.lifecycle, request, input)
+    startPendingDeepLinkResolution()
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingDeepLinkResolution
+'-------------------------------------------------------------------------------
+sub startPendingDeepLinkResolution()
+    entry = LatestRequestLifecycle.TakeNext(m.deepLinkState.lifecycle)
+    if entry = invalid then return
+    pool = m.deepLinkState.taskPool
+    task = pool.nodes[pool.nextIndex]
+    pool.nextIndex = (pool.nextIndex + 1) mod pool.nodes.Count()
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onResolverResponse
+'-------------------------------------------------------------------------------
+sub onResolverResponse()
+    handleResolverResponse(m.deepLinkState.taskPool.nodes[0].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternateResolverResponse
+'-------------------------------------------------------------------------------
+sub onAlternateResolverResponse()
+    handleResolverResponse(m.deepLinkState.taskPool.nodes[1].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleResolverResponse
+'-------------------------------------------------------------------------------
+sub handleResolverResponse(response as dynamic)
+    completion = LatestRequestLifecycle.Complete(m.deepLinkState.lifecycle, response, "deepLinkResolve")
+    if completion.matched <> true then return
+    if completion.isCurrent <> true then
+        startPendingDeepLinkResolution()
+        return
+    end if
+
+    if response.authExpired = true then
+        m.deepLinkState.deferredInput = completion.context
+        m.deepLinkState.session = invalid
+        m.top.authenticationRequired = {
+            message: Format.SafeString(response.errorMessage, "Your session has expired. Please sign in again.")
+            accountKey: Format.SafeString(response.accountKey, "")
+        }
+    else if response.ok = true and response.payload <> invalid then
+        publishDestination(response.payload, completion.context.isColdLaunch)
+    else
+        requestHomeFallback(Format.SafeString(response.errorMessage, "Unable to open the requested content."), completion.context.isColdLaunch)
+    end if
+    startPendingDeepLinkResolution()
+end sub
+
+'-------------------------------------------------------------------------------
+' reportDestinationReady
+'-------------------------------------------------------------------------------
+sub reportDestinationReady(destinationId as integer)
+    if destinationId <> m.deepLinkState.awaitingDestinationId then return
+    m.deepLinkState.awaitingDestinationId = -1
+    setDeepLinkLaunchGate(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' reportDestinationFailed
+'-------------------------------------------------------------------------------
+sub reportDestinationFailed(destinationId as integer, message as string)
+    if destinationId <> m.deepLinkState.awaitingDestinationId then return
+    requestHomeFallback(message, m.deepLinkState.coldLaunchPending)
+end sub
+
+'-------------------------------------------------------------------------------
+' requestHomeFallback
+'-------------------------------------------------------------------------------
+sub requestHomeFallback(message as string, isColdLaunch as boolean)
+    if isColdLaunch then setDeepLinkLaunchGate(true)
+    publishDestination({ type: DeepLink.DestinationType.HomeFallback, message: message }, isColdLaunch)
+end sub
+
+'-------------------------------------------------------------------------------
+' publishDestination
+'-------------------------------------------------------------------------------
+sub publishDestination(destination as object, isColdLaunch as boolean)
+    m.deepLinkState.nextDestinationId++
+    request = {}
+    for each key in destination
+        request[key] = destination[key]
+    end for
+    request.AddReplace("destinationId", m.deepLinkState.nextDestinationId)
+    request.AddReplace("isColdLaunch", isColdLaunch)
+    m.deepLinkState.awaitingDestinationId = request.destinationId
+    m.top.destinationRequested = request
+end sub
+
+'-------------------------------------------------------------------------------
+' supersedeAwaitingDestination
+'-------------------------------------------------------------------------------
+sub supersedeAwaitingDestination()
+    m.deepLinkState.awaitingDestinationId = -1
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelDeepLinkWork
+'-------------------------------------------------------------------------------
+sub cancelDeepLinkWork(message as string)
+    hadColdLaunch = m.deepLinkState.coldLaunchPending
+    resetDeepLinkResolution()
+    m.deepLinkState.deferredInput = invalid
+    supersedeAwaitingDestination()
+    if hadColdLaunch then requestHomeFallback(message, true)
+end sub
+
+'-------------------------------------------------------------------------------
+' resetDeepLinkResolution
+'-------------------------------------------------------------------------------
+sub resetDeepLinkResolution()
+    stopResolverTasks()
+    LatestRequestLifecycle.Deactivate(m.deepLinkState.lifecycle)
+    LatestRequestLifecycle.Activate(m.deepLinkState.lifecycle)
+end sub
+
+'-------------------------------------------------------------------------------
+' stopResolverTasks
+'-------------------------------------------------------------------------------
+sub stopResolverTasks()
+    for each task in m.deepLinkState.taskPool.nodes
+        task.control = TaskControl.Command.Stop
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' setDeepLinkLaunchGate
+'-------------------------------------------------------------------------------
+sub setDeepLinkLaunchGate(awaitingDestination as boolean)
+    if m.deepLinkState.coldLaunchPending = awaitingDestination then return
+    m.deepLinkState.coldLaunchPending = awaitingDestination
+    m.top.launchGateChanged = { awaitingDestination: awaitingDestination }
+end sub
+
+'-------------------------------------------------------------------------------
+' hasDeepLinkSession
+'-------------------------------------------------------------------------------
+function hasDeepLinkSession(sessionContext as dynamic) as boolean
+    if sessionContext = invalid then return false
+    return Format.SafeString(sessionContext.server, "") <> "" and Format.SafeString(sessionContext.token, "") <> "" and Format.SafeString(sessionContext.userId, "") <> ""
+end function

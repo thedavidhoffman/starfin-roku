@@ -1,0 +1,64 @@
+namespace tests
+
+    @suite("Deep-link helpers")
+    class DeepLinkTests extends rooibos.BaseTestSuite
+
+        @describe("input normalization")
+
+        @it("ignores a normal launch without deep-link values")
+        function _()
+            result = DeepLink.NormalizeInput({}, true)
+
+            m.assertFalse(result.ok)
+            m.assertTrue(result.ignored)
+        end function
+
+        @it("normalizes keys and media type case-insensitively")
+        function _()
+            result = DeepLink.NormalizeInput({ CONTENTID: " episode-1 ", MEDIATYPE: "EPISODE" }, false)
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.input.contentId, "episode-1")
+            m.assertEqual(result.input.mediaType, DeepLink.MediaType.Episode)
+            m.assertFalse(result.input.isColdLaunch)
+        end function
+
+        @it("rejects a missing content ID")
+        function _()
+            result = DeepLink.NormalizeInput({ mediaType: "movie" }, true)
+
+            m.assertFalse(result.ok)
+            m.assertFalse(result.ignored)
+        end function
+
+        @it("rejects an unsupported media type")
+        function _()
+            result = DeepLink.NormalizeInput({ contentId: "item-1", mediaType: "album" }, true)
+
+            m.assertFalse(result.ok)
+        end function
+
+        @describe("bookmark normalization")
+
+        @it("preserves long partial-playback ticks exactly")
+        function _()
+            item = { UserData: { Played: false, PlaybackPositionTicks: 36000000000& } }
+
+            m.assertEqual(DeepLink.GetStartPositionTicks(item), 36000000000&)
+        end function
+
+        @it("starts completed media at zero")
+        function _()
+            item = { UserData: { Played: true, PlaybackPositionTicks: 36000000000& } }
+
+            m.assertEqual(DeepLink.GetStartPositionTicks(item), 0&)
+        end function
+
+        @it("starts unwatched media at zero")
+        function _()
+            m.assertEqual(DeepLink.GetStartPositionTicks({ UserData: { Played: false } }), 0&)
+        end function
+
+    end class
+
+end namespace

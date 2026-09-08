@@ -1,0 +1,178 @@
+'-------------------------------------------------------------------------------
+' submitInput
+'-------------------------------------------------------------------------------
+sub submitInput(inputData as dynamic, isColdLaunch as boolean)
+    m.deepLinkController.callFunc("submitInput", inputData, isColdLaunch)
+end sub
+
+'-------------------------------------------------------------------------------
+' deepLinkHandleDestinationRequested
+'-------------------------------------------------------------------------------
+sub deepLinkHandleDestinationRequested()
+    destination = m.deepLinkController.destinationRequested
+    if destination = invalid then return
+    m.deepLinkNavigation.destinationId = Number.ToInteger(destination.destinationId, -1)
+    m.deepLinkNavigation.destinationType = Format.SafeString(destination.type, "")
+    m.deepLinkNavigation.fallbackMessage = ""
+    m.deepLinkNavigation.seasonDestinationId = -1
+    m.deepLinkNavigation.seasonPage = invalid
+
+    if destination.type = DeepLink.DestinationType.Playback then
+        playerShow(destination)
+    else if destination.type = DeepLink.DestinationType.Season then
+        resetDynamicPages()
+        tvSeasonShow({
+            seriesId: destination.series.Id
+            seasonId: destination.season.Id
+            series: destination.series
+            season: destination.season
+            seasons: []
+            nextSeason: invalid
+            allEpisodes: false
+            seriesMetadataPending: false
+            initialFocusEpisodeId: destination.initialFocusEpisodeId
+            deepLinkDestinationId: m.deepLinkNavigation.destinationId
+        })
+    else if destination.type = DeepLink.DestinationType.HomeFallback then
+        m.deepLinkNavigation.fallbackMessage = Format.SafeString(destination.message, "Unable to open the requested content.")
+        resetDynamicPages()
+        showHome(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' deepLinkHandleAuthenticationRequired
+'-------------------------------------------------------------------------------
+sub deepLinkHandleAuthenticationRequired()
+    request = m.deepLinkController.authenticationRequired
+    if request = invalid then return
+    m.authController.expireActiveSessionRequested = { message: request.message, accountKey: request.accountKey }
+end sub
+
+'-------------------------------------------------------------------------------
+' deepLinkHandlePlaybackReady
+'-------------------------------------------------------------------------------
+sub deepLinkHandlePlaybackReady()
+    if m.deepLinkNavigation.destinationType <> DeepLink.DestinationType.Playback then return
+    deepLinkReportDestinationReady()
+end sub
+
+'-------------------------------------------------------------------------------
+' deepLinkHandlePlaybackFailed
+'-------------------------------------------------------------------------------
+sub deepLinkHandlePlaybackFailed()
+    if m.deepLinkNavigation.destinationType <> DeepLink.DestinationType.Playback then return
+    message = Format.SafeString(m.playbackController.playbackFailed, "Unable to play the requested content.")
+    m.deepLinkController.callFunc("reportDestinationFailed", m.deepLinkNavigation.destinationId, message)
+end sub
+
+'-------------------------------------------------------------------------------
+' deepLinkHandleSeasonReady
+'-------------------------------------------------------------------------------
+sub deepLinkHandleSeasonReady(event = invalid as dynamic)
+    if isCurrentDeepLinkSeasonEvent(event) <> true then return
+    deepLinkReportDestinationReady()
+end sub
+
+'-------------------------------------------------------------------------------
+' deepLinkHandleSeasonFailed
+'-------------------------------------------------------------------------------
+sub deepLinkHandleSeasonFailed(event = invalid as dynamic)
+    if isCurrentDeepLinkSeasonEvent(event) <> true then return
+    message = Format.SafeString(event.getData(), "Unable to open the requested season.")
+    m.deepLinkController.callFunc("reportDestinationFailed", m.deepLinkNavigation.destinationId, message)
+end sub
+
+'-------------------------------------------------------------------------------
+' isCurrentDeepLinkSeasonEvent
+'-------------------------------------------------------------------------------
+function isCurrentDeepLinkSeasonEvent(event as dynamic) as boolean
+    if m.deepLinkNavigation.destinationType <> DeepLink.DestinationType.Season then return false
+    if m.deepLinkNavigation.seasonDestinationId <> m.deepLinkNavigation.destinationId then return false
+    if event = invalid or m.deepLinkNavigation.seasonPage = invalid then return false
+    source = event.getRoSGNode()
+    return source <> invalid and source.isSameNode(m.deepLinkNavigation.seasonPage)
+end function
+
+'-------------------------------------------------------------------------------
+' deepLinkCancelCurrentDestination
+'-------------------------------------------------------------------------------
+function deepLinkCancelCurrentDestination(destinationType as string, page = invalid as dynamic) as boolean
+    if m.deepLinkNavigation.destinationType <> destinationType then return false
+    if m.deepLinkNavigation.destinationId < 0 then return false
+
+    if destinationType = DeepLink.DestinationType.Season then
+        if page = invalid or m.deepLinkNavigation.seasonPage = invalid then return false
+        if page.isSameNode(m.deepLinkNavigation.seasonPage) <> true then return false
+        if m.deepLinkNavigation.seasonDestinationId <> m.deepLinkNavigation.destinationId then return false
+    end if
+
+    m.deepLinkController.callFunc("reportDestinationFailed", m.deepLinkNavigation.destinationId, "The launch request was cancelled.")
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' deepLinkHandleHomeReady
+'-------------------------------------------------------------------------------
+sub deepLinkHandleHomeReady()
+    if m.deepLinkNavigation.fallbackMessage <> "" then
+        AppStatus.SetMessage(m.deepLinkNavigation.fallbackMessage)
+        m.deepLinkNavigation.fallbackMessage = ""
+    end if
+    if m.deepLinkNavigation.destinationType = DeepLink.DestinationType.HomeFallback then
+        deepLinkReportDestinationReady()
+    else if m.deepLinkNavigation.launchAwaitingDestination <> true then
+        signalLaunchComplete()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' deepLinkReportDestinationReady
+'-------------------------------------------------------------------------------
+sub deepLinkReportDestinationReady()
+    destinationId = m.deepLinkNavigation.destinationId
+    if destinationId < 0 then return
+    m.deepLinkController.callFunc("reportDestinationReady", destinationId)
+    m.deepLinkNavigation.destinationId = -1
+    m.deepLinkNavigation.destinationType = ""
+    m.deepLinkNavigation.seasonDestinationId = -1
+    m.deepLinkNavigation.seasonPage = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' deepLinkHandleLaunchGateChanged
+'-------------------------------------------------------------------------------
+sub deepLinkHandleLaunchGateChanged()
+    change = m.deepLinkController.launchGateChanged
+    if change = invalid then return
+    m.deepLinkNavigation.launchAwaitingDestination = change.awaitingDestination = true
+    if m.deepLinkNavigation.launchAwaitingDestination <> true then signalLaunchComplete()
+end sub
+
+'-------------------------------------------------------------------------------
+' beginPerformanceDialog
+'-------------------------------------------------------------------------------
+sub beginPerformanceDialog()
+    signalPerformanceBeacon(PerformanceBeacon.BeginDialog(m.performanceBeaconState))
+end sub
+
+'-------------------------------------------------------------------------------
+' completePerformanceDialog
+'-------------------------------------------------------------------------------
+sub completePerformanceDialog()
+    signalPerformanceBeacon(PerformanceBeacon.CompleteDialog(m.performanceBeaconState))
+end sub
+
+'-------------------------------------------------------------------------------
+' signalLaunchComplete
+'-------------------------------------------------------------------------------
+sub signalLaunchComplete()
+    signalPerformanceBeacon(PerformanceBeacon.CompleteLaunch(m.performanceBeaconState))
+end sub
+
+'-------------------------------------------------------------------------------
+' signalPerformanceBeacon
+'-------------------------------------------------------------------------------
+sub signalPerformanceBeacon(beacon as string)
+    if beacon <> "" then m.top.signalBeacon(beacon)
+end sub

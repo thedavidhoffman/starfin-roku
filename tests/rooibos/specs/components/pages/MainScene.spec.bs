@@ -14,6 +14,15 @@ namespace tests
                 accountKey: "account-1"
             }
             m.node.settings = SettingsStore.Defaults()
+            m.node.performanceBeaconState = PerformanceBeacon.Create()
+            m.node.deepLinkNavigation = {
+                destinationId: -1
+                destinationType: ""
+                launchAwaitingDestination: false
+                fallbackMessage: ""
+                seasonDestinationId: -1
+                seasonPage: invalid
+            }
             m.node.homePage.visible = false
             m.node.header.visible = false
             m.node.playbackController.playRequest = invalid
@@ -92,6 +101,11 @@ namespace tests
         @it("declares the playbackController node")
         function _()
             m.assertNotInvalid(m.top.findNode("playbackController"))
+        end function
+
+        @it("declares the deepLinkController node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("deepLinkController"))
         end function
 
         @describe("video library routing")
@@ -477,6 +491,227 @@ namespace tests
 
         @describe("application startup")
 
+        @it("completes a normal launch when Home reports ready")
+        function _()
+            'bs:disable-next-line 1140
+            deepLinkHandleHomeReady()
+
+            m.assertTrue(m.node.performanceBeaconState.launchComplete)
+        end function
+
+        @it("keeps a cold launch gated while its destination is pending")
+        function _()
+            m.node.deepLinkNavigation.launchAwaitingDestination = true
+
+            'bs:disable-next-line 1140
+            deepLinkHandleHomeReady()
+
+            m.assertFalse(m.node.performanceBeaconState.launchComplete)
+        end function
+
+        @it("completes a cold playback launch only when playback reports ready")
+        function _()
+            m.node.deepLinkController.callFunc("submitInput", { contentId: "", mediaType: "movie" }, true)
+            destinationId = m.node.deepLinkController.destinationRequested.destinationId
+            m.node.deepLinkNavigation.destinationId = destinationId
+            m.node.deepLinkNavigation.destinationType = DeepLink.DestinationType.Playback
+            m.node.deepLinkNavigation.launchAwaitingDestination = true
+
+            'bs:disable-next-line 1140
+            deepLinkHandlePlaybackReady()
+
+            m.assertEqual(m.node.deepLinkNavigation.destinationId, -1)
+            m.assertTrue(m.node.performanceBeaconState.launchComplete)
+        end function
+
+        @it("shows a fallback message and completes its cold launch from Home readiness")
+        function _()
+            m.node.deepLinkController.callFunc("submitInput", { contentId: "", mediaType: "movie" }, true)
+            destinationId = m.node.deepLinkController.destinationRequested.destinationId
+            m.node.deepLinkNavigation.destinationId = destinationId
+            m.node.deepLinkNavigation.destinationType = DeepLink.DestinationType.HomeFallback
+            m.node.deepLinkNavigation.launchAwaitingDestination = true
+            m.node.deepLinkNavigation.fallbackMessage = "Unable to open that item."
+
+            'bs:disable-next-line 1140
+            deepLinkHandleHomeReady()
+
+            m.assertEqual(m.node.deepLinkNavigation.fallbackMessage, "")
+            m.assertTrue(m.node.performanceBeaconState.launchComplete)
+        end function
+
+        @it("selects one nonblocking refresh for a clean Home fallback")
+        function _()
+            m.node.homeRefreshState.playbackRowsDirty = false
+            homePage = m.node.homePage
+            recorder = m.createHomePageCallRecorder()
+            m.node.homePage = recorder
+
+            'bs:disable-next-line 1140
+            showHome(true)
+
+            m.node.homePage = homePage
+            m.assertEqual(recorder.calls, ["activate"])
+        end function
+
+        @it("selects one blocking refresh for a dirty Home fallback")
+        function _()
+            m.node.homeRefreshState.playbackRowsDirty = true
+            homePage = m.node.homePage
+            recorder = m.createHomePageCallRecorder()
+            m.node.homePage = recorder
+
+            'bs:disable-next-line 1140
+            showHome(true)
+
+            m.node.homePage = homePage
+            m.assertEqual(recorder.calls, ["activateBlocking"])
+        end function
+
+        @it("tracks authentication dialog performance beacons through its MainScene handlers")
+        function _()
+            'bs:disable-next-line 1140
+            beginPerformanceDialog()
+
+            m.assertTrue(m.node.performanceBeaconState.dialogOpen)
+
+            'bs:disable-next-line 1140
+            completePerformanceDialog()
+
+            m.assertFalse(m.node.performanceBeaconState.dialogOpen)
+        end function
+
+        @it("preserves a cold deep link when a saved login account is selected")
+        function _()
+            m.node.session = invalid
+            m.node.authenticatedContent.visible = false
+            m.node.deepLinkController.callFunc("submitInput", { contentId: "movie-1", mediaType: "movie" }, true)
+
+            'bs:disable-next-line 1140
+            authHandleAccountPickerClosed({
+                request: { source: "login" }
+                overlay: { selectedAccount: { accountKey: "account-2" } }
+            })
+            m.node.deepLinkController.callFunc("updateSession", {
+                server: "http://server"
+                token: "token"
+                userId: "user"
+                accountKey: "account-2"
+            })
+
+            resolverRequest = m.node.deepLinkController.findNode("resolverTask").request
+            m.assertEqual(resolverRequest.contentId, "movie-1")
+            m.assertEqual(m.node.authController.switchAccountRequest.accountKey, "account-2")
+        end function
+
+        @it("pairs the authentication dialog interval after a saved session expires")
+        function _()
+            m.node.authController.sessionExpired = {
+                message: "Please sign in again."
+                server: "http://server"
+                username: "user"
+                clearRuntimeSession: true
+            }
+
+            m.assertTrue(m.node.performanceBeaconState.dialogOpen)
+
+            m.node.authController.authenticatedSession = {
+                accountKey: "account-1"
+                server: "http://server"
+                token: "token"
+                userId: "user"
+            }
+
+            m.assertFalse(m.node.performanceBeaconState.dialogOpen)
+        end function
+
+        @it("replaces active playback with a deep-linked season")
+        function _()
+            m.openPlayback("movie-1")
+            destinationId = m.publishSeasonDestination()
+
+            m.assertEqual(m.node.playbackController.getChildCount(), 0)
+            m.assertNotInvalid(m.node.deepLinkNavigation.seasonPage)
+            m.assertEqual(m.node.deepLinkNavigation.seasonDestinationId, destinationId)
+        end function
+
+        @it("ignores readiness from a superseded season page")
+        function _()
+            m.publishSeasonDestination()
+            supersededPage = m.node.deepLinkNavigation.seasonPage
+            currentDestinationId = m.publishSeasonDestination()
+
+            supersededPage.ready = true
+
+            m.assertEqual(m.node.deepLinkNavigation.destinationId, currentDestinationId)
+            m.assertTrue(m.node.deepLinkNavigation.launchAwaitingDestination)
+        end function
+
+        @it("completes only readiness from the current season page")
+        function _()
+            m.publishSeasonDestination()
+
+            m.node.deepLinkNavigation.seasonPage.ready = true
+
+            m.assertEqual(m.node.deepLinkNavigation.destinationId, -1)
+            m.assertTrue(m.node.performanceBeaconState.launchComplete)
+        end function
+
+        @it("routes a current season failure to Home fallback")
+        function _()
+            m.publishSeasonDestination()
+
+            m.node.deepLinkNavigation.seasonPage.loadFailed = "Season unavailable."
+
+            m.assertEqual(m.node.deepLinkController.destinationRequested.type, DeepLink.DestinationType.HomeFallback)
+            m.assertEqual(m.node.deepLinkController.destinationRequested.message, "Season unavailable.")
+        end function
+
+        @it("routes a current season close before readiness to Home fallback")
+        function _()
+            m.publishSeasonDestination()
+
+            m.node.deepLinkNavigation.seasonPage.closeRequested = true
+
+            m.assertEqual(m.node.deepLinkController.destinationRequested.type, DeepLink.DestinationType.HomeFallback)
+            m.assertEqual(m.node.deepLinkController.destinationRequested.message, "The launch request was cancelled.")
+
+            m.node.homePage.ready = true
+
+            m.assertEqual(m.node.deepLinkNavigation.destinationId, -1)
+            m.assertTrue(m.node.performanceBeaconState.launchComplete)
+        end function
+
+        @it("ignores failure from a superseded season page")
+        function _()
+            m.publishSeasonDestination()
+            supersededPage = m.node.deepLinkNavigation.seasonPage
+            currentDestinationId = m.publishSeasonDestination()
+
+            supersededPage.loadFailed = "Old failure."
+
+            m.assertEqual(m.node.deepLinkNavigation.destinationId, currentDestinationId)
+            m.assertEqual(m.node.deepLinkController.destinationRequested.destinationId, currentDestinationId)
+        end function
+
+        @it("routes a player close before deep-link readiness to Home fallback")
+        function _()
+            m.publishPlaybackDestination()
+
+            m.node.playbackController.closed = {
+                restorePlayRequest: invalid
+                upNextRequest: invalid
+            }
+
+            m.assertEqual(m.node.deepLinkController.destinationRequested.type, DeepLink.DestinationType.HomeFallback)
+            m.assertEqual(m.node.deepLinkController.destinationRequested.message, "The launch request was cancelled.")
+
+            m.node.homePage.ready = true
+
+            m.assertEqual(m.node.deepLinkNavigation.destinationId, -1)
+            m.assertTrue(m.node.performanceBeaconState.launchComplete)
+        end function
+
         @it("routes Quick Connect requests from Login to AuthController")
         function _()
             request = { server: "https://server" }
@@ -573,6 +808,41 @@ namespace tests
                 itemId: itemId
                 item: { Id: itemId, Type: "Movie", Name: "Movie" }
             }
+        end function
+
+        function createHomePageCallRecorder() as object
+            return {
+                visible: false
+                calls: []
+                callFunc: function(name as string) as dynamic
+                    m.calls.Push(name)
+                    return invalid
+                end function
+            }
+        end function
+
+        function publishSeasonDestination() as integer
+            m.node.deepLinkNavigation.launchAwaitingDestination = true
+            m.node.deepLinkController.callFunc("submitInput", { contentId: "", mediaType: "movie" }, true)
+            destinationId = m.node.deepLinkController.destinationRequested.destinationId
+            m.node.deepLinkController.destinationRequested = {
+                destinationId: destinationId
+                isColdLaunch: true
+                type: DeepLink.DestinationType.Season
+                series: { Id: "series-1" }
+                season: { Id: "season-1" }
+                initialFocusEpisodeId: "episode-1"
+            }
+            return destinationId
+        end function
+
+        function publishPlaybackDestination() as integer
+            m.node.deepLinkNavigation.launchAwaitingDestination = true
+            m.node.deepLinkController.callFunc("submitInput", { contentId: "", mediaType: "movie" }, true)
+            destinationId = m.node.deepLinkController.destinationRequested.destinationId
+            m.node.deepLinkNavigation.destinationId = destinationId
+            m.node.deepLinkNavigation.destinationType = DeepLink.DestinationType.Playback
+            return destinationId
         end function
 
     end class

@@ -35,7 +35,10 @@ sub tvSeasonShow(selection as object)
     page.observeField("closeRequested", "tvSeasonHandleCloseRequested")
     page.observeField("selectedEpisodeDetails", "tvEpisodeHandleTVSeasonEpisodeSelected")
     page.observeField("seasonWatchedStateChanged", "tvShowHandleTVSeasonWatchedStateChanged")
+    page.observeField("ready", "deepLinkHandleSeasonReady")
+    page.observeField("loadFailed", "deepLinkHandleSeasonFailed")
     page.settings = m.settings
+    page.initialFocusEpisodeId = Format.SafeString(selection.initialFocusEpisodeId, "")
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
@@ -51,6 +54,11 @@ sub tvSeasonShow(selection as object)
     }
 
     m.tvSeasonPage = page
+    deepLinkDestinationId = Number.ToInteger(selection.deepLinkDestinationId, -1)
+    if deepLinkDestinationId >= 0 then
+        m.deepLinkNavigation.seasonDestinationId = deepLinkDestinationId
+        m.deepLinkNavigation.seasonPage = page
+    end if
     authAppendDynamicPage(page)
     if m.tvShowPage <> invalid then m.tvShowPage.visible = false
     m.homePage.visible = false
@@ -75,6 +83,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub tvSeasonHandleCloseRequested()
     clearStatus()
+    if deepLinkCancelCurrentDestination(DeepLink.DestinationType.Season, m.tvSeasonPage) then return
+
     if m.tvSeasonPage <> invalid then
         m.tvSeasonPage.callFunc("deactivate")
         m.dynamicPageHost.removeChild(m.tvSeasonPage)
