@@ -1,0 +1,399 @@
+'-------------------------------------------------------------------------------
+' getEpisodeNodeAtPosition
+'-------------------------------------------------------------------------------
+function getEpisodeNodeAtPosition(position as dynamic) as object
+    if position = invalid or position.Count() < 2 then return invalid
+    if m.episodesList.content = invalid then return invalid
+
+    row = m.episodesList.content.getChild(position[0])
+    if row = invalid then return invalid
+
+    return row.getChild(position[1])
+end function
+
+'-------------------------------------------------------------------------------
+' getGridEpisodeNodeAtPosition
+'-------------------------------------------------------------------------------
+function getGridEpisodeNodeAtPosition(position as dynamic) as object
+    if position = invalid then return invalid
+    if m.episodesGrid.content = invalid then return invalid
+    if position < 0 or position >= m.episodesGrid.content.getChildCount() then return invalid
+
+    return m.episodesGrid.content.getChild(position)
+end function
+
+'-------------------------------------------------------------------------------
+' getFocusedEpisodeNode
+'-------------------------------------------------------------------------------
+function getFocusedEpisodeNode() as object
+    if isVerticalEpisodeList() then return getGridEpisodeNodeAtPosition(m.episodesGrid.itemFocused)
+    return getEpisodeNodeAtPosition(m.episodesList.rowItemFocused)
+end function
+
+'-------------------------------------------------------------------------------
+' focusInitialEpisode
+'-------------------------------------------------------------------------------
+function focusInitialEpisode(itemId as string) as boolean
+    episodeIndex = -1
+    for i = 0 to m.pageState.episodes.Count() - 1
+        if Format.SafeString(m.pageState.episodes[i].Id, "") = itemId then
+            episodeIndex = i
+            exit for
+        end if
+    end for
+    if episodeIndex < 0 then
+        focusEpisodesIfActive()
+        return false
+    end if
+    contentIndex = episodeIndex
+    if m.pageState.allEpisodes <> true then contentIndex++
+    if isVerticalEpisodeList() then
+        m.episodesGrid.jumpToItem = contentIndex
+        m.episodesGrid.itemFocused = contentIndex
+        m.episodesGrid.setFocus(true)
+    else
+        m.episodesList.jumpToRowItem = [0, contentIndex]
+        m.episodesList.rowItemFocused = [0, contentIndex]
+        m.episodesList.setFocus(true)
+    end if
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onEpisodeFocused
+'-------------------------------------------------------------------------------
+sub onEpisodeFocused()
+    if m.pageState.allEpisodes then
+        if redirectSpacerFocus() then return
+        m.pageState.focusedEpisodeGridIndex = m.episodesGrid.itemFocused
+        updateAllEpisodesSeasonLabel()
+    end if
+    updateChevrons()
+end sub
+
+'-------------------------------------------------------------------------------
+' redirectSpacerFocus
+'-------------------------------------------------------------------------------
+function redirectSpacerFocus() as boolean
+    index = m.episodesGrid.itemFocused
+    node = getGridEpisodeNodeAtPosition(index)
+    if node = invalid or Format.SafeString(node.itemType, "") <> "LayoutSpacer" then return false
+
+    stepValue = 1
+    if m.pageState.focusedEpisodeGridIndex > index then stepValue = -1
+    targetIndex = index
+    while targetIndex >= 0 and targetIndex < m.episodesGrid.content.getChildCount()
+        targetIndex = targetIndex + stepValue
+        target = getGridEpisodeNodeAtPosition(targetIndex)
+        if target <> invalid and Format.SafeString(target.itemType, "") <> "LayoutSpacer" then
+            m.episodesGrid.jumpToItem = targetIndex
+            return true
+        end if
+    end while
+
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onPreviousSeasonSelected
+'-------------------------------------------------------------------------------
+sub onPreviousSeasonSelected()
+    navigateToSeason(m.pageState.previousSeason)
+end sub
+
+'-------------------------------------------------------------------------------
+' onNextSeasonSelected
+'-------------------------------------------------------------------------------
+sub onNextSeasonSelected()
+    navigateToSeason(m.pageState.nextSeason)
+end sub
+
+'-------------------------------------------------------------------------------
+' navigateToSeason
+'-------------------------------------------------------------------------------
+sub navigateToSeason(season as dynamic)
+    request = buildSeasonLoadRequest(season)
+    if request = invalid then return
+
+    m.top.loadRequest = request
+end sub
+
+'-------------------------------------------------------------------------------
+' buildSeasonLoadRequest
+'-------------------------------------------------------------------------------
+function buildSeasonLoadRequest(season as dynamic) as dynamic
+    request = m.pageState.request
+    if request = invalid then return invalid
+
+    seasonId = getSeasonId(season)
+    if seasonId = "" then return invalid
+
+    return {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        seriesId: request.seriesId
+        seasonId: seasonId
+        series: request.series
+        season: season
+        seasons: m.pageState.seasons
+        nextSeason: getRelativeSeason(season, 1)
+        keepSeasonNavFocus: true
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' updateAdjacentSeasons
+'-------------------------------------------------------------------------------
+sub updateAdjacentSeasons()
+    m.pageState.previousSeason = getRelativeSeason(m.pageState.season, -1)
+    m.pageState.nextSeason = getRelativeSeason(m.pageState.season, 1)
+
+    if m.pageState.nextSeason = invalid and m.pageState.request <> invalid then
+        m.pageState.nextSeason = m.pageState.request.nextSeason
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getRelativeSeason
+'-------------------------------------------------------------------------------
+function getRelativeSeason(season as dynamic, offset as integer) as dynamic
+    currentIndex = getSeasonIndex(season)
+    if currentIndex < 0 then return invalid
+
+    seasons = m.pageState.seasons
+    relativeIndex = currentIndex + offset
+    if relativeIndex < 0 or relativeIndex >= seasons.Count() then return invalid
+
+    return seasons[relativeIndex]
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonIndex
+'-------------------------------------------------------------------------------
+function getSeasonIndex(season as dynamic) as integer
+    seasonId = getSeasonId(season)
+    if seasonId = "" then return -1
+
+    seasons = m.pageState.seasons
+    if seasons = invalid then return -1
+
+    for i = 0 to seasons.Count() - 1
+        if getSeasonId(seasons[i]) = seasonId then return i
+    end for
+
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonId
+'-------------------------------------------------------------------------------
+function getSeasonId(season as dynamic) as string
+    if Arrays.IsAssocArray(season) = false then return ""
+
+    return Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
+end function
+
+'-------------------------------------------------------------------------------
+' getActiveEpisodeList
+'-------------------------------------------------------------------------------
+function getActiveEpisodeList() as object
+    if isVerticalEpisodeList() then return m.episodesGrid
+    return m.episodesList
+end function
+
+'-------------------------------------------------------------------------------
+' isVerticalEpisodeList
+'-------------------------------------------------------------------------------
+function isVerticalEpisodeList() as boolean
+    if m.pageState.allEpisodes then return true
+    return m.pageState.episodeListScroll = "vertical"
+end function
+
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "seasonId")
+    LatestRequestLifecycle.Activate(m.pageState.detailsLoad)
+    m.top.setFocus(true)
+    refreshPlaybackProgressChange()
+    focusEpisodesIfActive()
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshPlaybackProgressChange
+'-------------------------------------------------------------------------------
+sub refreshPlaybackProgressChange()
+    if m.top.playbackProgressChange = invalid then return
+
+    onPlaybackProgressChange()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusEpisodesIfActive
+'-------------------------------------------------------------------------------
+sub focusEpisodesIfActive()
+    if hasEpisodeItems() = false then return
+
+    m.pageState.focusArea = "episodes"
+    setEpisodeListVisible(true)
+    m.seasonNav.callFunc("deactivate")
+    m.top.setFocus(true)
+    getActiveEpisodeList().setFocus(true)
+    updateChevrons()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusSeasonNav
+'-------------------------------------------------------------------------------
+sub focusSeasonNav()
+    if hasSeasonNavigation() = false then
+        focusEpisodesIfActive()
+        return
+    end if
+
+    m.pageState.focusArea = "seasonNav"
+    m.top.setFocus(true)
+    m.seasonNav.callFunc("activate")
+    updateChevrons()
+end sub
+
+'-------------------------------------------------------------------------------
+' hasSeasonNavigation
+'-------------------------------------------------------------------------------
+function hasSeasonNavigation() as boolean
+    if m.pageState.allEpisodes then return false
+    return m.pageState.previousSeason <> invalid or m.pageState.nextSeason <> invalid
+end function
+
+'-------------------------------------------------------------------------------
+' updateChevrons
+'-------------------------------------------------------------------------------
+sub updateChevrons()
+    if m.pageState.focusArea <> "episodes" then
+        m.leftChevron.visible = false
+        m.rightChevron.visible = false
+        return
+    end if
+
+    if isVerticalEpisodeList() then
+        m.leftChevron.visible = false
+        m.rightChevron.visible = false
+        return
+    end if
+
+    overflow = getEpisodeOverflowState()
+    m.leftChevron.visible = overflow.left
+    m.rightChevron.visible = overflow.right
+end sub
+
+'-------------------------------------------------------------------------------
+' getEpisodeOverflowState
+'-------------------------------------------------------------------------------
+function getEpisodeOverflowState() as object
+    state = { left: false, right: false }
+    visibleItemCount = 3
+
+    if m.episodesList.content = invalid then return state
+    if m.episodesList.content.getChildCount() = 0 then return state
+
+    row = m.episodesList.content.getChild(0)
+    if row = invalid then return state
+
+    itemCount = row.getChildCount()
+    if itemCount <= visibleItemCount then return state
+
+    focused = m.episodesList.rowItemFocused
+    finalWindowStart = itemCount - visibleItemCount
+    windowStart = m.pageState.episodeWindowStart
+    if windowStart = invalid then windowStart = 0
+
+    if focused <> invalid and focused.Count() >= 2 then
+        focusedIndex = focused[1]
+        if focusedIndex < windowStart then
+            windowStart = focusedIndex
+        else if focusedIndex >= windowStart + visibleItemCount then
+            windowStart = focusedIndex - visibleItemCount + 1
+        end if
+    end if
+
+    if windowStart < 0 then windowStart = 0
+    if windowStart > finalWindowStart then windowStart = finalWindowStart
+    m.pageState.episodeWindowStart = windowStart
+
+    state.left = windowStart > 0
+    state.right = (windowStart + visibleItemCount) < itemCount
+
+    return state
+end function
+
+'-------------------------------------------------------------------------------
+' restoreEpisodeFocus
+'-------------------------------------------------------------------------------
+sub restoreEpisodeFocus(itemId as string)
+    index = getEpisodeContentIndex(itemId)
+    if index < 0 then return
+
+    if isVerticalEpisodeList() then
+        m.episodesGrid.jumpToItem = index
+    else
+        m.episodesList.jumpToRowItem = [0, index]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getEpisodeContentIndex
+'-------------------------------------------------------------------------------
+function getEpisodeContentIndex(itemId as string) as integer
+    if itemId = "" then return -1
+
+    if isVerticalEpisodeList() then
+        if m.episodesGrid.content = invalid then return -1
+
+        for i = 0 to m.episodesGrid.content.getChildCount() - 1
+            child = m.episodesGrid.content.getChild(i)
+            if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return i
+        end for
+
+        return -1
+    end if
+
+    if m.episodesList.content = invalid or m.episodesList.content.getChildCount() = 0 then return -1
+
+    row = m.episodesList.content.getChild(0)
+    if row = invalid then return -1
+
+    for i = 0 to row.getChildCount() - 1
+        child = row.getChild(i)
+        if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return i
+    end for
+
+    return -1
+end function
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press = false then return false
+
+    if key = "back" then
+        AppStatus.ClearMessage()
+        m.top.closeRequested = true
+        return true
+    end if
+
+    if key = "up" and m.pageState.focusArea = "episodes" and hasSeasonNavigation() then
+        focusSeasonNav()
+        return true
+    end if
+
+    if key = "down" and m.pageState.focusArea = "seasonNav" then
+        focusEpisodesIfActive()
+        return true
+    end if
+
+    return false
+end function
+

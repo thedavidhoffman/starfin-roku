@@ -1,0 +1,395 @@
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
+
+    if m.pageState.focusArea = "episodes" then
+        if m.pageState.episodesLoaded = true then renderEpisodes(m.pageState.episodes)
+        setEpisodeListVisible(hasEpisodeItems())
+        updateChevrons()
+        focusEpisodesIfActive()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderSeason
+'-------------------------------------------------------------------------------
+sub renderSeason(item as dynamic, renderSeriesIdentity = true as boolean, renderSeasonLabel = true as boolean)
+    if Arrays.IsAssocArray(item) = false then return
+
+    request = m.pageState.request
+    series = invalid
+    if request <> invalid then series = request.series
+
+    if renderSeriesIdentity then
+        m.logoBanner.title = Format.FirstNonEmpty([series.Name, item.SeriesName], "")
+        m.logoBanner.logoUrl = getSeriesLogoUrl()
+    else
+        m.logoBanner.title = ""
+        m.logoBanner.logoUrl = ""
+    end if
+    if renderSeasonLabel then
+        m.seasonLabel.text = getItemTitle(item)
+    else
+        m.seasonLabel.text = ""
+    end if
+    if m.pageState.allEpisodes then
+        m.seasonNav.hasPrevious = false
+        m.seasonNav.hasNext = false
+    else
+        m.seasonNav.hasPrevious = m.pageState.previousSeason <> invalid
+        m.seasonNav.hasNext = m.pageState.nextSeason <> invalid
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getSeriesLogoUrl
+'-------------------------------------------------------------------------------
+function getSeriesLogoUrl() as string
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    identity = SeriesIdentity.FromItem(Format.SafeString(request.server, ""), request.series)
+    return identity.logoUrl
+end function
+
+'-------------------------------------------------------------------------------
+' renderEpisodes
+'-------------------------------------------------------------------------------
+sub renderEpisodes(episodes as object)
+    if isVerticalEpisodeList() then
+        renderEpisodesGrid(episodes)
+    else
+        renderEpisodesList(episodes)
+    end if
+
+    setEpisodeListVisible(hasEpisodeItems())
+    m.pageState.episodeWindowStart = 0
+end sub
+
+'-------------------------------------------------------------------------------
+' updateAllEpisodesSeasonLabel
+'-------------------------------------------------------------------------------
+sub updateAllEpisodesSeasonLabel()
+    node = getFocusedEpisodeNode()
+    if node = invalid or node.raw = invalid then return
+
+    seasonId = Format.SafeString(node.raw.SeasonId, "")
+    for each season in m.pageState.seasons
+        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") = seasonId then
+            m.pageState.season = season
+            m.seasonLabel.text = getItemTitle(season)
+            return
+        end if
+    end for
+
+    seasonName = Format.SafeString(node.raw.SeasonName, "")
+    if seasonName = "" and node.raw.ParentIndexNumber <> invalid then seasonName = "Season " + Format.SafeString(node.raw.ParentIndexNumber, "")
+    m.seasonLabel.text = seasonName
+end sub
+
+'-------------------------------------------------------------------------------
+' renderEpisodesList
+'-------------------------------------------------------------------------------
+sub renderEpisodesList(episodes as object)
+    rowContent = CreateObject("roSGNode", "ContentNode")
+    row = rowContent.createChild("ContentNode")
+
+    if m.pageState.allEpisodes <> true then appendSeasonSummaryItem(row)
+
+    for each episode in episodes
+        if Arrays.IsAssocArray(episode) = false then continue for
+
+        appendEpisodeItem(row, episode)
+    end for
+
+    m.episodesList.content = rowContent
+    m.episodesGrid.content = CreateObject("roSGNode", "ContentNode")
+end sub
+
+'-------------------------------------------------------------------------------
+' renderEpisodesGrid
+'-------------------------------------------------------------------------------
+sub renderEpisodesGrid(episodes as object)
+    gridContent = CreateObject("roSGNode", "ContentNode")
+
+    if m.pageState.allEpisodes <> true then appendSeasonSummaryItem(gridContent)
+
+    currentSeasonKey = ""
+    for each episode in episodes
+        if Arrays.IsAssocArray(episode) = false then continue for
+
+        if m.pageState.allEpisodes then
+            seasonKey = getEpisodeSeasonKey(episode)
+            if currentSeasonKey <> "" and seasonKey <> currentSeasonKey then
+                while gridContent.getChildCount() mod m.layout.episodeGridColumns <> 0
+                    appendGridLayoutSpacer(gridContent)
+                end while
+            end if
+            currentSeasonKey = seasonKey
+        end if
+        appendEpisodeItem(gridContent, episode)
+    end for
+
+    m.episodesList.content = CreateObject("roSGNode", "ContentNode")
+    m.episodesGrid.content = gridContent
+end sub
+
+'-------------------------------------------------------------------------------
+' getEpisodeSeasonKey
+'-------------------------------------------------------------------------------
+function getEpisodeSeasonKey(episode as object) as string
+    seasonId = Format.SafeString(episode.SeasonId, "")
+    if seasonId <> "" then return seasonId
+    return "season-" + Format.SafeString(episode.ParentIndexNumber, "")
+end function
+
+'-------------------------------------------------------------------------------
+' appendGridLayoutSpacer
+'-------------------------------------------------------------------------------
+sub appendGridLayoutSpacer(parent as object)
+    child = parent.createChild("ContentNode")
+    child.AddFields({ itemType: "LayoutSpacer" })
+end sub
+
+'-------------------------------------------------------------------------------
+' clearEpisodes
+'-------------------------------------------------------------------------------
+sub clearEpisodes()
+    m.episodesList.content = CreateObject("roSGNode", "ContentNode")
+    m.episodesGrid.content = CreateObject("roSGNode", "ContentNode")
+    m.episodesList.visible = false
+    m.episodesGrid.visible = false
+    m.pageState.episodeWindowStart = 0
+    m.leftChevron.visible = false
+    m.rightChevron.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' appendEpisodeItem
+'-------------------------------------------------------------------------------
+sub appendEpisodeItem(parent as object, episode as object)
+    child = parent.createChild("ContentNode")
+    child.title = getItemTitle(episode)
+    child.description = Format.FirstNonEmpty([episode.Overview], "")
+    child.HDPosterUrl = getImageUrl(episode, "Primary", 531, 300)
+    child.AddFields({
+        itemId: Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
+        itemType: Format.SafeString(Format.FirstNonEmpty([episode.Type], ""), "")
+        episodeIndexNumber: Format.FirstNonEmpty([episode.IndexNumber], "")
+        premiereDate: Format.FirstNonEmpty([episode.PremiereDate], "")
+        airDate: Format.FirstNonEmpty([episode.AirDate], "")
+        dateCreated: Format.FirstNonEmpty([episode.DateCreated], "")
+        progressPercent: getProgressPercent(episode)
+        progressWidth: getProgressWidth(episode)
+        raw: episode
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' getEpisodeDetailBackdropUrl
+'-------------------------------------------------------------------------------
+function getEpisodeDetailBackdropUrl(node as dynamic) as string
+    if Format.SafeString(node.itemType, "") = "SeasonSummary" then
+        detailBackdropUrl = Format.SafeString(node.detailBackdropUrl, "")
+        if detailBackdropUrl <> "" then return detailBackdropUrl
+    end if
+
+    return Format.SafeString(node.HDPosterUrl, "")
+end function
+
+'-------------------------------------------------------------------------------
+' appendSeasonSummaryItem
+'-------------------------------------------------------------------------------
+sub appendSeasonSummaryItem(row as object)
+    season = m.pageState.season
+    if row = invalid or Arrays.IsAssocArray(season) = false then return
+
+    child = row.createChild("ContentNode")
+    child.title = getItemTitle(season)
+    child.description = getSeasonSummaryDescription(season)
+    child.HDPosterUrl = getSeasonBackgroundUrl()
+    child.AddFields({
+        itemId: Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
+        itemType: "SeasonSummary"
+        episodeCount: Format.FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
+        seasonYear: getSeasonYearText(season)
+        detailBackdropUrl: getSeasonDetailBackdropUrl()
+        raw: season
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSeasonSummaryArtwork
+'-------------------------------------------------------------------------------
+sub updateSeasonSummaryArtwork()
+    content = m.episodesGrid.content
+    if isVerticalEpisodeList() <> true then
+        if m.episodesList.content = invalid or m.episodesList.content.getChildCount() = 0 then return
+        content = m.episodesList.content.getChild(0)
+    end if
+    if content = invalid then return
+
+    for i = 0 to content.getChildCount() - 1
+        child = content.getChild(i)
+        if child <> invalid and Format.SafeString(child.itemType, "") = "SeasonSummary" then
+            child.HDPosterUrl = getSeasonBackgroundUrl()
+            child.detailBackdropUrl = getSeasonDetailBackdropUrl()
+            return
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' hasEpisodeItems
+'-------------------------------------------------------------------------------
+function hasEpisodeItems() as boolean
+    if isVerticalEpisodeList() then
+        return m.episodesGrid.content <> invalid and m.episodesGrid.content.getChildCount() > 0
+    end if
+
+    if m.episodesList.content = invalid then return false
+    if m.episodesList.content.getChildCount() = 0 then return false
+
+    row = m.episodesList.content.getChild(0)
+    return row <> invalid and row.getChildCount() > 0
+end function
+
+'-------------------------------------------------------------------------------
+' setEpisodeListVisible
+'-------------------------------------------------------------------------------
+sub setEpisodeListVisible(isVisible as boolean)
+    m.episodesList.visible = isVisible and isVerticalEpisodeList() = false
+    m.episodesGrid.visible = isVisible and isVerticalEpisodeList()
+end sub
+
+'-------------------------------------------------------------------------------
+' getTVEpisodeListScrollSetting
+'-------------------------------------------------------------------------------
+function getTVEpisodeListScrollSetting() as string
+    value = m.top.settings[SettingsStore.Key.TvEpisodeListDisplay]
+
+    if LCase(value) = "vertical" then return "vertical"
+    return "horizontal"
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonSummaryDescription
+'-------------------------------------------------------------------------------
+function getSeasonSummaryDescription(season as dynamic) as string
+    description = Format.FirstNonEmpty([season.Overview], "")
+    if description <> "" then return description
+
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    series = request.series
+    if Arrays.IsAssocArray(series) = false then return ""
+
+    return Format.FirstNonEmpty([series.Overview], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonYearText
+'-------------------------------------------------------------------------------
+function getSeasonYearText(season as dynamic) as string
+    year = Format.FirstNonEmpty([season.ProductionYear], "")
+    if year <> "" then return Format.SafeString(year, "")
+
+    return DateTime.ToYear(season.PremiereDate)
+end function
+
+'-------------------------------------------------------------------------------
+' getItemTitle
+'-------------------------------------------------------------------------------
+function getItemTitle(item as dynamic) as string
+    if Arrays.IsAssocArray(item) = false then return ""
+    return Format.FirstNonEmpty([item.Name], "")
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressPercent
+'-------------------------------------------------------------------------------
+function getProgressPercent(item as dynamic) as float
+    if Arrays.IsAssocArray(item) = false then return 0
+    if item.UserData <> invalid and item.UserData.Played = true then return 0
+
+    if item.UserData <> invalid and item.UserData.PlayedPercentage <> invalid then
+        playedPercentage = item.UserData.PlayedPercentage
+        if playedPercentage > 100 then return 100
+        if playedPercentage > 0 then return playedPercentage
+    end if
+
+    if item.RunTimeTicks = invalid or item.RunTimeTicks <= 0 then return 0
+
+    progressTicks = PlaybackProgress.GetTicksFromItem(item)
+    if progressTicks <= 0 then return 0
+
+    return PlaybackProgress.GetPercentage(progressTicks, item.RunTimeTicks)
+end function
+
+'-------------------------------------------------------------------------------
+' getProgressWidth
+'-------------------------------------------------------------------------------
+function getProgressWidth(item as dynamic) as integer
+    progressPercent = getProgressPercent(item)
+    if progressPercent <= 0 then return 0
+
+    progressWidth = int(510 * (progressPercent / 100))
+    if progressWidth < 1 then return 1
+    if progressWidth > 510 then return 510
+
+    return progressWidth
+end function
+
+'-------------------------------------------------------------------------------
+' getImageUrl
+'-------------------------------------------------------------------------------
+function getImageUrl(item as dynamic, imageType as string, width as integer, height as integer) as string
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    options = invalid
+    if imageType = "Logo" then options = { format: "Png" }
+    return ItemImage.GetUrl(request.server, item, imageType, width, height, options)
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonBackgroundUrl
+'-------------------------------------------------------------------------------
+function getSeasonBackgroundUrl() as string
+    request = m.pageState.request
+    if request <> invalid then
+        imageUrl = Format.FirstNonEmpty([request.series.thumbUrl], "")
+        if imageUrl <> "" then return imageUrl
+
+        imageUrl = getImageUrl(request.series, "Thumb", 531, 300)
+        if imageUrl <> "" then return imageUrl
+
+        imageUrl = Format.FirstNonEmpty([request.series.backdropUrl], "")
+        if imageUrl <> "" then return imageUrl
+
+        imageUrl = getImageUrl(request.series, "Backdrop", 531, 300)
+        if imageUrl <> "" then return imageUrl
+    end if
+
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' getSeasonDetailBackdropUrl
+'-------------------------------------------------------------------------------
+function getSeasonDetailBackdropUrl() as string
+    request = m.pageState.request
+    if request = invalid then return ""
+
+    imageUrl = Format.FirstNonEmpty([request.series.detailBackdropUrl], "")
+    if imageUrl <> "" then return imageUrl
+
+    imageUrl = Format.FirstNonEmpty([request.series.backdropUrl], "")
+    if imageUrl <> "" then return imageUrl
+
+    return getImageUrl(request.series, "Backdrop", 1920, 1080)
+end function
+

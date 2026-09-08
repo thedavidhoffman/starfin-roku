@@ -7,6 +7,7 @@ import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskRequest.bs"
 import "pkg:/source/Number.bs"
+import "pkg:/source/TVSeasonTaskResponse.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -20,7 +21,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    validationError = TaskRequest.ValidateRequest(request, "tvSeason", ["seriesId", "seasonId"])
+    validationError = TaskRequest.ValidateRequest(request, TVSeasonTaskResponse.Action.Season, ["seriesId", "seasonId"])
     if validationError <> invalid then
         validationError.AddReplace("requestId", getRequestId(request))
         if request <> invalid then
@@ -33,7 +34,7 @@ sub executeRequest()
 
     seasonResult = loadSeason(request)
     if seasonResult.ok <> true then
-        seasonResult.AddReplace("action", "tvSeason")
+        seasonResult.AddReplace("action", TVSeasonTaskResponse.Action.Season)
         seasonResult.AddReplace("seriesId", Format.SafeString(request.seriesId, ""))
         seasonResult.AddReplace("seasonId", Format.SafeString(request.seasonId, ""))
         seasonResult.AddReplace("requestId", getRequestId(request))
@@ -45,7 +46,7 @@ sub executeRequest()
     if request.allEpisodes = true then episodesSeasonId = ""
     episodesResult = loadEpisodes(request, episodesSeasonId)
     if episodesResult.ok <> true then
-        episodesResult.AddReplace("action", "tvSeason")
+        episodesResult.AddReplace("action", TVSeasonTaskResponse.Action.Season)
         episodesResult.AddReplace("seriesId", Format.SafeString(request.seriesId, ""))
         episodesResult.AddReplace("seasonId", Format.SafeString(request.seasonId, ""))
         episodesResult.AddReplace("requestId", getRequestId(request))
@@ -55,7 +56,7 @@ sub executeRequest()
 
     seasonResponse = {
         ok: true
-        action: "tvSeason"
+        action: TVSeasonTaskResponse.Action.Season
         seriesId: Format.SafeString(request.seriesId, "")
         seasonId: Format.SafeString(request.seasonId, "")
         requestId: getRequestId(request)
@@ -74,7 +75,7 @@ sub executeRequest()
         if seriesOk then seriesPayload = seriesResult.data
         m.top.response = {
             ok: seriesOk
-            action: "tvSeasonSeries"
+            action: TVSeasonTaskResponse.Action.Series
             seriesId: Format.SafeString(request.seriesId, "")
             seasonId: Format.SafeString(request.seasonId, "")
             requestId: getRequestId(request)
@@ -87,7 +88,7 @@ sub executeRequest()
         if seasonsResult <> invalid and seasonsResult.ok = true then
             m.top.response = {
                 ok: true
-                action: "tvSeasonSeasons"
+                action: TVSeasonTaskResponse.Action.Seasons
                 seriesId: Format.SafeString(request.seriesId, "")
                 seasonId: Format.SafeString(request.seasonId, "")
                 requestId: getRequestId(request)
@@ -105,7 +106,7 @@ end sub
 sub publishCompletion(request as object)
     m.top.response = {
         ok: true
-        action: "tvSeasonComplete"
+        action: TVSeasonTaskResponse.Action.Complete
         seriesId: Format.SafeString(request.seriesId, "")
         seasonId: Format.SafeString(request.seasonId, "")
         requestId: getRequestId(request)

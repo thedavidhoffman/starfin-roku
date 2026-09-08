@@ -1,0 +1,205 @@
+'-------------------------------------------------------------------------------
+' onEpisodeSelected
+'-------------------------------------------------------------------------------
+sub onEpisodeSelected()
+    selection = buildFocusedEpisodeDetailsSelection()
+    if selection = invalid then return
+
+    m.top.selectedEpisodeDetails = selection
+end sub
+
+'-------------------------------------------------------------------------------
+' buildFocusedEpisodeDetailsSelection
+'-------------------------------------------------------------------------------
+function buildFocusedEpisodeDetailsSelection() as dynamic
+    focusedEpisode = getFocusedEpisodeNode()
+    if focusedEpisode = invalid then return invalid
+
+    return {
+        loadRequest: buildEpisodeLoadRequest(focusedEpisode)
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildEpisodeLoadRequest
+'-------------------------------------------------------------------------------
+function buildEpisodeLoadRequest(node as dynamic) as dynamic
+    playSelection = buildEpisodePlaySelection(node)
+    if playSelection = invalid then return invalid
+
+    request = m.pageState.request
+    if request = invalid then return invalid
+
+    return {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        seriesId: request.seriesId
+        seasonId: getEpisodeSeasonId(playSelection.item, request.seasonId)
+        series: buildSeriesIdentity(request, playSelection.item)
+        season: buildEpisodeSeasonIdentity(playSelection.item, request)
+        seasons: m.pageState.seasons
+        itemId: playSelection.itemId
+        item: playSelection.item
+        posterUrl: getEpisodeDetailBackdropUrl(node)
+        startPositionTicks: playSelection.startPositionTicks
+        playbackQueue: playSelection.playbackQueue
+        playbackQueueIndex: playSelection.playbackQueueIndex
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeSeasonId
+'-------------------------------------------------------------------------------
+function getEpisodeSeasonId(item as dynamic, fallbackSeasonId as string) as string
+    if item <> invalid then
+        seasonId = Format.SafeString(item.SeasonId, "")
+        if seasonId <> "" then return seasonId
+    end if
+    return fallbackSeasonId
+end function
+
+'-------------------------------------------------------------------------------
+' buildEpisodeSeasonIdentity
+'-------------------------------------------------------------------------------
+function buildEpisodeSeasonIdentity(item as dynamic, request as object) as object
+    seasonId = getEpisodeSeasonId(item, Format.SafeString(request.seasonId, ""))
+    for each season in m.pageState.seasons
+        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") = seasonId then return season
+    end for
+
+    seasonName = ""
+    if item <> invalid then seasonName = Format.SafeString(item.SeasonName, "")
+    return { Id: seasonId, Name: seasonName }
+end function
+
+'-------------------------------------------------------------------------------
+' buildSeriesIdentity
+'-------------------------------------------------------------------------------
+function buildSeriesIdentity(request as object, item as dynamic) as object
+    identity = SeriesIdentity.FromItem(Format.SafeString(request.server, ""), request.series)
+    seriesId = ""
+    if item <> invalid then
+        seriesId = Format.FirstNonEmpty([item.SeriesId], "")
+        if identity.Name = "" then identity.Name = Format.FirstNonEmpty([item.SeriesName], "")
+    end if
+
+    identity.Id = Format.FirstNonEmpty([identity.Id, request.seriesId, seriesId], "")
+    if identity.logoUrl = "" then identity.logoUrl = getSeriesLogoUrl()
+
+    return identity
+end function
+
+'-------------------------------------------------------------------------------
+' buildSeasonIdentity
+'-------------------------------------------------------------------------------
+function buildSeasonIdentity(request as object) as object
+    seasonName = ""
+    if request.season <> invalid then seasonName = Format.FirstNonEmpty([request.season.Name], "")
+
+    return {
+        Id: Format.FirstNonEmpty([request.seasonId], "")
+        Name: seasonName
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getEpisodeNodeById
+'-------------------------------------------------------------------------------
+function getEpisodeNodeById(itemId as string) as dynamic
+    if isVerticalEpisodeList() then
+        if m.episodesGrid.content = invalid then return invalid
+
+        for i = 0 to m.episodesGrid.content.getChildCount() - 1
+            child = m.episodesGrid.content.getChild(i)
+            if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return child
+        end for
+
+        return invalid
+    end if
+
+    if m.episodesList.content = invalid or m.episodesList.content.getChildCount() = 0 then return invalid
+
+    row = m.episodesList.content.getChild(0)
+    if row = invalid then return invalid
+
+    for i = 0 to row.getChildCount() - 1
+        child = row.getChild(i)
+        if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return child
+    end for
+
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' buildEpisodePlaySelection
+'-------------------------------------------------------------------------------
+function buildEpisodePlaySelection(node as dynamic) as dynamic
+    if node = invalid then return invalid
+
+    itemId = Format.SafeString(node.itemId, "")
+    if itemId = "" then return invalid
+
+    item = node.raw
+    if Arrays.IsAssocArray(item) = false then return invalid
+
+    playbackQueue = buildPlaybackQueue(m.pageState.episodes)
+    playbackQueueIndex = getPlaybackQueueIndex(playbackQueue, itemId)
+
+    return {
+        itemId: itemId
+        item: item
+        startPositionTicks: PlaybackProgress.GetTicksFromItem(item)
+        playbackQueue: playbackQueue
+        playbackQueueIndex: playbackQueueIndex
+        playbackQueueScope: "series"
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildPlaybackQueue
+'-------------------------------------------------------------------------------
+function buildPlaybackQueue(episodes as object) as object
+    queue = []
+    appendEpisodesToPlaybackQueue(queue, episodes, m.pageState.season)
+
+    return queue
+end function
+
+'-------------------------------------------------------------------------------
+' appendEpisodesToPlaybackQueue
+'-------------------------------------------------------------------------------
+sub appendEpisodesToPlaybackQueue(queue as object, episodes as dynamic, season as dynamic)
+    if episodes = invalid then return
+
+    for each episode in episodes
+        if Arrays.IsAssocArray(episode) = false then continue for
+
+        episodeId = Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
+        if episodeId = "" then continue for
+
+        queueSeason = season
+        if m.pageState.allEpisodes and m.pageState.request <> invalid then queueSeason = buildEpisodeSeasonIdentity(episode, m.pageState.request)
+        queue.Push({
+            itemId: episodeId
+            item: episode
+            season: queueSeason
+            startPositionTicks: PlaybackProgress.GetTicksFromItem(episode)
+        })
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackQueueIndex
+'-------------------------------------------------------------------------------
+function getPlaybackQueueIndex(playbackQueue as object, itemId as string) as integer
+    if playbackQueue = invalid then return 0
+
+    for i = 0 to playbackQueue.Count() - 1
+        item = playbackQueue[i]
+        if item <> invalid and Format.SafeString(item.itemId, "") = itemId then return i
+    end for
+
+    return 0
+end function
+

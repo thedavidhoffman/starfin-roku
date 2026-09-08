@@ -27,6 +27,11 @@ namespace tests
                 loadingSpinnerNode.id = "loadingSpinner"
                 scene.appendChild(loadingSpinnerNode)
             end if
+            existingStatusLabel = scene.findNode("statusLabel")
+            if existingStatusLabel <> invalid and existingStatusLabel.getParent() = scene then scene.removeChild(existingStatusLabel)
+            statusLabelNode = CreateObject("roSGNode", "StatusLabel")
+            statusLabelNode.id = "statusLabel"
+            scene.appendChild(statusLabelNode)
             scene.findNode("loadingSpinner").control = "stop"
         end function
         @describe("declarative component contract")
@@ -319,10 +324,15 @@ namespace tests
                 requestId: requestId
                 errorMessage: "Season unavailable."
             }
+            statusLabel = m.top.getScene().findNode("statusLabel")
+            statusLabel.visible = false
+            Spinner.Show()
 
             'bs:disable-next-line 1140
             handleTVSeasonResponse(task)
 
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            m.assertTrue(statusLabel.visible)
             m.assertEqual(m.top.loadFailed, "Season unavailable.")
         end function
 
@@ -466,13 +476,14 @@ namespace tests
             m.node.pageState.request.seriesMetadataPending = true
             m.node.pageState.episodesLoaded = false
             m.top.findNode("seasonLabel").text = "Season 1"
+            series = { Id: "series-2", Name: "Returned Series" }
             seriesTask = {
                 response: {
                     ok: true
                     action: "tvSeasonSeries"
                     seasonId: "season-1"
                     requestId: 1
-                    payload: { Id: "series-1", Name: "Series" }
+                    payload: series
                 }
             }
             AsyncLifecycle.Begin(m.node.pageState.lifecycle, "season-1")
@@ -481,6 +492,48 @@ namespace tests
             handleTVSeasonResponse(seriesTask)
 
             m.assertEqual(m.top.findNode("seasonLabel").text, "Season 1")
+            m.assertFalse(m.node.pageState.request.seriesMetadataPending)
+            m.assertEqual(m.node.pageState.request.series.Id, "series-2")
+            m.assertEqual(m.node.pageState.request.series.Name, "Returned Series")
+        end function
+
+        @it("dispatches seasons responses to adjacent-season handling")
+        function _()
+            request = m.createRequest()
+            m.node.pageState.request = request
+            m.node.pageState.season = request.season
+            seasonsTask = {
+                response: {
+                    ok: true
+                    action: "tvSeasonSeasons"
+                    seasonId: "season-1"
+                    requestId: 1
+                    payload: { Items: [request.season, m.createSeason("season-2", "Season 2")] }
+                }
+            }
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "season-1")
+
+            'bs:disable-next-line 1140
+            handleTVSeasonResponse(seasonsTask)
+
+            m.assertEqual(m.node.pageState.seasons.Count(), 2)
+            m.assertEqual(m.node.pageState.nextSeason.Id, "season-2")
+        end function
+
+        @it("rejects unknown response actions")
+        function _()
+            request = m.createRequest()
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            unknownTask = {
+                response: { ok: true, action: "tvSeasonUnknown", seasonId: "season-1", requestId: 1, payload: {} }
+            }
+
+            'bs:disable-next-line 1140
+            handleTVSeasonResponse(unknownTask)
+
+            m.assertNotInvalid(m.node.pageState.detailsLoad.active)
+            m.assertFalse(m.top.ready)
         end function
 
         @it("renders and ends loading for the current season response")
