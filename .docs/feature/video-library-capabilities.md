@@ -11,6 +11,10 @@ The capability matrix below documents the intended behavior for each surface.
 | Playlist library | No | No | No | No | Title ascending |
 | Playlist contents | No | No | No | No | Playlist order |
 
+Device automation exercises two configured Title-mode letter-grid cases for
+each movie and TV library. Library names come from `MOVIE_LIBRARY` and
+`TV_LIBRARY`; every filtered page is loaded and its sort names are verified.
+
 ## Selection-dependent letter navigation
 
 The letter grid is available only when the active Browse By selection keeps

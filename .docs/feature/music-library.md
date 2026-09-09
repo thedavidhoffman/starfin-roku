@@ -28,6 +28,10 @@ closes, and rapid changes retain the original paging state for rollback. Letter
 selection is reset to `ALL` when the browse mode or music library changes and is
 not persisted.
 
+Device automation exercises two configured letter-grid cases against the music
+library named by `MUSIC_LIBRARY`: one in Album mode and one in Artist mode. Each
+case loads every filtered page and verifies the returned sort names.
+
 ## Album requests
 
 Ordinary album browsing requests 100 items per page. Decade browsing supplies a

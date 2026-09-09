@@ -46,9 +46,12 @@ function readConfig() {
   const username = process.env.JELLYFIN_USERNAME?.trim();
   const jellyfinPassword = process.env.JELLYFIN_PASSWORD;
   const searchCasesText = process.env.SEARCH_CASES?.trim();
-  const letterGridSearchLibrary = process.env.LETTERGRID_SEARCH_LIBRARY?.trim();
-  const letterGridCasesText = process.env.LETTERGRID_CASES?.trim();
-  const tvSeriesLibrary = process.env.TVSERIES_LIBRARY?.trim();
+  const movieLibrary = process.env.MOVIE_LIBRARY?.trim();
+  const tvLibrary = process.env.TV_LIBRARY?.trim();
+  const musicLibrary = process.env.MUSIC_LIBRARY?.trim();
+  const letterGridMovieCasesText = process.env.LETTERGRID_MOVIE_CASES?.trim();
+  const letterGridTvCasesText = process.env.LETTERGRID_TV_CASES?.trim();
+  const letterGridMusicCasesText = process.env.LETTERGRID_MUSIC_CASES?.trim();
   const tvSeriesSmokeTestText = process.env.TVSERIES_SMOKE_TEST?.trim();
   const deepLinkCasesText = process.env.DEEP_LINK_CASES?.trim();
   if (!host || !password) {
@@ -57,11 +60,8 @@ function readConfig() {
   if (!server || !username || !jellyfinPassword) {
     throw new Error('tests/automation/.env.automation must define JELLYFIN_SERVER_URL, JELLYFIN_USERNAME, and JELLYFIN_PASSWORD.');
   }
-  if (!letterGridSearchLibrary) {
-    throw new Error('tests/automation/.env.automation must define LETTERGRID_SEARCH_LIBRARY.');
-  }
-  if (!tvSeriesLibrary) {
-    throw new Error('tests/automation/.env.automation must define TVSERIES_LIBRARY.');
+  if (!movieLibrary || !tvLibrary || !musicLibrary) {
+    throw new Error('tests/automation/.env.automation must define MOVIE_LIBRARY, TV_LIBRARY, and MUSIC_LIBRARY.');
   }
 
   let deepLinkCases;
@@ -77,20 +77,38 @@ function readConfig() {
     deepLinkCases[key] = deepLinkCases[key].trim();
   }
 
-  let letterGridCases;
-  try {
-    letterGridCases = JSON.parse(letterGridCasesText ?? '');
-  } catch {
-    throw new Error('LETTERGRID_CASES must be a valid JSON array.');
-  }
-  if (
-    !Array.isArray(letterGridCases)
-    || letterGridCases.length === 0
-    || letterGridCases.some(letter => typeof letter !== 'string' || !/^[A-Z]$/i.test(letter.trim()))
-  ) {
-    throw new Error('LETTERGRID_CASES must contain at least one single letter.');
-  }
-  letterGridCases = letterGridCases.map(letter => letter.trim().toUpperCase());
+  const parseLetterGridCases = (name, text, supportedBrowseModes) => {
+    let cases;
+    try {
+      cases = JSON.parse(text ?? '');
+    } catch {
+      throw new Error(`${name} must be a valid JSON array.`);
+    }
+    if (!Array.isArray(cases) || cases.length !== 2) {
+      throw new Error(`${name} must contain exactly two cases.`);
+    }
+    const normalized = cases.map(testCase => ({
+      browseMode: typeof testCase?.browseMode === 'string' ? testCase.browseMode.trim() : '',
+      letter: typeof testCase?.letter === 'string' ? testCase.letter.trim().toUpperCase() : ''
+    }));
+    if (normalized.some(testCase => !supportedBrowseModes.includes(testCase.browseMode))) {
+      throw new Error(`${name} contains an unsupported browseMode.`);
+    }
+    if (normalized.some(testCase => !/^[A-Z]$/.test(testCase.letter))) {
+      throw new Error(`${name} letters must be single letters from A through Z.`);
+    }
+    if (new Set(normalized.map(testCase => testCase.letter)).size !== normalized.length) {
+      throw new Error(`${name} letters must be distinct.`);
+    }
+    return normalized;
+  };
+  const letterGridMovieCases = parseLetterGridCases('LETTERGRID_MOVIE_CASES', letterGridMovieCasesText, ['Title']);
+  const letterGridTvCases = parseLetterGridCases('LETTERGRID_TV_CASES', letterGridTvCasesText, ['Title']);
+  const letterGridMusicCases = parseLetterGridCases(
+    'LETTERGRID_MUSIC_CASES',
+    letterGridMusicCasesText,
+    ['Album', 'Artist']
+  );
 
   let tvSeriesSmokeTest;
   try {
@@ -218,12 +236,15 @@ function readConfig() {
   return {
     config,
     deepLinkCases,
-    letterGridCases,
-    letterGridSearchLibrary,
+    letterGridMovieCases,
+    letterGridMusicCases,
+    letterGridTvCases,
+    movieLibrary,
+    musicLibrary,
     searchCases,
     selectedDevice,
     testAccount: { server, username, password: jellyfinPassword },
-    tvSeriesLibrary,
+    tvLibrary,
     tvSeriesSmokeTest
   };
 }
@@ -269,12 +290,15 @@ try {
   const {
     config,
     deepLinkCases,
-    letterGridCases,
-    letterGridSearchLibrary,
+    letterGridMovieCases,
+    letterGridMusicCases,
+    letterGridTvCases,
+    movieLibrary,
+    musicLibrary,
     searchCases,
     selectedDevice,
     testAccount,
-    tvSeriesLibrary,
+    tvLibrary,
     tvSeriesSmokeTest
   } = readConfig();
   const deviceClient = new EcpClient(selectedDevice.host, {
@@ -327,10 +351,13 @@ try {
         ...process.env,
         STARFIN_AUTOMATION_CONFIG: JSON.stringify(config),
         STARFIN_AUTOMATION_ACCOUNT: JSON.stringify(testAccount),
-        STARFIN_AUTOMATION_LETTERGRID_CASES: JSON.stringify(letterGridCases),
-        STARFIN_AUTOMATION_LETTERGRID_SEARCH_LIBRARY: letterGridSearchLibrary,
+        STARFIN_AUTOMATION_LETTERGRID_MOVIE_CASES: JSON.stringify(letterGridMovieCases),
+        STARFIN_AUTOMATION_LETTERGRID_MUSIC_CASES: JSON.stringify(letterGridMusicCases),
+        STARFIN_AUTOMATION_LETTERGRID_TV_CASES: JSON.stringify(letterGridTvCases),
+        STARFIN_AUTOMATION_MOVIE_LIBRARY: movieLibrary,
+        STARFIN_AUTOMATION_MUSIC_LIBRARY: musicLibrary,
         STARFIN_AUTOMATION_SEARCH_CASES: JSON.stringify(searchCases),
-        STARFIN_AUTOMATION_TVSERIES_LIBRARY: tvSeriesLibrary,
+        STARFIN_AUTOMATION_TV_LIBRARY: tvLibrary,
         STARFIN_AUTOMATION_TVSERIES_SMOKE_TEST: JSON.stringify(tvSeriesSmokeTest),
         STARFIN_AUTOMATION_DEEP_LINK_CASES: JSON.stringify(deepLinkCases),
         STARFIN_AUTOMATION_RESULTS: resultsDir,

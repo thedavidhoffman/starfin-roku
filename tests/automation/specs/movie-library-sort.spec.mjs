@@ -35,12 +35,12 @@ async function findConfiguredMovieLibrary(environment) {
           keyPath: `#shelvesGroup.${shelfIndex}.rowContent.${itemIndex}.raw`
         });
         const item = itemResponse.value;
-        if (item?.Name === environment.letterGridSearchLibrary) return { item, shelfIndex };
+        if (item?.Name === environment.movieLibrary) return { item, shelfIndex };
       }
     }
 
     return false;
-  }, `the ${environment.letterGridSearchLibrary} library in My Media`, 45000);
+  }, `the ${environment.movieLibrary} library in My Media`, 45000);
 }
 
 async function openConfiguredMovieLibrary(environment) {
@@ -65,7 +65,7 @@ async function openConfiguredMovieLibrary(environment) {
       && values.results.pageVisible?.value === true
       && values.results.responseOk?.value === true
       && ['done', 'stop'].includes(String(values.results.taskState?.value ?? '').toLowerCase());
-  }, `the ${environment.letterGridSearchLibrary} movie library to load`, 120000);
+  }, `the ${environment.movieLibrary} movie library to load`, 120000);
 }
 
 async function selectBrowseOption(environment, sortCase) {

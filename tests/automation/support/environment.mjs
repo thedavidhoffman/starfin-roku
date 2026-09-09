@@ -19,9 +19,12 @@ export async function getAutomationEnvironment() {
   const config = JSON.parse(configText);
   const testAccount = JSON.parse(process.env.STARFIN_AUTOMATION_ACCOUNT ?? '{}');
   const searchCases = JSON.parse(process.env.STARFIN_AUTOMATION_SEARCH_CASES ?? '[]');
-  const letterGridCases = JSON.parse(process.env.STARFIN_AUTOMATION_LETTERGRID_CASES ?? '[]');
-  const letterGridSearchLibrary = process.env.STARFIN_AUTOMATION_LETTERGRID_SEARCH_LIBRARY ?? '';
-  const tvSeriesLibrary = process.env.STARFIN_AUTOMATION_TVSERIES_LIBRARY ?? '';
+  const letterGridMovieCases = JSON.parse(process.env.STARFIN_AUTOMATION_LETTERGRID_MOVIE_CASES ?? '[]');
+  const letterGridMusicCases = JSON.parse(process.env.STARFIN_AUTOMATION_LETTERGRID_MUSIC_CASES ?? '[]');
+  const letterGridTvCases = JSON.parse(process.env.STARFIN_AUTOMATION_LETTERGRID_TV_CASES ?? '[]');
+  const movieLibrary = process.env.STARFIN_AUTOMATION_MOVIE_LIBRARY ?? '';
+  const musicLibrary = process.env.STARFIN_AUTOMATION_MUSIC_LIBRARY ?? '';
+  const tvLibrary = process.env.STARFIN_AUTOMATION_TV_LIBRARY ?? '';
   const tvSeriesSmokeTest = JSON.parse(process.env.STARFIN_AUTOMATION_TVSERIES_SMOKE_TEST ?? '{}');
   const deepLinkCases = JSON.parse(process.env.STARFIN_AUTOMATION_DEEP_LINK_CASES ?? '{}');
   if (!testAccount.server || !testAccount.username || !testAccount.password) {
@@ -43,15 +46,18 @@ export async function getAutomationEnvironment() {
     deepLinkCases,
     device,
     ecp,
-    letterGridCases,
-    letterGridSearchLibrary,
+    letterGridMovieCases,
+    letterGridMusicCases,
+    letterGridTvCases,
+    movieLibrary,
+    musicLibrary,
     odc,
     resultsDir,
     screenshotClient,
     searchCases,
     selectedDevice,
     testAccount,
-    tvSeriesLibrary,
+    tvLibrary,
     tvSeriesSmokeTest,
     version
   };

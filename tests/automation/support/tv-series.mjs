@@ -28,7 +28,7 @@ async function findConfiguredTVLibrary(environment) {
         });
         const item = itemResponse.value;
         if (
-          item?.Name === environment.tvSeriesLibrary
+          item?.Name === environment.tvLibrary
           && String(item.CollectionType ?? '').toLowerCase() === 'tvshows'
         ) {
           return { item, shelfIndex };
@@ -37,7 +37,7 @@ async function findConfiguredTVLibrary(environment) {
     }
 
     return false;
-  }, `the ${environment.tvSeriesLibrary} TV library in My Media`, 45000);
+  }, `the ${environment.tvLibrary} TV library in My Media`, 45000);
 }
 
 async function openConfiguredTVLibrary(environment) {
@@ -64,7 +64,7 @@ async function openConfiguredTVLibrary(environment) {
       && String(values.results.collectionType?.value ?? '').toLowerCase() === 'tvshows'
       && values.results.responseOk?.value === true
       && ['done', 'stop'].includes(String(values.results.taskState?.value ?? '').toLowerCase());
-  }, `the ${environment.tvSeriesLibrary} TV library to load`, 120000);
+  }, `the ${environment.tvLibrary} TV library to load`, 120000);
 }
 
 async function findSeries(environment) {
