@@ -46,3 +46,7 @@ and glass assets by `scripts/generate-account-badge-assets.ps1`.
 
 The final geometry, circular crop, image sharpness, overlay composition, and top
 margin have been visually confirmed on both 1280x720 and 1920x1080 displays.
+
+Device automation changes the General setting through the production Settings
+dialog, closes it, and verifies and captures the badge first visible and then
+hidden on the authenticated application header.

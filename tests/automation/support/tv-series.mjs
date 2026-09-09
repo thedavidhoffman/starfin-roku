@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { captureEvidence } from './evidence.mjs';
 import { getAutomationEnvironment } from './environment.mjs';
 import { waitFor } from './lifecycle.mjs';
 
@@ -253,7 +252,7 @@ function assertExpectedEpisodes(cards, expectedEpisodes) {
   }
 }
 
-async function selectConfiguredEpisode(context, environment) {
+async function selectConfiguredEpisode(environment) {
   const expected = environment.tvSeriesSmokeTest.testEpisode;
   assert.equal(expected.season, 1, 'The current TV-series fixture provides episode data for Season 1.');
 
@@ -295,8 +294,6 @@ async function selectConfiguredEpisode(context, environment) {
       value: itemIndex
     });
   }
-  await captureEvidence(context, 'tv-series-library-test-episode-focused');
-
   await environment.odc.setValue({
     base: 'scene',
     keyPath: isHorizontal ? '#episodesList.rowItemSelected' : '#episodesGrid.itemSelected',
@@ -429,7 +426,7 @@ async function isPlayerAttached(environment) {
   return response.found && response.value > 0;
 }
 
-async function stopPlayback(context, environment, episode, options = {}) {
+async function stopPlayback(environment, episode, options = {}) {
   await requestPlayerClose(environment);
   const restoredState = await waitFor(async () => {
     const values = await environment.odc.getValues({
@@ -468,7 +465,6 @@ async function stopPlayback(context, environment, episode, options = {}) {
   }
   assert.equal(restoredState.statusVisible, false, `No application error should be visible after playback: ${restoredState.statusText}`);
   assert.equal(restoredState.statusText, '', 'No application error text should remain after playback.');
-  await captureEvidence(context, 'tv-series-library-episode-playback-stopped');
 }
 
 async function stopPlaybackForCleanup(environment) {

@@ -71,6 +71,14 @@ async function assertPersistedLayout(environment, accountKey, expectedValue) {
 }
 
 describe('Starfin library settings persistence', function () {
+  after(async function () {
+    const defaultLayout = layouts.find(layout => layout.presentation === 'poster' && layout.columns === 6);
+    const { environment } = await openSettings(categories.libraries);
+
+    await selectLayoutForEveryLibrary(environment, defaultLayout);
+    await closeAndSaveSettings(environment);
+  });
+
   for (const layout of layouts) {
     const expectedValue = `${layout.presentation};${layout.columns}`;
 

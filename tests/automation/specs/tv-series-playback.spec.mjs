@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { ensureAuthenticated } from '../support/authentication.mjs';
-import { addEvidenceMetadata, captureEvidence } from '../support/evidence.mjs';
+import { addEvidenceMetadata } from '../support/evidence.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 import {
   findSeries,
@@ -18,19 +18,15 @@ import {
   verifyPlaybackCheckpoints
 } from '../support/tv-series.mjs';
 
-async function openConfiguredEpisode(context, environment) {
+async function openConfiguredEpisode(environment) {
   await openConfiguredTVLibrary(environment);
   const { item, itemIndex } = await findSeries(environment);
   await openSeries(environment, itemIndex, item);
-  await captureEvidence(context, 'tv-series-playback-series-page');
 
   const seasonCards = await readSeasonCards(environment);
   await openSeasonOne(environment, seasonCards);
-  await captureEvidence(context, 'tv-series-playback-season-1-page');
 
-  const episode = await selectConfiguredEpisode(context, environment);
-  await captureEvidence(context, 'tv-series-playback-episode-detail');
-  return episode;
+  return selectConfiguredEpisode(environment);
 }
 
 async function runWithPlaybackCleanup(environment, operation) {
@@ -94,21 +90,21 @@ describe('Starfin TV episode playback', function () {
 
   it('plays the configured episode through the 20-second checkpoint', async function () {
     const environment = await ensureAuthenticated();
-    const episode = await openConfiguredEpisode(this, environment);
+    const episode = await openConfiguredEpisode(environment);
 
     await runWithPlaybackCleanup(environment, async markStopped => {
       const initialSnapshot = await startEpisodePlayback(environment, episode);
       const checkpoints = await verifyPlaybackCheckpoints(environment, initialSnapshot);
       addEvidenceMetadata(this, { playback: { initial: initialSnapshot, checkpoints } });
 
-      await stopPlayback(this, environment, episode);
+      await stopPlayback(environment, episode);
       markStopped();
     });
   });
 
   it('pauses and resumes the configured episode', async function () {
     const environment = await ensureAuthenticated();
-    const episode = await openConfiguredEpisode(this, environment);
+    const episode = await openConfiguredEpisode(environment);
 
     await runWithPlaybackCleanup(environment, async markStopped => {
       const started = await startEpisodePlayback(environment, episode);
@@ -135,14 +131,14 @@ describe('Starfin TV episode playback', function () {
       }, 'resumed playback position to advance', 15000);
       addEvidenceMetadata(this, { pauseResume: { paused, stillPaused, resumed, advanced } });
 
-      await stopPlayback(this, environment, episode);
+      await stopPlayback(environment, episode);
       markStopped();
     });
   });
 
   it('plays the next episode and returns to the previous episode', async function () {
     const environment = await ensureAuthenticated();
-    const episode = await openConfiguredEpisode(this, environment);
+    const episode = await openConfiguredEpisode(environment);
     const expected = environment.tvSeriesSmokeTest.testEpisode;
 
     await runWithPlaybackCleanup(environment, async markStopped => {
@@ -178,7 +174,7 @@ describe('Starfin TV episode playback', function () {
       assert.equal(previousEpisode.itemId, episode.Id, 'Previous should return to the originally configured episode.');
       addEvidenceMetadata(this, { episodeNavigation: { nextEpisode, previousEpisode } });
 
-      await stopPlayback(this, environment, episode, { verifyProgress: false });
+      await stopPlayback(environment, episode, { verifyProgress: false });
       markStopped();
     });
   });

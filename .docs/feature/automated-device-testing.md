@@ -102,7 +102,7 @@ Date order. Release Date assertions fall back from `PremiereDate` to
 `ProductionYear` and use `SortName` in the requested direction to resolve equal
 dates.
 
-The TV-series smoke test selects the `TVSERIES_LIBRARY` library from Home's My
+The TV-series smoke test selects the `TV_LIBRARY` library from Home's My
 Media row, finds the first series whose title starts with the configured
 `TVSERIES_SMOKE_TEST.seriesName`, and opens its series page. It verifies that
 every configured season is represented by a rendered season card with the
@@ -116,9 +116,10 @@ The TV episode playback spec independently navigates to the configured
 5, 10, 15, and 20 seconds before confirming clean stop and restoration. Separate
 cases verify pause holds position before resume advances it, and that Next then
 Previous move from the configured episode to its adjacent successor and back.
-Navigation and restored-page screenshots remain as visual evidence; playback
-frames are not captured because Roku's hardware video plane is not reliably
-available to the screenshot API. Every playback case uses failure-safe cleanup.
+Playback screenshots are not captured because Roku's hardware video plane is
+not reliably available to the screenshot API. State checkpoints remain attached
+to the report as structured metadata, and every playback case uses failure-safe
+cleanup.
 
 Release Date browsing preserves normal server-backed pagination by requesting
 `PremiereDate,ProductionYear,SortName` from Jellyfin. The additional fields give
@@ -131,12 +132,17 @@ rows. Each layout is selected through the real matrix controls, captured as
 screenshot evidence, and saved by closing the dialog. The test then performs a
 targeted registry read of only the eight account-scoped library layout keys and
 verifies their compound values. Registry sections, tokens, and unrelated account
-values are not added to the report.
+values are not added to the report. A separate display spec changes each movie
+and TV presentation-and-column combination, closes Settings, verifies the live
+grid and card layout, and captures both the setting and rendered library. Both
+specs restore movie and TV layouts to `poster;6` before later suites run.
 
 Separate automation specs cover every selectable value in Media Shell, Playback,
 TV, Screensaver, General, Video, and Subtitles. They operate the production
 controls and dialog save lifecycle, then read only the affected account-scoped or
-global registry key. General includes the real TMDB API-key keyboard flow using a
+global registry key. A separate account-badge display spec verifies that closing
+Settings updates the authenticated header for both On and Off. General includes
+the real TMDB API-key keyboard flow using a
 synthetic value. Opening Roku's keyboard can display an OS-owned mobile-keyboard
 QR banner that outlives the dialog, so keyboard tests exit and relaunch Starfin in
 a `finally` block before later screenshots are captured. Advanced verifies that
