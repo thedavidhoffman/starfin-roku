@@ -41,6 +41,9 @@ when Roku reports `playing`; a season is ready after its episodes render and the
 requested episode is focused; Home is ready after its core refresh completes.
 Destination failures and pre-readiness user cancellation are reported to the
 controller and converge on Home, allowing a cold launch to complete normally.
+The fallback message remains visible while Home's asynchronously loaded shelves
+finish rendering. Starting a later Home refresh clears the previous message;
+individual shelf renders do not clear status owned by the fallback workflow.
 
 ## Roku performance beacons
 
