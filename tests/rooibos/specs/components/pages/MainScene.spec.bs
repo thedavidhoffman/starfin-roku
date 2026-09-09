@@ -110,6 +110,24 @@ namespace tests
 
         @describe("video library routing")
 
+        @it("logs a grouped collection opened through the shared library boundary")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+
+            'bs:disable-next-line 1140
+            videoLibraryShow({
+                libraryId: "collection-1"
+                collectionType: "collection"
+                title: "Favorites"
+                item: { Id: "collection-1", Name: "Favorites" }
+            }, true)
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Opening collection " + Chr(34) + "Favorites" + Chr(34)) > 0)
+        end function
+
         @it("uses music video items for music video libraries")
         function _()
             'bs:disable-next-line 1140
@@ -235,6 +253,21 @@ namespace tests
 
         @describe("music library routing")
 
+        @it("logs the selected music library name")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+            m.node.homePage.selectedMusicLibrary = {
+                libraryId: "music-1"
+                collectionType: "music"
+                item: { Id: "music-1", Name: "My Music", CollectionType: "music" }
+            }
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "[MainScene] Activity: Opening music library " + Chr(34) + "My Music" + Chr(34)) > 0)
+        end function
+
         @it("focuses the filter row immediately after selecting decade browse")
         function _()
             page = CreateObject("roSGNode", "MusicLibraryPageTestDouble")
@@ -264,6 +297,64 @@ namespace tests
         end function
 
         @describe("playback controller integration")
+
+        @it("logs a movie opened through the shared detail boundary")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+
+            'bs:disable-next-line 1140
+            movieShow({ itemId: "movie-1", item: { Id: "movie-1", Name: "Alien" } }, false)
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Opening movie " + Chr(34) + "Alien" + Chr(34)) > 0)
+        end function
+
+        @it("logs a TV show opened through the shared detail boundary")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+
+            'bs:disable-next-line 1140
+            tvShowShow({ itemId: "series-1", item: { Id: "series-1", Name: "The Angry Beavers" } }, false)
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Opening TV show " + Chr(34) + "The Angry Beavers" + Chr(34)) > 0)
+        end function
+
+        @it("logs a person opened through the shared detail boundary")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+
+            'bs:disable-next-line 1140
+            personShow({ itemId: "person-1", item: { Id: "person-1", Name: "Jane Actor" } })
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Opening person " + Chr(34) + "Jane Actor" + Chr(34)) > 0)
+        end function
+
+        @it("logs a season opened through the shared detail boundary")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+
+            'bs:disable-next-line 1140
+            tvSeasonShow({
+                seriesId: "series-1"
+                seasonId: "season-1"
+                series: { Id: "series-1", Name: "Series" }
+                season: { Id: "season-1", Name: "Season 1" }
+                seasons: []
+            })
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Opening season " + Chr(34) + "Series - Season 1" + Chr(34)) > 0)
+        end function
 
         @it("observes authentication failures from tasks in an opened player")
         function _()
@@ -423,6 +514,19 @@ namespace tests
 
         @describe("construction")
 
+        @it("logs opening home at the navigation boundary")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+
+            'bs:disable-next-line 1140
+            showHome()
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "[MainScene] Activity: Opening home") > 0)
+        end function
+
         @it("does not start the application during construction")
         function _()
             m.assertFalse(m.node.appLifecycle.started)
@@ -430,6 +534,21 @@ namespace tests
         end function
 
         @describe("settings propagation")
+
+        @it("logs each committed layout change")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+            savedSettings = SettingsStore.Defaults()
+            savedSettings[SettingsStore.Key.MusicVideosLayout] = "thumbnail;4"
+
+            'bs:disable-next-line 1140
+            applySettingsFromOverlay({ settingsSaved: true, savedSettings: savedSettings })
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Changed music videos layout to " + Chr(34) + "thumbnail;4" + Chr(34)) > 0)
+        end function
 
         @it("fans saved artwork settings out to active library pages")
         function _()
@@ -468,6 +587,41 @@ namespace tests
 
             m.assertInvalid(retainedVideoLibraryPage.settings)
             m.assertTrue(m.node.videoLibraryNavigation.settingsDirty)
+        end function
+
+        @describe("media action activity")
+
+        @it("logs a successful favorite action with its item title")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+            m.node.mediaActionState.activeRequest = {
+                sourcePage: ""
+                item: { Id: "movie-1", Name: "Alien" }
+            }
+            m.node.mediaActionsController.mediaStateChanged = {
+                action: "favorite"
+                value: true
+            }
+
+            'bs:disable-next-line 1140
+            navHandleMediaStateChanged()
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Added to favorites " + Chr(34) + "Alien" + Chr(34)) > 0)
+        end function
+
+        @it("logs a failed media action with its correlated item id")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MainScene", collector)
+            m.node.mediaActionState.activeRequest = { itemId: "movie-1" }
+            m.node.mediaActionsController.actionFailed = { errorMessage: "Update failed." }
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Media action failed itemId=movie-1: Update failed.") > 0)
         end function
 
         @it("applies deferred settings after restoring the retained video library")

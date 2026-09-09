@@ -845,6 +845,8 @@ namespace tests
 
         @it("commits final progress alignment after a normal first page response")
         function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("VideoLibrary", collector)
             request = m.restoreRequest("response-layout", "movies", "Movie")
             m.node.pageState.request = request
             m.node.pageState.paging.nextStartIndex = 0
@@ -872,6 +874,10 @@ namespace tests
             m.assertTrue(m.node.videoLibraryProgressIndicator.visible)
             m.assertEqual(m.node.sortButton.translation, [progressRightEdge - 48.0, 120.0])
             m.assertEqual(m.node.browseByButton.translation, [progressRightEdge - 246.0, 120.0])
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "[VideoLibrary] Activity: Viewing library") > 0)
+            m.assertTrue(Instr(1, entries[0], "; items=100") > 0)
         end function
 
         @it("commits deferred browse controls to the progress edge")
@@ -1361,6 +1367,54 @@ namespace tests
             m.assertEqual(m.node.videoLibraryTask.request.sortOrder, "Descending")
             m.assertEqual(m.node.videoLibraryTask.request.years[0], "1980")
             m.assertTrue(m.node.sortButton.sortEnabled)
+        end function
+
+        @it("logs an accepted sort-direction change exactly once")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("VideoLibrary", collector)
+            m.configurePaging(12, 12, 0)
+            m.node.pageState.request.title = "Movies"
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("PremiereDate", "PremiereDate", "Release Date", "Ascending"))
+
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Descending" })
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "[VideoLibrary] Activity: Sorting " + Chr(34) + "Movies" + Chr(34) + " by " + Chr(34) + "Release Date" + Chr(34) + " Descending") > 0)
+            m.assertEqual(m.node.videoLibraryTask.request.sortOrder, "Descending")
+        end function
+
+        @it("does not log an unchanged sort direction")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("VideoLibrary", collector)
+            m.configurePaging(12, 12, 0)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("PremiereDate", "PremiereDate", "Release Date", "Ascending"))
+
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Ascending" })
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 0)
+        end function
+
+        @it("does not log an invalid sort-direction selection")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("VideoLibrary", collector)
+            m.configurePaging(12, 12, 0)
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("PremiereDate", "PremiereDate", "Release Date", "Ascending"))
+
+            'bs:disable-next-line 1140
+            applySortOrderSelection(invalid)
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 0)
         end function
 
         @describe("browse transitions")

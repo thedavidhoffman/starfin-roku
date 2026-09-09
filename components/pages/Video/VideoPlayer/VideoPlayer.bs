@@ -1,4 +1,5 @@
 import "pkg:/source/TaskControl.bs"
+import "pkg:/source/ActivityLog.bs"
 import "pkg:/source/MediaControl.bs"
 import "pkg:/source/AnimationControl.bs"
 import "pkg:/source/Playstate.bs"
@@ -221,6 +222,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub onVideoStateChanged()
     state = VideoPlayerState.Normalize(m.videoPlayer.state)
+    previousPlaybackState = m.playbackDiagnostics.lastState
+    activityStateChanged = previousPlaybackState <> state
     diagnosePlaybackState(state)
     updateBufferingSpinner(state)
     onPlaybackRecoveryStateChanged(state)
@@ -235,6 +238,7 @@ sub onVideoStateChanged()
         if handlePlaybackRecoveryFailure("videoError", Format.SafeString(m.videoPlayer.errorStr, "")) then return
         finalizePlaybackRecoveryFailure("Unable to play this video after recovery attempts.")
     else if state = VideoPlayerState.Value.Finished then
+        if activityStateChanged then m.log.activity("Completed " + getPlaybackActivityTitle())
         stopPlaybackRecoveryTimers()
         finalizeCurrentPlaybackItem()
         if continueAfterCompletedItem() then return
@@ -243,10 +247,12 @@ sub onVideoStateChanged()
     else if state = VideoPlayerState.Value.Playing then
         m.top.ready = true
         if m.playback.hasReportedStart = true then
+            if previousPlaybackState = VideoPlayerState.Value.Paused then m.log.activity("Resumed " + getPlaybackActivityTitle())
             if tracksCurrentPlaybackProgress() then
                 reportPlaystateUpdate()
             end if
         else
+            m.log.activity("Playing " + getPlaybackActivityTitle() + " using " + Format.SafeString(m.activePlayback.playMethod, "playback"))
             reportPlaystateStart()
         end if
         if tracksCurrentPlaybackProgress() then
@@ -255,10 +261,12 @@ sub onVideoStateChanged()
             m.playstateTimer.control = TimerControl.Command.Stop
         end if
     else if state = VideoPlayerState.Value.Paused then
+        if activityStateChanged then m.log.activity("Paused " + getPlaybackActivityTitle())
         m.playstateTimer.control = TimerControl.Command.Stop
         reportPlaystateUpdate()
     else if state = VideoPlayerState.Value.Stopped then
         if isPlaybackRecoveryRestarting() then return
+        if activityStateChanged and m.playback.hasReportedStart = true then m.log.activity("Stopped " + getPlaybackActivityTitle())
         emitPlaybackProgress(false)
         reportPlaystateStop()
     end if
@@ -544,6 +552,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         end if
 
+        if m.playback.hasReportedStart = true then m.log.activity("Stopped " + getPlaybackActivityTitle())
         emitPlaybackProgress(false)
         stopPlayback()
         m.top.closeRequested = true

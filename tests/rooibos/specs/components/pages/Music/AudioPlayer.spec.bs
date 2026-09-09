@@ -45,6 +45,36 @@ namespace tests
             m.assertTrue(m.node.player.disableScreenSaver)
         end function
 
+        @it("logs pause and resume once per playback state transition")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("AudioPlayer", collector)
+            m.configurePlayer("playing", "none")
+            m.node.playerState.tracks = [{ Id: "track-1", Name: "Track One" }]
+            m.node.playerState.currentIndex = 0
+
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+            m.node.player.state = "paused"
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+            m.node.player.state = "playing"
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+
+            entries = collector.callFunc("getSnapshot")
+            activityEntries = []
+            for each entry in entries
+                if Instr(1, entry, "Activity:") > 0 then activityEntries.Push(entry)
+            end for
+            m.assertEqual(activityEntries.Count(), 3)
+            m.assertTrue(Instr(1, activityEntries[0], "Playing track " + Chr(34) + "Track One" + Chr(34)) > 0)
+            m.assertTrue(Instr(1, activityEntries[1], "Paused track " + Chr(34) + "Track One" + Chr(34)) > 0)
+            m.assertTrue(Instr(1, activityEntries[2], "Resumed track " + Chr(34) + "Track One" + Chr(34)) > 0)
+        end function
+
         @it("preserves an active screensaver through a successful track transition")
         function _()
             m.configurePlayer("finished", "bounce")

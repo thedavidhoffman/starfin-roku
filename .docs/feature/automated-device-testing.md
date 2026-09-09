@@ -146,7 +146,10 @@ authentication; automation does not confirm the destructive erase action.
 After any settings spec runs, suite teardown restores all eighteen settings to
 their canonical defaults and verifies the account and global registry values.
 This cleanup preserves authentication, saved accounts, and unrelated registry
-data.
+data. Teardown first relaunches Starfin to an authenticated Home surface so a
+final playback or deep-link case cannot block restoration. It then exits the
+development channel through Roku Home even when restoration fails, preventing
+automated playback from remaining active after the suite.
 
 ## Evidence reports
 

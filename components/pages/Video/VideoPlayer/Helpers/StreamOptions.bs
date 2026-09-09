@@ -174,8 +174,11 @@ sub onVideoModeApplyTimerFire()
     if restartRequest = invalid then return
 
     restartRequest = PlaybackRequest.WithChanges(restartRequest, { videoMode: videoMode })
-    m.log.write("Restarting playback with video mode=" + videoMode)
-    m.top.playRequest = restartRequest
+    dispatchStreamRestart(
+        restartRequest,
+        "Restarting playback with video mode=" + videoMode,
+        "Selected video mode " + ActivityLog.Quote(videoMode, "Automatic")
+    )
 end sub
 
 '-------------------------------------------------------------------------------
@@ -198,13 +201,19 @@ sub applySubtitleSelection(selection as dynamic)
     if streamIndex = m.streamOptions.selectedSubtitleStreamIndex then return
 
     previousDeliveryMethod = m.streamOptions.activeSubtitleDeliveryMethod
+    previousStreamIndex = m.streamOptions.selectedSubtitleStreamIndex
     m.streamOptions.selectedSubtitleStreamIndex = streamIndex
     updatedRequest = PlaybackRequest.WithChanges(getAcceptedOrPendingPlaybackRequest(), { subtitleStreamIndex: streamIndex })
     if streamIndex = SubtitleSelection.None then
+        streamTitle = Format.SafeString(selection.label, "Off")
+        if commitLocalSubtitleSelection(updatedRequest, streamIndex, streamTitle) <> true then
+            m.streamOptions.selectedSubtitleStreamIndex = previousStreamIndex
+            return
+        end if
         setSubtitleCaptionMode("Off")
         m.videoPlayer.subtitleTrack = ""
         m.streamOptions.activeSubtitleDeliveryMethod = "none"
-        commitLocalSubtitleSelection(updatedRequest, streamIndex, Format.SafeString(selection.label, "Off"))
+        m.log.activity("Selected subtitles " + ActivityLog.Quote(streamTitle, "Off"))
         return
     end if
     externalTrack = SubtitlePlayback.FindExternalTrack(m.streamOptions.externalSubtitleTracks, streamIndex)
@@ -213,28 +222,37 @@ sub applySubtitleSelection(selection as dynamic)
     if SubtitlePlayback.RequiresRestart(previousDeliveryMethod, targetDeliveryMethod) <> true and externalTrack <> invalid then
         trackName = SubtitlePlayback.FindAvailableTrackName(m.videoPlayer.availableSubtitleTracks, externalTrack.deliveryUrl)
         if trackName <> "" then
+            streamTitle = Format.SafeString(selection.label, "")
+            if commitLocalSubtitleSelection(updatedRequest, streamIndex, streamTitle) <> true then
+                m.streamOptions.selectedSubtitleStreamIndex = previousStreamIndex
+                return
+            end if
             setSubtitleCaptionMode("On")
             m.videoPlayer.subtitleTrack = trackName
             m.streamOptions.activeSubtitleDeliveryMethod = "external"
-            commitLocalSubtitleSelection(updatedRequest, streamIndex, Format.SafeString(selection.label, ""))
+            m.log.activity("Selected subtitles " + ActivityLog.Quote(streamTitle, "Off"))
             return
         end if
     end if
-    restartPlaybackWithStreamOptions()
+    activityMessage = "Selected subtitles " + ActivityLog.Quote(selection.label, "subtitle track")
+    if restartPlaybackWithStreamOptions(activityMessage) <> true then m.streamOptions.selectedSubtitleStreamIndex = previousStreamIndex
 end sub
 
 '-------------------------------------------------------------------------------
 ' commitLocalSubtitleSelection
 '-------------------------------------------------------------------------------
-sub commitLocalSubtitleSelection(request as object, streamIndex as integer, streamTitle as string)
-    if m.activePlayback = invalid then return
+function commitLocalSubtitleSelection(request as dynamic, streamIndex as integer, streamTitle as string) as boolean
+    if m.activePlayback = invalid or request = invalid then return false
 
     acceptedRequest = PlaybackRequest.Create(request)
+    if acceptedRequest = invalid then return false
+
     m.activePlayback.request = acceptedRequest
     m.activePlayback.subtitleStreamIndex = streamIndex
     m.activePlayback.subtitleStreamTitle = streamTitle
     m.pendingPlaybackRequest = acceptedRequest
-end sub
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' applyAudioSelection
@@ -245,8 +263,10 @@ sub applyAudioSelection(selection as dynamic)
     streamIndex = Number.ToInteger(selection.streamIndex, -1)
     if streamIndex = m.streamOptions.selectedAudioStreamIndex then return
 
+    previousStreamIndex = m.streamOptions.selectedAudioStreamIndex
     m.streamOptions.selectedAudioStreamIndex = streamIndex
-    restartPlaybackWithStreamOptions()
+    activityMessage = "Selected audio " + ActivityLog.Quote(selection.label, "audio track")
+    if restartPlaybackWithStreamOptions(activityMessage) <> true then m.streamOptions.selectedAudioStreamIndex = previousStreamIndex
 end sub
 
 '-------------------------------------------------------------------------------
@@ -277,18 +297,31 @@ sub applyChapterSelection(selection as dynamic)
     m.playbackControls.thumbnailData = {}
     m.playbackControls.position = targetPosition
     m.playbackControls.previewPosition = targetPosition
+    m.log.activity("Selected chapter " + ActivityLog.Quote(selection.label, "chapter"))
 end sub
 
 '-------------------------------------------------------------------------------
 ' restartPlaybackWithStreamOptions
 '-------------------------------------------------------------------------------
-sub restartPlaybackWithStreamOptions()
+function restartPlaybackWithStreamOptions(activityMessage as string) as boolean
     request = buildStreamRestartPlayRequest()
-    if request = invalid then return
+    if request = invalid then return false
 
-    m.log.write("Restarting playback with stream options audioStreamIndex=" + Format.SafeString(request.audioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(request.subtitleStreamIndex, ""))
+    diagnosticMessage = "Restarting playback with stream options audioStreamIndex=" + Format.SafeString(request.audioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(request.subtitleStreamIndex, "")
+    return dispatchStreamRestart(request, diagnosticMessage, activityMessage)
+end function
+
+'-------------------------------------------------------------------------------
+' dispatchStreamRestart
+'-------------------------------------------------------------------------------
+function dispatchStreamRestart(request as dynamic, diagnosticMessage as string, activityMessage as string) as boolean
+    if request = invalid then return false
+
+    m.log.write(diagnosticMessage)
+    m.log.activity(activityMessage)
     m.top.playRequest = request
-end sub
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' buildStreamRestartPlayRequest

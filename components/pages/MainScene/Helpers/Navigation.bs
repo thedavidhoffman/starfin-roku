@@ -170,6 +170,7 @@ sub navHandleMediaActionsOverlayClosed(closed as object)
         token: request.token
         userId: request.userId
         sourcePage: request.sourcePage
+        item: selection.item
     }
     m.mediaActionState.activeRequest = actionRequest
     m.mediaActionsController.actionRequest = actionRequest
@@ -254,6 +255,12 @@ sub navHandleMediaStateChanged()
     if change = invalid or request = invalid then return
 
     routeMediaStateChange(Format.SafeString(request.sourcePage, ""), change)
+    activityAction = "Updated"
+    if change.action = "watched" and change.value = true then activityAction = "Marked as watched"
+    if change.action = "watched" and change.value <> true then activityAction = "Marked as unwatched"
+    if change.action = "favorite" and change.value = true then activityAction = "Added to favorites"
+    if change.action = "favorite" and change.value <> true then activityAction = "Removed from favorites"
+    m.log.activity(activityAction + " " + ActivityLog.ItemTitle(request.item, "item"))
     AppStatus.ClearMessage()
 end sub
 
@@ -262,10 +269,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub navHandleMediaActionFailed()
     failure = m.mediaActionsController.actionFailed
+    request = m.mediaActionState.activeRequest
     m.mediaActionState.activeRequest = invalid
     if failure = invalid then return
 
-    AppStatus.SetMessage(Format.SafeString(failure.errorMessage, "Unable to update media state."))
+    message = Format.SafeString(failure.errorMessage, "Unable to update media state.")
+    AppStatus.SetMessage(message)
+    itemId = Format.SafeString(failure.itemId, "")
+    if itemId = "" and request <> invalid then itemId = Format.SafeString(request.itemId, "")
+    m.log.activity("Media action failed itemId=" + itemId + ": " + message)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -354,6 +366,7 @@ end sub
 ' showHome
 '-------------------------------------------------------------------------------
 sub showHome(refresh = false as boolean)
+    m.log.activity("Opening home")
     m.homePage.visible = true
     m.header.visible = true
 
@@ -434,9 +447,31 @@ sub applySettingsFromOverlay(overlay as dynamic)
     if overlay.settingsSaved <> true then return
     if overlay.savedSettings = invalid then return
 
+    logCommittedLayoutChanges(m.settings, overlay.savedSettings)
     m.settings = overlay.savedSettings
     if themeAudioIsEnabled() <> true then themeAudioStop()
     fanOutSettings()
+end sub
+
+'-------------------------------------------------------------------------------
+' logCommittedLayoutChanges
+'-------------------------------------------------------------------------------
+sub logCommittedLayoutChanges(previousSettings as dynamic, savedSettings as object)
+    layouts = [
+        { key: SettingsStore.Key.TvLibraryLayout, label: "TV library" }
+        { key: SettingsStore.Key.MovieLibraryLayout, label: "movie library" }
+        { key: SettingsStore.Key.CollectionCardsLayout, label: "collection cards" }
+        { key: SettingsStore.Key.CollectionItemsLayout, label: "collection items" }
+        { key: SettingsStore.Key.PlaylistCardsLayout, label: "playlist cards" }
+        { key: SettingsStore.Key.PlaylistItemsLayout, label: "playlist items" }
+        { key: SettingsStore.Key.MusicVideosLayout, label: "music videos" }
+        { key: SettingsStore.Key.HomeVideosLayout, label: "home videos" }
+    ]
+    for each layout in layouts
+        oldValue = SettingsStore.GetSettingValue(previousSettings, layout.key)
+        newValue = SettingsStore.GetSettingValue(savedSettings, layout.key)
+        if oldValue <> newValue then m.log.activity("Changed " + layout.label + " layout to " + ActivityLog.Quote(newValue, "default"))
+    end for
 end sub
 
 '-------------------------------------------------------------------------------

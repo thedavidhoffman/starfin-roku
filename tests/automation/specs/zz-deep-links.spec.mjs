@@ -4,15 +4,7 @@
 // and authentication state unsuitable for the ordinary smoke tests that follow.
 import assert from 'node:assert/strict';
 import { ensureAuthenticated, relaunchAuthenticatedStarfin } from '../support/authentication.mjs';
-import { clearStarfinRegistry, waitFor, waitForMainScene } from '../support/lifecycle.mjs';
-
-async function exitStarfin(environment) {
-  await environment.ecp.sendKeypress(environment.ecp.Key.Home);
-  await waitFor(async () => {
-    const response = await environment.ecp.getActiveApp();
-    return response.app?.id !== 'dev';
-  }, 'Starfin to exit before a deep-link launch');
-}
+import { clearStarfinRegistry, exitStarfin, waitFor, waitForMainScene } from '../support/lifecycle.mjs';
 
 async function sendColdDeepLink(environment, contentId, mediaType) {
   await exitStarfin(environment);

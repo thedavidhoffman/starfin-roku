@@ -7,6 +7,7 @@ individual Starfin features.
 ## Table of Contents
 
 - [Account Badge](account-badge.md)
+- [Activity Logging](activity-logging.md)
 - [Audio Playback](audio-playback.md)
 - [Automated Device Testing](automated-device-testing.md)
 - [Deep Links and Roku Performance Beacons](deep-links.md)

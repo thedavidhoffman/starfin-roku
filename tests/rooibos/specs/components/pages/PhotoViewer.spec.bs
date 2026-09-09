@@ -8,7 +8,7 @@ namespace tests
             m.node.viewerState.request = { server: "http://server", token: "token" }
             m.node.viewerState.items = [
                 { Id: "photo-0", Type: "Photo", ImageTags: { Primary: "tag-0" } }
-                { Id: "photo-1", Type: "Photo", ImageTags: { Primary: "tag-1" } }
+                { Id: "photo-1", Name: "Beach", Type: "Photo", ImageTags: { Primary: "tag-1" } }
                 { Id: "photo-2", Type: "Photo", ImageTags: { Primary: "tag-2" } }
                 { Id: "photo-3", Type: "Photo", ImageTags: { Primary: "tag-3" } }
             ]
@@ -201,6 +201,22 @@ namespace tests
             m.assertEqual(m.node.viewerState.displayedIndex, 1)
             m.assertEqual(m.node.viewerState.pendingIndex, -1)
             m.assertTrue(target.poster.visible)
+        end function
+
+        @it("logs a photo only when it becomes the displayed image")
+        function _()
+            target = m.assignReadySlot(1)
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("PhotoViewer", collector)
+
+            'bs:disable-next-line 1140
+            commitPhotoSlot(target)
+            'bs:disable-next-line 1140
+            commitPhotoSlot(target)
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[entries.Count() - 1], "[PhotoViewer] Activity: Viewing photo " + Chr(34) + "Beach" + Chr(34) + "; image 2 of 4") > 0)
         end function
 
         @it("honors the newest target during rapid navigation")

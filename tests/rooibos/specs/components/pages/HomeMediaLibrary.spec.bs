@@ -122,6 +122,8 @@ namespace tests
             'bs:disable-next-line 1140
             level = getCurrentLevel()
             level.items = [item]
+            m.node.libraryTask.request = { queryId: -999 }
+            m.node.libraryTask.control = "stop"
             m.node.itemsGrid.content = m.buildContent([item])
             m.node.itemsGrid.itemSelected = 0
 
@@ -129,6 +131,61 @@ namespace tests
             'bs:disable-next-line 1140
             current = getCurrentLevel()
             m.assertEqual(current.folderId, "folder")
+        end function
+
+        @it("logs a folder opening before its load completes")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("HomeMediaLibrary", collector)
+            item = { Id: "folder", Type: "Folder", Name: "Vacation", ImageTags: {} }
+            'bs:disable-next-line 1140
+            level = getCurrentLevel()
+            level.items = [item]
+            m.node.itemsGrid.content = m.buildContent([item])
+
+            m.node.itemsGrid.itemSelected = 0
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "[HomeMediaLibrary] Activity: Opening folder " + Chr(34) + "Vacation" + Chr(34)) > 0)
+        end function
+
+        @it("does not log a folder opening for an invalid grid selection")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("HomeMediaLibrary", collector)
+            m.node.itemsGrid.content = m.buildContent([])
+
+            'bs:disable-next-line 1140
+            onItemSelected()
+
+            m.assertEqual(collector.callFunc("getSnapshot").Count(), 0)
+        end function
+
+        @it("rejects a selected folder without an ID before navigation or loading")
+        function _()
+            item = { Id: "", Type: "Folder", Name: "Broken Folder", ImageTags: {} }
+            m.node.itemsGrid.content = m.buildContent([item])
+            m.node.itemsGrid.itemSelected = 0
+            selection = LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title")
+            'bs:disable-next-line 1140
+            level = createLevel("root", "Photos", selection)
+            level.items = [item]
+            level.focusedIndex = 4
+            m.node.state.stack = [level]
+            m.node.state.activeRequest = invalid
+            queryId = m.node.state.queryId
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("HomeMediaLibrary", collector)
+
+            'bs:disable-next-line 1140
+            onItemSelected()
+
+            m.assertEqual(m.node.state.stack.Count(), 1)
+            m.assertEqual(level.focusedIndex, 4)
+            m.assertInvalid(m.node.state.activeRequest)
+            m.assertEqual(m.node.state.queryId, queryId)
+            m.assertEqual(collector.callFunc("getSnapshot").Count(), 0)
         end function
 
         @it("emits the photo-only sequence and selected index")

@@ -195,6 +195,8 @@ namespace tests
 
         @it("ignores grid selection without a page request")
         function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("Collections", collector)
             m.setPosterSettings()
             m.node.pageState.request = invalid
             m.top.selectedCollection = invalid
@@ -204,6 +206,33 @@ namespace tests
             m.top.findNode("collectionsGrid").itemSelected = 0
 
             m.assertInvalid(m.top.selectedCollection)
+            m.assertEqual(collector.callFunc("getSnapshot").Count(), 0)
+        end function
+
+        @it("logs a nested collection opening before its load completes")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("Collections", collector)
+            m.node.pageState.request = { server: "http://server", token: "token", userId: "user" }
+            scene = m.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                spinnerNode = CreateObject("roSGNode", "Spinner")
+                spinnerNode.id = "loadingSpinner"
+                scene.appendChild(spinnerNode)
+            end if
+            if scene.findNode("statusLabel") = invalid then
+                status = CreateObject("roSGNode", "StatusLabel")
+                status.id = "statusLabel"
+                scene.appendChild(status)
+            end if
+            item = m.createCollection("collection-1", "Favorites")
+
+            'bs:disable-next-line 1140
+            loadChildCollections("collection-1", item)
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "[Collections] Activity: Opening collection " + Chr(34) + "Favorites" + Chr(34)) > 0)
         end function
 
         @it("restores parent collection navigation state")

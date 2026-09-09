@@ -18,6 +18,14 @@ export async function waitFor(check, description, timeoutMs = 20000) {
   throw new Error(`Timed out waiting for ${description}.${detail}`);
 }
 
+export async function exitStarfin(environment) {
+  await environment.ecp.sendKeypress(environment.ecp.Key.Home);
+  await waitFor(async () => {
+    const response = await environment.ecp.getActiveApp();
+    return response.app?.id !== 'dev';
+  }, 'Starfin to exit');
+}
+
 export async function launchStarfin(environment) {
   await environment.ecp.sendLaunchChannel({
     channelId: 'dev',
@@ -42,11 +50,7 @@ export async function waitForMainScene(environment) {
 }
 
 export async function relaunchStarfin(environment) {
-  await environment.ecp.sendKeypress(environment.ecp.Key.Home);
-  await waitFor(async () => {
-    const response = await environment.ecp.getActiveApp();
-    return response.app?.id !== 'dev';
-  }, 'Starfin to exit before relaunch');
+  await exitStarfin(environment);
 
   await launchStarfin(environment);
   await waitForMainScene(environment);

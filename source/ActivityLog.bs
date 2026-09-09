@@ -1,0 +1,83 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/String.bs"
+
+namespace ActivityLog
+
+    '---------------------------------------------------------------------------
+    ' ActivityLog.Quote
+    '---------------------------------------------------------------------------
+    function Quote(value as dynamic, fallback as string) as string
+        title = Format.SafeString(value, "")
+        if title = "" then title = fallback
+        return Chr(34) + title + Chr(34)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' ActivityLog.ItemTitle
+    '---------------------------------------------------------------------------
+    function ItemTitle(item as dynamic, fallback as string) as string
+        if item = invalid then return ActivityLog.Quote("", fallback)
+        return ActivityLog.Quote(item.Name, fallback)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' ActivityLog.RequestTitle
+    '---------------------------------------------------------------------------
+    function RequestTitle(request as dynamic, fallback as string) as string
+        if request = invalid then return ActivityLog.Quote("", fallback)
+        return ActivityLog.Quote(request.title, fallback)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' ActivityLog.SeasonTitle
+    '---------------------------------------------------------------------------
+    function SeasonTitle(series as dynamic, season as dynamic) as string
+        parts = []
+        if series <> invalid then
+            seriesName = Format.SafeString(series.Name, "")
+            if seriesName <> "" then parts.Push(seriesName)
+        end if
+        if season <> invalid then
+            seasonName = Format.SafeString(season.Name, "")
+            if seasonName <> "" then parts.Push(seasonName)
+        end if
+        if parts.Count() = 0 then parts.Push("season")
+
+        return ActivityLog.Quote(Strings.Join(parts, " - "), "season")
+    end function
+
+    '---------------------------------------------------------------------------
+    ' ActivityLog.EpisodeTitle
+    '---------------------------------------------------------------------------
+    function EpisodeTitle(item as dynamic) as string
+        if item = invalid then return ActivityLog.Quote("", "episode")
+
+        parts = []
+        seriesName = Format.SafeString(item.SeriesName, "")
+        if seriesName <> "" then parts.Push(seriesName)
+
+        seasonNumber = Number.ToInteger(item.ParentIndexNumber, -1)
+        episodeNumber = Number.ToInteger(item.IndexNumber, -1)
+        episodeCode = ""
+        if seasonNumber >= 0 then episodeCode = "S" + ActivityLog.__Pad2(seasonNumber)
+        if episodeNumber >= 0 then episodeCode = episodeCode + "E" + ActivityLog.__Pad2(episodeNumber)
+        if episodeCode <> "" then parts.Push(episodeCode)
+
+        episodeName = Format.SafeString(item.Name, "")
+        if episodeName <> "" then parts.Push(episodeName)
+        if parts.Count() = 0 then parts.Push("episode")
+
+        return ActivityLog.Quote(Strings.Join(parts, " - "), "episode")
+    end function
+
+    '---------------------------------------------------------------------------
+    ' ActivityLog.__Pad2
+    '---------------------------------------------------------------------------
+    function __Pad2(value as integer) as string
+        text = value.ToStr()
+        if Len(text) < 2 then return "0" + text
+        return text
+    end function
+
+end namespace

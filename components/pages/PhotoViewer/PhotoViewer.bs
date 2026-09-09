@@ -1,9 +1,11 @@
 import "pkg:/source/Array.bs"
+import "pkg:/source/ActivityLog.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/ItemImage.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/Number.bs"
+import "pkg:/source/Logger.bs"
 import "pkg:/source/ResolutionProfile.bs"
 import "pkg:/source/Status.bs"
 import "pkg:/source/Url.bs"
@@ -13,6 +15,7 @@ import "pkg:/source/TimerControl.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = new Logger("PhotoViewer", m.global.logService)
     m.statusBackground = m.top.findNode("statusBackground")
     m.statusLabel = m.top.findNode("statusLabel")
     m.leftChevron = m.top.findNode("leftChevron")
@@ -215,11 +218,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub commitPhotoSlot(slot as object)
     if slot = invalid or slot.ready <> true then return
+    changedPhoto = m.viewerState.displayedIndex <> slot.index
     for each candidate in m.viewerState.slots
         candidate.poster.visible = candidate.poster.id = slot.poster.id
     end for
     m.viewerState.displayedIndex = slot.index
     m.viewerState.pendingIndex = -1
+    if changedPhoto then
+        item = m.viewerState.items[slot.index]
+        m.log.activity("Viewing photo " + ActivityLog.ItemTitle(item, "photo") + "; image " + (slot.index + 1).ToStr() + " of " + m.viewerState.items.Count().ToStr())
+    end if
     updateNavigationChevrons()
     AppStatus.ClearMessage()
     ensureAdjacentPhotoSlots(slot.index)
@@ -323,6 +331,7 @@ sub handlePhotoSlotLoadStatus(slot as object, observedUri as string, status as d
             m.viewerState.pendingIndex = -1
             if m.viewerState.slideshow then pauseSlideshow(false)
             AppStatus.SetMessage("This image could not be loaded.")
+            m.log.activity("Photo load failed: This image could not be loaded.")
         end if
     else if loadStatus = "ready" then
         slot.ready = true

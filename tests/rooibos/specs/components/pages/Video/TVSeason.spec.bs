@@ -285,6 +285,8 @@ namespace tests
 
         @it("publishes failure instead of readiness when the requested episode is missing")
         function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("TVSeason", collector)
             m.top.initialFocusEpisodeId = "missing"
             m.top.ready = false
             m.top.loadFailed = ""
@@ -309,6 +311,10 @@ namespace tests
 
             m.assertFalse(m.top.ready)
             m.assertEqual(m.top.loadFailed, "The requested episode is unavailable in this season.")
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Season load failed: The requested episode is unavailable in this season.") > 0)
+            m.assertEqual(Instr(1, entries[0], "Viewing season"), 0)
         end function
 
         @it("publishes a load failure for the current season request")
@@ -327,6 +333,7 @@ namespace tests
             statusLabel = m.top.getScene().findNode("statusLabel")
             statusLabel.visible = false
             Spinner.Show()
+            logCount = m.global.logService.callFunc("getSnapshot").Count()
 
             'bs:disable-next-line 1140
             handleTVSeasonResponse(task)
@@ -334,6 +341,9 @@ namespace tests
             m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
             m.assertTrue(statusLabel.visible)
             m.assertEqual(m.top.loadFailed, "Season unavailable.")
+            entries = m.global.logService.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), logCount + 1)
+            m.assertTrue(Instr(1, entries[entries.Count() - 1], "[TVSeason] Activity: Season load failed: Season unavailable.") > 0)
         end function
 
         @it("shows right overflow at the beginning")
@@ -528,12 +538,14 @@ namespace tests
             unknownTask = {
                 response: { ok: true, action: "tvSeasonUnknown", seasonId: "season-1", requestId: 1, payload: {} }
             }
+            logCount = m.global.logService.callFunc("getSnapshot").Count()
 
             'bs:disable-next-line 1140
             handleTVSeasonResponse(unknownTask)
 
             m.assertNotInvalid(m.node.pageState.detailsLoad.active)
             m.assertFalse(m.top.ready)
+            m.assertEqual(m.global.logService.callFunc("getSnapshot").Count(), logCount)
         end function
 
         @it("renders and ends loading for the current season response")
@@ -552,6 +564,7 @@ namespace tests
                 }
             }
             Spinner.Show()
+            logCount = m.global.logService.callFunc("getSnapshot").Count()
 
             'bs:disable-next-line 1140
             handleTVSeasonResponse(completedTask)
@@ -561,6 +574,9 @@ namespace tests
             m.assertTrue(m.top.findNode("episodesList").visible)
             m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
             m.assertNotInvalid(m.node.pageState.detailsLoad.active)
+            entries = m.global.logService.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), logCount + 1)
+            m.assertTrue(Instr(1, entries[entries.Count() - 1], "[TVSeason] Activity: Viewing season " + Chr(34) + "Series - Season 1" + Chr(34) + "; episodes=1") > 0)
         end function
 
         @it("releases the active request only after terminal completion")

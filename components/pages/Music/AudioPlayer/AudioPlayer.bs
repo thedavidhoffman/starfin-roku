@@ -1,4 +1,5 @@
 import "pkg:/source/TaskControl.bs"
+import "pkg:/source/ActivityLog.bs"
 import "pkg:/source/MediaControl.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/JellyfinImage.bs"
@@ -51,6 +52,7 @@ sub init()
         seekPosition: 0.0
         changingTrack: false
         restartPosition: 0.0
+        lastObservedState: ""
         lastPosition: 0.0
     }
     configureButtons()
@@ -125,6 +127,7 @@ sub onTracksResponse()
     m.backdrop.uri = getAlbumBackgroundUrl(album, request, artworkUrl)
     m.playerState.tracks = response.data.Items
     renderTracks()
+    m.log.activity("Viewing album " + ActivityLog.ItemTitle(album, "album") + "; tracks=" + m.playerState.tracks.Count().ToStr())
     if m.playerState.tracks.Count() > 0 then playTrack(0)
 end sub
 
@@ -221,24 +224,32 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlayerStateChanged()
     state = LCase(Format.SafeString(m.player.state, ""))
+    previousPlayerState = m.playerState.lastObservedState
+    activityStateChanged = previousPlayerState <> state
+    m.playerState.lastObservedState = state
     track = getCurrentTrack()
     itemId = ""
     if track <> invalid then itemId = Format.SafeString(track.Id, "")
     m.log.write("Playback state changed state=" + state + " itemId=" + itemId + " position=" + Number.ToFloat(m.player.position, 0.0).ToStr() + " changingTrack=" + m.playerState.changingTrack.ToStr() + " errorCode=" + Number.ToInteger(m.player.errorCode, 0).ToStr() + " errorMessage=" + Format.SafeString(m.player.errorMsg, ""))
     updatePlayPauseIcon()
     if state = "playing" then
+        if m.playerState.changingTrack then m.log.activity("Playing track " + ActivityLog.ItemTitle(track, "Untitled Track"))
+        if m.playerState.changingTrack <> true and previousPlayerState = "paused" then m.log.activity("Resumed track " + ActivityLog.ItemTitle(track, "Untitled Track"))
         m.playerState.changingTrack = false
         if m.playerState.restartPosition > 0 then m.player.seek = m.playerState.restartPosition
         m.playerState.restartPosition = 0.0
         m.player.disableScreenSaver = true
         if m.screensaverOverlay.callFunc("isVisible") <> true then m.screensaverOverlay.callFunc("startDelay")
     else if state = "finished" then
+        if activityStateChanged then m.log.activity("Completed track " + ActivityLog.ItemTitle(track, "Untitled Track"))
         if m.playerState.currentIndex < m.playerState.tracks.Count() - 1 then
             playNext()
         else
             stopScreensaverSession()
         end if
     else if state = "paused" or state = "error" or (state = "stopped" and m.playerState.changingTrack <> true) then
+        if activityStateChanged and state = "paused" then m.log.activity("Paused track " + ActivityLog.ItemTitle(track, "Untitled Track"))
+        if activityStateChanged and state = "stopped" and m.playerState.changingTrack <> true then m.log.activity("Stopped track " + ActivityLog.ItemTitle(track, "Untitled Track"))
         stopScreensaverSession()
     end if
 end sub

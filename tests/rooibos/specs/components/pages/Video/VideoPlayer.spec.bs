@@ -242,6 +242,370 @@ namespace tests
             m.assertFalse(m.node.overlay.restoreCastAfterNavigation)
         end function
 
+        @describe("activity logging")
+
+        @it("logs initial playback once across repeated playing notifications")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "buffering")
+            m.node.playback.hasReportedStart = false
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Playing " + Chr(34) + "Alien" + Chr(34) + " using Transcode") > 0)
+        end function
+
+        @it("logs pause, resume, and manual stop once per state transition")
+        function _()
+            collector = m.prepareActivityPlayback("paused", "playing")
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            m.node.videoPlayer.state = "playing"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            m.node.videoPlayer.state = "stopped"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 3)
+            m.assertTrue(Instr(1, activities[0], "Paused " + Chr(34) + "Alien" + Chr(34)) > 0)
+            m.assertTrue(Instr(1, activities[1], "Resumed " + Chr(34) + "Alien" + Chr(34)) > 0)
+            m.assertTrue(Instr(1, activities[2], "Stopped " + Chr(34) + "Alien" + Chr(34)) > 0)
+        end function
+
+        @it("logs a Back-key stop once through the subsequent stopped notification")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+            m.node.videoPlayer.state = "stopped"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            activities = m.getActivityEntries(collector)
+            m.assertTrue(handled)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Stopped " + Chr(34) + "Alien" + Chr(34)) > 0)
+        end function
+
+        @it("does not log a stop when Back only closes visible playback controls")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.playbackControls.visible = true
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("logs normal completion with the current item title")
+        function _()
+            collector = m.prepareActivityPlayback("finished", "playing")
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Completed " + Chr(34) + "Alien" + Chr(34)) > 0)
+        end function
+
+        @it("logs an accepted recovery restart")
+        function _()
+            collector = m.prepareActivityPlayback("error", "playing")
+            m.node.pendingPlaybackRequest = m.node.activePlayback.request
+            m.node.recovery.itemId = "movie-1"
+            m.node.recovery.originalMode = PlaybackMode.Mode.Automatic
+            m.node.recovery.effectiveMode = PlaybackMode.Mode.Automatic
+            m.node.recovery.sameModeRetryUsed = false
+
+            'bs:disable-next-line 1140
+            restarted = handlePlaybackRecoveryFailure("videoError", "decoder error")
+
+            activities = m.getActivityEntries(collector)
+            m.assertTrue(restarted)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Restarting " + Chr(34) + "Alien" + Chr(34) + " using " + PlaybackMode.Mode.Automatic) > 0)
+        end function
+
+        @it("logs terminal recovery failure")
+        function _()
+            collector = m.prepareActivityPlayback("error", "playing")
+
+            'bs:disable-next-line 1140
+            finalizePlaybackRecoveryFailure("Unable to recover playback.")
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Playback failed for " + Chr(34) + "Alien" + Chr(34) + ": Unable to recover playback.") > 0)
+        end function
+
+        @it("logs queue advancement with the destination title")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.activePlayback.queue = {
+                items: [
+                    { itemId: "movie-1", item: { Id: "movie-1", Name: "Alien", Type: "Movie" }, hasPlaybackContext: false }
+                    { itemId: "movie-2", item: { Id: "movie-2", Name: "Aliens", Type: "Movie" }, hasPlaybackContext: false }
+                ]
+                index: 0
+                mode: "sequential"
+                scope: ""
+            }
+
+            'bs:disable-next-line 1140
+            advanced = startQueueItemAtOffset(1)
+
+            activities = m.getActivityEntries(collector)
+            m.assertTrue(advanced)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Advancing to " + Chr(34) + "Aliens" + Chr(34)) > 0)
+        end function
+
+        @it("logs an accepted intro skip")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.mediaSegments.activeEndSeconds = 42
+
+            'bs:disable-next-line 1140
+            skipActiveIntro()
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Skipped intro for " + Chr(34) + "Alien" + Chr(34)) > 0)
+        end function
+
+        @it("logs an accepted chapter selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            applyChapterSelection({ label: "Chapter 2", startPositionSeconds: 60, startPositionTicks: 600000000 })
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Selected chapter " + Chr(34) + "Chapter 2" + Chr(34)) > 0)
+        end function
+
+        @it("logs a locally committed subtitle selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.streamOptions.selectedSubtitleStreamIndex = 2
+
+            'bs:disable-next-line 1140
+            applySubtitleSelection({ streamIndex: -1, label: "Off" })
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Selected subtitles " + Chr(34) + "Off" + Chr(34)) > 0)
+        end function
+
+        @it("logs a restart-required subtitle selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            applySubtitleSelection({ streamIndex: 2, label: "English CC" })
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(m.top.playRequest.subtitleStreamIndex, 2)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Selected subtitles " + Chr(34) + "English CC" + Chr(34)) > 0)
+        end function
+
+        @it("restores subtitle selection when a restart request cannot be built")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.streamOptions.selectedSubtitleStreamIndex = -1
+            m.node.activePlayback = invalid
+            m.node.pendingPlaybackRequest = invalid
+
+            'bs:disable-next-line 1140
+            applySubtitleSelection({ streamIndex: 2, label: "English CC" })
+
+            m.assertEqual(m.node.streamOptions.selectedSubtitleStreamIndex, -1)
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("logs an accepted audio selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            applyAudioSelection({ streamIndex: 3, label: "English 5.1" })
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Selected audio " + Chr(34) + "English 5.1" + Chr(34)) > 0)
+        end function
+
+        @it("restores audio selection when a restart request cannot be built")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.streamOptions.selectedAudioStreamIndex = 1
+            m.node.activePlayback = invalid
+            m.node.pendingPlaybackRequest = invalid
+
+            'bs:disable-next-line 1140
+            applyAudioSelection({ streamIndex: 3, label: "English 5.1" })
+
+            m.assertEqual(m.node.streamOptions.selectedAudioStreamIndex, 1)
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("logs an accepted video mode selection after its delayed restart")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            applyVideoModeSelection({ key: PlaybackMode.Mode.TranscodeNoRemux })
+
+            m.assertEqual(m.node.videoModeApplyTimer.control, "start")
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+
+            'bs:disable-next-line 1140
+            onVideoModeApplyTimerFire()
+
+            activities = m.getActivityEntries(collector)
+            m.assertEqual(activities.Count(), 1)
+            m.assertTrue(Instr(1, activities[0], "Selected video mode " + Chr(34) + PlaybackMode.Mode.TranscodeNoRemux + Chr(34)) > 0)
+        end function
+
+        @it("does not log a video mode when its delayed restart request cannot be built")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            applyVideoModeSelection({ key: PlaybackMode.Mode.TranscodeNoRemux })
+            m.node.activePlayback = invalid
+            m.node.pendingPlaybackRequest = invalid
+            'bs:disable-next-line 1140
+            onVideoModeApplyTimerFire()
+
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("does not log an unchanged audio selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.streamOptions.selectedAudioStreamIndex = 3
+
+            'bs:disable-next-line 1140
+            applyAudioSelection({ streamIndex: 3, label: "English 5.1" })
+
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("does not log an unchanged subtitle selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.streamOptions.selectedSubtitleStreamIndex = 2
+
+            'bs:disable-next-line 1140
+            applySubtitleSelection({ streamIndex: 2, label: "English CC" })
+
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("does not log an unchanged video mode selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            applyVideoModeSelection({ key: PlaybackMode.Mode.Automatic })
+
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("does not log an unavailable intro skip")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+            m.node.mediaSegments.activeEndSeconds = -1
+
+            'bs:disable-next-line 1140
+            skipActiveIntro()
+
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("does not log an invalid chapter selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            applyChapterSelection(invalid)
+
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("does not log an invalid audio selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            'bs:disable-next-line 1140
+            applyAudioSelection(invalid)
+
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        @it("does not log an empty video mode selection")
+        function _()
+            collector = m.prepareActivityPlayback("playing", "playing")
+
+            m.node.streamOptions.pendingVideoMode = ""
+            'bs:disable-next-line 1140
+            onVideoModeApplyTimerFire()
+
+            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
+        end function
+
+        private function prepareActivityPlayback(state as string, previousState as string) as object
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("VideoPlayer", collector)
+            item = { Id: "movie-1", Name: "Alien", Type: "Movie", UserData: {} }
+            request = {
+                itemId: "movie-1"
+                item: item
+                videoMode: PlaybackMode.Mode.Automatic
+                subtitleBurnInMode: "Automatic"
+                startPositionTicks: 0
+            }
+            m.node.activePlayback.request = request
+            m.node.activePlayback.context.item = item
+            m.node.activePlayback.playMethod = "Transcode"
+            m.node.activePlayback.session.itemId = "movie-1"
+            m.node.playbackDiagnostics.lastState = previousState
+            m.node.videoPlayer = {
+                state: state
+                position: 10
+                duration: 120
+                control: ""
+                seek: 0
+                errorStr: ""
+                bufferingStatus: { percentage: 0 }
+            }
+            return collector
+        end function
+
+        private function getActivityEntries(collector as object) as object
+            activities = []
+            for each entry in collector.callFunc("getSnapshot")
+                if Instr(1, entry, "Activity:") > 0 then activities.Push(entry)
+            end for
+            return activities
+        end function
+
     end class
 
 end namespace

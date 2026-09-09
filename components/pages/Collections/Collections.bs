@@ -1,4 +1,6 @@
 import "pkg:/source/TaskControl.bs"
+import "pkg:/source/ActivityLog.bs"
+import "pkg:/source/Logger.bs"
 import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
@@ -21,6 +23,7 @@ import "pkg:/source/VideoCardPresentation.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = new Logger("Collections", m.global.logService)
     m.titleLabel = m.top.findNode("titleLabel")
     m.collectionsGrid = m.top.findNode("collectionsGrid")
     m.collectionsTask = m.top.findNode("collectionsTask")
@@ -85,7 +88,9 @@ sub onCollectionsResponse()
 
     if response.ok <> true then
         Spinner.Hide()
-        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load collections."))
+        message = Format.SafeString(response.errorMessage, "Unable to load collections.")
+        AppStatus.SetMessage(message)
+        m.log.activity("Collections load failed: " + message)
         return
     end if
 
@@ -93,6 +98,7 @@ sub onCollectionsResponse()
     m.pageState.usingTopCollections = hasTopCollections(rootCollections)
     m.pageState.collections = filterRootCollections(rootCollections)
     renderCollections(m.pageState.collections)
+    m.log.activity("Viewing collections " + ActivityLog.RequestTitle(m.pageState.request, "Collections") + "; items=" + m.pageState.collections.Count().ToStr())
     Spinner.Hide()
     AppStatus.ClearMessage()
     focusCollectionsIfActive()
@@ -124,6 +130,7 @@ sub loadChildCollections(itemId as string, item as object)
     if request = invalid then return
 
     title = Format.FirstNonEmpty([item.Name], "Collection")
+    m.log.activity("Opening collection " + ActivityLog.ItemTitle(item, "Collection"))
     childRequest = {
         server: request.server
         token: request.token
@@ -160,7 +167,9 @@ sub handleDrilldownResponse(response as object)
     if pending = invalid then return
 
     if response.ok <> true then
-        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load collection."))
+        message = Format.SafeString(response.errorMessage, "Unable to load collection.")
+        AppStatus.SetMessage(message)
+        m.log.activity("Collection load failed: " + message)
         return
     end if
 
@@ -177,6 +186,7 @@ sub handleDrilldownResponse(response as object)
     m.pageState.usingTopCollections = false
     m.titleLabel.text = getCollectionTitle(pending.request.title)
     renderCollections(collections)
+    m.log.activity("Viewing collection " + ActivityLog.Quote(pending.request.title, "Collection") + "; items=" + collections.Count().ToStr())
     AppStatus.ClearMessage()
     focusCollectionsIfActive()
 end sub
