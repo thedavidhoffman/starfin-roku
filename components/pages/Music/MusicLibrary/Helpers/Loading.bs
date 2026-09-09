@@ -76,6 +76,8 @@ end function
 ' fallBackToAlbumBrowse
 '-------------------------------------------------------------------------------
 function fallBackToAlbumBrowse() as boolean
+    closeLetterGrid(false)
+    resetMusicLetterFilter()
     m.state.browse.selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Album, LibraryBrowse.SortKey.Album, "Album")
     m.state.browse.filterType = ""
     m.state.browse.decade = -1
@@ -97,6 +99,12 @@ sub onMusicArtistsResponse()
     if AsyncLifecycle.IsCurrentResponse(m.state.lifecycle, response, "libraryId", "musicArtists") <> true then return
     if Number.ToInteger(response.queryId, -1) <> m.state.content.artists.load.queryId then return
     if response.ok <> true then
+        if m.state.letterFilter.pending <> "" then
+            rejectedLetter = m.state.letterFilter.pending
+            restoreMusicPagingAfterRejectedLetterSelection()
+            updateMusicLetterGridStatus("Unable to load artists starting with " + rejectedLetter + ".")
+            return
+        end if
         m.state.content.artists.load.requestInFlight = false
         m.state.content.artists.load.status = "failed"
         m.state.content.artists.load.hasMore = false
@@ -111,6 +119,12 @@ sub onMusicArtistsResponse()
     startIndex = Number.ToInteger(response.startIndex, -1)
     expectedStartIndex = m.state.content.artists.load.nextStartIndex
     if startIndex <> expectedStartIndex then
+        if m.state.letterFilter.pending <> "" then
+            rejectedLetter = m.state.letterFilter.pending
+            restoreMusicPagingAfterRejectedLetterSelection()
+            updateMusicLetterGridStatus("Unable to load artists starting with " + rejectedLetter + ".")
+            return
+        end if
         m.state.content.artists.load.requestInFlight = false
         m.state.content.artists.load.status = "failed"
         m.state.content.artists.load.hasMore = false
@@ -120,6 +134,18 @@ sub onMusicArtistsResponse()
     end if
     m.state.content.artists.load.requestInFlight = false
     pageArtists = getValidMusicItems(response.payload, "artist")
+    letterSelectionCommitted = false
+    if startIndex = 0 and m.state.letterFilter.pending <> "" and pageArtists.Count() = 0 then
+        rejectedLetter = m.state.letterFilter.pending
+        restoreMusicPagingAfterRejectedLetterSelection()
+        updateMusicLetterGridStatus("No artists start with " + rejectedLetter + ".")
+        return
+    end if
+    if startIndex = 0 and m.state.letterFilter.pending <> "" then
+        commitMusicLetterSelection()
+        m.state.content.artists.items = []
+        letterSelectionCommitted = true
+    end if
     for each artist in pageArtists
         m.state.content.artists.items.Push(artist)
     end for
@@ -136,6 +162,7 @@ sub onMusicArtistsResponse()
             appendArtistPage(pageArtists)
         end if
         updateTitleLabel(m.state.content.artists.load.totalCount)
+        if letterSelectionCommitted then finalizeMusicLetterSelection()
         blockingEnded = false
         if m.state.loadingUi.foreground.kind = "artists" and (m.state.content.artists.items.Count() > 0 or m.state.content.artists.load.hasMore <> true) then blockingEnded = finishForegroundLoad("artists")
         if blockingEnded then focusAlbums()
@@ -162,6 +189,12 @@ sub onMusicLibraryResponse()
         m.foregroundAlbumLoadTimer.control = TimerControl.Command.Stop
     end if
     if response.ok <> true then
+        if m.state.letterFilter.pending <> "" then
+            rejectedLetter = m.state.letterFilter.pending
+            restoreMusicPagingAfterRejectedLetterSelection()
+            updateMusicLetterGridStatus("Unable to load albums starting with " + rejectedLetter + ".")
+            return
+        end if
         if m.state.filterRefresh.phase = "loading" then
             m.filteredRefreshTimer.control = TimerControl.Command.Stop
             m.filteredRefreshTimer.duration = 0.2
@@ -182,6 +215,12 @@ sub onMusicLibraryResponse()
     startIndex = Number.ToInteger(response.startIndex, -1)
     expectedStartIndex = m.state.content.albums.load.nextStartIndex
     if startIndex <> expectedStartIndex then
+        if m.state.letterFilter.pending <> "" then
+            rejectedLetter = m.state.letterFilter.pending
+            restoreMusicPagingAfterRejectedLetterSelection()
+            updateMusicLetterGridStatus("Unable to load albums starting with " + rejectedLetter + ".")
+            return
+        end if
         if m.state.filterRefresh.phase = "loading" then
             m.filteredRefreshTimer.control = TimerControl.Command.Stop
             m.filteredRefreshTimer.duration = 0.2
@@ -198,11 +237,23 @@ sub onMusicLibraryResponse()
         return
     end if
     m.state.content.albums.load.requestInFlight = false
+    pageAlbums = getValidMusicItems(response.payload, "album")
+    letterSelectionCommitted = false
+    if startIndex = 0 and m.state.letterFilter.pending <> "" and pageAlbums.Count() = 0 then
+        rejectedLetter = m.state.letterFilter.pending
+        restoreMusicPagingAfterRejectedLetterSelection()
+        updateMusicLetterGridStatus("No albums start with " + rejectedLetter + ".")
+        return
+    end if
+    if startIndex = 0 and m.state.letterFilter.pending <> "" then
+        commitMusicLetterSelection()
+        m.state.content.albums.items = []
+        letterSelectionCommitted = true
+    end if
     if startIndex = 0 then
         m.state.content.albums.load.totalCount = Number.ToInteger(response.totalRecordCount, -1)
         if m.state.content.albums.load.totalCount >= 0 then updateTitleLabel(m.state.content.albums.load.totalCount)
     end if
-    pageAlbums = getValidMusicItems(response.payload, "album")
     isFilteredRefresh = m.state.filterRefresh.phase = "loading" and startIndex = 0
     if isFilteredRefresh then
         m.filteredRefreshTimer.control = TimerControl.Command.Stop
@@ -214,7 +265,7 @@ sub onMusicLibraryResponse()
         end for
     end if
     m.log.write("Album page accepted libraryId=" + getLibraryId() + " startIndex=" + startIndex.ToStr() + " pageCount=" + pageAlbums.Count().ToStr() + " totalLoaded=" + m.state.content.albums.items.Count().ToStr())
-    if startIndex = 0 then m.log.activity("Viewing music library " + ActivityLog.RequestTitle(m.state.request, "Music") + "; albums=" + m.state.content.albums.load.totalCount.ToStr())
+    if startIndex = 0 and letterSelectionCommitted <> true then m.log.activity("Viewing music library " + ActivityLog.RequestTitle(m.state.request, "Music") + "; albums=" + m.state.content.albums.load.totalCount.ToStr())
     AppStatus.ClearMessage()
 
     hasMore = response.hasMore = true
@@ -226,9 +277,12 @@ sub onMusicLibraryResponse()
         renderAlbums(pageAlbums)
         LibraryBrowseRefresh.Commit(m.state.filterRefresh)
         m.log.write("Filter refresh committed libraryId=" + getLibraryId() + " mediaType=music filter=" + getMusicFilterLogValue() + " queryId=" + m.state.content.albums.load.queryId.ToStr())
+    else if letterSelectionCommitted then
+        renderAlbums(pageAlbums)
     else
         appendAlbumPage(pageAlbums)
     end if
+    if letterSelectionCommitted then finalizeMusicLetterSelection()
     rememberCommittedMusicFilterView()
     blockingEnded = false
     if m.state.loadingUi.foreground.kind = "albums" and (m.state.content.albums.items.Count() > 0 or m.state.content.albums.load.hasMore <> true) then blockingEnded = finishForegroundLoad("albums")
@@ -257,6 +311,7 @@ sub loadAlbumPage(startIndex as integer)
     request.years = []
     request.albumSortBy = LibraryBrowse.ApiSortBy.Title
     request.albumSortOrder = LibraryBrowse.NormalizeSortOrder(m.state.browse.selection.sortOrder)
+    request.startsWith = getRequestedMusicLetter()
     if LibraryBrowse.IsGenreActive(m.state.browse.filterType) then request.genre = m.state.browse.genre
     if LibraryBrowse.IsDecadeActive(m.state.browse.filterType) then request.years = getSelectedDecadeYears()
 
@@ -534,11 +589,12 @@ end sub
 sub hideForegroundControls()
     if m.state.loadingUi.foreground.controlsHidden then return
 
-    if m.browseByButton.isInFocusChain() or m.sortButton.isInFocusChain() or m.filterButtonRow.isInFocusChain() then m.top.setFocus(true)
+    if m.letterGutterButton.isInFocusChain() or m.browseByButton.isInFocusChain() or m.sortButton.isInFocusChain() or m.filterButtonRow.isInFocusChain() then m.top.setFocus(true)
     m.state.loadingUi.foreground.controlsHidden = true
     m.state.loadingUi.foreground.restoreFilterVisible = m.filterButtonRow.visible
     m.browseByButton.visible = false
     m.sortButton.visible = false
+    m.letterGutterButton.visible = false
     m.filterButtonRow.visible = false
     updateGridLayout()
 end sub
@@ -552,6 +608,7 @@ sub showForegroundControls()
     m.state.loadingUi.foreground.restoreFilterVisible = false
     m.browseByButton.visible = true
     m.sortButton.visible = true
+    m.letterGutterButton.visible = true
     m.filterButtonRow.visible = restoreFilterVisible
     updateGridLayout()
 end sub
@@ -568,6 +625,7 @@ sub loadArtistPage(startIndex as integer)
     artistRequest.queryId = m.state.content.artists.load.queryId
     artistRequest.pageStartIndex = startIndex
     artistRequest.artistSortOrder = LibraryBrowse.NormalizeSortOrder(m.state.browse.selection.sortOrder)
+    artistRequest.startsWith = getRequestedMusicLetter()
     m.state.content.artists.load.requestInFlight = true
     m.musicArtistsTask.control = TaskControl.Command.Stop
     m.musicArtistsTask.request = artistRequest

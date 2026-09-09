@@ -114,6 +114,285 @@ namespace tests
             m.assertEqual(options[2].optionKey, "Favorites")
         end function
 
+        @describe("letter filtering")
+
+        @it("uses the horizontal gutter without moving the music grid")
+        function _()
+            m.assertEqual(m.node.letterGutterButton.layoutMode, "horizontal")
+            m.assertEqual(m.node.letterGutterButton.translation, [68.0, 156.0])
+            m.assertEqual(m.node.musicGrid.translation, [48.0, 207.0])
+        end function
+
+        @it("opens the shared letter grid for the music library")
+        function _()
+            m.node.state.letterFilter.selected = "M"
+
+            'bs:disable-next-line 1140
+            opened = openLetterGrid()
+
+            m.assertTrue(opened)
+            m.assertTrue(m.node.state.letterGridOpen)
+            m.assertEqual(m.node.top.letterGridRequested.sourcePage, "musicLibrary")
+            m.assertEqual(m.node.top.letterGridRequested.selectedLetter, "M")
+        end function
+
+        @it("requests album pages with the pending letter")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.letterFilter.pending = "B"
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            loadAlbumPage(0)
+
+            m.assertEqual(m.node.musicLibraryTask.request.startsWith, "B")
+        end function
+
+        @it("requests artist pages with the pending letter")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.browse.selection = LibraryBrowse.CreateSortSelection("Artist", "Artist", "Artist")
+            m.node.state.letterFilter.pending = "C"
+            m.node.musicArtistsTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            loadArtistPage(0)
+
+            m.assertEqual(m.node.musicArtistsTask.request.startsWith, "C")
+        end function
+
+        @it("defers grid focus until the letter overlay closes")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MusicLibrary", collector)
+            m.node.state.context = { libraryId: "music-1", title: "Music" }
+            m.node.state.letterGridOpen = true
+            m.node.state.letterFilter.pending = "#"
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode")
+            m.node.musicGrid.content = content
+            m.node.browseByButton.setFocus(true)
+
+            'bs:disable-next-line 1140
+            commitMusicLetterSelection()
+            'bs:disable-next-line 1140
+            finalizeMusicLetterSelection()
+
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(m.node.state.letterFilter.selected, "#")
+            m.assertFalse(m.node.state.letterGridOpen)
+            m.assertEqual(m.node.musicGrid.itemFocused, 0)
+            m.assertFalse(m.node.musicGrid.isInFocusChain())
+            m.assertTrue(m.node.top.letterGridRequested.focusItems)
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Activity: Filtering " + Chr(34) + "Music" + Chr(34) + " by letter " + Chr(34) + "#" + Chr(34)) > 0)
+        end function
+
+        @it("replaces the rendered album grid when a letter commits")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MusicLibrary", collector)
+            m.prepareForegroundAlbumResponse(8)
+            m.node.state.loadingUi.foreground.kind = ""
+            m.node.state.context.title = "Music"
+            oldAlbums = [{ Id: "old", Name: "Alpha", AlbumArtist: "Artist" }]
+            m.node.state.content.albums.items = oldAlbums
+            'bs:disable-next-line 1140
+            renderAlbums(oldAlbums)
+            m.node.state.letterGridOpen = true
+            m.node.state.letterFilter.pending = "D"
+            m.node.state.letterFilter.previousPaging = { nextStartIndex: 1, totalCount: 1, hasMore: false, status: "loaded" }
+            m.node.musicLibraryTask.response = {
+                ok: true
+                action: "musicLibrary"
+                libraryId: "music-1"
+                queryId: 8
+                startIndex: 0
+                payload: { Items: [{ Id: "new", Name: "Delta", AlbumArtist: "Artist" }] }
+                nextStartIndex: 1
+                totalRecordCount: 1
+                hasMore: false
+            }
+
+            'bs:disable-next-line 1140
+            onMusicLibraryResponse()
+
+            m.assertEqual(m.node.state.content.albums.items.Count(), 1)
+            m.assertEqual(m.node.state.content.albums.items[0].Id, "new")
+            m.assertEqual(m.node.musicGrid.content.getChildCount(), 1)
+            m.assertEqual(m.node.musicGrid.content.getChild(0).raw.Id, "new")
+            m.assertEqual(m.node.state.letterFilter.selected, "D")
+            m.assertFalse(m.node.state.letterGridOpen)
+            m.assertEqual(m.node.musicGrid.itemFocused, 0)
+            m.assertTrue(m.node.top.letterGridRequested.focusItems)
+            entries = collector.callFunc("getSnapshot")
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Activity: Filtering " + Chr(34) + "Music" + Chr(34) + " by letter " + Chr(34) + "D" + Chr(34)) > 0)
+        end function
+
+        @it("preserves the original paging snapshot across rapid letter selections")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.content.albums.load.nextStartIndex = 200
+            m.node.state.content.albums.load.totalCount = 350
+            m.node.state.content.albums.load.hasMore = true
+            m.node.state.content.albums.load.status = "loaded"
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            selectLetter("D")
+            firstSnapshot = m.node.state.letterFilter.previousPaging
+            'bs:disable-next-line 1140
+            selectLetter("E")
+
+            m.assertEqual(m.node.state.letterFilter.pending, "E")
+            m.assertEqual(m.node.musicLibraryTask.request.startsWith, "E")
+            m.assertEqual(m.node.state.letterFilter.previousPaging, firstSnapshot)
+            m.assertEqual(m.node.state.letterFilter.previousPaging.nextStartIndex, 200)
+            m.assertEqual(m.node.state.letterFilter.previousPaging.status, "loaded")
+        end function
+
+        @it("ignores an earlier letter response while the replacement remains pending")
+        function _()
+            m.prepareForegroundAlbumResponse(4)
+            m.node.state.loadingUi.foreground.kind = ""
+            m.node.state.letterFilter.pending = "E"
+            m.node.state.letterFilter.previousPaging = { nextStartIndex: 100, totalCount: 240, hasMore: true, status: "loaded" }
+            m.node.state.content.albums.load.queryId = 6
+            m.node.musicLibraryTask.response = {
+                ok: true
+                action: "musicLibrary"
+                libraryId: "music-1"
+                queryId: 5
+                startIndex: 0
+                payload: { Items: [{ Id: "stale", Name: "Delta" }] }
+            }
+
+            'bs:disable-next-line 1140
+            onMusicLibraryResponse()
+
+            m.assertEqual(m.node.state.letterFilter.pending, "E")
+            m.assertEqual(m.node.state.letterFilter.previousPaging.nextStartIndex, 100)
+            m.assertEqual(m.node.state.letterFilter.selected, "ALL")
+        end function
+
+        @it("restores original paging when a replacement letter request fails")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MusicLibrary", collector)
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, "music-1")
+            m.node.state.content.albums.load.nextStartIndex = 200
+            m.node.state.content.albums.load.totalCount = 350
+            m.node.state.content.albums.load.hasMore = true
+            m.node.state.content.albums.load.status = "loaded"
+            m.node.musicLibraryTask = { control: "", request: invalid, response: invalid }
+
+            'bs:disable-next-line 1140
+            selectLetter("D")
+            'bs:disable-next-line 1140
+            selectLetter("E")
+            currentQueryId = m.node.state.content.albums.load.queryId
+            m.node.musicLibraryTask.response = {
+                ok: false
+                action: "musicLibrary"
+                libraryId: "music-1"
+                queryId: currentQueryId
+                errorMessage: "failed"
+            }
+
+            'bs:disable-next-line 1140
+            onMusicLibraryResponse()
+
+            m.assertEqual(m.node.state.letterFilter.selected, "ALL")
+            m.assertEqual(m.node.state.letterFilter.pending, "")
+            m.assertEqual(m.node.state.content.albums.load.nextStartIndex, 200)
+            m.assertEqual(m.node.state.content.albums.load.totalCount, 350)
+            m.assertTrue(m.node.state.content.albums.load.hasMore)
+            m.assertEqual(m.node.state.content.albums.load.status, "loaded")
+            m.assertEqual(collector.callFunc("getSnapshot").Count(), 0)
+        end function
+
+        @it("restores original paging when a replacement letter has no matches")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, "music-1")
+            m.node.state.content.albums.load.nextStartIndex = 100
+            m.node.state.content.albums.load.totalCount = 240
+            m.node.state.content.albums.load.hasMore = true
+            m.node.state.content.albums.load.status = "loaded"
+            m.node.musicLibraryTask = { control: "", request: invalid, response: invalid }
+
+            'bs:disable-next-line 1140
+            selectLetter("D")
+            'bs:disable-next-line 1140
+            selectLetter("E")
+            currentQueryId = m.node.state.content.albums.load.queryId
+            m.node.musicLibraryTask.response = {
+                ok: true
+                action: "musicLibrary"
+                libraryId: "music-1"
+                queryId: currentQueryId
+                startIndex: 0
+                payload: { Items: [] }
+                totalRecordCount: 0
+                hasMore: false
+            }
+
+            'bs:disable-next-line 1140
+            onMusicLibraryResponse()
+
+            m.assertEqual(m.node.state.letterFilter.selected, "ALL")
+            m.assertEqual(m.node.state.letterFilter.pending, "")
+            m.assertEqual(m.node.state.content.albums.load.nextStartIndex, 100)
+            m.assertEqual(m.node.state.content.albums.load.totalCount, 240)
+            m.assertTrue(m.node.state.content.albums.load.hasMore)
+            m.assertEqual(m.node.state.content.albums.load.status, "loaded")
+        end function
+
+        @it("restores original paging when rapid letter selection is cancelled")
+        function _()
+            m.node.state.context = { libraryId: "music-1", server: "http://server", token: "token", userId: "user-1" }
+            m.node.state.content.albums.load.nextStartIndex = 100
+            m.node.state.content.albums.load.totalCount = 240
+            m.node.state.content.albums.load.hasMore = true
+            m.node.state.content.albums.load.status = "loaded"
+            m.node.state.letterGridOpen = true
+            m.node.musicLibraryTask = { control: "", request: invalid }
+
+            'bs:disable-next-line 1140
+            selectLetter("D")
+            'bs:disable-next-line 1140
+            selectLetter("E")
+            'bs:disable-next-line 1140
+            closeLetterGrid(false)
+
+            m.assertEqual(m.node.state.letterFilter.selected, "ALL")
+            m.assertEqual(m.node.state.letterFilter.pending, "")
+            m.assertEqual(m.node.state.content.albums.load.nextStartIndex, 100)
+            m.assertEqual(m.node.state.content.albums.load.totalCount, 240)
+            m.assertTrue(m.node.state.content.albums.load.hasMore)
+            m.assertEqual(m.node.state.content.albums.load.status, "loaded")
+            m.assertFalse(m.node.top.letterGridRequested.focusItems)
+        end function
+
+        @it("restores paging without activity when a letter is rejected")
+        function _()
+            collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("MusicLibrary", collector)
+            m.node.state.letterFilter.pending = "X"
+            m.node.state.letterFilter.previousPaging = { nextStartIndex: 100, totalCount: 240, hasMore: true, status: "loaded" }
+
+            'bs:disable-next-line 1140
+            restoreMusicPagingAfterRejectedLetterSelection()
+
+            m.assertEqual(m.node.state.content.albums.load.nextStartIndex, 100)
+            m.assertEqual(m.node.state.letterFilter.selected, "ALL")
+            m.assertEqual(collector.callFunc("getSnapshot").Count(), 0)
+        end function
+
+        @describe("browse filter selection")
+
         @it("switches to the first decade filter")
         function _()
             m.node.state.filters.options.decadeOptions = [{ label: "1970s", value: 1970 }, { label: "1980s", value: 1980 }]

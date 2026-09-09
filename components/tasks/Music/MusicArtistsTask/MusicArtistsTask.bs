@@ -7,6 +7,7 @@ import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/Number.bs"
+import "pkg:/source/LetterBrowse.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 
@@ -45,12 +46,17 @@ sub executeRequest()
         sortBy: LibraryBrowse.ApiSortBy.Title
         sortOrder: LibraryBrowse.NormalizeSortOrder(request.artistSortOrder)
     }
+    startsWith = Format.SafeString(request.startsWith, "ALL")
+    if startsWith <> "" and startsWith <> "ALL" and startsWith <> "#" then params.AddReplace("nameStartsWith", startsWith)
     pageSize = 100
     startIndex = Number.ToInteger(request.pageStartIndex, 0)
     params.startIndex = startIndex
     params.limit = pageSize
-    requestUrl = request.server + "/Artists/AlbumArtists" + Url.BuildQueryString(params)
-    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    if startsWith = "#" then
+        response = loadNonAlphabeticArtistPage(request, params, startIndex, pageSize)
+    else
+        response = requestAlbumArtists(request, params)
+    end if
     m.log.write("HTTP page completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
     if response.ok <> true then
         m.log.error("Artist request failed libraryId=" + Format.SafeString(request.libraryId, "") + " message=" + Format.SafeString(response.errorMessage, ""))
@@ -75,6 +81,58 @@ sub executeRequest()
         hasMore: artists.Count() = pageSize and (totalRecordCount < 0 or startIndex + artists.Count() < totalRecordCount)
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' loadNonAlphabeticArtistPage
+'-------------------------------------------------------------------------------
+function loadNonAlphabeticArtistPage(request as object, params as object, startIndex as integer, pageSize as integer) as object
+    cacheKey = Format.SafeString(request.libraryId, "") + "|" + Format.SafeString(request.artistSortOrder, "")
+    if startIndex = 0 or m.nonAlphabeticCache = invalid or m.nonAlphabeticCache.key <> cacheKey then
+        baseParams = {}
+        for each key in params
+            if LCase(key) <> "startindex" and LCase(key) <> "limit" then baseParams[key] = params[key]
+        end for
+        lowerParams = copyArtistParams(baseParams)
+        lowerParams.AddReplace("nameLessThan", "A")
+        lowerResponse = requestAlbumArtists(request, lowerParams)
+        if lowerResponse.ok <> true then return lowerResponse
+
+        upperParams = copyArtistParams(baseParams)
+        upperParams.AddReplace("nameStartsWithOrGreater", "Z")
+        upperResponse = requestAlbumArtists(request, upperParams)
+        if upperResponse.ok <> true then return upperResponse
+
+        items = getArtistItems(lowerResponse.data)
+        for each item in getArtistItems(upperResponse.data)
+            name = UCase(Format.SafeString(item.SortName, Format.SafeString(item.Name, "")))
+            if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
+        end for
+        items = LetterBrowse.SortItems(items, request.artistSortOrder)
+        m.nonAlphabeticCache = { key: cacheKey, items: items }
+    end if
+
+    pageItems = LetterBrowse.GetPage(m.nonAlphabeticCache.items, startIndex, pageSize)
+    return { ok: true, data: { Items: pageItems, TotalRecordCount: m.nonAlphabeticCache.items.Count() } }
+end function
+
+'-------------------------------------------------------------------------------
+' copyArtistParams
+'-------------------------------------------------------------------------------
+function copyArtistParams(params as object) as object
+    result = {}
+    for each key in params
+        result[key] = params[key]
+    end for
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' requestAlbumArtists
+'-------------------------------------------------------------------------------
+function requestAlbumArtists(request as object, params as object) as object
+    requestUrl = request.server + "/Artists/AlbumArtists" + Url.BuildQueryString(params)
+    return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+end function
 
 '-------------------------------------------------------------------------------
 ' getArtistTotalRecordCount

@@ -11,6 +11,7 @@ import "pkg:/source/Number.bs"
 import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/LetterBrowse.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -53,13 +54,19 @@ sub executeRequest()
     if Format.SafeString(request.artistIds, "") <> "" then params.AddReplace("artistIds", request.artistIds)
     if Format.SafeString(request.genre, "") <> "" then params.AddReplace("genres", request.genre)
     if Type(request.years) = "roArray" and request.years.Count() > 0 then params.AddReplace("years", request.years.Join(","))
+    startsWith = Format.SafeString(request.startsWith, "ALL")
+    if startsWith <> "" and startsWith <> "ALL" and startsWith <> "#" then params.AddReplace("nameStartsWith", startsWith)
 
     pageSize = getAlbumPageSize(request)
     startIndex = Number.ToInteger(request.pageStartIndex, 0)
     params.AddReplace("startIndex", startIndex)
     params.AddReplace("limit", pageSize)
-    requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
-    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    if startsWith = "#" then
+        response = loadNonAlphabeticAlbumPage(request, params, startIndex, pageSize)
+    else
+        requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    end if
     m.log.write("HTTP page completed libraryId=" + Format.SafeString(request.libraryId, "") + " startIndex=" + startIndex.ToStr() + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
     if response.ok <> true then
         m.log.error("Album request failed libraryId=" + Format.SafeString(request.libraryId, "") + " message=" + Format.SafeString(response.errorMessage, ""))
@@ -83,6 +90,74 @@ sub executeRequest()
         queryId: Number.ToInteger(request.queryId, 0)
     }
 end sub
+
+'-------------------------------------------------------------------------------
+' loadNonAlphabeticAlbumPage
+'-------------------------------------------------------------------------------
+function loadNonAlphabeticAlbumPage(request as object, params as object, startIndex as integer, pageSize as integer) as object
+    cacheKey = Format.SafeString(request.libraryId, "") + "|" + Format.SafeString(request.albumSortOrder, "") + "|" + Format.SafeString(request.genre, "") + "|" + (request.favoriteOnly = true).ToStr()
+    if Type(request.years) = "roArray" then cacheKey = cacheKey + "|" + request.years.Join(",")
+    if startIndex = 0 or m.nonAlphabeticCache = invalid or m.nonAlphabeticCache.key <> cacheKey then
+        baseParams = copyUnpagedAlbumParams(params)
+        lowerParams = copyAlbumParams(baseParams)
+        lowerParams.AddReplace("nameLessThan", "A")
+        lowerResponse = requestAlbumItems(request, lowerParams)
+        if lowerResponse.ok <> true then return lowerResponse
+
+        upperParams = copyAlbumParams(baseParams)
+        upperParams.AddReplace("nameStartsWithOrGreater", "Z")
+        upperResponse = requestAlbumItems(request, upperParams)
+        if upperResponse.ok <> true then return upperResponse
+
+        items = ApiPayload.GetItems(lowerResponse.data)
+        for each item in ApiPayload.GetItems(upperResponse.data)
+            name = UCase(Format.SafeString(item.SortName, Format.SafeString(item.Name, "")))
+            if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
+        end for
+        items = LetterBrowse.SortItems(items, request.albumSortOrder)
+        m.nonAlphabeticCache = { key: cacheKey, items: items }
+    end if
+
+    return buildNonAlphabeticAlbumResponse(m.nonAlphabeticCache.items, startIndex, pageSize)
+end function
+
+'-------------------------------------------------------------------------------
+' copyUnpagedAlbumParams
+'-------------------------------------------------------------------------------
+function copyUnpagedAlbumParams(params as object) as object
+    result = {}
+    for each key in params
+        if LCase(key) <> "startindex" and LCase(key) <> "limit" then result[key] = params[key]
+    end for
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' copyAlbumParams
+'-------------------------------------------------------------------------------
+function copyAlbumParams(params as object) as object
+    result = {}
+    for each key in params
+        result[key] = params[key]
+    end for
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' requestAlbumItems
+'-------------------------------------------------------------------------------
+function requestAlbumItems(request as object, params as object) as object
+    requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+    return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' buildNonAlphabeticAlbumResponse
+'-------------------------------------------------------------------------------
+function buildNonAlphabeticAlbumResponse(items as object, startIndex as integer, pageSize as integer) as object
+    pageItems = LetterBrowse.GetPage(items, startIndex, pageSize)
+    return { ok: true, data: { Items: pageItems, TotalRecordCount: items.Count() } }
+end function
 
 '-------------------------------------------------------------------------------
 ' getAlbumFields

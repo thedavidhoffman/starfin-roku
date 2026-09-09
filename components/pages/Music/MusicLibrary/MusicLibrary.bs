@@ -23,6 +23,7 @@ import "pkg:/components/pages/Music/MusicLibrary/Helpers/Rendering.bs"
 import "pkg:/components/pages/Music/MusicLibrary/Helpers/BrowseControls.bs"
 import "pkg:/components/pages/Music/MusicLibrary/Helpers/Navigation.bs"
 import "pkg:/components/pages/Music/MusicLibrary/Helpers/MediaState.bs"
+import "pkg:/components/pages/Music/MusicLibrary/Helpers/LetterGrid.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -42,6 +43,7 @@ sub initReferences()
     m.titleLabel = m.top.findNode("titleLabel")
     m.browseByButton = m.top.findNode("browseByButton")
     m.sortButton = m.top.findNode("sortButton")
+    m.letterGutterButton = m.top.findNode("letterGutterButton")
     m.filterButtonRow = m.top.findNode("filterButtonRow")
     m.emptyFilterLabel = m.top.findNode("emptyFilterLabel")
     m.musicGrid = m.top.findNode("musicGrid")
@@ -63,6 +65,8 @@ sub initHandlers()
     m.browseByButton.observeField("focusExitDown", "onBrowseByButtonFocusExitDown")
     m.sortButton.observeField("sortOrderChanged", "onSortOrderChanged")
     m.sortButton.observeField("focusExitDown", "onSortButtonFocusExitDown")
+    m.letterGutterButton.observeField("focused", "onLetterGutterButtonFocused")
+    m.letterGutterButton.observeField("buttonSelected", "onLetterGutterButtonSelected")
     m.filterButtonRow.observeField("filterSelected", "onFilterButtonRowSelected")
     m.filterButtonRow.observeField("focusExitUp", "onFilterButtonRowFocusExitUp")
     m.filterButtonRow.observeField("focusExitDown", "onFilterButtonRowFocusExitDown")
@@ -97,6 +101,16 @@ sub initState()
         filters: {
             options: LibraryBrowse.NormalizeFilterOptions(invalid)
             load: createLoadState()
+        }
+        letterGridOpen: false
+        letterGridPanel: {
+            x: 68
+            y: 207
+        }
+        letterFilter: {
+            selected: "ALL"
+            pending: ""
+            previousPaging: invalid
         }
         refreshPending: false
         filterRefresh: LibraryBrowseRefresh.Create()
@@ -181,6 +195,7 @@ sub onLoadRequestChanged()
         m.state.browse.genre = ""
     end if
     m.state.filters.options = LibraryBrowse.NormalizeFilterOptions(invalid)
+    resetMusicLetterFilter()
     syncSortControls()
     hideFilterButtonRow()
     if isFilteredAlbumBrowseActive() then
@@ -249,6 +264,7 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    closeLetterGrid(false)
     wasLoading = m.state.loadingUi.foreground.kind <> ""
     m.state.loadingUi.foreground.pausedKind = m.state.loadingUi.foreground.kind
     restoreFilterView = LibraryBrowseRefresh.IsActive(m.state.filterRefresh)
@@ -301,12 +317,23 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "left" and m.sortButton.isInFocusChain() then return focusBrowseByButton()
 
+    if key = "up" and m.letterGutterButton.isInFocusChain() then
+        m.top.focusExitUp = true
+        return true
+    end if
+
+    if key = "left" and isMusicGridAtFirstColumn() then return openLetterGrid()
+
     if key = "up" and isAlbumsGridAtFirstRow() then
         if focusFilterButtonRow() = true then return true
         return focusBrowseByButton()
     end if
 
     if key = "back" then
+        if m.state.letterGridOpen then
+            closeLetterGrid(true)
+            return true
+        end if
         if isFirstAlbumFocused() <> true then
             getActiveGrid().jumpToItem = 0
             return true

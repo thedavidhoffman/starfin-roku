@@ -15,6 +15,19 @@ artist's sort name, so it cannot provide ordering consistent with Artist browse.
 The option is omitted instead of requiring the Roku client to load the entire
 album library before rendering.
 
+## Letter navigation
+
+The horizontal letter control is available for every music browse mode. Album,
+Favorites, Decade, and Genre apply `ALL`, `#`, or `A`-through-`Z` to album sort
+names while preserving the active filters. Artist applies the same selection to
+album-artist sort names. Letter changes are transactional: the current grid and
+paging state remain committed until the first replacement page succeeds, and an
+empty or failed bucket leaves the current grid in place with feedback in the
+letter dialog. Focus returns to the first replacement item only after the dialog
+closes, and rapid changes retain the original paging state for rollback. Letter
+selection is reset to `ALL` when the browse mode or music library changes and is
+not persisted.
+
 ## Album requests
 
 Ordinary album browsing requests 100 items per page. Decade browsing supplies a

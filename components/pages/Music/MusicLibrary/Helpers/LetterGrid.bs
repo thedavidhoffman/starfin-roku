@@ -1,0 +1,186 @@
+'-------------------------------------------------------------------------------
+' resetMusicLetterFilter
+'-------------------------------------------------------------------------------
+sub resetMusicLetterFilter()
+    m.state.letterFilter.selected = "ALL"
+    m.state.letterFilter.pending = ""
+    m.state.letterFilter.previousPaging = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' getRequestedMusicLetter
+'-------------------------------------------------------------------------------
+function getRequestedMusicLetter() as string
+    if m.state.letterFilter.pending <> "" then return m.state.letterFilter.pending
+    return Format.SafeString(m.state.letterFilter.selected, "ALL")
+end function
+
+'-------------------------------------------------------------------------------
+' onLetterGutterButtonFocused
+'-------------------------------------------------------------------------------
+sub onLetterGutterButtonFocused()
+    if m.letterGutterButton.focused then openLetterGrid()
+end sub
+
+'-------------------------------------------------------------------------------
+' onLetterGutterButtonSelected
+'-------------------------------------------------------------------------------
+sub onLetterGutterButtonSelected()
+    openLetterGrid()
+end sub
+
+'-------------------------------------------------------------------------------
+' openLetterGrid
+'-------------------------------------------------------------------------------
+function openLetterGrid() as boolean
+    if m.letterGutterButton.visible <> true then return false
+
+    m.state.letterGridOpen = true
+    m.top.letterGridRequested = {
+        id: "letterGrid"
+        sourcePage: "musicLibrary"
+        componentName: "LetterGridDialog"
+        openFunction: "openGrid"
+        closeFields: ["closeRequested"]
+        eventFields: ["letterSelected"]
+        selectedLetter: m.state.letterFilter.selected
+        panelX: m.state.letterGridPanel.x
+        panelY: m.state.letterGridPanel.y
+    }
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' closeLetterGrid
+'-------------------------------------------------------------------------------
+sub closeLetterGrid(focusItems as boolean)
+    cancelPendingMusicLetterSelection()
+    wasOpen = m.state.letterGridOpen = true
+    m.state.letterGridOpen = false
+    if wasOpen then
+        m.top.letterGridRequested = {
+            id: "letterGrid"
+            sourcePage: "musicLibrary"
+            action: "close"
+            focusItems: focusItems
+        }
+        return
+    end if
+    if focusItems then focusAlbums()
+end sub
+
+'-------------------------------------------------------------------------------
+' selectLetter
+'-------------------------------------------------------------------------------
+sub selectLetter(letter as string)
+    if letter = "" or letter = m.state.letterFilter.pending then return
+    if letter = m.state.letterFilter.selected then
+        closeLetterGrid(true)
+        return
+    end if
+
+    load = getActiveMusicPageLoadState()
+    m.state.letterFilter.pending = letter
+    if m.state.letterFilter.previousPaging = invalid then
+        m.state.letterFilter.previousPaging = {
+            nextStartIndex: load.nextStartIndex
+            totalCount: load.totalCount
+            hasMore: load.hasMore
+            status: load.status
+        }
+    end if
+    load.nextStartIndex = 0
+    load.requestInFlight = false
+    load.queryId = load.queryId + 1
+    load.status = "loading"
+    updateMusicLetterGridStatus("")
+    if isArtistBrowseMode() then
+        loadArtistPage(0)
+    else
+        loadAlbumPage(0)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getActiveMusicPageLoadState
+'-------------------------------------------------------------------------------
+function getActiveMusicPageLoadState() as object
+    if isArtistBrowseMode() then return m.state.content.artists.load
+    return m.state.content.albums.load
+end function
+
+'-------------------------------------------------------------------------------
+' restoreMusicPagingAfterRejectedLetterSelection
+'-------------------------------------------------------------------------------
+sub restoreMusicPagingAfterRejectedLetterSelection()
+    previous = m.state.letterFilter.previousPaging
+    m.state.letterFilter.pending = ""
+    m.state.letterFilter.previousPaging = invalid
+    load = getActiveMusicPageLoadState()
+    load.requestInFlight = false
+    if previous = invalid then return
+    load.nextStartIndex = previous.nextStartIndex
+    load.totalCount = previous.totalCount
+    load.hasMore = previous.hasMore
+    load.status = previous.status
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelPendingMusicLetterSelection
+'-------------------------------------------------------------------------------
+sub cancelPendingMusicLetterSelection()
+    if m.state.letterFilter.pending = "" then return
+    if isArtistBrowseMode() then
+        m.musicArtistsTask.control = TaskControl.Command.Stop
+    else
+        m.musicLibraryTask.control = TaskControl.Command.Stop
+    end if
+    restoreMusicPagingAfterRejectedLetterSelection()
+    load = getActiveMusicPageLoadState()
+    load.queryId = load.queryId + 1
+end sub
+
+'-------------------------------------------------------------------------------
+' commitMusicLetterSelection
+'-------------------------------------------------------------------------------
+sub commitMusicLetterSelection()
+    letter = m.state.letterFilter.pending
+    m.state.letterFilter.selected = letter
+    m.state.letterFilter.pending = ""
+    m.state.letterFilter.previousPaging = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' finalizeMusicLetterSelection
+'-------------------------------------------------------------------------------
+sub finalizeMusicLetterSelection()
+    m.musicGrid.jumpToItem = 0
+    m.musicGrid.itemFocused = 0
+    closeLetterGrid(true)
+    letter = Format.SafeString(m.state.letterFilter.selected, "ALL")
+    m.log.activity("Filtering " + ActivityLog.RequestTitle(m.state.context, "Music") + " by letter " + ActivityLog.Quote(letter, "ALL"))
+end sub
+
+'-------------------------------------------------------------------------------
+' updateMusicLetterGridStatus
+'-------------------------------------------------------------------------------
+sub updateMusicLetterGridStatus(statusText as string)
+    if m.state.letterGridOpen <> true then return
+    m.top.letterGridRequested = {
+        id: "letterGrid"
+        sourcePage: "musicLibrary"
+        action: "update"
+        statusText: statusText
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' isMusicGridAtFirstColumn
+'-------------------------------------------------------------------------------
+function isMusicGridAtFirstColumn() as boolean
+    if m.musicGrid.isInFocusChain() <> true then return false
+    focusedIndex = Number.ToInteger(m.musicGrid.itemFocused, 0)
+    columns = Number.ToInteger(m.musicGrid.numColumns, 1)
+    if columns <= 0 then columns = 1
+    return focusedIndex mod columns = 0
+end function

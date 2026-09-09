@@ -32,6 +32,10 @@ entries use the existing timestamp and component label followed by the stable
   request context is available, immediately before task dispatch.
 - Video-library browse-option and sort-direction changes record the resulting
   sort label and direction after the selection is accepted.
+- Music- and video-library letter changes record the committed letter after the
+  replacement page succeeds. Empty, failed, cancelled, repeated, and stale
+  selections do not record activity. A committed letter replacement records
+  only the letter-filter event, not an additional library-viewing event.
 - Failures are recorded only after the owning workflow accepts the response as
   current.
 - Playback pause, resume, stop, completion, and track changes are recorded only
