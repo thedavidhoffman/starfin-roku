@@ -26,6 +26,7 @@ individual Starfin features.
 - [Playback Skip Controls](playback-skip-controls.md)
 - [Playlist Artwork](playlist-artwork.md)
 - [Preview Sheets](preview-sheets.md)
+- [Primary Button](primary-button.md)
 - [Quick Connect](quick-connect.md)
 - [Search](search.md)
 - [Theme Songs](theme-songs.md)

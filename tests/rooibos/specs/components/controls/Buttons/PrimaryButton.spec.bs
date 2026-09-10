@@ -127,14 +127,110 @@ namespace tests
             m.assertTrue(m.top.buttonSelected)
         end function
 
-        @it("estimates preferred width without creating a main-thread font registry")
+        @describe("measured text layout")
+
+        private function naturalWidth(text as string, font as dynamic) as float
+            label = CreateObject("roSGNode", "Label")
+            label.font = font
+            label.text = text
+            return label.boundingRect().width
+        end function
+
+        @it("distinguishes narrow and wide glyphs with the same character count")
         function _()
-            m.top.text = "Continue"
+            m.top.textFont = "font:MediumSystemFont"
+            m.top.text = "iiii"
+            narrow = m.top.callFunc("getPreferredWidth", 30)
+            m.top.text = "WWWW"
+            wide = m.top.callFunc("getPreferredWidth", 30)
 
-            'bs:disable-next-line 1140
-            width = getPreferredWidth(30)
+            m.assertTrue(wide > narrow)
+            measured = m.naturalWidth("WWWW", m.node.textLabel.font)
+            m.assertTrue(wide >= measured + 60)
+            m.assertTrue(wide < measured + 61)
+        end function
 
-            m.assertEqual(width, 204)
+        @it("recalculates layout after changing the font")
+        function _()
+            m.top.buttonWidth = 600
+            m.top.iconUri = "pkg:/images/icons/play-light.png"
+            m.top.text = "Resume"
+            m.top.textFont = "font:SmallestSystemFont"
+            small = m.node.textLabel.width
+            m.top.textFont = "font:LargeSystemFont"
+
+            m.assertTrue(m.node.textLabel.width > small)
+            m.assertTrue(m.node.textLabel.width >= m.naturalWidth("Resume", m.node.textLabel.font))
+        end function
+
+        @it("fits Play and its icon inside the existing button dimensions")
+        function _()
+            m.top.textFont = "font:SmallestSystemFont"
+            m.top.buttonWidth = 120
+            m.top.buttonHeight = 48
+            m.top.textHeight = 26
+            m.top.iconGap = 6
+            m.top.contentOffsetX = 2
+            m.top.iconUri = "pkg:/images/icons/play-light.png"
+            m.top.text = "Play"
+
+            measured = m.naturalWidth("Play", m.node.textLabel.font)
+            m.assertTrue(measured > 0)
+            m.assertTrue(m.node.textLabel.width >= measured)
+            m.assertTrue(m.node.textLabel.translation[0] + m.node.textLabel.width <= 120)
+            m.assertEqual(m.node.textLabel.translation[0] - m.node.iconPoster.translation[0], 30.0)
+            m.assertEqual(m.node.background.width, 120.0)
+        end function
+
+        @it("fits Resume and its icon inside the existing button dimensions")
+        function _()
+            m.top.textFont = "font:SmallestSystemFont"
+            m.top.buttonWidth = 165
+            m.top.buttonHeight = 48
+            m.top.textHeight = 26
+            m.top.iconGap = 6
+            m.top.contentOffsetX = -2
+            m.top.iconUri = "pkg:/images/icons/play-light.png"
+            m.top.text = "Resume"
+
+            measured = m.naturalWidth("Resume", m.node.textLabel.font)
+            m.assertTrue(measured > 0)
+            m.assertTrue(m.node.textLabel.width >= measured)
+            m.assertTrue(m.node.textLabel.translation[0] + m.node.textLabel.width <= 165)
+            m.assertEqual(m.node.textLabel.translation[0] - m.node.iconPoster.translation[0], 30.0)
+            m.assertEqual(m.node.background.width, 165.0)
+        end function
+
+        @it("fits Random and its icon inside the existing button dimensions")
+        function _()
+            m.top.textFont = "font:SmallestSystemFont"
+            m.top.buttonWidth = 165
+            m.top.buttonHeight = 48
+            m.top.textHeight = 26
+            m.top.iconGap = 6
+            m.top.contentOffsetX = 3
+            m.top.iconUri = "pkg:/images/icons/play-light.png"
+            m.top.text = "Random"
+
+            measured = m.naturalWidth("Random", m.node.textLabel.font)
+            m.assertTrue(measured > 0)
+            m.assertTrue(m.node.textLabel.width >= measured)
+            m.assertTrue(m.node.textLabel.translation[0] + m.node.textLabel.width <= 165)
+            m.assertEqual(m.node.textLabel.translation[0] - m.node.iconPoster.translation[0], 30.0)
+            m.assertEqual(m.node.background.width, 165.0)
+        end function
+
+        @it("constrains genuinely oversized text without enlarging the button")
+        function _()
+            m.top.buttonWidth = 120
+            m.top.iconUri = "pkg:/images/icons/play-light.png"
+            m.top.iconGap = 6
+            m.top.contentOffsetX = 0
+            m.top.text = "A very long button label"
+
+            m.assertEqual(m.node.background.width, 120.0)
+            m.assertEqual(m.node.textLabel.width, 66.0)
+            m.assertTrue(m.node.textLabel.translation[0] + m.node.textLabel.width <= 120)
         end function
 
     end class
