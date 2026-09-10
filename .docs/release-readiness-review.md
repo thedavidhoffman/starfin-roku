@@ -225,6 +225,12 @@ public archives. Verify both archives' contents, including screenshot redaction
 and the absence of exposed IP addresses or credentials in report text and
 metadata. Do not attach private reports or logs to a public release.
 
+The exact loopback address `127.0.0.1` may remain visible in screenshots, report
+text, and metadata because it does not identify a private device or server.
+This exception also applies to the unit-test report below. All other IP addresses
+remain subject to redaction; the exception does not extend to other loopback
+addresses or to credentials.
+
 Each resolution must report at least one executed automation test, equal test
 and pass counts, and no failed, pending, skipped, or unexpected results. Both
 complete suites must pass and both sanitized archives must pass verification.
@@ -241,7 +247,7 @@ versioned unit-test report under `out/`. Sanitize the report before saving it:
   -- --host <ip_redacted> --password "<password_redacted>"
   ```
 
-- Replace every IPv4 address anywhere in the report with `<ip_redacted>`,
+- Replace every IPv4 address except `127.0.0.1` anywhere in the report with `<ip_redacted>`,
   including the Roku address, local addresses, socket endpoints, and addresses
   repeated in deployment or connection messages.
 - Replace the password argument value with `<password_redacted>` without
@@ -250,8 +256,8 @@ versioned unit-test report under `out/`. Sanitize the report before saving it:
   of the raw password value.
 - Redact any other credentials discovered in the output.
 
-After sanitizing, verify that the report contains no IPv4 addresses or raw
-credentials. The report must retain the final test totals, result, warnings,
+After sanitizing, verify that the report contains no IPv4 addresses other than
+`127.0.0.1` and no raw credentials. The report must retain the final test totals, result, warnings,
 crashes, failures, and ignored-test count.
 
 Record the total test count, passing result, and unit-test report path in the
