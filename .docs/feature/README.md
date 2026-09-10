@@ -10,6 +10,7 @@ individual Starfin features.
 - [Activity Logging](activity-logging.md)
 - [Audio Playback](audio-playback.md)
 - [Automated Device Testing](automated-device-testing.md)
+- [Character Constants](character-constants.md)
 - [Deep Links and Roku Performance Beacons](deep-links.md)
 - [Episode Detail Browsing](episode-detail-browsing.md)
 - [Home Media Playback](home-media.md)
