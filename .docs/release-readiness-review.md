@@ -70,7 +70,19 @@ These are generated release outputs and should not be treated as source files.
 Replace existing reports for the same version when the complete verification is
 rerun so the files always describe the latest run of that candidate.
 
-## 1. Establish the Release Scope
+## 1. Confirm the Release Version
+
+Before starting the review or running any checks, prompt the user for the target
+release version in `major.minor.build` format and wait for their response. Do not
+infer the target from the current manifest, package metadata, or previous reports.
+
+Use the confirmed version throughout the decision record, report filenames,
+automation archive names, and release artifact. Verify that the Roku manifest's
+`major_version`, `minor_version`, and `build_version` match it before proceeding.
+If they differ, report the mismatch and resolve it with the user before continuing;
+do not silently change or increment the version.
+
+## 2. Establish the Release Scope
 
 - Identify the last known-good release tag, commit, or branch.
 - Review the diff from that baseline to the proposed release commit.
@@ -84,7 +96,7 @@ rerun so the files always describe the latest run of that candidate.
 - Do not use `.to-do.md` as release scope unless its owner explicitly requests
   it.
 
-## 2. Perform a Risk-Focused Code Review
+## 3. Perform a Risk-Focused Code Review
 
 Review changed production code and the directly connected callers, consumers,
 and tests. Do not inspect unrelated historical code solely for completeness.
@@ -103,7 +115,7 @@ For stateful workflows, trace the complete event sequence and confirm that
 state and side effects have clear owners. Look for obsolete workarounds or
 alternate paths that bypass the current implementation.
 
-## 3. Reconcile Behavior and Documentation
+## 4. Reconcile Behavior and Documentation
 
 - Compare changed behavior with its feature document under `.docs/feature/`.
 - Update or create the applicable feature document when release behavior has
@@ -112,7 +124,7 @@ alternate paths that bypass the current implementation.
 - Verify that documented limitations and deferred issues still describe the
   proposed release accurately.
 
-## 4. Run Automated Verification
+## 5. Run Automated Verification
 
 Run the complete project validation rather than only the tests nearest to the
 latest changes:
@@ -158,7 +170,7 @@ Distinguish findings from command failures: a nonzero exit can indicate reported
 vulnerabilities or outdated packages. Registry, network, or tooling errors leave
 the assessment incomplete and must be resolved before recommending `SHIP`.
 
-## 5. Run Required Roku Device Tests
+## 6. Run Required Roku Device Tests
 
 Install and test on the configured development device. Run the complete Rooibos
 unit-test suite for every release candidate:
@@ -284,7 +296,7 @@ do not include those device or server details in the generated release-readiness
 report. An absent or incomplete manual smoke-test record is not a release
 blocker.
 
-## 6. Verify the Release Artifact
+## 7. Verify the Release Artifact
 
 - Build the exact package intended for distribution.
 - Confirm its version and channel configuration.
@@ -321,6 +333,7 @@ Write the completed decision record to the versioned release-readiness report
 under `out/`. Record:
 
 - Baseline and proposed release commit.
+- User-confirmed target release version and manifest version match.
 - Validation commands and results.
 - Dependency assessment: audit completion and counts by severity, advisory
   applicability and disposition, available fixes, and reasons for accepted or
