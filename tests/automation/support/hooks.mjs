@@ -12,6 +12,9 @@ export const mochaHooks = {
   async afterEach() {
     if (this.currentTest?.state !== 'failed') return;
 
+    console.error(`Failed: ${this.currentTest.fullTitle()}`);
+    console.error(this.currentTest.err?.stack ?? this.currentTest.err?.message ?? 'No test error was recorded.');
+
     try {
       await captureEvidence(this, this.currentTest.fullTitle(), { failure: true });
     } catch (error) {
