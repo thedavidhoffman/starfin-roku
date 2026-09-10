@@ -1,3 +1,4 @@
+import "pkg:/source/tests/source/MediaAuthentication.bs"
 import "pkg:/source/Char.bs"
 
 namespace tests
@@ -84,7 +85,7 @@ namespace tests
             m.node.playerState.currentIndex = 0
             m.node.screensaverOverlay.callFunc("startDelay")
             m.node.player.disableScreenSaver = true
-            m.node.playbackInfoTask = { request: invalid, control: "" }
+            m.node.playerState.playbackLoad.nodes[0] = { request: invalid, control: "" }
 
             'bs:disable-next-line 1140
             onPlayerStateChanged()
@@ -153,8 +154,8 @@ namespace tests
             m.configurePlayer("playing", "bounce")
             m.node.player.disableScreenSaver = true
             m.node.screensaverOverlay.callFunc("startDelay")
-            m.node.tracksTask = { control: "run" }
-            m.node.playbackInfoTask = { control: "run" }
+            m.node.playerState.tracksLoad.nodes[0] = { control: "run" }
+            m.node.playerState.playbackLoad.nodes[0] = { control: "run" }
 
             'bs:disable-next-line 1140
             deactivate()
@@ -179,7 +180,7 @@ namespace tests
             m.node.player.position = 42.0
             m.node.playerState.tracks = [{ Id: "track-1", Name: "Track" }]
             m.node.playerState.currentIndex = 0
-            m.node.playbackInfoTask = { request: invalid, control: "" }
+            m.node.playerState.playbackLoad.nodes[0] = { request: invalid, control: "" }
 
             'bs:disable-next-line 1140
             onPlaybackProgressChanged()
@@ -191,7 +192,7 @@ namespace tests
             'bs:disable-next-line 1140
             togglePlayback()
 
-            m.assertEqual(m.node.playbackInfoTask.request.itemId, "track-1")
+            m.assertEqual(m.node.playerState.playbackLoad.nodes[0].request.itemId, "track-1")
             m.assertEqual(m.node.playerState.restartPosition, 42.0)
         end function
 
@@ -222,11 +223,13 @@ namespace tests
         end function
 
         private sub configurePlayer(state as string, screensaverType as string)
+            m.node.playerState.playbackLoad = { lifecycle: LatestRequestLifecycle.Create(), nodes: [{}, {}], nextIndex: 0 }
+            m.node.playerState.tracksLoad = { lifecycle: LatestRequestLifecycle.Create(), nodes: [{}, {}], nextIndex: 0 }
             settings = {}
             settings[SettingsStore.Key.ScreensaverType] = screensaverType
             settings[SettingsStore.Key.ScreensaverDelay] = "1"
             m.node.player = { state: state, control: "", disableScreenSaver: false, position: 0.0, duration: 0.0, seek: 0.0, errorCode: 0, errorMsg: "" }
-            m.node.playerState.request = { settings: settings, server: "server", token: "token", userId: "user" }
+            m.node.playerState.request = { settings: settings, server: "https://server", token: "fresh", userId: "user" }
             m.node.playerState.changingTrack = true
         end sub
 
@@ -235,7 +238,14 @@ namespace tests
             m.node.player.disableScreenSaver = true
             m.node.playerState.tracks = [{ Id: "track-1", Name: "Track" }]
             m.node.playerState.currentIndex = 0
-            m.node.playbackInfoTask = { response: response }
+            request = PlaybackRequest.Create(m.node.playerState.request)
+            request.itemId = "track-1"
+            request.title = "Track"
+            LatestRequestLifecycle.Queue(m.node.playerState.playbackLoad.lifecycle, request, request)
+            LatestRequestLifecycle.TakeNext(m.node.playerState.playbackLoad.lifecycle)
+            if response.itemId = "track-1" then response.requestId = 1
+            response.action = "themeAudioPlaybackInfo"
+            m.node.playerState.playbackLoad.nodes[0] = { response: response }
             m.node.screensaverOverlay.callFunc("startDelay")
         end sub
 
@@ -243,6 +253,285 @@ namespace tests
             m.assertFalse(m.node.playerState.changingTrack)
             m.assertFalse(m.node.player.disableScreenSaver)
         end sub
+
+        @describe("Authenticated audio content")
+
+        @it("attaches current-session authentication for mp3 playback")
+        function _()
+            m.configurePlaybackInfoResponse({ ok: true, itemId: "track-1", streamUrl: "https://server/stream?ApiKey=server-token&x=1", streamFormat: "mp3" })
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.node.player.content.url, "https://server/stream?ApiKey=server-token&x=1")
+            m.assertEqual(m.node.player.content.HttpHeaders.Count(), 1)
+            m.assertEqual(m.node.player.content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+            m.assertEqual(m.node.player.control, "play")
+        end function
+
+        @it("attaches current-session authentication for hls playback")
+        function _()
+            m.configurePlaybackInfoResponse({ ok: true, itemId: "track-1", streamUrl: "https://server/stream?ApiKey=server-token&x=1", streamFormat: "hls" })
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.node.player.content.url, "https://server/stream?ApiKey=server-token&x=1")
+            m.assertEqual(m.node.player.content.HttpHeaders.Count(), 1)
+            m.assertEqual(m.node.player.content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+            m.assertEqual(m.node.player.control, "play")
+        end function
+
+        @it("leaves external audio URLs unauthenticated")
+        function _()
+            m.configurePlaybackInfoResponse({ ok: true, itemId: "track-1", streamUrl: "https://cdn.test/stream?ApiKey=provider", streamFormat: "mp3" })
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.node.player.content.url, "https://cdn.test/stream?ApiKey=provider")
+            m.assertEqual(m.node.player.content.HttpHeaders.Count(), 0)
+        end function
+
+        private sub configureSelection()
+            m.configurePlayer("stopped", "none")
+            m.node.playerState.tracks = [{ Id: "track-1", Name: "First" }, { Id: "track-2", Name: "Second" }, { Id: "track-3", Name: "Third" }]
+        end sub
+
+        private function response(requestId as integer, streamUrl = "https://server/stream?ApiKey=supplied#fragment" as string) as object
+            return { requestId: requestId, action: "themeAudioPlaybackInfo", ok: true, streamUrl: streamUrl, streamFormat: "hls" }
+        end function
+
+        @it("same-item supersession rejects the first generation and starts the alternate task")
+        function _()
+            m.configureSelection()
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.assertInvalid(m.node.player.content)
+            m.assertEqual(m.node.playerState.playbackLoad.nodes[1].request.requestId, 2)
+            m.node.playerState.playbackLoad.nodes[1].response = m.response(2)
+            'bs:disable-next-line 1140
+            onAlternatePlaybackInfoResponse()
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1, "https://old.test"))
+            m.assertEqual(m.node.player.content.url, "https://server/stream?ApiKey=supplied#fragment")
+        end function
+
+        @it("rapid selections replace pending work with the final track")
+        function _()
+            m.configureSelection()
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            playTrack(1)
+            'bs:disable-next-line 1140
+            playTrack(2)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.assertEqual(m.node.playerState.playbackLoad.nodes[1].request.itemId, "track-3")
+            m.assertEqual(m.node.playerState.playbackLoad.nodes[1].request.requestId, 3)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(3))
+            m.assertEqual(m.node.player.content.title, "Third")
+        end function
+
+        @it("stale failures cannot cancel the newest screensaver transition")
+        function _()
+            m.configureSelection()
+            m.node.player.disableScreenSaver = true
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            playTrack(1)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false })
+            m.assertTrue(m.node.playerState.changingTrack)
+            m.assertTrue(m.node.player.disableScreenSaver)
+            m.assertEqual(m.node.playerState.playbackLoad.nodes[1].request.itemId, "track-2")
+        end function
+
+        @it("deactivation rejects late completion without resetting generations")
+        function _()
+            m.configureSelection()
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            deactivate()
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.assertInvalid(m.node.player.content)
+            m.assertEqual(m.node.player.control, "stop")
+            'bs:disable-next-line 1140
+            playTrack(0)
+            m.assertEqual(m.node.playerState.playbackLoad.lifecycle.active.request.requestId, 2)
+        end function
+
+        @it("content uses the session captured when its request was queued")
+        function _()
+            m.configureSelection()
+            'bs:disable-next-line 1140
+            playTrack(0)
+            m.node.playerState.request.token = "later"
+            m.node.playerState.request.userId = "other"
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.assertEqual(m.node.player.content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+        end function
+
+        @it("successive external content replaces previous authentication")
+        function _()
+            m.configureSelection()
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.node.playerState.request.token = "fresh"
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(2, "https://external/stream?ApiKey=provider"))
+            m.assertEqual(m.node.player.content.url, "https://external/stream?ApiKey=provider")
+            m.assertEqual(m.node.player.content.HttpHeaders, [])
+        end function
+
+        @it("successive missing-token content replaces previous authentication")
+        function _()
+            m.configureSelection()
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.node.playerState.request.token = ""
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(2, "https://server/stream"))
+            m.assertEqual(m.node.player.content.url, "https://server/stream")
+            m.assertEqual(m.node.player.content.HttpHeaders, [])
+        end function
+
+        @it("successive new-session content replaces previous authentication")
+        function _()
+            m.configureSelection()
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.node.playerState.request.token = "new-token"
+            'bs:disable-next-line 1140
+            playTrack(0)
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(2, "https://server/stream"))
+            m.assertEqual(m.node.player.content.url, "https://server/stream")
+            m.assertEqual(m.node.player.content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("new-token", "user")])
+        end function
+
+        private sub loadAlbum(albumId as string, token as string)
+            m.node.top = { loadRequest: { server: "https://server", token: token, userId: "user", albumId: albumId, item: { Id: albumId, Name: "Album" }, settings: {} } }
+            'bs:disable-next-line 1140
+            onLoadRequestChanged()
+        end sub
+
+        private function albumResponse(requestId as integer) as object
+            return { requestId: requestId, action: "albumTracks", ok: true, data: { Items: [{ Id: "track-1", Name: "First" }] } }
+        end function
+
+        @it("rejects late album results after same-album session replacement")
+        function _()
+            m.configureSelection()
+            m.loadAlbum("album-1", "fresh")
+            m.loadAlbum("album-1", "new-token")
+            'bs:disable-next-line 1140
+            handleTracksResponse(m.albumResponse(1))
+            m.assertEqual(m.node.playerState.tracks.Count(), 0)
+            m.assertInvalid(m.node.playerState.playbackLoad.lifecycle.active)
+            m.node.playerState.tracksLoad.nodes[1].response = m.albumResponse(2)
+            'bs:disable-next-line 1140
+            onAlternateTracksResponse()
+            m.assertEqual(m.node.playerState.playbackLoad.lifecycle.active.request.token, "new-token")
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.assertEqual(m.node.player.content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("new-token", "user")])
+        end function
+
+        @it("rejects late album results after album replacement")
+        function _()
+            m.configureSelection()
+            m.loadAlbum("album-1", "fresh")
+            m.loadAlbum("album-2", "new-token")
+            'bs:disable-next-line 1140
+            handleTracksResponse(m.albumResponse(1))
+            m.assertEqual(m.node.playerState.tracks.Count(), 0)
+            m.assertInvalid(m.node.playerState.playbackLoad.lifecycle.active)
+            m.node.playerState.tracksLoad.nodes[1].response = m.albumResponse(2)
+            'bs:disable-next-line 1140
+            onAlternateTracksResponse()
+            m.assertEqual(m.node.playerState.playbackLoad.lifecycle.active.request.token, "new-token")
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+            m.assertEqual(m.node.player.content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("new-token", "user")])
+        end function
+
+        @it("album selection coalesces to the latest pending request in the same session")
+        function _()
+            m.configureSelection()
+            m.loadAlbum("album-1", "fresh")
+            m.loadAlbum("album-2", "fresh")
+            m.loadAlbum("album-3", "fresh")
+            'bs:disable-next-line 1140
+            handleTracksResponse(m.albumResponse(1))
+            m.assertEqual(m.node.playerState.tracks.Count(), 0)
+            m.assertEqual(m.node.playerState.tracksLoad.nodes[1].request.albumId, "album-3")
+            m.assertEqual(m.node.playerState.tracksLoad.nodes[1].request.requestId, 3)
+            'bs:disable-next-line 1140
+            handleTracksResponse(m.albumResponse(3))
+            m.assertEqual(m.node.playerState.playbackLoad.lifecycle.active.request.itemId, "track-1")
+        end function
+
+        @it("stale album failure advances the latest selection without starting playback")
+        function _()
+            m.configureSelection()
+            m.loadAlbum("album-1", "fresh")
+            m.loadAlbum("album-2", "fresh")
+            'bs:disable-next-line 1140
+            handleTracksResponse({ action: "albumTracks", requestId: 1, ok: false })
+            m.assertEqual(m.node.playerState.tracks.Count(), 0)
+            m.assertInvalid(m.node.playerState.playbackLoad.lifecycle.active)
+            m.assertEqual(m.node.playerState.tracksLoad.nodes[1].request.albumId, "album-2")
+        end function
+
+        @it("late album results cannot reopen deactivated playback")
+        function _()
+            m.configureSelection()
+            m.loadAlbum("album-1", "fresh")
+            'bs:disable-next-line 1140
+            deactivate()
+            'bs:disable-next-line 1140
+            handleTracksResponse(m.albumResponse(1))
+            m.assertEqual(m.node.playerState.tracks.Count(), 0)
+            m.assertInvalid(m.node.playerState.playbackLoad.lifecycle.active)
+        end function
+
+        @it("pause and resume leave the outstanding request generation intact")
+        function _()
+            m.configureSelection()
+            'bs:disable-next-line 1140
+            playTrack(0)
+            m.node.player.state = "playing"
+            'bs:disable-next-line 1140
+            togglePlayback()
+            m.assertEqual(m.node.player.control, "pause")
+            m.assertEqual(m.node.playerState.playbackLoad.lifecycle.active.request.requestId, 1)
+            m.node.player.state = "paused"
+            'bs:disable-next-line 1140
+            togglePlayback()
+            m.assertEqual(m.node.player.control, "resume")
+            m.assertEqual(m.node.playerState.playbackLoad.lifecycle.active.request.requestId, 1)
+        end function
 
     end class
 

@@ -1,3 +1,6 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/Encode.bs"
+
 namespace Url
 
     '---------------------------------------------------------------------------
@@ -70,48 +73,50 @@ namespace Url
     end function
 
     '---------------------------------------------------------------------------
-    ' Url.SetQueryParam
+    ' Url.Resolve
     '---------------------------------------------------------------------------
-    ' Example: ("https://server/items", "start", "20") returns "https://server/items?start=20".
-    '---------------------------------------------------------------------------
-    function SetQueryParam(urlValue as string, name as string, value as string) as string
-
-        ' Replaces an existing query parameter by name, or appends it when absent.
-
-        queryStart = Instr(1, urlValue, "?")
-        if queryStart = 0 then return Url.__AddQueryParam(urlValue, name, value)
-
-        lowerUrl = LCase(urlValue)
-        lowerName = LCase(name)
-        searchStart = queryStart + 1
-
-        while true
-            keyStart = Instr(searchStart, lowerUrl, lowerName + "=")
-            if keyStart = 0 then return Url.__AddQueryParam(urlValue, name, value)
-            if keyStart = queryStart + 1 or Mid(urlValue, keyStart - 1, 1) = "&" then
-                valueStart = keyStart + Len(name) + 1
-                valueEnd = Instr(valueStart, urlValue, "&")
-                if valueEnd = 0 then valueEnd = Len(urlValue) + 1
-
-                return Left(urlValue, valueStart - 1) + Encode.Url(value) + Mid(urlValue, valueEnd)
-            end if
-
-            searchStart = keyStart + Len(name) + 1
+    function Resolve(server as dynamic, urlValue as dynamic) as string
+        path = Format.SafeString(urlValue, "")
+        if path = "" then return ""
+        base = Format.SafeString(server, "")
+        ' A leading // supplies a host, not a path beneath the server.
+        if Left(path, 2) = "//" then
+            schemeEnd = Instr(1, base, "://")
+            if schemeEnd = 0 then return path
+            return Left(base, schemeEnd) + path
+        end if
+        schemePattern = CreateObject("roRegex", "^[A-Za-z][A-Za-z0-9+.-]*:", "")
+        if schemePattern.IsMatch(path) then return path
+        if base = "" then return path
+        while Right(base, 1) = "/"
+            base = Left(base, Len(base) - 1)
         end while
-
-        return Url.__AddQueryParam(urlValue, name, value)
+        if Left(path, 1) = "/" then return base + path
+        return base + "/" + path
     end function
 
     '---------------------------------------------------------------------------
-    ' Url.__AddQueryParam
+    ' Url.GetOrigin
     '---------------------------------------------------------------------------
-    ' Example: ("https://server/items", "start", "20") returns "https://server/items?start=20".
-    '---------------------------------------------------------------------------
-    function __AddQueryParam(urlValue as string, name as string, value as string) as string
-        separator = "?"
-        if Instr(1, urlValue, "?") > 0 then separator = "&"
+    function GetOrigin(urlValue as dynamic) as string
+        normalized = LCase(Format.SafeString(urlValue, ""))
+        schemeEnd = Instr(1, normalized, "://")
+        if schemeEnd = 0 then return ""
 
-        return urlValue + separator + Encode.Url(name) + "=" + Encode.Url(value)
+        scheme = Left(normalized, schemeEnd - 1)
+        if scheme <> "http" and scheme <> "https" then return ""
+        authorityStart = schemeEnd + 3
+        authorityEnd = Len(normalized) + 1
+        for each separator in ["/", "?", "#"]
+            position = Instr(authorityStart, normalized, separator)
+            if position > 0 and position < authorityEnd then authorityEnd = position
+        end for
+        authority = Mid(normalized, authorityStart, authorityEnd - authorityStart)
+        if authority = "" or Instr(1, authority, "@") > 0 then return ""
+
+        if scheme = "http" and Right(authority, 3) = ":80" then authority = Left(authority, Len(authority) - 3)
+        if scheme = "https" and Right(authority, 4) = ":443" then authority = Left(authority, Len(authority) - 4)
+        return scheme + "://" + authority
     end function
 
     '---------------------------------------------------------------------------

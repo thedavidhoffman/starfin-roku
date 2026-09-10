@@ -1,4 +1,6 @@
 import "pkg:/source/Char.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/Url.bs"
 
 namespace JellyfinAuth
 
@@ -49,6 +51,39 @@ namespace JellyfinAuth
         return {
             Authorization: JellyfinAuth.BuildAuthorizationHeader(token)
         }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' JellyfinAuth.BuildMediaRequest
+    '---------------------------------------------------------------------------
+    function BuildMediaRequest(server as dynamic, urlValue as dynamic, token as dynamic, userId = invalid as dynamic) as object
+        resolvedUrl = Url.Resolve(server, urlValue)
+        result = { url: resolvedUrl, headers: {} }
+        if JellyfinAuth.__CanAuthenticate(server, resolvedUrl) <> true then return result
+
+        if Format.SafeString(token, "") <> "" then result.headers = { Authorization: JellyfinAuth.BuildAuthorizationHeader(token, userId) }
+        return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' JellyfinAuth.CreateContent
+    '---------------------------------------------------------------------------
+    function CreateContent(server as dynamic, streamUrl as dynamic, token as dynamic, userId = invalid as dynamic) as object
+        mediaRequest = JellyfinAuth.BuildMediaRequest(server, streamUrl, token, userId)
+        content = CreateObject("roSGNode", "ContentNode")
+        content.url = mediaRequest.url
+        headers = []
+        if mediaRequest.headers.Authorization <> invalid then headers.Push("Authorization: " + mediaRequest.headers.Authorization)
+        content.HttpHeaders = headers
+        return content
+    end function
+
+    '---------------------------------------------------------------------------
+    ' JellyfinAuth.__CanAuthenticate
+    '---------------------------------------------------------------------------
+    function __CanAuthenticate(server as dynamic, urlValue as string) as boolean
+        origin = Url.GetOrigin(server)
+        return origin <> "" and Url.GetOrigin(urlValue) = origin
     end function
 
 end namespace

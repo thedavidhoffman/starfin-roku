@@ -1,8 +1,9 @@
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
-import "pkg:/source/Encode.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -102,7 +103,11 @@ sub downloadTrickplayFile(request as object, tileIndex as integer, localUri as s
     transfer.InitClientCertificates()
     transfer.EnableEncodings(true)
     transfer.SetMessagePort(port)
-    transfer.SetUrl(requestUrl)
+    mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, requestUrl, request.token, request.userId)
+    transfer.SetUrl(mediaRequest.url)
+    for each headerName in mediaRequest.headers
+        transfer.AddHeader(headerName, mediaRequest.headers[headerName])
+    end for
 
     if transfer.AsyncGetToFile(localUri) <> true then
         m.log.error("Unable to start trickplay preload tileIndex=" + tileIndex.ToStr())
@@ -136,7 +141,7 @@ function getRemoteTrickplayUrl(request as object, tileIndex as integer) as strin
     tileWidth = getTileWidth(request)
     if server = "" or itemId = "" or token = "" or tileWidth <= 0 then return ""
 
-    return server + "/Videos/" + itemId + "/Trickplay/" + tileWidth.ToStr() + "/" + tileIndex.ToStr() + ".jpg?ApiKey=" + Encode.Url(token)
+    return Url.Resolve(server, "/Videos/" + itemId + "/Trickplay/" + tileWidth.ToStr() + "/" + tileIndex.ToStr() + ".jpg")
 end function
 
 '-------------------------------------------------------------------------------

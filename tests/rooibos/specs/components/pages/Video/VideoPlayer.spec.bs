@@ -1,3 +1,4 @@
+import "pkg:/source/tests/source/MediaAuthentication.bs"
 import "pkg:/source/Char.bs"
 
 namespace tests
@@ -606,6 +607,129 @@ namespace tests
                 if Instr(1, entry, "Activity:") > 0 then activities.Push(entry)
             end for
             return activities
+        end function
+
+        @describe("Media request authentication")
+
+        @it("passes server subtitle URLs to content alongside the playback header")
+        function _()
+            playbackInfo = { MediaSources: [{ MediaStreams: [{ Type: "Subtitle", Index: 4, DeliveryMethod: "External", DeliveryUrl: "/sub.srt?ApiKey=server-token&x=a%26b#cue" }] }] }
+            tracks = SubtitlePlayback.BuildExternalTracks(playbackInfo, "http://server/base")
+            response = { streamUrl: "http://server/master.m3u8?ApiKey=server-token", streamFormat: "hls", subtitleDeliveryMethod: "external", externalSubtitleTracks: tracks, externalSubtitleTrack: tracks[0] }
+            request = { server: "http://server/base", token: "session-token", userId: "user" }
+
+            'bs:disable-next-line 1140
+            content = buildVideoContent(response, request, { Name: "Movie" }, 0)
+
+            m.assertEqual(content.url, "http://server/master.m3u8?ApiKey=server-token")
+            m.assertEqual(content.SubtitleTracks[0].TrackName, "http://server/base/sub.srt?ApiKey=server-token&x=a%26b#cue")
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "http://server/base/sub.srt?ApiKey=server-token&x=a%26b#cue")
+            m.assertEqual(content.HttpHeaders.Count(), 1)
+            m.assertEqual(content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("session-token", "user")])
+        end function
+
+        @it("switches external subtitles using the unchanged server delivery URL")
+        function _()
+            m.prepareActivityPlayback("playing", "playing")
+            playbackInfo = { MediaSources: [{ MediaStreams: [{ Type: "Subtitle", Index: 4, DeliveryMethod: "External", DeliveryUrl: "/sub.srt?ApiKey=server-token#cue" }] }] }
+            m.node.streamOptions.externalSubtitleTracks = SubtitlePlayback.BuildExternalTracks(playbackInfo, "http://server")
+            m.node.streamOptions.activeSubtitleDeliveryMethod = "external"
+            m.node.streamOptions.selectedSubtitleStreamIndex = 2
+            m.node.videoPlayer.availableSubtitleTracks = [{ TrackName: "#EXT-X-MEDIA:http://server/sub.srt?ApiKey=server-token#cue" }]
+
+            'bs:disable-next-line 1140
+            applySubtitleSelection({ streamIndex: 4, label: "English" })
+
+            m.assertEqual(m.node.videoPlayer.subtitleTrack, "#EXT-X-MEDIA:http://server/sub.srt?ApiKey=server-token#cue")
+            m.assertEqual(m.node.videoPlayer.globalCaptionMode, "On")
+            m.assertEqual(m.node.activePlayback.request.subtitleStreamIndex, 4)
+            m.assertEqual(m.node.videoPlayer.control, "")
+        end function
+
+        @it("authenticates direct video without query credentials")
+        function _()
+            response = { streamUrl: "http://server/Videos/movie/stream?Static=true", streamFormat: "mp4", subtitleDeliveryMethod: "none" }
+            request = { server: "http://server", token: "fresh", userId: "user" }
+
+            'bs:disable-next-line 1140
+            content = buildVideoContent(response, request, { Name: "Movie" }, 12)
+
+            m.assertEqual(content.url, "http://server/Videos/movie/stream?Static=true")
+            m.assertEqual(content.HttpHeaders.Count(), 1)
+            m.assertTrue(content.PlayStart = 12)
+            m.assertEqual(content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+        end function
+
+        @it("preserves the supplied HLS URL and attaches the session header")
+        function _()
+            response = { streamUrl: "http://server/master.m3u8?ApiKey=server-token#f", streamFormat: "hls", subtitleDeliveryMethod: "none" }
+            request = { server: "http://server", token: "fresh", userId: "user" }
+
+            'bs:disable-next-line 1140
+            content = buildVideoContent(response, request, { Name: "Movie" }, 12)
+
+            m.assertEqual(content.url, "http://server/master.m3u8?ApiKey=server-token#f")
+            m.assertEqual(content.HttpHeaders.Count(), 1)
+            m.assertTrue(content.PlayStart = 12)
+            m.assertEqual(content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+        end function
+
+        @it("does not send session credentials to external Live TV")
+        function _()
+            response = { streamUrl: "https://tuner.test/live?signature=provider", streamFormat: "hls", subtitleDeliveryMethod: "none" }
+            request = { server: "http://server", token: "fresh", userId: "user" }
+
+            'bs:disable-next-line 1140
+            content = buildVideoContent(response, request, { Name: "Movie" }, 12)
+
+            m.assertEqual(content.url, "https://tuner.test/live?signature=provider")
+            m.assertEqual(content.HttpHeaders.Count(), 0)
+            m.assertTrue(content.PlayStart = 12)
+        end function
+
+        @it("successive external video content replaces previous authentication")
+        function _()
+            request = { server: "http://server", token: "fresh", userId: "user" }
+            response = { streamUrl: "http://server/stream", streamFormat: "hls", subtitleDeliveryMethod: "none" }
+            'bs:disable-next-line 1140
+            first = buildVideoContent(response, request, { Name: "Movie" }, 0)
+            m.assertEqual(first.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+            request.token = "fresh"
+            response.streamUrl = "https://tuner.test/stream?ApiKey=provider"
+            'bs:disable-next-line 1140
+            second = buildVideoContent(response, request, { Name: "Movie" }, 0)
+            m.assertEqual(second.url, "https://tuner.test/stream?ApiKey=provider")
+            m.assertEqual(second.HttpHeaders, [])
+        end function
+
+        @it("successive missing-token video content replaces previous authentication")
+        function _()
+            request = { server: "http://server", token: "fresh", userId: "user" }
+            response = { streamUrl: "http://server/stream", streamFormat: "hls", subtitleDeliveryMethod: "none" }
+            'bs:disable-next-line 1140
+            first = buildVideoContent(response, request, { Name: "Movie" }, 0)
+            m.assertEqual(first.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+            request.token = ""
+            response.streamUrl = "http://server/stream"
+            'bs:disable-next-line 1140
+            second = buildVideoContent(response, request, { Name: "Movie" }, 0)
+            m.assertEqual(second.url, "http://server/stream")
+            m.assertEqual(second.HttpHeaders, [])
+        end function
+
+        @it("successive new-session video content replaces previous authentication")
+        function _()
+            request = { server: "http://server", token: "fresh", userId: "user" }
+            response = { streamUrl: "http://server/stream", streamFormat: "hls", subtitleDeliveryMethod: "none" }
+            'bs:disable-next-line 1140
+            first = buildVideoContent(response, request, { Name: "Movie" }, 0)
+            m.assertEqual(first.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+            request.token = "replacement"
+            response.streamUrl = "http://server/stream"
+            'bs:disable-next-line 1140
+            second = buildVideoContent(response, request, { Name: "Movie" }, 0)
+            m.assertEqual(second.url, "http://server/stream")
+            m.assertEqual(second.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("replacement", "user")])
         end function
 
     end class

@@ -78,6 +78,105 @@ namespace tests
             m.assertFalse(failure.ok)
         end function
 
+        @it("builds direct audio URLs without credentials")
+        function _()
+            request = { server: "http://server", token: "secret", itemId: "song-1" }
+
+            'bs:disable-next-line 1140
+            result = buildThemeAudioStreamInfo(request, { PlaySessionId: "play-1", MediaSources: [{ Id: "source-1", Container: "mp3" }] })
+
+            m.assertTrue(result.ok)
+            parts = result.streamUrl.Split("?")
+            parameters = LCase(parts[1]).Split("&")
+            parameters.Sort()
+            m.assertEqual(parts[0], "http://server/Audio/song-1/stream")
+            m.assertEqual(parameters, ["container=mp3", "mediasourceid=source-1", "playsessionid=play-1", "static=true"])
+            m.assertTrue(Instr(1, LCase(result.streamUrl), "mediasourceid=source-1") > 0)
+        end function
+
+        @it("preserves network-relative audio destinations through authentication")
+        function _()
+            request = { server: "https://server/base", token: "secret", itemId: "song" }
+
+            'bs:disable-next-line 1140
+            stream = buildThemeAudioStreamInfo(request, { MediaSources: [{ TranscodingUrl: "//cdn.test/master.m3u8#cue" }] })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertEqual(mediaRequest.url, "https://cdn.test/master.m3u8#cue")
+            m.assertEqual(mediaRequest.headers.Count(), 0)
+        end function
+
+        @it("uses the supplied HTTP audio path with the session header")
+        function _()
+            request = { server: "https://server/base/", token: "session-token", itemId: "song" }
+
+            'bs:disable-next-line 1140
+            stream = buildThemeAudioStreamInfo(request, { MediaSources: [{ Protocol: "Http", Path: "/song.mp3?ApiKey=server-token#cue", Container: "mp3" }] })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertEqual(mediaRequest.url, "https://server/base/song.mp3?ApiKey=server-token#cue")
+            m.assertEqual(mediaRequest.headers.Count(), 1)
+            m.assertEqual(stream.streamFormat, "mp3")
+        end function
+
+        @it("preserves the supplied audio HLS query and fragment")
+        function _()
+            request = { server: "https://server/base/", token: "session-token", itemId: "song" }
+
+            'bs:disable-next-line 1140
+            stream = buildThemeAudioStreamInfo(request, { MediaSources: [{ TranscodingUrl: "https://server/audio.m3u8?ApiKey=server-token&x=a%26b#cue" }] })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertEqual(mediaRequest.url, "https://server/audio.m3u8?ApiKey=server-token&x=a%26b#cue")
+            m.assertEqual(mediaRequest.headers.Count(), 1)
+            m.assertEqual(stream.streamFormat, "hls")
+        end function
+
+        @it("echoes the generation on validation failure")
+        function _()
+            m.node.top.request = { requestId: 42 }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.requestId, 42)
+            m.assertEqual(m.node.top.response.action, "themeAudioPlaybackInfo")
+        end function
+
+        @it("echoes the generation on request failure")
+        function _()
+            m.node.top.request = { requestId: 43, server: "https://server", token: "token", userId: "user", itemId: "item" }
+            m.stubCall(HttpClient.Request, { ok: false, errorMessage: "fixture", data: { Items: [], MediaSources: [{ TranscodingUrl: "/stream?ApiKey=supplied" }] } })
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertEqual(m.node.top.response.ok, false)
+            m.assertEqual(m.node.top.response.requestId, 43)
+            m.assertEqual(m.node.top.response.action, "themeAudioPlaybackInfo")
+            m.assertEqual(m.node.top.response.itemId, "item")
+        end function
+
+        @it("echoes the generation on request success")
+        function _()
+            m.node.top.request = { requestId: 43, server: "https://server", token: "token", userId: "user", itemId: "item" }
+            m.stubCall(HttpClient.Request, { ok: true, errorMessage: "fixture", data: { Items: [], MediaSources: [{ TranscodingUrl: "/stream?ApiKey=supplied" }] } })
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertEqual(m.node.top.response.ok, true)
+            m.assertEqual(m.node.top.response.requestId, 43)
+            m.assertEqual(m.node.top.response.action, "themeAudioPlaybackInfo")
+            m.assertEqual(m.node.top.response.itemId, "item")
+        end function
+
+        @it("echoes the generation when the server returns no playable source")
+        function _()
+            m.node.top.request = { requestId: 44, server: "https://server", token: "token", itemId: "item" }
+            m.stubCall(HttpClient.Request, { ok: true, data: {} })
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.requestId, 44)
+            m.assertEqual(m.node.top.response.action, "themeAudioPlaybackInfo")
+        end function
+
     end class
 
 end namespace

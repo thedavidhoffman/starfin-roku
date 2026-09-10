@@ -16,6 +16,7 @@ individual Starfin features.
 - [Home Media Playback](home-media.md)
 - [Home Refresh Lifecycle](home-refresh-lifecycle.md)
 - [Library Genre Browsing](library-genre-browsing.md)
+- [Media Authentication](media-authentication.md)
 - [Music Video Playback](music-videos.md)
 - [Next Item Playback](next-item-playback.md)
 - [Music Library](music-library.md)

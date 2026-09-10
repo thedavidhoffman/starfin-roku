@@ -1,3 +1,6 @@
+import "pkg:/source/LatestRequestLifecycle.bs"
+import "pkg:/source/PlaybackRequest.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/ActivityLog.bs"
 import "pkg:/source/MediaControl.bs"
@@ -21,6 +24,31 @@ import "pkg:/source/store/SettingsStore.bs"
 sub init()
     m.log = new Logger("AudioPlayer", m.global.logService)
     MaskAssets.Apply(m.top.findNode("albumArtworkMask"), "audio-player-album-mask.png", [651, 651], [434, 434])
+
+    m.playerState = {
+        tracksLoad: { lifecycle: LatestRequestLifecycle.Create(), nodes: [], nextIndex: 0 }
+        playbackLoad: { lifecycle: LatestRequestLifecycle.Create(), nodes: [], nextIndex: 0 }
+        request: invalid
+        tracks: []
+        currentIndex: -1
+        focusArea: "tracks"
+        buttonIndex: 1
+        seeking: false
+        seekPosition: 0.0
+        changingTrack: false
+        restartPosition: 0.0
+        lastObservedState: ""
+        lastPosition: 0.0
+    }
+    initReferences()
+    configureButtons()
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.albumArtwork = m.top.findNode("albumArtwork")
     m.backdrop = m.top.findNode("backdrop")
     m.albumTitle = m.top.findNode("albumTitle")
@@ -39,25 +67,16 @@ sub init()
     m.trackList = m.top.findNode("trackList")
     m.player = m.top.findNode("player")
     m.screensaverOverlay = m.top.findNode("screensaverOverlay")
-    m.tracksTask = m.top.findNode("tracksTask")
-    m.playbackInfoTask = m.top.findNode("playbackInfoTask")
+    m.playerState.tracksLoad.nodes = [m.top.findNode("tracksTask"), m.top.findNode("tracksTaskAlternate")]
+    m.playerState.playbackLoad.nodes = [m.top.findNode("playbackInfoTask"), m.top.findNode("playbackInfoTaskAlternate")]
+end sub
 
-    m.playerState = {
-        request: invalid
-        tracks: []
-        currentIndex: -1
-        focusArea: "tracks"
-        buttonIndex: 1
-        seeking: false
-        seekPosition: 0.0
-        changingTrack: false
-        restartPosition: 0.0
-        lastObservedState: ""
-        lastPosition: 0.0
-    }
-    configureButtons()
-    m.tracksTask.observeField("response", "onTracksResponse")
-    m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.playerState.tracksLoad.nodes[0].observeField("response", "onTracksResponse")
+    m.playerState.playbackLoad.nodes[0].observeField("response", "onPlaybackInfoResponse")
     m.player.observeField("state", "onPlayerStateChanged")
     m.player.observeField("position", "onPlaybackProgressChanged")
     m.player.observeField("duration", "onPlaybackProgressChanged")
@@ -66,6 +85,30 @@ sub init()
     m.playPauseButton.observeField("buttonSelected", "togglePlayback")
     m.nextButton.observeField("buttonSelected", "playNext")
     m.screensaverOverlay.observeField("dismissed", "onScreensaverDismissed")
+    m.playerState.tracksLoad.nodes[1].observeField("response", "onAlternateTracksResponse")
+    m.playerState.playbackLoad.nodes[1].observeField("response", "onAlternatePlaybackInfoResponse")
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingRequest
+'-------------------------------------------------------------------------------
+sub startPendingRequest(work as object)
+    entry = LatestRequestLifecycle.TakeNext(work.lifecycle)
+    if entry = invalid then return
+    task = work.nodes[work.nextIndex]
+    work.nextIndex = (work.nextIndex + 1) mod work.nodes.Count()
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelRequests
+'-------------------------------------------------------------------------------
+sub cancelRequests(work as object)
+    LatestRequestLifecycle.Deactivate(work.lifecycle)
+    for each task in work.nodes
+        task.control = TaskControl.Command.Stop
+    end for
 end sub
 
 '-------------------------------------------------------------------------------
@@ -85,6 +128,14 @@ end sub
 sub onLoadRequestChanged()
     request = m.top.loadRequest
     if request = invalid then return
+    previous = m.playerState.request
+    if previous <> invalid then
+        if previous.server <> request.server or previous.token <> request.token or previous.userId <> request.userId then cancelRequests(m.playerState.tracksLoad)
+    end if
+    cancelRequests(m.playerState.playbackLoad)
+    stopScreensaverSession()
+    m.player.control = MediaControl.Command.Stop
+    request = PlaybackRequest.Create(request)
     m.playerState.request = request
     m.playerState.tracks = []
     m.playerState.currentIndex = -1
@@ -101,23 +152,39 @@ sub onLoadRequestChanged()
     m.trackList.content = CreateObject("roSGNode", "ContentNode")
     updateTimeline(0, 0)
 
-    m.tracksTask.request = {
+    taskRequest = {
         server: request.server
         token: request.token
         userId: request.userId
         albumId: request.albumId
     }
-    m.tracksTask.control = TaskControl.Command.Run
+    LatestRequestLifecycle.Queue(m.playerState.tracksLoad.lifecycle, taskRequest, request)
+    startPendingRequest(m.playerState.tracksLoad)
 end sub
 
 '-------------------------------------------------------------------------------
 ' onTracksResponse
 '-------------------------------------------------------------------------------
 sub onTracksResponse()
-    response = m.tracksTask.response
-    request = m.playerState.request
-    if response = invalid or request = invalid then return
-    if Format.SafeString(response.albumId, "") <> Format.SafeString(request.albumId, "") then return
+    handleTracksResponse(m.playerState.tracksLoad.nodes[0].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternateTracksResponse
+'-------------------------------------------------------------------------------
+sub onAlternateTracksResponse()
+    handleTracksResponse(m.playerState.tracksLoad.nodes[1].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleTracksResponse
+'-------------------------------------------------------------------------------
+sub handleTracksResponse(response as dynamic)
+    completion = LatestRequestLifecycle.Complete(m.playerState.tracksLoad.lifecycle, response, "albumTracks")
+    if completion.matched <> true then return
+    startPendingRequest(m.playerState.tracksLoad)
+    if completion.isCurrent <> true then return
+    request = completion.context
     if response.ok <> true or response.data = invalid or response.data.Items = invalid then return
 
     album = response.album
@@ -174,42 +241,48 @@ sub playTrack(index as integer, restartPosition = 0.0 as float)
     track = m.playerState.tracks[index]
     m.albumTitle.text = Format.FirstNonEmpty([track.Name], "Untitled Track")
     request = m.playerState.request
-    m.playbackInfoTask.request = {
+    taskRequest = {
         server: request.server
         token: request.token
         userId: request.userId
         itemId: Format.SafeString(track.Id, "")
         title: Format.FirstNonEmpty([track.Name], "Untitled Track")
     }
-    m.playbackInfoTask.control = TaskControl.Command.Run
+    LatestRequestLifecycle.Queue(m.playerState.playbackLoad.lifecycle, taskRequest, taskRequest)
+    startPendingRequest(m.playerState.playbackLoad)
 end sub
 
 '-------------------------------------------------------------------------------
 ' onPlaybackInfoResponse
 '-------------------------------------------------------------------------------
 sub onPlaybackInfoResponse()
-    response = m.playbackInfoTask.response
-    track = getCurrentTrack()
-    if track = invalid then
-        stopScreensaverSession()
-        return
-    end if
-    if response = invalid then
-        stopScreensaverSession()
-        return
-    end if
-    responseItemId = Format.SafeString(response.itemId, "")
-    trackItemId = Format.SafeString(track.Id, "")
-    if responseItemId = "" or responseItemId <> trackItemId then return
+    handlePlaybackInfoResponse(m.playerState.playbackLoad.nodes[0].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternatePlaybackInfoResponse
+'-------------------------------------------------------------------------------
+sub onAlternatePlaybackInfoResponse()
+    handlePlaybackInfoResponse(m.playerState.playbackLoad.nodes[1].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' handlePlaybackInfoResponse
+'-------------------------------------------------------------------------------
+sub handlePlaybackInfoResponse(response as dynamic)
+    completion = LatestRequestLifecycle.Complete(m.playerState.playbackLoad.lifecycle, response, "themeAudioPlaybackInfo")
+    if completion.matched <> true then return
+    startPendingRequest(m.playerState.playbackLoad)
+    if completion.isCurrent <> true then return
     if response.ok <> true then
         stopScreensaverSession()
         return
     end if
 
-    content = CreateObject("roSGNode", "ContentNode")
-    content.url = Format.SafeString(response.streamUrl, "")
+    request = completion.context
+    content = JellyfinAuth.CreateContent(request.server, response.streamUrl, request.token, request.userId)
     content.streamFormat = Format.SafeString(response.streamFormat, "")
-    content.title = Format.FirstNonEmpty([track.Name], "Untitled Track")
+    content.title = request.title
     if content.url = "" then
         stopScreensaverSession()
         return
@@ -459,8 +532,8 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
-    m.tracksTask.control = TaskControl.Command.Stop
-    m.playbackInfoTask.control = TaskControl.Command.Stop
+    cancelRequests(m.playerState.tracksLoad)
+    cancelRequests(m.playerState.playbackLoad)
     stopScreensaverSession()
     m.player.control = MediaControl.Command.Stop
 end sub

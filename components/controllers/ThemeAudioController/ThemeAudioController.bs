@@ -1,3 +1,7 @@
+import "pkg:/source/LatestRequestLifecycle.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackRequest.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/MediaControl.bs"
 import "pkg:/source/Format.bs"
@@ -9,14 +13,44 @@ import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 sub init()
     m.log = new Logger("ThemeAudioController", m.global.logService)
-    m.audio = m.top.findNode("audio")
-    m.playbackInfoTask = m.top.findNode("playbackInfoTask")
-    m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
-    m.audio.observeField("state", "onAudioStateChanged")
     m.themeAudioState = {
         request: invalid
         isActive: false
+        lifecycle: LatestRequestLifecycle.Create()
+        taskPool: { nodes: [], nextIndex: 0 }
     }
+    initReferences()
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.audio = m.top.findNode("audio")
+    m.themeAudioState.taskPool.nodes = [m.top.findNode("playbackInfoTask"), m.top.findNode("playbackInfoTaskAlternate")]
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.themeAudioState.taskPool.nodes[0].observeField("response", "onPlaybackInfoResponse")
+    m.themeAudioState.taskPool.nodes[1].observeField("response", "onAlternatePlaybackInfoResponse")
+    m.audio.observeField("state", "onAudioStateChanged")
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingPlayback
+'-------------------------------------------------------------------------------
+sub startPendingPlayback()
+    entry = LatestRequestLifecycle.TakeNext(m.themeAudioState.lifecycle)
+    if entry = invalid then return
+    pool = m.themeAudioState.taskPool
+    task = pool.nodes[pool.nextIndex]
+    pool.nextIndex = (pool.nextIndex + 1) mod pool.nodes.Count()
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
 end sub
 
 '-------------------------------------------------------------------------------
@@ -26,11 +60,18 @@ sub playTheme(request as object)
     if request = invalid then return
     if Format.SafeString(request.itemId, "") = "" then return
 
-    stopTheme()
-    m.themeAudioState.request = request
+    previous = m.themeAudioState.request
+    if previous <> invalid then
+        if previous.server <> request.server or previous.token <> request.token or previous.userId <> request.userId then stopTheme()
+    end if
+    m.themeAudioState.isActive = false
+    m.audio.control = MediaControl.Command.Stop
+    m.audio.content = invalid
+    capturedRequest = PlaybackRequest.Create(request)
+    m.themeAudioState.request = capturedRequest
     m.log.write("Resolving theme music playback itemId=" + Format.SafeString(request.itemId, ""))
-    m.playbackInfoTask.request = request
-    m.playbackInfoTask.control = TaskControl.Command.Run
+    LatestRequestLifecycle.Queue(m.themeAudioState.lifecycle, capturedRequest, capturedRequest)
+    startPendingPlayback()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -39,7 +80,10 @@ end sub
 sub stopTheme()
     m.themeAudioState.isActive = false
     m.themeAudioState.request = invalid
-    m.playbackInfoTask.control = TaskControl.Command.Stop
+    LatestRequestLifecycle.Deactivate(m.themeAudioState.lifecycle)
+    for each task in m.themeAudioState.taskPool.nodes
+        task.control = TaskControl.Command.Stop
+    end for
     m.audio.control = MediaControl.Command.Stop
     m.audio.content = invalid
 end sub
@@ -48,19 +92,32 @@ end sub
 ' onPlaybackInfoResponse
 '-------------------------------------------------------------------------------
 sub onPlaybackInfoResponse()
-    response = m.playbackInfoTask.response
-    if response = invalid then return
+    handlePlaybackInfoResponse(m.themeAudioState.taskPool.nodes[0].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternatePlaybackInfoResponse
+'-------------------------------------------------------------------------------
+sub onAlternatePlaybackInfoResponse()
+    handlePlaybackInfoResponse(m.themeAudioState.taskPool.nodes[1].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' handlePlaybackInfoResponse
+'-------------------------------------------------------------------------------
+sub handlePlaybackInfoResponse(response as dynamic)
+    completion = LatestRequestLifecycle.Complete(m.themeAudioState.lifecycle, response, "themeAudioPlaybackInfo")
+    if completion.matched <> true then return
+    startPendingPlayback()
+    if completion.isCurrent <> true then return
 
     if response.ok <> true then
         m.log.write("Unable to play theme music: " + Format.SafeString(response.errorMessage, "Unknown error."))
         return
     end if
 
-    if m.themeAudioState.request = invalid then return
-    if Format.SafeString(response.itemId, "") <> Format.SafeString(m.themeAudioState.request.itemId, "") then return
-
-    content = CreateObject("roSGNode", "ContentNode")
-    content.url = Format.SafeString(response.streamUrl, "")
+    request = completion.context
+    content = JellyfinAuth.CreateContent(request.server, response.streamUrl, request.token, request.userId)
     content.streamFormat = Format.SafeString(response.streamFormat, "")
     content.title = Format.SafeString(response.title, "Theme Music")
     if content.url = "" then return

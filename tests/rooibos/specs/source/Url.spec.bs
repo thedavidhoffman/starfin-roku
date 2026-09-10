@@ -86,30 +86,61 @@ namespace tests
             m.assertEqual(Url.BuildImageUrl("server.local", "item-1", "", "", 300, 200), "")
         end function
 
-        @describe("Url.SetQueryParam")
+        @describe("URL resolution and origins")
 
-        @it("appends an encoded parameter when the URL has no query")
+        @it("resolves a root-relative media path beneath the server base")
         function _()
-            result = Url.SetQueryParam("https://server.local/Items", "search term", "science fiction")
-            m.assertEqual(result, "https://server.local/Items?search%20term=science%20fiction")
+            m.assertEqual(Url.Resolve("https://server/base/", "/stream"), "https://server/base/stream")
         end function
 
-        @it("appends a parameter to an existing query")
+        @it("resolves a relative media path beneath the server base")
         function _()
-            result = Url.SetQueryParam("https://server.local/Items?limit=10", "start", "20")
-            m.assertEqual(result, "https://server.local/Items?limit=10&start=20")
+            m.assertEqual(Url.Resolve("https://server/base/", "stream"), "https://server/base/stream")
         end function
 
-        @it("replaces an existing parameter case-insensitively")
+        @it("preserves an absolute external URL")
         function _()
-            result = Url.SetQueryParam("https://server.local/Items?limit=10&start=20", "LIMIT", "25")
-            m.assertEqual(result, "https://server.local/Items?limit=25&start=20")
+            m.assertEqual(Url.Resolve("https://server", "https://cdn.test/stream"), "https://cdn.test/stream")
         end function
 
-        @it("does not replace a partial parameter-name match")
+        @it("resolves network-relative URLs without changing their host")
         function _()
-            result = Url.SetQueryParam("https://server.local/Items?itemLimit=10", "limit", "25")
-            m.assertEqual(result, "https://server.local/Items?itemLimit=10&limit=25")
+            m.assertEqual(Url.Resolve("https://server/base", "//cdn.test/master.m3u8"), "https://cdn.test/master.m3u8")
+        end function
+
+        @it("preserves empty media URLs")
+        function _()
+            m.assertEqual(Url.Resolve("https://server", ""), "")
+        end function
+
+        @it("preserves non-HTTP schemes")
+        function _()
+            m.assertEqual(Url.Resolve("https://server", "tmp:/tile.jpg"), "tmp:/tile.jpg")
+        end function
+
+        @it("normalizes HTTPS origins")
+        function _()
+            m.assertEqual(Url.GetOrigin("https://SERVER:443/base?q=1#f"), "https://server")
+        end function
+
+        @it("normalizes HTTP origins")
+        function _()
+            m.assertEqual(Url.GetOrigin("http://SERVER:80/base"), "http://server")
+        end function
+
+        @it("retains non-default origin ports")
+        function _()
+            m.assertEqual(Url.GetOrigin("https://server:8443/path"), "https://server:8443")
+        end function
+
+        @it("rejects non-HTTP authentication origins")
+        function _()
+            m.assertEqual(Url.GetOrigin("tmp:/tile.jpg"), "")
+        end function
+
+        @it("rejects origins containing user information")
+        function _()
+            m.assertEqual(Url.GetOrigin("https://user@server/path"), "")
         end function
 
     end class

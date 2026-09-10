@@ -4,6 +4,18 @@ Album playback is owned by `AudioPlayer`, which loads the album track list,
 resolves each selected audio stream, advances on track completion, and owns the
 music screensaver lifecycle.
 
+Album loading and stream resolution each keep one active request and one
+replaceable pending request, alternating between two task nodes. Each request
+captures its session and selection; only the latest matching generation can
+update playback. Closing the player or replacing its session cancels outstanding
+work without reusing generation IDs. Pause and resume preserve pending resolution.
+
+Album loading and stream resolution each keep one active request and one
+replaceable pending request, alternating between two task nodes. Each request
+captures its session and selection; only the latest matching generation can
+update playback. Closing the player or replacing its session cancels outstanding
+work without reusing generation IDs. Pause and resume preserve pending resolution.
+
 ## Screensavers
 
 Starfin supports None, Bouncing artwork, and Starfield during music playback.
@@ -26,3 +38,5 @@ begins; a completed track restarts from the beginning.
 
 Audio state logs include the current track ID, position, track-change status, and
 Roku error details. Stream URLs and credentials are not logged by the player.
+
+Playback requests follow the shared [media authentication](media-authentication.md) rules.

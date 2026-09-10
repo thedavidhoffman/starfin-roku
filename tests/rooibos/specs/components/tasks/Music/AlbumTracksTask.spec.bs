@@ -16,6 +16,40 @@ namespace tests
             m.assertFalse(m.node.top.response.ok)
         end function
 
+        @it("echoes the generation on validation failure")
+        function _()
+            m.node.top.request = { requestId: 42 }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.requestId, 42)
+            m.assertEqual(m.node.top.response.action, "albumTracks")
+        end function
+
+        @it("echoes the generation on request failure")
+        function _()
+            m.node.top.request = { requestId: 43, server: "https://server", token: "token", userId: "user", albumId: "item" }
+            m.stubCall(HttpClient.Request, { ok: false, errorMessage: "fixture", data: { Items: [], MediaSources: [{ TranscodingUrl: "/stream?ApiKey=supplied" }] } })
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertEqual(m.node.top.response.ok, false)
+            m.assertEqual(m.node.top.response.requestId, 43)
+            m.assertEqual(m.node.top.response.action, "albumTracks")
+            m.assertEqual(m.node.top.response.albumId, "item")
+        end function
+
+        @it("echoes the generation on request success")
+        function _()
+            m.node.top.request = { requestId: 43, server: "https://server", token: "token", userId: "user", albumId: "item" }
+            m.stubCall(HttpClient.Request, { ok: true, errorMessage: "fixture", data: { Items: [], MediaSources: [{ TranscodingUrl: "/stream?ApiKey=supplied" }] } })
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertEqual(m.node.top.response.ok, true)
+            m.assertEqual(m.node.top.response.requestId, 43)
+            m.assertEqual(m.node.top.response.action, "albumTracks")
+            m.assertEqual(m.node.top.response.albumId, "item")
+        end function
+
     end class
 
 end namespace

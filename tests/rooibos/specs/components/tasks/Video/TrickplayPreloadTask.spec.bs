@@ -1,3 +1,5 @@
+import "pkg:/source/tests/source/MediaAuthentication.bs"
+
 namespace tests
 
     @SGNode("TrickplayPreloadTask")
@@ -6,12 +8,12 @@ namespace tests
 
         @describe("trickplay URI construction")
 
-        @it("builds encoded remote and stable local tile URIs")
+        @it("builds remote and stable local tile URIs")
         function _()
             request = { server: "http://server", token: "a b", itemId: "item-1", tileWidth: 320, tileCount: 3 }
 
             'bs:disable-next-line 1140
-            m.assertEqual(getRemoteTrickplayUrl(request, 2), "http://server/Videos/item-1/Trickplay/320/2.jpg?ApiKey=a%20b")
+            m.assertEqual(getRemoteTrickplayUrl(request, 2), "http://server/Videos/item-1/Trickplay/320/2.jpg")
             'bs:disable-next-line 1140
             m.assertEqual(getLocalTrickplayUri(request, 2), "tmp:/starfin-trickplay-item-1-320-2.jpg")
             'bs:disable-next-line 1140
@@ -46,6 +48,270 @@ namespace tests
             m.assertEqual(getTileWidth(invalid), 0)
         end function
 
+        @describe("authenticated download")
+
+        @async(20000)
+        @it("sends authentication on the actual tile download request")
+        function _()
+            fixture = ParseJson(ReadAsciiFile("pkg:/test-fixtures/http-fixture.json"))
+            m.assertNotInvalid(fixture, "Run through npm test to start the HTTP fixture.")
+
+            m.downloadState = {
+                completed: false
+                failure: ""
+                task: CreateObject("roSGNode", "TrickplayPreloadTask")
+                fixture: fixture
+                localUri: "tmp:/starfin-trickplay-" + fixture.itemId + "-320-0.jpg"
+            }
+            m.downloadState.task.request = {
+                action: "add"
+                server: fixture.server
+                token: fixture.token
+                itemId: fixture.itemId
+                tileWidth: 320
+                tileCount: 1
+            }
+            GetGlobalAA().trickplayDownloadSuite = m
+            m.downloadState.task.observeFieldScoped("state", "tests_OnTrickplayDownloadState")
+            m.downloadState.task.control = "run"
+        end function
+
+        private function readCapture() as string
+            return ReadAsciiFile(m.downloadState.localUri)
+        end function
+
+        private sub checkDownload()
+            if m.downloadState = invalid then return
+            if m.downloadState.completed or m.downloadState.cleanupTask <> invalid then return
+            try
+                if m.downloadState.task.state = "run" or m.downloadState.task.state = "init" then return
+                response = m.downloadState.task.response
+                if Type(response) <> "roAssociativeArray" then
+                    m.failDownload("Download finished without a response.")
+                    return
+                end if
+                if response.complete <> true then
+                    m.failDownload("Download did not complete.")
+                    return
+                end if
+                m.validateCapture(m.readCapture())
+            catch error
+                m.failDownload("Download callback error: " + error.message)
+            end try
+        end sub
+
+        private sub validateCapture(text as string)
+            captured = ParseJson(text)
+            if Type(captured) <> "roAssociativeArray" then
+                m.failDownload("Download capture is empty or is not a JSON object.")
+                return
+            end if
+            fixture = m.downloadState.fixture
+            if captured.accepted <> true then
+                m.failDownload("Download authentication was rejected.")
+                return
+            end if
+            if captured.itemId <> fixture.itemId or captured.method <> "GET" or captured.path <> fixture.tilePath then
+                m.failDownload("Download capture has incorrect request fields.")
+                return
+            end if
+            expected = TestMediaAuthentication.ExpectedHeader(fixture.token)
+            if captured.authorization <> Mid(expected, 16) then
+                m.failDownload("Download capture has an incorrect authorization header.")
+                return
+            end if
+            m.startDownloadCleanup()
+        end sub
+
+        private sub failDownload(message as string)
+            if m.downloadState = invalid then return
+            if m.downloadState.completed then return
+            if m.downloadState.failure = "" then m.downloadState.failure = message
+            m.startDownloadCleanup()
+        end sub
+
+        private sub checkDownloadCleanup()
+            if m.downloadState = invalid then return
+            if m.downloadState.completed then return
+            try
+                if m.downloadState.cleanupTask.state = "run" or m.downloadState.cleanupTask.state = "init" then return
+                if m.readCapture() <> "" then m.downloadState.failure = "Downloaded tile was not removed."
+            catch error
+                m.downloadState.failure = "Cleanup callback error: " + error.message
+            end try
+            m.finishDownload()
+        end sub
+
+        private sub finishDownload()
+            if m.downloadState = invalid then return
+            if m.downloadState.completed then return
+            m.downloadState.completed = true
+            m.downloadState.task.unobserveFieldScoped("state")
+            if m.downloadState.cleanupTask <> invalid then m.downloadState.cleanupTask.unobserveFieldScoped("state")
+            GetGlobalAA().Delete("trickplayDownloadSuite")
+            m.assertTrue(m.downloadState.failure = "", m.downloadState.failure)
+            m.done()
+        end sub
+
+        protected override function afterEach()
+            if m.downloadState <> invalid then
+                m.downloadState.task.unobserveFieldScoped("state")
+                m.downloadState.task.control = "stop"
+                if m.downloadState.completed <> true then m.startDownloadCleanup()
+                if m.downloadState.cleanupTask <> invalid then m.downloadState.cleanupTask.unobserveFieldScoped("state")
+                m.downloadState = invalid
+                GetGlobalAA().Delete("trickplayDownloadSuite")
+            end if
+        end function
+
+        private sub startDownloadCleanup()
+            if m.downloadState.cleanupTask <> invalid then return
+            m.downloadState.task.unobserveFieldScoped("state")
+            m.downloadState.cleanupTask = CreateObject("roSGNode", "TrickplayPreloadTask")
+            m.downloadState.cleanupTask.request = {
+                action: "remove"
+                itemId: m.downloadState.fixture.itemId
+                tileWidth: 320
+                tileCount: 1
+            }
+            m.downloadState.cleanupTask.observeFieldScoped("state", "tests_OnTrickplayCleanupState")
+            m.downloadState.cleanupTask.control = "run"
+        end sub
+
+        @describe("download callback failure handling")
+
+        private function recorder(captureText as string) as object
+            recorder = {
+                failures: []
+                doneCount: 0
+                captureText: captureText
+                downloadState: {
+                    completed: false
+                    failure: ""
+                    fixture: { itemId: "tile", tilePath: "/tile", token: "fixture" }
+                    task: { state: "stop", response: { complete: true }, unobserveFieldScoped: sub(field)
+                        m.unobserved = true
+                    end sub }
+                }
+                readCapture: function() as string
+                    return m.captureText
+                end function
+                startDownloadCleanup: sub()
+                    m.cleanupRequested = true
+                    m.downloadState.cleanupTask = { state: "stop", unobserveFieldScoped: sub(field)
+                        m.unobserved = true
+                    end sub }
+                end sub
+                assertTrue: sub(value, message)
+                    if value <> true then m.failures.Push(message)
+                end sub
+                done: sub()
+                    m.doneCount++
+                end sub
+                checkDownload: m.checkDownload
+                validateCapture: m.validateCapture
+                failDownload: m.failDownload
+                checkDownloadCleanup: m.checkDownloadCleanup
+                finishDownload: m.finishDownload
+            }
+            return recorder
+        end function
+
+        private sub assertRecordedFailure(recorder as object, expectedMessage as string)
+            m.assertTrue(recorder.cleanupRequested)
+            recorder.captureText = ""
+            recorder.readCapture = function() as string
+                return m.captureText
+            end function
+            recorder.checkDownloadCleanup()
+            m.assertEqual(recorder.failures.Count(), 1)
+            m.assertTrue(Instr(1, recorder.failures[0], expectedMessage) > 0)
+            m.assertEqual(recorder.doneCount, 1)
+            m.assertTrue(recorder.downloadState.task.unobserved)
+            m.assertTrue(recorder.downloadState.cleanupTask.unobserved)
+            m.assertInvalid(GetGlobalAA().trickplayDownloadSuite)
+        end sub
+
+        @it("reports empty captures and completes cleanup")
+        function _()
+            recorder = m.recorder("")
+            recorder.checkDownload()
+            m.assertRecordedFailure(recorder, "not a JSON object")
+        end function
+
+        @it("reports non-JSON captures and completes cleanup")
+        function _()
+            recorder = m.recorder("not-json")
+            recorder.checkDownload()
+            m.assertRecordedFailure(recorder, "not a JSON object")
+        end function
+
+        @it("reports non-object captures and completes cleanup")
+        function _()
+            recorder = m.recorder("[]")
+            recorder.checkDownload()
+            m.assertRecordedFailure(recorder, "not a JSON object")
+        end function
+
+        @it("reports rejected authentication captures and completes cleanup")
+        function _()
+            recorder = m.recorder("{ ""accepted"": false }")
+            recorder.checkDownload()
+            m.assertRecordedFailure(recorder, "authentication was rejected")
+        end function
+
+        @it("reports malformed request fields captures and completes cleanup")
+        function _()
+            recorder = m.recorder("{ ""accepted"": true }")
+            recorder.checkDownload()
+            m.assertRecordedFailure(recorder, "incorrect request fields")
+        end function
+
+        @it("reports unexpected download callback errors")
+        function _()
+            recorder = m.recorder("")
+            recorder.readCapture = function() as string
+                throw "simulated callback error"
+            end function
+            recorder.checkDownload()
+            m.assertRecordedFailure(recorder, "Download callback error")
+        end function
+
+        @it("reports unexpected cleanup callback errors")
+        function _()
+            recorder = m.recorder("")
+            recorder.startDownloadCleanup()
+            recorder.readCapture = function() as string
+                throw "simulated cleanup error"
+            end function
+            recorder.checkDownloadCleanup()
+            m.assertEqual(recorder.failures.Count(), 1)
+            m.assertEqual(recorder.doneCount, 1)
+        end function
+
+        @it("duplicate completion notifications report and finish only once")
+        function _()
+            recorder = m.recorder("")
+            GetGlobalAA().trickplayDownloadSuite = recorder
+            recorder.checkDownload()
+            m.assertRecordedFailure(recorder, "not a JSON object")
+            recorder.checkDownload()
+            recorder.checkDownloadCleanup()
+            recorder.finishDownload()
+            m.assertEqual(recorder.failures.Count(), 1)
+            m.assertEqual(recorder.doneCount, 1)
+        end function
+
     end class
+
+    sub OnTrickplayDownloadState()
+        suite = GetGlobalAA().trickplayDownloadSuite
+        if suite <> invalid then suite.checkDownload()
+    end sub
+
+    sub OnTrickplayCleanupState()
+        suite = GetGlobalAA().trickplayDownloadSuite
+        if suite <> invalid then suite.checkDownloadCleanup()
+    end sub
 
 end namespace

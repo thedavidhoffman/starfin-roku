@@ -1,3 +1,4 @@
+import "pkg:/source/Number.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
@@ -23,13 +24,22 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
+    response = resolveRequest(request)
+    response.requestId = -1
+    if request <> invalid then response.requestId = Number.ToInteger(request.requestId, -1)
+    m.top.response = response
+end sub
+
+'-------------------------------------------------------------------------------
+' resolveRequest
+'-------------------------------------------------------------------------------
+function resolveRequest(request as dynamic) as object
     itemId = ""
     if request <> invalid then itemId = Format.SafeString(request.itemId, "")
     validationError = TaskRequest.ValidateRequest(request, "themeAudioPlaybackInfo", ["itemId"])
     if validationError <> invalid then
         validationError.AddReplace("itemId", itemId)
-        m.top.response = validationError
-        return
+        return validationError
     end if
 
     requestUrl = request.server + "/Items/" + itemId + "/PlaybackInfo" + Url.BuildQueryString({
@@ -42,19 +52,17 @@ sub executeRequest()
     if result.ok <> true then
         result.AddReplace("action", "themeAudioPlaybackInfo")
         result.AddReplace("itemId", itemId)
-        m.top.response = result
-        return
+        return result
     end if
 
     streamInfo = buildThemeAudioStreamInfo(request, result.data)
     if streamInfo.ok <> true then
         streamInfo.AddReplace("itemId", itemId)
-        m.top.response = streamInfo
-        return
+        return streamInfo
     end if
 
     m.log.write("Theme audio PlaybackInfo resolved itemId=" + itemId + " streamFormat=" + Format.SafeString(streamInfo.streamFormat, "") + " streamUrl=" + PlaybackRequest.MaskUrl(streamInfo.streamUrl))
-    m.top.response = {
+    return {
         ok: true
         action: "themeAudioPlaybackInfo"
         itemId: itemId
@@ -62,7 +70,7 @@ sub executeRequest()
         streamFormat: streamInfo.streamFormat
         title: Format.SafeString(request.title, "Theme Music")
     }
-end sub
+end function
 
 '-------------------------------------------------------------------------------
 ' buildThemeAudioStreamInfo
@@ -75,22 +83,29 @@ function buildThemeAudioStreamInfo(request as object, playbackInfo as dynamic) a
     if transcodingUrl <> "" then
         return {
             ok: true
-            streamUrl: PlaybackRequest.BuildServerUrl(request.server, transcodingUrl)
+            streamUrl: Url.Resolve(request.server, transcodingUrl)
             streamFormat: "hls"
         }
     end if
 
     container = Format.SafeString(mediaSource.Container, "")
+    if LCase(Format.SafeString(mediaSource.Protocol, "")) = "http" and Format.SafeString(mediaSource.Path, "") <> "" then
+        return {
+            ok: true
+            streamUrl: Url.Resolve(request.server, mediaSource.Path)
+            streamFormat: PlaybackRequest.GetAudioStreamFormat(container)
+        }
+    end if
+
     streamParams = {
         Static: true
         Container: container
         MediaSourceId: Format.SafeString(mediaSource.Id, "")
         PlaySessionId: Format.SafeString(playbackInfo.PlaySessionId, "")
-        api_key: Format.SafeString(request.token, "")
     }
     return {
         ok: true
-        streamUrl: request.server + "/Audio/" + Format.SafeString(request.itemId, "") + "/stream" + Url.BuildQueryString(streamParams)
+        streamUrl: Url.Resolve(request.server, "/Audio/" + Format.SafeString(request.itemId, "") + "/stream") + Url.BuildQueryString(streamParams)
         streamFormat: PlaybackRequest.GetAudioStreamFormat(container)
     }
 end function

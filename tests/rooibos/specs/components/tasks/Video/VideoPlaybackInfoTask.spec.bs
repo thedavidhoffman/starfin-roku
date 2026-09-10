@@ -104,9 +104,9 @@ namespace tests
             playbackInfo = { MediaSources: [source] }
             'bs:disable-next-line 1140
             resolvedSubtitleIndex = getExistingSubtitleStreamIndex(source, 7)
-            externalTrack = SubtitlePlayback.BuildExternalTrack(playbackInfo, resolvedSubtitleIndex, "https://server.test", "token")
+            externalTrack = SubtitlePlayback.BuildExternalTrack(playbackInfo, resolvedSubtitleIndex, "https://server.test")
             m.assertEqual(externalTrack.index, 7)
-            m.assertTrue(Instr(1, externalTrack.deliveryUrl, "api_key=token") > 0)
+            m.assertEqual(externalTrack.deliveryUrl, "https://server.test/Videos/item/Subtitles/7/Stream.srt")
         end function
 
         @it("converts requested audio stream indexes")
@@ -127,12 +127,6 @@ namespace tests
             m.assertEqual(getMediaStreamIndex({ Index: 4 }, -1), 4)
             'bs:disable-next-line 1140
             m.assertEqual(getMediaStreamIndex(invalid, -2), -2)
-        end function
-
-        @it("constructs HTTP direct routes")
-        function _()
-            'bs:disable-next-line 1140
-            m.assertEqual(getAbsoluteUrlRoutePath("https://media.example:8096/Videos/1/file.mkv?x=1"), "/Videos/1/file.mkv?x=1")
         end function
 
         @it("does not request subtitle burn-in when subtitles are off")
@@ -203,6 +197,125 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             m.assertEqual(getStartPositionTicks({ startPositionTicks: 55 }), 55&)
+        end function
+
+        @it("builds direct video URLs without query credentials")
+        function _()
+            request = { server: "https://server", token: "secret", itemId: "movie-1" }
+            playbackInfo = { PlaySessionId: "session-1", MediaSources: [{ Id: "source-1", Container: "mp4", SupportsDirectPlay: true }] }
+            flags = { enableDirectPlay: true, enableDirectStream: true, enableTranscoding: true }
+
+            'bs:disable-next-line 1140
+            result = buildStreamInfo(request, playbackInfo, -1, -1, flags)
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.playbackMethod, "DirectPlay")
+            parts = result.streamUrl.Split("?")
+            parameters = LCase(parts[1]).Split("&")
+            parameters.Sort()
+            m.assertEqual(parts[0], "https://server/Videos/movie-1/stream")
+            m.assertEqual(parameters, ["container=mp4", "mediasourceid=source-1", "playsessionid=session-1", "static=true", "subtitlestreamindex=-1"])
+            m.assertTrue(Instr(1, LCase(result.streamUrl), "playsessionid=session-1") > 0)
+        end function
+
+        @describe("Resolved stream authentication")
+
+        @it("uses the supplied HTTP path for direct movie playback")
+        function _()
+            request = { server: "https://server/base", token: "session-token", itemId: "movie", item: { Type: "Movie" } }
+            playbackInfo = { MediaSources: [{ SupportsDirectPlay: true, Protocol: "Http", Container: "mp4", Path: "https://server/movie.mp4?ApiKey=server-token&x=a%26b#cue" }] }
+
+            'bs:disable-next-line 1140
+            stream = buildStreamInfo(request, playbackInfo, -1, -1, { enableDirectPlay: true })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertEqual(mediaRequest.url, "https://server/movie.mp4?ApiKey=server-token&x=a%26b#cue")
+            m.assertEqual(mediaRequest.headers.Count(), 1)
+            m.assertEqual(stream.playbackMethod, "DirectPlay")
+        end function
+
+        @it("preserves external network-relative HLS URLs through stream selection")
+        function _()
+            request = { server: "https://server/base", token: "secret", itemId: "movie" }
+            playbackInfo = { MediaSources: [{ Id: "source", TranscodingUrl: "//cdn.test/master.m3u8" }] }
+
+            'bs:disable-next-line 1140
+            stream = buildStreamInfo(request, playbackInfo, -1, -1, { enableDirectPlay: false, enableDirectStream: true, enableTranscoding: true })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertTrue(stream.ok)
+            m.assertEqual(mediaRequest.url, "https://cdn.test/master.m3u8")
+            m.assertEqual(mediaRequest.headers.Count(), 0)
+        end function
+
+        @it("preserves the server HLS URL including its subtitle index and authentication")
+        function _()
+            request = { server: "https://server", token: "secret", itemId: "movie" }
+            playbackInfo = { MediaSources: [{ Id: "source", TranscodingUrl: "/master.m3u8?ApiKey=server-token&SubtitleStreamIndex=1#cue" }] }
+
+            'bs:disable-next-line 1140
+            stream = buildStreamInfo(request, playbackInfo, -1, 2, { enableDirectPlay: false, enableDirectStream: true, enableTranscoding: true })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertTrue(stream.ok)
+            m.assertEqual(mediaRequest.url, "https://server/master.m3u8?ApiKey=server-token&SubtitleStreamIndex=1#cue")
+            m.assertEqual(mediaRequest.headers.Count(), 1)
+        end function
+
+        @it("preserves the base path through stream selection and authentication")
+        function _()
+            request = { server: "https://server/base/", token: "secret", itemId: "movie" }
+            playbackInfo = { MediaSources: [{ Id: "source", TranscodingUrl: "master.m3u8?ApiKey=server-token" }] }
+
+            'bs:disable-next-line 1140
+            stream = buildStreamInfo(request, playbackInfo, -1, -2, { enableDirectPlay: false, enableDirectStream: true, enableTranscoding: true })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertTrue(stream.ok)
+            m.assertEqual(mediaRequest.url, "https://server/base/master.m3u8?ApiKey=server-token")
+            m.assertEqual(mediaRequest.headers.Count(), 1)
+        end function
+
+        @it("preserves server-local Live TV URLs")
+        function _()
+            request = { server: "https://server/base/", token: "secret", itemId: "live", item: { Type: "TvChannel" } }
+            playbackInfo = { MediaSources: [{ SupportsDirectPlay: true, Protocol: "Http", Path: "http://localhost:8096/Videos/live/stream?session=one#cue" }] }
+
+            'bs:disable-next-line 1140
+            stream = buildStreamInfo(request, playbackInfo, -1, -1, { enableDirectPlay: true })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertTrue(stream.ok)
+            m.assertEqual(mediaRequest.url, "http://localhost:8096/Videos/live/stream?session=one#cue")
+            m.assertEqual(mediaRequest.headers.Count(), 0)
+        end function
+
+        @it("preserves loopback Live TV URLs")
+        function _()
+            request = { server: "https://server/base/", token: "secret", itemId: "live", item: { Type: "TvChannel" } }
+            playbackInfo = { MediaSources: [{ SupportsDirectPlay: true, Protocol: "Http", Path: "http://127.0.0.1:8096/Videos/live/stream" }] }
+
+            'bs:disable-next-line 1140
+            stream = buildStreamInfo(request, playbackInfo, -1, -1, { enableDirectPlay: true })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertTrue(stream.ok)
+            m.assertEqual(mediaRequest.url, "http://127.0.0.1:8096/Videos/live/stream")
+            m.assertEqual(mediaRequest.headers.Count(), 0)
+        end function
+
+        @it("preserves external Live TV stream destinations")
+        function _()
+            request = { server: "https://server/base/", token: "secret", itemId: "live", item: { Type: "TvChannel" } }
+            playbackInfo = { MediaSources: [{ SupportsDirectPlay: true, Protocol: "Http", Path: "https://tuner.test/live/stream?signature=provider" }] }
+
+            'bs:disable-next-line 1140
+            stream = buildStreamInfo(request, playbackInfo, -1, -1, { enableDirectPlay: true })
+            mediaRequest = JellyfinAuth.BuildMediaRequest(request.server, stream.streamUrl, request.token)
+
+            m.assertTrue(stream.ok)
+            m.assertEqual(mediaRequest.url, "https://tuner.test/live/stream?signature=provider")
+            m.assertEqual(mediaRequest.headers.Count(), 0)
         end function
 
     end class

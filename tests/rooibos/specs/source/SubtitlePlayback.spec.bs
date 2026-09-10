@@ -5,7 +5,7 @@ namespace tests
 
         @describe("external subtitle tracks")
 
-        @it("builds an authenticated external SRT track")
+        @it("builds an external SRT track from the server delivery URL")
         function _()
             playbackInfo = {
                 MediaSources: [{
@@ -14,18 +14,18 @@ namespace tests
                         Index: 4
                         Codec: "subrip"
                         DeliveryMethod: "External"
-                        DeliveryUrl: "/Videos/item/Subtitles/4/0/Stream.srt"
+                        DeliveryUrl: "/Videos/item/Subtitles/4/0/Stream.srt?ApiKey=server-token&x=a%26b#cue"
                         Language: "eng"
                         DisplayTitle: "English"
                     }]
                 }]
             }
 
-            result = SubtitlePlayback.BuildExternalTrack(playbackInfo, 4, "https://example.test", "secret")
+            result = SubtitlePlayback.BuildExternalTrack(playbackInfo, 4, "https://example.test")
 
             m.assertEqual(result.index, 4)
             m.assertEqual(result.codec, "subrip")
-            m.assertEqual(result.deliveryUrl, "https://example.test/Videos/item/Subtitles/4/0/Stream.srt?api_key=secret")
+            m.assertEqual(result.deliveryUrl, "https://example.test/Videos/item/Subtitles/4/0/Stream.srt?ApiKey=server-token&x=a%26b#cue")
             m.assertEqual(result.track.Language, "eng")
             m.assertEqual(result.track.Description, "English")
             m.assertEqual(result.track.TrackName, result.deliveryUrl)
@@ -44,39 +44,69 @@ namespace tests
                 }]
             }
 
-            m.assertInvalid(SubtitlePlayback.BuildExternalTrack(playbackInfo, 2, "https://example.test", "secret"))
+            m.assertInvalid(SubtitlePlayback.BuildExternalTrack(playbackInfo, 2, "https://example.test"))
             m.assertEqual(SubtitlePlayback.GetDeliveryMethod(playbackInfo, 2), "encode")
         end function
 
-        @it("preserves absolute delivery URLs and replaces their API key")
+        @it("preserves absolute delivery URLs and their supplied query")
         function _()
-            result = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "https://media.test/sub.srt?api_key=old&x=1", "new")
-            m.assertEqual(result, "https://media.test/sub.srt?api_key=new&x=1")
+            playbackInfo = m.makePlaybackInfo("https://MEDIA.test:443/sub.srt?ApiKey=server-token&x=a%26b#cue")
+
+            result = SubtitlePlayback.BuildExternalTrack(playbackInfo, 4, "https://media.test/base")
+
+            m.assertEqual(result.deliveryUrl, "https://MEDIA.test:443/sub.srt?ApiKey=server-token&x=a%26b#cue")
+            m.assertEqual(result.track.TrackName, "https://MEDIA.test:443/sub.srt?ApiKey=server-token&x=a%26b#cue")
         end function
 
-        @it("authenticates same-origin absolute delivery URLs with normalized default ports")
+        @it("resolves relative subtitle URLs beneath the server base path")
         function _()
-            result = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "https://MEDIA.test:443/sub.srt", "secret")
-            m.assertEqual(result, "https://MEDIA.test:443/sub.srt?api_key=secret")
+            playbackInfo = m.makePlaybackInfo("sub.srt?ApiKey=server-token#cue")
+
+            result = SubtitlePlayback.BuildExternalTrack(playbackInfo, 4, "https://media.test/base/")
+
+            m.assertEqual(result.deliveryUrl, "https://media.test/base/sub.srt?ApiKey=server-token#cue")
         end function
 
-        @it("does not send Jellyfin credentials to cross-origin subtitle URLs")
+        @it("preserves external subtitle destinations and query values")
         function _()
-            result = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "https://captions.test/sub.srt?x=1", "secret")
-            m.assertEqual(result, "https://captions.test/sub.srt?x=1")
+            playbackInfo = m.makePlaybackInfo("https://captions.test/sub.srt?signature=provider#cue")
+
+            result = SubtitlePlayback.BuildExternalTrack(playbackInfo, 4, "https://media.test")
+
+            m.assertEqual(result.deliveryUrl, "https://captions.test/sub.srt?signature=provider#cue")
         end function
 
-        @it("requires the scheme and effective port to match")
+        @it("does not add credentials to a subtitle URL")
         function _()
-            differentScheme = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "http://media.test/sub.srt", "secret")
-            differentPort = SubtitlePlayback.ResolveDeliveryUrl("https://media.test", "https://media.test:8443/sub.srt", "secret")
-            m.assertEqual(differentScheme, "http://media.test/sub.srt")
-            m.assertEqual(differentPort, "https://media.test:8443/sub.srt")
+            playbackInfo = m.makePlaybackInfo("/sub.srt")
+
+            result = SubtitlePlayback.BuildExternalTrack(playbackInfo, 4, "https://media.test")
+
+            m.assertEqual(result.deliveryUrl, "https://media.test/sub.srt")
+        end function
+
+        @it("omits an external track without a delivery URL")
+        function _()
+            playbackInfo = m.makePlaybackInfo("")
+
+            m.assertInvalid(SubtitlePlayback.BuildExternalTrack(playbackInfo, 4, "https://media.test"))
+        end function
+
+        @it("preserves each supplied URL when building the subtitle track list")
+        function _()
+            playbackInfo = m.makePlaybackInfo("/sub.srt?ApiKey=server-token#first")
+            playbackInfo.MediaSources[0].MediaStreams.Push({ Type: "Subtitle", Index: 5, DeliveryMethod: "External", DeliveryUrl: "https://captions.test/second.vtt?signature=provider" })
+
+            tracks = SubtitlePlayback.BuildExternalTracks(playbackInfo, "https://media.test")
+
+            m.assertEqual(tracks.Count(), 2)
+            m.assertEqual(tracks[0].track.TrackName, "https://media.test/sub.srt?ApiKey=server-token#first")
+            m.assertEqual(tracks[1].track.TrackName, "https://captions.test/second.vtt?signature=provider")
         end function
 
         @it("matches Roku track names containing the supplied URL")
         function _()
-            subtitleUrl = "https://example.test/sub.srt?api_key=secret"
+            subtitleUrl = "https://example.test/sub.srt?ApiKey=secret"
             tracks = [{ TrackName: "#EXT-X-MEDIA:" + subtitleUrl }]
             m.assertEqual(SubtitlePlayback.FindAvailableTrackName(tracks, subtitleUrl), tracks[0].TrackName)
             m.assertEqual(SubtitlePlayback.FindAvailableTrackName(tracks, "missing"), "")
@@ -105,6 +135,10 @@ namespace tests
         @it("restarts when switching across encoded and external delivery (case 5)")
         function _()
             m.assertEqual(SubtitlePlayback.NormalizeDeliveryMethod("unknown"), "none")
+        end function
+
+        private function makePlaybackInfo(deliveryUrl as string) as object
+            return { MediaSources: [{ MediaStreams: [{ Type: "Subtitle", Index: 4, DeliveryMethod: "External", DeliveryUrl: deliveryUrl }] }] }
         end function
 
     end class

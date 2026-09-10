@@ -5,6 +5,16 @@ Rooibos remains responsible for unit and SceneGraph component coverage; RTA
 validates the deployed application through real Roku launch, ECP, and scene
 inspection behavior.
 
+## Rooibos HTTP fixture
+
+`npm test -- --host <roku-host> --password "<developer-password>"` starts a local
+HTTP fixture for the trickplay download test. The Roku must be able to reach the
+runner computer on the assigned port. The test checks the request received by
+the server, using a generated dummy token and a unique tile URL.
+
+Fixture configuration is packaged only in test builds. The runner closes the
+server on exit and writes captured test requests under `build/rooibos-fixtures/`.
+
 ## Build boundary
 
 `bsconfig-automation.json` packages the production application together with

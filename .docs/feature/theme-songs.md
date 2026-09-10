@@ -55,3 +55,10 @@ televisiontunes.com
 - Keep the Roku app using Jellyfin-hosted theme song items rather than direct
   third-party MP3 URLs, so playback continues to use the existing authenticated
   media pipeline.
+
+Playback requests follow the shared [media authentication](media-authentication.md) rules.
+
+`ThemeAudioController` captures the session for each selection and accepts only
+the latest matching request generation. It keeps one active resolution and one
+replaceable pending selection, alternating between two task nodes. Stopping theme
+audio or replacing its session invalidates outstanding work without reusing IDs.

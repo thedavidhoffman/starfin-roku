@@ -1,3 +1,4 @@
+import "pkg:/source/Url.bs"
 '-------------------------------------------------------------------------------
 ' buildStreamInfo
 '-------------------------------------------------------------------------------
@@ -19,25 +20,23 @@ function buildStreamInfo(request as object, playbackInfo as dynamic, requestedAu
 
     if directPlayAllowed and directPlaySupported then
         streamFormat = PlaybackRequest.GetVideoStreamFormat(container)
-        if isLiveTvPlaybackRequest(request) = true and isHttpDirectMediaSource(mediaSource) then
-            streamUrl = buildHttpDirectStreamUrl(request.server, mediaSource.Path)
+        if isHttpDirectMediaSource(mediaSource) then
+            streamUrl = Url.Resolve(request.server, mediaSource.Path)
         else
             streamParams = {
                 Static: true
                 Container: container
                 PlaySessionId: playSessionId
-                api_key: request.token
             }
             if isLiveTvPlaybackRequest(request) <> true and mediaSourceId <> "" then streamParams.MediaSourceId = mediaSourceId
             if audioStreamIndex >= 0 then streamParams.AudioStreamIndex = audioStreamIndex
             if requestedSubtitleStreamIndex >= -1 then streamParams.SubtitleStreamIndex = requestedSubtitleStreamIndex
-            streamUrl = request.server + "/Videos/" + request.itemId + "/stream" + Url.BuildQueryString(streamParams)
+            streamUrl = Url.Resolve(request.server, "/Videos/" + request.itemId + "/stream") + Url.BuildQueryString(streamParams)
         end if
         playbackMethod = "DirectPlay"
         m.log.write("Playback selection chose DirectPlay because the request allows direct play and Jellyfin reported SupportsDirectPlay=true alternativeHlsAvailable=" + boolToText(transcodingUrl <> ""))
     else if transcodingAllowed and transcodingUrl <> "" then
-        streamUrl = PlaybackRequest.BuildServerUrl(request.server, transcodingUrl)
-        if requestedSubtitleStreamIndex >= -1 then streamUrl = Url.SetQueryParam(streamUrl, "SubtitleStreamIndex", requestedSubtitleStreamIndex.ToStr())
+        streamUrl = Url.Resolve(request.server, transcodingUrl)
         streamFormat = "hls"
         playbackMethod = getTranscodingPlaybackMethod(mediaSource)
         reasons = getPlaybackMethodReasons(mediaSource)

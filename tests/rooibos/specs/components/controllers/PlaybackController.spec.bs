@@ -5,7 +5,7 @@ namespace tests
     class PlaybackControllerTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
-            m.node.callFunc("removePlayer")
+            m.top.callFunc("removePlayer")
             m.top.playRequest = invalid
             m.top.playerOpened = false
             m.top.playbackProgressChanged = invalid
@@ -27,7 +27,7 @@ namespace tests
             onPlayRequestChanged()
 
             m.assertInvalid(m.node.player)
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.countPlayers(), 0)
         end function
 
         @it("creates and owns a VideoPlayer for a valid request")
@@ -40,7 +40,7 @@ namespace tests
             m.assertNotInvalid(m.node.player)
             m.assertTrue(m.node.player.isSubtype("VideoPlayer"))
             m.assertEqual(m.node.player.playRequest, request)
-            m.assertEqual(m.top.getChildCount(), 1)
+            m.assertEqual(m.countPlayers(), 1)
         end function
 
         @it("ignores playback requests without an item ID")
@@ -48,7 +48,7 @@ namespace tests
             m.top.playRequest = { item: { Name: "Missing ID" } }
 
             m.assertFalse(m.top.callFunc("hasPlayer"))
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.countPlayers(), 0)
         end function
 
         @it("publishes playerOpened after attaching a player")
@@ -58,7 +58,7 @@ namespace tests
             m.top.playRequest = { itemId: "item-1", item: { Id: "item-1" } }
 
             m.assertTrue(m.top.playerOpened)
-            m.assertEqual(m.top.getChildCount(), 1)
+            m.assertEqual(m.countPlayers(), 1)
         end function
 
         @it("replaces the active player for a new playback request")
@@ -71,7 +71,7 @@ namespace tests
             m.assertEqual(firstPlayer.findNode("videoPlayer").control, "stop")
             m.assertFalse(m.node.player.isSameNode(firstPlayer))
             m.assertEqual(m.node.player.playRequest.itemId, "item-2")
-            m.assertEqual(m.top.getChildCount(), 1)
+            m.assertEqual(m.countPlayers(), 1)
         end function
 
         @it("forwards playback progress from the active player")
@@ -147,7 +147,7 @@ namespace tests
             m.node.player.closeRequested = true
 
             m.assertInvalid(m.node.player)
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.countPlayers(), 0)
             m.assertEqual(m.top.closed.restorePlayRequest.itemId, "item-1")
             m.assertEqual(m.top.closed.upNextRequest, upNextRequest)
         end function
@@ -190,7 +190,15 @@ namespace tests
             m.assertFalse(m.top.callFunc("hasPlayer"))
             m.assertInvalid(m.node.player)
             m.assertInvalid(m.top.closed)
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.countPlayers(), 0)
+        end function
+
+        private function countPlayers() as integer
+            count = 0
+            for each child in m.top.getChildren(-1, 0)
+                if child.isSubtype("VideoPlayer") then count++
+            end for
+            return count
         end function
 
     end class

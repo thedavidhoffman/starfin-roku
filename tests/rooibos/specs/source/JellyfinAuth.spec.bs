@@ -1,3 +1,5 @@
+import "pkg:/source/tests/source/MediaAuthentication.bs"
+
 import "pkg:/source/Char.bs"
 
 namespace tests
@@ -32,6 +34,208 @@ namespace tests
             headers = JellyfinAuth.BuildTokenHeaders("token-1")
             m.assertEqual(headers.Count(), 1)
             m.assertTrue(Instr(1, headers.Authorization, "Token=" + Char.DoubleQuote + "token-1" + Char.DoubleQuote) > 0)
+        end function
+
+        @describe("Media authentication")
+
+        @it("resolves relative media beneath the server base path")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test/jellyfin/", "/Videos/item/stream?x=1#part", "secret", "user")
+
+            m.assertEqual(result.url, "https://media.test/jellyfin/Videos/item/stream?x=1#part")
+            m.assertEqual(result.headers.Count(), 1)
+            m.assertEqual(Left(result.headers.Authorization, 13), "MediaBrowser ")
+            m.assertEqual(Right(result.headers.Authorization, 14), "Token=" + Chr(34) + "secret" + Chr(34))
+        end function
+
+        @it("preserves a supplied HLS URL while attaching the session header")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "https://media.test/master.m3u8?ApiKey=server-token&x=a%26b#f", "secret")
+
+            m.assertEqual(result.url, "https://media.test/master.m3u8?ApiKey=server-token&x=a%26b#f")
+            m.assertEqual(result.headers.Count(), 1)
+            m.assertEqual(Left(result.headers.Authorization, 13), "MediaBrowser ")
+            m.assertEqual(Right(result.headers.Authorization, 14), "Token=" + Chr(34) + "secret" + Chr(34))
+        end function
+
+        @it("accepts case-insensitive hosts and default HTTPS ports")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "https://MEDIA.test:443/stream", "secret")
+
+            m.assertEqual(result.url, "https://MEDIA.test:443/stream")
+            m.assertEqual(result.headers.Count(), 1)
+            m.assertEqual(Left(result.headers.Authorization, 13), "MediaBrowser ")
+            m.assertEqual(Right(result.headers.Authorization, 14), "Token=" + Chr(34) + "secret" + Chr(34))
+        end function
+
+        @it("accepts default HTTP ports")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("http://media.test:80", "http://media.test/stream", "secret")
+
+            m.assertEqual(result.url, "http://media.test/stream")
+            m.assertEqual(result.headers.Count(), 1)
+            m.assertEqual(Left(result.headers.Authorization, 13), "MediaBrowser ")
+            m.assertEqual(Right(result.headers.Authorization, 14), "Token=" + Chr(34) + "secret" + Chr(34))
+        end function
+
+        @it("leaves external media credentials untouched")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "https://cdn.test/stream?signature=provider#f", "secret")
+
+            m.assertEqual(result.url, "https://cdn.test/stream?signature=provider#f")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("does not authenticate a different port")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "https://media.test:8443/stream", "secret")
+
+            m.assertEqual(result.url, "https://media.test:8443/stream")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("does not authenticate an HTTP downgrade")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "http://media.test/stream", "secret")
+
+            m.assertEqual(result.url, "http://media.test/stream")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("resolves network-relative external URLs without leaking credentials")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "//cdn.test/stream", "secret")
+
+            m.assertEqual(result.url, "https://cdn.test/stream")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("leaves non-HTTP resources unauthenticated")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "tmp:/subtitle.srt", "secret")
+
+            m.assertEqual(result.url, "tmp:/subtitle.srt")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("does not treat an empty URL as the server root")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "", "secret")
+
+            m.assertEqual(result.url, "")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("does not add an empty token header")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "/stream?x=1", "")
+
+            m.assertEqual(result.url, "https://media.test/stream?x=1")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("handles a missing token")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "/stream?ApiKey=server-token", invalid)
+
+            m.assertEqual(result.url, "https://media.test/stream?ApiKey=server-token")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("does not authenticate URLs containing user information")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "https://user@media.test/stream", "secret")
+
+            m.assertEqual(result.url, "https://user@media.test/stream")
+            m.assertEqual(result.headers.Count(), 0)
+        end function
+
+        @it("preserves colons in a relative URL query")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test/base", "stream?time=01:02", "secret")
+
+            m.assertEqual(result.url, "https://media.test/base/stream?time=01:02")
+            m.assertEqual(result.headers.Count(), 1)
+        end function
+
+        @it("uses the supplied user and refreshed token")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "/stream?ApiKey=server-token", "fresh", "user-2")
+            expectedSuffix = "UserId=" + Chr(34) + "user-2" + Chr(34) + ", Token=" + Chr(34) + "fresh" + Chr(34)
+
+            m.assertEqual(Right(result.headers.Authorization, Len(expectedSuffix)), expectedSuffix)
+            m.assertEqual(result.url, "https://media.test/stream?ApiKey=server-token")
+        end function
+
+        @it("preserves query separators without normalization")
+        function _()
+            result = JellyfinAuth.BuildMediaRequest("https://media.test", "/stream?&x=1&&y=a%26b&", "secret")
+
+            m.assertEqual(result.url, "https://media.test/stream?&x=1&&y=a%26b&")
+            m.assertEqual(result.headers.Count(), 1)
+        end function
+
+        @describe("content authentication")
+
+        @it("creates a ContentNode with the resolved URL and complete session header")
+        function _()
+            content = JellyfinAuth.CreateContent("https://server/base", "/stream?ApiKey=supplied&x=a%26b#part", "token", "user")
+
+            m.assertEqual(content.url, "https://server/base/stream?ApiKey=supplied&x=a%26b#part")
+            m.assertEqual(content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("token", "user")])
+            m.assertTrue(content.isSubtype("ContentNode"))
+        end function
+
+        @it("creates independent unauthenticated content for an external URL")
+        function _()
+            previous = JellyfinAuth.CreateContent("https://server", "/stream", "previous", "old-user")
+            m.assertEqual(previous.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("previous", "old-user")])
+
+            content = JellyfinAuth.CreateContent("https://server", "https://external/stream?ApiKey=provider#part", "token", "new-user")
+
+            m.assertFalse(content.isSameNode(previous))
+            m.assertEqual(previous.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("previous", "old-user")])
+            m.assertEqual(content.url, "https://external/stream?ApiKey=provider#part")
+            m.assertEqual(content.HttpHeaders, [])
+        end function
+
+        @it("creates independent unauthenticated content for a missing token")
+        function _()
+            previous = JellyfinAuth.CreateContent("https://server", "/stream", "previous", "old-user")
+            m.assertEqual(previous.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("previous", "old-user")])
+
+            content = JellyfinAuth.CreateContent("https://server", "https://server/stream", invalid, "new-user")
+
+            m.assertFalse(content.isSameNode(previous))
+            m.assertEqual(previous.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("previous", "old-user")])
+            m.assertEqual(content.url, "https://server/stream")
+            m.assertEqual(content.HttpHeaders, [])
+        end function
+
+        @it("creates independent unauthenticated content for an empty token")
+        function _()
+            previous = JellyfinAuth.CreateContent("https://server", "/stream", "previous", "old-user")
+            m.assertEqual(previous.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("previous", "old-user")])
+
+            content = JellyfinAuth.CreateContent("https://server", "https://server/stream", "", "new-user")
+
+            m.assertFalse(content.isSameNode(previous))
+            m.assertEqual(previous.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("previous", "old-user")])
+            m.assertEqual(content.url, "https://server/stream")
+            m.assertEqual(content.HttpHeaders, [])
+        end function
+
+        @it("creates independent content for a new session")
+        function _()
+            previous = JellyfinAuth.CreateContent("https://server", "/stream", "previous", "old-user")
+            m.assertEqual(previous.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("previous", "old-user")])
+
+            content = JellyfinAuth.CreateContent("https://server", "https://server/stream", "replacement", "new-user")
+
+            m.assertFalse(content.isSameNode(previous))
+            m.assertEqual(previous.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("previous", "old-user")])
+            m.assertEqual(content.url, "https://server/stream")
+            m.assertEqual(content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("replacement", "new-user")])
         end function
 
     end class
