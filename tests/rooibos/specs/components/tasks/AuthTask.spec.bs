@@ -1,3 +1,6 @@
+import "pkg:/source/Char.bs"
+import "pkg:/source/api/HttpClient.bs"
+
 namespace tests
 
     @SGNode("AuthTask")
@@ -14,6 +17,69 @@ namespace tests
             executeRequest()
 
             m.assertFalse(m.node.top.response.ok)
+        end function
+
+        @describe("password authentication")
+
+        @it("sends an exact empty-password request and accepts the server session")
+        function _()
+            payload = { AccessToken: "session-token", User: { Id: "user-id", Name: "user" } }
+            m.captureHttp({ ok: true, data: payload })
+
+            'bs:disable-next-line 1140
+            response = login({ server: "https://server", username: "user", password: "" })
+
+            capture = getGlobalAa().authTaskHttpCapture
+            m.assertEqual(capture.url, "https://server/Users/AuthenticateByName?format=json")
+            m.assertEqual(capture.method, "POST")
+            m.assertInvalid(capture.token)
+            q = Char.DoubleQuote
+            m.assertEqual(capture.body, "{" + q + "Username" + q + ":" + q + "user" + q + "," + q + "Pw" + q + ":" + q + q + "}")
+            m.assertTrue(Instr(1, capture.headers.Authorization, "MediaBrowser ") = 1)
+            m.assertTrue(response.ok)
+            m.assertEqual(response.action, "login")
+            m.assertEqual(response.server, "https://server")
+            m.assertEqual(response.payload, payload)
+        end function
+
+        @it("preserves the server rejection of an empty password")
+        function _()
+            failure = { ok: false, status: 401, errorMessage: "Not authorized" }
+            m.captureHttp(failure)
+
+            'bs:disable-next-line 1140
+            response = login({ server: "https://server", username: "user", password: "" })
+
+            m.assertEqual(response, failure)
+            m.assertEqual(ParseJson(getGlobalAa().authTaskHttpCapture.body).Pw, "")
+        end function
+
+        @it("sends password whitespace without trimming")
+        function _()
+            m.captureHttp({ ok: false, status: 401 })
+
+            'bs:disable-next-line 1140
+            response = login({ server: "https://server", username: "user", password: "  secret  " })
+
+            q = Char.DoubleQuote
+            m.assertEqual(getGlobalAa().authTaskHttpCapture.body, "{" + q + "Username" + q + ":" + q + "user" + q + "," + q + "Pw" + q + ":" + q + "  secret  " + q + "}")
+        end function
+
+        function captureHttp(result as object)
+            getGlobalAa().authTaskHttpCapture = { result: result }
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                capture = getGlobalAa().authTaskHttpCapture
+                capture.url = requestUrl
+                capture.method = method
+                capture.token = token
+                capture.body = body
+                capture.headers = headers
+                return capture.result
+            end function)
+        end function
+
+        protected override function tearDown()
+            getGlobalAa().Delete("authTaskHttpCapture")
         end function
 
     end class

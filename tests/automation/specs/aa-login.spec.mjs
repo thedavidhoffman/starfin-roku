@@ -12,7 +12,7 @@ const coreHomeTaskIds = [
   'liveTvOnNowTask'
 ];
 
-const requiredCredentialsMessage = 'Server address, username, and password are all required.';
+const requiredCredentialsMessage = 'Server address and username are required.';
 const unreachableServer = '127.0.0.1:1';
 const unreachableServerMessage = /^Login failed: Failed to connect to 127\.0\.0\.1 port 1 after \d+ ms: Could not connect to server$/;
 const invalidCredentialsMessage = 'Login failed: Not authorized';
@@ -160,8 +160,12 @@ describe('Starfin authenticated smoke test', function () {
       password: ''
     });
     await submitLogin(environment);
-    await assertFailedLoginState(environment, requiredCredentialsMessage);
-    const missingPasswordScreenshot = await captureEvidence(this, 'login-validation-missing-password');
+    await waitFor(async () => {
+      const values = await getLoginState(environment);
+      return values.results.status?.value === invalidCredentialsMessage;
+    }, 'the empty-password authentication failure', 20000);
+    await assertFailedLoginState(environment, invalidCredentialsMessage);
+    const emptyPasswordScreenshot = await captureEvidence(this, 'login-authentication-empty-password');
 
     await setLoginCredentials(environment, {
       server: environment.testAccount.server,
@@ -208,7 +212,7 @@ describe('Starfin authenticated smoke test', function () {
         'login-validation-empty',
         'login-validation-unreachable-server',
         'login-validation-missing-username',
-        'login-validation-missing-password',
+        'login-authentication-empty-password',
         'login-validation-invalid-credentials',
         'login-screen-populated',
         'home-page'
@@ -231,7 +235,7 @@ describe('Starfin authenticated smoke test', function () {
       emptyValidationScreenshot,
       unreachableServerScreenshot,
       missingUsernameScreenshot,
-      missingPasswordScreenshot,
+      emptyPasswordScreenshot,
       invalidCredentialsScreenshot,
       populatedLoginScreenshot,
       homeScreenshot

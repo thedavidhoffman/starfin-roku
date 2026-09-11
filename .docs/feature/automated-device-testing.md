@@ -73,9 +73,9 @@ delete-and-verify loop before failing startup.
 The authenticated smoke test waits for the empty Login screen and captures
 evidence. In one ordered flow, it submits the empty form, attempts authentication
 against the intentionally unreachable loopback endpoint `127.0.0.1:1`, then checks the
-missing-username and missing-password states against the configured server. It also
-submits a deliberately incorrect password to verify the reachable server's rejected-
-credentials response. Each failed attempt verifies the rendered Login status,
+missing-username validation against the configured server. It submits an empty
+password and a deliberately incorrect password for the password-protected test
+account to verify the reachable server's rejected-credentials response. Each failed attempt verifies the rendered Login status,
 confirms Login remains visible and Home remains hidden, and captures screenshot
 evidence. The unreachable-server assertion includes the submitted IP and port while
 allowing the reported connection duration to vary.

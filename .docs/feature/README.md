@@ -30,6 +30,7 @@ individual Starfin features.
 - [Video Toolbar](video-toolbar.md)
 - [Quick Connect](quick-connect.md)
 - [Search](search.md)
+- [Sign In](sign-in.md)
 - [Theme Songs](theme-songs.md)
 - [TV Season Browsing](tv-season-browsing.md)
 - [Filmography](filmography.md)

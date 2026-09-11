@@ -187,7 +187,7 @@ namespace tests
             m.top.findNode("loginButton").buttonSelected = true
 
             m.assertInvalid(m.top.loginRequested)
-            m.assertEqual(m.top.statusMessage, "Server address, username, and password are all required.")
+            m.assertEqual(m.top.statusMessage, "Server address and username are required.")
         end function
 
         @it("rejects a missing username")
@@ -199,13 +199,33 @@ namespace tests
             m.assertInvalid(m.top.loginRequested)
         end function
 
-        @it("rejects a missing password")
+        @it("submits an empty password for server authentication")
         function _()
             m.setCredentials("http://server", "user", "")
 
             m.top.findNode("loginButton").buttonSelected = true
 
+            m.assertEqual(m.top.loginRequested, { action: "login", server: "http://server", username: "user", password: "" })
+            m.assertEqual(m.top.statusMessage, "Signing in...")
+        end function
+
+        @it("rejects a whitespace-only username")
+        function _()
+            m.setCredentials("http://server", "   ", "")
+
+            m.top.findNode("loginButton").buttonSelected = true
+
             m.assertInvalid(m.top.loginRequested)
+            m.assertEqual(m.top.statusMessage, "Server address and username are required.")
+        end function
+
+        @it("preserves password whitespace")
+        function _()
+            m.setCredentials("http://server", "user", "  secret  ")
+
+            m.top.findNode("loginButton").buttonSelected = true
+
+            m.assertEqual(m.top.loginRequested.password, "  secret  ")
         end function
 
         @it("emits a normalized login request")
