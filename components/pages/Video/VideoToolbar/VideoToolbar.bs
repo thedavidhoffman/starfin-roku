@@ -5,6 +5,25 @@ import "pkg:/source/String.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    m.toolbarLayout = {
+        collapsedWidth: 64
+        buttonSpacing: 12
+    }
+    m.focusState = {
+        focusedIndex: 0
+        focusedButtonId: ""
+        buttons: []
+        hasFocus: false
+    }
+    initHandlers()
+    updateToolbarButtons()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.toolbarItems = m.top.findNode("toolbarItems")
     m.resumeButton = m.top.findNode("resumeButton")
     m.restartButton = m.top.findNode("restartButton")
@@ -20,6 +39,12 @@ sub init()
     m.videoButton = m.top.findNode("videoButton")
     m.mediaInfoButton = m.top.findNode("mediaInfoButton")
     m.seasonButton = m.top.findNode("seasonButton")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.resumeButton.observeField("buttonSelected", "onResumeButtonSelected")
     m.restartButton.observeField("buttonSelected", "onRestartButtonSelected")
     m.playButton.observeField("buttonSelected", "onPlayButtonSelected")
@@ -34,19 +59,10 @@ sub init()
     m.videoButton.observeField("buttonSelected", "onVideoButtonSelected")
     m.mediaInfoButton.observeField("buttonSelected", "onMediaInfoButtonSelected")
     m.seasonButton.observeField("buttonSelected", "onSeasonButtonSelected")
-    m.toolbarLayout = {
-        collapsedWidth: 64
-        defaultExpandedWidth: 168
-        buttonSpacing: 12
-    }
-    m.focusState = {
-        focusedIndex: 0
-        focusedButtonId: ""
-        buttons: []
-        hasFocus: false
-    }
     m.top.observeField("focusedChild", "onFocusChanged")
-    updateToolbarButtons()
+    for each button in m.toolbarItems.getChildren(-1, 0)
+        button.observeField("preferredWidth", "layoutButtons")
+    end for
 end sub
 
 '-------------------------------------------------------------------------------
@@ -113,7 +129,7 @@ sub layoutButtons()
         button.hasFocusVisual = m.focusState.hasFocus = true and i = m.focusState.focusedIndex
 
         if m.focusState.hasFocus = true and i = m.focusState.focusedIndex then
-            x = x + getButtonExpandedWidth(button)
+            x = x + button.preferredWidth
         else
             x = x + m.toolbarLayout.collapsedWidth
         end if
@@ -121,17 +137,6 @@ sub layoutButtons()
         x = x + m.toolbarLayout.buttonSpacing
     end for
 end sub
-
-'-------------------------------------------------------------------------------
-' getButtonExpandedWidth
-'-------------------------------------------------------------------------------
-function getButtonExpandedWidth(button as object) as integer
-    if button.expandedWidth <> invalid and button.expandedWidth > 0 then
-        return button.expandedWidth
-    end if
-
-    return m.toolbarLayout.defaultExpandedWidth
-end function
 
 '-------------------------------------------------------------------------------
 ' syncFocusedButtonFromFocusChain
@@ -258,9 +263,7 @@ sub configureToolbarButtons(state as object)
     resumeText = getPlaybackButtonText("Resume", resumeLabelItem)
     playText = getPlaybackButtonText("Play", m.top.playItem)
     m.resumeButton.text = resumeText
-    m.resumeButton.expandedWidth = getPlaybackButtonExpandedWidth(resumeText, "Resume", 195)
     m.playButton.text = playText
-    m.playButton.expandedWidth = getPlaybackButtonExpandedWidth(playText, "Play", 145)
 
     m.markWatchedButton.visible = state.supportsWatchedActions and state.isWatched <> true
     m.markUnwatchedButton.visible = state.supportsWatchedActions and state.isWatched
@@ -329,16 +332,6 @@ function getPlaybackButtonText(action as string, item as dynamic) as string
     if seasonNumber = "" or episodeNumber = "" then return action
 
     return action + " S" + seasonNumber + ":E" + episodeNumber
-end function
-
-'-------------------------------------------------------------------------------
-' getPlaybackButtonExpandedWidth
-'-------------------------------------------------------------------------------
-function getPlaybackButtonExpandedWidth(text as string, action as string, fallback as integer) as integer
-    suffixLength = Len(text) - Len(action)
-    if suffixLength <= 0 then return fallback
-
-    return fallback + (suffixLength * 13)
 end function
 
 '-------------------------------------------------------------------------------

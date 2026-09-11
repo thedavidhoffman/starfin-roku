@@ -271,7 +271,107 @@ namespace tests
             m.assertFalse(handled)
         end function
 
+        @describe("measured button layout")
+
+        @it("fits resume episode text and positions Restart after the expanded button")
+        function _()
+            m.top.resumePositionSeconds = 40
+            m.top.supportsRestart = true
+            m.top.resumeItem = { ParentIndexNumber: 3, IndexNumber: 20 }
+            m.top.callFunc("activate")
+            resume = m.top.findNode("resumeButton")
+            restart = m.top.findNode("restartButton")
+            label = resume.findNode("textLabel")
+            reference = CreateObject("roSGNode", "Label")
+            reference.font = label.font
+            reference.text = "Resume S3:E20"
+
+            m.assertEqual(label.text, "Resume S3:E20")
+            m.assertTrue(label.width >= reference.boundingRect().width)
+            m.assertEqual(restart.translation[0], resume.findNode("background").width + 12)
+        end function
+
+        @it("relayouts siblings when the focused button text changes directly")
+        function _()
+            m.top.resumePositionSeconds = 40
+            m.top.supportsRestart = true
+            m.top.resumeItem = { ParentIndexNumber: 3, IndexNumber: 20 }
+            m.top.callFunc("activate")
+            resume = m.top.findNode("resumeButton")
+            restart = m.top.findNode("restartButton")
+            previousX = restart.translation[0]
+
+            resume.text = "Resume S123:E456"
+
+            m.assertTrue(restart.translation[0] > previousX)
+            m.assertEqual(restart.translation[0], resume.findNode("background").width + 12)
+            m.assertTrue(resume.hasFocus())
+        end function
+
+        @it("shrinks sibling spacing when focused episode context is removed")
+        function _()
+            m.top.resumePositionSeconds = 40
+            m.top.supportsRestart = true
+            m.top.resumeItem = { ParentIndexNumber: 123, IndexNumber: 456 }
+            m.top.callFunc("activate")
+            restart = m.top.findNode("restartButton")
+            previousX = restart.translation[0]
+
+            m.top.resumeItem = {}
+
+            m.assertTrue(restart.translation[0] < previousX)
+            m.assertEqual(restart.translation[0], 207.0)
+            m.assertTrue(m.top.findNode("resumeButton").hasFocus())
+        end function
+
+        @it("fits a multi-digit play episode label")
+        function _()
+            m.top.resumePositionSeconds = 0
+            m.top.resumeItem = invalid
+            m.top.playItem = { ParentIndexNumber: 123, IndexNumber: 456 }
+            m.top.callFunc("activate")
+            label = m.top.findNode("playButton").findNode("textLabel")
+            reference = CreateObject("roSGNode", "Label")
+            reference.font = label.font
+            reference.text = "Play S123:E456"
+
+            m.assertEqual(label.text, "Play S123:E456")
+            m.assertTrue(label.width >= reference.boundingRect().width)
+        end function
+
+        @it("collapses the measured button when focus moves to Restart")
+        function _()
+            m.top.resumePositionSeconds = 40
+            m.top.supportsRestart = true
+            m.top.resumeItem = { ParentIndexNumber: 3, IndexNumber: 20 }
+            m.top.callFunc("activate")
+
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+
+            resume = m.top.findNode("resumeButton")
+            restart = m.top.findNode("restartButton")
+            m.assertEqual(resume.findNode("background").width, 64.0)
+            m.assertFalse(resume.findNode("textLabel").visible)
+            m.assertEqual(restart.translation[0], 76.0)
+            m.assertTrue(restart.hasFocus())
+        end function
+
+        @it("keeps all buttons compact when the toolbar is deactivated")
+        function _()
+            m.top.resumePositionSeconds = 40
+            m.top.supportsRestart = true
+            m.top.resumeItem = { ParentIndexNumber: 3, IndexNumber: 20 }
+            m.top.callFunc("activate")
+
+            m.top.callFunc("deactivate")
+
+            m.assertEqual(m.top.findNode("resumeButton").findNode("background").width, 64.0)
+            m.assertEqual(m.top.findNode("restartButton").translation[0], 76.0)
+        end function
+
         @describe("button events")
+
         @it("emits play selection")
         function _()
             m.top.playSelected = false

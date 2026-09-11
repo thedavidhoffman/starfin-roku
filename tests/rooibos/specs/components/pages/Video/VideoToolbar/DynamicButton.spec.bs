@@ -103,6 +103,69 @@ namespace tests
             m.assertFalse(m.node.textLabel.visible)
         end function
 
+        @describe("measured expanded width")
+
+        @it("fits the complete resume episode label using its actual font")
+        function _()
+            m.top.expandedWidth = 195
+            m.top.text = "Resume S3:E20"
+            m.top.hasFocusVisual = true
+            reference = CreateObject("roSGNode", "Label")
+            reference.font = m.node.textLabel.font
+            reference.text = "Resume S3:E20"
+
+            m.assertTrue(m.node.textLabel.width >= reference.boundingRect().width)
+            m.assertEqual(m.node.textLabel.text, "Resume S3:E20")
+            m.assertTrue(m.node.background.width = m.top.preferredWidth)
+            m.assertTrue(m.top.preferredWidth > 195)
+        end function
+
+        @it("measures different glyph widths for equal length strings")
+        function _()
+            m.top.expandedWidth = 64
+            m.top.text = "iiiiiiii"
+            narrowWidth = m.top.preferredWidth
+
+            m.top.text = "WWWWWWWW"
+
+            m.assertTrue(m.top.preferredWidth > narrowWidth)
+        end function
+
+        @it("shrinks to the configured minimum after a long label becomes short")
+        function _()
+            m.top.expandedWidth = 195
+            m.top.hasFocusVisual = true
+            m.top.text = "Resume S123:E456"
+            longWidth = m.top.preferredWidth
+
+            m.top.text = "Play"
+
+            m.assertTrue(longWidth > m.top.preferredWidth)
+            m.assertEqual(m.top.preferredWidth, 195)
+            m.assertEqual(m.node.background.width, 195.0)
+        end function
+
+        @it("updates the minimum width without changing text")
+        function _()
+            m.top.text = "Play"
+            m.top.hasFocusVisual = true
+
+            m.top.expandedWidth = 500
+
+            m.assertEqual(m.top.preferredWidth, 500)
+            m.assertEqual(m.node.background.width, 500.0)
+        end function
+
+        @it("keeps long labels collapsed until focused")
+        function _()
+            m.top.hasFocusVisual = false
+            m.top.text = "Resume S123:E456"
+
+            m.assertEqual(m.node.background.width, 64.0)
+            m.assertFalse(m.node.textLabel.visible)
+            m.assertTrue(m.top.preferredWidth > 195)
+        end function
+
         @describe("selection")
 
         @it("emits selection for a pressed OK key")
@@ -145,6 +208,7 @@ namespace tests
 
             m.assertFalse(handled)
         end function
+
     end class
 
 end namespace

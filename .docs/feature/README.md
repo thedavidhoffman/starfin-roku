@@ -27,6 +27,7 @@ individual Starfin features.
 - [Playlist Artwork](playlist-artwork.md)
 - [Preview Sheets](preview-sheets.md)
 - [Primary Button](primary-button.md)
+- [Video Toolbar](video-toolbar.md)
 - [Quick Connect](quick-connect.md)
 - [Search](search.md)
 - [Theme Songs](theme-songs.md)

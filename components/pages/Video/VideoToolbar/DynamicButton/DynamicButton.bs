@@ -1,5 +1,6 @@
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -8,6 +9,7 @@ sub init()
     m.background = m.top.findNode("background")
     m.iconPoster = m.top.findNode("iconPoster")
     m.textLabel = m.top.findNode("textLabel")
+    m.measurementLabel = CreateObject("roSGNode", "Label")
     m.layout = {
         collapsedWidth: 64
         expandedWidth: 168
@@ -17,6 +19,8 @@ sub init()
         iconY: 13
         textX: 60
         textY: 15
+        rightPadding: 16
+        textPadding: 8
     }
     m.top.observeField("focusedChild", "onFocusChanged")
     onTextChanged()
@@ -29,6 +33,26 @@ end sub
 '-------------------------------------------------------------------------------
 sub onTextChanged()
     m.textLabel.text = Format.SafeString(m.top.text, "")
+    updatePreferredWidth()
+end sub
+
+'-------------------------------------------------------------------------------
+' updatePreferredWidth
+'-------------------------------------------------------------------------------
+sub updatePreferredWidth()
+    ' Measure an unconstrained label using the same SceneGraph font as the text.
+    m.measurementLabel.font = m.textLabel.font
+    m.measurementLabel.text = m.textLabel.text
+    measuredWidth = m.measurementLabel.boundingRect().width
+    textWidth = Number.ToInteger(measuredWidth, 0)
+    if measuredWidth > textWidth then textWidth++
+
+    width = m.layout.expandedWidth
+    if m.top.expandedWidth > 0 then width = m.top.expandedWidth
+    contentWidth = m.layout.textX + textWidth + m.layout.textPadding + m.layout.rightPadding
+    if contentWidth > width then width = contentWidth
+    m.top.preferredWidth = width
+    onFocusVisualChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -56,9 +80,7 @@ sub onFocusVisualChanged()
     hasFocus = m.top.hasFocusVisual = true
     if hasFocus then
         m.background.uri = "pkg:/images/buttons/media-toolbar-button-focused.9.png"
-        width = m.layout.expandedWidth
-        if m.top.expandedWidth <> invalid and m.top.expandedWidth > 0 then width = m.top.expandedWidth
-        m.background.width = width
+        m.background.width = m.top.preferredWidth
     else
         m.background.uri = "pkg:/images/buttons/media-toolbar-button-unfocused.9.png"
         m.background.width = m.layout.collapsedWidth
@@ -69,7 +91,7 @@ sub onFocusVisualChanged()
     m.iconPoster.height = m.layout.iconSize
     m.iconPoster.translation = [m.layout.iconX, m.layout.iconY]
     m.textLabel.translation = [m.layout.textX, m.layout.textY]
-    m.textLabel.width = m.background.width - m.layout.textX - 16
+    m.textLabel.width = m.background.width - m.layout.textX - m.layout.rightPadding
     m.textLabel.visible = hasFocus
     if hasFocus then
         m.textLabel.color = &h0F1A2AFF
