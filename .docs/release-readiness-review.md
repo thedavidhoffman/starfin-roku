@@ -57,15 +57,15 @@ folder and filenames. For release `2.1.8`, produce:
 
 ```text
 .release/2.1.8/
-    starfin.2.1.8
+    starfin.2.1.8.zip
     v2.1.8-automation-test-report-1080p.zip
     v2.1.8-automation-test-report-720p.zip
     v2.1.8-release-readiness-report.md
     v2.1.8-unit-test-report.txt
 ```
 
-The distribution package is named `starfin.<version>` with no additional filename
-extension; retain its package format when copying it from the build output.
+The distribution package is named `starfin.<version>.zip`; retain the ZIP
+format and extension when copying it from the build output.
 The automation ZIP filenames identify the version and resolution, without a
 run timestamp. Record the originating run IDs in the readiness report.
 
@@ -332,7 +332,7 @@ blocker.
 - Confirm the artifact contains no development credentials or debug-only
   configuration.
 - Place the verified distribution package in `.release/<version>/` as
-  `starfin.<version>` and verify the final copy.
+  `starfin.<version>.zip` and verify the final copy.
 - Optionally install the release artifact fresh instead of relying only on an
   existing development side-load.
 - When the artifact is installed, confirm that it launches successfully and
