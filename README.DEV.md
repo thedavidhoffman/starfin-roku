@@ -46,19 +46,18 @@ changes.
 - `npm run validate` validates and transpiles the project without changing the
   manifest build number. Compiler output is generated under `build/` and `out/`.
 - `npm run clean` removes generated `build/` and `out/` content.
-- `npm run increment-build-version` increments `build_version` in `manifest`.
-- `npm run build` increments the build version, cleans generated output, and
-  runs validation.
+- `npm run build` cleans generated output and runs validation.
 - `npm run package` runs the build and creates
   `out/starfin.<major>.<minor>.<build>.zip`.
-- `npm run deploy` increments the build version, validates, and deploys to the
+- `npm run deploy` validates and deploys to the
   Roku configured in `rokudeploy.json`.
 - `npm run generate:image-masks` regenerates the checked-in HD mask assets.
 - `npm run validate:image-geometry` validates image dimensions and alpha-mask
   geometry.
 
-Use `npm run validate` for routine checks when you do not want to increment the
-checked-in manifest version.
+Set `major_version`, `minor_version`, and `build_version` in `manifest`
+deliberately when starting a release. Build, package, and deploy preserve that
+version, including when rerun for the same release.
 
 ## Unit Tests
 
