@@ -49,26 +49,46 @@ that blocker; do not imply they passed or reuse earlier results as current
 evidence. Once the blocker is resolved, a new review must satisfy the complete
 verification requirements.
 
-## Release Evidence Files
+## Release Artifact Folder and Filenames
 
-Store the completed review evidence under `out/`, using the version embedded in
-the release artifact:
-
-```text
-out/v<major>.<minor>.<build>-release-readiness-report.md
-out/v<major>.<minor>.<build>-unit-test-report.txt
-```
-
-For example, release `2.0.3` produces:
+Store all final release artifacts in `.release/<version>/` at the project root.
+Use the user-confirmed version, matching the package manifest, for both the
+folder and filenames. For release `2.1.8`, produce:
 
 ```text
-out/v2.0.3-release-readiness-report.md
-out/v2.0.3-unit-test-report.txt
+.release/2.1.8/
+    starfin.2.1.8
+    v2.1.8-automation-test-report-1080p.zip
+    v2.1.8-automation-test-report-720p.zip
+    v2.1.8-release-readiness-report.md
+    v2.1.8-unit-test-report.txt
 ```
 
-These are generated release outputs and should not be treated as source files.
-Replace existing reports for the same version when the complete verification is
-rerun so the files always describe the latest run of that candidate.
+The distribution package is named `starfin.<version>` with no additional filename
+extension; retain its package format when copying it from the build output.
+The automation ZIP filenames identify the version and resolution, without a
+run timestamp. Record the originating run IDs in the readiness report.
+
+After confirming the version and verifying the manifest match, create the
+version's release folder. If this is a new assessment for the same version,
+clear that specific version folder before writing any new artifacts. Verify
+that the resolved target is the intended version directory directly under the
+project's `.release/` directory before clearing it. Preserve other release
+versions and private evidence. Do not clear the folder between steps or when
+resuming the same assessment.
+
+Build and automation tools may use `build/` and `out/` as working directories.
+Preserve private reports, original screenshots, and raw logs there; place the
+sanitized final deliverables in the release folder using the names above.
+Treat `.release/` as generated output, outside source review scope.
+
+Verify the final copies in the release folder, including extracting and opening
+both automation ZIPs, before recommending `SHIP`.
+
+If the assessment stops at a blocker, write its `NO SHIP` readiness report to
+this same folder and retain only artifacts actually produced by that assessment.
+Mark missing artifacts as `NOT PRODUCED`; never leave an earlier run's files
+in place as if they were current evidence.
 
 ## 1. Confirm the Release Version
 
@@ -81,6 +101,9 @@ automation archive names, and release artifact. Verify that the Roku manifest's
 `major_version`, `minor_version`, and `build_version` match it before proceeding.
 If they differ, report the mismatch and resolve it with the user before continuing;
 do not silently change or increment the version.
+
+Once the version matches, initialize or clear its release folder as specified
+in **Release Artifact Folder and Filenames** before proceeding with the review.
 
 ## 2. Establish the Release Scope
 
@@ -202,7 +225,7 @@ Follow this sequence:
 3. Prompt the user to restore **1080p**, wait for confirmation, and verify the
    restoration. Perform this restoration step even after a test failure.
 
-Keep each run's reports in a timestamp-first folder:
+Keep each run's private working reports in a timestamp-first folder:
 
 ```text
 out/automation-results/<run-id> (1080p)/
@@ -210,15 +233,9 @@ out/automation-results/<run-id> (720p)/
 ```
 
 For example, `2026-09-10T14-56-57-797Z (1080p)`. Each resolution uses its own
-run's timestamp and produces a separate sanitized report ZIP. For release
-`2.1.8`, name the archives:
-
-```text
-starfin-automation-report-v2.1.8-1080p-<run-id>.zip
-starfin-automation-report-v2.1.8-720p-<run-id>.zip
-```
-
-Use the release artifact's version for subsequent releases. Each ZIP must contain
+run timestamp. Copy its sanitized report ZIP into `.release/<version>/` using
+the final filename specified in **Release Artifact Folder and Filenames**,
+regardless of the runner's working filename. Each ZIP must contain
 the complete HTML and JSON report, its `assets/` directory (including scripts,
 styles, fonts, and licenses), verification metadata, and screenshots with
 IP addresses redacted. Preserve the private originals and exclude logs from
@@ -242,7 +259,8 @@ a release blocker. Record each resolution's aggregate result counts, archive
 verification result, and sanitized ZIP path in the decision record.
 
 Capture the complete console output from the final full-suite run in the
-versioned unit-test report under `out/`. Sanitize the report before saving it:
+versioned unit-test report in `.release/<version>/`. Sanitize the report before
+saving it:
 
 - Normalize the displayed device-test arguments to:
 
@@ -313,6 +331,8 @@ blocker.
 - Confirm required images, fonts, and other packaged assets are present.
 - Confirm the artifact contains no development credentials or debug-only
   configuration.
+- Place the verified distribution package in `.release/<version>/` as
+  `starfin.<version>` and verify the final copy.
 - Optionally install the release artifact fresh instead of relying only on an
   existing development side-load.
 - When the artifact is installed, confirm that it launches successfully and
@@ -338,8 +358,8 @@ Avoid expanding observations into unrelated cleanup during the release review.
 
 ## Ship Decision Record
 
-Write the completed decision record to the versioned release-readiness report
-under `out/`. Record:
+Write the completed decision record to
+`.release/<version>/v<version>-release-readiness-report.md`. Record:
 
 - Baseline and proposed release commit.
 - User-confirmed target release version and manifest version match.
@@ -352,9 +372,11 @@ under `out/`. Record:
 - Complete unit-test count and all-passing result.
 - Path to the versioned unit-test report.
 - Aggregate device-automation result counts for each resolution (1080p and
-  720p), each archive's verification result, and both sanitized report ZIP paths.
+  720p), originating run IDs, each archive's verification result, and both final
+  sanitized report ZIP paths in the release folder.
 - Confirmation that 1080p was restored and verified.
 - Release artifact version and, when performed, installation and launch results.
+- Final release-folder path and artifact filenames.
 - Open blockers, accepted follow-ups, and known limitations.
 - Final decision: `SHIP` or `NO SHIP`.
 - Reviewer and review date.
@@ -375,6 +397,7 @@ optional fields may be omitted without blocking a `SHIP` decision.
 
 A `SHIP` decision requires no unresolved release blockers, complete passing RTA
 suites at both 1080p and 720p with no failed, pending, skipped, or unexpected
-results, and successful verification of both sanitized report archives. Any accepted
+results, and successful verification of the final artifacts, including both
+sanitized report archives, in `.release/<version>/`. Any accepted
 follow-up should have a documented owner and enough detail to be actionable
 after release.
