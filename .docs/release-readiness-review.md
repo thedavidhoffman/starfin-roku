@@ -219,11 +219,14 @@ starfin-automation-report-v2.1.8-720p-<run-id>.zip
 ```
 
 Use the release artifact's version for subsequent releases. Each ZIP must contain
-the complete HTML and JSON report, verification metadata, and screenshots with
+the complete HTML and JSON report, its `assets/` directory (including scripts,
+styles, fonts, and licenses), verification metadata, and screenshots with
 IP addresses redacted. Preserve the private originals and exclude logs from
 public archives. Verify both archives' contents, including screenshot redaction
 and the absence of exposed IP addresses or credentials in report text and
-metadata. Do not attach private reports or logs to a public release.
+metadata. Extract each ZIP into a separate directory and verify that the HTML
+report renders with its local scripts, styles, fonts, and screenshots available.
+Do not attach private reports or logs to a public release.
 
 The exact loopback address `127.0.0.1` may remain visible in screenshots, report
 text, and metadata because it does not identify a private device or server.

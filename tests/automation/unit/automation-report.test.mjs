@@ -127,6 +127,7 @@ test('creates a sanitized archive without logs and preserves private evidence', 
   t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
   const screenshotsDir = path.join(tempDir, 'screenshots');
   await fs.mkdir(path.join(tempDir, 'logs'), { recursive: true });
+  await fs.mkdir(path.join(tempDir, 'assets'), { recursive: true });
   await fs.mkdir(screenshotsDir, { recursive: true });
   await fs.writeFile(path.join(tempDir, 'report.html'), '<html><body>passing</body></html>');
   await fs.writeFile(path.join(tempDir, 'report.json'), JSON.stringify(passingReport()));
@@ -163,4 +164,48 @@ test('creates a sanitized archive without logs and preserves private evidence', 
   assert.equal(verification.rokuOsVersion, '15.3.4');
   assert.match(path.basename(result.archivePath), /-1080p-test-run[.]zip$/);
   await assert.rejects(fs.access(path.join(result.publicDir, 'logs')));
+});
+
+test('packages report scripts, styles, and nested font assets in the ZIP', async t => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'starfin-report-assets-'));
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+  await fs.mkdir(path.join(tempDir, 'screenshots'), { recursive: true });
+  await fs.mkdir(path.join(tempDir, 'assets', 'fonts'), { recursive: true });
+  const assets = {
+    'assets/app.js': 'document.body.dataset.rendered = "true";',
+    'assets/app.css': '@font-face { font-family: report; src: url("fonts/report.woff2"); }',
+    'assets/fonts/report.woff2': 'font fixture'
+  };
+  for (const [name, contents] of Object.entries(assets)) {
+    await fs.writeFile(path.join(tempDir, name), contents);
+  }
+  await fs.writeFile(path.join(tempDir, 'report.html'),
+    '<html><head><link rel="stylesheet" href="assets/app.css"></head><body><script src="assets/app.js"></script></body></html>');
+  await fs.writeFile(path.join(tempDir, 'report.json'), JSON.stringify(passingReport()));
+  await sharp({ create: { width: 1280, height: 720, channels: 3, background: '#ffffff' } })
+    .png().toFile(path.join(tempDir, 'screenshots', 'login-screen-empty.png'));
+
+  const result = await createReleaseAutomationReport({
+    resultsDir: tempDir, runId: 'assets', version: '1.2.3', resolution: '720p', sensitiveValues: []
+  });
+  const archive = await fs.readFile(result.archivePath);
+
+  for (const [name, contents] of Object.entries(assets)) {
+    assert.equal(await fs.readFile(path.join(result.publicDir, name), 'utf8'), contents);
+    assert.equal(await fs.readFile(path.join(tempDir, name), 'utf8'), contents);
+    assert.ok(archive.includes(Buffer.from(name)), `ZIP must include ${name}`);
+  }
+});
+
+test('rejects an incomplete report whose assets directory is missing', async t => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'starfin-report-missing-assets-'));
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+  await fs.mkdir(path.join(tempDir, 'screenshots'));
+  await fs.writeFile(path.join(tempDir, 'report.html'), '<script src="assets/app.js"></script>');
+  await fs.writeFile(path.join(tempDir, 'report.json'), JSON.stringify(passingReport()));
+
+  await assert.rejects(createReleaseAutomationReport({
+    resultsDir: tempDir, runId: 'missing-assets', version: '1.2.3', sensitiveValues: []
+  }), { code: 'ENOENT' });
+  await assert.rejects(fs.access(path.join(tempDir, 'starfin-automation-report-v1.2.3-missing-assets.zip')));
 });

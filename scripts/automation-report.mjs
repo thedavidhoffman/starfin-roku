@@ -200,6 +200,7 @@ export async function createReleaseAutomationReport({
   await Promise.all([
     fs.copyFile(path.join(resultsDir, 'report.html'), path.join(publicDir, 'report.html')),
     fs.copyFile(reportJsonPath, path.join(publicDir, 'report.json')),
+    fs.cp(path.join(resultsDir, 'assets'), path.join(publicDir, 'assets'), { recursive: true }),
     fs.cp(path.join(resultsDir, 'screenshots'), path.join(publicDir, 'screenshots'), { recursive: true })
   ]);
 

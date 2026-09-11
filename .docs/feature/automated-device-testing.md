@@ -195,12 +195,14 @@ failure. Screenshot failure does not replace the original test error.
 A successful release-mode run also creates a `public-report/` copy and a
 versioned ZIP in the same timestamped directory. Resolution-specific runs append
 `(1080p)` or `(720p)` to that directory name, and their archives add `1080p` or
-`720p` before the run ID. The ZIP contains only the HTML
-and JSON reports, screenshots, and a non-sensitive `verification.json` with the
+`720p` before the run ID. The ZIP contains the HTML and JSON reports, the complete
+`assets/` directory (scripts, styles, fonts, and licenses), screenshots, and a
+non-sensitive `verification.json` with the
 Starfin version, completion time, aggregate passing counts, verified resolution,
 screenshot dimensions, Roku model, and Roku OS version. Only this ZIP is
 suitable for attachment to a public release; the original report and logs remain
-private.
+private. Extract the ZIP before opening `report.html`; the report's local assets
+must remain alongside it.
 
 Screenshots are supporting evidence rather than pixel-diff assertions. They may
 not faithfully capture DRM video planes, animation smoothness, overscan, or HDMI
