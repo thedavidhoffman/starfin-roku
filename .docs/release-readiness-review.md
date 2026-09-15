@@ -116,8 +116,6 @@ in **Release Artifact Folder and Filenames** before proceeding with the review.
   unfinished work intended for a later release.
 - Treat unrelated working-tree changes as user-owned and keep them outside the
   review scope.
-- Do not use `.to-do.md` as release scope unless its owner explicitly requests
-  it.
 
 ## 3. Perform a Risk-Focused Code Review
 
