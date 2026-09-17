@@ -1,0 +1,176 @@
+namespace tests
+
+    @SGNode("LogContent")
+    @suite("LogContent component")
+    class LogContentTests extends rooibos.BaseTestSuite
+
+        @describe("declarative component contract")
+
+        @it("declares the logViewport node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("logViewport"))
+        end function
+
+        @it("declares the logSheet node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("logSheet"))
+        end function
+
+        @it("declares the scrollTrack node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("scrollTrack"))
+        end function
+
+        @it("declares the scrollThumb node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("scrollThumb"))
+        end function
+
+        @it("declares the scrollHoldDelayTimer node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("scrollHoldDelayTimer"))
+        end function
+
+        @it("declares the scrollRepeatTimer node")
+        function _()
+            m.assertNotInvalid(m.top.findNode("scrollRepeatTimer"))
+        end function
+
+        @describe("log rendering")
+
+        @it("creates the visible row pool")
+        function _()
+            m.assertEqual(m.top.findNode("logSheet").getChildCount(), 19)
+        end function
+
+        @it("renders an empty-state message")
+        function _()
+            m.top.callFunc("loadEntries", [])
+
+            m.assertEqual(m.node.logViewState.lines[1].text, "No application log entries have been collected.")
+            m.assertTrue(m.hasVisibleText("No application log entries have been collected."))
+        end function
+
+        @it("renders an entry source")
+        function _()
+            m.top.callFunc("loadEntries", ["01/02 03:04:05 [Player] started"])
+
+            m.assertTrue(m.hasVisibleText("Player"))
+        end function
+
+        @it("renders an entry timestamp")
+        function _()
+            m.top.callFunc("loadEntries", ["01/02 03:04:05 [Player] started"])
+
+            m.assertTrue(m.hasVisibleText("01/02 03:04:05"))
+        end function
+
+        @it("removes warning prefixes from rendered messages")
+        function _()
+            m.top.callFunc("loadEntries", ["[Player] WARNING: caution"])
+
+            m.assertTrue(m.hasVisibleText("caution"))
+            m.assertFalse(m.hasVisibleText("WARNING: caution"))
+        end function
+
+        @it("shortens URL origins in single-line messages")
+        function _()
+            m.top.callFunc("loadEntries", ["[Network] request https://example.com/path/item"])
+
+            m.assertTrue(m.hasVisibleText("request /path/item"))
+        end function
+
+        @it("shows the scrollbar for overflowing logs")
+        function _()
+            m.top.callFunc("loadEntries", m.createEntries(20))
+
+            m.assertTrue(m.top.findNode("scrollTrack").visible)
+            m.assertTrue(m.top.findNode("scrollThumb").visible)
+        end function
+
+        @it("hides the scrollbar for short logs")
+        function _()
+            m.top.callFunc("loadEntries", ["short"])
+
+            m.assertFalse(m.top.findNode("scrollTrack").visible)
+            m.assertFalse(m.top.findNode("scrollThumb").visible)
+        end function
+
+        @describe("scrolling")
+
+        @it("scrolls upward from the bottom of an overflowing log")
+        function _()
+            m.top.callFunc("loadEntries", m.createEntries(20))
+            initialY = m.top.findNode("scrollThumb").translation[1]
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("scrollThumb").translation[1] < initialY)
+        end function
+
+        @it("starts the hold-delay timer for pressed scroll keys")
+        function _()
+            m.top.callFunc("loadEntries", m.createEntries(20))
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.findNode("scrollHoldDelayTimer").control, "start")
+        end function
+
+        @it("stops scroll timers when the held key is released")
+        function _()
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", false)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.findNode("scrollHoldDelayTimer").control, "stop")
+            m.assertEqual(m.top.findNode("scrollRepeatTimer").control, "stop")
+        end function
+
+        @it("ignores unrelated pressed keys")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertFalse(handled)
+        end function
+
+        @it("focuses the log content")
+        function _()
+            m.top.callFunc("focusLog")
+
+            m.assertTrue(m.top.hasFocus())
+        end function
+
+        function hasVisibleText(expectedText as string) as boolean
+            sheet = m.top.findNode("logSheet")
+            for rowIndex = 0 to sheet.getChildCount() - 1
+                row = sheet.getChild(rowIndex)
+                if row.visible then
+                    for childIndex = 0 to row.getChildCount() - 1
+                        child = row.getChild(childIndex)
+                        if child.subtype() = "Label" and child.visible and child.text = expectedText then return true
+                    end for
+                end if
+            end for
+            return false
+        end function
+
+        function createEntries(count as integer) as object
+            entries = []
+            for i = 1 to count
+                entries.Push("[Source] entry " + i.ToStr())
+            end for
+            return entries
+        end function
+
+    end class
+
+end namespace

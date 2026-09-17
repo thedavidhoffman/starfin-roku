@@ -15,6 +15,11 @@ the server, using a generated dummy token and a unique tile URL.
 Fixture configuration is packaged only in test builds. The runner closes the
 server on exit and writes captured test requests under `build/rooibos-fixtures/`.
 
+Rooibos discovers test files from the filesystem, including Git-ignored files.
+Keep parked feature tests outside `tests/rooibos/specs/` when their production
+dependencies are absent. The `Logs` component suites are explicitly unignored
+so the normal test command and a fresh checkout include the same coverage.
+
 ## Build boundary
 
 `bsconfig-automation.json` packages the production application together with

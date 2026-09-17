@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 '-------------------------------------------------------------------------------
 ' syncMusicVideoRandomButton
 '-------------------------------------------------------------------------------
@@ -30,7 +32,7 @@ sub onMusicVideoRandomSelected()
     if request = invalid then return
 
     m.pageState.randomPlayback.loading = true
-    AppStatus.ClearMessage()
+    AppMessage.Dismiss()
     Spinner.Show()
     m.musicVideoRandomPlaybackTask.control = TaskControl.Command.Stop
     m.musicVideoRandomPlaybackTask.request = request
@@ -49,21 +51,20 @@ sub onMusicVideoRandomPlaybackResponse()
     m.pageState.randomPlayback.loading = false
     Spinner.Hide()
     if response.ok <> true then
-        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load random music videos."))
+        AppMessage.Show((response.failureKind <> invalid ? "Unable to load random music videos. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load random music videos."))
         focusMusicVideoRandomButton()
         return
     end if
 
     queue = shuffledMusicVideoPlaybackQueue(response.playbackQueue)
     if queue.Count() = 0 then
-        AppStatus.SetMessage("No music videos are available for random playback.")
+        AppMessage.Show("No music videos are available for random playback.")
         focusMusicVideoRandomButton()
         return
     end if
 
     queueItem = queue[0]
     m.pageState.randomPlayback.restoreFocus = true
-    AppStatus.ClearMessage()
     m.top.selectedVideo = {
         itemId: queueItem.itemId
         item: queueItem.item

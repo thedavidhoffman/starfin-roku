@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 '-------------------------------------------------------------------------------
 ' loadCurrentLevel
 '-------------------------------------------------------------------------------
@@ -35,7 +37,7 @@ sub loadCurrentLevel(reset as boolean, preserveControlFocus = false as boolean)
         includeItemTypes: getIncludeItemTypes(level.isFavorites = true)
     }
     AsyncLifecycle.BeginFromField(m.state.lifecycle, m.libraryTask.request, "queryId")
-    AppStatus.ClearMessage()
+    if reset then AppMessage.Dismiss()
     Spinner.Show(0)
     m.libraryTask.control = TaskControl.Command.Run
 end sub
@@ -79,9 +81,9 @@ sub onHomeMediaLibraryResponse()
     AsyncLifecycle.Deactivate(m.state.lifecycle)
     Spinner.Hide()
     if response.ok <> true then
-        message = Format.SafeString(response.errorMessage, "Unable to load home media.")
-        AppStatus.SetMessage(message)
-        m.log.activity("Folder load failed: " + message)
+        message = (response.failureKind <> invalid ? "Unable to load home media. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load home media.")
+        AppMessage.Show(message)
+        m.log.activity("Folder load failed: " + Format.SafeString(response.errorMessage, message))
         return
     end if
 
@@ -96,6 +98,5 @@ sub onHomeMediaLibraryResponse()
     level.hasMore = response.hasMore = true
     renderItems(level.items, true)
     if Number.ToInteger(response.startIndex, 0) = 0 then m.log.activity("Viewing folder " + ActivityLog.Quote(level.title, "Home Media") + "; items=" + level.totalCount.ToStr())
-    AppStatus.ClearMessage()
     restoreFocusAfterLoad()
 end sub

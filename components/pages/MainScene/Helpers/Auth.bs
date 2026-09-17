@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 '-------------------------------------------------------------------------------
 ' authSyncSavedSessionToLogin
 '-------------------------------------------------------------------------------
@@ -152,7 +154,6 @@ sub authHandleAccountPickerClosed(closed as object)
     Spinner.ShowBlocking()
     themeAudioStop()
     resetDynamicPages()
-    AppStatus.SetMessage("Switching account...")
     m.authController.switchAccountRequest = { accountKey: account.accountKey, source: source }
 end sub
 
@@ -175,7 +176,7 @@ function handleComponentError(response as dynamic, accountKey as string) as bool
 
     if response.authExpired = true then
         m.authController.expireActiveSessionRequested = {
-            message: response.errorMessage
+            message: RequestFailure.GetDisplayMessage(response, "Your session has expired. Please sign in again.")
             accountKey: accountKey
         }
         return true
@@ -188,6 +189,7 @@ end function
 ' authAppendDynamicPage
 '-------------------------------------------------------------------------------
 sub authAppendDynamicPage(page as object)
+    dismissMessage()
     m.dynamicPageHost.appendChild(page)
     authObserveTaskOwner(page)
 end sub
@@ -313,7 +315,7 @@ sub authHandleAuthenticatedSession()
     m.session = session
     completePerformanceDialog()
     m.deepLinkController.callFunc("updateSession", buildSessionLoadRequest())
-    AppStatus.ClearMessage()
+    AppMessage.Dismiss()
     syncHeaderUserIdentity()
     navShowApp()
 end sub
@@ -343,9 +345,9 @@ sub authHandleLoginFailed()
     if response = invalid then return
 
     if m.authenticatedContent.visible = true then
-        AppStatus.SetMessage(response.message)
         m.homePage.visible = true
         m.homePage.callFunc("activate")
+        AppMessage.Show(response.message)
     else
         m.login.statusMessage = response.message
         if Format.SafeString(response.source, "") = "login" then
@@ -393,6 +395,8 @@ function buildSessionLoadRequest() as object
         token: m.session.token
         userId: m.session.userId
         accountKey: m.session.accountKey
+        permissions: m.session.permissions
+        homePreferences: m.session.homePreferences
     }
 
 end function

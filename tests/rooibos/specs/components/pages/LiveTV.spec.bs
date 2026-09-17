@@ -13,6 +13,7 @@ namespace tests
             m.top.closeRequested = false
             m.top.findNode("guideGrid").content = CreateObject("roSGNode", "ContentNode")
         end function
+
         @describe("declarative component contract")
 
         @it("declares the previewBg node")
@@ -344,6 +345,59 @@ namespace tests
                 BackdropImageTags: []
             }
         end function
+
+        @it("shows a contextual initial guide failure without leaving loading active")
+        function _()
+            getGlobalAa().requestFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            m.node.liveTvState.schedule.initialDisplayed = false
+            m.node.liveTvState.isLoading = true
+
+            'bs:disable-next-line 1140
+            handleScheduleLoadError({ ok: false, failureKind: "timeout", errorMessage: "technical timeout" })
+
+            m.assertFalse(m.node.liveTvState.isLoading)
+            m.assertTrue(m.node.liveTvState.hasLoaded)
+            m.assertEqual(getGlobalAa().requestFailureMessage, "Unable to load the Live TV guide. The server took too long to respond.")
+        end function
+
+        @describe("empty guide presentation")
+
+        @it("shows the existing preview for an empty channel response without a dialog")
+        function _()
+            getGlobalAa().requestFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            AsyncLifecycle.Begin(m.node.liveTvState.lifecycle, "user")
+            m.node.liveTvState.isLoading = true
+
+            m.node.channelsTask.response = { ok: true, action: "liveTvChannels", userId: "user", payload: { Items: [] } }
+
+            m.assertFalse(m.node.liveTvState.isLoading)
+            m.assertTrue(m.node.emptyPreviewGroup.visible)
+            m.assertEqual(m.node.emptyPreviewMessage.text, "No Live TV channels were found.")
+            m.assertEqual(getGlobalAa().requestFailureMessage, "")
+        end function
+
+        @it("shows the existing preview when no channel ids are available for scheduling")
+        function _()
+            getGlobalAa().requestFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            m.node.liveTvState.channels = []
+            m.node.liveTvState.isLoading = true
+
+            'bs:disable-next-line 1140
+            loadSchedule()
+
+            m.assertFalse(m.node.liveTvState.isLoading)
+            m.assertTrue(m.node.emptyPreviewGroup.visible)
+            m.assertEqual(m.node.emptyPreviewMessage.text, "No Live TV channels were found.")
+            m.assertEqual(getGlobalAa().requestFailureMessage, "")
+        end function
+
+        private sub captureRequestFailureMessage(message as string)
+            getGlobalAa().requestFailureMessage = message
+        end sub
+
     end class
 
 end namespace

@@ -7,6 +7,7 @@ namespace tests
     class MainSceneTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.node.authController = m.top.findNode("authController")
             'bs:disable-next-line 1140
             resetDynamicPages()
             m.node.session = {
@@ -31,6 +32,20 @@ namespace tests
             m.node.playbackController.playerOpened = false
             m.node.playbackController.selectedPerson = invalid
             m.node.playbackController.closed = invalid
+        end function
+
+        @describe("session permission forwarding")
+
+        @it("passes runtime Live TV permissions to page load requests")
+        function _()
+            m.node.session = { server: "https://server", token: "token", userId: "user", accountKey: "server/user", permissions: { canAccessLiveTv: false }, homePreferences: { latestItemsExcludes: ["home"] } }
+
+            'bs:disable-next-line 1140
+            request = buildSessionLoadRequest()
+
+            m.assertEqual(request.permissions, { canAccessLiveTv: false })
+            m.assertEqual(request.homePreferences, { latestItemsExcludes: ["home"] })
+            m.assertEqual(request.userId, "user")
         end function
 
         @describe("declarative component contract")
@@ -70,9 +85,9 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("themeAudioController"))
         end function
 
-        @it("declares the statusLabel node")
+        @it("declares the messageOverlayHost node")
         function _()
-            m.assertNotInvalid(m.top.findNode("statusLabel"))
+            m.assertNotInvalid(m.top.findNode("messageOverlayHost"))
         end function
 
         @it("declares the header node")
@@ -1038,6 +1053,203 @@ namespace tests
             m.node.deepLinkNavigation.destinationId = destinationId
             m.node.deepLinkNavigation.destinationType = DeepLink.DestinationType.Playback
             return destinationId
+        end function
+
+        @describe("message lifecycle")
+
+        @it("defers opening and combines distinct messages without replacing an existing overlay")
+        function _()
+            m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", accountKey: "" })
+            existing = m.node.overlayHost.getChild(0)
+            'bs:disable-next-line 1140
+            showMessage("First failure")
+            'bs:disable-next-line 1140
+            showMessage("First failure")
+            'bs:disable-next-line 1140
+            showMessage("Second failure")
+
+            m.assertEqual(m.node.messageOverlayHost.getChildCount(), 0)
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertEqual(m.node.messageOverlayHost.getChildCount(), 1)
+            m.assertEqual(m.node.messageState.overlay.message, "First failure" + Chr(10) + Chr(10) + "Second failure")
+            m.assertTrue(m.node.overlayHost.getChild(0).isSameNode(existing))
+            'bs:disable-next-line 1140
+            dismissMessage()
+        end function
+
+        @it("appends to the open message without replacing its dialog")
+        function _()
+            'bs:disable-next-line 1140
+            showMessage("First failure")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+            original = m.node.messageState.overlay
+            'bs:disable-next-line 1140
+            showMessage("Second failure")
+
+            m.assertTrue(m.node.messageState.overlay.isSameNode(original))
+            m.assertEqual(original.message, "First failure" + Chr(10) + Chr(10) + "Second failure")
+            'bs:disable-next-line 1140
+            dismissMessage()
+        end function
+
+        @it("restores the previous focus on acknowledgment and releases references")
+        function _()
+            m.top.visible = true
+            button = CreateObject("roSGNode", "PrimaryButton")
+            m.top.appendChild(button)
+            button.setFocus(true)
+            'bs:disable-next-line 1140
+            showMessage("Failure")
+            m.assertTrue(m.node.messageState.returnFocus.isSameNode(button))
+            'bs:disable-next-line 1140
+            m.assertTrue(isMessageReturnFocusAvailable(button))
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+            m.node.messageState.overlay.callFunc("closeDialog")
+
+            m.assertTrue(button.hasFocus())
+            m.assertInvalid(m.node.messageState.returnFocus)
+            m.assertInvalid(m.node.messageState.overlay)
+            m.assertInvalid(m.node.messageOverlayHost.closed)
+            m.top.removeChild(button)
+        end function
+
+        @it("prevents background focus changes from leaving the modal")
+        function _()
+            button = CreateObject("roSGNode", "PrimaryButton")
+            m.top.appendChild(button)
+            'bs:disable-next-line 1140
+            showMessage("Failure")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+            button.setFocus(true)
+            m.assertEqual(m.node.messageOpenTimer.control, "start")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertTrue(m.node.messageState.overlay.findNode("okButton").hasFocus())
+            'bs:disable-next-line 1140
+            dismissMessage()
+            m.top.removeChild(button)
+        end function
+
+        @it("cancels a deferred message during navigation without restoring old focus")
+        function _()
+            'bs:disable-next-line 1140
+            showMessage("Failure")
+            'bs:disable-next-line 1140
+            dismissMessage()
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertEqual(m.node.messageOverlayHost.getChildCount(), 0)
+            m.assertEqual(m.node.messageState.messages.Count(), 0)
+            m.assertInvalid(m.node.messageState.returnFocus)
+        end function
+
+        @it("falls back to the underlying overlay when the previous control is removed")
+        function _()
+            m.top.visible = true
+            m.node.authenticatedContent.visible = true
+            m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", accountKey: "" })
+            existing = m.node.overlayHost.getChild(0)
+            button = CreateObject("roSGNode", "PrimaryButton")
+            m.top.appendChild(button)
+            button.setFocus(true)
+            'bs:disable-next-line 1140
+            showMessage("Failure")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+            m.top.removeChild(button)
+
+            m.node.messageState.overlay.callFunc("closeDialog")
+
+            m.assertTrue(existing.isInFocusChain())
+            m.assertEqual(m.node.messageOverlayHost.getChildCount(), 0)
+            m.node.overlayHost.callFunc("closeOverlay")
+        end function
+
+        @it("clears a visible message when routing to login without restoring its old control")
+        function _()
+            button = CreateObject("roSGNode", "PrimaryButton")
+            m.top.appendChild(button)
+            button.setFocus(true)
+            'bs:disable-next-line 1140
+            showMessage("Failure")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+
+            m.assertEqual(m.node.messageOverlayHost.getChildCount(), 0)
+            m.assertInvalid(m.node.messageState.returnFocus)
+            m.assertTrue(m.node.login.isInFocusChain())
+            m.assertFalse(button.hasFocus())
+            m.top.removeChild(button)
+        end function
+
+        @it("clears acknowledgment state and keeps blocking progress when switching accounts")
+        function _()
+            m.node.authController = m.createAuthControllerMock(invalid)
+            m.node.authController.addField("switchAccountRequest", "assocarray", true)
+            'bs:disable-next-line 1140
+            showMessage("Failure from the previous account")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            'bs:disable-next-line 1140
+            authHandleAccountPickerClosed({ request: { source: "login" }, overlay: { selectedAccount: { accountKey: "account-2" } } })
+
+            m.assertEqual(m.node.authController.switchAccountRequest.accountKey, "account-2")
+            m.assertEqual(m.node.messageOverlayHost.getChildCount(), 0)
+            m.assertEqual(m.node.messageState.messages.Count(), 0)
+            m.assertInvalid(m.node.messageState.returnFocus)
+            progressNode = m.top.getScene().findNode("loadingSpinner")
+            m.assertTrue(progressNode.blockInteraction)
+            m.assertEqual(progressNode.control, "start")
+            Spinner.HideBlocking()
+        end function
+
+        @it("suppresses outgoing Home refresh messages when hiding the page")
+        function _()
+            homePage = m.node.homePage
+            recorder = m.createHomePageCallRecorder()
+            recorder.visible = true
+            m.node.homePage = recorder
+
+            'bs:disable-next-line 1140
+            hideHome()
+            m.node.homePage = homePage
+
+            m.assertFalse(recorder.visible)
+            m.assertEqual(recorder.calls, ["suppressRefreshMessages"])
+        end function
+
+        @it("suppresses outgoing Home refresh messages during session and page cleanup")
+        function _()
+            homePage = m.node.homePage
+            recorder = m.createHomePageCallRecorder()
+            m.node.homePage = recorder
+
+            'bs:disable-next-line 1140
+            resetDynamicPages()
+            m.node.homePage = homePage
+
+            m.assertEqual(recorder.calls, ["suppressRefreshMessages"])
+        end function
+
+        @it("rejects a detached return-focus target")
+        function _()
+            button = CreateObject("roSGNode", "PrimaryButton")
+            m.top.appendChild(button)
+            m.top.removeChild(button)
+
+            'bs:disable-next-line 1140
+            m.assertFalse(isMessageReturnFocusAvailable(button))
         end function
 
     end class

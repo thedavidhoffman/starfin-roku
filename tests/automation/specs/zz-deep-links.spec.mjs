@@ -71,8 +71,8 @@ async function waitForHomeFallback(environment) {
     const values = await environment.odc.getValues({
       requests: {
         homeVisible: { base: 'scene', keyPath: '#homePage.visible' },
-        statusVisible: { base: 'scene', keyPath: '#statusLabel.visible' },
-        statusText: { base: 'scene', keyPath: '#statusLabel.0.text' },
+        statusVisible: { base: 'scene', keyPath: '#messageOverlayHost.visible' },
+        statusText: { base: 'scene', keyPath: '#messageOverlayHost.0.message' },
         destinationType: { base: 'scene', keyPath: '#deepLinkController.destinationRequested.type' },
         destinationMessage: { base: 'scene', keyPath: '#deepLinkController.destinationRequested.message' }
       }

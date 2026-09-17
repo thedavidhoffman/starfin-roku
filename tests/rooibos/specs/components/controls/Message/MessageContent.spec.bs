@@ -1,0 +1,125 @@
+namespace tests
+
+    @SGNode("MessageContent")
+    @suite("Message content")
+    class MessageContentTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.message = ""
+        end function
+
+        @describe("layout and acknowledgment")
+
+        @it("fits a short message and right aligns the text sized button")
+        function _()
+            m.top.message = "The server denied access."
+            button = m.top.findNode("okButton")
+
+            m.assertEqual(m.top.preferredHeight, 420)
+            m.assertEqual(Number.ToInteger(button.buttonWidth, 0), button.callFunc("getPreferredWidth", 30))
+            m.assertEqual(button.translation, [680.0 - button.buttonWidth, 134.0])
+            m.assertEqual(m.top.findNode("messageLabel").text, m.top.message)
+        end function
+
+        @it("grows to fit a multiline message")
+        function _()
+            m.top.message = "One" + Chr(10) + "Two" + Chr(10) + "Three" + Chr(10) + "Four" + Chr(10) + "Five" + Chr(10) + "Six"
+
+            m.assertTrue(m.top.preferredHeight > 420)
+            m.assertTrue(m.top.preferredHeight <= 720)
+            m.assertFalse(m.top.findNode("scrollTrack").visible)
+        end function
+
+        @it("scrolls oversized text while keeping OK focused")
+        function _()
+            text = ""
+            for i = 1 to 40
+                text += "Message line " + i.ToStr() + Chr(10)
+            end for
+            m.top.message = text
+            m.top.callFunc("focusAcknowledgment")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.preferredHeight, 720)
+            m.assertTrue(m.top.findNode("scrollTrack").visible)
+            m.assertEqual(m.top.findNode("messageLabel").text, text)
+            m.assertEqual(m.top.findNode("messageLabel").translation, [0.0, -40.0])
+            m.assertTrue(m.top.findNode("okButton").hasFocus())
+        end function
+
+        @it("clamps oversized content at the bottom with its final line reachable")
+        function _()
+            m.top.message = m.longMessage()
+            m.top.callFunc("focusAcknowledgment")
+            for i = 1 to 100
+                'bs:disable-next-line 1140
+                onKeyEvent("down", true)
+            end for
+
+            label = m.top.findNode("messageLabel")
+            m.assertTrue(label.translation[1] < 0)
+            m.assertEqual(label.translation[1] + m.node.layout.textHeight, m.node.layout.viewportHeight)
+            m.assertTrue(m.top.findNode("okButton").hasFocus())
+        end function
+
+        @it("clamps oversized content at the top after scrolling back up")
+        function _()
+            m.top.message = m.longMessage()
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            for i = 1 to 5
+                'bs:disable-next-line 1140
+                onKeyEvent("up", true)
+            end for
+
+            m.assertEqual(m.top.findNode("messageLabel").translation, [0.0, 0.0])
+        end function
+
+        @it("preserves the reading position when more text is appended")
+        function _()
+            m.top.message = m.longMessage()
+            m.top.callFunc("focusAcknowledgment")
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            previousTranslation = m.top.findNode("messageLabel").translation
+
+            m.top.message += Chr(10) + "Another failure"
+
+            m.assertEqual(m.top.findNode("messageLabel").translation, previousTranslation)
+            m.assertTrue(m.top.findNode("okButton").hasFocus())
+        end function
+
+        @it("clamps the reading position when replacement text no longer overflows")
+        function _()
+            m.top.message = m.longMessage()
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+
+            m.top.message = "Short"
+
+            m.assertEqual(m.top.findNode("messageLabel").translation, [0.0, 0.0])
+            m.assertFalse(m.top.findNode("scrollTrack").visible)
+        end function
+
+        @it("emits acknowledgment when OK is selected")
+        function _()
+            m.top.acknowledged = false
+            m.top.findNode("okButton").buttonSelected = true
+
+            m.assertTrue(m.top.acknowledged)
+        end function
+
+        private function longMessage() as string
+            text = ""
+            for i = 1 to 30
+                text += "Message line " + i.ToStr() + Chr(10)
+            end for
+            return text + "Final line"
+        end function
+
+    end class
+
+end namespace

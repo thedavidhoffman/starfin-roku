@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 
 '-------------------------------------------------------------------------------
 ' loadFilterOptions
@@ -110,7 +112,7 @@ sub onMusicArtistsResponse()
         m.state.content.artists.load.hasMore = false
         m.log.error("Artist load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music artists."))
         if isArtistBrowseMode() then
-            AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music artists."))
+            AppMessage.Show((response.failureKind <> invalid ? "Unable to load music artists. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load music artists."))
             if m.state.loadingUi.foreground.kind = "artists" and finishForegroundLoad("artists") then focusBrowseByButton()
         end if
         return
@@ -155,7 +157,6 @@ sub onMusicArtistsResponse()
     m.state.content.artists.load.hasMore = response.hasMore = true
     m.log.write("Artist page accepted libraryId=" + getLibraryId() + " count=" + m.state.content.artists.items.Count().ToStr())
     if isArtistBrowseMode() then
-        AppStatus.ClearMessage()
         if startIndex = 0 then
             renderArtists()
         else
@@ -198,14 +199,14 @@ sub onMusicLibraryResponse()
         if m.state.filterRefresh.phase = "loading" then
             m.filteredRefreshTimer.control = TimerControl.Command.Stop
             m.filteredRefreshTimer.duration = 0.2
-            rollbackMusicFilterRefresh(Format.SafeString(response.errorMessage, "Unable to load music library."))
+            rollbackMusicFilterRefresh((response.failureKind <> invalid ? "Unable to load music library. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load music library."))
             return
         end if
         m.state.content.albums.load.requestInFlight = false
         m.state.content.albums.load.status = "failed"
         m.state.content.albums.load.hasMore = false
         m.log.error("Album load failed libraryId=" + getLibraryId() + " message=" + Format.SafeString(response.errorMessage, "Unable to load music library."))
-        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load music library."))
+        AppMessage.Show((response.failureKind <> invalid ? "Unable to load music library. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load music library."))
         if m.state.loadingUi.foreground.kind = "albums" and finishForegroundLoad("albums") then
             if focusAfterForegroundLoad() <> true then focusBrowseByButton()
         end if
@@ -266,7 +267,6 @@ sub onMusicLibraryResponse()
     end if
     m.log.write("Album page accepted libraryId=" + getLibraryId() + " startIndex=" + startIndex.ToStr() + " pageCount=" + pageAlbums.Count().ToStr() + " totalLoaded=" + m.state.content.albums.items.Count().ToStr())
     if startIndex = 0 and letterSelectionCommitted <> true then m.log.activity("Viewing music library " + ActivityLog.RequestTitle(m.state.request, "Music") + "; albums=" + m.state.content.albums.load.totalCount.ToStr())
-    AppStatus.ClearMessage()
 
     hasMore = response.hasMore = true
     m.state.content.albums.load.hasMore = hasMore
@@ -459,7 +459,7 @@ sub handleForegroundAlbumTimeout()
     m.state.content.albums.load.requestInFlight = false
     m.state.content.albums.load.status = "failed"
     m.state.content.albums.load.hasMore = false
-    AppStatus.SetMessage("Music library request timed out.")
+    AppMessage.Show("Music library request timed out.")
     if finishForegroundLoad("albums") then
         if focusAfterForegroundLoad() <> true then focusBrowseByButton()
     end if
@@ -490,7 +490,7 @@ sub rollbackMusicFilterRefresh(message as string)
     m.state.content.albums.load.queryId = m.state.filterRefresh.queryId
     m.state.content.albums.load.requestInFlight = false
     restoreCommittedMusicFilterView(m.state.committedFilterView)
-    AppStatus.SetMessage(message)
+    AppMessage.Show(message)
     focusRestoredMusicFilterView()
     m.log.error("Filter refresh rolled back libraryId=" + getLibraryId() + " mediaType=music message=" + message)
 end sub
@@ -562,7 +562,7 @@ sub startArtistQuery()
     m.state.content.artists.load.hasMore = false
     m.state.content.artists.load.queryId = m.state.content.artists.load.queryId + 1
     AsyncLifecycle.Begin(m.state.lifecycle, request.libraryId)
-    AppStatus.ClearMessage()
+    AppMessage.Dismiss()
     m.log.write("Artist load started libraryId=" + Format.SafeString(request.libraryId, ""))
     renderArtists()
     queueForegroundLoad("artists")

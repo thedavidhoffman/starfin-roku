@@ -1,0 +1,204 @@
+import "pkg:/source/RequestFailure.bs"
+
+namespace tests
+
+    @suite("Request failure messages")
+    class RequestFailureTests extends rooibos.BaseTestSuite
+
+        @describe("failure classification")
+
+        @it("classifies response code -28")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(-28), "timeout")
+        end function
+
+        @it("classifies response code 408")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(408), "timeout")
+        end function
+
+        @it("classifies response code 504")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(504), "timeout")
+        end function
+
+        @it("classifies response code 0")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(0), "connectionFailed")
+        end function
+
+        @it("classifies response code -6")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(-6), "connectionFailed")
+        end function
+
+        @it("classifies response code -7")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(-7), "connectionFailed")
+        end function
+
+        @it("classifies response code -35")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(-35), "connectionFailed")
+        end function
+
+        @it("classifies response code -60")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(-60), "connectionFailed")
+        end function
+
+        @it("classifies response code -3")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(-3), "invalidRequest")
+        end function
+
+        @it("classifies response code -2")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(-2), "requestStartFailed")
+        end function
+
+        @it("classifies response code 401")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(401), "requestRejected")
+        end function
+
+        @it("classifies response code 403")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(403), "accessDenied")
+        end function
+
+        @it("classifies response code 404")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(404), "notFound")
+        end function
+
+        @it("classifies response code 429")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(429), "rateLimited")
+        end function
+
+        @it("classifies response code 500")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(500), "serverError")
+        end function
+
+        @it("classifies response code 503")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(503), "serverError")
+        end function
+
+        @it("classifies response code 400")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(400), "requestRejected")
+        end function
+
+        @it("classifies response code 302")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(302), "unexpectedResponse")
+        end function
+
+        @it("classifies response code -18")
+        function _()
+            m.assertEqual(RequestFailure.FromStatus(-18), "unexpectedResponse")
+        end function
+
+        @describe("failure explanations")
+
+        @it("explains timeout")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("timeout"), "The server took too long to respond.")
+        end function
+
+        @it("explains connectionFailed")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("connectionFailed"), "Couldn't connect to the server.")
+        end function
+
+        @it("explains authenticationRequired")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("authenticationRequired"), "Your session has expired. Please sign in again.")
+        end function
+
+        @it("explains accessDenied")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("accessDenied"), "The server denied access.")
+        end function
+
+        @it("explains notFound")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("notFound"), "The requested content could not be found.")
+        end function
+
+        @it("explains rateLimited")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("rateLimited"), "The server is receiving too many requests. Please wait a moment.")
+        end function
+
+        @it("explains serverError")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("serverError"), "The server encountered an error.")
+        end function
+
+        @it("explains requestRejected")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("requestRejected"), "The server rejected the request.")
+        end function
+
+        @it("explains invalidRequest")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("invalidRequest"), "The app couldn't prepare the request.")
+        end function
+
+        @it("explains requestStartFailed")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("requestStartFailed"), "The app couldn't start the request.")
+        end function
+
+        @it("explains unexpectedResponse")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("unexpectedResponse"), "The app received an unexpected response from the server.")
+        end function
+
+        @it("explains an unknown failure identifier")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage("futureKind"), "The app received an unexpected response from the server.")
+        end function
+
+        @it("explains a missing failure identifier")
+        function _()
+            m.assertEqual(RequestFailure.GetMessage(invalid), "The app received an unexpected response from the server.")
+        end function
+
+        @it("prefers a known identifier over technical details")
+        function _()
+            m.assertEqual(RequestFailure.GetDisplayMessage({ failureKind: "accessDenied", errorMessage: "Forbidden" }, "Unable to load."), "The server denied access.")
+        end function
+
+        @it("uses safe wording for an unknown identifier")
+        function _()
+            m.assertEqual(RequestFailure.GetDisplayMessage({ failureKind: "futureKind", errorMessage: "internal details" }, "Unable to load."), "The app received an unexpected response from the server.")
+        end function
+
+        @it("preserves an app generated message")
+        function _()
+            m.assertEqual(RequestFailure.GetDisplayMessage({ errorMessage: "The selected item has no playable media source." }, "Unable to load."), "The selected item has no playable media source.")
+        end function
+
+        @it("uses context for a missing response")
+        function _()
+            m.assertEqual(RequestFailure.GetDisplayMessage(invalid, "Unable to load."), "Unable to load.")
+        end function
+
+        @it("uses context for a missing message")
+        function _()
+            m.assertEqual(RequestFailure.GetDisplayMessage({}, "Unable to load."), "Unable to load.")
+        end function
+
+        @it("uses context for a blank message")
+        function _()
+            m.assertEqual(RequestFailure.GetDisplayMessage({ errorMessage: "   " }, "Unable to load."), "Unable to load.")
+        end function
+
+    end class
+
+end namespace

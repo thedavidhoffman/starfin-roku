@@ -1,0 +1,112 @@
+import "pkg:/source/Number.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    initHandlers()
+    ' Dialog supplies a 680-pixel content area at y=170 inside its 800-pixel frame.
+    m.layout = {
+        contentWidth: 680
+        contentTop: 170
+        minimumHeight: 420
+        maximumHeight: 720
+        bottomPadding: 60
+        buttonGap: 32
+        buttonPadding: 30
+        scrollGap: 12
+        scrollStep: 40
+        minimumThumbHeight: 24
+        offset: 0
+        textHeight: 0
+        viewportHeight: 0
+    }
+    onMessageChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.viewport = m.top.findNode("viewport")
+    m.messageLabel = m.top.findNode("messageLabel")
+    m.okButton = m.top.findNode("okButton")
+    m.scrollTrack = m.top.findNode("scrollTrack")
+    m.scrollThumb = m.top.findNode("scrollThumb")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.okButton.observeField("buttonSelected", "onAcknowledged")
+end sub
+
+'-------------------------------------------------------------------------------
+' onMessageChanged
+'-------------------------------------------------------------------------------
+sub onMessageChanged()
+    m.messageLabel.width = m.layout.contentWidth - m.scrollTrack.width - m.layout.scrollGap
+    m.messageLabel.text = m.top.message
+    m.layout.textHeight = m.messageLabel.boundingRect().height
+    reservedHeight = m.layout.contentTop + m.okButton.buttonHeight + m.layout.buttonGap + m.layout.bottomPadding
+    height = Number.ToInteger(m.layout.textHeight + reservedHeight, m.layout.minimumHeight)
+    if height < m.layout.minimumHeight then height = m.layout.minimumHeight
+    if height > m.layout.maximumHeight then height = m.layout.maximumHeight
+    m.top.preferredHeight = height
+    m.layout.viewportHeight = height - reservedHeight
+    m.viewport.clippingRect = [0, 0, m.layout.contentWidth, m.layout.viewportHeight]
+    m.okButton.buttonWidth = m.okButton.callFunc("getPreferredWidth", m.layout.buttonPadding)
+    m.okButton.translation = [m.layout.contentWidth - m.okButton.buttonWidth, m.layout.viewportHeight + m.layout.buttonGap]
+    updateScrollPosition()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusAcknowledgment
+'-------------------------------------------------------------------------------
+sub focusAcknowledgment()
+    m.okButton.hasFocusVisual = true
+    m.okButton.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAcknowledged
+'-------------------------------------------------------------------------------
+sub onAcknowledged()
+    m.top.acknowledged = true
+end sub
+
+'-------------------------------------------------------------------------------
+' updateScrollPosition
+'-------------------------------------------------------------------------------
+sub updateScrollPosition()
+    maximum = m.layout.textHeight - m.layout.viewportHeight
+    if maximum < 0 then maximum = 0
+    if m.layout.offset < 0 then m.layout.offset = 0
+    if m.layout.offset > maximum then m.layout.offset = maximum
+    m.messageLabel.translation = [0, -m.layout.offset]
+    m.scrollTrack.visible = maximum > 0
+    m.scrollThumb.visible = maximum > 0
+    if maximum = 0 then return
+    m.scrollTrack.height = m.layout.viewportHeight
+    thumbHeight = m.layout.viewportHeight * m.layout.viewportHeight / m.layout.textHeight
+    if thumbHeight < m.layout.minimumThumbHeight then thumbHeight = m.layout.minimumThumbHeight
+    m.scrollThumb.height = thumbHeight
+    scrollX = m.layout.contentWidth - m.scrollTrack.width
+    m.scrollTrack.translation = [scrollX, 0]
+    m.scrollThumb.translation = [scrollX, (m.layout.viewportHeight - thumbHeight) * m.layout.offset / maximum]
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press <> true then return false
+    if key = "back" then return false
+    if key = "up" or key = "down" then
+        if key = "up" then m.layout.offset -= m.layout.scrollStep else m.layout.offset += m.layout.scrollStep
+        updateScrollPosition()
+    end if
+    return true
+end function

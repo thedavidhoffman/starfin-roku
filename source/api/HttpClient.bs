@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 namespace HttpClient
 
     '---------------------------------------------------------------------------
@@ -10,13 +12,13 @@ namespace HttpClient
         if requestUrl = invalid or requestUrl = "" then
             message = "Invalid http request: url is invalid."
             log.error(message)
-            return { ok: false, errorMessage: message }
+            return { ok: false, failureKind: RequestFailure.Kind.InvalidRequest, errorMessage: message }
         end if
 
         if method = invalid or method = "" then
             message = "Invalid http request: method is invalid."
             log.error(message)
-            return { ok: false, errorMessage: message }
+            return { ok: false, failureKind: RequestFailure.Kind.InvalidRequest, errorMessage: message }
         end if
 
         normalizedMethod = UCase(method)
@@ -65,7 +67,7 @@ namespace HttpClient
         if requestStarted <> true then
             message = "Unable to start the server request."
             HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
-            return { ok: false, status: 0, errorMessage: message }
+            return { ok: false, status: 0, failureKind: RequestFailure.Kind.RequestStartFailed, errorMessage: message }
         end if
 
         msg = wait(timeoutMs, port)
@@ -73,13 +75,13 @@ namespace HttpClient
             transfer.AsyncCancel()
             message = "The server request timed out."
             HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
-            return { ok: false, status: 0, errorMessage: message }
+            return { ok: false, status: 0, failureKind: RequestFailure.Kind.Timeout, errorMessage: message }
         end if
 
         if type(msg) <> "roUrlEvent" then
             message = "Unexpected server response."
             HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
-            return { ok: false, status: 0, errorMessage: message }
+            return { ok: false, status: 0, failureKind: RequestFailure.Kind.UnexpectedResponse, errorMessage: message }
         end if
 
         status = msg.GetResponseCode()
@@ -90,14 +92,14 @@ namespace HttpClient
         if status = 0 then
             message = "Unable to reach the server."
             HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
-            return { ok: false, status: status, errorMessage: message }
+            return { ok: false, status: status, failureKind: RequestFailure.Kind.ConnectionFailed, errorMessage: message }
         end if
 
         hasAuthenticatedRequest = (token <> invalid and token <> "") or HttpClient.__AuthorizationHeaderHasToken(headers)
         if status = 401 and hasAuthenticatedRequest then
             message = "Your session has expired. Please sign in again."
             HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
-            return { ok: false, status: status, authExpired: true, errorMessage: message }
+            return { ok: false, status: status, failureKind: RequestFailure.Kind.AuthenticationRequired, authExpired: true, errorMessage: message }
         end if
 
         data = invalid
@@ -116,7 +118,7 @@ namespace HttpClient
                 message = Strings.Trim(msg.GetFailureReason())
             end if
             HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
-            return { ok: false, status: status, errorMessage: message, responseText: responseText }
+            return { ok: false, status: status, failureKind: RequestFailure.FromStatus(status), errorMessage: message, responseText: responseText }
         end if
 
         return { ok: true, status: status, data: data, responseText: responseText }

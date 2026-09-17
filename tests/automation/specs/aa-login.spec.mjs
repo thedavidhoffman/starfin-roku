@@ -14,8 +14,8 @@ const coreHomeTaskIds = [
 
 const requiredCredentialsMessage = 'Server address and username are required.';
 const unreachableServer = '127.0.0.1:1';
-const unreachableServerMessage = /^Login failed: Failed to connect to 127\.0\.0\.1 port 1 after \d+ ms: Could not connect to server$/;
-const invalidCredentialsMessage = 'Login failed: Not authorized';
+const unreachableServerMessage = "Login failed: Couldn't connect to the server.";
+const invalidCredentialsMessage = 'Login failed: The server rejected the request.';
 
 function isTaskComplete(state) {
   return ['done', 'stop'].includes(String(state ?? '').toLowerCase());
@@ -62,11 +62,7 @@ async function assertFailedLoginState(environment, expectedStatus) {
   const values = await getLoginState(environment);
   const status = values.results.status?.value;
 
-  if (expectedStatus instanceof RegExp) {
-    assert.match(status ?? '', expectedStatus);
-  } else {
-    assert.equal(status, expectedStatus);
-  }
+  assert.equal(status, expectedStatus);
   assert.equal(values.results.loginVisible?.value, true, 'Login should remain visible after a failed attempt.');
   assert.equal(values.results.homeVisible?.value, false, 'Home should remain hidden after a failed attempt.');
 }
@@ -81,8 +77,8 @@ async function waitForHomeReady(environment) {
       login: { base: 'scene', keyPath: '#login.visible' },
       shelves: { base: 'scene', keyPath: '#shelvesGroup.getChildCount()' },
       spinner: { base: 'scene', keyPath: '#loadingSpinner.visible' },
-      statusVisible: { base: 'scene', keyPath: '#statusLabel.visible' },
-      statusText: { base: 'scene', keyPath: '#statusLabel.text' }
+      statusVisible: { base: 'scene', keyPath: '#messageOverlayHost.visible' },
+      statusText: { base: 'scene', keyPath: '#messageOverlayHost.0.message' }
     };
     for (const taskId of coreHomeTaskIds) {
       requests[taskId] = { base: 'scene', keyPath: `#${taskId}.state` };
@@ -140,7 +136,7 @@ describe('Starfin authenticated smoke test', function () {
     await waitFor(async () => {
       const values = await getLoginState(environment);
       const status = values.results.status?.value ?? '';
-      return unreachableServerMessage.test(status) ? status : false;
+      return status === unreachableServerMessage;
     }, 'the unreachable-server login failure', 20000);
     await assertFailedLoginState(environment, unreachableServerMessage);
     const unreachableServerScreenshot = await captureEvidence(this, 'login-validation-unreachable-server');

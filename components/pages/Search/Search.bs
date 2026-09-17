@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/ActivityLog.bs"
 import "pkg:/source/Logger.bs"
@@ -9,7 +10,7 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/ItemImage.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/EpisodeSort.bs"
-import "pkg:/source/Status.bs"
+import "pkg:/source/AppMessage.bs"
 import "pkg:/source/Spinner.bs"
 import "pkg:/source/AsyncLifecycle.bs"
 import "pkg:/source/Array.bs"
@@ -137,11 +138,8 @@ sub onKeyboardTextChanged()
     Spinner.Hide()
 
     if Len(query) < m.searchState.minimumQueryLength then
-        AppStatus.ClearMessage()
         clearRows()
         m.helpLabel.visible = true
-    else
-        AppStatus.ClearMessage()
     end if
 end sub
 
@@ -165,7 +163,7 @@ sub runSearch()
         m.searchState.submittedQuery = ""
         Spinner.Hide()
         clearRows()
-        AppStatus.SetMessage("Enter at least 3 characters.")
+        AppMessage.Show("Enter at least 3 characters.")
         focusSearchButton()
         return
     end if
@@ -181,7 +179,7 @@ sub runSearch()
     bindSearchSpinner()
     Spinner.ShowBlocking()
     if m.searchState.loading.spinner <> invalid then m.searchState.loading.spinner.cancelEnabled = true
-    AppStatus.ClearMessage()
+    AppMessage.Dismiss()
     m.searchTask.request = request
     m.searchTask.control = TaskControl.Command.Run
 end sub
@@ -199,14 +197,13 @@ sub onSearchResponse()
 
     if response.ok <> true then
         clearRows()
-        message = Format.SafeString(response.errorMessage, "Search failed.")
-        AppStatus.SetMessage(message)
-        m.log.activity("Search failed for " + ActivityLog.Quote(m.searchState.submittedQuery, "query") + ": " + message)
+        message = (response.failureKind <> invalid ? "Search failed. " : "") + RequestFailure.GetDisplayMessage(response, "Search failed.")
+        AppMessage.Show(message)
+        m.log.activity("Search failed for " + ActivityLog.Quote(m.searchState.submittedQuery, "query") + ": " + Format.SafeString(response.errorMessage, message))
         focusSearchButton()
         return
     end if
 
-    AppStatus.ClearMessage()
     renderRows(response.payload)
     resultCount = 0
     if response.payload <> invalid then

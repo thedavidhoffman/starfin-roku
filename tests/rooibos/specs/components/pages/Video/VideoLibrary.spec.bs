@@ -2139,6 +2139,28 @@ namespace tests
             registry.Flush()
         end sub
 
+        @it("shows a contextual failure after a library request is denied")
+        function _()
+            getGlobalAa().requestFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            m.node.pageState.request = { libraryId: "denied-library", title: "Library" }
+            m.node.pageState.paging.queryId = 17
+            m.node.pageState.paging.requestInFlight = true
+            m.node.pageState.movieLibraryBrowse.active = false
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "denied-library")
+            m.node.videoLibraryTask = { response: { ok: false, action: "videoLibrary", libraryId: "denied-library", queryId: 17, failureKind: "accessDenied", errorMessage: "Forbidden" } }
+
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+
+            m.assertFalse(m.node.pageState.paging.requestInFlight)
+            m.assertEqual(getGlobalAa().requestFailureMessage, "Unable to load library. The server denied access.")
+        end function
+
+        private sub captureRequestFailureMessage(message as string)
+            getGlobalAa().requestFailureMessage = message
+        end sub
+
     end class
 
 end namespace

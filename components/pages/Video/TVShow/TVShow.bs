@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/ActivityLog.bs"
 import "pkg:/source/ApiPayload.bs"
@@ -12,7 +13,7 @@ import "pkg:/source/DeviceCapabilities.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/DateTime.bs"
 import "pkg:/source/Logger.bs"
-import "pkg:/source/Status.bs"
+import "pkg:/source/AppMessage.bs"
 import "pkg:/source/Spinner.bs"
 import "pkg:/source/AsyncLifecycle.bs"
 import "pkg:/source/PlaybackProgress.bs"
@@ -128,12 +129,11 @@ sub onRandomPlaybackResponse()
     m.pageState.randomQueueLoading = false
     Spinner.Hide()
     if response.ok <> true then
-        AppStatus.SetMessage(Format.SafeString(response.errorMessage, "Unable to load random playback."))
+        AppMessage.Show((response.failureKind <> invalid ? "Unable to load random playback. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load random playback."))
         return
     end if
 
     m.pageState.randomPlaybackQueue = response.playbackQueue
-    AppStatus.ClearMessage()
     startRandomPlayback()
 end sub
 
@@ -355,9 +355,9 @@ sub onTVShowResponse()
         m.videoToolbar.visible = false
         Spinner.Hide()
         renderSeries(m.pageState.series, false)
-        message = Format.SafeString(response.errorMessage, "Unable to load this series.")
-        AppStatus.SetMessage(message)
-        m.log.activity("TV show load failed: " + message)
+        message = (response.failureKind <> invalid ? "Unable to load this series. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this series.")
+        AppMessage.Show(message)
+        m.log.activity("TV show load failed: " + Format.SafeString(response.errorMessage, message))
         return
     end if
 
@@ -366,7 +366,7 @@ sub onTVShowResponse()
         m.videoToolbar.visible = false
         Spinner.Hide()
         renderSeries(m.pageState.series, false)
-        AppStatus.SetMessage("Unable to load this series.")
+        AppMessage.Show("Unable to load this series.")
         m.log.activity("TV show load failed: Unable to load this series.")
         return
     end if
@@ -385,7 +385,6 @@ sub onTVShowResponse()
     renderSeasons(m.pageState.seasons)
     m.log.activity("Viewing TV show " + ActivityLog.ItemTitle(payload.series, "TV show") + "; seasons=" + m.pageState.seasons.Count().ToStr())
     Spinner.Hide()
-    AppStatus.ClearMessage()
     if m.pageState.focusArea = "videoToolbar" then
         focusVideoToolbar()
     else

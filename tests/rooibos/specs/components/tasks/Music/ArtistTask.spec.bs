@@ -24,6 +24,22 @@ namespace tests
             m.assertInvalid(validateRequest(request))
         end function
 
+        @it("preserves metadata HTTP failure details and artist correlation")
+        function _()
+            failure = { ok: false, status: 429, failureKind: "rateLimited", authExpired: false, responseText: "diagnostic body", errorMessage: "Too Many Requests" }
+
+            'bs:disable-next-line 1140
+            response = buildErrorResponse("artist-id", failure.errorMessage, failure)
+
+            m.assertEqual(response.action, "musicArtist")
+            m.assertEqual(response.artistId, "artist-id")
+            m.assertEqual(response.failureKind, "rateLimited")
+            m.assertEqual(response.status, 429)
+            m.assertFalse(response.authExpired)
+            m.assertEqual(response.responseText, "diagnostic body")
+            m.assertEqual(response.errorMessage, "Too Many Requests")
+        end function
+
     end class
 
 end namespace

@@ -11,7 +11,7 @@ logging services, creates `MainScene`, and owns application exit and Roku memory
 events.
 
 `components/pages/MainScene` is the app shell. Its XML owns authentication,
-top-level page hosting, the header, shared status and loading UI, global overlays,
+top-level page hosting, the header, shared acknowledgment dialogs and loading UI, global overlays,
 and app-level controllers. Its local helper files divide routing by feature while
 keeping the `MainScene` component context.
 
@@ -71,6 +71,16 @@ Dialogs that must cover the current page and header are requested through
 identifies the dialog/content component, open function, close field, source page,
 and feature payload. `MainScene` routes the request; the feature handles the
 result and restores focus.
+
+Message presentation uses a dedicated top-level OverlayHost above ordinary overlays
+and the spinner. AppMessage.Show/Dismiss route through narrow MainScene interfaces.
+MainScene owns deferred opening, deduplication, modal focus protection, and return
+focus; MessageDialog and MessageContent own frame, layout, acknowledgment, and
+scrolling. Dismissal releases retained node references. Successful background work
+must not dismiss messages. Home aggregates failures within its current refresh
+before presenting them; progress and empty-state labels remain with their owners.
+MainScene routes Home hiding through hideHome() and suppresses outgoing refresh
+messages during page/session cleanup. Home owns that refresh-level suppression.
 
 ## Requests, responses, and state
 

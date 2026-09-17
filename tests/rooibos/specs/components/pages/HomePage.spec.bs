@@ -7,6 +7,7 @@ namespace tests
         protected override function beforeEach()
             m.node.homeState.request = { server: "http://server", token: "token", userId: "user" }
             m.node.homeState.rows = {}
+            m.node.homeState.refresh = { blocking: false, pendingCore: {}, messages: [] }
             m.node.homeState.playbackRows.continueWatchingItems = []
             m.node.homeState.playbackRows.nextUpItems = []
             m.node.homeState.focusedShelfIndex = 0
@@ -17,11 +18,333 @@ namespace tests
             m.top.selectedHomeMediaPhoto = invalid
 
             scene = m.top.getScene()
+            getGlobalAa().homeTestContext = m.node
+            getGlobalAa().homeStatusCapture = { message: "", writes: 0, clears: 0 }
             if scene.findNode("loadingSpinner") = invalid then
                 loadingSpinnerNode = CreateObject("roSGNode", "Spinner")
                 loadingSpinnerNode.id = "loadingSpinner"
                 scene.appendChild(loadingSpinnerNode)
             end if
+        end function
+
+        protected override function afterEach()
+            'bs:disable-next-line 1140
+            cleanupHomeTasks()
+            Spinner.HideBlocking()
+            getGlobalAa().Delete("homeTestContext")
+            getGlobalAa().Delete("homeStatusCapture")
+        end function
+
+        @describe("Live TV permission and denied responses")
+
+        @it("finishes Home without a Live TV task when permission is denied")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh({ canAccessLiveTv: false })
+
+            m.assertFalse(m.node.tasks.DoesExist("liveTvOnNow"))
+            m.assertFalse(m.node.homeState.refresh.pendingCore.DoesExist("liveTvOnNow"))
+            m.assertEqual(m.node.tasks.Count(), 4)
+            m.finishOtherHomeRows()
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.top.visible)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            m.assertEqual(m.top.findNode("shelvesGroup").getChildCount(), 1)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "")
+        end function
+
+        @it("finishes Home without a Live TV task when permission is missing")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh(invalid)
+
+            m.assertFalse(m.node.tasks.DoesExist("liveTvOnNow"))
+            m.assertFalse(m.node.homeState.refresh.pendingCore.DoesExist("liveTvOnNow"))
+            m.assertEqual(m.node.tasks.Count(), 4)
+            m.finishOtherHomeRows()
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.top.visible)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            m.assertEqual(m.top.findNode("shelvesGroup").getChildCount(), 1)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "")
+        end function
+
+        @it("loads On Now when Live TV permission is granted")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh({ canAccessLiveTv: true })
+            m.assertTrue(m.node.tasks.DoesExist("liveTvOnNow"))
+            m.assertTrue(m.node.tasks.liveTvOnNow.request.permissions.canAccessLiveTv)
+
+            m.node.tasks.liveTvOnNow.response = { ok: true, action: "liveTvOnNow", payload: { Items: [{ Id: "program", Name: "Fixture", Type: "Program", ImageTags: {} }] } }
+            m.finishOtherHomeRows()
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.node.homeState.rows.DoesExist("liveTvOnNow"))
+            m.assertEqual(m.top.findNode("shelvesGroup").getChildCount(), 2)
+        end function
+
+        @it("omits a denied On Now row when its 403 arrives first")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh({ canAccessLiveTv: true })
+
+            getGlobalAa().homeStatusCapture.message = "Unrelated message"
+            getGlobalAa().homeStatusCapture.writes = 0
+            getGlobalAa().homeStatusCapture.clears = 0
+
+            m.node.tasks.liveTvOnNow.response = { ok: false, action: "liveTvOnNow", status: 403, failureKind: "accessDenied", errorMessage: "Forbidden" }
+
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unrelated message")
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 0)
+            m.assertEqual(getGlobalAa().homeStatusCapture.clears, 0)
+            m.assertFalse(m.top.ready)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+            m.finishOtherHomeRows()
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.top.visible)
+            m.assertFalse(m.node.homeState.rows.DoesExist("liveTvOnNow"))
+            m.assertEqual(m.top.findNode("shelvesGroup").getChildCount(), 1)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+        end function
+
+        @it("omits a denied On Now row when its 403 arrives last")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh({ canAccessLiveTv: true })
+            m.finishOtherHomeRows()
+            getGlobalAa().homeStatusCapture.message = "Unrelated message"
+            getGlobalAa().homeStatusCapture.writes = 0
+            getGlobalAa().homeStatusCapture.clears = 0
+
+            m.node.tasks.liveTvOnNow.response = { ok: false, action: "liveTvOnNow", status: 403, failureKind: "accessDenied", errorMessage: "Forbidden" }
+
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unrelated message")
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 0)
+            m.assertEqual(getGlobalAa().homeStatusCapture.clears, 0)
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.top.visible)
+            m.assertFalse(m.node.homeState.rows.DoesExist("liveTvOnNow"))
+            m.assertEqual(m.top.findNode("shelvesGroup").getChildCount(), 1)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+        end function
+
+        @it("retains other Live TV errors")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            response = { ok: false, action: "liveTvOnNow", status: 500, failureKind: "serverError", errorMessage: "Visible failure" }
+
+            'bs:disable-next-line 1140
+            ignored = handleHomeResponseFailure(response)
+            'bs:disable-next-line 1140
+            publishHomeRefreshMessages()
+
+            m.assertTrue(ignored)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unable to load On Now. The server encountered an error.")
+        end function
+
+        @it("retains non Live TV permission errors")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            response = { ok: false, action: "continueWatching", status: 403, failureKind: "accessDenied", errorMessage: "Visible failure" }
+
+            'bs:disable-next-line 1140
+            ignored = handleHomeResponseFailure(response)
+            'bs:disable-next-line 1140
+            publishHomeRefreshMessages()
+
+            m.assertTrue(ignored)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unable to load Continue Watching. The server denied access.")
+        end function
+
+        @it("retains library list permission errors")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            response = { ok: false, action: "libraries", status: 403, failureKind: "accessDenied", errorMessage: "Visible failure" }
+
+            'bs:disable-next-line 1140
+            ignored = handleHomeResponseFailure(response)
+            'bs:disable-next-line 1140
+            publishHomeRefreshMessages()
+
+            m.assertTrue(ignored)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unable to load your libraries. The server denied access.")
+        end function
+
+        @it("does not swallow expired authentication")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            response = { ok: false, action: "liveTvOnNow", status: 401, errorMessage: "Visible failure", authExpired: true }
+
+            'bs:disable-next-line 1140
+            ignored = handleHomeResponseFailure(response)
+            'bs:disable-next-line 1140
+            publishHomeRefreshMessages()
+
+            m.assertTrue(ignored)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Visible failure")
+        end function
+
+        @it("ignores Live TV denial from a stale generation")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh({ canAccessLiveTv: true })
+            m.node.homeState.queryId += 1
+
+            m.node.tasks.liveTvOnNow.response = { ok: false, action: "liveTvOnNow", status: 403, failureKind: "accessDenied", errorMessage: "Forbidden" }
+
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("liveTvOnNow"))
+            m.assertFalse(m.top.ready)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "")
+        end function
+
+        @it("ignores Live TV denial from a stale account")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.stubCall(AppMessage.Dismiss, m.captureStatusClear)
+
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh({ canAccessLiveTv: true })
+            m.node.homeState.sessionKey = "another-account"
+
+            m.node.tasks.liveTvOnNow.response = { ok: false, action: "liveTvOnNow", status: 403, failureKind: "accessDenied", errorMessage: "Forbidden" }
+
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("liveTvOnNow"))
+            m.assertFalse(m.top.ready)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "")
+        end function
+
+        @it("uses the owned request to name a failed Recently Added library")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            task = CreateObject("roSGNode", "LatestMediaTask")
+            task.request = { homeQueryId: m.node.homeState.queryId, homeSessionKey: m.node.homeState.sessionKey, parentId: "movies" }
+            m.node.homeState.latestLibraries = { movies: { name: "Movies" } }
+            m.node.homeState.latestTasks = [task]
+            m.top.appendChild(task)
+            task.observeField("response", "onDynamicLatestMediaResponse")
+
+            task.response = { ok: false, action: "latestMedia", status: 500, failureKind: "serverError", errorMessage: "Raw server error" }
+
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unable to load Recently Added in Movies. The server encountered an error.")
+            m.assertEqual(m.node.homeState.latestTasks.Count(), 0)
+        end function
+
+        @it("names the library when Recently Added fails")
+        function _()
+            'bs:disable-next-line 1140
+            message = getHomeErrorMessage({ action: "latestMedia", status: 500, failureKind: "serverError" }, "Movies")
+
+            m.assertEqual(message, "Unable to load Recently Added in Movies. The server encountered an error.")
+        end function
+
+        @it("explains request timeouts")
+        function _()
+            'bs:disable-next-line 1140
+            message = getHomeErrorMessage({ action: "nextUp", status: 0, failureKind: "timeout", errorMessage: "Technical wording can change." }, "")
+
+            m.assertEqual(message, "Unable to load Next Up. The server took too long to respond.")
+        end function
+
+        @it("explains gateway timeouts")
+        function _()
+            'bs:disable-next-line 1140
+            message = getHomeErrorMessage({ action: "nextUp", status: 504, failureKind: "timeout" }, "")
+
+            m.assertEqual(message, "Unable to load Next Up. The server took too long to respond.")
+        end function
+
+        @it("explains connection failures")
+        function _()
+            'bs:disable-next-line 1140
+            message = getHomeErrorMessage({ action: "continueListening", status: -7, failureKind: "connectionFailed" }, "")
+
+            m.assertEqual(message, "Unable to load Continue Listening. Couldn't connect to the server.")
+        end function
+
+        @it("uses safe wording for unknown failures")
+        function _()
+            'bs:disable-next-line 1140
+            message = getHomeErrorMessage({ action: "nextUp", status: 400, failureKind: "futureKind", errorMessage: "<html>secret server details</html>" }, "")
+
+            m.assertEqual(message, "Unable to load Next Up. The app received an unexpected response from the server.")
+        end function
+
+        @describe("Recently Added exclusions")
+
+        @it("excludes selected libraries from latest tasks while retaining My Media")
+        function _()
+            m.node.homeState.request.homePreferences = { latestItemsExcludes: ["home", "music"] }
+            libraries = [m.createLibrary("home", "homevideos"), m.createLibrary("music", "musicvideos"), m.createLibrary("movies", "movies")]
+            'bs:disable-next-line 1140
+            addRow("libraries", "My Media", libraries)
+
+            'bs:disable-next-line 1140
+            queueLatestMediaRows(libraries)
+
+            m.assertEqual(m.node.homeState.latestLibraries.Count(), 1)
+            m.assertTrue(m.node.homeState.latestLibraries.DoesExist("movies"))
+            m.assertEqual(m.node.homeState.rowOrder, ["libraries", "continueWatching", "continueListening", "nextUp", "latest:movies", "liveTvOnNow"])
+            m.assertEqual(m.node.homeState.rows.libraries.getChildCount(), 3)
+        end function
+
+        @it("loads all eligible latest libraries when preferences are missing")
+        function _()
+            'bs:disable-next-line 1140
+            queueLatestMediaRows([m.createLibrary("home", "homevideos"), m.createLibrary("music", "musicvideos")])
+
+            m.assertEqual(m.node.homeState.latestLibraries.Count(), 2)
+        end function
+
+        @it("replaces excluded libraries when the account preferences change")
+        function _()
+            libraries = [m.createLibrary("home", "homevideos"), m.createLibrary("music", "musicvideos")]
+            m.node.homeState.request.homePreferences = { latestItemsExcludes: ["home"] }
+            'bs:disable-next-line 1140
+            queueLatestMediaRows(libraries)
+            m.node.homeState.request.homePreferences = { latestItemsExcludes: ["music"] }
+
+            'bs:disable-next-line 1140
+            queueLatestMediaRows(libraries)
+
+            m.assertTrue(m.node.homeState.latestLibraries.DoesExist("home"))
+            m.assertFalse(m.node.homeState.latestLibraries.DoesExist("music"))
         end function
 
         @describe("declarative component contract")
@@ -61,7 +384,7 @@ namespace tests
             collector = CreateObject("roSGNode", "LogService")
             m.node.log = new Logger("HomePage", collector)
             m.top.ready = false
-            m.node.homeState.refresh = { blocking: true, pendingCore: {} }
+            m.node.homeState.refresh = { blocking: true, pendingCore: {}, messages: [] }
 
             'bs:disable-next-line 1140
             finishBlockingRefreshIfReady()
@@ -469,6 +792,47 @@ namespace tests
             m.assertFalse(handled)
         end function
 
+        function captureStatusMessage(message)
+            capture = getGlobalAa().homeStatusCapture
+            capture.message = message
+            capture.writes += 1
+        end function
+
+        function captureStatusClear()
+            capture = getGlobalAa().homeStatusCapture
+            capture.message = ""
+            capture.clears += 1
+        end function
+
+        function createControlledHomeTask(action, componentName, responseHandler, request)
+            task = CreateObject("roSGNode", "Group")
+            task.addFields({ request: {}, response: {}, control: "" })
+            context = getGlobalAa().homeTestContext
+            context.top.appendChild(task)
+            context.tasks[action] = task
+            task.observeField("response", responseHandler)
+            controlledRequest = {}
+            controlledRequest.Append(request)
+            controlledRequest.homeQueryId = context.homeState.queryId
+            controlledRequest.homeSessionKey = context.homeState.sessionKey
+            task.request = controlledRequest
+        end function
+
+        function startPermissionRefresh(permissions as dynamic)
+            m.node.homeState.request.permissions = permissions
+            m.top.ready = false
+            'bs:disable-next-line 1140
+            refreshHomeData(true)
+        end function
+
+        function finishOtherHomeRows()
+            for each action in ["libraries", "continueWatching", "continueListening", "nextUp"]
+                items = []
+                if action = "continueWatching" then items = [{ Id: "movie", Name: "Fixture", Type: "Movie", ImageTags: {} }]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: items } }
+            end for
+        end function
+
         function renderTwoRows()
             'bs:disable-next-line 1140
             addRow("libraries", "My Media", [m.createLibrary("movies-1", "movies")])
@@ -482,6 +846,80 @@ namespace tests
         function createLibrary(id as string, collectionType as string) as object
             return { Id: id, Name: id, Type: "CollectionFolder", CollectionType: collectionType, ImageTags: {}, BackdropImageTags: [] }
         end function
+
+        @it("combines refresh failures after the last core response")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh({ canAccessLiveTv: false })
+            m.node.tasks.continueWatching.response = { ok: false, action: "continueWatching", failureKind: "accessDenied" }
+            m.node.tasks.nextUp.response = { ok: false, action: "nextUp", failureKind: "timeout" }
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 0)
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [] } }
+            m.node.tasks.continueListening.response = { ok: true, action: "continueListening", payload: { Items: [] } }
+
+            m.assertTrue(m.top.ready)
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 1)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unable to load Continue Watching. The server denied access." + Chr(10) + Chr(10) + "Unable to load Next Up. The server took too long to respond.")
+        end function
+
+        @describe("refresh message presentation lifecycle")
+
+        @it("discards collected and late core failures after leaving Home while rows finish loading")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.startPermissionRefresh({ canAccessLiveTv: false })
+            m.node.tasks.nextUp.response = { ok: false, action: "nextUp", failureKind: "timeout" }
+
+            m.top.callFunc("suppressRefreshMessages")
+            m.node.tasks.continueListening.response = { ok: false, action: "continueListening", failureKind: "timeout" }
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Name: "Fixture", Type: "Movie", ImageTags: {} }] } }
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [] } }
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.node.homeState.rows.DoesExist("continueWatching"))
+            m.assertEqual(m.node.homeState.refresh.messages.Count(), 0)
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 0)
+        end function
+
+        @it("discards a late Recently Added failure after leaving Home")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            task = CreateObject("roSGNode", "LatestMediaTask")
+            task.request = { homeQueryId: m.node.homeState.queryId, homeSessionKey: m.node.homeState.sessionKey, parentId: "movies" }
+            m.node.homeState.latestLibraries = { movies: { name: "Movies" } }
+            m.node.homeState.latestTasks = [task]
+            m.top.appendChild(task)
+            task.observeField("response", "onDynamicLatestMediaResponse")
+
+            m.top.callFunc("suppressRefreshMessages")
+            task.response = { ok: false, action: "latestMedia", failureKind: "serverError" }
+
+            m.assertEqual(m.node.homeState.latestTasks.Count(), 0)
+            m.assertEqual(m.node.homeState.refresh.messages.Count(), 0)
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 0)
+        end function
+
+        @it("permits messages from a new refresh after an outgoing refresh was suppressed")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.top.callFunc("suppressRefreshMessages")
+
+            m.startPermissionRefresh({ canAccessLiveTv: false })
+            m.node.tasks.continueWatching.response = { ok: false, action: "continueWatching", failureKind: "timeout" }
+            for each action in ["nextUp", "continueListening", "libraries"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 1)
+            m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unable to load Continue Watching. The server took too long to respond.")
+        end function
+
     end class
 
 end namespace

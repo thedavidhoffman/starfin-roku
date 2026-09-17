@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 '-------------------------------------------------------------------------------
 ' onLoadRequestChanged
 '-------------------------------------------------------------------------------
@@ -128,7 +130,7 @@ sub handleTVSeasonPrimaryResponse(response as object)
             return
         end if
 
-        message = Format.SafeString(response.errorMessage, "Unable to load tv season.")
+        message = (response.failureKind <> invalid ? "Unable to load tv season. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load tv season.")
         publishTVSeasonLoadFailure(message)
         return
     end if
@@ -149,7 +151,6 @@ sub handleTVSeasonPrimaryResponse(response as object)
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
     Spinner.Hide()
-    AppStatus.ClearMessage()
     updateChevrons()
     if m.top.initialFocusEpisodeId <> "" then
         initialFocusEpisodeId = m.top.initialFocusEpisodeId
@@ -173,7 +174,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub publishTVSeasonLoadFailure(message as string)
     Spinner.Hide()
-    AppStatus.SetMessage(message)
+    AppMessage.Show(message)
     m.log.activity("Season load failed: " + message)
     m.top.loadFailed = message
 end sub

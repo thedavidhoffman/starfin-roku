@@ -85,6 +85,96 @@ namespace tests
             m.assertEqual(session.primaryImageTag, "image-tag")
         end function
 
+
+        @it("retains authenticated Recently Added exclusions")
+        function _()
+            response = { server: "https://server", payload: { User: { Id: "user", Configuration: { LatestItemsExcludes: ["home", "music"] } } } }
+
+            'bs:disable-next-line 1140
+            session = buildAuthenticatedSession(response)
+
+            m.assertEqual(session.homePreferences.latestItemsExcludes, ["home", "music"])
+        end function
+
+        @it("defaults missing Recently Added exclusions to an empty list")
+        function _()
+            'bs:disable-next-line 1140
+            session = buildAuthenticatedSession({ server: "https://server", payload: { User: { Id: "user" } } })
+
+            m.assertEqual(session.homePreferences.latestItemsExcludes, [])
+        end function
+
+        @it("allows Live TV only for an explicit true policy")
+        function _()
+            response = { server: "https://server", payload: { AccessToken: "token", User: { Id: "user", Policy: { EnableLiveTvAccess: true } } } }
+
+            'bs:disable-next-line 1140
+            session = buildAuthenticatedSession(response)
+
+            m.assertTrue(session.permissions.canAccessLiveTv)
+        end function
+
+        @it("denies Live TV for a false policy")
+        function _()
+            response = { server: "https://server", payload: { AccessToken: "token", User: { Id: "user", Policy: { EnableLiveTvAccess: false } } } }
+
+            'bs:disable-next-line 1140
+            session = buildAuthenticatedSession(response)
+
+            m.assertFalse(session.permissions.canAccessLiveTv)
+        end function
+
+        @it("denies Live TV when policy is missing")
+        function _()
+            response = { server: "https://server", payload: { AccessToken: "token", User: { Id: "user", Policy: invalid } } }
+
+            'bs:disable-next-line 1140
+            session = buildAuthenticatedSession(response)
+
+            m.assertFalse(session.permissions.canAccessLiveTv)
+        end function
+
+        @it("denies Live TV when the permission is missing")
+        function _()
+            response = { server: "https://server", payload: { AccessToken: "token", User: { Id: "user", Policy: {} } } }
+
+            'bs:disable-next-line 1140
+            session = buildAuthenticatedSession(response)
+
+            m.assertFalse(session.permissions.canAccessLiveTv)
+        end function
+
+        @it("denies Live TV for a string permission")
+        function _()
+            response = { server: "https://server", payload: { AccessToken: "token", User: { Id: "user", Policy: { EnableLiveTvAccess: "true" } } } }
+
+            'bs:disable-next-line 1140
+            session = buildAuthenticatedSession(response)
+
+            m.assertFalse(session.permissions.canAccessLiveTv)
+        end function
+
+        @it("replaces runtime permissions when another account authenticates")
+        function _()
+            original = { activeAccountKey: AuthStore.GetActiveAccountKey(), server: AuthStore.GetLastServer() }
+            m.node.savedSession = { permissions: { canAccessLiveTv: true }, homePreferences: { latestItemsExcludes: ["previous"] } }
+            m.node.authState.pendingSwitch = { accountKey: "permission-test.invalid/denied" }
+            response = { server: "https://permission-test.invalid", payload: { AccessToken: "fixture", User: { Id: "denied", Policy: { EnableLiveTvAccess: false } } } }
+
+            'bs:disable-next-line 1140
+            storeAuthenticatedSession(response)
+
+            m.assertEqual(m.top.authenticatedSession.homePreferences.latestItemsExcludes, [])
+            m.assertFalse(m.top.authenticatedSession.permissions.canAccessLiveTv)
+            m.assertEqual(m.top.authenticatedSession.userId, "denied")
+            m.assertInvalid(m.node.authState.pendingSwitch)
+            m.assertFalse(AuthStore.LoadAccount("permission-test.invalid/denied", true).DoesExist("permissions"))
+
+            AuthStore.ClearActiveAccount()
+            AuthStore.ForgetAccount("permission-test.invalid/denied")
+            m.restoreAuthStoreState(original)
+        end function
+
         @it("resolves response actions from the response or current request")
         function _()
             m.node.authApiTask.request = { action: "authorize" }
@@ -301,7 +391,7 @@ namespace tests
                 server: "https://quick-connect-test.invalid"
                 payload: {
                     AccessToken: "quick-connect-test-token"
-                    User: { Id: "quick-connect-test-user", Name: "Quick Connect Test" }
+                    User: { Id: "quick-connect-test-user", Name: "Quick Connect Test", Policy: { EnableLiveTvAccess: true } }
                 }
             }
 
@@ -311,6 +401,7 @@ namespace tests
             accountKey = "quick-connect-test.invalid/quick-connect-test-user"
             m.assertEqual(m.top.authenticatedSession.accountKey, accountKey)
             m.assertEqual(m.top.authenticatedSession.username, "Quick Connect Test")
+            m.assertTrue(m.top.authenticatedSession.permissions.canAccessLiveTv)
             m.assertEqual(AuthStore.LoadAccount(accountKey, true).token, "quick-connect-test-token")
 
             AuthStore.ClearActiveAccount()
@@ -403,6 +494,16 @@ namespace tests
                 store.Write("server", state.server)
             end if
             store.Flush()
+        end function
+
+        @it("displays the request identifier when login is rejected")
+        function _()
+            m.node.authState.pendingSwitch = invalid
+
+            'bs:disable-next-line 1140
+            handleAuthError({ authExpired: false, failureKind: "requestRejected", status: 401, errorMessage: "Unauthorized" }, "login")
+
+            m.assertEqual(m.top.loginFailed, { message: "Login failed: The server rejected the request." })
         end function
 
     end class

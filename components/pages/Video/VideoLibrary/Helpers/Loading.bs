@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/ApiPayload.bs"
 
 '-------------------------------------------------------------------------------
@@ -97,7 +98,7 @@ sub onVideoLibraryResponse()
         if m.pageState.filterRefresh.phase = "loading" then
             m.filterRefreshTimer.control = TimerControl.Command.Stop
             m.filterRefreshTimer.duration = 0.2
-            rollbackVideoFilterRefresh(Format.SafeString(response.errorMessage, "Unable to load library."))
+            rollbackVideoFilterRefresh((response.failureKind <> invalid ? "Unable to load library. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load library."))
             return
         end if
         m.pageState.isLoading = false
@@ -112,9 +113,9 @@ sub onVideoLibraryResponse()
         if m.pageState.movieLibraryBrowse.active <> true then
             markBrowseTransitionItemsFailed()
             Spinner.Hide()
-            message = Format.SafeString(response.errorMessage, "Unable to load library.")
-            AppStatus.SetMessage(message)
-            m.log.activity("Library load failed for " + ActivityLog.RequestTitle(m.pageState.request, "Library") + ": " + message)
+            message = (response.failureKind <> invalid ? "Unable to load library. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load library.")
+            AppMessage.Show(message)
+            m.log.activity("Library load failed for " + ActivityLog.RequestTitle(m.pageState.request, "Library") + ": " + Format.SafeString(response.errorMessage, message))
         end if
         return
     end if
@@ -189,7 +190,6 @@ sub onVideoLibraryResponse()
         if isPlaylistsView() then activityType = "playlist"
         m.log.activity("Viewing " + activityType + " " + ActivityLog.RequestTitle(m.pageState.request, "Library") + "; items=" + m.pageState.paging.totalCount.ToStr())
     end if
-    if m.pageState.movieLibraryBrowse.active <> true then AppStatus.ClearMessage()
     if startIndex = 0 and m.pageState.movieLibraryBrowse.active <> true then markBrowseTransitionItemsReady()
     if m.pageState.movieLibraryBrowse.active <> true then Spinner.Hide()
     requestNextVideoLibraryPageIfNeeded()

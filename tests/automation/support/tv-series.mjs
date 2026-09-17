@@ -436,8 +436,8 @@ async function stopPlayback(environment, episode, options = {}) {
         restoredItemId: { base: 'scene', keyPath: '#dynamicPageHost.3.loadRequest.itemId' },
         progressItemId: { base: 'scene', keyPath: '#dynamicPageHost.3.playbackProgressChanged.itemId' },
         progressTicks: { base: 'scene', keyPath: '#dynamicPageHost.3.playbackProgressChanged.positionTicks' },
-        statusVisible: { base: 'scene', keyPath: '#statusLabel.visible' },
-        statusText: { base: 'scene', keyPath: '#statusLabel.text' }
+        statusVisible: { base: 'scene', keyPath: '#messageOverlayHost.visible' },
+        statusText: { base: 'scene', keyPath: '#messageOverlayHost.0.message' }
       }
     });
     const result = {

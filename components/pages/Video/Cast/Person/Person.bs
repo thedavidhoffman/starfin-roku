@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/Char.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/ActivityLog.bs"
@@ -16,7 +17,7 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/EpisodeSort.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/DateTime.bs"
-import "pkg:/source/Status.bs"
+import "pkg:/source/AppMessage.bs"
 import "pkg:/source/Spinner.bs"
 import "pkg:/source/AsyncLifecycle.bs"
 import "pkg:/source/PlaybackMode.bs"
@@ -112,9 +113,9 @@ sub onPersonResponse()
 
     if response.ok <> true then
         Spinner.Hide()
-        message = Format.SafeString(response.errorMessage, "Unable to load this person.")
-        AppStatus.SetMessage(message)
-        m.log.activity("Person load failed: " + message)
+        message = (response.failureKind <> invalid ? "Unable to load this person. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this person.")
+        AppMessage.Show(message)
+        m.log.activity("Person load failed: " + Format.SafeString(response.errorMessage, message))
         return
     end if
 
@@ -126,7 +127,6 @@ sub onPersonResponse()
     relatedCount = ApiPayload.GetItems(response.payload.items).Count() + ApiPayload.GetItems(response.payload.episodeItems).Count()
     m.log.activity("Viewing person " + ActivityLog.ItemTitle(person, "person") + "; related items=" + relatedCount.ToStr())
     Spinner.Hide()
-    AppStatus.ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------

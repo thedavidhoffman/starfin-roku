@@ -13,6 +13,7 @@
 ' references. MainScene executes published destinations and reports readiness or
 ' failure through the controller's narrow interface.
 
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/DeepLink.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/LatestRequestLifecycle.bs"
@@ -155,13 +156,13 @@ sub handleResolverResponse(response as dynamic)
         m.deepLinkState.deferredInput = completion.context
         m.deepLinkState.session = invalid
         m.top.authenticationRequired = {
-            message: Format.SafeString(response.errorMessage, "Your session has expired. Please sign in again.")
+            message: RequestFailure.GetDisplayMessage(response, "Your session has expired. Please sign in again.")
             accountKey: Format.SafeString(response.accountKey, "")
         }
     else if response.ok = true and response.payload <> invalid then
         publishDestination(response.payload, completion.context.isColdLaunch)
     else
-        requestHomeFallback(Format.SafeString(response.errorMessage, "Unable to open the requested content."), completion.context.isColdLaunch)
+        requestHomeFallback((response.failureKind <> invalid ? "Unable to open the requested content. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to open the requested content."), completion.context.isColdLaunch)
     end if
     startPendingDeepLinkResolution()
 end sub

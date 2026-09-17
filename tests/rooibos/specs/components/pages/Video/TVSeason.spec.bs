@@ -7,6 +7,8 @@ namespace tests
     class TVSeasonTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.collector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("TVSeason", m.collector)
             m.top.settings = { "tv-ep-list-scroll": "horizontal" }
             m.node.pageState.request = m.createRequest()
             m.node.pageState.season = m.createSeason("season-1", "Season 1")
@@ -29,11 +31,6 @@ namespace tests
                 loadingSpinnerNode.id = "loadingSpinner"
                 scene.appendChild(loadingSpinnerNode)
             end if
-            existingStatusLabel = scene.findNode("statusLabel")
-            if existingStatusLabel <> invalid and existingStatusLabel.getParent() = scene then scene.removeChild(existingStatusLabel)
-            statusLabelNode = CreateObject("roSGNode", "StatusLabel")
-            statusLabelNode.id = "statusLabel"
-            scene.appendChild(statusLabelNode)
             scene.findNode("loadingSpinner").control = "stop"
         end function
         @describe("declarative component contract")
@@ -332,18 +329,18 @@ namespace tests
                 requestId: requestId
                 errorMessage: "Season unavailable."
             }
-            statusLabel = m.top.getScene().findNode("statusLabel")
-            statusLabel.visible = false
+            getGlobalAa().seasonFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureFailureMessage)
             Spinner.Show()
-            logCount = m.global.logService.callFunc("getSnapshot").Count()
+            logCount = m.collector.callFunc("getSnapshot").Count()
 
             'bs:disable-next-line 1140
             handleTVSeasonResponse(task)
 
             m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
-            m.assertTrue(statusLabel.visible)
+            m.assertEqual(getGlobalAa().seasonFailureMessage, "Season unavailable.")
             m.assertEqual(m.top.loadFailed, "Season unavailable.")
-            entries = m.global.logService.callFunc("getSnapshot")
+            entries = m.collector.callFunc("getSnapshot")
             m.assertEqual(entries.Count(), logCount + 1)
             m.assertTrue(Instr(1, entries[entries.Count() - 1], "[TVSeason] Activity: Season load failed: Season unavailable.") > 0)
         end function
@@ -540,14 +537,14 @@ namespace tests
             unknownTask = {
                 response: { ok: true, action: "tvSeasonUnknown", seasonId: "season-1", requestId: 1, payload: {} }
             }
-            logCount = m.global.logService.callFunc("getSnapshot").Count()
+            logCount = m.collector.callFunc("getSnapshot").Count()
 
             'bs:disable-next-line 1140
             handleTVSeasonResponse(unknownTask)
 
             m.assertNotInvalid(m.node.pageState.detailsLoad.active)
             m.assertFalse(m.top.ready)
-            m.assertEqual(m.global.logService.callFunc("getSnapshot").Count(), logCount)
+            m.assertEqual(m.collector.callFunc("getSnapshot").Count(), logCount)
         end function
 
         @it("renders and ends loading for the current season response")
@@ -566,7 +563,7 @@ namespace tests
                 }
             }
             Spinner.Show()
-            logCount = m.global.logService.callFunc("getSnapshot").Count()
+            logCount = m.collector.callFunc("getSnapshot").Count()
 
             'bs:disable-next-line 1140
             handleTVSeasonResponse(completedTask)
@@ -576,7 +573,7 @@ namespace tests
             m.assertTrue(m.top.findNode("episodesList").visible)
             m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
             m.assertNotInvalid(m.node.pageState.detailsLoad.active)
-            entries = m.global.logService.callFunc("getSnapshot")
+            entries = m.collector.callFunc("getSnapshot")
             m.assertEqual(entries.Count(), logCount + 1)
             m.assertTrue(Instr(1, entries[entries.Count() - 1], "[TVSeason] Activity: Viewing season " + Char.DoubleQuote + "Series - Season 1" + Char.DoubleQuote + "; episodes=1") > 0)
         end function
@@ -671,6 +668,10 @@ namespace tests
             end for
             return episodes
         end function
+        private sub captureFailureMessage(message as string)
+            getGlobalAa().seasonFailureMessage = message
+        end sub
+
     end class
 
 end namespace

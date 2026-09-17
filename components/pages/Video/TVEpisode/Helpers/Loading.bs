@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 '-------------------------------------------------------------------------------
 ' loadItemDetails
 '-------------------------------------------------------------------------------
@@ -90,9 +92,9 @@ sub handleEpisodeDetailsResponse(task as dynamic)
         if isPlaybackRefresh then m.state.playbackRefreshPending = false
         renderEpisodeContent(m.state.itemContent, false)
         Spinner.Hide()
-        message = Format.SafeString(response.errorMessage, "Unable to load this episode.")
-        AppStatus.SetMessage(message)
-        m.log.activity("Episode load failed: " + message)
+        message = (response.failureKind <> invalid ? "Unable to load this episode. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this episode.")
+        AppMessage.Show(message)
+        m.log.activity("Episode load failed: " + Format.SafeString(response.errorMessage, message))
         startPendingEpisodeDetailsLoad()
         return
     end if
@@ -108,7 +110,6 @@ sub handleEpisodeDetailsResponse(task as dynamic)
     if isPlaybackRefresh <> true then m.log.activity("Viewing episode " + ActivityLog.EpisodeTitle(response.payload))
     if isPlaybackRefresh then notifyRefreshedWatchedState(response.payload)
     Spinner.Hide()
-    AppStatus.ClearMessage()
     startPendingEpisodeDetailsLoad()
 end sub
 

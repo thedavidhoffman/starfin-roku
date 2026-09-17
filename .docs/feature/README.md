@@ -27,6 +27,7 @@ individual Starfin features.
 - [Playlist Artwork](playlist-artwork.md)
 - [Preview Sheets](preview-sheets.md)
 - [Primary Button](primary-button.md)
+- [Request Failure Classification](request-failures.md)
 - [Video Toolbar](video-toolbar.md)
 - [Quick Connect](quick-connect.md)
 - [Search](search.md)
@@ -38,3 +39,5 @@ individual Starfin features.
 - [Video Media Cards](video-media-cards.md)
 - [Video Playback Lifecycle](video-playback-lifecycle.md)
 - [Video Playback Options](video-playback-options.md)
+
+- [Message Dialog](message-dialog.md)

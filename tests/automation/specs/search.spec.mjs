@@ -157,7 +157,7 @@ describe('Starfin Search results', function () {
         requests: {
           homeVisible: { base: 'scene', keyPath: '#homePage.visible' },
           searchVisible: { base: 'scene', keyPath: '#dynamicPageHost.0.visible' },
-          statusVisible: { base: 'scene', keyPath: '#statusLabel.visible' }
+          statusVisible: { base: 'scene', keyPath: '#messageOverlayHost.visible' }
         }
       });
       assert.equal(surface.results.homeVisible?.value, false, 'Home should remain hidden while Search is active.');

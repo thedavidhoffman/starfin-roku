@@ -1,0 +1,67 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
+
+namespace RequestFailure
+
+    enum Kind
+        Timeout = "timeout"
+        ConnectionFailed = "connectionFailed"
+        AuthenticationRequired = "authenticationRequired"
+        AccessDenied = "accessDenied"
+        NotFound = "notFound"
+        RateLimited = "rateLimited"
+        ServerError = "serverError"
+        RequestRejected = "requestRejected"
+        InvalidRequest = "invalidRequest"
+        RequestStartFailed = "requestStartFailed"
+        UnexpectedResponse = "unexpectedResponse"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' RequestFailure.GetMessage
+    '---------------------------------------------------------------------------
+    function GetMessage(kind as dynamic) as string
+        if kind = RequestFailure.Kind.Timeout then return "The server took too long to respond."
+        if kind = RequestFailure.Kind.ConnectionFailed then return "Couldn't connect to the server."
+        if kind = RequestFailure.Kind.AuthenticationRequired then return "Your session has expired. Please sign in again."
+        if kind = RequestFailure.Kind.AccessDenied then return "The server denied access."
+        if kind = RequestFailure.Kind.NotFound then return "The requested content could not be found."
+        if kind = RequestFailure.Kind.RateLimited then return "The server is receiving too many requests. Please wait a moment."
+        if kind = RequestFailure.Kind.ServerError then return "The server encountered an error."
+        if kind = RequestFailure.Kind.RequestRejected then return "The server rejected the request."
+        if kind = RequestFailure.Kind.InvalidRequest then return "The app couldn't prepare the request."
+        if kind = RequestFailure.Kind.RequestStartFailed then return "The app couldn't start the request."
+        if kind = RequestFailure.Kind.UnexpectedResponse then return "The app received an unexpected response from the server."
+        return "The app received an unexpected response from the server."
+    end function
+
+    '---------------------------------------------------------------------------
+    ' RequestFailure.FromStatus
+    '---------------------------------------------------------------------------
+    function FromStatus(status as integer) as string
+        ' Roku reports a transport timeout as -28 (CURLE_OPERATION_TIMEDOUT).
+        if status = -28 or status = 408 or status = 504 then return RequestFailure.Kind.Timeout
+        if status = -1 or status = -3 then return RequestFailure.Kind.InvalidRequest
+        if status = -2 then return RequestFailure.Kind.RequestStartFailed
+        if status = 0 or status = -5 or status = -6 or status = -7 or status = -35 or status = -51 or status = -58 or status = -60 or status = -77 then return RequestFailure.Kind.ConnectionFailed
+        if status = 403 then return RequestFailure.Kind.AccessDenied
+        if status = 404 then return RequestFailure.Kind.NotFound
+        if status = 429 then return RequestFailure.Kind.RateLimited
+        if status >= 500 and status <= 599 then return RequestFailure.Kind.ServerError
+        if status >= 400 and status <= 499 then return RequestFailure.Kind.RequestRejected
+        return RequestFailure.Kind.UnexpectedResponse
+    end function
+
+    '---------------------------------------------------------------------------
+    ' RequestFailure.GetDisplayMessage
+    '---------------------------------------------------------------------------
+    function GetDisplayMessage(response as dynamic, fallback as string) as string
+        if response = invalid then return fallback
+        if response.failureKind <> invalid then return RequestFailure.GetMessage(response.failureKind)
+
+        message = Format.SafeString(response.errorMessage, "")
+        if Strings.Trim(message) <> "" then return message
+        return fallback
+    end function
+
+end namespace

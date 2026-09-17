@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 '-------------------------------------------------------------------------------
 ' onLoadRequestChanged
 '-------------------------------------------------------------------------------
@@ -81,9 +83,9 @@ sub handleMovieResponse(task as dynamic)
     if response.ok <> true then
         renderMovie(m.state.item, false)
         Spinner.Hide()
-        message = Format.SafeString(response.errorMessage, "Unable to load this movie.")
-        AppStatus.SetMessage(message)
-        m.log.activity("Movie load failed: " + message)
+        message = (response.failureKind <> invalid ? "Unable to load this movie. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this movie.")
+        AppMessage.Show(message)
+        m.log.activity("Movie load failed: " + Format.SafeString(response.errorMessage, message))
         return
     end if
 
@@ -91,7 +93,6 @@ sub handleMovieResponse(task as dynamic)
     renderMovie(response.payload, false)
     m.log.activity("Viewing movie " + ActivityLog.ItemTitle(response.payload, "movie"))
     Spinner.Hide()
-    AppStatus.ClearMessage()
     loadThemeSong(response.payload)
 end sub
 

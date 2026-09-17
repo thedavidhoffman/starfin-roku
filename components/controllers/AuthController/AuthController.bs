@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Format.bs"
@@ -177,7 +178,7 @@ sub handleQuickConnectResponse(response as object)
             m.quickConnectTimer.control = TimerControl.Command.Start
             return
         end if
-        failQuickConnect(Format.SafeString(response.errorMessage, "Quick Connect failed."))
+        failQuickConnect(RequestFailure.GetDisplayMessage(response, "Quick Connect failed."))
         return
     end if
 
@@ -466,7 +467,7 @@ sub handleAuthError(response as object, action as string)
         if response.authExpired = true then
             AuthStore.RemoveToken(account.accountKey)
             m.top.sessionExpired = {
-                message: Format.SafeString(response.errorMessage, "Your saved session expired. Please sign in again.")
+                message: RequestFailure.GetDisplayMessage(response, "Your saved session expired. Please sign in again.")
                 server: account.server
                 username: account.username
                 accountKey: pendingSwitch.accountKey
@@ -474,7 +475,7 @@ sub handleAuthError(response as object, action as string)
                 clearRuntimeSession: false
             }
         else
-            publishLoginFailed("Account switch failed: " + Format.SafeString(response.errorMessage, "Unknown error."), pendingSwitch)
+            publishLoginFailed("Account switch failed: " + RequestFailure.GetDisplayMessage(response, "Unknown error."), pendingSwitch)
         end if
     else if m.authState.isResumingSession = true then
         m.authState.isResumingSession = false
@@ -490,10 +491,10 @@ sub handleAuthError(response as object, action as string)
                 clearRuntimeSession: true
             }
         else
-            publishLoginRequired("Unable to resume the saved session: " + Format.SafeString(response.errorMessage, "Unknown error."), false)
+            publishLoginRequired("Unable to resume the saved session: " + RequestFailure.GetDisplayMessage(response, "Unknown error."), false)
         end if
     else if action = "login" then
-        publishLoginFailed("Login failed: " + Format.SafeString(response.errorMessage, "Unknown error."))
+        publishLoginFailed("Login failed: " + RequestFailure.GetDisplayMessage(response, "Unknown error."))
     end if
 
 end sub
@@ -553,6 +554,8 @@ function buildAuthenticatedSession(response as object) as object
     username = ""
     userId = invalid
     primaryImageTag = ""
+    permissions = { canAccessLiveTv: false }
+    homePreferences = { latestItemsExcludes: [] }
 
     if payload <> invalid and payload.AccessToken <> invalid then
         sessionToken = payload.AccessToken
@@ -564,6 +567,16 @@ function buildAuthenticatedSession(response as object) as object
         username = Format.SafeString(payload.User.Name, "")
         userId = payload.User.Id
         primaryImageTag = Format.SafeString(payload.User.PrimaryImageTag, "")
+        if payload.User.Configuration <> invalid then
+            if GetInterface(payload.User.Configuration.LatestItemsExcludes, "ifArray") <> invalid then
+                homePreferences.latestItemsExcludes = payload.User.Configuration.LatestItemsExcludes
+            end if
+        end if
+        if payload.User.Policy <> invalid then
+            if GetInterface(payload.User.Policy.EnableLiveTvAccess, "ifBoolean") <> invalid then
+                permissions.canAccessLiveTv = payload.User.Policy.EnableLiveTvAccess = true
+            end if
+        end if
     end if
 
     return {
@@ -573,6 +586,8 @@ function buildAuthenticatedSession(response as object) as object
         token: sessionToken
         userId: userId
         primaryImageTag: primaryImageTag
+        permissions: permissions
+        homePreferences: homePreferences
     }
 
 end function

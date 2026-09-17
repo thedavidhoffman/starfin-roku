@@ -26,6 +26,18 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("artistAlbumsTask"))
         end function
 
+        @it("displays third party request failures within the artist overview")
+        function _()
+            m.node.state.request = { musicBrainzArtistId: "artist-id", item: { Name: "Artist" } }
+            m.node.state.lifecycle.isActive = true
+            m.node.artistTask = { response: { ok: false, artistId: "artist-id", failureKind: "rateLimited", status: 429, errorMessage: "Too Many Requests" } }
+
+            'bs:disable-next-line 1140
+            onArtistResponse()
+
+            m.assertEqual(m.top.findNode("mediaShell").mediaContent.overview, "Unable to load the artist overview. The server is receiving too many requests. Please wait a moment.")
+        end function
+
     end class
 
 end namespace

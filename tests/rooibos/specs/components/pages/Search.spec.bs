@@ -419,6 +419,28 @@ namespace tests
             return { Id: "person-1", Name: "Person", Type: "Person", ImageTags: {} }
         end function
 
+        @it("shows a contextual request explanation and restores focus on failure")
+        function _()
+            getGlobalAa().requestFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            m.top.callFunc("activate")
+            m.node.searchState.loading.inFlight = true
+            m.node.searchState.submittedQuery = "movie"
+            AsyncLifecycle.Begin(m.node.searchState.lifecycle, "movie")
+            Spinner.ShowBlocking()
+
+            m.top.findNode("searchTask").response = { ok: false, action: "search", query: "movie", failureKind: "accessDenied", status: 403, errorMessage: "Forbidden" }
+
+            m.assertEqual(getGlobalAa().requestFailureMessage, "Search failed. The server denied access.")
+            m.assertFalse(m.node.searchState.loading.inFlight)
+            m.assertFalse(m.top.getScene().findNode("loadingSpinner").blockInteraction)
+            m.assertTrue(m.top.findNode("searchButton").hasFocus())
+        end function
+
+        private sub captureRequestFailureMessage(message as string)
+            getGlobalAa().requestFailureMessage = message
+        end sub
+
     end class
 
 end namespace

@@ -732,6 +732,28 @@ namespace tests
             m.assertEqual(second.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("replacement", "user")])
         end function
 
+        @it("displays the request failure after playback recovery is exhausted")
+        function _()
+            getGlobalAa().requestFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            m.node.playback.requestId = 6
+            m.node.pendingPlaybackRequest = { requestId: 6, itemId: "failed-item" }
+            m.node.recovery.originalMode = PlaybackMode.Mode.TranscodeNoRemux
+            m.node.recovery.effectiveMode = PlaybackMode.Mode.TranscodeNoRemux
+            m.node.recovery.sameModeRetryUsed = true
+            m.node.playbackInfoTask = { response: { ok: false, requestId: 6, status: 403, failureKind: "accessDenied", errorMessage: "Forbidden" } }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.top.playbackFailed, "Unable to play this item. The server denied access.")
+            m.assertEqual(getGlobalAa().requestFailureMessage, m.top.playbackFailed)
+        end function
+
+        private sub captureRequestFailureMessage(message as string)
+            getGlobalAa().requestFailureMessage = message
+        end sub
+
     end class
 
 end namespace

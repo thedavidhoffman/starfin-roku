@@ -1,0 +1,108 @@
+import "pkg:/source/TimerControl.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' showMessage
+'-------------------------------------------------------------------------------
+sub showMessage(message as string)
+    if Strings.Trim(message) = "" then return
+    for each existing in m.messageState.messages
+        if existing = message then return
+    end for
+    if m.messageState.messages.Count() = 0 then m.messageState.returnFocus = getMessageReturnFocus()
+    m.messageState.messages.Push(message)
+    if m.messageState.overlay <> invalid then
+        m.messageOverlayHost.callFunc("updateOverlay", { id: "message", message: Strings.Join(m.messageState.messages, Chr(10) + Chr(10)) })
+    else
+        m.messageOpenTimer.control = TimerControl.Command.Start
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onMessageOpenTimer
+'-------------------------------------------------------------------------------
+sub onMessageOpenTimer()
+    if m.messageState.messages.Count() = 0 then return
+    if m.messageState.overlay <> invalid then
+        m.messageState.overlay.callFunc("focusAcknowledgment")
+        return
+    end if
+    m.messageOverlayHost.visible = true
+    m.messageState.overlay = m.messageOverlayHost.callFunc("openOverlay", {
+        id: "message"
+        componentName: "MessageDialog"
+        openFunction: "openMessage"
+        closeField: "closeRequested"
+        message: Strings.Join(m.messageState.messages, Chr(10) + Chr(10))
+    })
+end sub
+
+'-------------------------------------------------------------------------------
+' dismissMessage
+'-------------------------------------------------------------------------------
+sub dismissMessage(restoreFocus = false as boolean)
+    m.messageOpenTimer.control = TimerControl.Command.Stop
+    target = m.messageState.returnFocus
+    m.messageState = { messages: [], returnFocus: invalid, overlay: invalid }
+    m.messageOverlayHost.callFunc("closeOverlay")
+    m.messageOverlayHost.closed = invalid
+    m.messageOverlayHost.visible = false
+    if restoreFocus <> true then return
+    if isMessageReturnFocusAvailable(target) then
+        target.setFocus(true)
+    else if m.overlayHost.getChildCount() > 0 then
+        m.overlayHost.getChild(0).callFunc("focusContent")
+    else
+        focusActiveSurface()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onMessageClosed
+'-------------------------------------------------------------------------------
+sub onMessageClosed()
+    if m.messageOverlayHost.closed = invalid then return
+    dismissMessage(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onMessageFocusChanged
+'-------------------------------------------------------------------------------
+sub onMessageFocusChanged()
+    overlay = m.messageState.overlay
+    if overlay = invalid then return
+    if overlay.getScene() = invalid then return
+    ' Let the competing setFocus finish before restoring the modal focus chain.
+    m.messageOpenTimer.control = TimerControl.Command.Start
+end sub
+
+'-------------------------------------------------------------------------------
+' getMessageReturnFocus
+'-------------------------------------------------------------------------------
+function getMessageReturnFocus() as dynamic
+    node = m.top
+    while node.focusedChild <> invalid
+        child = node.focusedChild
+        if child.isSameNode(node) then exit while
+        node = child
+    end while
+    if node.isSameNode(m.top) or node.isSameNode(m.loadingSpinner) then return invalid
+    return node
+end function
+
+'-------------------------------------------------------------------------------
+' isMessageReturnFocusAvailable
+'-------------------------------------------------------------------------------
+function isMessageReturnFocusAvailable(node as dynamic) as boolean
+    if node = invalid then return false
+    scene = node.getScene()
+    if scene = invalid then return false
+    ' The captured control already accepted focus; existing buttons need not declare focusable.
+    ancestor = node
+    while ancestor <> invalid
+        if ancestor.visible = false then return false
+        if ancestor.isSameNode(m.top) then return true
+        ancestor = ancestor.getParent()
+    end while
+    return false
+end function

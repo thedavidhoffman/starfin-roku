@@ -1,3 +1,5 @@
+import "pkg:/source/RequestFailure.bs"
+
 '-------------------------------------------------------------------------------
 ' navHandleHomeOverlayRequested
 '-------------------------------------------------------------------------------
@@ -167,7 +169,7 @@ sub navHandleMediaActionsOverlayClosed(closed as object)
     end if
 
     if m.mediaActionState.activeRequest <> invalid then
-        AppStatus.SetMessage("A media action is already in progress.")
+        AppMessage.Show("A media action is already in progress.")
         return
     end if
 
@@ -269,7 +271,6 @@ sub navHandleMediaStateChanged()
     if change.action = "favorite" and change.value = true then activityAction = "Added to favorites"
     if change.action = "favorite" and change.value <> true then activityAction = "Removed from favorites"
     m.log.activity(activityAction + " " + ActivityLog.ItemTitle(request.item, "item"))
-    AppStatus.ClearMessage()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -281,11 +282,11 @@ sub navHandleMediaActionFailed()
     m.mediaActionState.activeRequest = invalid
     if failure = invalid then return
 
-    message = Format.SafeString(failure.errorMessage, "Unable to update media state.")
-    AppStatus.SetMessage(message)
+    message = (failure.failureKind <> invalid ? "Unable to update media state. " : "") + RequestFailure.GetDisplayMessage(failure, "Unable to update media state.")
+    AppMessage.Show(message)
     itemId = Format.SafeString(failure.itemId, "")
     if itemId = "" and request <> invalid then itemId = Format.SafeString(request.itemId, "")
-    m.log.activity("Media action failed itemId=" + itemId + ": " + message)
+    m.log.activity("Media action failed itemId=" + itemId + ": " + Format.SafeString(failure.errorMessage, message))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -371,9 +372,18 @@ sub markHomePlaybackRowsDirty()
 end sub
 
 '-------------------------------------------------------------------------------
+' hideHome
+'-------------------------------------------------------------------------------
+sub hideHome()
+    m.homePage.callFunc("suppressRefreshMessages")
+    m.homePage.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
 ' showHome
 '-------------------------------------------------------------------------------
 sub showHome(refresh = false as boolean)
+    dismissMessage()
     m.log.activity("Opening home")
     m.homePage.visible = true
     m.header.visible = true
@@ -533,7 +543,7 @@ sub navShowLoginRoute()
     clearStatus()
     m.login.visible = true
     m.authenticatedContent.visible = false
-    m.homePage.visible = false
+    hideHome()
     resetDynamicPages()
     m.login.callFunc("activate")
 end sub
@@ -558,6 +568,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub resetDynamicPages()
     clearStatus()
+    m.homePage.callFunc("suppressRefreshMessages")
     themeAudioStop()
     m.mediaActionsController.callFunc("cancelActiveAction")
     m.mediaActionState.activeRequest = invalid
@@ -609,5 +620,5 @@ end sub
 '-------------------------------------------------------------------------------
 sub clearStatus()
     Spinner.Hide()
-    m.statusLabel.callFunc("clearMessage")
+    dismissMessage()
 end sub

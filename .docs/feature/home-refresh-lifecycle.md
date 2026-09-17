@@ -22,3 +22,54 @@ publish the task through `taskCreated`. MainScene observes that event and adds
 the standard authentication-response observer before the task runs. A 401 from
 a dynamic Latest Media or Live TV schedule request therefore expires only the
 matching active account through the same path as declarative task nodes.
+
+## Live TV permission and denied access
+
+AuthController derives `permissions.canAccessLiveTv` from the authenticated user's
+`Policy.EnableLiveTvAccess`. Only boolean true grants access; missing policy or
+permission defaults to false. Permissions remain in memory and are rebuilt by
+sign-in, saved-session authorization, Quick Connect, and account switching. They
+are not persisted in the registry and require no additional API request.
+
+MainScene passes permissions through the session load request. Home skips its
+On Now task when access is unavailable and marks that core task complete so the
+normal readiness, spinner, and focus lifecycle can finish.
+
+A current On Now HTTP 403 is logged and the row omitted without setting or
+clearing the shared status message. This handles permission changes after login.
+Only action `liveTvOnNow` with numeric status 403 receives this treatment. Other
+errors remain visible, and the existing 401 authentication-expiration route is unchanged.
+Stale task responses are rejected before permission-error handling.
+
+## Recently Added exclusions and error messages
+
+AuthController retains User.Configuration.LatestItemsExcludes in the runtime
+session's homePreferences, defaulting to an empty list. MainScene forwards these
+preferences to Home. They refresh on authentication and saved-session validation,
+including account switching; they are not stored in the registry. Changes made
+on another client take effect after the next session validation or sign-in.
+
+Home excludes matching library IDs before scheduling Recently Added tasks.
+This does not remove libraries from My Media or change library access.
+
+Home failures identify the affected section, including the library name for
+Recently Added. Home uses RequestFailure.GetMessage with the HTTP client's structured failureKind;
+it does not classify failures using technical message text or HTTP codes.
+Unknown or missing identifiers receive the unexpected-response explanation. HTTP logs retain technical details. Authentication expiration and the
+On Now 403 exception remain unchanged. Empty-Home behavior is unchanged.
+
+## Aggregated acknowledgments
+
+Each refresh owns a message list. Accepted failures are collected, preserving the
+On Now 403 omission, and published once through AppMessage after core and current
+Recently Added requests finish. Existing ready/spinner timing remains intact. A
+new refresh discards prior collected messages; stale responses cannot contribute.
+Successful responses never dismiss a visible acknowledgment.
+
+
+MainScene's hideHome() and page/session cleanup call suppressRefreshMessages().
+This clears the current refresh's collected failures and suppresses subsequent
+failure presentation, including delayed Recently Added failures, without canceling
+row loading. Starting another refresh resets suppression. Returning to the same
+refresh does not display its discarded errors. Opening an overlay keeps Home's
+refresh eligible to present messages.
