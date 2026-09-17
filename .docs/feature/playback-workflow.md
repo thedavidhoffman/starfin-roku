@@ -4,6 +4,25 @@ Video playback uses three explicit assocarray value contracts. These contracts
 cover every media type routed through `VideoPlayer`; music audio and theme audio
 use separate workflows.
 
+## Estimated finish time
+
+PlaybackControls shows `Finishes at 1:50 PM` above the timeline's right edge.
+It estimates the current title's completion from the current local clock plus
+remaining duration, using the same 12-hour AM/PM format as the playback clock.
+The estimate follows the seek preview and returns to actual position on cancel.
+Unknown or nonpositive durations hide the label; positions are clamped to the
+known duration. It does not predict the completion of the entire queue.
+
+A component-owned one-second timer runs only while controls are active, visible,
+and have a known duration. Pausing and buffering therefore advance the estimate
+without requiring position events. Hiding or deactivating controls stops the
+timer; opening them recalculates immediately. Progress and seek changes also
+refresh immediately, but unchanged label text is not reassigned. Existing
+DateTime helpers own timestamp conversion and local time formatting.
+
+The label is non-focusable and does not alter timeline or button navigation.
+No server requests, registry settings, or localization migration are introduced.
+
 ## Workflow at a Glance
 
 Selecting an item moves snapshots between owners; it does not turn the library

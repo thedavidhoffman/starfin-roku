@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { ensureAuthenticated } from '../support/authentication.mjs';
-import { addEvidenceMetadata } from '../support/evidence.mjs';
+import { addEvidenceMetadata, captureEvidence } from '../support/evidence.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 import {
   findSeries,
@@ -96,6 +96,83 @@ describe('Starfin TV episode playback', function () {
       const initialSnapshot = await startEpisodePlayback(environment, episode);
       const checkpoints = await verifyPlaybackCheckpoints(environment, initialSnapshot);
       addEvidenceMetadata(this, { playback: { initial: initialSnapshot, checkpoints } });
+
+      await stopPlayback(environment, episode);
+      markStopped();
+    });
+  });
+
+  it('updates the finish time while paused and stops its timer when hidden', async function () {
+    this.timeout(150000);
+    const environment = await ensureAuthenticated();
+    const episode = await openConfiguredEpisode(environment);
+    const read = async keyPath => (await environment.odc.getValue({ base: 'scene', keyPath })).value;
+    const showControls = async () => {
+      if (await read('#playbackControls.visible') !== true) await environment.ecp.sendKeypress(environment.ecp.Key.Up);
+      await waitFor(async () => await read('#playbackControls.visible') === true, 'playback controls to open');
+      // Keep the controls visible long enough to observe a real minute change.
+      await environment.odc.setValue({ base: 'scene', keyPath: '#controlsHideTimer.control', value: 'stop' });
+    };
+
+    await runWithPlaybackCleanup(environment, async markStopped => {
+      await startEpisodePlayback(environment, episode);
+      await showControls();
+      const playingText = await read('#finishTimeLabel.text');
+      assert.match(playingText, /^Finishes at (?:[1-9]|1[0-2]):[0-5][0-9] [AP]M$/);
+      assert.equal(await read('#finishTimeTimer.control'), 'start');
+      await captureEvidence(this, 'finish-time-playing');
+
+      await environment.ecp.sendKeypress(environment.ecp.Key.Back);
+      await waitFor(async () => await read('#playbackControls.visible') === false, 'controls to hide');
+      assert.equal(await read('#finishTimeTimer.control'), 'stop');
+
+      await environment.ecp.sendKeypress(environment.ecp.Key.Play);
+      await waitForPlayerState(environment, 'paused', 'playback to pause for finish-time verification');
+      await showControls();
+      const pausedText = await read('#finishTimeLabel.text');
+      const pausedClock = /^Finishes at ([1-9]|1[0-2]):([0-5][0-9]) ([AP]M)$/.exec(pausedText);
+      assert.ok(pausedClock, `Unexpected paused finish time: ${pausedText}`);
+      const pausedMinutes = (Number(pausedClock[1]) % 12 + (pausedClock[3] === 'PM' ? 12 : 0)) * 60 + Number(pausedClock[2]);
+      // Wrap at midnight so the assertion also handles noon and day rollover.
+      const nextMinute = (pausedMinutes + 1) % 1440;
+      const expectedText = `Finishes at ${Math.floor(nextMinute / 60) % 12 || 12}:${String(nextMinute % 60).padStart(2, '0')} ${nextMinute < 720 ? 'AM' : 'PM'}`;
+      const updatedText = await waitFor(async () => {
+        const text = await read('#finishTimeLabel.text');
+        return text !== pausedText ? text : false;
+      }, 'paused finish time to advance to the next displayed minute', 65000);
+      assert.equal(updatedText, expectedText, 'Paused finish time should advance exactly one minute.');
+      assert.equal((await readPlaybackSnapshot(environment, undefined)).state, 'paused');
+      assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: '#playPauseButton' }), true);
+      await captureEvidence(this, 'finish-time-paused');
+
+      await environment.ecp.sendKeypress(environment.ecp.Key.Back);
+      await waitFor(async () => await read('#playbackControls.visible') === false, 'paused controls to hide');
+      assert.equal(await read('#finishTimeTimer.control'), 'stop');
+      await showControls();
+      assert.equal(await read('#finishTimeTimer.control'), 'start');
+      addEvidenceMetadata(this, { finishTime: { playingText, pausedText, updatedText } });
+      await stopPlayback(environment, episode);
+      markStopped();
+    });
+  });
+
+  it('stops the finish-time timer when playback controls naturally auto-hide', async function () {
+    const environment = await ensureAuthenticated();
+    const episode = await openConfiguredEpisode(environment);
+    const read = async keyPath => (await environment.odc.getValue({ base: 'scene', keyPath })).value;
+
+    await runWithPlaybackCleanup(environment, async markStopped => {
+      await startEpisodePlayback(environment, episode);
+      await environment.ecp.sendKeypress(environment.ecp.Key.Up);
+      await waitFor(async () => await read('#playbackControls.visible') === true, 'playback controls to open');
+      assert.equal(await read('#controlsHideTimer.control'), 'start');
+      assert.equal(await read('#finishTimeTimer.control'), 'start');
+
+      // Let the normal five-second timeout expire without keys or timer overrides.
+      await waitFor(async () => await read('#playbackControls.visible') === false, 'playback controls to auto-hide', 15000);
+      assert.equal(await read('#finishTimeTimer.control'), 'stop');
+      assert.equal((await readPlaybackSnapshot(environment, undefined)).state, 'playing');
+      await captureEvidence(this, 'finish-time-auto-hidden');
 
       await stopPlayback(environment, episode);
       markStopped();

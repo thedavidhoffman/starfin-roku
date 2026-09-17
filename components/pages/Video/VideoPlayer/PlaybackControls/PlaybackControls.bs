@@ -2,6 +2,8 @@ import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/Theme.bs"
+import "pkg:/source/DateTime.bs"
+import "pkg:/source/TimerControl.bs"
 import "pkg:/source/video-player-helpers/VideoPlayerTrickplay.bs"
 import "pkg:/source/video-player-helpers/PlaybackControlsLogic.bs"
 
@@ -9,6 +11,42 @@ import "pkg:/source/video-player-helpers/PlaybackControlsLogic.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+
+    m.controlState = {
+        focusedIndex: 1
+        focusArea: "buttons"
+        buttons: []
+    }
+    m.optionButtonLayout = {
+        startX: 102
+        y: 962
+        spacing: 95
+    }
+    m.trickplayPositions = {
+        default: [102, 420]
+        tall: [102, 360]
+    }
+
+    colors = Theme.Get()
+    m.metadataLabels.title.color = colors.text.light.primary
+    m.metadataLabels.subtitle.color = colors.text.light.secondary
+    m.finishTime.label.color = colors.text.light.primary
+
+    initIcons()
+    initHandlers()
+    onTitleChanged()
+    onSubtitleChanged()
+    onPlayingChanged()
+    onOptionsChanged()
+    onSkipButtonAvailabilityChanged()
+    updateButtonFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.castButton = m.top.findNode("castButton")
     m.subtitleButton = m.top.findNode("subtitleButton")
     m.audioButton = m.top.findNode("audioButton")
@@ -33,16 +71,17 @@ sub init()
     m.positionLabel = m.top.findNode("positionLabel")
     m.remainingLabel = m.top.findNode("remainingLabel")
 
-    m.controlState = {
-        focusedIndex: 1
-        focusArea: "buttons"
-        buttons: []
+    m.finishTime = {
+        label: m.top.findNode("finishTimeLabel")
+        timer: m.top.findNode("finishTimeTimer")
+        active: false
     }
-    m.optionButtonLayout = {
-        startX: 102
-        y: 962
-        spacing: 95
-    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initIcons
+'-------------------------------------------------------------------------------
+sub initIcons()
     m.playPauseIcons = {
         play: {
             icon: "pkg:/images/icons/playback-controls/play-unfocused.png"
@@ -53,15 +92,6 @@ sub init()
             focusedIcon: "pkg:/images/icons/playback-controls/pause-focused.png"
         }
     }
-    m.trickplayPositions = {
-        default: [102, 420]
-        tall: [102, 360]
-    }
-
-    colors = Theme.Get()
-    m.metadataLabels.title.color = colors.text.light.primary
-    m.metadataLabels.subtitle.color = colors.text.light.secondary
-
     m.castButton.icon = "pkg:/images/icons/playback-controls/person-unfocused.png"
     m.castButton.focusedIcon = "pkg:/images/icons/playback-controls/person-focused.png"
     m.subtitleButton.icon = "pkg:/images/icons/playback-controls/subtitles-unfocused.png"
@@ -78,7 +108,12 @@ sub init()
     m.skipBackButton.focusedIcon = "pkg:/images/icons/playback-controls/skip-back-focused.png"
     m.skipForwardButton.icon = "pkg:/images/icons/playback-controls/skip-forward-unfocused.png"
     m.skipForwardButton.focusedIcon = "pkg:/images/icons/playback-controls/skip-forward-focused.png"
+end sub
 
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.castButton.observeField("buttonSelected", "onCastButtonSelected")
     m.subtitleButton.observeField("buttonSelected", "onSubtitleButtonSelected")
     m.audioButton.observeField("buttonSelected", "onAudioButtonSelected")
@@ -90,12 +125,8 @@ sub init()
     m.skipForwardButton.observeField("buttonSelected", "onSkipForwardButtonSelected")
     m.last5Button.observeField("buttonSelected", "onLast5ButtonSelected")
     m.top.observeField("focusedChild", "onFocusChanged")
-    onTitleChanged()
-    onSubtitleChanged()
-    onPlayingChanged()
-    onOptionsChanged()
-    onSkipButtonAvailabilityChanged()
-    updateButtonFocus()
+    m.top.observeField("visible", "onFinishTimeVisibilityChanged")
+    m.finishTime.timer.observeField("fire", "updateFinishTime")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -129,6 +160,8 @@ end sub
 ' onProgressChanged
 '-------------------------------------------------------------------------------
 sub onProgressChanged()
+    syncFinishTimeTimer()
+    updateFinishTime()
     if m.top.isSeeking = true then return
     updateProgress(m.top.position, false)
 end sub
@@ -137,6 +170,7 @@ end sub
 ' onPreviewChanged
 '-------------------------------------------------------------------------------
 sub onPreviewChanged()
+    updateFinishTime()
     if m.top.isSeeking <> true then return
     updateProgress(m.top.previewPosition, true)
 end sub
@@ -145,6 +179,7 @@ end sub
 ' onSeekingChanged
 '-------------------------------------------------------------------------------
 sub onSeekingChanged()
+    updateFinishTime()
     m.previewBar.visible = m.top.isSeeking = true
     m.trickplayPreview.isSeeking = m.top.isSeeking
     if m.top.isSeeking = true then
@@ -313,6 +348,8 @@ end sub
 ' activate
 '-------------------------------------------------------------------------------
 sub activate()
+    m.finishTime.active = true
+    onFinishTimeVisibilityChanged()
     m.top.setFocus(true)
     if m.controlState.focusArea = "progress" then
         focusProgress()
@@ -325,6 +362,8 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    m.finishTime.active = false
+    syncFinishTimeTimer()
     releaseFocus()
 end sub
 
@@ -553,3 +592,43 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     return false
 end function
+
+'-------------------------------------------------------------------------------
+' onFinishTimeVisibilityChanged
+'-------------------------------------------------------------------------------
+sub onFinishTimeVisibilityChanged()
+    syncFinishTimeTimer()
+    updateFinishTime()
+end sub
+
+'-------------------------------------------------------------------------------
+' syncFinishTimeTimer
+'-------------------------------------------------------------------------------
+sub syncFinishTimeTimer()
+    shouldRun = m.finishTime.active and m.top.visible and Number.ToFloat(m.top.duration, 0) > 0
+    if shouldRun then
+        if m.finishTime.timer.control <> TimerControl.Command.Start then m.finishTime.timer.control = TimerControl.Command.Start
+    else
+        m.finishTime.timer.control = TimerControl.Command.Stop
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' updateFinishTime
+'-------------------------------------------------------------------------------
+sub updateFinishTime()
+    if Number.ToFloat(m.top.duration, 0) <= 0 then
+        m.finishTime.label.text = ""
+        m.finishTime.label.visible = false
+        return
+    end if
+    if m.finishTime.active <> true or m.top.visible <> true then return
+
+    position = m.top.position
+    if m.top.isSeeking then position = m.top.previewPosition
+    progress = PlaybackControlsLogic_GetProgress(position, m.top.duration)
+    remainingSeconds = Number.ToInteger(progress.duration - progress.position, 0)
+    text = "Finishes at " + DateTime.ToLocalShortTime(DateTime.ToIsoOffset(remainingSeconds))
+    if m.finishTime.label.text <> text then m.finishTime.label.text = text
+    m.finishTime.label.visible = true
+end sub
