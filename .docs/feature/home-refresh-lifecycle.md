@@ -73,3 +73,28 @@ failure presentation, including delayed Recently Added failures, without canceli
 row loading. Starting another refresh resets suppression. Returning to the same
 refresh does not display its discarded errors. Opening an overlay keeps Home's
 refresh eligible to present messages.
+
+## Episode artwork preference
+
+Settings > TV includes "Use Episode Images in 'Next Up' and 'Continue Watching'
+Sections", stored per account as `home-episode-images` with `on`/`off` values.
+The default is Off for new and existing accounts without a saved value. No
+registry migration is needed. Settings retains its existing save-on-close
+behavior (including Back); there is no separate Cancel action.
+
+When enabled, episode cards in these two Home rows prefer the episode's own
+Primary still. Missing stills use the existing series thumbnail/backdrop/poster
+fallback chain. Off preserves that previous image-selection behavior. Movies,
+other rows, and card geometry are unchanged.
+
+MainScene distributes committed settings to HomePage through its `settings`
+field. Home updates only the existing image fields in the affected ContentNodes,
+retaining shelves, selection, scroll position, metadata, and progress. No data
+requests are issued. Subsequent responses use the latest preference, while the
+existing generation/session checks continue rejecting stale responses.
+
+System Info includes this preference in each account's registry section. Account
+settings are listed from `SettingsStore.AccountKeys()` so new preferences are
+included automatically. Device-wide streaming and subtitle burn-in settings
+appear once under Global Application Registry. Coverage checks every defined
+setting appears exactly once in the correct scope, including effective defaults.

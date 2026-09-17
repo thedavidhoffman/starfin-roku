@@ -3,6 +3,57 @@ namespace tests
     @suite("Settings store")
     class SettingsStoreTests extends rooibos.BaseTestSuite
 
+        protected override function afterEach()
+            if m.registrySnapshot = invalid then return invalid
+
+            registry = CreateObject("roRegistry")
+            for each name in m.registrySnapshot
+                registry.Delete(name)
+                values = m.registrySnapshot[name]
+                if values.Count() > 0 then
+                    section = CreateObject("roRegistrySection", name)
+                    section.WriteMulti(values)
+                    section.Flush()
+                end if
+            end for
+            registry.Flush()
+            m.registrySnapshot = invalid
+        end function
+
+        @describe("Home episode images")
+
+        @it("defaults missing episode image preferences to off")
+        function _()
+            m.assertEqual(SettingsStore.Key.HomeEpisodeImages, "home-episode-images")
+            m.assertEqual(SettingsStore.GetSettingValue(invalid, SettingsStore.Key.HomeEpisodeImages), "off")
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.HomeEpisodeImages), "off")
+        end function
+
+        @it("persists episode images separately for each account")
+        function _()
+            ' Save also writes device settings; restore all affected sections even if assertions fail.
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName("rooibos-images-a"), RegistryStore.AccountSectionName("rooibos-images-b")]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
+
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.HomeEpisodeImages] = "off"
+            SettingsStore.Save("rooibos-images-a", settings)
+            settings[SettingsStore.Key.HomeEpisodeImages] = "on"
+            SettingsStore.Save("rooibos-images-b", settings)
+
+            m.assertEqual(SettingsStore.Load("rooibos-images-a")[SettingsStore.Key.HomeEpisodeImages], "off")
+            m.assertEqual(SettingsStore.Load("rooibos-images-b")[SettingsStore.Key.HomeEpisodeImages], "on")
+
+        end function
+
+        @it("preserves explicitly disabled episode images")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "home-episode-images": "off" }, SettingsStore.Key.HomeEpisodeImages), "off")
+        end function
+
         @describe("SettingsStore.Key")
 
         @it("provides the persisted registry key values (case 1)")
@@ -101,7 +152,7 @@ namespace tests
         function _()
             defaults = SettingsStore.Defaults()
 
-            m.assertEqual(defaults.Count(), 18)
+            m.assertEqual(defaults.Count(), 19)
             m.assertEqual(defaults[SettingsStore.Key.TvLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.MovieLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.CollectionCardsLayout], "poster;6")
@@ -136,6 +187,7 @@ namespace tests
                 SettingsStore.Key.MusicVideosLayout
                 SettingsStore.Key.HomeVideosLayout
                 SettingsStore.Key.TvEpisodeListDisplay
+                SettingsStore.Key.HomeEpisodeImages
                 SettingsStore.Key.MediaShellBackground
                 SettingsStore.Key.ThemeMusic
                 SettingsStore.Key.NextItemPlayback

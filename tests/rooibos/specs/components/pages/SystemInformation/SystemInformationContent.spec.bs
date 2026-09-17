@@ -59,6 +59,48 @@ namespace tests
             m.assertTrue(m.hasLabel(content, "GLOBAL APPLICATION REGISTRY"))
         end function
 
+        @it("reports every defined setting exactly once in its correct scope")
+        function _()
+            'bs:disable-next-line 1140
+            accountSection = getAccountRegistrySection(m.createAccount())
+            'bs:disable-next-line 1140
+            globalSection = getGlobalRegistrySection()
+            accountKeys = {}
+            for each key in SettingsStore.AccountKeys()
+                accountKeys[key] = true
+            end for
+
+            for each key in SettingsStore.Defaults()
+                accountCount = 0
+                globalCount = 0
+                for each entry in accountSection.entries
+                    if entry.key = key then accountCount++
+                end for
+                for each entry in globalSection.entries
+                    if entry.key = key then globalCount++
+                end for
+                m.assertEqual(accountCount + globalCount, 1, key + " must appear exactly once")
+                if accountKeys.DoesExist(key) then
+                    m.assertEqual(accountCount, 1, key + " belongs to the account")
+                else
+                    m.assertEqual(globalCount, 1, key + " belongs to global settings")
+                end if
+            end for
+        end function
+
+        @it("reports effective account setting values including defaults")
+        function _()
+            account = m.createAccount()
+            settings = SettingsStore.Load(account.accountKey)
+            'bs:disable-next-line 1140
+            section = getAccountRegistrySection(account)
+            for each key in SettingsStore.AccountKeys()
+                for each entry in section.entries
+                    if entry.key = key then m.assertEqual(entry.value, SettingsStore.GetSettingValue(settings, key))
+                end for
+            end for
+        end function
+
         @it("reports the playlist card setting in account information")
         function _()
             'bs:disable-next-line 1140

@@ -10,6 +10,7 @@ import "pkg:/source/Array.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/AuthStore.bs"
 import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/TimerControl.bs"
 import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/store/LibraryViewStateStore.bs"
@@ -163,6 +164,8 @@ function getGlobalRegistrySection() as object
             { key: "active-account-key", value: AuthStore.GetActiveAccountKey() }
             { key: "last-server", value: AuthStore.GetLastServer() }
             { key: SettingsStore.Key.DisplayAccountBadge, value: SettingsStore.LoadGlobal(SettingsStore.Key.DisplayAccountBadge) }
+            { key: SettingsStore.Key.VideoStreamingMode, value: PlaybackMode.Normalize(SettingsStore.LoadGlobal(SettingsStore.Key.VideoStreamingMode)) }
+            { key: SettingsStore.Key.SubtitleBurnInMode, value: SubtitleBurnIn.Normalize(SettingsStore.LoadGlobal(SettingsStore.Key.SubtitleBurnInMode)) }
             { key: SettingsStore.Key.TmdbApiKey, value: truncateText(SettingsStore.LoadIntegration(SettingsStore.Key.TmdbApiKey), 40) }
         ]
     }
@@ -182,19 +185,10 @@ function getAccountRegistrySection(account as object) as object
         { key: "userId", value: account.userId }
         { key: "primary-image-tag", value: account.primaryImageTag }
         { key: "token", value: truncateWithEllipsis(account.token, 10) }
-        { key: SettingsStore.Key.TvLibraryLayout, value: settings[SettingsStore.Key.TvLibraryLayout] }
-        { key: SettingsStore.Key.MovieLibraryLayout, value: settings[SettingsStore.Key.MovieLibraryLayout] }
-        { key: SettingsStore.Key.CollectionCardsLayout, value: settings[SettingsStore.Key.CollectionCardsLayout] }
-        { key: SettingsStore.Key.CollectionItemsLayout, value: settings[SettingsStore.Key.CollectionItemsLayout] }
-        { key: SettingsStore.Key.PlaylistCardsLayout, value: settings[SettingsStore.Key.PlaylistCardsLayout] }
-        { key: SettingsStore.Key.PlaylistItemsLayout, value: settings[SettingsStore.Key.PlaylistItemsLayout] }
-        { key: SettingsStore.Key.MusicVideosLayout, value: settings[SettingsStore.Key.MusicVideosLayout] }
-        { key: SettingsStore.Key.HomeVideosLayout, value: settings[SettingsStore.Key.HomeVideosLayout] }
-        { key: SettingsStore.Key.TvEpisodeListDisplay, value: settings[SettingsStore.Key.TvEpisodeListDisplay] }
-        { key: SettingsStore.Key.MediaShellBackground, value: settings[SettingsStore.Key.MediaShellBackground] }
-        { key: SettingsStore.Key.ThemeMusic, value: settings[SettingsStore.Key.ThemeMusic] }
-        { key: SettingsStore.Key.VideoStreamingMode, value: settings[SettingsStore.Key.VideoStreamingMode] }
     ]
+    for each key in SettingsStore.AccountKeys()
+        entries.Push({ key: key, value: SettingsStore.GetSettingValue(settings, key) })
+    end for
     for each state in LibraryViewStateStore.List(account.accountKey)
         entries.Push(getLibraryViewStateEntry(state))
     end for

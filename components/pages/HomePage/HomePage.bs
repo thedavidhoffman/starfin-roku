@@ -14,6 +14,7 @@ import "pkg:/source/AppMessage.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/VideoCardPresentation.bs"
 import "pkg:/source/Number.bs"
+import "pkg:/source/store/SettingsStore.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -30,6 +31,7 @@ sub init()
         queryId: 0
         sessionKey: ""
         rows: {}
+        episodeImagesEnabled: LCase(SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.HomeEpisodeImages)) = "on"
         rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow"]
         latestLibraries: {}
         latestTasks: []
@@ -48,6 +50,26 @@ sub init()
             pendingCore: {}
         }
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' onSettingsChanged
+'-------------------------------------------------------------------------------
+sub onSettingsChanged()
+    enabled = LCase(SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.HomeEpisodeImages)) = "on"
+    if enabled = m.homeState.episodeImagesEnabled then return
+    m.homeState.episodeImagesEnabled = enabled
+
+    ' Update existing content nodes so shelf position and focus remain intact.
+    for each key in ["continueWatching", "nextUp"]
+        if m.homeState.rows.DoesExist(key) then
+            row = m.homeState.rows[key]
+            for each child in row.getChildren(-1, 0)
+                imageUrl = getHomeItemImageUrl(key, child.raw, getRowImageAspect(key))
+                if child.HDPosterUrl <> imageUrl then child.HDPosterUrl = imageUrl
+            end for
+        end if
+    end for
 end sub
 
 '-------------------------------------------------------------------------------
@@ -938,7 +960,7 @@ function hasRenderedRows() as boolean
 end function
 
 '-------------------------------------------------------------------------------
-' getItemImageUrl
+' getHomeItemImageUrl
 '-------------------------------------------------------------------------------
 function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as string) as string
     if key = "continueWatching" or key = "nextUp" then
@@ -959,7 +981,14 @@ function getResumeRowImageUrl(item as dynamic, imageAspect as string) as string
     if Arrays.IsAssocArray(item) = false then return ""
 
     itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
-    if itemType = "episode" then return getSeriesThumbnailImageUrl(item, imageAspect)
+    if itemType = "episode" then
+        if m.homeState.episodeImagesEnabled then
+            imageSize = getImageSize(imageAspect)
+            imageUrl = ItemImage.GetUrl(m.homeState.request.server, item, JellyfinImage.Type.Primary, imageSize.width, imageSize.height)
+            if imageUrl <> "" then return imageUrl
+        end if
+        return getSeriesThumbnailImageUrl(item, imageAspect)
+    end if
     if itemType = "movie" or itemType = "video" then return getMovieThumbnailImageUrl(item, imageAspect)
 
     return ""
