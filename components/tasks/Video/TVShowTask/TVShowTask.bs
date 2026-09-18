@@ -22,28 +22,37 @@ end sub
 ' executeRequest
 '-------------------------------------------------------------------------------
 sub executeRequest()
-    request = m.top.request
+    response = getResponse(m.top.request)
+    if m.top.request <> invalid then response.requestId = m.top.request.requestId
+    m.top.response = response
+end sub
+
+'-------------------------------------------------------------------------------
+' getResponse
+'-------------------------------------------------------------------------------
+function getResponse(request as dynamic) as object
     validationError = TaskRequest.ValidateRequest(request, "tvShow", ["itemId"])
     if validationError <> invalid then
         if request <> invalid then validationError.AddReplace("itemId", Format.SafeString(request.itemId, ""))
-        m.top.response = validationError
-        return
+        return validationError
     end if
 
-    seriesResult = loadSeries(request)
-    if seriesResult.ok <> true then
-        seriesResult.AddReplace("action", "tvShow")
-        seriesResult.AddReplace("itemId", Format.SafeString(request.itemId, ""))
-        m.top.response = seriesResult
-        return
-    end if
+    seriesResult = { data: invalid }
+    seasonsResult = { data: invalid }
+    if request.playbackOnly <> true then
+        seriesResult = loadSeries(request)
+        if seriesResult.ok <> true then
+            seriesResult.AddReplace("action", "tvShow")
+            seriesResult.AddReplace("itemId", Format.SafeString(request.itemId, ""))
+            return seriesResult
+        end if
 
-    seasonsResult = loadSeasons(request)
-    if seasonsResult.ok <> true then
-        seasonsResult.AddReplace("action", "tvShow")
-        seasonsResult.AddReplace("itemId", Format.SafeString(request.itemId, ""))
-        m.top.response = seasonsResult
-        return
+        seasonsResult = loadSeasons(request)
+        if seasonsResult.ok <> true then
+            seasonsResult.AddReplace("action", "tvShow")
+            seasonsResult.AddReplace("itemId", Format.SafeString(request.itemId, ""))
+            return seasonsResult
+        end if
     end if
 
     resumeItem = invalid
@@ -51,6 +60,11 @@ sub executeRequest()
     if resumeResult.ok = true then
         resumeItem = getFirstItem(resumeResult.data)
     else
+        if request.playbackOnly = true then
+            resumeResult.action = "tvShow"
+            resumeResult.itemId = request.itemId
+            return resumeResult
+        end if
         m.log.write("Unable to load series resume item: " + Format.SafeString(resumeResult.errorMessage, "unknown error"))
     end if
 
@@ -59,6 +73,11 @@ sub executeRequest()
     if upNextResult.ok = true then
         upNextItem = getFirstItem(upNextResult.data)
     else
+        if request.playbackOnly = true then
+            upNextResult.action = "tvShow"
+            upNextResult.itemId = request.itemId
+            return upNextResult
+        end if
         m.log.write("Unable to load series up-next item: " + Format.SafeString(upNextResult.errorMessage, "unknown error"))
     end if
 
@@ -74,7 +93,7 @@ sub executeRequest()
         end if
     end if
 
-    m.top.response = {
+    return {
         ok: true
         action: "tvShow"
         itemId: Format.SafeString(request.itemId, "")
@@ -87,7 +106,7 @@ sub executeRequest()
             playbackQueueIndex: playbackQueueIndex
         }
     }
-end sub
+end function
 
 '-------------------------------------------------------------------------------
 ' loadSeries

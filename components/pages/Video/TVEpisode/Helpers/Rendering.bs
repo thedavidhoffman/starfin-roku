@@ -1,3 +1,4 @@
+import "pkg:/source/MediaItem.bs"
 import "pkg:/source/JellyfinImage.bs"
 
 '-------------------------------------------------------------------------------
@@ -60,7 +61,11 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
         m.mediaToolbar.mediaType = "tv-episode"
     end if
     playbackItem = item.raw
-    if isSeasonDetailsItem(item) and m.state.playSelection <> invalid then playbackItem = m.state.playSelection.item
+    if isSeasonDetailsItem(item) then
+        playbackItem = invalid
+        if m.state.playSelection <> invalid then playbackItem = m.state.playSelection.item
+    end if
+    m.mediaToolbar.supportsPlayback = isSeasonDetailsItem(item) <> true or m.state.playSelection <> invalid
     m.mediaToolbar.resumeItem = invalid
     m.mediaToolbar.playItem = playbackItem
     m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(playbackItem).Count()
@@ -211,11 +216,7 @@ end function
 ' isSeasonDetailsItem
 '-------------------------------------------------------------------------------
 function isSeasonDetailsItem(item as dynamic) as boolean
-    itemType = Format.SafeString(item.itemType, "")
-    if itemType = "SeasonSummary" or itemType = "Season" then return true
-    if item.raw = invalid then return false
-
-    return Format.SafeString(item.raw.Type, "") = "Season"
+    return item <> invalid and Format.SafeString(item.itemType, "") = MediaItem.Type.Season
 end function
 
 '-------------------------------------------------------------------------------
@@ -247,7 +248,7 @@ function getEpisodePosterUrl(item as dynamic) as string
     request = m.state.request
     if request = invalid then return ""
 
-    if Format.SafeString(item.Type, "") = "Season" then
+    if Format.SafeString(item.Type, "") = MediaItem.Type.Season then
         posterUrl = Format.SafeString(request.posterUrl, "")
         if posterUrl <> "" then return posterUrl
     end if

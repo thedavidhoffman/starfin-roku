@@ -1,3 +1,4 @@
+import "pkg:/source/MediaItem.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Number.bs"
@@ -95,14 +96,13 @@ sub onItemContentChanged()
     item = m.top.itemContent
     if item = invalid then
         renderImage("")
-        updateProgress(invalid, false)
+        updateProgress(invalid)
         updateWatchedIndicator(invalid)
         return
     end if
 
-    isSeasonSummary = Format.SafeString(item.itemType, "") = "SeasonSummary"
     renderImage(Format.SafeString(item.HDPosterUrl, ""))
-    updateProgress(item, isSeasonSummary)
+    updateProgress(item)
     updateWatchedIndicator(item)
 end sub
 
@@ -140,9 +140,9 @@ end function
 '-------------------------------------------------------------------------------
 ' updateProgress
 '-------------------------------------------------------------------------------
-sub updateProgress(item as dynamic, isSeasonSummary as boolean)
+sub updateProgress(item as dynamic)
     trackWidth = getProgressTrackWidth(getPosterWidth())
-    if isItemPlayed(item) then
+    if isItemPlayed(item) or (item <> invalid and Format.SafeString(item.itemType, "") = MediaItem.Type.Season) then
         m.progressBar.visible = false
         m.progressBar.progressWidth = 0
         return
@@ -150,15 +150,15 @@ sub updateProgress(item as dynamic, isSeasonSummary as boolean)
 
     progressWidth = 0
     if item <> invalid then
-        if item.progressWidth <> invalid then progressWidth = int(item.progressWidth)
+        if item.progressWidth <> invalid then progressWidth = Number.ToInteger(item.progressWidth, 0)
         if progressWidth = 0 and item.progressPercent <> invalid then
             progress = item.progressPercent
             if progress > 100 then progress = 100
-            if progress > 0 then progressWidth = int(trackWidth * (progress / 100))
+            if progress > 0 then progressWidth = Number.ToInteger(trackWidth * (progress / 100), 0)
         end if
     end if
 
-    visible = isSeasonSummary <> true and progressWidth > 0
+    visible = progressWidth > 0
     m.progressBar.visible = visible
     if visible <> true then
         m.progressBar.progressWidth = 0
@@ -188,7 +188,7 @@ function isItemPlayed(item as dynamic) as boolean
     if item = invalid then return false
 
     raw = item.raw
-    if Format.SafeString(item.itemType, "") = "SeasonSummary" then
+    if Format.SafeString(item.itemType, "") = MediaItem.Type.Season then
         return raw <> invalid and raw.UserData <> invalid and raw.UserData.UnplayedItemCount = 0
     end if
 

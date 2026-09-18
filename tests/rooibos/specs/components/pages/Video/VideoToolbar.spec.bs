@@ -477,6 +477,78 @@ namespace tests
             m.assertTrue(m.top.mediaInfoSelected)
         end function
 
+        @describe("unavailable playback")
+
+        @it("hides playback actions even when old resume data exists")
+        function _()
+            m.top.resumePositionSeconds = 30
+            m.top.resumeItem = { Id: "episode-1" }
+            m.top.supportsRandomPlay = true
+            m.top.supportsPlayback = false
+
+            m.assertFalse(m.node.playButton.visible)
+            m.assertFalse(m.node.resumeButton.visible)
+            m.assertFalse(m.node.restartButton.visible)
+            m.assertFalse(m.node.randomPlayButton.visible)
+
+            m.top.supportsPlayback = true
+            m.top.supportsRandomPlay = false
+            m.top.resumePositionSeconds = 0
+            m.top.resumeItem = invalid
+        end function
+
+        @it("transfers focused Play to the available watched action")
+        function _()
+            m.top.supportsPlayback = true
+            m.top.supportsWatchedActions = true
+            m.top.isWatched = false
+            m.top.resumePositionSeconds = 0
+            m.top.resumeItem = invalid
+            m.top.callFunc("resetFocus")
+
+            m.top.supportsPlayback = false
+
+            m.assertTrue(m.node.markWatchedButton.isInFocusChain())
+            m.assertEqual(m.node.focusState.focusedButtonId, "markWatchedButton")
+            m.top.supportsPlayback = true
+        end function
+
+        @it("focuses the unwatched action by identity without Play")
+        function _()
+            m.top.supportsWatchedActions = true
+            m.top.supportsPlayback = false
+            m.top.isWatched = true
+
+            m.top.callFunc("focusWatchedAction")
+
+            m.assertTrue(m.node.markUnwatchedButton.isInFocusChain())
+            m.assertEqual(m.node.focusState.focusedButtonId, "markUnwatchedButton")
+            m.top.supportsPlayback = true
+        end function
+
+        @it("does not steal external focus when playback is disabled")
+        function _()
+            m.top.callFunc("deactivate")
+            sibling = CreateObject("roSGNode", "Group")
+            m.top.getScene().appendChild(sibling)
+            sibling.setFocus(true)
+
+            m.top.supportsPlayback = false
+
+            m.assertTrue(sibling.hasFocus())
+            m.top.supportsPlayback = true
+            m.top.getScene().removeChild(sibling)
+        end function
+
+        @it("restores Play when playback becomes available")
+        function _()
+            m.top.resumePositionSeconds = 0
+            m.top.resumeItem = invalid
+            m.top.supportsPlayback = false
+            m.top.supportsPlayback = true
+            m.assertTrue(m.node.playButton.visible)
+        end function
+
     end class
 
 end namespace

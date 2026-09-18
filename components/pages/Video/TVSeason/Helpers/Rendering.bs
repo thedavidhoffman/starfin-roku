@@ -1,15 +1,28 @@
+import "pkg:/source/MediaItem.bs"
 import "pkg:/source/JellyfinImage.bs"
 
 '-------------------------------------------------------------------------------
 ' onSettingsChanged
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
-    m.pageState.episodeListScroll = getTVEpisodeListScrollSetting()
+    scroll = getTVEpisodeListScrollSetting()
+    showSummary = getShowSeasonSummaryCardSetting()
+    if scroll = m.pageState.episodeListScroll and showSummary = m.pageState.showSeasonSummaryCard then return
 
-    if m.pageState.focusArea = "episodes" then
-        if m.pageState.episodesLoaded = true then renderEpisodes(m.pageState.episodes)
-        setEpisodeListVisible(hasEpisodeItems())
-        updateChevrons()
+    focusedItem = getFocusedItemNode()
+    hadFocus = m.top.isInFocusChain()
+    m.pageState.episodeListScroll = scroll
+    m.pageState.showSeasonSummaryCard = showSummary
+    if m.pageState.episodesLoaded <> true then return
+
+    renderEpisodes(m.pageState.episodes)
+    if focusedItem <> invalid then restoreItemFocus(Format.SafeString(focusedItem.itemId, ""), Format.SafeString(focusedItem.itemType, ""))
+    updateChevrons()
+    ' A settings update may arrive beneath a dialog or an inactive page.
+    if hadFocus <> true then return
+    if m.pageState.focusArea = "seasonNav" and hasSeasonNavigation() then
+        focusSeasonNav()
+    else
         focusEpisodesIfActive()
     end if
 end sub
@@ -74,7 +87,7 @@ end sub
 ' updateAllEpisodesSeasonLabel
 '-------------------------------------------------------------------------------
 sub updateAllEpisodesSeasonLabel()
-    node = getFocusedEpisodeNode()
+    node = getFocusedItemNode()
     if node = invalid or node.raw = invalid then return
 
     seasonId = Format.SafeString(node.raw.SeasonId, "")
@@ -98,7 +111,7 @@ sub renderEpisodesList(episodes as object)
     rowContent = CreateObject("roSGNode", "ContentNode")
     row = rowContent.createChild("ContentNode")
 
-    if m.pageState.allEpisodes <> true then appendSeasonSummaryItem(row)
+    if m.pageState.allEpisodes <> true and m.pageState.showSeasonSummaryCard then appendSeasonSummaryItem(row)
 
     for each episode in episodes
         if Arrays.IsAssocArray(episode) = false then continue for
@@ -116,7 +129,7 @@ end sub
 sub renderEpisodesGrid(episodes as object)
     gridContent = CreateObject("roSGNode", "ContentNode")
 
-    if m.pageState.allEpisodes <> true then appendSeasonSummaryItem(gridContent)
+    if m.pageState.allEpisodes <> true and m.pageState.showSeasonSummaryCard then appendSeasonSummaryItem(gridContent)
 
     currentSeasonKey = ""
     for each episode in episodes
@@ -193,7 +206,7 @@ end sub
 ' getEpisodeDetailBackdropUrl
 '-------------------------------------------------------------------------------
 function getEpisodeDetailBackdropUrl(node as dynamic) as string
-    if Format.SafeString(node.itemType, "") = "SeasonSummary" then
+    if Format.SafeString(node.itemType, "") = MediaItem.Type.Season then
         detailBackdropUrl = Format.SafeString(node.detailBackdropUrl, "")
         if detailBackdropUrl <> "" then return detailBackdropUrl
     end if
@@ -214,7 +227,7 @@ sub appendSeasonSummaryItem(row as object)
     child.HDPosterUrl = getSeasonBackgroundUrl()
     child.AddFields({
         itemId: Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
-        itemType: "SeasonSummary"
+        itemType: MediaItem.Type.Season
         episodeCount: Format.FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
         seasonYear: getSeasonYearText(season)
         detailBackdropUrl: getSeasonDetailBackdropUrl()
@@ -235,9 +248,10 @@ sub updateSeasonSummaryArtwork()
 
     for i = 0 to content.getChildCount() - 1
         child = content.getChild(i)
-        if child <> invalid and Format.SafeString(child.itemType, "") = "SeasonSummary" then
+        if child <> invalid and Format.SafeString(child.itemType, "") = MediaItem.Type.Season then
             child.HDPosterUrl = getSeasonBackgroundUrl()
             child.detailBackdropUrl = getSeasonDetailBackdropUrl()
+            child.description = getSeasonSummaryDescription(m.pageState.season)
             return
         end if
     end for
@@ -270,10 +284,17 @@ end sub
 ' getTVEpisodeListScrollSetting
 '-------------------------------------------------------------------------------
 function getTVEpisodeListScrollSetting() as string
-    value = m.top.settings[SettingsStore.Key.TvEpisodeListDisplay]
+    value = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.TvEpisodeListDisplay)
 
     if LCase(value) = "vertical" then return "vertical"
     return "horizontal"
+end function
+
+'-------------------------------------------------------------------------------
+' getShowSeasonSummaryCardSetting
+'-------------------------------------------------------------------------------
+function getShowSeasonSummaryCardSetting() as boolean
+    return LCase(SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.ShowSeasonSummaryCard)) = "on"
 end function
 
 '-------------------------------------------------------------------------------
@@ -338,7 +359,7 @@ function getProgressWidth(item as dynamic) as integer
     progressPercent = getProgressPercent(item)
     if progressPercent <= 0 then return 0
 
-    progressWidth = int(510 * (progressPercent / 100))
+    progressWidth = Number.ToInteger(510 * (progressPercent / 100), 0)
     if progressWidth < 1 then return 1
     if progressWidth > 510 then return 510
 

@@ -203,7 +203,8 @@ async function openSeasonOne(environment, seasonCards) {
       && values.results.pageType?.value === 'TVSeason'
       && values.results.pageVisible?.value === true
       && values.results.seasonLabel?.value === 'Season 1'
-      && episodeNodeCount > environment.tvSeriesSmokeTest.season1.length;
+      && episodeNodeCount >= environment.tvSeriesSmokeTest.season1.length
+        && (await readEpisodeCards(environment)).filter(card => card.itemType === 'Episode').length === environment.tvSeriesSmokeTest.season1.length;
   }, 'the Season 1 episode list to load', 120000);
 }
 
@@ -219,7 +220,7 @@ async function readEpisodeCards(environment) {
   const isHorizontal = horizontalCount > 0;
   const itemCount = isHorizontal ? horizontalCount : verticalCount;
   const contentPath = isHorizontal ? '#episodesList.content.0' : '#episodesGrid.content';
-  const fields = ['title', 'itemType', 'episodeIndexNumber', 'premiereDate', 'airDate', 'dateCreated'];
+  const fields = ['itemId', 'title', 'itemType', 'episodeIndexNumber', 'premiereDate', 'airDate', 'dateCreated'];
   const requests = {};
 
   for (let itemIndex = 0; itemIndex < itemCount; itemIndex += 1) {
@@ -234,10 +235,14 @@ async function readEpisodeCards(environment) {
   const response = await environment.odc.getValues({ requests });
   return Array.from({ length: itemCount }, (_, itemIndex) => Object.fromEntries(
     fields.map(field => [field, response.results[`${itemIndex}-${field}`]?.value])
-  )).filter(item => String(item.itemType).toLowerCase() === 'episode');
+  ));
 }
 
 function assertExpectedEpisodes(cards, expectedEpisodes) {
+    cards = cards.filter(card => card.itemType === 'Episode');
+  assert.equal(cards.length, expectedEpisodes.length);
+  assert.ok(cards.every(card => String(card.itemType).toLowerCase() === 'episode'));
+  assert.equal(Number(cards[0].episodeIndexNumber), expectedEpisodes[0].number);
   for (const expected of expectedEpisodes) {
     const card = cards.find(candidate => Number(candidate.episodeIndexNumber) === expected.number);
     assert.ok(card, `Episode ${expected.number} should be listed.`);

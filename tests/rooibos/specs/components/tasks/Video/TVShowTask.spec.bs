@@ -33,6 +33,65 @@ namespace tests
             m.assertEqual(response.itemId, "")
         end function
 
+        @describe("playback refresh")
+
+        @it("loads playback targets without reloading series or seasons and echoes generation")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: false })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeasons, { ok: false })
+            'bs:disable-next-line 1001
+            m.stubCall(loadResumeItem, { ok: true, data: { Items: [] } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadUpNextItem, { ok: true, data: { Items: [{ Id: "next", SeasonId: "season-2" }] } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadPlaybackQueue, { items: [{ itemId: "next" }], index: 0 })
+            m.top.request = { server: "server", token: "token", itemId: "series", playbackOnly: true, requestId: 9 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 9)
+            m.assertEqual(m.top.response.payload.upNextItem.Id, "next")
+            m.assertEqual(m.top.response.payload.playbackQueue[0].itemId, "next")
+        end function
+
+        @it("preserves structured Resume failure and generation during refresh")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadResumeItem, { ok: false, status: 401, authExpired: true, failureKind: "authenticationRequired", errorMessage: "technical" })
+            m.top.request = { server: "server", token: "token", itemId: "series", playbackOnly: true, requestId: 10 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 10)
+            m.assertEqual(m.top.response.status, 401)
+            m.assertTrue(m.top.response.authExpired)
+            m.assertEqual(m.top.response.failureKind, "authenticationRequired")
+        end function
+
+        @it("preserves structured UpNext failure and generation during refresh")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadResumeItem, { ok: true, data: { Items: [] } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadUpNextItem, { ok: false, status: 401, authExpired: true, failureKind: "authenticationRequired", errorMessage: "technical" })
+            m.top.request = { server: "server", token: "token", itemId: "series", playbackOnly: true, requestId: 10 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 10)
+            m.assertEqual(m.top.response.status, 401)
+            m.assertTrue(m.top.response.authExpired)
+            m.assertEqual(m.top.response.failureKind, "authenticationRequired")
+        end function
+
     end class
 
 end namespace

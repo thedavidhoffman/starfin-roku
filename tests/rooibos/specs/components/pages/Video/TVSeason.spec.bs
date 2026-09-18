@@ -9,7 +9,7 @@ namespace tests
         protected override function beforeEach()
             m.collector = CreateObject("roSGNode", "LogService")
             m.node.log = new Logger("TVSeason", m.collector)
-            m.top.settings = { "tv-ep-list-scroll": "horizontal" }
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "off" }
             m.node.pageState.request = m.createRequest()
             m.node.pageState.season = m.createSeason("season-1", "Season 1")
             m.node.pageState.seasons = [m.node.pageState.season]
@@ -18,6 +18,7 @@ namespace tests
             m.node.pageState.episodes = []
             m.node.pageState.episodesLoaded = true
             m.node.pageState.episodeListScroll = "horizontal"
+            m.node.pageState.showSeasonSummaryCard = false
             m.node.pageState.allEpisodes = false
             m.node.pageState.focusArea = "episodes"
             m.node.pageState.detailsLoad = LatestRequestLifecycle.Create()
@@ -33,6 +34,242 @@ namespace tests
             end if
             scene.findNode("loadingSpinner").control = "stop"
         end function
+        @describe("vertical summary targeting")
+
+        @it("targets an episode by ID and type with the summary visible")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "on" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            'bs:disable-next-line 1140
+            focused = focusInitialEpisode("episode-2")
+            m.assertTrue(focused)
+            m.assertEqual(m.node.episodesGrid.jumpToItem, 2)
+            'bs:disable-next-line 1140
+            m.assertEqual(getItemContentIndex("season-1", "Episode"), -1)
+        end function
+
+        @describe("horizontal summary targeting")
+
+        @it("targets an episode by ID and type with the summary visible")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "on" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            'bs:disable-next-line 1140
+            focused = focusInitialEpisode("episode-2")
+            m.assertTrue(focused)
+            m.assertEqual(m.node.episodesList.jumpToRowItem, [0, 2])
+            'bs:disable-next-line 1140
+            m.assertEqual(getItemContentIndex("season-1", "Episode"), -1)
+        end function
+
+        @describe("optional season summary")
+
+        @it("defaults to a typed season card in the horizontal list")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "horizontal" }
+            m.node.pageState.season.Overview = "Season overview"
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            row = m.node.episodesList.content.getChild(0)
+            m.assertEqual(row.getChildCount(), 2)
+            m.assertEqual(row.getChild(0).itemId, "season-1")
+            m.assertEqual(row.getChild(0).itemType, "Season")
+            m.assertEqual(row.getChild(0).description, "Season overview")
+            m.assertEqual(row.getChild(1).itemId, "episode-1")
+        end function
+
+        @it("renders a summary without a description in a vertical season list")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "on" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            content = m.node.episodesGrid.content
+            m.assertEqual(content.getChildCount(), 2)
+            m.assertEqual(content.getChild(0).itemType, "Season")
+            m.assertEqual(content.getChild(0).description, "")
+        end function
+
+        @it("keeps a summary visible for an empty season when enabled")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "on" }
+            'bs:disable-next-line 1140
+            renderEpisodes([])
+            m.assertTrue(m.node.episodesList.visible)
+            m.assertEqual(m.node.episodesList.content.getChild(0).getChildCount(), 1)
+        end function
+
+        @it("keeps All Episodes free of summaries when enabled")
+        function _()
+            m.top.settings = { "show-season-summary-card": "on" }
+            m.node.pageState.allEpisodes = true
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.assertEqual(m.node.episodesGrid.content.getChildCount(), 1)
+            m.assertEqual(m.node.episodesGrid.content.getChild(0).itemType, "Episode")
+        end function
+
+        @it("preserves episode identity when showing the summary")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            'bs:disable-next-line 1140
+            focusInitialEpisode("episode-2")
+            request = m.node.tvSeasonTask.request
+
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "on" }
+
+            m.assertEqual(m.node.episodesList.jumpToRowItem, [0, 2])
+            m.assertTrue(m.node.episodesList.isInFocusChain())
+            m.assertEqual(m.node.tvSeasonTask.request, request)
+        end function
+
+        @it("preserves episode identity when hiding the vertical summary")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "on" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            'bs:disable-next-line 1140
+            focusInitialEpisode("episode-2")
+
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "off" }
+
+            m.assertEqual(m.node.episodesGrid.jumpToItem, 1)
+            m.assertTrue(m.node.episodesGrid.isInFocusChain())
+        end function
+
+        @it("selects the first episode when hiding the focused summary")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "on" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.node.episodesList.rowItemFocused = [0, 0]
+            m.node.episodesList.setFocus(true)
+
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "off" }
+
+            m.assertEqual(m.node.episodesList.jumpToRowItem, [0, 0])
+            m.assertEqual(m.node.episodesList.content.getChild(0).getChild(0).itemId, "episode-1")
+        end function
+
+        @it("falls back to season navigation when hiding an empty summary")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "on" }
+            m.node.pageState.nextSeason = m.createSeason("season-2", "Season 2")
+            'bs:disable-next-line 1140
+            renderSeason(m.node.pageState.season)
+            'bs:disable-next-line 1140
+            renderEpisodes([])
+            m.node.episodesList.rowItemFocused = [0, 0]
+            m.node.episodesList.setFocus(true)
+
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "off" }
+
+            m.assertFalse(m.node.episodesList.visible)
+            m.assertEqual(m.node.pageState.focusArea, "seasonNav")
+            m.assertTrue(m.node.seasonNav.isInFocusChain())
+        end function
+
+        @it("does not rebuild for unrelated saved settings")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            content = m.node.episodesList.content
+
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "off", "theme-music": "on" }
+
+            m.assertTrue(m.node.episodesList.content.isSameNode(content))
+        end function
+
+        @it("updates cached content without stealing focus from another control")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            sibling = CreateObject("roSGNode", "Group")
+            m.top.getScene().appendChild(sibling)
+            sibling.setFocus(true)
+
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "on" }
+
+            m.assertTrue(sibling.hasFocus())
+            m.assertEqual(m.node.episodesList.content.getChild(0).getChild(0).itemType, "Season")
+            m.top.getScene().removeChild(sibling)
+        end function
+
+        @it("uses the preference changed while episode data was pending")
+        function _()
+            m.node.pageState.episodesLoaded = false
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "on" }
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "off" }
+            request = m.createRequest()
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            active = LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            response = { ok: true, action: "tvSeason", seasonId: "season-1", requestId: active.request.requestId, payload: { season: m.node.pageState.season, episodes: [m.createEpisode("episode-1")] } }
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(response)
+
+            m.assertEqual(m.node.episodesList.content.getChild(0).getChildCount(), 1)
+            m.assertEqual(m.node.episodesList.content.getChild(0).getChild(0).itemType, "Episode")
+        end function
+
+        @it("opens season details with an episode-only playback queue")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "on" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            node = m.node.episodesList.content.getChild(0).getChild(0)
+            'bs:disable-next-line 1140
+            request = buildEpisodeLoadRequest(node)
+
+            m.assertEqual(request.itemId, "season-1")
+            m.assertEqual(request.item.Type, "Season")
+            m.assertEqual(request.season.Id, "season-1")
+            m.assertEqual(request.playbackQueue.Count(), 2)
+            m.assertEqual(request.playbackQueue[0].item.Type, "Episode")
+            m.assertInvalid(request.playbackQueueScope)
+        end function
+
+        @it("rejects nonmedia cards as detail targets")
+        function _()
+            node = CreateObject("roSGNode", "ContentNode")
+            node.addFields({ itemId: "spacer", itemType: "LayoutSpacer" })
+            'bs:disable-next-line 1140
+            request = buildEpisodeLoadRequest(node)
+            m.assertInvalid(request)
+        end function
+
+        @it("marks the whole season watched and publishes the updated count")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            m.top.watchedStateChange = { itemId: "season-1", isWatched: true }
+            m.assertTrue(m.node.pageState.episodes[0].UserData.Played)
+            m.assertTrue(m.node.pageState.episodes[1].UserData.Played)
+            m.assertEqual(m.top.seasonWatchedStateChanged.unplayedItemCount, 0)
+        end function
+
+        @it("marks the whole season unwatched and publishes its episode count")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            m.node.pageState.episodes[0].UserData.Played = true
+            m.node.pageState.episodes[1].UserData.Played = true
+            m.top.watchedStateChange = { itemId: "season-1", isWatched: false }
+            m.assertFalse(m.node.pageState.episodes[0].UserData.Played)
+            m.assertFalse(m.node.pageState.episodes[1].UserData.Played)
+            m.assertEqual(m.top.seasonWatchedStateChanged.unplayedItemCount, 2)
+        end function
+
         @describe("declarative component contract")
 
         @it("declares the logoBanner node")
@@ -189,7 +426,8 @@ namespace tests
 
             list = m.top.findNode("episodesList")
             m.assertTrue(list.visible)
-            m.assertEqual(list.content.getChild(0).getChildCount(), 3)
+            m.assertEqual(list.content.getChild(0).getChildCount(), 2)
+            m.assertEqual(list.content.getChild(0).getChild(0).itemId, "episode-1")
         end function
 
         @it("renders vertical episode content")
@@ -203,16 +441,17 @@ namespace tests
 
             grid = m.top.findNode("episodesGrid")
             m.assertTrue(grid.visible)
-            m.assertEqual(grid.content.getChildCount(), 3)
+            m.assertEqual(grid.content.getChildCount(), 2)
+            m.assertEqual(grid.content.getChild(0).itemId, "episode-1")
         end function
 
-        @it("renders the season summary when episodes are empty")
+        @it("hides episode content when the season has no episodes")
         function _()
             'bs:disable-next-line 1140
             renderEpisodes([])
 
-            m.assertTrue(m.top.findNode("episodesList").visible)
-            m.assertEqual(m.top.findNode("episodesList").content.getChild(0).getChildCount(), 1)
+            m.assertFalse(m.top.findNode("episodesList").visible)
+            m.assertEqual(m.top.findNode("episodesList").content.getChild(0).getChildCount(), 0)
         end function
 
         @it("finds a rendered horizontal episode by id")
@@ -222,9 +461,9 @@ namespace tests
             renderEpisodes(m.node.pageState.episodes)
 
             'bs:disable-next-line 1140
-            index = getEpisodeContentIndex("episode-2")
+            index = getItemContentIndex("episode-2")
 
-            m.assertEqual(index, 2)
+            m.assertEqual(index, 1)
         end function
 
         @it("returns minus one for a missing episode id")
@@ -234,7 +473,7 @@ namespace tests
             renderEpisodes(m.node.pageState.episodes)
 
             'bs:disable-next-line 1140
-            index = getEpisodeContentIndex("missing")
+            index = getItemContentIndex("missing")
 
             m.assertEqual(index, -1)
         end function
@@ -249,8 +488,8 @@ namespace tests
             focused = focusInitialEpisode("episode-2")
 
             m.assertTrue(focused)
-            m.assertEqual(m.top.findNode("episodesList").jumpToRowItem, [0, 2])
-            m.assertEqual(m.top.findNode("episodesList").rowItemFocused, [0, 2])
+            m.assertEqual(m.top.findNode("episodesList").jumpToRowItem, [0, 1])
+            m.assertEqual(m.top.findNode("episodesList").rowItemFocused, [0, 1])
         end function
 
         @it("focuses the requested episode in the vertical grid")
@@ -264,8 +503,30 @@ namespace tests
             focused = focusInitialEpisode("episode-2")
 
             m.assertTrue(focused)
-            m.assertEqual(m.top.findNode("episodesGrid").jumpToItem, 2)
-            m.assertEqual(m.top.findNode("episodesGrid").itemFocused, 2)
+            m.assertEqual(m.top.findNode("episodesGrid").jumpToItem, 1)
+            m.assertEqual(m.top.findNode("episodesGrid").itemFocused, 1)
+        end function
+
+        @it("focuses the episode after All Episodes season spacers")
+        function _()
+            m.node.pageState.allEpisodes = true
+            m.node.pageState.episodeListScroll = "vertical"
+            first = m.createEpisode("episode-1")
+            second = m.createEpisode("episode-2")
+            second.SeasonId = "season-2"
+            second.ParentIndexNumber = 2
+            m.node.pageState.episodes = [first, second]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+
+            'bs:disable-next-line 1140
+            focused = focusInitialEpisode("episode-2")
+
+            grid = m.top.findNode("episodesGrid")
+            m.assertTrue(focused)
+            m.assertEqual(grid.itemFocused, m.node.layout.episodeGridColumns)
+            m.assertEqual(grid.content.getChild(grid.itemFocused).itemId, "episode-2")
+            m.assertEqual(grid.content.getChild(1).itemType, "LayoutSpacer")
         end function
 
         @it("falls back to normal episode focus when the requested ID is missing")
@@ -387,19 +648,19 @@ namespace tests
             m.assertEqual(queue[0].season.Id, "season-1")
         end function
 
-        @it("builds episode playback selection with queue position")
+        @it("builds episode details with its episode-only queue position")
         function _()
             m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
             'bs:disable-next-line 1140
             renderEpisodes(m.node.pageState.episodes)
-            node = m.top.findNode("episodesList").content.getChild(0).getChild(2)
+            node = m.top.findNode("episodesList").content.getChild(0).getChild(1)
 
             'bs:disable-next-line 1140
-            selection = buildEpisodePlaySelection(node)
+            selection = buildEpisodeLoadRequest(node)
 
             m.assertEqual(selection.itemId, "episode-2")
             m.assertEqual(selection.playbackQueueIndex, 1)
-            m.assertEqual(selection.playbackQueueScope, "series")
+            m.assertInvalid(selection.playbackQueueScope)
         end function
 
         @it("marks an episode watched and decrements season unplayed count")
@@ -413,18 +674,6 @@ namespace tests
 
             m.assertTrue(episode.UserData.Played)
             m.assertEqual(season.UserData.UnplayedItemCount, 0)
-        end function
-
-        @it("marks a whole season watched")
-        function _()
-            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
-
-            'bs:disable-next-line 1140
-            season = updateEpisodeWatchedState("season-1", true)
-
-            m.assertTrue(season.UserData.Played)
-            m.assertTrue(m.node.pageState.episodes[0].UserData.Played)
-            m.assertTrue(m.node.pageState.episodes[1].UserData.Played)
         end function
 
         @it("stores unfinished episode progress")
@@ -671,6 +920,132 @@ namespace tests
         private sub captureFailureMessage(message as string)
             getGlobalAa().seasonFailureMessage = message
         end sub
+
+        @describe("empty horizontal season focus")
+
+        @it("focuses adjacent-season navigation on initial load")
+        function _()
+            m.node.pageState.episodeListScroll = "horizontal"
+            m.node.pageState.showSeasonSummaryCard = false
+            m.top.initialFocusEpisodeId = ""
+            request = m.createRequest()
+            m.node.pageState.seasons = [m.node.pageState.season, m.createSeason("season-2", "Season 2")]
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            entry = LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            response = { ok: true, action: "tvSeason", seasonId: "season-1", requestId: entry.request.requestId, payload: { season: m.node.pageState.season, episodes: [] } }
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(response)
+
+            m.assertTrue(m.top.ready)
+            m.assertFalse(m.node.episodesList.visible)
+            m.assertFalse(m.node.episodesGrid.visible)
+            m.assertTrue(m.node.seasonNav.isInFocusChain())
+            m.assertEqual(m.node.pageState.focusArea, "seasonNav")
+        end function
+
+        @it("keeps page focus and Back when no adjacent season exists")
+        function _()
+            m.node.pageState.episodeListScroll = "horizontal"
+            m.node.pageState.showSeasonSummaryCard = false
+            m.top.initialFocusEpisodeId = ""
+            request = m.createRequest()
+            m.node.pageState.seasons = [m.node.pageState.season]
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            entry = LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            response = { ok: true, action: "tvSeason", seasonId: "season-1", requestId: entry.request.requestId, payload: { season: m.node.pageState.season, episodes: [] } }
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(response)
+
+            m.assertTrue(m.top.ready)
+            m.assertFalse(m.node.episodesList.visible)
+            m.assertFalse(m.node.episodesGrid.visible)
+            m.assertTrue(m.top.isInFocusChain())
+            m.assertFalse(m.node.seasonNav.visible)
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("back", true))
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @describe("empty vertical season focus")
+
+        @it("focuses adjacent-season navigation on initial load")
+        function _()
+            m.node.pageState.episodeListScroll = "vertical"
+            m.node.pageState.showSeasonSummaryCard = false
+            m.top.initialFocusEpisodeId = ""
+            request = m.createRequest()
+            m.node.pageState.seasons = [m.node.pageState.season, m.createSeason("season-2", "Season 2")]
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            entry = LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            response = { ok: true, action: "tvSeason", seasonId: "season-1", requestId: entry.request.requestId, payload: { season: m.node.pageState.season, episodes: [] } }
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(response)
+
+            m.assertTrue(m.top.ready)
+            m.assertFalse(m.node.episodesList.visible)
+            m.assertFalse(m.node.episodesGrid.visible)
+            m.assertTrue(m.node.seasonNav.isInFocusChain())
+            m.assertEqual(m.node.pageState.focusArea, "seasonNav")
+        end function
+
+        @it("keeps page focus and Back when no adjacent season exists")
+        function _()
+            m.node.pageState.episodeListScroll = "vertical"
+            m.node.pageState.showSeasonSummaryCard = false
+            m.top.initialFocusEpisodeId = ""
+            request = m.createRequest()
+            m.node.pageState.seasons = [m.node.pageState.season]
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            entry = LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            response = { ok: true, action: "tvSeason", seasonId: "season-1", requestId: entry.request.requestId, payload: { season: m.node.pageState.season, episodes: [] } }
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(response)
+
+            m.assertTrue(m.top.ready)
+            m.assertFalse(m.node.episodesList.visible)
+            m.assertFalse(m.node.episodesGrid.visible)
+            m.assertTrue(m.top.isInFocusChain())
+            m.assertFalse(m.node.seasonNav.visible)
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("back", true))
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @describe("empty season reactivation")
+
+        @it("restores adjacent-season navigation after returning to an empty list")
+        function _()
+            m.node.pageState.nextSeason = m.createSeason("season-2", "Season 2")
+            'bs:disable-next-line 1140
+            renderSeason(m.node.pageState.season)
+            'bs:disable-next-line 1140
+            renderEpisodes([])
+            m.top.callFunc("deactivate")
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.node.seasonNav.isInFocusChain())
+            m.assertEqual(m.node.pageState.focusArea, "seasonNav")
+        end function
+
+        @it("restores page focus and Back without adjacent seasons")
+        function _()
+            m.node.pageState.nextSeason = invalid
+            m.node.pageState.previousSeason = invalid
+            'bs:disable-next-line 1140
+            renderSeason(m.node.pageState.season)
+            'bs:disable-next-line 1140
+            renderEpisodes([])
+            m.top.callFunc("deactivate")
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.isInFocusChain())
+            m.assertFalse(m.node.seasonNav.visible)
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("back", true))
+            m.assertTrue(m.top.closeRequested)
+        end function
 
     end class
 

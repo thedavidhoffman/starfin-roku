@@ -13,6 +13,7 @@ export const accountDefaults = {
   'music-videos-layout': 'poster;6',
   'home-videos-layout': 'poster;6',
   'tv-ep-list-scroll': 'vertical',
+  'show-season-summary-card': 'on',
   'home-episode-images': 'off',
   'media-shell-background': 'full-screen',
   'theme-music': 'off',

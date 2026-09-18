@@ -1,3 +1,4 @@
+import "pkg:/source/MediaItem.bs"
 import "pkg:/source/RequestFailure.bs"
 
 '-------------------------------------------------------------------------------
@@ -101,7 +102,7 @@ function isItemWatched(item as dynamic) as boolean
     if item = invalid then return false
     if item.raw = invalid then return false
     if item.raw.UserData = invalid then return false
-    if Format.SafeString(item.itemType, "") = "SeasonSummary" then
+    if Format.SafeString(item.itemType, "") = MediaItem.Type.Season then
         return item.raw.UserData.UnplayedItemCount = 0
     end if
 
@@ -128,11 +129,12 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
     if raw.UserData = invalid then raw.UserData = {}
 
     raw.UserData.Played = isWatched
-    if Format.SafeString(item.itemType, "") = "SeasonSummary" then
+    if Format.SafeString(item.itemType, "") = MediaItem.Type.Season then
         if isWatched then
             raw.UserData.UnplayedItemCount = 0
         else
-            raw.UserData.UnplayedItemCount = 1
+            raw.UserData.UnplayedItemCount = Number.ToInteger(Format.FirstNonEmpty([raw.RecursiveItemCount, raw.ChildCount], "1"), 1)
+            if raw.UserData.UnplayedItemCount < 1 then raw.UserData.UnplayedItemCount = 1
         end if
     end if
 
@@ -145,7 +147,22 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
 
     item.raw = raw
     m.state.itemContent = item
-    if m.state.playSelection <> invalid then
+    if Format.SafeString(item.itemType, "") = MediaItem.Type.Season then
+        ' The season is the action target; its playable selection must remain an episode.
+        request = m.state.request
+        if request <> invalid and Type(request.playbackQueue) = "roArray" then
+            for each entry in request.playbackQueue
+                if entry.item <> invalid then
+                    if entry.item.UserData = invalid then entry.item.UserData = {}
+                    entry.item.UserData.Played = isWatched
+                    entry.item.UserData.PlayedPercentage = 0
+                    if isWatched then entry.item.UserData.PlaybackPositionTicks = 0
+                    entry.startPositionTicks = PlaybackProgress.GetTicksFromItem(entry.item)
+                end if
+            end for
+            m.state.playSelection = buildSeasonPlaySelection(request)
+        end if
+    else if m.state.playSelection <> invalid then
         m.state.playSelection.item = raw
     end if
 end sub

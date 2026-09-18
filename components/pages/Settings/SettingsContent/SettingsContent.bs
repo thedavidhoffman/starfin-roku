@@ -46,6 +46,7 @@ sub initReferences()
         themeMusicOptions: m.top.findNode("themeMusicOptions")
         nextItemPlaybackOptions: m.top.findNode("nextItemPlaybackOptions")
         librarySettingsGrid: m.top.findNode("librarySettingsGrid")
+        showSeasonSummaryCardOptions: m.top.findNode("showSeasonSummaryCardOptions")
         homeEpisodeImagesOptions: m.top.findNode("homeEpisodeImagesOptions")
         tvEpisodeListDisplayOptions: m.top.findNode("tvEpisodeListDisplayOptions")
         videoStreamingModeOptions: m.top.findNode("videoStreamingModeOptions")
@@ -66,7 +67,7 @@ sub initReferences()
         [m.settingsControls.librarySettingsGrid]
         [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
         [m.settingsControls.nextItemPlaybackOptions]
-        [m.settingsControls.tvEpisodeListDisplayOptions, m.settingsControls.homeEpisodeImagesOptions]
+        [m.settingsControls.tvEpisodeListDisplayOptions, m.settingsControls.showSeasonSummaryCardOptions, m.settingsControls.homeEpisodeImagesOptions]
         [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
         [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
         [m.settingsControls.videoStreamingModeOptions]
@@ -103,6 +104,7 @@ sub initHandlers()
     m.settingsControls.displayAccountBadgeOptions.observeField("itemSelected", "onDisplayAccountBadgeSelected")
     m.settingsControls.librarySettingsGrid.observeField("selectionChanged", "onLibrarySelectionChanged")
     m.settingsControls.librarySettingsGrid.observeField("focusExitLeft", "onLibraryFocusExitLeft")
+    m.settingsControls.showSeasonSummaryCardOptions.observeField("itemSelected", "onShowSeasonSummaryCardSelected")
     m.settingsControls.homeEpisodeImagesOptions.observeField("itemSelected", "onHomeEpisodeImagesSelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
@@ -133,6 +135,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initOptionContent()
     setOptionTitles(m.settingsControls.displayAccountBadgeOptions, ["Off", "On"])
+    setOptionTitles(m.settingsControls.showSeasonSummaryCardOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.homeEpisodeImagesOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
     setOptionTitles(m.settingsControls.mediaShellBackgroundOptions, ["Full Screen", "Partial Screen", "Cinematic"])
@@ -172,6 +175,7 @@ sub loadSettingsValues()
     m.settingsState.values[SettingsStore.Key.PlaylistItemsLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.PlaylistItemsLayout)
     m.settingsState.values[SettingsStore.Key.MusicVideosLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MusicVideosLayout)
     m.settingsState.values[SettingsStore.Key.HomeVideosLayout] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.HomeVideosLayout)
+    m.settingsState.values[SettingsStore.Key.ShowSeasonSummaryCard] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ShowSeasonSummaryCard)
     m.settingsState.values[SettingsStore.Key.HomeEpisodeImages] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.HomeEpisodeImages)
     m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvEpisodeListDisplay)
     m.settingsState.values[SettingsStore.Key.MediaShellBackground] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
@@ -185,6 +189,7 @@ sub loadSettingsValues()
     m.settingsState.values[SettingsStore.Key.TmdbApiKey] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TmdbApiKey)
 
     m.settingsControls.librarySettingsGrid.selections = getLibrarySettingsValues()
+    setOnOffOption(m.settingsControls.showSeasonSummaryCardOptions, m.settingsState.values[SettingsStore.Key.ShowSeasonSummaryCard])
     setOnOffOption(m.settingsControls.homeEpisodeImagesOptions, m.settingsState.values[SettingsStore.Key.HomeEpisodeImages])
     setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[SettingsStore.Key.MediaShellBackground])
@@ -230,6 +235,9 @@ end function
 '-------------------------------------------------------------------------------
 ' onCategoryFocused
 '-------------------------------------------------------------------------------
+'-------------------------------------------------------------------------------
+' onDeviceCategoryFocused
+'-------------------------------------------------------------------------------
 sub onDeviceCategoryFocused()
     showCategory(m.categoryState.deviceOffset + getListIndex(m.deviceCategoryList.itemFocused, m.categoryState.deviceCount))
 end sub
@@ -264,15 +272,24 @@ end function
 '-------------------------------------------------------------------------------
 ' onCategorySelected
 '-------------------------------------------------------------------------------
+'-------------------------------------------------------------------------------
+' onDeviceCategorySelected
+'-------------------------------------------------------------------------------
 sub onDeviceCategorySelected()
     showCategory(m.categoryState.deviceOffset + getListIndex(m.deviceCategoryList.itemSelected, m.categoryState.deviceCount))
     focusCategoryControl(0, 0)
 end sub
 
+'-------------------------------------------------------------------------------
+' onUserCategoryFocused
+'-------------------------------------------------------------------------------
 sub onUserCategoryFocused()
     showCategory(getListIndex(m.userCategoryList.itemFocused, m.categoryState.userCount))
 end sub
 
+'-------------------------------------------------------------------------------
+' onUserCategorySelected
+'-------------------------------------------------------------------------------
 sub onUserCategorySelected()
     showCategory(getListIndex(m.userCategoryList.itemSelected, m.categoryState.userCount))
     focusCategoryControl(0, 0)
@@ -501,6 +518,18 @@ sub onDisplayAccountBadgeSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' onShowSeasonSummaryCardSelected
+'-------------------------------------------------------------------------------
+sub onShowSeasonSummaryCardSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.showSeasonSummaryCardOptions)
+    if selectedIndex < 0 then return
+    m.settingsControls.showSeasonSummaryCardOptions.checkedItem = selectedIndex
+    value = "off"
+    if selectedIndex = 1 then value = "on"
+    m.settingsState.values[SettingsStore.Key.ShowSeasonSummaryCard] = value
+end sub
+
+'-------------------------------------------------------------------------------
 ' onHomeEpisodeImagesSelected
 '-------------------------------------------------------------------------------
 sub onHomeEpisodeImagesSelected()
@@ -561,6 +590,9 @@ sub onVideoStreamingModeFocused()
     m.videoStreamingModeDescription.text = getVideoStreamingModeDescription(index)
 end sub
 
+'-------------------------------------------------------------------------------
+' onSubtitleBurnInSelected
+'-------------------------------------------------------------------------------
 sub onSubtitleBurnInSelected()
     selectedIndex = getSelectedItemIndex(m.settingsControls.subtitleBurnInOptions)
     if selectedIndex < 0 then return
@@ -568,6 +600,9 @@ sub onSubtitleBurnInSelected()
     m.settingsState.values[SettingsStore.Key.SubtitleBurnInMode] = getSubtitleBurnInModeForIndex(selectedIndex)
 end sub
 
+'-------------------------------------------------------------------------------
+' onSubtitleBurnInFocused
+'-------------------------------------------------------------------------------
 sub onSubtitleBurnInFocused()
     index = getListIndex(m.settingsControls.subtitleBurnInOptions.itemFocused, 3)
     m.subtitleBurnInDescription.text = getSubtitleBurnInDescription(index)
@@ -662,12 +697,18 @@ sub setSubtitleBurnInOption(value as dynamic)
     m.subtitleBurnInDescription.text = getSubtitleBurnInDescription(selectedIndex)
 end sub
 
+'-------------------------------------------------------------------------------
+' getSubtitleBurnInModeForIndex
+'-------------------------------------------------------------------------------
 function getSubtitleBurnInModeForIndex(index as integer) as string
     if index = 1 then return SubtitleBurnIn.Mode.PreferExternal
     if index = 2 then return SubtitleBurnIn.Mode.Always
     return SubtitleBurnIn.Mode.DuringTranscoding
 end function
 
+'-------------------------------------------------------------------------------
+' getSubtitleBurnInDescription
+'-------------------------------------------------------------------------------
 function getSubtitleBurnInDescription(index as integer) as string
     if index = 1 then return "Uses Roku-native external subtitles whenever supported, including during transcoding. This reduces server processing and preserves video quality, but subtitle timing may be less reliable on some media."
     if index = 2 then return "Always burns the selected subtitle into the video. This provides the most reliable synchronization but disables Direct Play and requires additional server processing."

@@ -4,6 +4,48 @@ namespace tests
     @suite("SettingsContent component")
     class SettingsContentTests extends rooibos.BaseTestSuite
 
+        @describe("season summary preference")
+
+        @it("loads enabled by default between scroll and episode images")
+        function _()
+            m.top.accountKey = "rooibos-summary-default"
+            m.top.callFunc("loadSettingsValues")
+            m.assertEqual(m.node.settingsControls.showSeasonSummaryCardOptions.checkedItem, 1)
+            m.assertEqual(m.node.categoryControls[3][1], m.node.settingsControls.showSeasonSummaryCardOptions)
+            m.assertEqual(m.top.findNode("showSeasonSummaryCardLabel").text, "Show Season Summary Card")
+        end function
+
+        @it("includes an edited Off preference in save values")
+        function _()
+            m.node.settingsControls.showSeasonSummaryCardOptions.itemSelected = 0
+            'bs:disable-next-line 1140
+            onShowSeasonSummaryCardSelected()
+            values = m.top.callFunc("getSettingsValues")
+            m.assertEqual(values[SettingsStore.Key.ShowSeasonSummaryCard], "off")
+        end function
+
+        @it("includes an edited On preference in save values")
+        function _()
+            m.node.settingsControls.showSeasonSummaryCardOptions.itemSelected = 1
+            'bs:disable-next-line 1140
+            onShowSeasonSummaryCardSelected()
+            values = m.top.callFunc("getSettingsValues")
+            m.assertEqual(values[SettingsStore.Key.ShowSeasonSummaryCard], "on")
+        end function
+
+        @it("discards an unsaved preference when settings reload")
+        function _()
+            m.top.accountKey = "rooibos-summary-cancel"
+            m.top.callFunc("loadSettingsValues")
+            m.node.settingsControls.showSeasonSummaryCardOptions.itemSelected = 0
+            'bs:disable-next-line 1140
+            onShowSeasonSummaryCardSelected()
+
+            m.top.callFunc("loadSettingsValues")
+            m.assertEqual(m.node.settingsControls.showSeasonSummaryCardOptions.checkedItem, 1)
+            m.assertEqual(SettingsStore.Load(m.top.accountKey)[SettingsStore.Key.ShowSeasonSummaryCard], "on")
+        end function
+
         @describe("Home episode image preference")
 
         @it("loads disabled by default and includes the control in TV navigation")
@@ -11,7 +53,7 @@ namespace tests
             m.top.accountKey = "rooibos-episode-images-default"
             m.top.callFunc("loadSettingsValues")
             m.assertEqual(m.node.settingsControls.homeEpisodeImagesOptions.checkedItem, 0)
-            m.assertEqual(m.node.categoryControls[3][1], m.node.settingsControls.homeEpisodeImagesOptions)
+            m.assertEqual(m.node.categoryControls[3][2], m.node.settingsControls.homeEpisodeImagesOptions)
         end function
 
         @it("stores an edited off selection in dialog values")

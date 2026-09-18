@@ -6,6 +6,14 @@ namespace tests
 
         protected override function beforeEach()
             m.node.pageState.request = m.createRequest()
+            m.node.pageState.detailsLoad = LatestRequestLifecycle.Create()
+            m.node.pageState.lifecycle = AsyncLifecycle.Create()
+            m.node.pageState.playbackRefresh = { needed: false, playPending: false }
+            firstTask = CreateObject("roSGNode", "Node")
+            firstTask.addFields({ request: {}, control: "stop" })
+            secondTask = CreateObject("roSGNode", "Node")
+            secondTask.addFields({ request: {}, control: "stop" })
+            m.node.pageState.taskPool = { nodes: [firstTask, secondTask], nextIndex: 0 }
             m.node.pageState.series = m.createSeries()
             m.node.pageState.seasons = []
             m.node.pageState.playbackQueue = invalid
@@ -21,6 +29,7 @@ namespace tests
             m.top.overlayRequested = invalid
             m.top.closeRequested = false
         end function
+
         @describe("declarative component contract")
 
         @it("declares the mediaShell node")
@@ -300,6 +309,356 @@ namespace tests
             handled = onKeyEvent("back", false)
 
             m.assertFalse(handled)
+        end function
+
+        @describe("season media actions")
+
+        @it("opens actions for the focused season with its session context")
+        function _()
+            m.node.pageState.seasons = [m.createSeason("season-1", "Season 1")]
+            'bs:disable-next-line 1140
+            renderSeasons(m.node.pageState.seasons)
+            'bs:disable-next-line 1140
+            focusSeasonsIfActive()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("options", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.overlayRequested.id, "mediaActions")
+            m.assertEqual(m.top.overlayRequested.sourcePage, "tvShow")
+            m.assertEqual(m.top.overlayRequested.item.Id, "season-1")
+            m.assertEqual(m.top.overlayRequested.item.Type, "Season")
+            m.assertEqual(m.top.overlayRequested.server, "http://server")
+            m.assertEqual(m.top.overlayRequested.token, "token")
+            m.assertEqual(m.top.overlayRequested.userId, "user")
+            m.assertInvalid(m.top.selectedSeason)
+        end function
+
+        @it("ignores options outside the season grid")
+        function _()
+            'bs:disable-next-line 1140
+            focusVideoToolbar()
+            m.assertFalse(m.top.findNode("seasonsGrid").isInFocusChain())
+            m.assertTrue(m.top.findNode("videoToolbar").isInFocusChain())
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("options", true)
+
+            m.assertFalse(handled)
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("applies season watched true to data and the card without moving focus")
+        function _()
+            season = m.createSeason("season-1", "Season 1")
+            season.RecursiveItemCount = 4
+            m.node.pageState.seasons = [season, m.createSeason("season-2", "Season 2")]
+            'bs:disable-next-line 1140
+            renderSeasons(m.node.pageState.seasons)
+            'bs:disable-next-line 1140
+            focusSeasonsIfActive()
+            grid = m.top.findNode("seasonsGrid")
+            previousIndex = grid.itemFocused
+
+            m.top.mediaStateChange = { action: "watched", itemId: "season-1", value: true }
+            'bs:disable-next-line 1140
+            onMediaStateChange()
+            'bs:disable-next-line 1140
+            onSeasonWatchedStateChange()
+
+            m.assertEqual(m.node.pageState.seasons[0].UserData.UnplayedItemCount, 0)
+            m.assertEqual(grid.content.getChild(0).raw.UserData.Played, true)
+            m.assertEqual(grid.content.getChild(1).raw.UserData.UnplayedItemCount, 1)
+            m.assertEqual(grid.itemFocused, previousIndex)
+            m.assertTrue(grid.hasFocus())
+        end function
+
+        @it("applies season watched false to data and the card without moving focus")
+        function _()
+            season = m.createSeason("season-1", "Season 1")
+            season.RecursiveItemCount = 4
+            m.node.pageState.seasons = [season, m.createSeason("season-2", "Season 2")]
+            'bs:disable-next-line 1140
+            renderSeasons(m.node.pageState.seasons)
+            'bs:disable-next-line 1140
+            focusSeasonsIfActive()
+            grid = m.top.findNode("seasonsGrid")
+            previousIndex = grid.itemFocused
+
+            m.top.mediaStateChange = { action: "watched", itemId: "season-1", value: false }
+            'bs:disable-next-line 1140
+            onMediaStateChange()
+            'bs:disable-next-line 1140
+            onSeasonWatchedStateChange()
+
+            m.assertEqual(m.node.pageState.seasons[0].UserData.UnplayedItemCount, 4)
+            m.assertEqual(grid.content.getChild(0).raw.UserData.Played, false)
+            m.assertEqual(grid.content.getChild(1).raw.UserData.UnplayedItemCount, 1)
+            m.assertEqual(grid.itemFocused, previousIndex)
+            m.assertTrue(grid.hasFocus())
+        end function
+
+        @it("marks a season unwatched when episode counts are missing")
+        function _()
+            season = m.createSeason("season-1", "Season 1")
+            season.UserData.Played = true
+            season.UserData.UnplayedItemCount = 0
+            m.node.pageState.seasons = [season]
+            'bs:disable-next-line 1140
+            renderSeasons(m.node.pageState.seasons)
+
+            m.top.mediaStateChange = { action: "watched", itemId: "season-1", value: false }
+            'bs:disable-next-line 1140
+            onMediaStateChange()
+            'bs:disable-next-line 1140
+            onSeasonWatchedStateChange()
+
+            m.assertEqual(m.node.pageState.seasons[0].UserData.UnplayedItemCount, 1)
+            m.assertFalse(m.top.findNode("seasonsGrid").content.getChild(0).raw.UserData.Played)
+        end function
+
+        @describe("playback target refresh")
+
+        @it("refreshes cached targets without replacing season content or focus")
+        function _()
+            m.node.pageState.seasons = [m.createSeason("season-1", "Season 1")]
+            'bs:disable-next-line 1140
+            renderSeasons(m.node.pageState.seasons)
+            'bs:disable-next-line 1140
+            focusSeasonsIfActive()
+            grid = m.top.findNode("seasonsGrid")
+            content = grid.content
+            toolbar = m.top.findNode("videoToolbar")
+            toolbar.resumeItem = m.createEpisode("old-episode")
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
+
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+
+            m.assertInvalid(toolbar.resumeItem)
+            request = m.node.pageState.taskPool.nodes[0].request
+            m.assertTrue(request.playbackOnly)
+            m.assertEqual(request.itemId, "series-1")
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(request.requestId))
+
+            m.assertEqual(toolbar.playItem.Id, "next-episode")
+            m.assertEqual(m.node.pageState.playbackQueue[0].itemId, "next-episode")
+            m.assertFalse(m.node.pageState.playbackRefresh.needed)
+            m.assertInvalid(m.top.selectedEpisode)
+            m.assertEqual(grid.content, content)
+            m.assertTrue(grid.hasFocus())
+        end function
+
+        @it("coalesces later changes and rejects the older refresh")
+        function _()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+            oldId = m.node.pageState.taskPool.nodes[0].request.requestId
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+            latestId = m.node.pageState.detailsLoad.latestRequestId
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(oldId))
+
+            m.assertInvalid(m.top.findNode("videoToolbar").playItem)
+            m.assertEqual(m.node.pageState.taskPool.nodes[1].request.requestId, latestId)
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(latestId))
+            m.assertEqual(m.top.findNode("videoToolbar").playItem.Id, "next-episode")
+        end function
+
+        @it("ignores a refresh after deactivation and retries on activation")
+        function _()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+            oldId = m.node.pageState.detailsLoad.latestRequestId
+            m.top.callFunc("deactivate")
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(oldId))
+
+            m.assertInvalid(m.top.findNode("videoToolbar").playItem)
+            m.top.callFunc("activate")
+            m.assertTrue(m.node.pageState.detailsLoad.latestRequestId > oldId)
+        end function
+
+        @it("keeps stale playback unavailable after failure and retries on Play")
+        function _()
+            m.stubCall(AppMessage.Show, invalid)
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+            requestId = m.node.pageState.detailsLoad.latestRequestId
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse({ action: "tvShow", requestId: requestId, ok: false, errorMessage: "Unavailable" })
+
+            m.assertTrue(m.node.pageState.playbackRefresh.needed)
+            m.assertInvalid(m.top.findNode("videoToolbar").playItem)
+            'bs:disable-next-line 1140
+            onVideoToolbarPlaySelected()
+            m.assertInvalid(m.top.selectedEpisode)
+            m.assertTrue(m.node.pageState.detailsLoad.latestRequestId > requestId)
+        end function
+
+        @it("clears playback targets when no resume or next episode remains")
+        function _()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+            response = m.refreshResponse(m.node.pageState.detailsLoad.latestRequestId)
+            response.payload = { resumeItem: invalid, upNextItem: invalid, playbackQueue: invalid, playbackQueueIndex: 0 }
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.findNode("videoToolbar").resumeItem)
+            m.assertInvalid(m.top.findNode("videoToolbar").playItem)
+            m.assertFalse(m.node.pageState.playbackRefresh.needed)
+        end function
+
+        @it("reuses an active refresh for repeated Play and activation")
+        function _()
+            m.beginPendingPlay()
+            requestId = m.node.pageState.detailsLoad.latestRequestId
+
+            'bs:disable-next-line 1140
+            onVideoToolbarPlaySelected()
+            m.top.callFunc("activate")
+
+            m.assertEqual(m.node.pageState.detailsLoad.latestRequestId, requestId)
+            m.assertInvalid(m.node.pageState.detailsLoad.pending)
+            m.assertTrue(m.node.pageState.playbackRefresh.playPending)
+        end function
+
+        @it("plays the fresh target exactly once after a pending Play")
+        function _()
+            m.beginPendingPlay()
+            response = m.refreshResponse(m.node.pageState.detailsLoad.latestRequestId)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "next-episode")
+            m.assertFalse(m.node.pageState.playbackRefresh.playPending)
+            m.top.selectedEpisode = invalid
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("resumes the refreshed resume item after a pending Play")
+        function _()
+            m.beginPendingPlay()
+            response = m.refreshResponse(m.node.pageState.detailsLoad.latestRequestId)
+            response.payload.resumeItem = m.createEpisode("resume-episode")
+            response.payload.resumeItem.UserData.PlaybackPositionTicks = 50000000
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "resume-episode")
+            m.assertEqual(m.top.selectedEpisode.startPositionTicks.ToStr(), "50000000")
+        end function
+
+        @it("keeps pending Play for the newest watched-state refresh")
+        function _()
+            m.beginPendingPlay()
+            oldId = m.node.pageState.detailsLoad.latestRequestId
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+            latestId = m.node.pageState.detailsLoad.latestRequestId
+            'bs:disable-next-line 1140
+            onVideoToolbarPlaySelected()
+            m.assertEqual(m.node.pageState.detailsLoad.latestRequestId, latestId)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(oldId))
+
+            m.assertInvalid(m.top.selectedEpisode)
+            m.assertTrue(m.node.pageState.playbackRefresh.playPending)
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(latestId))
+            m.assertEqual(m.top.selectedEpisode.itemId, "next-episode")
+        end function
+
+        @it("clears pending Play on failure and permits an explicit retry")
+        function _()
+            m.stubCall(AppMessage.Show, invalid)
+            m.beginPendingPlay()
+            requestId = m.node.pageState.detailsLoad.latestRequestId
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse({ action: "tvShow", requestId: requestId, ok: false, errorMessage: "Unavailable" })
+
+            m.assertFalse(m.node.pageState.playbackRefresh.playPending)
+            m.assertInvalid(m.top.selectedEpisode)
+            'bs:disable-next-line 1140
+            onVideoToolbarPlaySelected()
+            m.assertTrue(m.node.pageState.detailsLoad.latestRequestId > requestId)
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(m.node.pageState.detailsLoad.latestRequestId))
+            m.assertEqual(m.top.selectedEpisode.itemId, "next-episode")
+        end function
+
+        @it("clears pending Play on navigation and does not replay it on return")
+        function _()
+            m.beginPendingPlay()
+            oldId = m.node.pageState.detailsLoad.latestRequestId
+            m.top.callFunc("deactivate")
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(oldId))
+            m.top.callFunc("activate")
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.refreshResponse(m.node.pageState.detailsLoad.latestRequestId))
+
+            m.assertFalse(m.node.pageState.playbackRefresh.playPending)
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("clears pending Play for a new series load")
+        function _()
+            m.beginPendingPlay()
+            request = m.createRequest()
+            request.itemId = "new-series"
+            m.top.loadRequest = request
+            'bs:disable-next-line 1140
+            onLoadRequestChanged()
+
+            m.assertFalse(m.node.pageState.playbackRefresh.playPending)
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("consumes pending Play without playing when no target remains")
+        function _()
+            m.beginPendingPlay()
+            response = m.refreshResponse(m.node.pageState.detailsLoad.latestRequestId)
+            response.payload = { resumeItem: invalid, upNextItem: invalid, playbackQueue: invalid, playbackQueueIndex: 0 }
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertFalse(m.node.pageState.playbackRefresh.playPending)
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        sub beginPendingPlay()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+            'bs:disable-next-line 1140
+            onVideoToolbarPlaySelected()
+        end sub
+
+        function refreshResponse(requestId as integer) as object
+            episode = m.createEpisode("next-episode")
+            return { action: "tvShow", requestId: requestId, ok: true, payload: { resumeItem: invalid, upNextItem: episode, playbackQueue: [{ itemId: episode.Id, item: episode }], playbackQueueIndex: 0 } }
         end function
 
         function createRequest() as object

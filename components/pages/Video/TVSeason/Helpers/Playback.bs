@@ -12,39 +12,44 @@ end sub
 ' buildFocusedEpisodeDetailsSelection
 '-------------------------------------------------------------------------------
 function buildFocusedEpisodeDetailsSelection() as dynamic
-    focusedEpisode = getFocusedEpisodeNode()
+    focusedEpisode = getFocusedItemNode()
     if focusedEpisode = invalid then return invalid
 
-    return {
-        loadRequest: buildEpisodeLoadRequest(focusedEpisode)
-    }
+    request = buildEpisodeLoadRequest(focusedEpisode)
+    if request = invalid then return invalid
+    return { loadRequest: request }
 end function
 
 '-------------------------------------------------------------------------------
 ' buildEpisodeLoadRequest
 '-------------------------------------------------------------------------------
 function buildEpisodeLoadRequest(node as dynamic) as dynamic
-    playSelection = buildEpisodePlaySelection(node)
-    if playSelection = invalid then return invalid
-
+    if node = invalid then return invalid
+    itemType = Format.SafeString(node.itemType, "")
+    if itemType <> MediaItem.Type.Season and itemType <> MediaItem.Type.Episode then return invalid
+    itemId = Format.SafeString(node.itemId, "")
+    item = node.raw
     request = m.pageState.request
-    if request = invalid then return invalid
+    if itemId = "" or Arrays.IsAssocArray(item) <> true or request = invalid then return invalid
 
+    season = buildEpisodeSeasonIdentity(item, request)
+    if itemType = MediaItem.Type.Season then season = item
+    queue = buildPlaybackQueue(m.pageState.episodes)
     return {
         server: request.server
         token: request.token
         userId: request.userId
         seriesId: request.seriesId
-        seasonId: getEpisodeSeasonId(playSelection.item, request.seasonId)
-        series: buildSeriesIdentity(request, playSelection.item)
-        season: buildEpisodeSeasonIdentity(playSelection.item, request)
+        seasonId: season.Id
+        series: buildSeriesIdentity(request, item)
+        season: season
         seasons: m.pageState.seasons
-        itemId: playSelection.itemId
-        item: playSelection.item
+        itemId: itemId
+        item: item
         posterUrl: getEpisodeDetailBackdropUrl(node)
-        startPositionTicks: playSelection.startPositionTicks
-        playbackQueue: playSelection.playbackQueue
-        playbackQueueIndex: playSelection.playbackQueueIndex
+        startPositionTicks: PlaybackProgress.GetTicksFromItem(item)
+        playbackQueue: queue
+        playbackQueueIndex: getPlaybackQueueIndex(queue, itemId)
     }
 end function
 
@@ -88,72 +93,6 @@ function buildSeriesIdentity(request as object, item as dynamic) as object
     if identity.logoUrl = "" then identity.logoUrl = getSeriesLogoUrl()
 
     return identity
-end function
-
-'-------------------------------------------------------------------------------
-' buildSeasonIdentity
-'-------------------------------------------------------------------------------
-function buildSeasonIdentity(request as object) as object
-    seasonName = ""
-    if request.season <> invalid then seasonName = Format.FirstNonEmpty([request.season.Name], "")
-
-    return {
-        Id: Format.FirstNonEmpty([request.seasonId], "")
-        Name: seasonName
-    }
-end function
-
-'-------------------------------------------------------------------------------
-' getEpisodeNodeById
-'-------------------------------------------------------------------------------
-function getEpisodeNodeById(itemId as string) as dynamic
-    if isVerticalEpisodeList() then
-        if m.episodesGrid.content = invalid then return invalid
-
-        for i = 0 to m.episodesGrid.content.getChildCount() - 1
-            child = m.episodesGrid.content.getChild(i)
-            if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return child
-        end for
-
-        return invalid
-    end if
-
-    if m.episodesList.content = invalid or m.episodesList.content.getChildCount() = 0 then return invalid
-
-    row = m.episodesList.content.getChild(0)
-    if row = invalid then return invalid
-
-    for i = 0 to row.getChildCount() - 1
-        child = row.getChild(i)
-        if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return child
-    end for
-
-    return invalid
-end function
-
-'-------------------------------------------------------------------------------
-' buildEpisodePlaySelection
-'-------------------------------------------------------------------------------
-function buildEpisodePlaySelection(node as dynamic) as dynamic
-    if node = invalid then return invalid
-
-    itemId = Format.SafeString(node.itemId, "")
-    if itemId = "" then return invalid
-
-    item = node.raw
-    if Arrays.IsAssocArray(item) = false then return invalid
-
-    playbackQueue = buildPlaybackQueue(m.pageState.episodes)
-    playbackQueueIndex = getPlaybackQueueIndex(playbackQueue, itemId)
-
-    return {
-        itemId: itemId
-        item: item
-        startPositionTicks: PlaybackProgress.GetTicksFromItem(item)
-        playbackQueue: playbackQueue
-        playbackQueueIndex: playbackQueueIndex
-        playbackQueueScope: "series"
-    }
 end function
 
 '-------------------------------------------------------------------------------

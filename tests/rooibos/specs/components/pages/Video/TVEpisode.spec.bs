@@ -4,25 +4,71 @@ namespace tests
     @suite("TVEpisode component")
     class TVEpisodeTests extends rooibos.BaseTestSuite
 
+        @describe("season details")
+
+        @it("formats season metadata using the real media type")
+        function _()
+            season = { itemType: "Season", raw: { Type: "Season", IndexNumber: 3, ChildCount: 8, ProductionYear: 2025 } }
+            'bs:disable-next-line 1140
+            m.assertEqual(getEpisodePositionText(season), "Season 3")
+            'bs:disable-next-line 1140
+            m.assertEqual(getSecondaryMetadataText(season), "8 episodes" + MediaMetadata.BulletSeparator() + "2025")
+            'bs:disable-next-line 1140
+            m.assertEqual(getMediaShellType(season), "tv-season")
+        end function
+
+        @it("plays the first episode from a season summary")
+        function _()
+            episode = { Id: "episode-1", Type: "Episode", UserData: {} }
+            m.node.state.request = { server: "http://server", itemId: "season-1", series: { Id: "series-1", Name: "Series" }, playbackQueueScope: "series", playbackQueue: [{ itemId: "episode-1", item: episode, season: { Id: "season-1" }, startPositionTicks: 0 }] }
+            'bs:disable-next-line 1140
+            selection = buildPlaySelection({ Id: "season-1", Type: "Season" })
+            m.assertEqual(selection.itemId, "episode-1")
+            m.assertEqual(selection.item.Type, "Episode")
+            m.assertEqual(selection.playbackQueueIndex, 0)
+        end function
+
+        @it("does not create a play target for an empty season")
+        function _()
+            m.node.state.request = { itemId: "season-1", playbackQueue: [] }
+            'bs:disable-next-line 1140
+            m.assertInvalid(buildPlaySelection({ Id: "season-1", Type: "Season" }))
+        end function
+
+        @it("keeps season watched actions from replacing the playable episode")
+        function _()
+            episode = { Id: "episode-1", Type: "Episode", UserData: { Played: false } }
+            m.node.state.request = { server: "http://server", series: { Id: "series-1" }, playbackQueueScope: "series", playbackQueue: [{ itemId: "episode-1", item: episode, season: { Id: "season-1" }, startPositionTicks: 0 }] }
+            season = { itemId: "season-1", itemType: "Season", raw: { Id: "season-1", Type: "Season", ChildCount: 1, UserData: { UnplayedItemCount: 1 } } }
+            'bs:disable-next-line 1140
+            updateItemWatchedState(season, true)
+            m.assertEqual(season.raw.UserData.UnplayedItemCount, 0)
+            m.assertEqual(m.node.state.playSelection.itemId, "episode-1")
+            m.assertEqual(m.node.state.playSelection.item.Type, "Episode")
+            m.assertTrue(m.node.state.playSelection.item.UserData.Played)
+        end function
+
+        @it("uses the known season count when marked unwatched")
+        function _()
+            m.node.state.request = invalid
+            m.node.state.playSelection = invalid
+            season = { itemId: "season-1", itemType: "Season", raw: { ChildCount: 8, UserData: { UnplayedItemCount: 0 } } }
+            'bs:disable-next-line 1140
+            updateItemWatchedState(season, false)
+            m.assertEqual(season.raw.UserData.UnplayedItemCount, 8)
+        end function
+
         @describe("local helper responsibilities")
 
-        @it("formats episode and season rendering metadata")
+        @it("formats episode rendering metadata")
         function _()
             episode = {
                 itemType: "Episode"
                 raw: { Type: "Episode", ParentIndexNumber: 2, IndexNumber: 10 }
             }
-            season = {
-                itemType: "Season"
-                raw: { Type: "Season", IndexNumber: 3, ChildCount: 8, ProductionYear: 2025 }
-            }
 
             'bs:disable-next-line 1140
             m.assertEqual(getEpisodePositionText(episode), "Season 2" + MediaMetadata.BulletSeparator() + "Episode 10")
-            'bs:disable-next-line 1140
-            m.assertEqual(getEpisodePositionText(season), "Season 3")
-            'bs:disable-next-line 1140
-            m.assertEqual(getSeasonMetadataText(season.raw), "8 episodes" + MediaMetadata.BulletSeparator() + "2025")
         end function
 
         @it("applies a loaded series queue to episode navigation")
@@ -138,28 +184,11 @@ namespace tests
         @it("formats rendering fallbacks and filters empty metadata")
         function _()
             'bs:disable-next-line 1140
-            m.assertTrue(isSeasonNumberTitle(" Season 12 "))
-            'bs:disable-next-line 1140
-            m.assertFalse(isSeasonNumberTitle("Season Twelve"))
-            'bs:disable-next-line 1140
             m.assertEqual(getEpisodeNumberText({}), "Episode")
             'bs:disable-next-line 1140
             m.assertEqual(getAiredDateText({ AirDate: "2025-04-03T12:30:00Z" }), "2025-04-03")
-            'bs:disable-next-line 1140
-            m.assertEqual(getSeasonMetadataText({ RecursiveItemCount: 4, ChildCount: 8, PremiereDate: "2024-01-01" }), "4 episodes" + MediaMetadata.BulletSeparator() + "2024")
         end function
 
-        @it("identifies season content from normalized and raw item types")
-        function _()
-            'bs:disable-next-line 1140
-            m.assertTrue(isSeasonDetailsItem({ itemType: "SeasonSummary", raw: {} }))
-            'bs:disable-next-line 1140
-            m.assertTrue(isSeasonDetailsItem({ itemType: "", raw: { Type: "Season" } }))
-            'bs:disable-next-line 1140
-            m.assertFalse(isSeasonDetailsItem({ itemType: "Episode", raw: { Type: "Episode" } }))
-            'bs:disable-next-line 1140
-            m.assertEqual(getMediaShellType({ itemType: "Season", raw: {} }), "tv-season")
-        end function
 
         @it("calculates item progress from played percentage and runtime")
         function _()
@@ -239,7 +268,7 @@ namespace tests
             m.assertEqual(item.raw.UserData.PlayedPercentage, 0)
         end function
 
-        @it("updates watched state for episodes and season summaries")
+        @it("updates watched state for episodes")
         function _()
             episode = { itemId: "e1", itemType: "Episode", raw: { UserData: { PlaybackPositionTicks: 25 } } }
             'bs:disable-next-line 1140
@@ -248,15 +277,6 @@ namespace tests
             m.assertTrue(isItemWatched(episode))
             m.assertEqual(episode.raw.UserData.PlaybackPositionTicks, 0)
 
-            season = { itemId: "s1", itemType: "SeasonSummary", raw: { UserData: { UnplayedItemCount: 3 } } }
-            'bs:disable-next-line 1140
-            updateItemWatchedState(season, true)
-            'bs:disable-next-line 1140
-            m.assertTrue(isItemWatched(season))
-            m.assertEqual(season.raw.UserData.UnplayedItemCount, 0)
-            'bs:disable-next-line 1140
-            updateItemWatchedState(season, false)
-            m.assertEqual(season.raw.UserData.UnplayedItemCount, 1)
         end function
 
         @it("builds the details task request and suppresses duplicate loads")
@@ -465,6 +485,37 @@ namespace tests
             'bs:disable-next-line 1140
             m.assertTrue(onKeyEvent("up", true))
             m.assertEqual(m.node.state.focusArea, "episodeBrowse")
+        end function
+
+        @describe("empty season toolbar")
+
+        @it("hides inert Play and focuses a usable action for an empty season")
+        function _()
+            m.node.state.request = { server: "http://server", series: { Id: "series-1", Name: "Series" }, playbackQueue: [] }
+            m.node.state.focusArea = "toolbar"
+            season = { Id: "season-1", Type: "Season", Name: "Season 1", IndexNumber: 1, UserData: { UnplayedItemCount: 0 }, ImageTags: {} }
+            'bs:disable-next-line 1140
+            applyEpisodeDetails(season)
+            'bs:disable-next-line 1140
+            focusVideoToolbar()
+
+            m.assertFalse(m.node.mediaToolbar.findNode("playButton").visible)
+            m.assertFalse(m.node.mediaToolbar.findNode("resumeButton").visible)
+            m.assertTrue(m.node.mediaToolbar.findNode("markUnwatchedButton").isInFocusChain())
+        end function
+
+        @it("retains Play for a season with an episode")
+        function _()
+            m.node.state.request = { server: "http://server", series: { Id: "series-1", Name: "Series" }, playbackQueue: [{ itemId: "episode-1", item: { Id: "episode-1", Type: "Episode", UserData: {} }, season: { Id: "season-1" }, startPositionTicks: 0 }] }
+            m.node.state.focusArea = "toolbar"
+            season = { Id: "season-1", Type: "Season", Name: "Season 1", IndexNumber: 1, UserData: { UnplayedItemCount: 0 }, ImageTags: {} }
+            'bs:disable-next-line 1140
+            applyEpisodeDetails(season)
+            'bs:disable-next-line 1140
+            focusVideoToolbar()
+
+            m.assertTrue(m.node.mediaToolbar.findNode("playButton").visible)
+            m.assertEqual(m.node.state.playSelection.itemId, "episode-1")
         end function
 
     end class

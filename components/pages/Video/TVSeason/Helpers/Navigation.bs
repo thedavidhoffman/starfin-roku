@@ -23,9 +23,9 @@ function getGridEpisodeNodeAtPosition(position as dynamic) as object
 end function
 
 '-------------------------------------------------------------------------------
-' getFocusedEpisodeNode
+' getFocusedItemNode
 '-------------------------------------------------------------------------------
-function getFocusedEpisodeNode() as object
+function getFocusedItemNode() as object
     if isVerticalEpisodeList() then return getGridEpisodeNodeAtPosition(m.episodesGrid.itemFocused)
     return getEpisodeNodeAtPosition(m.episodesList.rowItemFocused)
 end function
@@ -34,19 +34,12 @@ end function
 ' focusInitialEpisode
 '-------------------------------------------------------------------------------
 function focusInitialEpisode(itemId as string) as boolean
-    episodeIndex = -1
-    for i = 0 to m.pageState.episodes.Count() - 1
-        if Format.SafeString(m.pageState.episodes[i].Id, "") = itemId then
-            episodeIndex = i
-            exit for
-        end if
-    end for
-    if episodeIndex < 0 then
+    contentIndex = getItemContentIndex(itemId, MediaItem.Type.Episode)
+    if contentIndex < 0 then
         focusEpisodesIfActive()
         return false
     end if
-    contentIndex = episodeIndex
-    if m.pageState.allEpisodes <> true then contentIndex++
+
     if isVerticalEpisodeList() then
         m.episodesGrid.jumpToItem = contentIndex
         m.episodesGrid.itemFocused = contentIndex
@@ -234,7 +227,17 @@ end sub
 ' focusEpisodesIfActive
 '-------------------------------------------------------------------------------
 sub focusEpisodesIfActive()
-    if hasEpisodeItems() = false then return
+    if hasEpisodeItems() = false then
+        if hasSeasonNavigation() then
+            focusSeasonNav()
+        else
+            m.pageState.focusArea = "episodes"
+            m.seasonNav.callFunc("deactivate")
+            m.top.setFocus(true)
+            updateChevrons()
+        end if
+        return
+    end if
 
     m.pageState.focusArea = "episodes"
     setEpisodeListVisible(true)
@@ -329,11 +332,12 @@ function getEpisodeOverflowState() as object
 end function
 
 '-------------------------------------------------------------------------------
-' restoreEpisodeFocus
+' restoreItemFocus
 '-------------------------------------------------------------------------------
-sub restoreEpisodeFocus(itemId as string)
-    index = getEpisodeContentIndex(itemId)
-    if index < 0 then return
+sub restoreItemFocus(itemId as string, itemType = "" as string)
+    index = getItemContentIndex(itemId, itemType)
+    if index < 0 then index = 0
+    if hasEpisodeItems() <> true then return
 
     if isVerticalEpisodeList() then
         m.episodesGrid.jumpToItem = index
@@ -343,32 +347,21 @@ sub restoreEpisodeFocus(itemId as string)
 end sub
 
 '-------------------------------------------------------------------------------
-' getEpisodeContentIndex
+' getItemContentIndex
 '-------------------------------------------------------------------------------
-function getEpisodeContentIndex(itemId as string) as integer
+function getItemContentIndex(itemId as string, itemType = "" as string) as integer
     if itemId = "" then return -1
+    content = getActiveEpisodeList().content
+    if content = invalid then return -1
+    if isVerticalEpisodeList() <> true then content = content.getChild(0)
+    if content = invalid then return -1
 
-    if isVerticalEpisodeList() then
-        if m.episodesGrid.content = invalid then return -1
-
-        for i = 0 to m.episodesGrid.content.getChildCount() - 1
-            child = m.episodesGrid.content.getChild(i)
-            if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return i
-        end for
-
-        return -1
-    end if
-
-    if m.episodesList.content = invalid or m.episodesList.content.getChildCount() = 0 then return -1
-
-    row = m.episodesList.content.getChild(0)
-    if row = invalid then return -1
-
-    for i = 0 to row.getChildCount() - 1
-        child = row.getChild(i)
-        if child <> invalid and Format.SafeString(child.itemId, "") = itemId then return i
+    for i = 0 to content.getChildCount() - 1
+        child = content.getChild(i)
+        if Format.SafeString(child.itemId, "") = itemId then
+            if itemType = "" or Format.SafeString(child.itemType, "") = itemType then return i
+        end if
     end for
-
     return -1
 end function
 

@@ -25,6 +25,35 @@ describe('Starfin TV settings persistence', function () {
   }
 });
 
+describe('Starfin TV toggle settings persistence', function () {
+  const settings = [
+    { label: 'season summary card', nodeId: 'showSeasonSummaryCardOptions', key: 'show-season-summary-card' },
+    { label: 'Home episode images', nodeId: 'homeEpisodeImagesOptions', key: 'home-episode-images' }
+  ];
+
+  for (const setting of settings) {
+    for (const enabled of [true, false]) {
+      const value = enabled ? 'on' : 'off';
+      it(`persists ${setting.label} ${value}`, async function () {
+        // Save the opposite value first so this case verifies a write even in isolation.
+        const { environment } = await openSettings(categories.tv);
+        await selectRadioOption(environment, setting.nodeId, enabled ? 0 : 1);
+        await closeAndSaveSettings(environment);
+
+        await exerciseRadioSetting(this, {
+          category: categories.tv,
+          nodeId: setting.nodeId,
+          index: enabled ? 1 : 0,
+          scope: 'account',
+          key: setting.key,
+          value,
+          checkpoint: `settings-tv-${setting.key}-${value}`
+        });
+      });
+    }
+  }
+});
+
 describe('Starfin Home episode images', function () {
   for (const enabled of [false, true]) {
     it(`updates both Home rows with episode images ${enabled ? 'on' : 'off'} and restores on restart`, async function () {

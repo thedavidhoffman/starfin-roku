@@ -1,0 +1,77 @@
+'-------------------------------------------------------------------------------
+' startPendingTVShowLoad
+'-------------------------------------------------------------------------------
+sub startPendingTVShowLoad()
+    entry = LatestRequestLifecycle.TakeNext(m.pageState.detailsLoad)
+    if entry = invalid then return
+
+    pool = m.pageState.taskPool
+    task = pool.nodes[pool.nextIndex]
+    pool.nextIndex = (pool.nextIndex + 1) mod pool.nodes.Count()
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' invalidatePlaybackTargets
+'-------------------------------------------------------------------------------
+sub invalidatePlaybackTargets()
+    m.pageState.playbackRefresh.needed = true
+    m.pageState.playbackQueue = invalid
+    m.pageState.playbackQueueIndex = 0
+    m.videoToolbar.resumeItem = invalid
+    m.videoToolbar.playItem = invalid
+    if m.pageState.lifecycle.isActive then refreshPlaybackTargets(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshPlaybackTargets
+'-------------------------------------------------------------------------------
+sub refreshPlaybackTargets(supersede = false as boolean)
+    request = m.pageState.request
+    if request = invalid then return
+
+    ' Only a new watched-state change supersedes a refresh already in flight.
+    load = m.pageState.detailsLoad
+    if supersede <> true then
+        if load.pending <> invalid and load.pending.context = true then return
+        if load.active <> invalid and load.active.context = true then return
+    end if
+
+    refreshRequest = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: request.itemId
+        playbackOnly: true
+    }
+    LatestRequestLifecycle.Queue(m.pageState.detailsLoad, refreshRequest, true)
+    startPendingTVShowLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackTargets
+'-------------------------------------------------------------------------------
+sub applyPlaybackTargets(payload as object)
+    m.pageState.playbackQueue = payload.playbackQueue
+    m.pageState.playbackQueueIndex = Number.ToInteger(payload.playbackQueueIndex, 0)
+    m.videoToolbar.resumeItem = payload.resumeItem
+    m.videoToolbar.playItem = payload.upNextItem
+    m.pageState.playbackRefresh.needed = false
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPlaybackRefresh
+'-------------------------------------------------------------------------------
+sub applyPlaybackRefresh(response as object)
+    if response.ok <> true or response.payload = invalid then
+        m.pageState.playbackRefresh.playPending = false
+        AppMessage.Show("Unable to refresh series playback. " + RequestFailure.GetDisplayMessage(response, "Reopen the series or select Play to retry."))
+        return
+    end if
+
+    applyPlaybackTargets(response.payload)
+    playPending = m.pageState.playbackRefresh.playPending
+    m.pageState.playbackRefresh.playPending = false
+    if playPending then onVideoToolbarPlaySelected()
+end sub

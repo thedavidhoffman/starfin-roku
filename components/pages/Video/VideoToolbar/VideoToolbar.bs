@@ -203,18 +203,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusWatchedAction()
     updateToolbarButtons()
-    if m.focusState.buttons.Count() < 2 then
-        focusButton(0)
-        return
-    end if
-
-    focusButton(1)
+    buttonId = "markWatchedButton"
+    if m.top.isWatched then buttonId = "markUnwatchedButton"
+    focusButton(findFocusedButtonIndex(buttonId))
 end sub
 
 '-------------------------------------------------------------------------------
 ' updateToolbarButtons
 '-------------------------------------------------------------------------------
 sub updateToolbarButtons()
+    hadFocus = m.top.isInFocusChain()
     previousFocusedButtonId = getCurrentFocusedButtonId()
     state = getToolbarState()
 
@@ -222,6 +220,9 @@ sub updateToolbarButtons()
     m.focusState.buttons = buildToolbarButtonList()
     restoreToolbarFocus(previousFocusedButtonId, state.hasResumeAction)
     layoutButtons()
+    if hadFocus and findFocusedButtonIndex(previousFocusedButtonId) < 0 and m.focusState.focusedIndex >= 0 then
+        m.focusState.buttons[m.focusState.focusedIndex].setFocus(true)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -229,10 +230,12 @@ end sub
 '-------------------------------------------------------------------------------
 function getToolbarState() as object
     mediaType = m.top.mediaType
-    hasResumeProgress = m.top.resumePositionSeconds > 0
-    hasResumeItem = m.top.resumeItem <> invalid
+    supportsPlayback = m.top.supportsPlayback <> false
+    hasResumeProgress = supportsPlayback and m.top.resumePositionSeconds > 0
+    hasResumeItem = supportsPlayback and m.top.resumeItem <> invalid
 
     return {
+        supportsPlayback: supportsPlayback
         isWatched: m.top.isWatched = true
         supportsWatchedActions: m.top.supportsWatchedActions <> false
         supportsItemNavigation: m.top.supportsItemNavigation <> false
@@ -254,8 +257,8 @@ end function
 sub configureToolbarButtons(state as object)
     m.resumeButton.visible = state.hasResumeAction
     m.restartButton.visible = state.hasResumeProgress and m.top.supportsRestart <> false
-    m.playButton.visible = state.hasResumeAction <> true
-    m.randomPlayButton.visible = m.top.supportsRandomPlay = true
+    m.playButton.visible = state.supportsPlayback and state.hasResumeAction <> true
+    m.randomPlayButton.visible = state.supportsPlayback and m.top.supportsRandomPlay = true
     m.allEpisodesButton.visible = m.top.supportsAllEpisodes = true
 
     resumeLabelItem = m.top.playItem
