@@ -1,0 +1,134 @@
+namespace tests
+
+    @SGNode("VideoMediaInfoContent")
+    @suite("VideoMediaInfoContent component")
+    class VideoMediaInfoContentTests extends rooibos.BaseTestSuite
+
+        @describe("behavior")
+
+        @it("uses the appropriate column widths for its information")
+        function _()
+            m.top.item = m.createItem(1)
+            sheet = m.top.findNode("propertySheet")
+
+            m.assertTrue(m.top.findNode("propertyViewport").clippingRect[2] = 1080)
+            m.assertTrue(m.top.findNode("scrollTrack").translation[0] = 1070)
+            m.assertTrue(sheet.getChild(0).width = 1052)
+            m.assertTrue(sheet.getChild(2).width = 260)
+            m.assertTrue(sheet.getChild(3).translation[0] = 284)
+            m.assertTrue(sheet.getChild(3).width = 768)
+            m.assertTrue(sheet.getChild(3).translation[0] + sheet.getChild(3).width = 1052)
+        end function
+
+        @it("omits the redundant source name row")
+        function _()
+            m.top.item = m.createItem(1)
+
+            m.assertInvalid(m.valueFor(0, "Source"))
+            m.assertEqual(m.top.sections[0].entries.Count(), 4)
+        end function
+
+        @it("renders source metadata")
+        function _()
+            m.top.item = m.createItem(1)
+            m.assertEqual(m.valueFor(0, "Media"), "Movie")
+            m.assertEqual(m.valueFor(0, "Container"), "MKV")
+            m.assertEqual(m.valueFor(0, "Size"), "1.0 GiB")
+            m.assertEqual(m.valueFor(0, "Path"), "/media/movie.mkv")
+        end function
+
+        @it("groups video before every audio track")
+        function _()
+            m.top.item = m.createItem(4)
+            m.assertEqual(m.top.sections.Count(), 7)
+            m.assertEqual(m.top.sections[1].title, "Video 1 - Main Video")
+            m.assertEqual(m.top.sections[5].title, "Audio 4 - English Audio 4")
+        end function
+
+        @it("preserves detailed video fields")
+        function _()
+            m.top.item = m.createItem(1)
+            m.assertEqual(m.valueFor(1, "Resolution"), "1920x1080")
+            m.assertEqual(m.valueFor(1, "Frame rate"), "24")
+            m.assertEqual(m.valueFor(1, "Bitrate"), "5000 kbps")
+            m.assertEqual(m.valueFor(1, "Interlaced"), "No")
+        end function
+
+        @it("preserves audio flags and channel details")
+        function _()
+            m.top.item = m.createItem(1)
+            m.assertEqual(m.valueFor(2, "Channels"), "6 ch")
+            m.assertEqual(m.valueFor(2, "Layout"), "5.1")
+            m.assertEqual(m.valueFor(2, "Default"), "Yes")
+            m.assertEqual(m.valueFor(2, "Forced"), "No")
+        end function
+
+        @it("shows the missing subtitle message")
+        function _()
+            m.top.item = m.createItem(1)
+            m.assertEqual(m.valueFor(3, "Status"), "No subtitle streams reported.")
+        end function
+
+        @it("falls back to item streams without a media source")
+        function _()
+            m.top.item = { MediaStreams: [{ Type: "Audio", Codec: "aac" }] }
+            m.assertEqual(m.valueFor(1, "Codec"), "aac")
+        end function
+
+        @it("prefers the first source streams")
+        function _()
+            m.top.item = { MediaSources: [{ MediaStreams: [{ Type: "Video", Codec: "hevc" }] }], MediaStreams: [{ Type: "Audio", Codec: "aac" }] }
+            m.assertEqual(m.valueFor(1, "Codec"), "hevc")
+            m.assertEqual(m.top.sections.Count(), 3)
+        end function
+
+        @it("shows subtitle-only metadata without claiming streams are missing")
+        function _()
+            m.top.item = { MediaStreams: [{ Type: "Subtitle", Language: "eng", Codec: "srt", IsExternal: true }] }
+            m.assertEqual(m.top.sections.Count(), 2)
+            m.assertEqual(m.valueFor(1, "External"), "Yes")
+        end function
+
+        @it("clears stale rows when the item is reset")
+        function _()
+            m.top.item = m.createItem(4)
+            m.top.item = {}
+            m.assertEqual(m.top.sections.Count(), 3)
+            m.assertEqual(m.valueFor(0, "Status"), "No media source details available.")
+            m.assertEqual(m.valueFor(1, "Status"), "No stream information available.")
+            m.assertFalse(m.top.findNode("scrollThumb").visible)
+        end function
+
+        @it("renders data into the shared property sheet")
+        function _()
+            m.top.item = m.createItem(1)
+            sheet = m.top.findNode("propertySheet")
+            m.assertEqual(sheet.getChild(0).text, "SOURCE")
+            m.assertEqual(sheet.getChild(3).text, "Movie")
+            m.assertTrue(m.top.findNode("scrollThumb").visible)
+        end function
+
+        function createItem(audioCount as integer) as object
+            streams = [
+                { Type: "Video", DisplayTitle: "Main Video", Width: 1920, Height: 1080, Codec: "h264", RealFrameRate: 24, BitRate: 5000000, BitDepth: 8, IsAnamorphic: false, IsInterlaced: false }
+            ]
+            for i = 1 to audioCount
+                streams.Push({ Type: "Audio", DisplayTitle: "English Audio " + i.ToStr(), Channels: 6, ChannelLayout: "5.1", Codec: "aac", Language: "eng", BitRate: 192000, SampleRate: 48000, IsDefault: i = 1, IsForced: false, IsExternal: false })
+            end for
+            if audioCount = 1 then streams[1].DisplayTitle = "English Audio"
+            return {
+                Name: "Movie"
+                MediaSources: [{ Name: "Source One", Container: "MKV", Size: 1073741824, Path: "/media/movie.mkv", MediaStreams: streams }]
+            }
+        end function
+
+        function valueFor(sectionIndex as integer, key as string) as dynamic
+            for each entry in m.top.sections[sectionIndex].entries
+                if entry.key = key then return entry.value
+            end for
+            return invalid
+        end function
+
+    end class
+
+end namespace

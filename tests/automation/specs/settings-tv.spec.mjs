@@ -76,13 +76,13 @@ async function assertRenderedOverlays(environment, rows, withLogo) {
 }
 
 describe('Starfin Home episode images', function () {
-  const modes = ['off', 'on-with-logo', 'on-without-logo'];
+  const modes = ['series', 'episode-with-logo', 'episode-without-logo'];
   const transitions = modes.flatMap(from => modes.filter(to => to !== from).map(to => ({ from, to })));
   for (const { from, to } of transitions) {
-    const enabled = to !== 'off';
+    const enabled = to !== 'series';
     it(`updates both Home rows from ${from} to ${to} and restores on restart`, async function () {
       const { environment, accountKey } = await openSettings(categories.tv);
-      // Force a change so even the default Off mode gets a registry write.
+      // Force a change so even the default series mode gets a registry write.
       await selectRadioOption(environment, 'homeEpisodeImagesOptions', modes.indexOf(to));
       await closeAndSaveSettings(environment);
       await openSettings(categories.tv);
@@ -114,7 +114,7 @@ describe('Starfin Home episode images', function () {
       };
       const rows = await inspectRows();
       for (const row of rows) {
-        const startingImage = from === 'off' ? `/Items/${row.seriesId}/Images/Thumb` : `/Items/${row.id}/Images/Primary`;
+        const startingImage = from === 'series' ? `/Items/${row.seriesId}/Images/Thumb` : `/Items/${row.id}/Images/Primary`;
         await waitFor(async () => String(await read(`${row.path}.HDPosterUrl`)).includes(startingImage), `${row.key} to show the opposite artwork before editing`);
       }
       const previousUrls = await Promise.all(rows.map(row => read(`${row.path}.HDPosterUrl`)));
@@ -130,14 +130,14 @@ describe('Starfin Home episode images', function () {
         const expected = enabled ? `/Items/${row.id}/Images/Primary` : `/Items/${row.seriesId}/Images/Thumb`;
         await waitFor(async () => String(await read(`${row.path}.HDPosterUrl`)).includes(expected), `${row.key} artwork to update`);
         const logo = String(await read(`${row.path}.logoOverlayUrl`));
-        if (to === 'on-with-logo') {
+        if (to === 'episode-with-logo') {
           assert.ok(logo.includes(`/Items/${row.logoId}/Images/Logo?tag=${row.logoTag}`), `${row.key} uses the inherited logo`);
         } else {
           assert.equal(logo, '', `${row.key} leaves show artwork and missing logos unadorned`);
         }
       }
       assert.equal(await read('#nextUpTask.request.homeQueryId'), queryBefore, 'Changing artwork must not request Home data again.');
-      await assertRenderedOverlays(environment, rows, to === 'on-with-logo');
+      await assertRenderedOverlays(environment, rows, to === 'episode-with-logo');
       await captureEvidence(this, `home-episode-images-${from}-to-${to}`);
 
       await relaunchAuthenticatedStarfin();
@@ -146,7 +146,7 @@ describe('Starfin Home episode images', function () {
         const expected = enabled ? `/Items/${row.id}/Images/Primary` : `/Items/${row.seriesId}/Images/Thumb`;
         assert.ok(String(await read(`${row.path}.HDPosterUrl`)).includes(expected));
         const logo = String(await read(`${row.path}.logoOverlayUrl`));
-        if (to === 'on-with-logo') {
+        if (to === 'episode-with-logo') {
           assert.ok(logo.includes(`/Items/${row.logoId}/Images/Logo?tag=${row.logoTag}`));
         } else {
           assert.equal(logo, '');

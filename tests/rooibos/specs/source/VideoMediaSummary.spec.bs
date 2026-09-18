@@ -1,0 +1,417 @@
+import "pkg:/source/VideoMediaSummary.bs"
+
+namespace tests
+
+    @suite("Video media summary")
+    class VideoMediaSummaryTests extends rooibos.BaseTestSuite
+
+        @describe("summary formatting")
+
+        @it("formats the baseline video and audio summary")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1920, Height: 1080, Codec: "h264" }, { Type: "Audio", Codec: "ac3", Channels: 6 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "1080p H.264 • AC3 5.1")
+        end function
+
+        @it("formats cropped HD")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1920, Height: 800 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "1080p")
+        end function
+
+        @it("formats cropped UHD")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 3840, Height: 1600 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "4K")
+        end function
+
+        @it("formats height-only HD")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Height: 1080 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "1080p")
+        end function
+
+        @it("formats 8K")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 7680, Height: 3200 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "8K")
+        end function
+
+        @it("formats 1440p")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 2560, Height: 1440 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "1440p")
+        end function
+
+        @it("formats 720p")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1280, Height: 720 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "720p")
+        end function
+
+        @it("formats SD")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 720, Height: 480 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "SD")
+        end function
+
+        @it("formats interlaced HD")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1920, Height: 1080, IsInterlaced: true }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "1080i")
+        end function
+
+        @it("formats missing dimensions")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Codec: "h264" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "H.264")
+        end function
+
+        @it("formats SDR")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Codec: "h264", VideoRange: "SDR", VideoRangeType: "SDR" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "H.264")
+        end function
+
+        @it("formats HDR10")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Codec: "hevc", VideoRangeType: "HDR10" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "HEVC HDR10")
+        end function
+
+        @it("formats HDR10 plus")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Codec: "hevc", VideoRangeType: "HDR10Plus" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "HEVC HDR10+")
+        end function
+
+        @it("formats Dolby Vision priority")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Codec: "hevc", VideoRangeType: "DOVIWithHDR10", VideoRange: "HDR" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "HEVC Dolby Vision")
+        end function
+
+        @it("formats HLG")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", VideoRangeType: "HLG" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "HLG")
+        end function
+
+        @it("formats generic HDR")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", VideoRange: "HDR" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "HDR")
+        end function
+
+        @it("formats unknown codec")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Codec: "vp9" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "VP9")
+        end function
+
+        @it("normalizes avc")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "avc" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "H.264")
+        end function
+
+        @it("normalizes h265")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "h265" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "HEVC")
+        end function
+
+        @it("normalizes av1")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "av1" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "AV1")
+        end function
+
+        @it("normalizes mpeg2video")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "mpeg2video" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "MPEG-2")
+        end function
+
+        @it("normalizes ac-3")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "ac-3" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "AC3")
+        end function
+
+        @it("normalizes eac3")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "eac3" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "EAC3")
+        end function
+
+        @it("normalizes aac")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "aac" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "AAC")
+        end function
+
+        @it("normalizes dts")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "dts" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "DTS")
+        end function
+
+        @it("normalizes truehd")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "truehd" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "TrueHD")
+        end function
+
+        @it("formats 1 channels")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Channels: 1 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "1.0")
+        end function
+
+        @it("formats 2 channels")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Channels: 2 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "2.0")
+        end function
+
+        @it("formats 6 channels")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Channels: 6 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "5.1")
+        end function
+
+        @it("formats 8 channels")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Channels: 8 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "7.1")
+        end function
+
+        @it("formats 4 channels")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Channels: 4 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "4ch")
+        end function
+
+        @it("prefers explicit layout")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", ChannelLayout: "7.1", Channels: 6 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "7.1")
+        end function
+
+        @it("normalizes stereo layout")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", ChannelLayout: "stereo" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "2.0")
+        end function
+
+        @it("normalizes mono layout")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", ChannelLayout: "mono" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "1.0")
+        end function
+
+        @it("uses first media source")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "aac" }], MediaSources: [{ MediaStreams: [{ Type: "Audio", Codec: "ac3" }] }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "AC3")
+        end function
+
+        @it("falls back from empty source streams")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "aac" }], MediaSources: [{ MediaStreams: [] }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "AAC")
+        end function
+
+        @it("resolves default audio")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Index: 3, Codec: "aac" }, { Type: "Audio", Index: 8, Codec: "ac3", IsDefault: true }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "AC3")
+        end function
+
+        @it("resolves selected audio")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Index: 3, Codec: "aac" }, { Type: "Audio", Index: 8, Codec: "ac3", IsDefault: true }] }
+
+            result = VideoMediaSummary.GetText(item, 3)
+
+            m.assertEqual(result, "AAC")
+        end function
+
+        @it("resolves missing selection audio")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Index: 3, Codec: "aac" }, { Type: "Audio", Index: 8, Codec: "ac3", IsDefault: true }] }
+
+            result = VideoMediaSummary.GetText(item, 99)
+
+            m.assertEqual(result, "AC3")
+        end function
+
+        @it("uses first audio without default")
+        function _()
+            item = { MediaStreams: [{ Type: "Audio", Codec: "aac" }, { Type: "Audio", Codec: "ac3" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "AAC")
+        end function
+
+        @it("skips attached artwork")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Codec: "mjpeg", IsAttachedPic: true }, { Type: "Video", Codec: "h264" }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "H.264")
+        end function
+
+        @it("handles absent item")
+        function _()
+            item = invalid
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "Media Info")
+        end function
+
+        @it("handles absent streams")
+        function _()
+            item = {}
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "Media Info")
+        end function
+
+        @it("handles empty streams")
+        function _()
+            item = { MediaStreams: [] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "Media Info")
+        end function
+
+        @it("handles missing useful metadata")
+        function _()
+            item = { MediaStreams: [invalid, { Type: "Video" }, { Type: "Audio", Channels: 0 }] }
+
+            result = VideoMediaSummary.GetText(item, -1)
+
+            m.assertEqual(result, "Media Info")
+        end function
+
+    end class
+
+end namespace

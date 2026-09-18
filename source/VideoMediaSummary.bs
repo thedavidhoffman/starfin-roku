@@ -1,0 +1,105 @@
+import "pkg:/source/Array.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/MediaMetadata.bs"
+
+namespace VideoMediaSummary
+
+    function GetText(item as dynamic, selectedAudioStreamIndex = -1 as integer) as string
+        if Arrays.IsAssocArray(item) = false then return "Media Info"
+
+        streams = item.MediaStreams
+        if item.MediaSources <> invalid and item.MediaSources.Count() > 0 then
+            source = item.MediaSources[0]
+            if source <> invalid and source.MediaStreams <> invalid and source.MediaStreams.Count() > 0 then streams = source.MediaStreams
+        end if
+        if streams = invalid then return "Media Info"
+
+        video = invalid
+        audio = invalid
+        defaultAudio = invalid
+        selectedAudio = invalid
+        for each stream in streams
+            if stream = invalid then continue for
+            if stream.Type = "Video" and video = invalid and stream.IsAttachedPic <> true then video = stream
+            if stream.Type = "Audio" then
+                if audio = invalid then audio = stream
+                if defaultAudio = invalid and stream.IsDefault = true then defaultAudio = stream
+                if selectedAudioStreamIndex >= 0 and Number.ToInteger(stream.Index, -1) = selectedAudioStreamIndex then selectedAudio = stream
+            end if
+        end for
+        if defaultAudio <> invalid then audio = defaultAudio
+        if selectedAudio <> invalid then audio = selectedAudio
+
+        sections = []
+        if video <> invalid then
+            parts = []
+            __Append(parts, __Resolution(video))
+            __Append(parts, __Codec(video.Codec))
+            __Append(parts, __Range(video))
+            if parts.Count() > 0 then sections.Push(parts.Join(" "))
+        end if
+        if audio <> invalid then
+            parts = []
+            __Append(parts, __Codec(audio.Codec))
+            __Append(parts, __Channels(audio))
+            if parts.Count() > 0 then sections.Push(parts.Join(" "))
+        end if
+        if sections.Count() = 0 then return "Media Info"
+        return sections.Join(MediaMetadata.BulletSeparator())
+    end function
+
+    sub __Append(parts as object, value as string)
+        if value <> "" then parts.Push(value)
+    end sub
+
+    function __Codec(value as dynamic) as string
+        codec = LCase(Format.SafeString(value, "").Trim())
+        names = { h264: "H.264", avc: "H.264", "h.264": "H.264", hevc: "HEVC", h265: "HEVC", "h.265": "HEVC", av1: "AV1", mpeg2video: "MPEG-2", mpeg2: "MPEG-2", ac3: "AC3", "ac-3": "AC3", eac3: "EAC3", "e-ac-3": "EAC3", aac: "AAC", dts: "DTS", truehd: "TrueHD" }
+        if names.DoesExist(codec) then return names[codec]
+        return UCase(codec)
+    end function
+
+    function __Resolution(stream as object) as string
+        width = Number.ToInteger(stream.Width, 0)
+        height = Number.ToInteger(stream.Height, 0)
+        ' Width preserves the familiar tier for widescreen files with cropped black bars.
+        if width >= 7680 or height >= 4320 then return "8K"
+        if width >= 3840 or height >= 2160 then return "4K"
+        suffix = "p"
+        if stream.IsInterlaced = true then suffix = "i"
+        if width >= 2560 or height >= 1440 then return "1440" + suffix
+        if width >= 1920 or height >= 1080 then return "1080" + suffix
+        if width >= 1280 or height >= 720 then return "720" + suffix
+        if width > 0 or height > 0 then return "SD"
+        return ""
+    end function
+
+    function __Range(stream as object) as string
+        rangeType = UCase(Format.SafeString(stream.VideoRangeType, ""))
+        range = UCase(Format.SafeString(stream.VideoRange, ""))
+        if Left(rangeType, 4) = "DOVI" or Left(rangeType, 2) = "DV" or Instr(1, rangeType, "DOLBY VISION") > 0 then return "Dolby Vision"
+        if rangeType = "HDR10PLUS" or rangeType = "HDR10+" then return "HDR10+"
+        if rangeType = "HDR10" or range = "HDR10" then return "HDR10"
+        if rangeType = "HLG" or range = "HLG" then return "HLG"
+        if range = "HDR" then return "HDR"
+        return ""
+    end function
+
+    function __Channels(stream as object) as string
+        layout = Format.SafeString(stream.ChannelLayout, "").Trim()
+        if layout <> "" then
+            if LCase(layout) = "mono" then return "1.0"
+            if LCase(layout) = "stereo" then return "2.0"
+            return layout
+        end if
+        channels = Number.ToInteger(stream.Channels, 0)
+        if channels = 1 then return "1.0"
+        if channels = 2 then return "2.0"
+        if channels = 6 then return "5.1"
+        if channels = 8 then return "7.1"
+        if channels > 0 then return channels.ToStr() + "ch"
+        return ""
+    end function
+
+end namespace

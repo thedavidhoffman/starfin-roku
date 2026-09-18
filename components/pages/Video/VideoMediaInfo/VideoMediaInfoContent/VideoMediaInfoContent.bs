@@ -1,0 +1,254 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
+
+function getContentWidth() as integer
+    return 1080
+end function
+
+function getKeyColumnWidth() as integer
+    return 260
+end function
+
+sub onItemChanged()
+    m.top.sections = buildSections(m.top.item)
+end sub
+
+function buildSections(item as dynamic) as object
+    sections = [buildSourceSection(item)]
+    streams = getMediaStreams(item)
+    appendStreamSections(sections, streams, "video", "Video")
+    appendStreamSections(sections, streams, "audio", "Audio")
+    beforeSubtitles = sections.Count()
+    appendStreamSections(sections, streams, "subtitle", "Subtitles")
+    hasStreams = sections.Count() > 1
+    if sections.Count() = beforeSubtitles then
+        sections.Push({ title: "Subtitles", entries: [{ key: "Status", value: "No subtitle streams reported." }] })
+    end if
+    if hasStreams = false then
+        sections = [sections[0], { title: "Streams", entries: [{ key: "Status", value: "No stream information available." }] }, sections[1]]
+    end if
+    return sections
+end function
+
+function buildSourceSection(item as dynamic) as object
+    entries = []
+    if item <> invalid then appendTextField(entries, "Media", item.Name)
+    source = getFirstMediaSource(item)
+    if source <> invalid then
+        appendTextField(entries, "Container", source.Container)
+        appendTextField(entries, "Size", formatSize(source.Size))
+        path = Format.FirstNonEmpty([source.Path], "No source path available.")
+        appendTextField(entries, "Path", path)
+    else
+        entries.Push({ key: "Status", value: "No media source details available." })
+    end if
+    return { title: "Source", entries: entries }
+end function
+
+sub appendStreamSections(sections as object, streams as object, streamType as string, title as string)
+    ordinal = 0
+    for each stream in streams
+        if stream = invalid then continue for
+        if LCase(Format.SafeString(stream.Type, "")) <> streamType then continue for
+        ordinal++
+        heading = title + " " + ordinal.ToStr()
+        description = Format.FirstNonEmpty([stream.DisplayTitle, stream.Title], "")
+        if description = "" then description = buildStreamSummary(stream, streamType)
+        if description <> "" then heading = heading + " - " + description
+        sections.Push({ title: heading, entries: buildStreamDetails(stream, streamType) })
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' buildStreamDetails
+'-------------------------------------------------------------------------------
+function buildStreamDetails(stream as dynamic, streamType as string) as object
+    lines = []
+
+    if streamType = "video" then
+        appendTextField(lines, "Resolution", getResolutionText(stream))
+        appendTextField(lines, "Frame rate", Format.FirstNonEmpty([stream.RealFrameRate, stream.AverageFrameRate], ""))
+        appendTextField(lines, "Codec", stream.Codec)
+        appendTextField(lines, "Profile", stream.Profile)
+        appendTextField(lines, "Level", stream.Level)
+        appendTextField(lines, "Aspect ratio", stream.AspectRatio)
+        appendBoolField(lines, "Anamorphic", stream.IsAnamorphic)
+        appendBoolField(lines, "Interlaced", stream.IsInterlaced)
+        appendTextField(lines, "Bitrate", formatBitrate(stream.BitRate))
+        appendTextField(lines, "Bit depth", formatBitDepth(stream.BitDepth))
+        appendTextField(lines, "Range", Format.FirstNonEmpty([stream.VideoRangeType, stream.VideoRange], ""))
+        appendTextField(lines, "Pixel format", stream.PixelFormat)
+    else if streamType = "audio" then
+        appendTextField(lines, "Language", Format.FirstNonEmpty([stream.Language, stream.DisplayLanguage], ""))
+        appendTextField(lines, "Codec", stream.Codec)
+        appendTextField(lines, "Channels", formatChannels(stream.Channels))
+        appendTextField(lines, "Layout", stream.ChannelLayout)
+        appendTextField(lines, "Bitrate", formatBitrate(stream.BitRate))
+        appendTextField(lines, "Sample rate", formatSampleRate(stream.SampleRate))
+        appendBoolField(lines, "Default", stream.IsDefault)
+        appendBoolField(lines, "Forced", stream.IsForced)
+        appendBoolField(lines, "External", stream.IsExternal)
+    else if streamType = "subtitle" then
+        appendTextField(lines, "Language", Format.FirstNonEmpty([stream.Language, stream.DisplayLanguage], ""))
+        appendTextField(lines, "Codec", stream.Codec)
+        appendBoolField(lines, "Default", stream.IsDefault)
+        appendBoolField(lines, "Forced", stream.IsForced)
+        appendBoolField(lines, "External", stream.IsExternal)
+    end if
+
+    if lines.Count() = 0 then lines.Push({ key: "Status", value: "No details available." })
+    return lines
+end function
+
+'-------------------------------------------------------------------------------
+' buildStreamSummary
+'-------------------------------------------------------------------------------
+function buildStreamSummary(stream as dynamic, streamType as string) as string
+    parts = []
+
+    if streamType = "video" then
+        appendPart(parts, getResolutionText(stream))
+        appendPart(parts, Format.FirstNonEmpty([stream.RealFrameRate, stream.AverageFrameRate], ""))
+        appendPart(parts, stream.Codec)
+    else if streamType = "audio" then
+        appendPart(parts, formatChannels(stream.Channels))
+        appendPart(parts, stream.ChannelLayout)
+        appendPart(parts, stream.Codec)
+    else if streamType = "subtitle" then
+        appendPart(parts, Format.FirstNonEmpty([stream.Language, stream.DisplayLanguage], ""))
+        appendPart(parts, stream.Codec)
+        if stream.IsForced = true then appendPart(parts, "Forced")
+        if stream.IsExternal = true then appendPart(parts, "External")
+    end if
+
+    summary = joinParts(parts, "  /  ")
+    if summary = "" then return "Details unavailable"
+    return summary
+end function
+
+'-------------------------------------------------------------------------------
+' getFirstMediaSource
+'-------------------------------------------------------------------------------
+function getFirstMediaSource(item as dynamic) as dynamic
+    if item = invalid then return invalid
+    if item.MediaSources = invalid then return invalid
+    if item.MediaSources.Count() = 0 then return invalid
+    return item.MediaSources[0]
+end function
+
+'-------------------------------------------------------------------------------
+' getMediaStreams
+'-------------------------------------------------------------------------------
+function getMediaStreams(item as dynamic) as object
+    mediaSource = getFirstMediaSource(item)
+    if mediaSource <> invalid and mediaSource.MediaStreams <> invalid then return mediaSource.MediaStreams
+    if item <> invalid and item.MediaStreams <> invalid then return item.MediaStreams
+    return []
+end function
+
+'-------------------------------------------------------------------------------
+' appendTextField
+'-------------------------------------------------------------------------------
+sub appendTextField(lines as object, label as string, value as dynamic)
+    text = Format.FirstNonEmpty([value], "")
+    if text = "" then return
+
+    lines.Push({ key: label, value: text, wrap: true })
+end sub
+
+'-------------------------------------------------------------------------------
+' appendPart
+'-------------------------------------------------------------------------------
+sub appendPart(parts as object, value as dynamic)
+    text = Format.FirstNonEmpty([value], "")
+    if text <> "" then parts.Push(text)
+end sub
+
+'-------------------------------------------------------------------------------
+' appendBoolField
+'-------------------------------------------------------------------------------
+sub appendBoolField(lines as object, label as string, value as dynamic)
+    if value = invalid then return
+
+    text = "No"
+    if value = true then text = "Yes"
+    lines.Push({ key: label, value: text })
+end sub
+
+'-------------------------------------------------------------------------------
+' getResolutionText
+'-------------------------------------------------------------------------------
+function getResolutionText(stream as dynamic) as string
+    if stream.Width = invalid or stream.Height = invalid then return ""
+    return Format.SafeString(stream.Width, "") + "x" + Format.SafeString(stream.Height, "")
+end function
+
+'-------------------------------------------------------------------------------
+' formatSize
+'-------------------------------------------------------------------------------
+function formatSize(value as dynamic) as string
+    if value = invalid then return ""
+
+    bytes = value
+    if bytes >= 1073741824 then return formatOneDecimal(bytes, 1073741824) + " GiB"
+    if bytes >= 1048576 then return formatOneDecimal(bytes, 1048576) + " MiB"
+    return Format.SafeString(value, "") + " bytes"
+end function
+
+'-------------------------------------------------------------------------------
+' formatOneDecimal
+'-------------------------------------------------------------------------------
+function formatOneDecimal(value as dynamic, divisor as dynamic) as string
+    tenths = Number.ToInteger(((value / divisor) * 10) + 0.5, 0)
+    whole = Number.ToInteger(tenths / 10, 0)
+    decimal = tenths - (whole * 10)
+    return whole.ToStr() + "." + decimal.ToStr()
+end function
+
+'-------------------------------------------------------------------------------
+' formatBitrate
+'-------------------------------------------------------------------------------
+function formatBitrate(value as dynamic) as string
+    if value = invalid then return ""
+    if value >= 1000 then return Number.ToInteger(value / 1000, 0).ToStr() + " kbps"
+    return Format.SafeString(value, "") + " bps"
+end function
+
+'-------------------------------------------------------------------------------
+' formatBitDepth
+'-------------------------------------------------------------------------------
+function formatBitDepth(value as dynamic) as string
+    if value = invalid then return ""
+    return Format.SafeString(value, "") + " bit"
+end function
+
+'-------------------------------------------------------------------------------
+' formatChannels
+'-------------------------------------------------------------------------------
+function formatChannels(value as dynamic) as string
+    if value = invalid then return ""
+    return Format.SafeString(value, "") + " ch"
+end function
+
+'-------------------------------------------------------------------------------
+' formatSampleRate
+'-------------------------------------------------------------------------------
+function formatSampleRate(value as dynamic) as string
+    if value = invalid then return ""
+    return Format.SafeString(value, "") + " Hz"
+end function
+
+'-------------------------------------------------------------------------------
+' joinParts
+'-------------------------------------------------------------------------------
+function joinParts(parts as object, separator as string) as string
+    text = ""
+    for each part in parts
+        if text <> "" then text = text + separator
+        text = text + Format.SafeString(part, "")
+    end for
+
+    return text
+end function
+

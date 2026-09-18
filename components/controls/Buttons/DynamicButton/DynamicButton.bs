@@ -44,8 +44,9 @@ sub updatePreferredWidth()
 
     width = m.layout.expandedWidth
     if m.top.expandedWidth > 0 then width = m.top.expandedWidth
-    contentWidth = m.layout.textX + textWidth + m.layout.textPadding + m.layout.rightPadding
+    contentWidth = getTextX() + textWidth + m.layout.textPadding + m.layout.rightPadding
     if contentWidth > width then width = contentWidth
+    if m.top.maxWidth > 0 and width > m.top.maxWidth then width = m.top.maxWidth
     m.top.preferredWidth = width
     onFocusVisualChanged()
 end sub
@@ -81,15 +82,24 @@ sub onFocusVisualChanged()
         m.background.width = m.layout.collapsedWidth
     end if
 
+    if m.top.alwaysShowText then m.background.width = m.top.preferredWidth
+    m.iconPoster.visible = m.top.icon <> "" or m.top.focusedIcon <> ""
     m.background.height = m.layout.height
     m.iconPoster.width = m.layout.iconSize
     m.iconPoster.height = m.layout.iconSize
     m.iconPoster.translation = [m.layout.iconX, m.layout.iconY]
-    m.textLabel.translation = [m.layout.textX, m.layout.textY]
-    m.textLabel.width = m.background.width - m.layout.textX - m.layout.rightPadding
-    m.textLabel.visible = hasFocus
+    m.textLabel.translation = [getTextX(), m.layout.textY]
+    m.textLabel.width = m.background.width - getTextX() - m.layout.rightPadding
+    if m.iconPoster.visible then
+        m.textLabel.horizAlign = "left"
+    else
+        m.textLabel.horizAlign = "center"
+    end if
+    m.textLabel.visible = hasFocus or m.top.alwaysShowText
     if hasFocus then
         m.textLabel.color = &h0F1A2AFF
+    else
+        m.textLabel.color = &hF3F7FBFF
     end if
     onIconChanged()
 end sub
@@ -106,4 +116,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     return false
+end function
+
+function getTextX() as integer
+    if m.top.icon = "" and m.top.focusedIcon = "" then return m.layout.rightPadding
+    return m.layout.textX
 end function

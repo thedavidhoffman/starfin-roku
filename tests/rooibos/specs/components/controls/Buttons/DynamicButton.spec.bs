@@ -107,6 +107,7 @@ namespace tests
 
         @it("clears a previous measurement when the label becomes empty")
         function _()
+            m.top.icon = "pkg:/images/icons/play.png"
             m.top.expandedWidth = 64
             m.top.text = "Resume S3:E20"
 
@@ -217,6 +218,108 @@ namespace tests
             handled = onKeyEvent("left", true)
 
             m.assertFalse(handled)
+        end function
+
+        @describe("persistent text")
+
+        @it("shows text without an icon when unfocused")
+        function _()
+            m.top.icon = ""
+            m.top.focusedIcon = ""
+            m.top.expandedWidth = 64
+            m.top.maxWidth = 0
+            m.top.alwaysShowText = true
+            m.top.text = "1080p H.264"
+            m.top.hasFocusVisual = false
+
+            m.assertTrue(m.node.textLabel.visible)
+            m.assertFalse(m.node.iconPoster.visible)
+            m.assertEqual(m.node.textLabel.translation[0], 16.0)
+            m.assertEqual(m.node.textLabel.color, &hF3F7FBFF)
+        end function
+
+        @it("keeps persistent text width on focus changes")
+        function _()
+            m.top.expandedWidth = 64
+            m.top.maxWidth = 0
+            m.top.alwaysShowText = true
+            m.top.text = "1080p H.264"
+            m.top.hasFocusVisual = false
+            width = m.node.background.width
+
+            m.top.hasFocusVisual = true
+
+            m.assertEqual(m.node.background.width, width)
+            m.assertEqual(m.node.textLabel.color, &h0F1A2AFF)
+        end function
+
+        @it("caps long persistent labels")
+        function _()
+            m.top.expandedWidth = 64
+            m.top.maxWidth = 0
+            m.top.alwaysShowText = true
+            m.top.maxWidth = 640
+            m.top.text = String(100, "W")
+
+            m.assertEqual(m.top.preferredWidth, 640)
+            m.assertEqual(m.node.background.width, 640.0)
+            m.assertTrue(m.node.textLabel.width < 640)
+        end function
+
+        @it("shrinks a persistent label after metadata changes")
+        function _()
+            m.top.expandedWidth = 64
+            m.top.maxWidth = 0
+            m.top.alwaysShowText = true
+            m.top.text = "4K HEVC Dolby Vision • TrueHD 7.1"
+            width = m.top.preferredWidth
+
+            m.top.text = "Media Info"
+
+            m.assertTrue(m.top.preferredWidth < width)
+            m.assertTrue(m.node.background.width = m.top.preferredWidth)
+        end function
+
+        @describe("text-only alignment")
+
+        @it("centers unfocused text inside equal horizontal insets")
+        function _()
+            m.top.icon = ""
+            m.top.focusedIcon = ""
+            m.top.alwaysShowText = true
+            m.top.text = "1080p H.264"
+            m.top.hasFocusVisual = false
+
+            label = m.node.textLabel
+            m.assertEqual(label.horizAlign, "center")
+            m.assertTrue(label.translation[0] = (m.node.background.width - label.width) / 2)
+        end function
+
+        @it("keeps focused text centered without changing button width")
+        function _()
+            m.top.icon = ""
+            m.top.focusedIcon = ""
+            m.top.alwaysShowText = true
+            m.top.text = "1080p H.264"
+            m.top.hasFocusVisual = false
+            width = m.node.background.width
+
+            m.top.hasFocusVisual = true
+
+            m.assertEqual(m.node.textLabel.horizAlign, "center")
+            m.assertEqual(m.node.background.width, width)
+        end function
+
+        @it("restores left alignment when an icon is supplied")
+        function _()
+            m.top.icon = ""
+            m.top.focusedIcon = ""
+            m.top.hasFocusVisual = true
+
+            m.top.icon = "pkg:/images/icons/media-toolbar/play-light.png"
+
+            m.assertEqual(m.node.textLabel.horizAlign, "left")
+            m.assertEqual(m.node.textLabel.translation[0], 60.0)
         end function
 
     end class

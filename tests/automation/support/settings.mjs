@@ -14,7 +14,7 @@ export const accountDefaults = {
   'home-videos-layout': 'poster;6',
   'tv-ep-list-scroll': 'vertical',
   'show-season-summary-card': 'on',
-  'home-episode-images': 'off',
+  'home-episode-images': 'series',
   'media-shell-background': 'full-screen',
   'theme-music': 'off',
   'next-item-playback': 'show-up-next',

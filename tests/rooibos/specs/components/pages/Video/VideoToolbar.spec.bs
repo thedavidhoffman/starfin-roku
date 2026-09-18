@@ -549,6 +549,121 @@ namespace tests
             m.assertTrue(m.node.playButton.visible)
         end function
 
+        @describe("media summary")
+
+        @it("places episode media info after season navigation")
+        function _()
+            m.top.mediaInfoText = "1080p H.264"
+            m.top.mediaType = "tv-episode"
+
+            m.assertEqual(m.node.focusState.buttons.Peek().id, "mediaInfoButton")
+            m.assertTrue(m.node.mediaInfoButton.translation[0] > m.node.seasonButton.translation[0])
+        end function
+
+        @it("places movie media info last")
+        function _()
+            m.top.mediaInfoText = "1080p H.264"
+            m.top.mediaType = "movie"
+
+            m.assertEqual(m.node.focusState.buttons.Peek().id, "mediaInfoButton")
+        end function
+
+        @it("keeps media summary visible when deactivated")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.mediaInfoText = "1080p H.264 • AC3 5.1"
+            m.top.callFunc("deactivate")
+
+            button = m.top.findNode("mediaInfoButton")
+            m.assertTrue(button.findNode("textLabel").visible)
+            m.assertEqual(button.text, "1080p H.264 • AC3 5.1")
+            m.assertTrue(button.findNode("background").width = button.preferredWidth)
+        end function
+
+        @it("navigates to and retains the final media info button")
+        function _()
+            m.top.mediaInfoText = "1080p H.264"
+            m.top.mediaType = "tv-episode"
+            m.top.callFunc("activate")
+            for i = 0 to 20
+                'bs:disable-next-line 1140
+                onKeyEvent("right", true)
+            end for
+
+            m.assertTrue(m.node.mediaInfoButton.hasFocus())
+            m.top.callFunc("deactivate")
+            m.top.callFunc("activate")
+            m.assertTrue(m.node.mediaInfoButton.hasFocus())
+        end function
+
+        @it("lays out buttons without overlap for the full episode toolbar")
+        function _()
+            m.top.mediaType = "tv-episode"
+            m.top.resumePositionSeconds = 40
+            m.top.subtitleStreamCount = 1
+            m.top.audioStreamCount = 2
+            m.top.chapterCount = 2
+            m.top.mediaInfoText = "4K HEVC Dolby Vision • TrueHD 7.1"
+            m.top.callFunc("activate")
+
+            previousEnd = 0.0
+            for each button in m.node.focusState.buttons
+                m.assertTrue(button.translation[0] >= previousEnd)
+                previousEnd = button.translation[0] + button.findNode("background").width + 12
+            end for
+            m.assertTrue(previousEnd <= 1728)
+        end function
+
+        @describe("media summary readiness")
+
+        @it("hides unresolved media info from rendering and navigation")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.mediaInfoText = ""
+
+            m.assertFalse(m.node.mediaInfoButton.visible)
+            for each button in m.node.focusState.buttons
+                m.assertTrue(button.id <> "mediaInfoButton")
+            end for
+        end function
+
+        @it("reveals resolved text without moving action focus")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.mediaInfoText = ""
+            m.top.callFunc("resetFocus")
+            focusedId = m.node.focusState.focusedButtonId
+
+            m.top.mediaInfoText = "1080p H.264"
+
+            m.assertTrue(m.node.mediaInfoButton.visible)
+            m.assertEqual(m.node.mediaInfoButton.text, "1080p H.264")
+            m.assertEqual(m.node.focusState.buttons.Peek().id, "mediaInfoButton")
+            m.assertEqual(m.node.focusState.focusedButtonId, focusedId)
+        end function
+
+        @it("allows a resolved fallback label")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.mediaInfoText = "Media Info"
+
+            m.assertTrue(m.node.mediaInfoButton.visible)
+            m.assertEqual(m.node.mediaInfoButton.text, "Media Info")
+        end function
+
+        @it("recovers focus when a new load hides the selected summary")
+        function _()
+            m.top.mediaType = "movie"
+            m.top.mediaInfoText = "1080p H.264"
+            'bs:disable-next-line 1140
+            focusButton(m.node.focusState.buttons.Count() - 1)
+
+            m.top.mediaInfoText = ""
+
+            m.assertFalse(m.node.mediaInfoButton.visible)
+            m.assertTrue(m.node.focusState.buttons[0].hasFocus())
+        end function
+
     end class
 
 end namespace

@@ -78,21 +78,19 @@ refresh eligible to present messages.
 
 Settings > TV includes "TV artwork in Next Up and Continue Watching", stored
 per account as
-`home-episode-images`: `off`, `on-with-logo`, or `on-without-logo`. The options
+`home-episode-images`: `series`, `episode-with-logo`, or `episode-without-logo`. The options
 are TV show artwork, Episode artwork with show logo, and Episode artwork without
-show logo, respectively. Legacy `on` values load
-as `on-with-logo` and are written canonically when settings are saved.
-The default is Off for new and existing accounts without a saved value. No
-registry migration is needed. Settings retains its existing save-on-close
+show logo, respectively. The default is `series` for missing or unrecognized values.
+Legacy values are not migrated or mapped. Settings retains its existing save-on-close
 behavior (including Back); there is no separate Cancel action.
 
-Both enabled modes prefer the episode's own Primary still. Missing stills use the existing series thumbnail/backdrop/poster
-fallback chain. Off preserves that previous image-selection behavior. Movies,
-other rows, and card geometry are unchanged. `on-without-logo` displays the
-still without the logo or gradient. Switching between enabled modes updates
+Both episode modes prefer the episode's own Primary still. Missing stills use the existing series thumbnail/backdrop/poster
+fallback chain. `series` preserves that previous image-selection behavior. Movies,
+other rows, and card geometry are unchanged. `episode-without-logo` displays the
+still without the logo or gradient. Switching between episode modes updates
 overlay fields even though the still URL is unchanged; no data reload is needed.
 
-With `on-with-logo`, when either row selects an episode's own Primary still,
+With `episode-with-logo`, when either row selects an episode's own Primary still,
 its thumbnail card can overlay the inherited show logo using `ParentLogoItemId` and `ParentLogoImageTag`.
 Both row requests include `Logo` in `EnableImageTypes`; no additional series
 lookup is needed. Missing logo metadata leaves the still unadorned. The PNG logo

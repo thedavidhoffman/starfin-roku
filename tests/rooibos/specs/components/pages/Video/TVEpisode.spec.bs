@@ -518,6 +518,215 @@ namespace tests
             m.assertEqual(m.node.state.playSelection.itemId, "episode-1")
         end function
 
+
+        @describe("media summary")
+
+        @it("renders source metadata in the toolbar")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1920, Codec: "h264" }, { Type: "Audio", Index: 2, Codec: "ac3", Channels: 6, IsDefault: true }, { Type: "Audio", Index: 4, Codec: "aac", Channels: 2 }] }
+            m.node.state.mediaInfoPending = false
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.state.request = invalid
+            m.node.state.playSelection = { item: item }
+            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            'bs:disable-next-line 1140
+            renderEpisodeContent({ itemType: "Episode", raw: item })
+
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "1080p H.264 • AC3 5.1")
+        end function
+
+        @it("refreshes the summary when audio is selected")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1920, Codec: "h264" }, { Type: "Audio", Index: 2, Codec: "ac3", Channels: 6, IsDefault: true }, { Type: "Audio", Index: 4, Codec: "aac", Channels: 2 }] }
+            m.node.state.mediaInfoPending = false
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.state.request = invalid
+            m.node.state.playSelection = { item: item }
+            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            'bs:disable-next-line 1140
+            renderEpisodeContent({ itemType: "Episode", raw: item })
+
+            m.node.streamOptions.selectedAudio = { streamIndex: 4, stream: item.MediaStreams[2] }
+
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "1080p H.264 • AAC 2.0")
+        end function
+
+        @it("preserves selected audio through metadata rendering")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1920, Codec: "h264" }, { Type: "Audio", Index: 2, Codec: "ac3", Channels: 6, IsDefault: true }, { Type: "Audio", Index: 4, Codec: "aac", Channels: 2 }] }
+            m.node.state.mediaInfoPending = false
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.state.request = invalid
+            m.node.state.playSelection = { item: item }
+            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            'bs:disable-next-line 1140
+            renderEpisodeContent({ itemType: "Episode", raw: item })
+            m.node.state.selectedStreams.audio = { streamIndex: 4 }
+
+            'bs:disable-next-line 1140
+            renderEpisodeContent({ itemType: "Episode", raw: item })
+
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "1080p H.264 • AAC 2.0")
+        end function
+
+        @it("clears stale summary when content is unavailable")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1920, Codec: "h264" }, { Type: "Audio", Index: 2, Codec: "ac3", Channels: 6, IsDefault: true }, { Type: "Audio", Index: 4, Codec: "aac", Channels: 2 }] }
+            m.node.state.mediaInfoPending = false
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.state.request = invalid
+            m.node.state.playSelection = { item: item }
+            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            'bs:disable-next-line 1140
+            renderEpisodeContent({ itemType: "Episode", raw: item })
+
+            'bs:disable-next-line 1140
+            clearPageState()
+
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "Media Info")
+        end function
+
+        @it("restores focus to media info after closing its view")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Width: 1920, Codec: "h264" }, { Type: "Audio", Index: 2, Codec: "ac3", Channels: 6, IsDefault: true }, { Type: "Audio", Index: 4, Codec: "aac", Channels: 2 }] }
+            m.node.state.mediaInfoPending = false
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.state.request = invalid
+            m.node.state.playSelection = { item: item }
+            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            'bs:disable-next-line 1140
+            renderEpisodeContent({ itemType: "Episode", raw: item })
+            m.node.mediaToolbar.callFunc("activate")
+            button = m.node.mediaToolbar.findNode("mediaInfoButton")
+            button.setFocus(true)
+            m.node.mediaToolbar.isWatched = not m.node.mediaToolbar.isWatched
+
+            button.buttonSelected = true
+            m.assertEqual(m.top.overlayRequested.componentName, "VideoMediaInfoDialog")
+            m.assertEqual(m.top.overlayRequested.openFunction, "openVideoMediaInfo")
+            m.top.callFunc("handleVideoMediaInfoOverlayClosed")
+
+            m.assertTrue(button.hasFocus())
+            m.assertTrue(button.findNode("textLabel").visible)
+        end function
+
+        @describe("media summary readiness")
+
+        @it("hides initial content until details complete")
+        function _()
+            m.node.state.request = invalid
+            m.node.state.itemId = "item-1"
+            m.node.state.mediaInfoPending = true
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.mediaToolbar.mediaType = "tv-episode"
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "item-1" })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+
+            'bs:disable-next-line 1140
+            renderEpisodeContent({ itemType: "Episode", raw: { MediaStreams: [{ Type: "Video", Codec: "h264" }] } }, true)
+
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "")
+            m.assertFalse(m.node.mediaToolbar.findNode("mediaInfoButton").visible)
+        end function
+
+        @it("reveals metadata from the current details response")
+        function _()
+            m.node.state.request = invalid
+            m.node.state.itemId = "item-1"
+            m.node.state.mediaInfoPending = true
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.mediaToolbar.mediaType = "tv-episode"
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "item-1" })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            task = { response: { ok: true, action: "tvEpisodeDetails", itemId: "item-1", requestId: 1, payload: { Id: "item-1", Type: "Episode", MediaStreams: [{ Type: "Video", Codec: "h264" }] } } }
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse(task)
+
+            m.assertFalse(m.node.state.mediaInfoPending)
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "H.264")
+            m.assertTrue(m.node.mediaToolbar.findNode("mediaInfoButton").visible)
+        end function
+
+        @it("reveals the fallback only after details complete")
+        function _()
+            m.node.state.request = invalid
+            m.node.state.itemId = "item-1"
+            m.node.state.mediaInfoPending = true
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.mediaToolbar.mediaType = "tv-episode"
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "item-1" })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            task = { response: { ok: true, action: "tvEpisodeDetails", itemId: "item-1", requestId: 1, payload: { Id: "item-1", Type: "Episode" } } }
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse(task)
+
+            m.assertFalse(m.node.state.mediaInfoPending)
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "Media Info")
+            m.assertTrue(m.node.mediaToolbar.findNode("mediaInfoButton").visible)
+        end function
+
+        @it("ignores unrelated completion while media info is pending")
+        function _()
+            m.node.state.request = invalid
+            m.node.state.itemId = "item-1"
+            m.node.state.mediaInfoPending = true
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.mediaToolbar.mediaType = "tv-episode"
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "item-1" })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            m.node.mediaToolbar.mediaInfoText = ""
+            task = { response: { ok: true, action: "tvEpisodeDetails", itemId: "old-item", requestId: 99, payload: {} } }
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse(task)
+
+            m.assertTrue(m.node.state.mediaInfoPending)
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "")
+        end function
+
+        @it("resolves fallback after a failed current load")
+        function _()
+            m.node.state.request = invalid
+            m.node.state.itemId = "item-1"
+            m.node.state.mediaInfoPending = true
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.mediaToolbar.mediaType = "tv-episode"
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "item-1" })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            m.node.state.item = {}
+            m.node.state.itemContent = { itemType: "Episode", raw: {} }
+            task = { response: { ok: false, action: "tvEpisodeDetails", itemId: "item-1", requestId: 1 } }
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse(task)
+
+            m.assertFalse(m.node.state.mediaInfoPending)
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "Media Info")
+        end function
+
+        @it("clears a previous title summary when a new load starts")
+        function _()
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "old-item" })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            m.node.mediaToolbar.mediaInfoText = "1080p H.264"
+            request = { server: "http://server", itemId: "item-2", settings: {} }
+            request.item = { Id: "item-2", Type: "Episode" }
+
+            m.top.loadRequest = request
+
+            m.assertTrue(m.node.state.mediaInfoPending)
+            m.assertEqual(m.node.mediaToolbar.mediaInfoText, "")
+            m.assertFalse(m.node.mediaToolbar.findNode("mediaInfoButton").visible)
+        end function
+
     end class
 
 end namespace
