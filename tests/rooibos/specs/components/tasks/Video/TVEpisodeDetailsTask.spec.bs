@@ -45,6 +45,158 @@ namespace tests
             m.assertEqual(m.node.top.response.requestId, 11)
         end function
 
+        @describe("progressive loading")
+
+        @it("publishes episode details before requesting missing series metadata")
+        function _()
+            getGlobalAa().progressTask = m.top
+            'bs:disable-next-line 1001
+            m.stubCall(loadEpisode, { ok: true, data: { Id: "episode-1", Type: "Episode", SeriesId: "series-1", People: [{ Name: "Actor" }] } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, m.captureBeforeSeries)
+            m.top.request = { server: "server", token: "token", itemId: "episode-1", requestId: 7 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            early = getGlobalAa().beforeSeriesResponse
+            m.assertEqual(early.action, "tvEpisodePrimary")
+            m.assertEqual(early.requestId, 7)
+            m.assertEqual(early.payload.People[0].Name, "Actor")
+            m.assertEqual(m.top.response.action, "tvEpisodeDetails")
+        end function
+
+        @it("publishes series artwork before requesting the episode queue")
+        function _()
+            getGlobalAa().progressTask = m.top
+            'bs:disable-next-line 1001
+            m.stubCall(loadEpisode, { ok: true, data: { Id: "episode-1", Type: "Episode", SeriesId: "series-1" } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: true, data: { Id: "series-1", Name: "Series", ImageTags: {} } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadPlaybackQueue, m.captureBeforeQueue)
+            m.top.request = { server: "server", token: "token", itemId: "episode-1", requestId: 8, loadPlaybackQueue: true }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            early = getGlobalAa().beforeQueueResponse
+            m.assertEqual(early.action, "tvEpisodeSeries")
+            m.assertEqual(early.series.Name, "Series")
+            m.assertEqual(m.top.response.playbackQueue.Count(), 2)
+            m.assertEqual(m.top.response.requestId, 8)
+        end function
+
+        @it("completes successfully when optional requests fail")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadEpisode, { ok: true, data: { Id: "episode-1", Type: "Episode", SeriesId: "series-1" } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: false })
+            'bs:disable-next-line 1001
+            m.stubCall(loadPlaybackQueue, invalid)
+            m.top.request = { server: "server", token: "token", itemId: "episode-1", loadPlaybackQueue: true }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.action, "tvEpisodeDetails")
+            m.assertEqual(m.top.response.payload.Id, "episode-1")
+        end function
+
+        private function captureBeforeSeries(request as object, seriesId as string) as object
+            getGlobalAa().beforeSeriesResponse = getGlobalAa().progressTask.response
+            return { ok: true, data: { Id: seriesId, Name: "Series", ImageTags: {} } }
+        end function
+
+        private function captureBeforeQueue(request as object, episode as dynamic) as object
+            getGlobalAa().beforeQueueResponse = getGlobalAa().progressTask.response
+            return { items: [{ itemId: "episode-1" }, { itemId: "episode-2" }], index: 0, season: { Id: "season-1" } }
+        end function
+
+        @describe("conditional series loading")
+
+        @it("reuses matching series metadata")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadEpisode, { ok: true, data: { Id: "episode-1", Type: "Episode", SeriesId: "series-1" } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: true, data: { Id: "series-1", Name: "Fetched", ImageTags: {} } })
+            m.top.request = { server: "server", token: "token", itemId: "episode-1", series: { Id: "series-1", Name: "Cached", metadataLoaded: true, logoUrl: "logo" }, loadPlaybackQueue: false }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.series.Name, "Cached")
+            m.assertTrue(m.top.response.series.metadataLoaded)
+        end function
+
+        @it("reuses known series metadata without a logo")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadEpisode, { ok: true, data: { Id: "episode-1", Type: "Episode", SeriesId: "series-1" } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: true, data: { Id: "series-1", Name: "Fetched", ImageTags: {} } })
+            m.top.request = { server: "server", token: "token", itemId: "episode-1", series: { Id: "series-1", Name: "Cached", metadataLoaded: true, logoUrl: "" }, loadPlaybackQueue: false }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.series.Name, "Cached")
+            m.assertTrue(m.top.response.series.metadataLoaded)
+        end function
+
+        @it("fetches missing series metadata")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadEpisode, { ok: true, data: { Id: "episode-1", Type: "Episode", SeriesId: "series-1" } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: true, data: { Id: "series-1", Name: "Fetched", ImageTags: {} } })
+            m.top.request = { server: "server", token: "token", itemId: "episode-1", series: invalid, loadPlaybackQueue: false }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.series.Name, "Fetched")
+            m.assertTrue(m.top.response.series.metadataLoaded)
+        end function
+
+        @it("fetches partial series context")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadEpisode, { ok: true, data: { Id: "episode-1", Type: "Episode", SeriesId: "series-1" } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: true, data: { Id: "series-1", Name: "Fetched", ImageTags: {} } })
+            m.top.request = { server: "server", token: "token", itemId: "episode-1", series: { Id: "series-1", Name: "Partial" }, loadPlaybackQueue: false }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.series.Name, "Fetched")
+            m.assertTrue(m.top.response.series.metadataLoaded)
+        end function
+
+        @it("fetches metadata when the supplied series differs")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadEpisode, { ok: true, data: { Id: "episode-1", Type: "Episode", SeriesId: "series-1" } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: true, data: { Id: "series-1", Name: "Fetched", ImageTags: {} } })
+            m.top.request = { server: "server", token: "token", itemId: "episode-1", series: { Id: "other", Name: "Cached", metadataLoaded: true }, loadPlaybackQueue: false }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.series.Name, "Fetched")
+            m.assertTrue(m.top.response.series.metadataLoaded)
+        end function
+
         @describe("series playback queue")
 
         @it("preserves per-episode season identity across season boundaries")

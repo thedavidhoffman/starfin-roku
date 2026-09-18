@@ -10,6 +10,8 @@ import "pkg:/source/api/HttpClient.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskRequest.bs"
 import "pkg:/source/Number.bs"
+import "pkg:/source/SeriesIdentity.bs"
+import "pkg:/source/TVEpisodeTaskResponse.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -24,7 +26,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    validationError = TaskRequest.ValidateRequest(request, "tvEpisodeDetails", ["itemId"])
+    validationError = TaskRequest.ValidateRequest(request, TVEpisodeTaskResponse.Action.Complete, ["itemId"])
     if validationError <> invalid then
         validationError.AddReplace("requestId", getRequestId(request))
         if request <> invalid then validationError.AddReplace("itemId", Format.SafeString(request.itemId, ""))
@@ -34,7 +36,7 @@ sub executeRequest()
 
     episodeResult = loadEpisode(request)
     if episodeResult.ok <> true then
-        episodeResult.AddReplace("action", "tvEpisodeDetails")
+        episodeResult.AddReplace("action", TVEpisodeTaskResponse.Action.Complete)
         episodeResult.AddReplace("itemId", Format.SafeString(request.itemId, ""))
         episodeResult.AddReplace("requestId", getRequestId(request))
         m.top.response = episodeResult
@@ -43,14 +45,36 @@ sub executeRequest()
 
     series = invalid
     seriesId = Format.SafeString(episodeResult.data.SeriesId, "")
-    if seriesId <> "" then
+    reuseSeries = SeriesIdentity.HasDetails(request.series, seriesId)
+    if reuseSeries then series = request.series
+
+    ' Publish usable episode data before waiting for optional series and queue requests.
+    m.top.response = {
+        ok: true
+        action: TVEpisodeTaskResponse.Action.Primary
+        itemId: Format.SafeString(request.itemId, "")
+        requestId: getRequestId(request)
+        payload: episodeResult.data
+        series: series
+    }
+
+    if reuseSeries <> true and seriesId <> "" then
         seriesResult = loadSeries(request, seriesId)
-        if seriesResult <> invalid and seriesResult.ok = true then series = seriesResult.data
+        if seriesResult <> invalid and seriesResult.ok = true and seriesResult.data <> invalid then
+            series = SeriesIdentity.FromItem(request.server, seriesResult.data, true)
+            m.top.response = {
+                ok: true
+                action: TVEpisodeTaskResponse.Action.Series
+                itemId: Format.SafeString(request.itemId, "")
+                requestId: getRequestId(request)
+                series: series
+            }
+        end if
     end if
 
     response = {
         ok: true
-        action: "tvEpisodeDetails"
+        action: TVEpisodeTaskResponse.Action.Complete
         itemId: Format.SafeString(request.itemId, "")
         requestId: getRequestId(request)
         payload: episodeResult.data

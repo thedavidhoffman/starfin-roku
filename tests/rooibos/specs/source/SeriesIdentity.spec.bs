@@ -5,6 +5,36 @@ namespace tests
 
         @describe("series identity construction and images")
 
+        @it("records an authoritative response even without an ImageTags field")
+        function _()
+            identity = SeriesIdentity.FromItem("server", { Id: "series-1", Name: "Series" }, true)
+            forwarded = SeriesIdentity.FromItem("server", identity)
+
+            m.assertTrue(SeriesIdentity.HasDetails(forwarded, "series-1"))
+            m.assertEqual(forwarded.logoUrl, "")
+        end function
+
+        @it("preserves known missing artwork through repeated normalization")
+        function _()
+            identity = SeriesIdentity.FromItem("server", { Id: "series-1", Name: "Series", ImageTags: {} })
+            forwarded = SeriesIdentity.FromItem("server", identity)
+
+            m.assertTrue(SeriesIdentity.HasDetails(forwarded, "series-1"))
+            m.assertEqual(forwarded.logoUrl, "")
+        end function
+
+        @it("does not mark partial identity as loaded")
+        function _()
+            identity = SeriesIdentity.FromItem("server", { Id: "series-1", Name: "Series" })
+
+            m.assertFalse(SeriesIdentity.HasDetails(identity, "series-1"))
+        end function
+
+        @it("requires a series name for reusable details")
+        function _()
+            m.assertFalse(SeriesIdentity.HasDetails({ Id: "series-1", metadataLoaded: true }, "series-1"))
+        end function
+
         @it("returns an empty identity for invalid items")
         function _()
             identity = SeriesIdentity.FromItem("https://server.local", invalid)

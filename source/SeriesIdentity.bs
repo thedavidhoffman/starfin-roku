@@ -14,9 +14,10 @@ namespace SeriesIdentity
     '---------------------------------------------------------------------------
     ' SeriesIdentity.FromItem
     '---------------------------------------------------------------------------
-    function FromItem(server as string, item as dynamic) as object
+    function FromItem(server as string, item as dynamic, metadataLoaded = false as boolean) as object
         if item = invalid then
             return {
+                metadataLoaded: false
                 Id: ""
                 Name: ""
                 logoUrl: ""
@@ -27,6 +28,7 @@ namespace SeriesIdentity
         end if
 
         return {
+            metadataLoaded: metadataLoaded or SeriesIdentity.__HasImageMetadata(item)
             Id: Format.FirstNonEmpty([item.Id], "")
             Name: Format.FirstNonEmpty([item.Name, item.SeriesName], "")
             logoUrl: SeriesIdentity.GetLogoUrl(server, item)
@@ -34,6 +36,18 @@ namespace SeriesIdentity
             backdropUrl: SeriesIdentity.GetImageUrl(server, item, JellyfinImage.Type.Backdrop, 531, 300)
             detailBackdropUrl: SeriesIdentity.GetDetailBackdropUrl(server, item)
         }
+    end function
+
+    function HasDetails(item as dynamic, seriesId as string) as boolean
+        if item = invalid or seriesId = "" then return false
+        if Format.SafeString(item.Id, "") <> seriesId then return false
+        if Format.SafeString(item.Name, "") = "" then return false
+        return SeriesIdentity.__HasImageMetadata(item)
+    end function
+
+    ' This describes known identity/artwork metadata, including confirmed missing artwork.
+    function __HasImageMetadata(item as object) as boolean
+        return item.metadataLoaded = true or item.ImageTags <> invalid
     end function
 
     '---------------------------------------------------------------------------

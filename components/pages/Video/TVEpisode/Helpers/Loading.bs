@@ -1,4 +1,5 @@
 import "pkg:/source/RequestFailure.bs"
+import "pkg:/source/TVEpisodeTaskResponse.bs"
 
 '-------------------------------------------------------------------------------
 ' loadItemDetails
@@ -23,6 +24,7 @@ sub loadItemDetails()
         token: request.token
         userId: request.userId
         itemId: itemId
+        series: request.series
         loadPlaybackQueue: Format.SafeString(request.playbackQueueScope, "") <> "series"
     }, false)
 end sub
@@ -79,40 +81,93 @@ sub handleEpisodeDetailsResponse(task as dynamic)
     response = task.response
     if response = invalid then return
 
-    completion = LatestRequestLifecycle.Complete(m.state.detailsLoad, response, "tvEpisodeDetails")
+    action = Format.SafeString(response.action, "")
+    if action = TVEpisodeTaskResponse.Action.Primary or action = TVEpisodeTaskResponse.Action.Series then
+        if isCurrentEpisodeStage(response) <> true then return
+        if response.ok <> true then return
+        context = m.state.detailsLoad.active.context
+        if context = invalid then
+            context = {}
+            m.state.detailsLoad.active.context = context
+        end if
+        if action = TVEpisodeTaskResponse.Action.Primary then
+            applyPrimaryEpisodeResponse(response, context)
+        else
+            applyEpisodeSeriesResponse(response.series, context)
+        end if
+        return
+    end if
+
+    completion = LatestRequestLifecycle.Complete(m.state.detailsLoad, response, TVEpisodeTaskResponse.Action.Complete)
     if completion.matched <> true then return
     if completion.isCurrent <> true then
         startPendingEpisodeDetailsLoad()
         return
     end if
+    if Format.SafeString(response.itemId, "") <> m.state.itemId then
+        startPendingEpisodeDetailsLoad()
+        return
+    end if
 
-    isPlaybackRefresh = completion.context <> invalid and completion.context.isPlaybackRefresh = true
-
+    context = completion.context
+    if context = invalid then context = {}
     if response.ok <> true then
         m.state.mediaInfoPending = false
-        if isPlaybackRefresh then m.state.playbackRefreshPending = false
+        if context.isPlaybackRefresh = true then m.state.playbackRefreshPending = false
         renderEpisodeContent(m.state.itemContent, false)
         Spinner.Hide()
         message = (response.failureKind <> invalid ? "Unable to load this episode. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this episode.")
         AppMessage.Show(message)
         m.log.activity("Episode load failed: " + Format.SafeString(response.errorMessage, message))
-        startPendingEpisodeDetailsLoad()
-        return
+    else
+        applyEpisodeSeriesResponse(response.series, context)
+        applyPlaybackQueueDetails(response)
+        applyPrimaryEpisodeResponse(response, context)
     end if
-    if Format.SafeString(response.itemId, "") <> m.state.itemId then return
+    startPendingEpisodeDetailsLoad()
+end sub
+
+function isCurrentEpisodeStage(response as object) as boolean
+    state = m.state.detailsLoad
+    if state.isActive <> true or state.active = invalid then return false
+    requestId = Number.ToInteger(response.requestId, -1)
+    if requestId < 0 or requestId <> state.latestRequestId then return false
+    if requestId <> state.active.request.requestId then return false
+    return Format.SafeString(response.itemId, "") = m.state.itemId
+end function
+
+sub applyPrimaryEpisodeResponse(response as object, context as object)
+    if context.primaryApplied = true then return
+    context.primaryApplied = true
     m.state.mediaInfoPending = false
-
-    if isPlaybackRefresh then m.state.playbackRefreshPending = false
-    if isPlaybackRefresh then m.state.request.startPositionTicks = invalid
-
-    applySeriesDetails(response.series)
-    applyPlaybackQueueDetails(response)
+    isPlaybackRefresh = context.isPlaybackRefresh = true
+    if isPlaybackRefresh then
+        m.state.playbackRefreshPending = false
+        m.state.request.startPositionTicks = invalid
+    end if
+    applyEpisodeSeriesResponse(response.series, context)
     applyEpisodeDetails(response.payload, false)
     m.cast.people = getPeople(response.payload)
     if isPlaybackRefresh <> true then m.log.activity("Viewing episode " + ActivityLog.EpisodeTitle(response.payload))
     if isPlaybackRefresh then notifyRefreshedWatchedState(response.payload)
     Spinner.Hide()
-    startPendingEpisodeDetailsLoad()
+end sub
+
+sub applyEpisodeSeriesResponse(series as dynamic, context as object)
+    if series = invalid or context.seriesApplied = true then return
+    context.seriesApplied = true
+    applySeriesDetails(series)
+    if m.state.playSelection <> invalid then m.state.playSelection.series = m.state.request.series
+    if m.state.itemContent = invalid then return
+
+    content = m.mediaShell.mediaContent
+    logoUrl = getMediaShellLogoUrl()
+    logoTitle = getMediaShellLogoTitle(m.state.itemContent)
+    if content.logoUrl = logoUrl and content.logoTitle = logoTitle and content.logoPending = false then return
+    content.logoUrl = logoUrl
+    content.logoTitle = logoTitle
+    content.logoPending = false
+    m.mediaShell.mediaContent = content
 end sub
 
 '-------------------------------------------------------------------------------
@@ -131,6 +186,7 @@ sub refreshPlaybackState()
         token: request.token
         userId: request.userId
         itemId: itemId
+        series: request.series
         loadPlaybackQueue: false
     }, true)
 end sub
@@ -162,6 +218,22 @@ sub applyPlaybackQueueDetails(response as object)
     m.state.request.playbackQueueIndex = response.playbackQueueIndex
     m.state.request.playbackQueueScope = Format.SafeString(response.playbackQueueScope, "series")
     if m.state.request.season = invalid and response.season <> invalid then m.state.request.season = response.season
+    selection = m.state.playSelection
+    if selection <> invalid then
+        ' Supplemental data owns queue context, never the current playback position or item state.
+        selection.playbackQueue = m.state.request.playbackQueue
+        selection.playbackQueueIndex = m.state.request.playbackQueueIndex
+        selection.playbackQueueScope = m.state.request.playbackQueueScope
+        selection.season = m.state.request.season
+        EpisodeQueueIdentity.Apply(selection, selection.playbackQueueScope, m.state.request.episodeQueueId)
+        applySelectedStreamsToPlaySelection(selection)
+        for each entry in selection.playbackQueue
+            if Format.SafeString(entry.itemId, "") = selection.itemId then
+                entry.item = selection.item
+                entry.startPositionTicks = selection.startPositionTicks
+            end if
+        end for
+    end if
     updateEpisodeBrowseState()
 end sub
 

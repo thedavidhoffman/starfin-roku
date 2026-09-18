@@ -57,8 +57,10 @@ Saving either the card preference or list orientation rerenders retained data,
 preserving item identity and existing focus ownership without additional requests.
 Hiding a selected summary selects the first episode; an empty list falls back to
 season navigation when available, otherwise the page. Updates beneath overlays or
-inactive pages do not take focus. Initial loading and reactivation use the same
-empty-season focus fallback. Empty season details hide playback actions and focus
+inactive pages do not take focus. Initial entry keeps focus on the page while episode data is pending, then focuses
+the first card (season summary when enabled, otherwise the first episode). Only a
+confirmed empty list uses the empty-season focus fallback, including on reactivation.
+Explicit previous/next season navigation continues to retain navigation focus. Empty season details hide playback actions and focus
 an available toolbar action; watched-action focus is resolved by button identity.
 Other toolbar callers retain playback actions by default, including TVShow
 refresh/retry behavior. Unrelated settings do not rebuild the list, and

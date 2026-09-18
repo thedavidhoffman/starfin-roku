@@ -921,6 +921,145 @@ namespace tests
             getGlobalAa().seasonFailureMessage = message
         end sub
 
+        @describe("initial season focus while loading")
+
+        @it("focuses the first horizontal card after loading with summary false")
+        function _()
+            m.node.pageState.episodeListScroll = "horizontal"
+            m.node.pageState.showSeasonSummaryCard = false
+            m.preparePendingSeasonFocus()
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+            m.assertFalse(m.node.seasonNav.isInFocusChain())
+
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(m.pendingSeasonResponse)
+
+            'bs:disable-next-line 1140
+            activeList = getActiveEpisodeList()
+            m.assertTrue(activeList.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+            'bs:disable-next-line 1140
+            focused = getFocusedItemNode()
+            m.assertEqual(focused.itemId, "episode-1")
+        end function
+
+        @it("focuses the first vertical card after loading with summary false")
+        function _()
+            m.node.pageState.episodeListScroll = "vertical"
+            m.node.pageState.showSeasonSummaryCard = false
+            m.preparePendingSeasonFocus()
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+            m.assertFalse(m.node.seasonNav.isInFocusChain())
+
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(m.pendingSeasonResponse)
+
+            'bs:disable-next-line 1140
+            activeList = getActiveEpisodeList()
+            m.assertTrue(activeList.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+            'bs:disable-next-line 1140
+            focused = getFocusedItemNode()
+            m.assertEqual(focused.itemId, "episode-1")
+        end function
+
+        @it("focuses the first horizontal card after loading with summary true")
+        function _()
+            m.node.pageState.episodeListScroll = "horizontal"
+            m.node.pageState.showSeasonSummaryCard = true
+            m.preparePendingSeasonFocus()
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+            m.assertFalse(m.node.seasonNav.isInFocusChain())
+
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(m.pendingSeasonResponse)
+
+            'bs:disable-next-line 1140
+            activeList = getActiveEpisodeList()
+            m.assertTrue(activeList.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+            'bs:disable-next-line 1140
+            focused = getFocusedItemNode()
+            m.assertEqual(focused.itemId, "season-1")
+        end function
+
+        @it("focuses the first vertical card after loading with summary true")
+        function _()
+            m.node.pageState.episodeListScroll = "vertical"
+            m.node.pageState.showSeasonSummaryCard = true
+            m.preparePendingSeasonFocus()
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+            m.assertFalse(m.node.seasonNav.isInFocusChain())
+
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(m.pendingSeasonResponse)
+
+            'bs:disable-next-line 1140
+            activeList = getActiveEpisodeList()
+            m.assertTrue(activeList.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+            'bs:disable-next-line 1140
+            focused = getFocusedItemNode()
+            m.assertEqual(focused.itemId, "season-1")
+        end function
+
+        @it("focuses cards when the response arrives before activation")
+        function _()
+            m.preparePendingSeasonFocus()
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(m.pendingSeasonResponse)
+
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.node.episodesList.hasFocus())
+            m.assertEqual(m.node.pageState.focusArea, "episodes")
+        end function
+
+        @it("preserves explicitly selected season navigation during loading")
+        function _()
+            m.preparePendingSeasonFocus()
+            'bs:disable-next-line 1140
+            focusSeasonNav()
+
+            'bs:disable-next-line 1140
+            handleTVSeasonPrimaryResponse(m.pendingSeasonResponse)
+
+            m.assertTrue(m.node.seasonNav.isInFocusChain())
+            m.assertEqual(m.node.pageState.focusArea, "seasonNav")
+        end function
+
+        function preparePendingSeasonFocus()
+            m.top.initialFocusEpisodeId = ""
+            m.node.pageState.episodesLoaded = false
+            m.node.pageState.seasons = [m.node.pageState.season, m.createSeason("season-2", "Season 2")]
+            'bs:disable-next-line 1140
+            clearEpisodes()
+            'bs:disable-next-line 1140
+            updateAdjacentSeasons()
+            'bs:disable-next-line 1140
+            renderSeason(m.node.pageState.season)
+            request = m.createRequest()
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, request)
+            entry = LatestRequestLifecycle.TakeNext(m.node.pageState.detailsLoad)
+            m.pendingSeasonResponse = { ok: true, action: "tvSeason", seasonId: "season-1", requestId: entry.request.requestId, payload: { season: m.node.pageState.season, episodes: [m.createEpisode("episode-1")] } }
+        end function
+
         @describe("empty horizontal season focus")
 
         @it("focuses adjacent-season navigation on initial load")

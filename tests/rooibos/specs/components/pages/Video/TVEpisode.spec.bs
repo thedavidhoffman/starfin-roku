@@ -123,7 +123,7 @@ namespace tests
             m.assertFalse(m.node.previousNextButton.hasNext)
         end function
 
-        @it("keeps episode navigation hidden when a reused page leaves cinematic mode")
+        @it("keeps episode navigation visible when switching to full-screen mode")
         function _()
             m.node.state.layout.isCinematic = true
             m.node.state.request = {
@@ -145,6 +145,44 @@ namespace tests
             updateEpisodeBrowseState()
 
             m.assertFalse(m.node.state.layout.isCinematic)
+            m.assertTrue(m.node.previousNextButton.visible)
+        end function
+
+        @it("shows and focuses episode navigation in full-screen mode")
+        function _()
+            m.node.state.layout.isCinematic = false
+            m.node.state.request = {
+                item: { Id: "second", Type: "Episode" }
+                playbackQueue: [{ itemId: "first" }, { itemId: "second" }, { itemId: "third" }]
+                playbackQueueIndex: 1
+                playbackQueueScope: "series"
+            }
+
+            'bs:disable-next-line 1140
+            updateEpisodeBrowseState()
+            'bs:disable-next-line 1140
+            focusEpisodeBrowse()
+
+            m.assertTrue(m.node.previousNextButton.visible)
+            m.assertTrue(m.node.previousNextButton.hasPrevious)
+            m.assertTrue(m.node.previousNextButton.hasNext)
+            m.assertTrue(m.node.previousNextButton.isInFocusChain())
+            m.assertEqual(m.node.state.focusArea, "episodeBrowse")
+        end function
+
+        @it("hides full-screen navigation for a single episode")
+        function _()
+            m.node.state.layout.isCinematic = false
+            m.node.state.request = {
+                item: { Id: "only", Type: "Episode" }
+                playbackQueue: [{ itemId: "only" }]
+                playbackQueueIndex: 0
+                playbackQueueScope: "series"
+            }
+
+            'bs:disable-next-line 1140
+            updateEpisodeBrowseState()
+
             m.assertFalse(m.node.previousNextButton.visible)
         end function
 
@@ -289,12 +327,14 @@ namespace tests
                 playbackQueueScope: "series"
             }
 
+            m.node.state.request.series = { Id: "series-1", Name: "Series", metadataLoaded: true }
             'bs:disable-next-line 1140
             loadItemDetails()
 
             m.assertEqual(m.node.episodeDetailsTask.request.itemId, "episode-1")
             m.assertEqual(m.node.episodeDetailsTask.request.requestId, 1)
             m.assertFalse(m.node.episodeDetailsTask.request.loadPlaybackQueue)
+            m.assertTrue(m.node.episodeDetailsTask.request.series.metadataLoaded)
             firstRequest = m.node.episodeDetailsTask.request
             'bs:disable-next-line 1140
             loadItemDetails()
@@ -309,6 +349,7 @@ namespace tests
             m.node.state.detailsTaskPool.nextIndex = 0
             m.node.state.request = { server: "server", token: "token", userId: "user", itemId: "episode-2" }
 
+            m.node.state.request.series = { Id: "series-1", Name: "Series", metadataLoaded: true }
             'bs:disable-next-line 1140
             refreshPlaybackState()
 
@@ -316,6 +357,7 @@ namespace tests
             m.assertEqual(m.node.episodeDetailsTask.request.itemId, "episode-2")
             m.assertEqual(m.node.episodeDetailsTask.request.requestId, 1)
             m.assertFalse(m.node.episodeDetailsTask.request.loadPlaybackQueue)
+            m.assertTrue(m.node.episodeDetailsTask.request.series.metadataLoaded)
         end function
 
         @it("declares the alternate episode details task")
@@ -608,6 +650,195 @@ namespace tests
 
             m.assertTrue(button.hasFocus())
             m.assertTrue(button.findNode("textLabel").visible)
+        end function
+
+        @describe("progressive detail responses")
+
+        @it("renders primary details and cast while optional work remains active")
+        function _()
+            m.prepareProgressiveEpisode()
+            Spinner.Show(0)
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+
+            m.assertEqual(m.node.state.itemContent.raw.Name, "Early episode")
+            m.assertEqual(m.node.cast.people[0].Name, "Actor")
+            m.assertFalse(m.node.state.mediaInfoPending)
+            m.assertNotInvalid(m.node.state.detailsLoad.active)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+        end function
+
+        @it("adds late series and navigation without resetting selected audio or focus")
+        function _()
+            m.prepareProgressiveEpisode()
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+            m.node.state.selectedStreams.audio = { streamIndex: 4 }
+            m.node.mediaToolbar.callFunc("activate")
+            button = m.node.mediaToolbar.findNode("mediaInfoButton")
+            button.setFocus(true)
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: { ok: true, action: "tvEpisodeSeries", requestId: 1, itemId: "episode-1", series: { Id: "series-1", Name: "Series", logoUrl: "cached-logo", metadataLoaded: true } } })
+            finalResponse = m.primaryResponse
+            finalResponse.action = "tvEpisodeDetails"
+            finalResponse.playbackQueue = [{ itemId: "episode-1" }, { itemId: "episode-2" }]
+            finalResponse.playbackQueueIndex = 0
+            finalResponse.playbackQueueScope = "series"
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: finalResponse })
+
+            m.assertTrue(button.hasFocus())
+            m.assertEqual(m.node.state.playSelection.audioStreamIndex, 4)
+            m.assertEqual(m.node.mediaShell.mediaContent.logoUrl, "cached-logo")
+            m.assertTrue(m.node.previousNextButton.visible)
+            m.assertTrue(m.node.previousNextButton.hasNext)
+            m.assertInvalid(m.node.state.detailsLoad.active)
+        end function
+
+        @it("ignores staged data after a newer request for the same episode")
+        function _()
+            m.prepareProgressiveEpisode()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "episode-1" })
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+
+            m.assertTrue(m.node.state.mediaInfoPending)
+            m.assertInvalid(m.node.state.itemContent)
+            m.assertNotInvalid(m.node.state.detailsLoad.active)
+        end function
+
+        @it("ignores staged data after deactivation")
+        function _()
+            m.prepareProgressiveEpisode()
+            m.top.callFunc("deactivate")
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+
+            m.assertTrue(m.node.state.mediaInfoPending)
+            m.assertInvalid(m.node.state.itemContent)
+        end function
+
+        @it("does not reapply duplicate primary payloads")
+        function _()
+            m.prepareProgressiveEpisode()
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+            duplicate = m.primaryResponse
+            duplicate.payload = { Id: "episode-1", Name: "Duplicate", Type: "Episode" }
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: duplicate })
+
+            m.assertEqual(m.node.state.itemContent.raw.Name, "Early episode")
+        end function
+
+        @it("preserves updated resume ticks when late artwork and queue arrive")
+        function _()
+            m.prepareProgressiveEpisode()
+            m.node.state.request.startPositionTicks = 100&
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+            'bs:disable-next-line 1140
+            updateItemPlaybackProgress(m.node.state.itemContent, { positionTicks: 500&, durationTicks: 1000&, isFinished: false })
+
+            m.finishProgressiveEpisode()
+
+            m.assertEqual(m.node.state.playSelection.startPositionTicks, 500&)
+            m.assertEqual(m.node.state.playSelection.item.UserData.PlaybackPositionTicks, 500&)
+            m.assertEqual(m.node.state.request.playbackQueue[0].startPositionTicks, 500&)
+        end function
+
+        @it("preserves a watched change when the delayed queue has older user data")
+        function _()
+            m.prepareProgressiveEpisode()
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+            'bs:disable-next-line 1140
+            updateItemWatchedState(m.node.state.itemContent, true)
+
+            m.finishProgressiveEpisode()
+
+            m.assertTrue(m.node.state.playSelection.item.UserData.Played)
+            m.assertTrue(m.node.state.request.playbackQueue[0].item.UserData.Played)
+        end function
+
+        @it("ignores repeated series stages after artwork has been committed")
+        function _()
+            m.prepareProgressiveEpisode()
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+            first = { ok: true, action: "tvEpisodeSeries", requestId: 1, itemId: "episode-1", series: { Id: "series-1", Name: "First", metadataLoaded: true } }
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: first })
+            first.series = { Id: "series-1", Name: "Repeated", metadataLoaded: true }
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: first })
+
+            m.assertEqual(m.node.state.request.series.Name, "First")
+            m.assertEqual(m.node.state.playSelection.series.Name, "First")
+        end function
+
+        @it("starts a queued playback refresh after ignoring stale supplemental data")
+        function _()
+            m.prepareProgressiveEpisode()
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+            m.node.state.request.token = "token"
+            m.node.state.request.userId = "user"
+            m.node.state.detailsTaskPool.nextIndex = 1
+            'bs:disable-next-line 1140
+            refreshPlaybackState()
+
+            m.finishProgressiveEpisode()
+
+            m.assertInvalid(m.node.state.request.series)
+            m.assertInvalid(m.node.state.request.playbackQueue)
+            m.assertEqual(m.node.state.detailsLoad.active.request.requestId, 2)
+            m.assertTrue(m.node.state.detailsLoad.active.context.isPlaybackRefresh)
+            m.assertTrue(m.node.state.playbackRefreshPending)
+            refreshed = { ok: true, action: "tvEpisodePrimary", requestId: 2, itemId: "episode-1", payload: { Id: "episode-1", Type: "Episode", Name: "Refreshed", UserData: { PlaybackPositionTicks: 900& } } }
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: refreshed })
+
+            m.assertFalse(m.node.state.playbackRefreshPending)
+            m.assertEqual(m.node.state.playSelection.startPositionTicks, 900&)
+            m.assertEqual(m.node.state.itemContent.raw.Name, "Refreshed")
+        end function
+
+        function finishProgressiveEpisode()
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: { ok: true, action: "tvEpisodeSeries", requestId: 1, itemId: "episode-1", series: { Id: "series-1", Name: "Series", metadataLoaded: true, logoUrl: "logo" } } })
+            finalResponse = m.primaryResponse
+            finalResponse.action = "tvEpisodeDetails"
+            finalResponse.playbackQueue = [{ itemId: "episode-1", item: { Id: "episode-1", UserData: { Played: false, PlaybackPositionTicks: 100& } }, startPositionTicks: 100& }, { itemId: "episode-2" }]
+            finalResponse.playbackQueueIndex = 0
+            finalResponse.playbackQueueScope = "series"
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: finalResponse })
+        end function
+
+        function prepareProgressiveEpisode()
+            scene = m.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                spinnerNode = CreateObject("roSGNode", "Spinner")
+                spinnerNode.id = "loadingSpinner"
+                scene.appendChild(spinnerNode)
+            end if
+            m.node.state.request = { server: "server", itemId: "episode-1", item: { Id: "episode-1", Type: "Episode" } }
+            m.node.state.itemId = "episode-1"
+            m.node.state.itemContent = invalid
+            m.node.state.layout.isCinematic = false
+            m.node.state.mediaInfoPending = true
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "episode-1" }, { isPlaybackRefresh: false })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            m.primaryResponse = { ok: true, action: "tvEpisodePrimary", itemId: "episode-1", requestId: 1, payload: { Id: "episode-1", Type: "Episode", Name: "Early episode", People: [{ Name: "Actor", Type: "Actor" }], MediaStreams: [{ Type: "Video", Codec: "h264" }] } }
         end function
 
         @describe("media summary readiness")
