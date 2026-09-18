@@ -34,7 +34,7 @@ never clear the optimistically rendered season label.
 
 ## Episode cards and season actions
 
-Settings > TV includes **Show Season Summary Card**, an account-specific Off/On
+Settings > TV includes **Show season summary card in TV episode list**, an account-specific Off/On
 preference stored as `show-season-summary-card`. It defaults to On for new and
 existing accounts without a saved value. The setting follows the existing Settings
 edit/save lifecycle and is included in System Info's account settings. No registry
@@ -98,7 +98,7 @@ failure retries and starts playback once fresh targets arrive.
 ## Automated setting coverage
 
 TV settings persistence tests independently save and verify On and Off for both
-Show Season Summary Card and Use Episode Images. Each case saves the opposite
+Show season summary card in TV episode list and Use Episode Images. Each case saves the opposite
 value first, so it exercises a real change even when run alone.
 
 TV season display tests flip the summary preference On and then Off in each list

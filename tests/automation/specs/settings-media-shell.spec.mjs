@@ -8,7 +8,7 @@ const cases = [
   { label: 'theme music off', nodeId: 'themeMusicOptions', index: 0, key: 'theme-music', value: 'off' }
 ];
 
-describe('Starfin Media Shell settings persistence', function () {
+describe('Starfin Media shell settings persistence', function () {
   for (const testCase of cases) {
     it(`persists ${testCase.label}`, async function () {
       await exerciseRadioSetting(this, {

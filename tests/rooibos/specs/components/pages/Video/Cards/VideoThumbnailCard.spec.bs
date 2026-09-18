@@ -6,6 +6,13 @@ namespace tests
     @suite("VideoThumbnailCard component")
     class VideoThumbnailCardTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.cardNodes.logoOverlay = m.top.findNode("logoOverlay")
+            m.node.cardNodes.logoOverlay.loadSync = true
+            'bs:disable-next-line 1140
+            applyThumbnailLayout([441, 249], 4)
+        end function
+
         @describe("thumbnail presentation")
 
         @it("renders thumbnail artwork and two title lines when metadata is hidden")
@@ -19,6 +26,150 @@ namespace tests
             m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 249)
             m.assertEqual(Number.ToInteger(m.top.findNode("title").numLines, -1), 2)
             m.assertFalse(m.top.findNode("metadataLabel").visible)
+            m.assertFalse(m.top.findNode("logoGradient").visible)
+        end function
+
+        @it("fits the logo at bottom left above playback progress")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: { PlayedPercentage: 50 } })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+
+            m.top.itemContent = content
+
+            logo = m.top.findNode("logoOverlay")
+            m.assertTrue(logo.visible)
+            m.assertEqual(logo.uri, content.logoOverlayUrl)
+            m.assertEqual(logo.loadDisplayMode, "scaletofit")
+            m.assertEqual(logo.width, 176.0)
+            m.assertEqual(logo.height, 62.0)
+            m.assertEqual(logo.translation, [12.0, 160.0])
+            m.assertTrue(m.top.findNode("progressBar").visible)
+        end function
+
+        @it("lowers the logo to the bottom inset without playback progress")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: {} })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+
+            m.top.itemContent = content
+
+            m.assertFalse(m.top.findNode("progressBar").visible)
+            m.assertEqual(m.top.findNode("logoOverlay").translation, [12.0, 175.0])
+        end function
+
+        @it("raises the logo when a reused card displays playback progress")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: {} })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+            m.top.itemContent = content
+            resumed = m.createContent({ Type: "Episode", UserData: { PlayedPercentage: 50 } })
+            resumed.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+
+            m.top.itemContent = resumed
+
+            m.assertTrue(m.top.findNode("progressBar").visible)
+            m.assertEqual(m.top.findNode("logoOverlay").translation, [12.0, 160.0])
+        end function
+
+        @it("clears a previous logo when a card is reused without one")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: {} })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+            m.top.itemContent = content
+
+            m.top.itemContent = m.createContent({ Type: "Movie", UserData: {} })
+
+            m.assertFalse(m.top.findNode("logoOverlay").visible)
+            m.assertEqual(m.top.findNode("logoOverlay").uri, "")
+            m.assertFalse(m.top.findNode("logoGradient").visible)
+        end function
+
+        @it("sizes the logo with the thumbnail artwork")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: {} })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png", cardLayout: { artworkSize: [600, 338], numColumns: 3 } })
+
+            m.top.itemContent = content
+
+            logo = m.top.findNode("logoOverlay")
+            m.assertEqual(logo.width, 240.0)
+            m.assertEqual(logo.height, 84.0)
+            m.assertEqual(logo.translation, [12.0, 242.0])
+            m.assertEqual(m.top.findNode("logoGradient").width, 600.0)
+            m.assertEqual(m.top.findNode("logoGradient").height, 338.0)
+        end function
+
+        @it("draws the logo gradient over artwork and below progress")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: { PlayedPercentage: 50 } })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+
+            m.top.itemContent = content
+
+            gradient = m.top.findNode("logoGradient")
+            mask = m.top.findNode("posterMask")
+            m.assertTrue(gradient.visible)
+            m.assertEqual(gradient.uri, "pkg:/images/overlays/episode-logo-gradient.png")
+            m.assertEqual(gradient.width, 441.0)
+            m.assertEqual(gradient.height, 249.0)
+            m.assertTrue(mask.getChild(1).isSameNode(m.top.findNode("poster")))
+            m.assertTrue(mask.getChild(2).isSameNode(gradient))
+            m.assertTrue(mask.getChild(3).isSameNode(m.top.findNode("progressBar")))
+            m.assertTrue(mask.getChild(4).isSameNode(m.top.findNode("logoOverlay")))
+        end function
+
+        @it("hides the gradient while the current logo is loading")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: {} })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+            m.top.itemContent = content
+            m.node.cardNodes.logoOverlay = { uri: content.logoOverlayUrl, loadStatus: "loading" }
+
+            'bs:disable-next-line 1140
+            onLogoLoadStatusChanged()
+
+            m.assertFalse(m.top.findNode("logoGradient").visible)
+        end function
+
+        @it("hides the gradient after a failed logo load")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: {} })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+            m.top.itemContent = content
+            m.node.cardNodes.logoOverlay = { uri: content.logoOverlayUrl, loadStatus: "failed" }
+
+            'bs:disable-next-line 1140
+            onLogoLoadStatusChanged()
+
+            m.assertFalse(m.top.findNode("logoGradient").visible)
+        end function
+
+        @it("does not show a gradient for a late ready status from different content")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: {} })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+            m.top.itemContent = content
+            m.node.cardNodes.logoOverlay = { uri: "pkg:/images/old-logo.png", loadStatus: "ready" }
+
+            'bs:disable-next-line 1140
+            onLogoLoadStatusChanged()
+
+            m.assertFalse(m.top.findNode("logoGradient").visible)
+        end function
+
+        @it("clears the previous gradient when a replacement logo cannot load")
+        function _()
+            content = m.createContent({ Type: "Episode", UserData: {} })
+            content.addFields({ logoOverlayUrl: "pkg:/images/icons/watched-check.png" })
+            m.top.itemContent = content
+            m.assertTrue(m.top.findNode("logoGradient").visible)
+            replacement = m.createContent({ Type: "Episode", UserData: {} })
+            replacement.addFields({ logoOverlayUrl: "pkg:/images/missing-logo-test.png" })
+
+            m.top.itemContent = replacement
+
+            m.assertEqual(m.top.findNode("logoOverlay").loadStatus, "failed")
+            m.assertFalse(m.top.findNode("logoGradient").visible)
         end function
 
         function createContent(raw as object) as object

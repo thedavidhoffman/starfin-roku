@@ -4,8 +4,8 @@ import {
 } from '../support/settings.mjs';
 
 const accountBadgeCases = [
-  { label: 'Account Badge on', index: 1, value: 'on' },
-  { label: 'Account Badge off', index: 0, value: 'off' }
+  { label: 'Account badge on', index: 1, value: 'on' },
+  { label: 'Account badge off', index: 0, value: 'off' }
 ];
 
 describe('Starfin General settings persistence', function () {

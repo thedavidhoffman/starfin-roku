@@ -8,7 +8,7 @@ namespace tests
             m.node.homeState.request = { server: "http://server", token: "token", userId: "user" }
             m.node.homeState.rows = {}
             m.top.settings = { "home-episode-images": "on" }
-            m.node.homeState.episodeImagesEnabled = true
+            m.node.homeState.episodeImageMode = "on-with-logo"
             m.node.homeState.refresh = { blocking: false, pendingCore: {}, messages: [] }
             m.node.homeState.playbackRows.continueWatchingItems = []
             m.node.homeState.playbackRows.nextUpItems = []
@@ -42,45 +42,50 @@ namespace tests
         @it("uses episode stills for continueWatching when on")
         function _()
             m.top.settings = { "home-episode-images": "on" }
-            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
             'bs:disable-next-line 1140
             row = buildRowContent("continueWatching", "Row", [item])
             m.assertTrue(Instr(1, row.getChild(0).HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertTrue(Instr(1, row.getChild(0).logoOverlayUrl, "/series/Images/Logo?tag=logo") > 0)
         end function
 
         @it("uses series artwork for continueWatching when off")
         function _()
             m.top.settings = { "home-episode-images": "off" }
-            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
             'bs:disable-next-line 1140
             row = buildRowContent("continueWatching", "Row", [item])
             m.assertTrue(Instr(1, row.getChild(0).HDPosterUrl, "/series/Images/Thumb") > 0)
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
         end function
 
         @it("uses episode stills for nextUp when on")
         function _()
             m.top.settings = { "home-episode-images": "on" }
-            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
             'bs:disable-next-line 1140
             row = buildRowContent("nextUp", "Row", [item])
             m.assertTrue(Instr(1, row.getChild(0).HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertTrue(Instr(1, row.getChild(0).logoOverlayUrl, "/series/Images/Logo?tag=logo") > 0)
         end function
 
         @it("uses series artwork for nextUp when off")
         function _()
             m.top.settings = { "home-episode-images": "off" }
-            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
             'bs:disable-next-line 1140
             row = buildRowContent("nextUp", "Row", [item])
             m.assertTrue(Instr(1, row.getChild(0).HDPosterUrl, "/series/Images/Thumb") > 0)
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
         end function
 
         @it("falls back to series artwork without an episode still")
         function _()
-            item = { Id: "episode", Type: "Episode", ImageTags: {}, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }
+            item = { Id: "episode", Type: "Episode", ImageTags: {}, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
             'bs:disable-next-line 1140
             row = buildRowContent("nextUp", "Row", [item])
             m.assertTrue(Instr(1, row.getChild(0).HDPosterUrl, "/series/Images/Thumb") > 0)
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
         end function
 
         @it("leaves movie artwork unchanged")
@@ -89,20 +94,22 @@ namespace tests
             'bs:disable-next-line 1140
             row = buildRowContent("continueWatching", "Row", [item])
             m.assertTrue(Instr(1, row.getChild(0).HDPosterUrl, "/movie/Images/Thumb") > 0)
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
         end function
 
         @it("does not alter other Home rows")
         function _()
             m.top.settings = { "home-episode-images": "off" }
-            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
             'bs:disable-next-line 1140
             row = buildRowContent("libraries", "Row", [item])
             m.assertTrue(Instr(1, row.getChild(0).HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
         end function
 
         @it("updates existing nodes without rebuilding shelves or starting requests")
         function _()
-            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
             'bs:disable-next-line 1140
             addRow("nextUp", "Next Up", [item])
             'bs:disable-next-line 1140
@@ -119,6 +126,7 @@ namespace tests
             m.assertTrue(m.node.homeState.rows.nextUp.isSameNode(row))
             m.assertTrue(row.getChild(0).isSameNode(child))
             m.assertTrue(Instr(1, child.HDPosterUrl, "/series/Images/Thumb") > 0)
+            m.assertEqual(child.logoOverlayUrl, "")
             m.assertEqual(m.node.homeState.queryId, queryId)
             m.assertEqual(m.node.tasks.Count(), taskCount)
         end function
@@ -129,7 +137,7 @@ namespace tests
             m.stubCall(runHomeTask, m.createControlledHomeTask)
             m.startPermissionRefresh({ canAccessLiveTv: false })
             m.top.settings = { "home-episode-images": "off" }
-            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }] } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }] } }
             m.assertTrue(Instr(1, m.node.homeState.rows.nextUp.getChild(0).HDPosterUrl, "/series/Images/Thumb") > 0)
         end function
 
@@ -137,10 +145,11 @@ namespace tests
         function _()
             m.top.settings = { "home-episode-images": "on" }
             m.top.settings = {}
-            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
             'bs:disable-next-line 1140
             row = buildRowContent("nextUp", "Row", [item])
             m.assertTrue(Instr(1, row.getChild(0).HDPosterUrl, "/series/Images/Thumb") > 0)
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
         end function
 
         @it("ignores unrelated settings changes")
@@ -152,6 +161,202 @@ namespace tests
             m.top.settings = { "home-episode-images": "on", "theme-music": "on" }
             m.assertEqual(child.HDPosterUrl, before)
             m.assertTrue(m.node.homeState.rows.nextUp.getChild(0).isSameNode(child))
+        end function
+
+        @it("omits the logo when metadata is absent")
+        function _()
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" } }
+
+            'bs:disable-next-line 1140
+            row = buildRowContent("nextUp", "Row", [item])
+
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
+        end function
+
+        @it("omits the logo without its parent ID")
+        function _()
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentLogoImageTag: "logo" }
+
+            'bs:disable-next-line 1140
+            row = buildRowContent("nextUp", "Row", [item])
+
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
+        end function
+
+        @it("omits the logo without its image tag")
+        function _()
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentLogoItemId: "series" }
+
+            'bs:disable-next-line 1140
+            row = buildRowContent("nextUp", "Row", [item])
+
+            m.assertEqual(row.getChild(0).logoOverlayUrl, "")
+        end function
+
+        @it("restores logos on existing nodes when episode images are enabled")
+        function _()
+            m.top.settings = { "home-episode-images": "off" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Next Up", [item])
+            child = m.node.homeState.rows.nextUp.getChild(0)
+
+            m.top.settings = { "home-episode-images": "on" }
+
+            m.assertTrue(m.node.homeState.rows.nextUp.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.logoOverlayUrl, "/series/Images/Logo?tag=logo") > 0)
+        end function
+
+        @it("updates nextUp from off to on-without-logo without new requests")
+        function _()
+            m.top.settings = { "home-episode-images": "off" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Row", [item])
+            child = m.node.homeState.rows.nextUp.getChild(0)
+            queryId = m.node.homeState.queryId
+            taskCount = m.node.tasks.Count()
+
+            m.top.settings = { "home-episode-images": "on-without-logo" }
+
+            m.assertTrue(m.node.homeState.rows.nextUp.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertEqual(child.logoOverlayUrl, "")
+            m.assertEqual(m.node.homeState.queryId, queryId)
+            m.assertEqual(m.node.tasks.Count(), taskCount)
+        end function
+
+        @it("updates nextUp from on-with-logo to on-without-logo without new requests")
+        function _()
+            m.top.settings = { "home-episode-images": "on-with-logo" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Row", [item])
+            child = m.node.homeState.rows.nextUp.getChild(0)
+            queryId = m.node.homeState.queryId
+            taskCount = m.node.tasks.Count()
+
+            m.top.settings = { "home-episode-images": "on-without-logo" }
+
+            m.assertTrue(m.node.homeState.rows.nextUp.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertEqual(child.logoOverlayUrl, "")
+            m.assertEqual(m.node.homeState.queryId, queryId)
+            m.assertEqual(m.node.tasks.Count(), taskCount)
+        end function
+
+        @it("updates nextUp from on-without-logo to on-with-logo without new requests")
+        function _()
+            m.top.settings = { "home-episode-images": "on-without-logo" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Row", [item])
+            child = m.node.homeState.rows.nextUp.getChild(0)
+            queryId = m.node.homeState.queryId
+            taskCount = m.node.tasks.Count()
+
+            m.top.settings = { "home-episode-images": "on-with-logo" }
+
+            m.assertTrue(m.node.homeState.rows.nextUp.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertTrue(Instr(1, child.logoOverlayUrl, "/series/Images/Logo") > 0)
+            m.assertEqual(m.node.homeState.queryId, queryId)
+            m.assertEqual(m.node.tasks.Count(), taskCount)
+        end function
+
+        @it("updates nextUp from on-without-logo to off without new requests")
+        function _()
+            m.top.settings = { "home-episode-images": "on-without-logo" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("nextUp", "Row", [item])
+            child = m.node.homeState.rows.nextUp.getChild(0)
+            queryId = m.node.homeState.queryId
+            taskCount = m.node.tasks.Count()
+
+            m.top.settings = { "home-episode-images": "off" }
+
+            m.assertTrue(m.node.homeState.rows.nextUp.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/series/Images/Thumb") > 0)
+            m.assertEqual(child.logoOverlayUrl, "")
+            m.assertEqual(m.node.homeState.queryId, queryId)
+            m.assertEqual(m.node.tasks.Count(), taskCount)
+        end function
+
+        @it("updates continueWatching from off to on-without-logo without new requests")
+        function _()
+            m.top.settings = { "home-episode-images": "off" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Row", [item])
+            child = m.node.homeState.rows.continueWatching.getChild(0)
+            queryId = m.node.homeState.queryId
+            taskCount = m.node.tasks.Count()
+
+            m.top.settings = { "home-episode-images": "on-without-logo" }
+
+            m.assertTrue(m.node.homeState.rows.continueWatching.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertEqual(child.logoOverlayUrl, "")
+            m.assertEqual(m.node.homeState.queryId, queryId)
+            m.assertEqual(m.node.tasks.Count(), taskCount)
+        end function
+
+        @it("updates continueWatching from on-with-logo to on-without-logo without new requests")
+        function _()
+            m.top.settings = { "home-episode-images": "on-with-logo" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Row", [item])
+            child = m.node.homeState.rows.continueWatching.getChild(0)
+            queryId = m.node.homeState.queryId
+            taskCount = m.node.tasks.Count()
+
+            m.top.settings = { "home-episode-images": "on-without-logo" }
+
+            m.assertTrue(m.node.homeState.rows.continueWatching.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertEqual(child.logoOverlayUrl, "")
+            m.assertEqual(m.node.homeState.queryId, queryId)
+            m.assertEqual(m.node.tasks.Count(), taskCount)
+        end function
+
+        @it("updates continueWatching from on-without-logo to on-with-logo without new requests")
+        function _()
+            m.top.settings = { "home-episode-images": "on-without-logo" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Row", [item])
+            child = m.node.homeState.rows.continueWatching.getChild(0)
+            queryId = m.node.homeState.queryId
+            taskCount = m.node.tasks.Count()
+
+            m.top.settings = { "home-episode-images": "on-with-logo" }
+
+            m.assertTrue(m.node.homeState.rows.continueWatching.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/episode/Images/Primary") > 0)
+            m.assertTrue(Instr(1, child.logoOverlayUrl, "/series/Images/Logo") > 0)
+            m.assertEqual(m.node.homeState.queryId, queryId)
+            m.assertEqual(m.node.tasks.Count(), taskCount)
+        end function
+
+        @it("updates continueWatching from on-without-logo to off without new requests")
+        function _()
+            m.top.settings = { "home-episode-images": "on-without-logo" }
+            item = { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" }, ParentThumbItemId: "series", ParentThumbImageTag: "thumb", ParentLogoItemId: "series", ParentLogoImageTag: "logo" }
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Row", [item])
+            child = m.node.homeState.rows.continueWatching.getChild(0)
+            queryId = m.node.homeState.queryId
+            taskCount = m.node.tasks.Count()
+
+            m.top.settings = { "home-episode-images": "off" }
+
+            m.assertTrue(m.node.homeState.rows.continueWatching.getChild(0).isSameNode(child))
+            m.assertTrue(Instr(1, child.HDPosterUrl, "/series/Images/Thumb") > 0)
+            m.assertEqual(child.logoOverlayUrl, "")
+            m.assertEqual(m.node.homeState.queryId, queryId)
+            m.assertEqual(m.node.tasks.Count(), taskCount)
         end function
 
         @describe("Live TV permission and denied responses")

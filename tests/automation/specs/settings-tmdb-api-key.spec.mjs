@@ -22,7 +22,7 @@ async function exerciseTmdbApiKey(context, value, checkpoint) {
         base: 'scene',
         keyPath: 'dialog.title'
       });
-      return response.found && response.value === 'Enter TMDB API Key';
+      return response.found && response.value === 'Enter TMDB API key';
     }, 'the TMDB API key keyboard');
 
     await environment.odc.setValue({ base: 'scene', keyPath: 'dialog.text', value });

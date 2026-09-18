@@ -27,8 +27,7 @@ describe('Starfin TV settings persistence', function () {
 
 describe('Starfin TV toggle settings persistence', function () {
   const settings = [
-    { label: 'season summary card', nodeId: 'showSeasonSummaryCardOptions', key: 'show-season-summary-card' },
-    { label: 'Home episode images', nodeId: 'homeEpisodeImagesOptions', key: 'home-episode-images' }
+    { label: 'season summary card', nodeId: 'showSeasonSummaryCardOptions', key: 'show-season-summary-card' }
   ];
 
   for (const setting of settings) {
@@ -54,13 +53,42 @@ describe('Starfin TV toggle settings persistence', function () {
   }
 });
 
+
+async function assertRenderedOverlays(environment, rows, withLogo) {
+  const nodeRefKey = 'episode-overlays';
+  await environment.odc.storeNodeReferences({ nodeRefKey, includeArrayGridChildren: true });
+  for (const row of rows) {
+    const { nodeRefs } = await environment.odc.getNodesWithProperties({ nodeRefKey, properties: [
+      { field: 'id', value: 'presentation' },
+      { keyPath: 'itemContent.raw.Id', value: row.id }
+    ] });
+    assert.ok(nodeRefs.length, `${row.key} episode card must be rendered`);
+    for (const ref of nodeRefs) {
+      for (const id of ['logoOverlay', 'logoGradient']) {
+        await waitFor(async () => {
+          const response = await environment.odc.getValue({ base: 'nodeRef', nodeRefKey, keyPath: `${ref}.#${id}.visible` });
+          return response.value === withLogo;
+        }, `${row.key} ${id} visibility after image loading`);
+      }
+    }
+  }
+  await environment.odc.deleteNodeReferences({ nodeRefKey });
+}
+
 describe('Starfin Home episode images', function () {
-  for (const enabled of [false, true]) {
-    it(`updates both Home rows with episode images ${enabled ? 'on' : 'off'} and restores on restart`, async function () {
+  const modes = ['off', 'on-with-logo', 'on-without-logo'];
+  const transitions = modes.flatMap(from => modes.filter(to => to !== from).map(to => ({ from, to })));
+  for (const { from, to } of transitions) {
+    const enabled = to !== 'off';
+    it(`updates both Home rows from ${from} to ${to} and restores on restart`, async function () {
       const { environment, accountKey } = await openSettings(categories.tv);
-      await selectRadioOption(environment, 'homeEpisodeImagesOptions', enabled ? 0 : 1);
+      // Force a change so even the default Off mode gets a registry write.
+      await selectRadioOption(environment, 'homeEpisodeImagesOptions', modes.indexOf(to));
       await closeAndSaveSettings(environment);
-      await assertSettingPersisted(environment, accountKey, 'account', 'home-episode-images', enabled ? 'off' : 'on');
+      await openSettings(categories.tv);
+      await selectRadioOption(environment, 'homeEpisodeImagesOptions', modes.indexOf(from));
+      await closeAndSaveSettings(environment);
+      await assertSettingPersisted(environment, accountKey, 'account', 'home-episode-images', from);
       await openSettings(categories.tv);
       const read = async keyPath => (await environment.odc.getValue({ base: 'scene', keyPath })).value;
       const inspectRows = async () => {
@@ -76,38 +104,53 @@ describe('Starfin Home episode images', function () {
             if (raw?.Type !== 'Episode' || !raw.ImageTags?.Primary) continue;
             const seriesId = raw.ParentThumbItemId || raw.ParentThumbImageItemId;
             const seriesTag = raw.ParentThumbImageTag;
-            if (!seriesId || !seriesTag) continue;
-            rows.push({ key, path: `${path}.${item}`, id: raw.Id, seriesId });
+            if (!seriesId || !seriesTag || !raw.ParentLogoItemId || !raw.ParentLogoImageTag) continue;
+            rows.push({ key, path: `${path}.${item}`, id: raw.Id, seriesId, logoId: raw.ParentLogoItemId, logoTag: raw.ParentLogoImageTag });
             break;
           }
         }
-        assert.deepEqual(rows.map(row => row.key).sort(), ['continueWatching', 'nextUp'], 'Both rows need an episode with a still and series artwork.');
+        assert.deepEqual(rows.map(row => row.key).sort(), ['continueWatching', 'nextUp'], 'Both rows need an episode with a still, series artwork, and a parent logo.');
         return rows;
       };
       const rows = await inspectRows();
       for (const row of rows) {
-        const startingImage = enabled ? `/Items/${row.seriesId}/Images/Thumb` : `/Items/${row.id}/Images/Primary`;
+        const startingImage = from === 'off' ? `/Items/${row.seriesId}/Images/Thumb` : `/Items/${row.id}/Images/Primary`;
         await waitFor(async () => String(await read(`${row.path}.HDPosterUrl`)).includes(startingImage), `${row.key} to show the opposite artwork before editing`);
       }
       const previousUrls = await Promise.all(rows.map(row => read(`${row.path}.HDPosterUrl`)));
-      await selectRadioOption(environment, 'homeEpisodeImagesOptions', enabled ? 1 : 0);
+      const previousLogos = await Promise.all(rows.map(row => read(`${row.path}.logoOverlayUrl`)));
+      await selectRadioOption(environment, 'homeEpisodeImagesOptions', modes.indexOf(to));
       assert.deepEqual(await Promise.all(rows.map(row => read(`${row.path}.HDPosterUrl`))), previousUrls, 'Editing should not affect Home until Settings closes.');
-      await captureEvidence(this, `settings-episode-images-${enabled ? 'on' : 'off'}`);
+      assert.deepEqual(await Promise.all(rows.map(row => read(`${row.path}.logoOverlayUrl`))), previousLogos, 'Editing must not change logos before saving.');
+      await captureEvidence(this, `settings-episode-images-${from}-to-${to}`);
       const queryBefore = await read('#nextUpTask.request.homeQueryId');
       await closeAndSaveSettings(environment);
-      await assertSettingPersisted(environment, accountKey, 'account', 'home-episode-images', enabled ? 'on' : 'off');
+      await assertSettingPersisted(environment, accountKey, 'account', 'home-episode-images', to);
       for (const row of rows) {
         const expected = enabled ? `/Items/${row.id}/Images/Primary` : `/Items/${row.seriesId}/Images/Thumb`;
         await waitFor(async () => String(await read(`${row.path}.HDPosterUrl`)).includes(expected), `${row.key} artwork to update`);
+        const logo = String(await read(`${row.path}.logoOverlayUrl`));
+        if (to === 'on-with-logo') {
+          assert.ok(logo.includes(`/Items/${row.logoId}/Images/Logo?tag=${row.logoTag}`), `${row.key} uses the inherited logo`);
+        } else {
+          assert.equal(logo, '', `${row.key} leaves show artwork and missing logos unadorned`);
+        }
       }
       assert.equal(await read('#nextUpTask.request.homeQueryId'), queryBefore, 'Changing artwork must not request Home data again.');
-      await captureEvidence(this, `home-episode-images-${enabled ? 'on' : 'off'}`);
+      await assertRenderedOverlays(environment, rows, to === 'on-with-logo');
+      await captureEvidence(this, `home-episode-images-${from}-to-${to}`);
 
       await relaunchAuthenticatedStarfin();
       await waitFor(async () => await read('#homePage.ready') === true, 'Home to finish loading after restart');
       for (const row of await inspectRows()) {
         const expected = enabled ? `/Items/${row.id}/Images/Primary` : `/Items/${row.seriesId}/Images/Thumb`;
         assert.ok(String(await read(`${row.path}.HDPosterUrl`)).includes(expected));
+        const logo = String(await read(`${row.path}.logoOverlayUrl`));
+        if (to === 'on-with-logo') {
+          assert.ok(logo.includes(`/Items/${row.logoId}/Images/Logo?tag=${row.logoTag}`));
+        } else {
+          assert.equal(logo, '');
+        }
       }
     });
   }

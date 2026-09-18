@@ -1,9 +1,9 @@
 import { categories, exerciseRadioSetting } from '../support/settings.mjs';
 
 const cases = [
-  { label: 'Prefer External Subtitles', index: 1, value: 'prefer-external' },
-  { label: 'Always Burn In', index: 2, value: 'always' },
-  { label: 'During Transcoding', index: 0, value: 'during-transcoding' }
+  { label: 'Prefer external subtitles', index: 1, value: 'prefer-external' },
+  { label: 'Always burn in', index: 2, value: 'always' },
+  { label: 'During transcoding', index: 0, value: 'during-transcoding' }
 ];
 
 describe('Starfin Subtitles settings persistence', function () {

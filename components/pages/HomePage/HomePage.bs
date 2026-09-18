@@ -1,3 +1,4 @@
+import "pkg:/source/HomeEpisodeImages.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/Logger.bs"
@@ -31,7 +32,7 @@ sub init()
         queryId: 0
         sessionKey: ""
         rows: {}
-        episodeImagesEnabled: LCase(SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.HomeEpisodeImages)) = "on"
+        episodeImageMode: SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.HomeEpisodeImages)
         rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow"]
         latestLibraries: {}
         latestTasks: []
@@ -56,9 +57,9 @@ end sub
 ' onSettingsChanged
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
-    enabled = LCase(SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.HomeEpisodeImages)) = "on"
-    if enabled = m.homeState.episodeImagesEnabled then return
-    m.homeState.episodeImagesEnabled = enabled
+    mode = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.HomeEpisodeImages)
+    if mode = m.homeState.episodeImageMode then return
+    m.homeState.episodeImageMode = mode
 
     ' Update existing content nodes so shelf position and focus remain intact.
     for each key in ["continueWatching", "nextUp"]
@@ -66,7 +67,7 @@ sub onSettingsChanged()
             row = m.homeState.rows[key]
             for each child in row.getChildren(-1, 0)
                 imageUrl = getHomeItemImageUrl(key, child.raw, getRowImageAspect(key))
-                if child.HDPosterUrl <> imageUrl then child.HDPosterUrl = imageUrl
+                child.setFields({ HDPosterUrl: imageUrl, logoOverlayUrl: getHomeLogoOverlayUrl(key, child.raw, imageUrl) })
             end for
         end if
     end for
@@ -689,6 +690,7 @@ function buildRowContent(key as string, title as string, items as object) as obj
         child.HDPosterUrl = imageUrl
         fields = {
             imageAspect: imageAspect
+            logoOverlayUrl: getHomeLogoOverlayUrl(key, item, imageUrl)
             showMetadata: shouldShowHomeItemMetadata(key)
             raw: item
         }
@@ -975,6 +977,25 @@ function getHomeItemImageUrl(key as string, item as dynamic, imageAspect as stri
 end function
 
 '-------------------------------------------------------------------------------
+' getHomeLogoOverlayUrl
+'-------------------------------------------------------------------------------
+function getHomeLogoOverlayUrl(key as string, item as dynamic, imageUrl as string) as string
+    if m.homeState.episodeImageMode <> HomeEpisodeImages.Mode.WithLogo then return ""
+    if key <> "continueWatching" and key <> "nextUp" then return ""
+    if isTVEpisode(item) = false or imageUrl = "" then return ""
+
+    imageSize = getImageSize(getRowImageAspect(key))
+    episodeUrl = ItemImage.GetUrl(m.homeState.request.server, item, JellyfinImage.Type.Primary, imageSize.width, imageSize.height)
+    ' Match the selected artwork so series fallbacks never receive an overlay.
+    if episodeUrl = "" or imageUrl <> episodeUrl then return ""
+
+    logoId = Format.SafeString(item.ParentLogoItemId, "")
+    logoTag = Format.SafeString(item.ParentLogoImageTag, "")
+    if logoId = "" or logoTag = "" then return ""
+    return Url.BuildImageUrl(m.homeState.request.server, logoId, JellyfinImage.Type.Logo, logoTag, 300, 150, { format: "Png" })
+end function
+
+'-------------------------------------------------------------------------------
 ' getResumeRowImageUrl
 '-------------------------------------------------------------------------------
 function getResumeRowImageUrl(item as dynamic, imageAspect as string) as string
@@ -982,7 +1003,7 @@ function getResumeRowImageUrl(item as dynamic, imageAspect as string) as string
 
     itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
     if itemType = "episode" then
-        if m.homeState.episodeImagesEnabled then
+        if m.homeState.episodeImageMode <> HomeEpisodeImages.Mode.Off then
             imageSize = getImageSize(imageAspect)
             imageUrl = ItemImage.GetUrl(m.homeState.request.server, item, JellyfinImage.Type.Primary, imageSize.width, imageSize.height)
             if imageUrl <> "" then return imageUrl

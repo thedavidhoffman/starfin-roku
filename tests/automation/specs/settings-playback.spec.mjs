@@ -1,8 +1,8 @@
 import { categories, exerciseRadioSetting } from '../support/settings.mjs';
 
 const cases = [
-  { label: 'Play Next Immediately', index: 1, value: 'play-next-immediately' },
-  { label: 'Show Up Next', index: 0, value: 'show-up-next' }
+  { label: 'Play next immediately', index: 1, value: 'play-next-immediately' },
+  { label: 'Show "Up Next"', index: 0, value: 'show-up-next' }
 ];
 
 describe('Starfin Playback settings persistence', function () {

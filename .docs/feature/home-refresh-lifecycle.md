@@ -76,16 +76,47 @@ refresh eligible to present messages.
 
 ## Episode artwork preference
 
-Settings > TV includes "Use Episode Images in 'Next Up' and 'Continue Watching'
-Sections", stored per account as `home-episode-images` with `on`/`off` values.
+Settings > TV includes "TV artwork in Next Up and Continue Watching", stored
+per account as
+`home-episode-images`: `off`, `on-with-logo`, or `on-without-logo`. The options
+are TV show artwork, Episode artwork with show logo, and Episode artwork without
+show logo, respectively. Legacy `on` values load
+as `on-with-logo` and are written canonically when settings are saved.
 The default is Off for new and existing accounts without a saved value. No
 registry migration is needed. Settings retains its existing save-on-close
 behavior (including Back); there is no separate Cancel action.
 
-When enabled, episode cards in these two Home rows prefer the episode's own
-Primary still. Missing stills use the existing series thumbnail/backdrop/poster
+Both enabled modes prefer the episode's own Primary still. Missing stills use the existing series thumbnail/backdrop/poster
 fallback chain. Off preserves that previous image-selection behavior. Movies,
-other rows, and card geometry are unchanged.
+other rows, and card geometry are unchanged. `on-without-logo` displays the
+still without the logo or gradient. Switching between enabled modes updates
+overlay fields even though the still URL is unchanged; no data reload is needed.
+
+With `on-with-logo`, when either row selects an episode's own Primary still,
+its thumbnail card can overlay the inherited show logo using `ParentLogoItemId` and `ParentLogoImageTag`.
+Both row requests include `Logo` in `EnableImageTypes`; no additional series
+lookup is needed. Missing logo metadata leaves the still unadorned. The PNG logo
+fits within 40% of the artwork width and 25% of its height, with a 12-pixel left
+inset and a 9-pixel gap above a visible progress bar. Without a progress bar
+(including Next Up), the logo sits 12 pixels above the artwork's bottom edge.
+Placement follows progress visibility when cards are reused. Logos retain their aspect ratio.
+Series artwork, movies, and other rows never receive this overlay. Artwork and
+`logoOverlayUrl` update together when the setting changes, and recycled thumbnail
+cards clear the logo when the next content has no overlay URL.
+
+A soft black gradient behind the logo improves contrast on light episode stills.
+It reaches 68% opacity at the bottom-left, fades upward and toward the right,
+and scales with the artwork inside its rounded mask. It is drawn below the logo
+and progress bar and appears only after the current logo loads successfully.
+Loading, failed, cleared, or replaced logos leave the gradient hidden. Logo placement
+and sizing are unchanged; the gradient follows the title-logo option. The texture is
+reproducible with `node scripts/generate-logo-gradient.mjs`.
+
+The top-left experiment was reverted; placement is bottom-left with `x = 12`.
+With a visible progress bar, `y = progressBar.translation[1] - logo.height - 9`;
+otherwise, `y = poster.height - logo.height - 12`. At the standard 441 by 249
+artwork size, the logo box is 176 by 62, positioned at `[12, 160]` with progress
+or `[12, 175]` without it. The size limits and `scaleToFit` mode are unchanged.
 
 MainScene distributes committed settings to HomePage through its `settings`
 field. Home updates only the existing image fields in the affected ContentNodes,

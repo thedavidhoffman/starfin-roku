@@ -5,6 +5,18 @@ import "pkg:/source/Number.bs"
 '-------------------------------------------------------------------------------
 sub init()
     initBase()
+    m.cardNodes.logoGradient = CreateObject("roSGNode", "Poster")
+    m.cardNodes.logoGradient.id = "logoGradient"
+    m.cardNodes.logoGradient.uri = "pkg:/images/overlays/episode-logo-gradient.png"
+    m.cardNodes.logoGradient.loadDisplayMode = "scaleToFill"
+    m.cardNodes.logoGradient.visible = false
+    ' Keep the gradient behind both the logo and the progress bar.
+    m.cardNodes.posterMask.insertChild(m.cardNodes.logoGradient, 2)
+    m.cardNodes.logoOverlay = m.cardNodes.posterMask.createChild("Poster")
+    m.cardNodes.logoOverlay.id = "logoOverlay"
+    m.cardNodes.logoOverlay.loadDisplayMode = "scaleToFit"
+    m.cardNodes.logoOverlay.visible = false
+    m.cardNodes.logoOverlay.observeField("loadStatus", "onLogoLoadStatusChanged")
     m.top.placeholderUri = "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
     m.top.callFunc("applyCardLayout", {
         contentTranslation: [21, 0], posterMaskName: "thumbnail-4-col-mask.png"
@@ -21,6 +33,23 @@ end sub
 '-------------------------------------------------------------------------------
 sub renderPresentation(content as object)
     if content.cardLayout <> invalid then applyThumbnailLayout(content.cardLayout.artworkSize, content.cardLayout.numColumns)
+    logo = m.cardNodes.logoOverlay
+    logo.width = Number.ToInteger(m.cardNodes.poster.width * 0.4, 176)
+    logo.height = Number.ToInteger(m.cardNodes.poster.height * 0.25, 62)
+    logoY = m.cardNodes.poster.height - logo.height - 12
+    if m.cardNodes.progressBar.visible then logoY = m.cardNodes.progressBar.translation[1] - logo.height - 9
+    logo.translation = [12, logoY]
+    logoUrl = Format.SafeString(content.logoOverlayUrl, "")
+    if logo.uri <> logoUrl then
+        ' Clear the previous logo's gradient before starting a replacement load.
+        m.cardNodes.logoGradient.visible = false
+        logo.uri = logoUrl
+    else
+        onLogoLoadStatusChanged()
+    end if
+    logo.visible = logo.uri <> ""
+    m.cardNodes.logoGradient.width = m.cardNodes.poster.width
+    m.cardNodes.logoGradient.height = m.cardNodes.poster.height
     renderStandardText(content)
     m.cardNodes.title.height = 34
     m.cardNodes.title.numLines = 1
@@ -28,6 +57,19 @@ sub renderPresentation(content as object)
         m.cardNodes.title.height = 48
         m.cardNodes.title.numLines = 2
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onLogoLoadStatusChanged
+'-------------------------------------------------------------------------------
+sub onLogoLoadStatusChanged()
+    logo = m.cardNodes.logoOverlay
+    content = m.top.itemContent
+    showGradient = false
+    if content <> invalid and logo.uri <> "" then
+        showGradient = logo.uri = Format.SafeString(content.logoOverlayUrl, "") and logo.loadStatus = "ready"
+    end if
+    m.cardNodes.logoGradient.visible = showGradient
 end sub
 
 sub applyThumbnailLayout(size as object, columns as dynamic)

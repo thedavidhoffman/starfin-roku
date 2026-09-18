@@ -1,3 +1,5 @@
+import "pkg:/source/api/HttpClient.bs"
+
 namespace tests
 
     @SGNode("NextUpTask")
@@ -17,6 +19,24 @@ namespace tests
             m.assertFalse(response.ok)
             m.assertEqual(response.action, "nextUp")
             m.assertEqual(response.errorMessage, "Invalid request.")
+        end function
+
+        @it("requests inherited logos and preserves their response metadata")
+        function _()
+            getGlobalAa().nextUpLogoRequest = ""
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().nextUpLogoRequest = requestUrl
+                return { ok: true, data: { Items: [{ ParentLogoItemId: "series", ParentLogoImageTag: "logo" }] } }
+            end function)
+            m.top.request = { server: "http://server", token: "token", userId: "user" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(Instr(1, getGlobalAa().nextUpLogoRequest, "enableimagetypes=Primary%2CBackdrop%2CThumb%2CLogo") > 0)
+            m.assertEqual(m.top.response.payload.Items[0].ParentLogoItemId, "series")
+            m.assertEqual(m.top.response.payload.Items[0].ParentLogoImageTag, "logo")
+            getGlobalAa().Delete("nextUpLogoRequest")
         end function
 
     end class
