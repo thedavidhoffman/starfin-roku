@@ -353,6 +353,205 @@ namespace tests
             m.assertFalse(handled)
         end function
 
+        @describe("server discovery")
+
+        @it("requests the discovery overlay")
+        function _()
+            m.top.serverValue = "http://nas:8097/base"
+            m.top.callFunc("activate")
+            'bs:disable-next-line 1140
+            onKeyEvent("OK", true)
+
+            m.assertEqual(m.top.overlayRequested.currentAddress, "http://nas:8097/base")
+            m.assertEqual(m.top.overlayRequested.id, "serverDiscovery")
+            m.assertEqual(m.top.overlayRequested.componentName, "ServerDiscoveryDialog")
+        end function
+
+        @it("clears credentials when selecting a different server")
+        function _()
+            m.setCredentials("http://old", "user", "secret")
+            m.top.callFunc("handleDiscoveryClosed", { address: "http://nas:8097/" })
+            m.assertEqual(m.top.serverValue, "http://nas:8097")
+            m.assertEqual(m.top.usernameValue, "")
+            m.assertEqual(m.top.passwordValue, "")
+            m.assertTrue(m.top.findNode("usernameInput").hasFocus())
+            m.assertInvalid(m.top.loginRequested)
+        end function
+
+        @it("preserves credentials for the same normalized server")
+        function _()
+            m.setCredentials("http://nas:8097/", "user", "secret")
+            m.top.callFunc("handleDiscoveryClosed", { address: "http://nas:8097" })
+            m.assertEqual(m.top.usernameValue, "user")
+            m.assertEqual(m.top.passwordValue, "secret")
+        end function
+
+        @it("preserves form values and restores focus on cancellation")
+        function _()
+            m.setCredentials("http://old", "user", "secret")
+            m.top.callFunc("handleDiscoveryClosed", invalid)
+            m.assertEqual(m.top.serverValue, "http://old")
+            m.assertEqual(m.top.usernameValue, "user")
+            m.assertEqual(m.top.passwordValue, "secret")
+            m.assertTrue(m.top.findNode("serverInput").hasFocus())
+        end function
+
+        @it("uses a discovered address for Quick Connect")
+        function _()
+            m.top.callFunc("handleDiscoveryClosed", { address: "http://nas:8097" })
+            m.top.findNode("quickConnectButton").buttonSelected = true
+            m.assertEqual(m.top.quickConnectRequested.server, "http://nas:8097")
+        end function
+
+        @it("moves from discovery to username")
+        function _()
+            m.top.callFunc("handleDiscoveryClosed", invalid)
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            m.assertTrue(m.top.findNode("usernameInput").hasFocus())
+        end function
+
+        @it("submits a chosen address through manual sign in")
+        function _()
+            m.top.callFunc("handleDiscoveryClosed", { address: " nas:8097/base/ " })
+            m.top.usernameValue = "user"
+            m.top.passwordValue = "secret"
+            m.top.findNode("loginButton").buttonSelected = true
+
+            m.assertEqual(m.top.loginRequested.server, "http://nas:8097/base")
+            m.assertEqual(m.top.loginRequested.username, "user")
+        end function
+
+        @describe("owned credential keyboards")
+
+        @it("saves a username and restores username focus")
+        function _()
+            keyboard = m.openCredentialKeyboard("username")
+            keyboard.text = "new-user"
+            keyboard.buttonSelected = 0
+
+            m.assertEqual(m.top.usernameValue, "new-user")
+            m.assertInvalid(m.node.keyboard.node)
+            m.assertTrue(m.top.findNode("usernameInput").hasFocus())
+        end function
+
+        @it("saves a password exactly as entered")
+        function _()
+            keyboard = m.openCredentialKeyboard("password")
+            keyboard.text = " secret "
+            keyboard.buttonSelected = 0
+
+            m.assertEqual(m.top.passwordValue, " secret ")
+            m.assertTrue(m.top.findNode("passwordInput").hasFocus())
+        end function
+
+        @it("cancels username edits without changing the field")
+        function _()
+            m.top.usernameValue = "before"
+            keyboard = m.openCredentialKeyboard("username")
+            keyboard.text = "discard"
+            keyboard.buttonSelected = 1
+
+            m.assertEqual(m.top.usernameValue, "before")
+            m.assertInvalid(m.node.keyboard.node)
+            m.assertTrue(m.top.findNode("usernameInput").hasFocus())
+        end function
+
+        @it("cleans up native Back closure and restores the edited field")
+        function _()
+            m.top.passwordValue = "before"
+            keyboard = m.openCredentialKeyboard("password")
+            keyboard.text = "discard"
+            'bs:disable-next-line 1140
+            onKeyboardDialogClosed(m.keyboardEvent(keyboard))
+
+            m.assertEqual(m.top.passwordValue, "before")
+            m.assertInvalid(m.node.keyboard.node)
+            m.assertEqual(m.node.keyboard.target, "")
+            m.assertTrue(m.top.findNode("passwordInput").hasFocus())
+        end function
+
+        @it("does not close a replacement dialog during cleanup")
+        function _()
+            old = m.openCredentialKeyboard("username")
+            replacement = CreateObject("roSGNode", "StandardKeyboardDialog")
+            m.top.getScene().dialog = replacement
+            'bs:disable-next-line 1140
+            onKeyboardDialogClosed(m.keyboardEvent(old))
+
+            m.assertTrue(m.top.getScene().dialog.isSameNode(replacement))
+            m.assertInvalid(m.node.keyboard.node)
+            m.top.getScene().dialog = invalid
+        end function
+
+        @it("ignores a stale Save callback after another keyboard opens")
+        function _()
+            old = m.openCredentialKeyboard("username")
+            old.buttonSelected = 1
+            current = m.openCredentialKeyboard("password")
+            current.text = "not-saved"
+            previous = m.top.passwordValue
+            'bs:disable-next-line 1140
+            onKeyboardDialogButtonSelected(m.keyboardEvent(old))
+
+            m.assertEqual(m.top.passwordValue, previous)
+            m.assertTrue(m.node.keyboard.node.isSameNode(current))
+            current.buttonSelected = 1
+        end function
+
+        @it("ignores a stale close callback after another keyboard opens")
+        function _()
+            old = m.openCredentialKeyboard("username")
+            old.buttonSelected = 1
+            current = m.openCredentialKeyboard("password")
+            'bs:disable-next-line 1140
+            onKeyboardDialogClosed(m.keyboardEvent(old))
+
+            m.assertTrue(m.node.keyboard.node.isSameNode(current))
+            current.buttonSelected = 1
+        end function
+
+        @it("closes its keyboard when login is hidden")
+        function _()
+            keyboard = m.openCredentialKeyboard("username")
+            m.top.visible = false
+
+            m.assertInvalid(m.node.keyboard.node)
+            m.assertTrue(keyboard.close)
+            m.assertInvalid(m.top.getScene().dialog)
+            m.top.visible = true
+        end function
+
+        @it("does not open a credential keyboard over another dialog")
+        function _()
+            m.top.visible = true
+            replacement = CreateObject("roSGNode", "StandardKeyboardDialog")
+            m.top.getScene().dialog = replacement
+            'bs:disable-next-line 1140
+            openKeyboardDialog("username")
+
+            m.assertTrue(m.top.getScene().dialog.isSameNode(replacement))
+            m.assertInvalid(m.node.keyboard.node)
+            m.top.getScene().dialog = invalid
+        end function
+
+        function openCredentialKeyboard(target as string) as object
+            m.top.visible = true
+            m.top.getScene().dialog = invalid
+            'bs:disable-next-line 1140
+            openKeyboardDialog(target)
+            return m.node.keyboard.node
+        end function
+
+        function keyboardEvent(node as object) as object
+            return {
+                node: node
+                getRoSGNode: function()
+                    return m.node
+                end function
+            }
+        end function
+
         function setCredentials(server as string, username as string, password as string)
             m.top.loginRequested = invalid
             m.top.serverValue = server

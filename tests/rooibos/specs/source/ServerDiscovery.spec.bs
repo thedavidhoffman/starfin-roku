@@ -1,0 +1,88 @@
+import "pkg:/source/ServerDiscovery.bs"
+
+namespace tests
+
+    @suite("ServerDiscovery")
+    class ServerDiscoveryTests extends rooibos.BaseTestSuite
+
+        @describe("observable behavior")
+
+        @it("preserves custom ports and base paths")
+        function _()
+            server = ServerDiscovery.ParseReply("{" + Chr(34) + "Address" + Chr(34) + ":" + Chr(34) + "https://nas:8097/jellyfin/" + Chr(34) + "}")
+
+            m.assertEqual(server.address, "https://nas:8097/jellyfin")
+            m.assertEqual(server.name, server.address)
+        end function
+
+        @it("ignores malformed JSON")
+        function _()
+
+            m.assertInvalid(ServerDiscovery.ParseReply("not json"))
+        end function
+
+        @it("ignores non-object replies")
+        function _()
+
+            m.assertInvalid(ServerDiscovery.ParseReply("[]"))
+        end function
+
+        @it("ignores missing addresses")
+        function _()
+
+            m.assertInvalid(ServerDiscovery.ParseReply("{}"))
+        end function
+
+        @it("ignores unsupported schemes")
+        function _()
+
+            m.assertInvalid(ServerDiscovery.ParseReply("{" + Chr(34) + "Address" + Chr(34) + ":" + Chr(34) + "ftp://nas" + Chr(34) + "}"))
+        end function
+
+        @it("ignores empty addresses")
+        function _()
+
+            m.assertInvalid(ServerDiscovery.ParseReply("{" + Chr(34) + "Address" + Chr(34) + ":" + Chr(34) + Chr(34) + "}"))
+        end function
+
+        @it("deduplicates repeated server IDs")
+        function _()
+            servers = []
+            ServerDiscovery.Add(servers, { id: "one", name: "NAS", address: "http://nas" })
+            ServerDiscovery.Add(servers, { id: "one", name: "NAS", address: "http://other" })
+
+            m.assertEqual(servers.Count(), 1)
+        end function
+
+        @it("deduplicates repeated addresses without IDs")
+        function _()
+            servers = []
+            ServerDiscovery.Add(servers, { id: "", name: "NAS", address: "http://nas" })
+            ServerDiscovery.Add(servers, { id: "", name: "NAS", address: "http://nas" })
+
+            m.assertEqual(servers.Count(), 1)
+        end function
+
+        @it("sorts names and breaks ties by URL")
+        function _()
+            servers = []
+            ServerDiscovery.Add(servers, { id: "3", name: "Zulu", address: "http://z" })
+            ServerDiscovery.Add(servers, { id: "2", name: "Alpha", address: "http://b" })
+            ServerDiscovery.Add(servers, { id: "1", name: "Alpha", address: "http://a" })
+
+            m.assertEqual(servers[0].id, "1")
+            m.assertEqual(servers[1].id, "2")
+            m.assertEqual(servers[2].id, "3")
+        end function
+
+        @it("keeps an empty result for an invalid reply")
+        function _()
+            servers = []
+            ServerDiscovery.Add(servers, invalid)
+
+            m.assertEqual(servers.Count(), 0)
+        end function
+
+    end class
+
+end namespace

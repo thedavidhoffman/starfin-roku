@@ -1,0 +1,224 @@
+import "pkg:/source/Number.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    m.discovery = { searching: true, servers: [] }
+    m.presentation = { focusedKey: "manual", updating: false }
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.status = m.top.findNode("status")
+    m.servers = m.top.findNode("servers")
+    m.search = m.top.findNode("search")
+    m.cancel = m.top.findNode("cancel")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.search.observeField("buttonSelected", "onSearchSelected")
+    m.cancel.observeField("buttonSelected", "onCancelSelected")
+    m.servers.observeField("itemSelected", "onServerSelected")
+    m.servers.observeField("itemFocused", "onItemFocused")
+    m.top.observeField("focusedChild", "onListFocusChanged")
+end sub
+
+'-------------------------------------------------------------------------------
+' onViewStateChanged
+'-------------------------------------------------------------------------------
+sub onViewStateChanged()
+    state = m.top.viewState
+    if state = invalid then return
+    scanCompleted = m.discovery.searching and not state.searching
+    hadListFocus = m.servers.isInFocusChain()
+    m.presentation.updating = true
+    m.discovery = state
+    renderDiscoveryState()
+    layoutContent()
+    applyDiscoveryFocus(scanCompleted, hadListFocus)
+    m.presentation.updating = false
+    onListFocusChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderDiscoveryState
+'-------------------------------------------------------------------------------
+sub renderDiscoveryState()
+    m.status.text = m.discovery.message
+    m.search.opacity = 1
+    if m.discovery.searching then m.search.opacity = 0.4
+    m.servers.visible = not m.discovery.searching
+    m.servers.content = buildServerRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' buildServerRows
+'-------------------------------------------------------------------------------
+function buildServerRows() as object
+    content = CreateObject("roSGNode", "ContentNode")
+    if m.discovery.searching then return content
+    for each server in m.discovery.servers
+        item = content.createChild("ContentNode")
+        key = "server:" + server.address
+        if server.id <> invalid and server.id <> "" then key = "server:" + server.id
+        item.addFields({ rowKey: key, listFocused: false, manualEntry: false })
+        item.title = server.name
+        item.description = server.address
+    end for
+    manual = content.createChild("ContentNode")
+    manual.title = "Enter server address manually"
+    manual.addFields({ rowKey: "manual", listFocused: false, manualEntry: true, showSeparator: m.discovery.servers.Count() > 0 })
+    return content
+end function
+
+'-------------------------------------------------------------------------------
+' applyDiscoveryFocus
+'-------------------------------------------------------------------------------
+sub applyDiscoveryFocus(scanCompleted as boolean, hadListFocus as boolean)
+    if m.discovery.searching then
+        if not m.top.keyboardActive then focusNode(m.cancel)
+        return
+    end if
+    focusedIndex = getRestoredRowIndex()
+    if scanCompleted then focusedIndex = 0
+    if not m.top.keyboardActive and (scanCompleted or hadListFocus) then focusNode(m.servers)
+    ' Native content/layout changes reset focus; restore the chosen row last.
+    m.servers.jumpToItem = focusedIndex
+    m.servers.itemFocused = focusedIndex
+    m.presentation.focusedKey = m.servers.content.getChild(focusedIndex).rowKey
+end sub
+
+'-------------------------------------------------------------------------------
+' getRestoredRowIndex
+'-------------------------------------------------------------------------------
+function getRestoredRowIndex() as integer
+    content = m.servers.content
+    for i = 0 to content.getChildCount() - 1
+        if content.getChild(i).rowKey = m.presentation.focusedKey then return i
+    end for
+    return content.getChildCount() - 1
+end function
+
+'-------------------------------------------------------------------------------
+' layoutContent
+'-------------------------------------------------------------------------------
+sub layoutContent()
+    listTop = m.status.boundingRect().height + 16
+    rows = m.servers.content.getChildCount()
+    if rows > 3 then rows = 3
+    m.servers.translation = [0, listTop]
+    if rows > 0 then m.servers.numRows = rows
+    if m.discovery.searching then rows = 1
+    rowStride = m.servers.itemSize[1] + m.servers.itemSpacing[1]
+    footerY = listTop + rows * rowStride + 24
+    m.search.translation = [0, footerY]
+    m.cancel.translation = [m.servers.itemSize[0] - m.cancel.buttonWidth, footerY]
+    m.top.preferredHeight = Number.ToInteger(footerY + m.search.buttonHeight)
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemFocused
+'-------------------------------------------------------------------------------
+sub onItemFocused()
+    if m.presentation.updating then return
+    content = m.servers.content
+    if content = invalid then return
+    item = content.getChild(m.servers.itemFocused)
+    if item <> invalid then m.presentation.focusedKey = item.rowKey
+end sub
+
+'-------------------------------------------------------------------------------
+' onListFocusChanged
+'-------------------------------------------------------------------------------
+sub onListFocusChanged()
+    content = m.servers.content
+    if content = invalid then return
+    isFocused = m.servers.isInFocusChain() and not m.top.keyboardActive
+    for each item in content.getChildren(-1, 0)
+        item.listFocused = isFocused
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' focusNode
+'-------------------------------------------------------------------------------
+sub focusNode(node as object)
+    m.search.hasFocusVisual = node.isSameNode(m.search)
+    m.cancel.hasFocusVisual = node.isSameNode(m.cancel)
+    node.setFocus(true)
+    onListFocusChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusManualEntry
+'-------------------------------------------------------------------------------
+sub focusManualEntry()
+    if m.discovery.searching then return
+    m.presentation.focusedKey = "manual"
+    m.servers.jumpToItem = m.discovery.servers.Count()
+    m.servers.itemFocused = m.discovery.servers.Count()
+    focusNode(m.servers)
+end sub
+
+'-------------------------------------------------------------------------------
+' onSearchSelected
+'-------------------------------------------------------------------------------
+sub onSearchSelected()
+    if not m.discovery.searching then m.top.searchRequested = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onCancelSelected
+'-------------------------------------------------------------------------------
+sub onCancelSelected()
+    m.top.cancelRequested = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onServerSelected
+'-------------------------------------------------------------------------------
+sub onServerSelected()
+    if m.discovery.searching then return
+    index = m.servers.itemSelected
+    if index = m.discovery.servers.Count() then
+        m.top.manualEntryRequested = true
+    else if index >= 0 and index < m.discovery.servers.Count() then
+        m.top.serverSelected = m.discovery.servers[index]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "back" then
+        onCancelSelected()
+        return true
+    end if
+    if m.servers.isInFocusChain() then
+        if key = "down" and m.servers.itemFocused = m.discovery.servers.Count() then
+            focusNode(m.search)
+            return true
+        end if
+        return false
+    end if
+    if key = "left" and not m.discovery.searching then
+        focusNode(m.search)
+    else if key = "right" then
+        focusNode(m.cancel)
+    else if key = "up" and not m.discovery.searching then
+        focusNode(m.servers)
+    else
+        return false
+    end if
+    return true
+end function

@@ -1,0 +1,49 @@
+import "pkg:/source/ServerDiscovery.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "execute"
+end sub
+
+'-------------------------------------------------------------------------------
+' execute
+'-------------------------------------------------------------------------------
+sub execute()
+    request = m.top.request
+    if request = invalid then return
+    socket = invalid
+    response = { generation: request.generation, ok: false, servers: [], message: "Unable to search for Jellyfin servers. Try again." }
+    try
+        port = CreateObject("roMessagePort")
+        socket = CreateObject("roDatagramSocket")
+        address = CreateObject("roSocketAddress")
+        address.SetAddress("255.255.255.255:7359")
+        socket.SetMessagePort(port)
+        socket.SetSendToAddress(address)
+        socket.SetBroadcast(true)
+        socket.NotifyReadable(true)
+        timer = CreateObject("roTimespan")
+        nextSend = 0
+        while timer.TotalMilliseconds() < 6000 and not m.top.cancelRequested
+            if timer.TotalMilliseconds() >= nextSend and nextSend < 6000 then
+                if socket.SendStr("Who is JellyfinServer?") < 0 then throw "Discovery broadcast failed"
+                nextSend += 2000
+            end if
+            message = Wait(100, port)
+            if type(message) = "roSocketEvent" then
+                if message.GetSocketId() = socket.GetId() and socket.IsReadable() then
+                    ServerDiscovery.Add(response.servers, ServerDiscovery.ParseReply(socket.ReceiveStr(4096)))
+                end if
+            end if
+            if not socket.eOK() then throw "Discovery socket failed"
+        end while
+        response.ok = true
+        response.message = ""
+    catch error
+        response.ok = false
+    end try
+    if socket <> invalid then socket.Close()
+    if not m.top.cancelRequested then m.top.response = response
+end sub

@@ -1,0 +1,54 @@
+import "pkg:/source/Url.bs"
+import "pkg:/source/String.bs"
+
+namespace ServerDiscovery
+
+    ' Discovered addresses are advertised by the server; never guess a replacement port.
+    '---------------------------------------------------------------------------
+    ' ServerDiscovery.ParseReply
+    '---------------------------------------------------------------------------
+    function ParseReply(text as string) as dynamic
+        data = ParseJson(text)
+        if type(data) <> "roAssociativeArray" then return invalid
+        if type(data.Address) <> "roString" and type(data.Address) <> "String" then return invalid
+        address = Url.NormalizeServer(data.Address)
+        pattern = CreateObject("roRegex", "^https?://[^/\s?#@:]+(:[0-9]+)?(/[^\s?#]*)?$", "i")
+        if not pattern.IsMatch(address) then return invalid
+        name = __String(data.Name)
+        if name = "" then name = address
+        return { id: __String(data.Id), name: name, address: address }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' ServerDiscovery.__String
+    '---------------------------------------------------------------------------
+    function __String(value as dynamic) as string
+        if type(value) = "roString" or type(value) = "String" then return value
+        return ""
+    end function
+
+    '---------------------------------------------------------------------------
+    ' ServerDiscovery.Add
+    '---------------------------------------------------------------------------
+    sub Add(servers as object, server as dynamic)
+        if server = invalid then return
+        for each existing in servers
+            if server.id <> "" and existing.id = server.id then return
+            if existing.address = server.address then return
+        end for
+        ' Insert in display order so result ordering does not depend on packet timing.
+        index = 0
+        key = LCase(server.name) + Chr(9) + server.address
+        while index < servers.Count()
+            existingKey = LCase(servers[index].name) + Chr(9) + servers[index].address
+            if key < existingKey then exit while
+            index++
+        end while
+        servers.Push(server)
+        for i = servers.Count() - 1 to index + 1 step -1
+            servers[i] = servers[i - 1]
+        end for
+        servers[index] = server
+    end sub
+
+end namespace

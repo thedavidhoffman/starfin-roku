@@ -89,7 +89,17 @@
 - Add an inline code comment when an operation's purpose or intent is not readily
   apparent from the code itself and the comment would materially improve
   understanding. Do not add comments that merely restate self-evident operations.
-- Add a three-line comment header immediately above each function definition in `src/config.js`.
+- Add a three-line comment header immediately above every named `function` or `sub` definition in production `.bs` and `.brs` files under `components/` and `source/`, including namespace members and class methods. Anonymous callbacks, unit tests, and generated files are excluded.
+- Indent all three header lines to match the declaration, using spaces.
 - Line 1 must be `'` followed immediately by dashes, extending to the 80th column with no space before the first dash.
-- Line 2 must be `' ` followed by the exact function name.
+- Line 2 must be `' ` followed by the namespace-qualified name for namespace functions, such as `Number.ToFloat` (including the full namespace path for nested namespaces). For component-local functions, global functions, and class methods, use the exact declared name, such as `initReferences` or `write`, without a component or class prefix. Preserve the declared spelling and casing.
 - Line 3 must match line 1 exactly.
+- Run `npm run validate:function-headers` to check this rule. `npm run validate` also runs it before compilation, so build, package, and deploy fail on header violations.
+- Existing violations are recorded in `scripts/function-header-baseline.json`; the checker rejects new violations. Do not add exceptions or regenerate this baseline to make validation pass. When changing a grandfathered function, bring its header into compliance and remove its exception. The baseline is transitional, not an alternative header convention.
+
+## Final change-set review
+
+- Before declaring work complete, review the entire task change set against every applicable rule in this file, including newly created and untracked files. Do not limit this review to the last edited file or assume passing compilation covers coding conventions.
+- Run the function-header check and `git diff --check`; inspect new files as well as the tracked diff. Fix violations introduced by the task without modifying unrelated user-owned work.
+- Review architecture and state ownership, naming, comments, documentation, and behavioral test coverage separately from automated checks. Verify required runtime tests were actually run and distinguish existing baseline failures from new failures.
+- In the final response, summarize the checks performed and disclose any remaining rule exceptions or verification gaps. Do not claim compliance for checks that were not performed.

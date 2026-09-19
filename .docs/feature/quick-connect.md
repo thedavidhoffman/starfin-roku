@@ -1,8 +1,9 @@
 # Quick Connect
 
 Starfin supports Jellyfin Quick Connect as an alternative to entering a username
-and password with a Roku remote. The user enters a server address, selects
-**Quick Connect**, and approves the displayed code from a Jellyfin client where
+and password with a Roku remote. Pressing OK on the server field opens the server
+picker. The user chooses a discovered server or **Enter server address manually**,
+then selects **Quick Connect** and approves the displayed code from a Jellyfin client where
 they are already signed in.
 
 The Jellyfin user that approves the code is the account Starfin authenticates and

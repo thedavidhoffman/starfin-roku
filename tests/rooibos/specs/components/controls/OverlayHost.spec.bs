@@ -41,10 +41,11 @@ namespace tests
             m.top.closed = invalid
 
             'bs:disable-next-line 1140
-            onOverlayClosed()
+            onOverlayClosed(invalid)
 
             m.assertInvalid(m.top.closed)
         end function
+
         @it("opens a description overlay")
         function _()
             initialChildCount = m.top.getChildCount()
@@ -76,6 +77,118 @@ namespace tests
             'bs:disable-next-line 1140
             closeOverlay()
             m.assertEqual(m.top.getChildCount(), initialChildCount)
+        end function
+
+        @it("cancels discovery when its overlay is removed")
+        function _()
+            initialChildCount = m.top.getChildCount()
+            overlay = m.top.callFunc("openOverlay", { id: "serverDiscovery", componentName: "ServerDiscoveryDialog", openFunction: "openDiscovery", closeField: "closeRequested" })
+            task = overlay.getChild(overlay.getChildCount() - 1)
+
+            m.top.callFunc("closeOverlay")
+
+            m.assertEqual(m.top.getChildCount(), initialChildCount)
+            m.assertTrue(task.cancelRequested)
+            m.assertInvalid(overlay.selectedServer)
+        end function
+
+        @it("routes a discovery selection through the closed payload")
+        function _()
+            overlay = m.top.callFunc("openOverlay", { id: "serverDiscovery", componentName: "ServerDiscoveryDialog", openFunction: "openDiscovery", closeField: "closeRequested" })
+            server = { name: "NAS", address: "http://nas" }
+            overlay.selectedServer = server
+            overlay.callFunc("closeDialog")
+
+            m.assertEqual(m.top.closed.request.id, "serverDiscovery")
+            m.assertEqual(m.top.closed.overlay.selectedServer, server)
+        end function
+
+        @it("passes the current address into the server picker")
+        function _()
+            overlay = m.top.callFunc("openOverlay", { id: "serverDiscovery", componentName: "ServerDiscoveryDialog", openFunction: "openDiscovery", currentAddress: "https://nas:8097/base" })
+
+            m.assertEqual(overlay.currentAddress, "https://nas:8097/base")
+            m.top.callFunc("closeOverlay")
+        end function
+
+        @it("closes an owned keyboard when replacing the server picker")
+        function _()
+            overlay = m.top.callFunc("openOverlay", { id: "serverDiscovery", componentName: "ServerDiscoveryDialog", openFunction: "openDiscovery" })
+            content = overlay.callFunc("getContentComponent")
+            content.manualEntryRequested = true
+            keyboard = m.top.getScene().dialog
+            m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", title: "Replacement", text: "Details" })
+
+            m.assertTrue(keyboard.close)
+            m.assertFalse(content.keyboardActive)
+            m.assertInvalid(m.top.getScene().dialog)
+            m.top.callFunc("closeOverlay")
+        end function
+
+        @it("detaches retired overlay close observers")
+        function _()
+            old = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", closeField: "closeRequested" })
+            current = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", closeField: "closeRequested" })
+            old.closeRequested = true
+
+            m.assertTrue(m.node.activeOverlay.isSameNode(current))
+            m.top.callFunc("closeOverlay")
+        end function
+
+        @it("rejects a queued close event from a retired overlay")
+        function _()
+            old = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", closeField: "closeRequested" })
+            current = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", closeField: "closeRequested" })
+            'bs:disable-next-line 1140
+            onOverlayClosed(m.overlayEvent(old))
+
+            m.assertTrue(m.node.activeOverlay.isSameNode(current))
+            m.top.callFunc("closeOverlay")
+        end function
+
+        @it("detaches retired overlay event observers")
+        function _()
+            old = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", eventFields: ["saveSelected"] })
+            current = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", eventFields: ["saveSelected"] })
+            m.top.eventRaised = invalid
+            old.saveSelected = true
+
+            m.assertInvalid(m.top.eventRaised)
+            m.top.callFunc("closeOverlay")
+        end function
+
+        @it("rejects a queued event from a retired overlay")
+        function _()
+            old = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", eventFields: ["saveSelected"] })
+            current = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", eventFields: ["saveSelected"] })
+            m.top.eventRaised = invalid
+            'bs:disable-next-line 1140
+            onOverlayEventRaised(m.overlayEvent(old))
+
+            m.assertInvalid(m.top.eventRaised)
+            m.top.callFunc("closeOverlay")
+        end function
+
+        @it("continues routing events from the active overlay")
+        function _()
+            current = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", eventFields: ["saveSelected"] })
+            current.saveSelected = true
+
+            m.assertEqual(m.top.eventRaised.field, "saveSelected")
+            m.assertTrue(m.top.eventRaised.value)
+            m.top.callFunc("closeOverlay")
+        end function
+
+        function overlayEvent(node as object) as object
+            return {
+                node: node
+                getRoSGNode: function()
+                    return m.node
+                end function
+                getField: function()
+                    return "saveSelected"
+                end function
+            }
         end function
 
     end class

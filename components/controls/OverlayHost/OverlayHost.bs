@@ -27,11 +27,11 @@ function openOverlay(request as dynamic) as dynamic
 
     closeFields = getCloseFields(request)
     for each closeField in closeFields
-        if closeField <> invalid and closeField <> "" then overlay.observeField(closeField, "onOverlayClosed")
+        if closeField <> invalid and closeField <> "" then overlay.observeFieldScoped(closeField, "onOverlayClosed")
     end for
     eventFields = getEventFields(request)
     for each eventField in eventFields
-        if eventField <> invalid and eventField <> "" then overlay.observeField(eventField, "onOverlayEventRaised")
+        if eventField <> invalid and eventField <> "" then overlay.observeFieldScoped(eventField, "onOverlayEventRaised")
     end for
 
     m.top.appendChild(overlay)
@@ -60,6 +60,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub applyOverlayRequestFields(overlay as object, request as object)
     requestId = Format.SafeString(request.id, "")
+
+    if requestId = "serverDiscovery" then
+        overlay.currentAddress = Format.SafeString(request.currentAddress, "")
+        return
+    end if
 
     if requestId = "message" then
         overlay.message = request.message
@@ -157,6 +162,15 @@ end function
 sub closeOverlay()
     if m.activeOverlay = invalid then return
 
+    for each field in getCloseFields(m.activeRequest)
+        if field <> invalid and field <> "" then m.activeOverlay.unobserveFieldScoped(field)
+    end for
+    for each field in getEventFields(m.activeRequest)
+        if field <> invalid and field <> "" then m.activeOverlay.unobserveFieldScoped(field)
+    end for
+    if m.activeRequest <> invalid and m.activeRequest.id = "serverDiscovery" then
+        m.activeOverlay.callFunc("cancelDiscovery")
+    end if
     m.top.removeChild(m.activeOverlay)
     m.activeOverlay = invalid
     m.activeRequest = invalid
@@ -165,9 +179,10 @@ end sub
 '-------------------------------------------------------------------------------
 ' onOverlayClosed
 '-------------------------------------------------------------------------------
-sub onOverlayClosed()
+sub onOverlayClosed(event as object)
     if m.activeOverlay = invalid or m.activeRequest = invalid then return
 
+    if not event.getRoSGNode().isSameNode(m.activeOverlay) then return
     closedOverlay = m.activeOverlay
     closedRequest = m.activeRequest
     closeOverlay()
@@ -183,6 +198,7 @@ end sub
 sub onOverlayEventRaised(event as object)
     if m.activeOverlay = invalid or m.activeRequest = invalid then return
 
+    if not event.getRoSGNode().isSameNode(m.activeOverlay) then return
     field = event.getField()
     m.top.eventRaised = {
         field: field

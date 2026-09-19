@@ -1,12 +1,34 @@
 import "pkg:/source/Format.bs"
-import "pkg:/source/Encode.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Url.bs"
+
+namespace LoginFocus
+    enum Target
+        Server = "server"
+        Username = "username"
+        Password = "password"
+        SignIn = "signin"
+        QuickConnect = "quickconnect"
+        SavedAccounts = "savedaccounts"
+        QuickCancel = "quickcancel"
+    end enum
+end namespace
 
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    m.keyboard = { node: invalid, target: "" }
+    initHandlers()
+    preloadSavedSession()
+    syncFieldsFromState()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.serverInput = m.top.findNode("serverInput")
     m.usernameInput = m.top.findNode("usernameInput")
     m.passwordInput = m.top.findNode("passwordInput")
@@ -20,24 +42,26 @@ sub init()
     m.quickConnectMessage = m.top.findNode("quickConnectMessage")
     m.quickConnectCancelButton = m.top.findNode("quickConnectCancelButton")
 
-    m.loginFocusNodes = [
-        m.serverInput
-        m.usernameInput
-        m.passwordInput
-        m.loginButton
-        m.quickConnectButton
-        m.savedAccountsButton
-    ]
-   
-    m.activeKeyboardField = invalid
+    m.loginFocus = {
+        server: { node: m.serverInput, down: LoginFocus.Target.Username }
+        username: { node: m.usernameInput, up: LoginFocus.Target.Server, down: LoginFocus.Target.Password, title: "Enter Username", valueField: "usernameValue" }
+        password: { node: m.passwordInput, up: LoginFocus.Target.Username, down: LoginFocus.Target.SignIn, title: "Enter Password", valueField: "passwordValue" }
+        signIn: { node: m.loginButton, up: LoginFocus.Target.Password, down: LoginFocus.Target.SavedAccounts, right: LoginFocus.Target.QuickConnect }
+        quickConnect: { node: m.quickConnectButton, up: LoginFocus.Target.Password, down: LoginFocus.Target.SavedAccounts, left: LoginFocus.Target.SignIn }
+        savedAccounts: { node: m.savedAccountsButton, up: LoginFocus.Target.SignIn }
+        quickCancel: { node: m.quickConnectCancelButton }
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("visible", "onVisibilityChanged")
     m.loginButton.observeField("buttonSelected", "onLoginPressed")
     m.quickConnectButton.observeField("buttonSelected", "onQuickConnectPressed")
     m.savedAccountsButton.observeField("buttonSelected", "onSavedAccountsPressed")
     m.quickConnectCancelButton.observeField("buttonSelected", "onQuickConnectCancelled")
-    
-    preloadSavedSession()
-    syncFieldsFromState()
-
 end sub
 
 '-------------------------------------------------------------------------------
@@ -100,7 +124,7 @@ sub onQuickConnectStateChanged()
     else if phase = "failed" then
         m.quickConnectCancelButton.hasFocusVisual = false
         m.top.statusMessage = Format.SafeString(state.message, "Quick Connect failed.")
-        focusLoginField(4)
+        focusLoginTarget(LoginFocus.Target.QuickConnect)
     else
         m.quickConnectCancelButton.hasFocusVisual = false
     end if
@@ -113,7 +137,7 @@ sub onQuickConnectPressed()
     server = Url.NormalizeServer(m.top.serverValue)
     if server = "" then
         m.top.statusMessage = "Server address is required for Quick Connect."
-        focusLoginField(0)
+        focusLoginTarget(LoginFocus.Target.Server)
         return
     end if
 
@@ -127,21 +151,14 @@ end sub
 sub onQuickConnectCancelled()
     m.top.quickConnectCancelled = true
     m.top.quickConnectState = { phase: "idle", code: "", message: "" }
-    focusLoginField(4)
+    focusLoginTarget(LoginFocus.Target.QuickConnect)
 end sub
 
 '-------------------------------------------------------------------------------
 ' focusQuickConnectCancel
 '-------------------------------------------------------------------------------
 sub focusQuickConnectCancel()
-    m.serverInput.hasFocusVisual = false
-    m.usernameInput.hasFocusVisual = false
-    m.passwordInput.hasFocusVisual = false
-    m.loginButton.hasFocusVisual = false
-    m.quickConnectButton.hasFocusVisual = false
-    m.savedAccountsButton.hasFocusVisual = false
-    m.quickConnectCancelButton.hasFocusVisual = true
-    m.quickConnectCancelButton.setFocus(true)
+    focusLoginTarget(LoginFocus.Target.QuickCancel)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -150,7 +167,7 @@ end sub
 sub activate()
     syncFieldsFromState()
     updateSavedAccountsButton()
-    focusLoginField(0)
+    focusLoginTarget(LoginFocus.Target.Server)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -159,10 +176,10 @@ end sub
 function focusSavedAccountsButton() as boolean
     updateSavedAccountsButton()
     if m.savedAccountsButton.visible <> true then
-        focusLoginField(0)
+        focusLoginTarget(LoginFocus.Target.Server)
         return false
     end if
-    focusLoginField(m.loginFocusNodes.Count() - 1)
+    focusLoginTarget(LoginFocus.Target.SavedAccounts)
     return true
 end function
 
@@ -170,7 +187,7 @@ end function
 ' focusLoginButton
 '-------------------------------------------------------------------------------
 function focusLoginButton() as boolean
-    focusLoginField(3)
+    focusLoginTarget(LoginFocus.Target.SignIn)
     return true
 end function
 
@@ -191,8 +208,6 @@ sub updateSavedAccountsButton()
     accounts = m.top.savedAccounts
     if accounts = invalid then accounts = []
     m.savedAccountsButton.visible = (accounts.Count() > 0)
-    m.loginFocusNodes = [m.serverInput, m.usernameInput, m.passwordInput, m.loginButton, m.quickConnectButton]
-    if m.savedAccountsButton.visible then m.loginFocusNodes.Push(m.savedAccountsButton)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -263,162 +278,132 @@ end function
 '-------------------------------------------------------------------------------
 ' openKeyboardDialog
 '-------------------------------------------------------------------------------
-sub openKeyboardDialog(fieldName as string)
-    keyboardDialog = CreateObject("roSGNode", "StandardKeyboardDialog")
-    keyboardDialog.buttons = ["Save", "Cancel"]
-    keyboardDialog.observeField("buttonSelected", "onKeyboardDialogButtonSelected")
-
-    if fieldName = "server" then
-        keyboardDialog.title = "Enter Server Address"
-        keyboardDialog.text = m.top.serverValue
-    else if fieldName = "username" then
-        keyboardDialog.title = "Enter Username"
-        keyboardDialog.text = m.top.usernameValue
-    else if fieldName = "password" then
-        keyboardDialog.title = "Enter Password"
-        keyboardDialog.text = m.top.passwordValue
-    else
-        return
-    end if
-
-    m.activeKeyboardField = fieldName
+sub openKeyboardDialog(target as string)
+    entry = m.loginFocus[target]
+    if entry = invalid or entry.valueField = invalid then return
     scene = m.top.getScene()
-    if scene <> invalid then
-        scene.dialog = keyboardDialog
-    end if
+    if scene = invalid or not m.top.visible then return
+    if scene.dialog <> invalid then return
+
+    keyboard = CreateObject("roSGNode", "StandardKeyboardDialog")
+    keyboard.title = entry.title
+    keyboard.text = m.top[entry.valueField]
+    keyboard.buttons = ["Save", "Cancel"]
+    keyboard.observeField("buttonSelected", "onKeyboardDialogButtonSelected")
+    keyboard.observeField("wasClosed", "onKeyboardDialogClosed")
+    m.keyboard = { node: keyboard, target: target }
+    scene.dialog = keyboard
 end sub
 
 '-------------------------------------------------------------------------------
 ' onKeyboardDialogButtonSelected
 '-------------------------------------------------------------------------------
-sub onKeyboardDialogButtonSelected()
+sub onKeyboardDialogButtonSelected(event as object)
+    keyboard = m.keyboard.node
+    if keyboard = invalid then return
+    if not event.getRoSGNode().isSameNode(keyboard) then return
+    target = m.keyboard.target
+    if keyboard.buttonSelected = 0 then m.top[m.loginFocus[target].valueField] = keyboard.text
+    closeOwnedLoginKeyboard()
+    restoreKeyboardFocus(target)
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyboardDialogClosed
+'-------------------------------------------------------------------------------
+sub onKeyboardDialogClosed(event as object)
+    if m.keyboard.node = invalid then return
+    if not event.getRoSGNode().isSameNode(m.keyboard.node) then return
+    target = m.keyboard.target
+    closeOwnedLoginKeyboard()
+    restoreKeyboardFocus(target)
+end sub
+
+'-------------------------------------------------------------------------------
+' closeOwnedLoginKeyboard
+'-------------------------------------------------------------------------------
+sub closeOwnedLoginKeyboard()
+    keyboard = m.keyboard.node
+    if keyboard = invalid then return
+    m.keyboard = { node: invalid, target: "" }
+    keyboard.unobserveField("buttonSelected")
+    keyboard.unobserveField("wasClosed")
     scene = m.top.getScene()
-    if scene = invalid then return
-
-    keyboardDialog = scene.dialog
-    if keyboardDialog = invalid then return
-
-    if keyboardDialog.buttonSelected = 0 then
-        if m.activeKeyboardField = "server" then
-            m.top.serverValue = keyboardDialog.text
-        else if m.activeKeyboardField = "username" then
-            m.top.usernameValue = keyboardDialog.text
-        else if m.activeKeyboardField = "password" then
-            m.top.passwordValue = keyboardDialog.text
-        end if
+    if scene <> invalid and scene.dialog <> invalid then
+        if scene.dialog.isSameNode(keyboard) then scene.dialog = invalid
     end if
-
-    scene.dialog = invalid
-
-    if m.activeKeyboardField = "server" then
-        focusLoginField(0)
-    else if m.activeKeyboardField = "username" then
-        focusLoginField(1)
-    else if m.activeKeyboardField = "password" then
-        focusLoginField(2)
-    end if
-
-    m.activeKeyboardField = invalid
+    keyboard.close = true
 end sub
 
 '-------------------------------------------------------------------------------
-' focusLoginField
+' restoreKeyboardFocus
 '-------------------------------------------------------------------------------
-sub focusLoginField(index as integer)
-    if m.loginFocusNodes = invalid then return
-    if index < 0 or index >= m.loginFocusNodes.Count() then return
-
-    if m.serverInput <> invalid then m.serverInput.hasFocusVisual = (index = 0)
-    if m.usernameInput <> invalid then m.usernameInput.hasFocusVisual = (index = 1)
-    if m.passwordInput <> invalid then m.passwordInput.hasFocusVisual = (index = 2)
-    if m.loginButton <> invalid then m.loginButton.hasFocusVisual = (index = 3)
-    if m.quickConnectButton <> invalid then m.quickConnectButton.hasFocusVisual = (index = 4)
-    if m.savedAccountsButton <> invalid then m.savedAccountsButton.hasFocusVisual = (index = 5)
-    node = m.loginFocusNodes[index]
-    if node <> invalid then
-        node.setFocus(true)
-    end if
+sub restoreKeyboardFocus(target as string)
+    if not m.top.visible then return
+    scene = m.top.getScene()
+    if scene <> invalid and scene.dialog <> invalid then return
+    focusLoginTarget(target)
 end sub
 
 '-------------------------------------------------------------------------------
-' getFocusedLoginFieldIndex
+' onVisibilityChanged
 '-------------------------------------------------------------------------------
-function getFocusedLoginFieldIndex() as integer
-    if m.loginFocusNodes = invalid then return -1
+sub onVisibilityChanged()
+    if not m.top.visible then closeOwnedLoginKeyboard()
+end sub
 
-    for i = 0 to m.loginFocusNodes.Count() - 1
-        node = m.loginFocusNodes[i]
-        if node <> invalid and node.isInFocusChain() then
-            return i
-        end if
+'-------------------------------------------------------------------------------
+' focusLoginTarget
+'-------------------------------------------------------------------------------
+sub focusLoginTarget(target as string)
+    entry = m.loginFocus[target]
+    if entry = invalid then return
+    if not entry.node.visible then return
+    for each key in m.loginFocus
+        m.loginFocus[key].node.hasFocusVisual = key = target
     end for
+    entry.node.setFocus(true)
+end sub
 
-    return -1
+'-------------------------------------------------------------------------------
+' getFocusedLoginTarget
+'-------------------------------------------------------------------------------
+function getFocusedLoginTarget() as string
+    for each key in m.loginFocus
+        if m.loginFocus[key].node.isInFocusChain() then return key
+    end for
+    return ""
 end function
 
 '-------------------------------------------------------------------------------
 ' handleLoginNavigation
 '-------------------------------------------------------------------------------
 function handleLoginNavigation(key as string) as boolean
-    focusedIndex = getFocusedLoginFieldIndex()
-    if focusedIndex = -1 then
-        focusLoginField(0)
+    target = getFocusedLoginTarget()
+    if target = "" then
+        focusLoginTarget(LoginFocus.Target.Server)
         return true
     end if
-
-    if key = "down" then
-        if focusedIndex < 3 then
-            focusLoginField(focusedIndex + 1)
-        else if (focusedIndex = 3 or focusedIndex = 4) and m.savedAccountsButton.visible then
-            focusLoginField(5)
-        end if
+    if key = "up" or key = "down" or key = "left" or key = "right" then
+        nextTarget = m.loginFocus[target][key]
+        if nextTarget <> invalid then focusLoginTarget(nextTarget)
         return true
     end if
-
-    if key = "up" then
-        if focusedIndex = 5 then
-            focusLoginField(3)
-        else if focusedIndex = 3 or focusedIndex = 4 then
-            focusLoginField(2)
-        else if focusedIndex > 0 then
-            focusLoginField(focusedIndex - 1)
-        end if
-        return true
+    if key <> "OK" and key <> "select" then return false
+    if target = LoginFocus.Target.Server then
+        onChooseServerPressed()
+    else if target = LoginFocus.Target.Username or target = LoginFocus.Target.Password then
+        openKeyboardDialog(target)
+    else if target = LoginFocus.Target.SignIn then
+        onLoginPressed()
+    else if target = LoginFocus.Target.QuickConnect then
+        onQuickConnectPressed()
+    else if target = LoginFocus.Target.SavedAccounts then
+        onSavedAccountsPressed()
+    else
+        return false
     end if
-
-    if key = "right" and focusedIndex = 3 then
-        focusLoginField(4)
-        return true
-    end if
-
-    if key = "left" and focusedIndex = 4 then
-        focusLoginField(3)
-        return true
-    end if
-
-    if key = "OK" or key = "select" then
-        if focusedIndex = 0 then
-            openKeyboardDialog("server")
-            return true
-        else if focusedIndex = 1 then
-            openKeyboardDialog("username")
-            return true
-        else if focusedIndex = 2 then
-            openKeyboardDialog("password")
-            return true
-        else if focusedIndex = 3 then
-            onLoginPressed()
-            return true
-        else if focusedIndex = 4 then
-            onQuickConnectPressed()
-            return true
-        else if focusedIndex = 5 then
-            onSavedAccountsPressed()
-            return true
-        end if
-    end if
-
-    return false
+    return true
 end function
 
 '-------------------------------------------------------------------------------
@@ -439,3 +424,34 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     return handleLoginNavigation(key)
 end function
+
+'-------------------------------------------------------------------------------
+' onChooseServerPressed
+'-------------------------------------------------------------------------------
+sub onChooseServerPressed()
+    m.top.overlayRequested = {
+        id: "serverDiscovery"
+        componentName: "ServerDiscoveryDialog"
+        openFunction: "openDiscovery"
+        closeField: "closeRequested"
+        currentAddress: m.top.serverValue
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' handleDiscoveryClosed
+'-------------------------------------------------------------------------------
+sub handleDiscoveryClosed(server as dynamic)
+    if server = invalid then
+        focusLoginTarget(LoginFocus.Target.Server)
+        return
+    end if
+    address = Url.NormalizeServer(server.address)
+    if address <> Url.NormalizeServer(m.top.serverValue) then
+        m.top.usernameValue = ""
+        m.top.passwordValue = ""
+    end if
+    m.top.serverValue = address
+    m.top.statusMessage = ""
+    focusLoginTarget(LoginFocus.Target.Username)
+end sub

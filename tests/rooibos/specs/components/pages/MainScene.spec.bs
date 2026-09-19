@@ -36,6 +36,40 @@ namespace tests
 
         @describe("session permission forwarding")
 
+        @it("routes discovery selection and refreshes accounts for the chosen server")
+        function _()
+            controller = {
+                lastServer: ""
+                callFunc: function(name as string, server as string) as object
+                    m.lastServer = server
+                    return []
+                end function
+            }
+            m.node.authController = controller
+            m.node.login.visible = true
+            m.node.login.usernameValue = "old-user"
+            m.node.login.passwordValue = "old-password"
+
+            'bs:disable-next-line 1140
+            authHandleDiscoveryClosed({ overlay: { selectedServer: { address: "http://discovered:8097" } } })
+
+            m.assertEqual(m.node.login.serverValue, "http://discovered:8097")
+            m.assertEqual(controller.lastServer, "http://discovered:8097")
+            m.assertEqual(m.node.login.savedAccounts, [])
+            m.assertEqual(m.node.login.passwordValue, "")
+        end function
+
+        @it("ignores discovery results after leaving login")
+        function _()
+            m.node.login.visible = false
+            previous = m.node.login.serverValue
+
+            'bs:disable-next-line 1140
+            authHandleDiscoveryClosed({ overlay: { selectedServer: { address: "http://late" } } })
+
+            m.assertEqual(m.node.login.serverValue, previous)
+        end function
+
         @it("passes runtime Live TV permissions to page load requests")
         function _()
             m.node.session = { server: "https://server", token: "token", userId: "user", accountKey: "server/user", permissions: { canAccessLiveTv: false }, homePreferences: { latestItemsExcludes: ["home"] } }

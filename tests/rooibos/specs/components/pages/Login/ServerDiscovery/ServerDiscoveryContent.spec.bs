@@ -1,0 +1,216 @@
+import "pkg:/source/Number.bs"
+
+namespace tests
+
+    @SGNode("ServerDiscoveryContent")
+    @suite("ServerDiscoveryContent component")
+    class ServerDiscoveryContentTests extends rooibos.BaseTestSuite
+
+        @describe("observable behavior")
+
+        @it("shows scanning status with the list hidden and Cancel focused")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+
+            m.assertEqual(m.top.findNode("status").text, "Searching")
+            m.assertFalse(m.top.findNode("servers").visible)
+            m.assertEqual(m.top.findNode("servers").content.getChildCount(), 0)
+            m.assertTrue(m.top.findNode("cancel").hasFocus())
+            m.top.findNode("search").buttonSelected = true
+
+            m.assertFalse(m.top.searchRequested)
+        end function
+
+        @it("renders names and URLs without selecting a server")
+        function _()
+            m.top.viewState = { searching: false, servers: [{ name: "NAS", address: "http://nas:8097" }], message: "Select a server..." }
+            item = m.top.findNode("servers").content.getChild(0)
+
+            m.assertEqual(item.title, "NAS")
+            m.assertEqual(item.description, "http://nas:8097")
+            m.assertInvalid(m.top.serverSelected)
+            m.assertTrue(m.top.findNode("servers").hasFocus())
+        end function
+
+        @it("emits explicit server selection")
+        function _()
+            server = { name: "NAS", address: "http://nas:8097" }
+            m.top.viewState = { searching: false, servers: [server], message: "Select" }
+            m.top.findNode("servers").itemSelected = 0
+
+            m.assertEqual(m.top.serverSelected, server)
+        end function
+
+        @it("allows retry after an empty scan")
+        function _()
+            m.top.viewState = { searching: false, servers: [], message: "No servers" }
+            m.top.findNode("search").buttonSelected = true
+
+            m.assertTrue(m.top.searchRequested)
+            m.assertTrue(m.top.findNode("servers").visible)
+            m.assertTrue(m.top.findNode("servers").content.getChild(0).manualEntry)
+        end function
+
+        @it("renders socket failures")
+        function _()
+            m.top.viewState = { searching: false, servers: [], message: "Unable to search" }
+
+            m.assertEqual(m.top.findNode("status").text, "Unable to search")
+        end function
+
+        @it("cancels with Back")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertTrue(m.top.cancelRequested)
+        end function
+
+        @it("moves from manual entry to retry")
+        function _()
+            m.top.viewState = { searching: false, servers: [{ name: "NAS", address: "http://nas" }], message: "Select" }
+            m.top.callFunc("focusManualEntry")
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+
+            m.assertTrue(m.top.findNode("search").hasFocus())
+        end function
+
+        @it("ignores manual entry selection during scanning")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+            previous = m.top.serverSelected
+            m.top.manualEntryRequested = false
+            m.top.findNode("servers").itemSelected = 0
+
+            m.assertFalse(m.top.manualEntryRequested)
+            m.assertEqual(m.top.serverSelected, previous)
+        end function
+
+        @it("places manual entry after discovered servers with a separator")
+        function _()
+            m.top.viewState = { searching: false, servers: [{ name: "NAS", address: "http://nas" }], message: "Select" }
+            list = m.top.findNode("servers")
+            manual = list.content.getChild(1)
+
+            m.assertEqual(list.content.getChildCount(), 2)
+            m.assertEqual(manual.title, "Enter server address manually")
+            m.assertTrue(manual.showSeparator)
+        end function
+
+        @it("highlights the first server when results arrive")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+            m.top.viewState = { searching: false, servers: [{ name: "NAS", address: "http://nas" }], message: "Select" }
+
+            m.assertEqual(m.top.findNode("servers").jumpToItem, 0)
+            m.assertEqual(m.node.presentation.focusedKey, "server:http://nas")
+            m.assertTrue(m.top.findNode("servers").hasFocus())
+        end function
+
+        @it("preserves server identity when result ordering changes")
+        function _()
+            nas = { id: "nas", name: "NAS", address: "http://nas" }
+            m.top.viewState = { searching: false, servers: [nas], message: "Select" }
+            m.top.findNode("servers").itemFocused = 0
+            m.top.viewState = { searching: false, servers: [{ id: "other", name: "A", address: "http://other" }, nas], message: "Select" }
+
+            m.assertEqual(m.top.findNode("servers").jumpToItem, 1)
+            m.assertEqual(m.node.presentation.focusedKey, "server:nas")
+        end function
+
+        @it("moves focus from Cancel into completed results")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            m.top.viewState = { searching: false, servers: [{ name: "NAS", address: "http://nas" }], message: "Select" }
+
+            m.assertTrue(m.top.findNode("servers").hasFocus())
+            m.assertTrue(m.top.findNode("servers").content.getChild(0).listFocused)
+        end function
+
+        @it("does not take focus while the keyboard is active")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+            m.top.keyboardActive = true
+            other = CreateObject("roSGNode", "Group")
+            m.top.appendChild(other)
+            other.setFocus(true)
+            m.top.viewState = { searching: false, servers: [{ name: "NAS", address: "http://nas" }], message: "Select" }
+
+            m.assertTrue(other.hasFocus())
+            m.assertFalse(m.top.findNode("servers").content.getChild(0).listFocused)
+            m.top.keyboardActive = false
+            m.top.removeChild(other)
+        end function
+
+        @it("positions the list sixteen pixels below rendered status")
+        function _()
+            m.top.viewState = { searching: false, servers: [], message: "No Jellyfin servers found. Try again or enter the server address manually." }
+
+            m.assertEqual(m.top.findNode("servers").translation[1], m.top.findNode("status").boundingRect().height + 16)
+            m.assertEqual(m.top.findNode("servers").focusFootprintBitmapUri, "pkg:/images/focus/transparent_focus_footprint.9.png")
+        end function
+
+        @it("shrinks status spacing back to one rendered line")
+        function _()
+            m.top.viewState = { searching: false, servers: [], message: "No Jellyfin servers found. Try again or enter the server address manually." }
+            wrappedTop = m.top.findNode("servers").translation[1]
+            m.top.viewState = { searching: false, servers: [], message: "Select a server..." }
+
+            m.assertTrue(m.top.findNode("servers").translation[1] < wrappedTop)
+            m.assertEqual(m.top.findNode("servers").vertFocusAnimationStyle, "floatingfocus")
+        end function
+
+        @it("keeps Up on Cancel while scanning")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+
+            m.assertTrue(m.top.findNode("cancel").hasFocus())
+            m.assertFalse(m.top.findNode("servers").hasFocus())
+        end function
+
+        @it("highlights manual entry when no servers are found")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+            m.top.viewState = { searching: false, servers: [], message: "No servers" }
+
+            m.assertEqual(m.top.findNode("servers").itemFocused, 0)
+            m.assertTrue(m.top.findNode("servers").hasFocus())
+            m.assertTrue(m.top.findNode("servers").content.getChild(0).manualEntry)
+        end function
+
+        @it("hides results and moves retry focus to Cancel during the next scan")
+        function _()
+            m.top.viewState = { searching: false, servers: [], message: "No servers" }
+            m.top.callFunc("focusManualEntry")
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+
+            m.assertFalse(m.top.findNode("servers").visible)
+            m.assertTrue(m.top.findNode("cancel").hasFocus())
+        end function
+
+        @it("reserves one row of space while searching")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+
+            m.assertEqual(m.top.findNode("search").translation[1], m.top.findNode("status").boundingRect().height + 16 + 104 + 24)
+            m.assertFalse(m.top.findNode("servers").visible)
+        end function
+
+        @it("reports content height without dialog frame spacing")
+        function _()
+            m.top.viewState = { searching: true, servers: [], message: "Searching" }
+
+            m.assertEqual(m.top.preferredHeight, Number.ToInteger(m.top.findNode("search").translation[1] + m.top.findNode("search").buttonHeight))
+        end function
+
+    end class
+
+end namespace

@@ -1,0 +1,317 @@
+import "pkg:/source/AsyncLifecycle.bs"
+
+namespace tests
+
+    @SGNode("ServerDiscoveryDialog")
+    @suite("ServerDiscoveryDialog component")
+    class ServerDiscoveryDialogTests extends rooibos.BaseTestSuite
+
+        @describe("scan lifecycle")
+
+        @it("opens a scan with cancellation available")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+
+            m.assertTrue(content.viewState.searching)
+            m.assertTrue(content.findNode("cancel").hasFocus())
+            m.assertNotInvalid(m.node.discovery.task)
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        @it("does not start overlapping scans")
+        function _()
+            m.top.callFunc("openDiscovery")
+            first = m.node.discovery.task
+
+            'bs:disable-next-line 1140
+            startDiscovery()
+
+            m.assertTrue(first.isSameNode(m.node.discovery.task))
+            m.assertEqual(m.node.discovery.generation, 1)
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        @it("cancels and invalidates the scan when closed")
+        function _()
+            m.top.callFunc("openDiscovery")
+            task = m.node.discovery.task
+
+            m.top.callFunc("closeDialog")
+
+            m.assertTrue(task.cancelRequested)
+            m.assertFalse(m.node.discovery.lifecycle.isActive)
+            m.assertInvalid(m.node.discovery.task)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("ignores a late callback after cancellation")
+        function _()
+            m.top.callFunc("openDiscovery")
+            m.top.callFunc("cancelDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            previous = content.viewState
+
+            'bs:disable-next-line 1140
+            onDiscoveryTaskState()
+
+            m.assertEqual(content.viewState, previous)
+        end function
+
+        @it("renders an empty completed scan and retires its task")
+        function _()
+            m.prepareCompletion({ generation: 1, ok: true, servers: [], message: "" })
+
+            'bs:disable-next-line 1140
+            onDiscoveryTaskState()
+
+            content = m.top.callFunc("getContentComponent")
+
+            m.assertFalse(content.viewState.searching)
+            m.assertEqual(content.viewState.message, "No Jellyfin servers found. Try again or enter the server address manually.")
+            m.assertInvalid(m.node.discovery.task)
+        end function
+
+        @it("renders a socket failure distinctly")
+        function _()
+            m.prepareCompletion({ generation: 1, ok: false, servers: [], message: "Unable to search" })
+
+            'bs:disable-next-line 1140
+            onDiscoveryTaskState()
+
+            content = m.top.callFunc("getContentComponent")
+
+            m.assertEqual(content.viewState.message, "Unable to search")
+        end function
+
+        @it("rejects results from another generation")
+        function _()
+            m.prepareCompletion({ generation: 9, ok: true, servers: [], message: "" })
+            content = m.top.callFunc("getContentComponent")
+            previous = content.viewState
+
+            'bs:disable-next-line 1140
+            onDiscoveryTaskState()
+
+            m.assertEqual(content.viewState, previous)
+        end function
+
+        @it("starts a fresh task on retry after completion")
+        function _()
+            m.prepareCompletion({ generation: 1, ok: true, servers: [], message: "" })
+            'bs:disable-next-line 1140
+            onDiscoveryTaskState()
+
+            'bs:disable-next-line 1140
+            startDiscovery()
+
+            m.assertEqual(m.node.discovery.generation, 2)
+            m.assertEqual(m.node.discovery.task.request.generation, 2)
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        @it("returns an explicitly selected server and closes")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            server = { name: "NAS", address: "http://nas" }
+
+            content.serverSelected = server
+
+            m.assertEqual(m.top.selectedServer, server)
+            m.assertTrue(m.top.closeRequested)
+            m.assertInvalid(m.node.discovery.task)
+        end function
+
+        @it("prefills its keyboard with the current address")
+        function _()
+            m.top.currentAddress = "https://nas:8097/jellyfin"
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+
+            m.assertEqual(m.node.discovery.keyboard.text, "https://nas:8097/jellyfin")
+            m.assertTrue(content.keyboardActive)
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        @it("keeps an empty manual address open with validation")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+            keyboard = m.node.discovery.keyboard
+            keyboard.text = "   "
+            keyboard.buttonSelected = 0
+
+            m.assertTrue(keyboard.isSameNode(m.node.discovery.keyboard))
+            m.assertEqual(keyboard.message, ["Server address is required"])
+            m.assertTrue(content.keyboardActive)
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        @it("normalizes a manual address and closes through selection")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+            keyboard = m.node.discovery.keyboard
+            keyboard.text = " nas:8097/jellyfin/ "
+            keyboard.buttonSelected = 0
+
+            m.assertEqual(m.top.selectedServer.address, "http://nas:8097/jellyfin")
+            m.assertTrue(m.top.closeRequested)
+            m.assertInvalid(m.node.discovery.keyboard)
+            m.assertInvalid(m.node.discovery.task)
+        end function
+
+        @it("returns keyboard cancellation to the manual row")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+            m.node.discovery.keyboard.buttonSelected = 1
+
+            m.assertInvalid(m.node.discovery.keyboard)
+            m.assertFalse(content.keyboardActive)
+            m.assertTrue(content.findNode("servers").hasFocus())
+            m.assertEqual(content.findNode("servers").jumpToItem, 0)
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        @it("returns a native keyboard close to the manual row")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+            closeEvent = {
+                node: m.node.discovery.keyboard
+                getRoSGNode: function()
+                    return m.node
+                end function
+            }
+            'bs:disable-next-line 1140
+            onManualKeyboardClosed(closeEvent)
+
+            m.assertInvalid(m.node.discovery.keyboard)
+            m.assertFalse(content.keyboardActive)
+            m.assertTrue(content.findNode("servers").hasFocus())
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        @it("closes its owned keyboard when the picker closes")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+            keyboard = m.node.discovery.keyboard
+            m.top.callFunc("closeDialog")
+
+            m.assertTrue(keyboard.close)
+            m.assertInvalid(m.node.discovery.keyboard)
+            m.assertFalse(content.keyboardActive)
+        end function
+
+        @it("leaves a replacement native dialog open during cleanup")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+            scene = m.top.getScene()
+            replacement = CreateObject("roSGNode", "StandardKeyboardDialog")
+            scene.dialog = replacement
+            m.top.callFunc("cancelDiscovery")
+
+            m.assertTrue(scene.dialog.isSameNode(replacement))
+            scene.dialog = invalid
+        end function
+
+        @it("ignores a close event from an earlier keyboard")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+            previous = m.node.discovery.keyboard
+            previous.buttonSelected = 1
+            content.viewState = { searching: false, servers: [], message: "Select a server..." }
+            content.manualEntryRequested = true
+            current = m.node.discovery.keyboard
+            staleEvent = {
+                node: previous
+                getRoSGNode: function()
+                    return m.node
+                end function
+            }
+            'bs:disable-next-line 1140
+            onManualKeyboardClosed(staleEvent)
+
+            m.assertTrue(current.isSameNode(m.node.discovery.keyboard))
+            m.assertTrue(content.keyboardActive)
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        @it("does not restart from retained content after closing")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            m.top.callFunc("cancelDiscovery")
+            generation = m.node.discovery.generation
+            content.searchRequested = true
+
+            m.assertInvalid(m.node.discovery.task)
+            m.assertEqual(m.node.discovery.generation, generation)
+            m.assertFalse(m.node.discovery.lifecycle.isActive)
+        end function
+
+        @it("rejects a queued retry after closing")
+        function _()
+            m.top.callFunc("openDiscovery")
+            m.top.callFunc("cancelDiscovery")
+            'bs:disable-next-line 1140
+            startDiscovery()
+
+            m.assertInvalid(m.node.discovery.task)
+            m.assertFalse(m.node.discovery.lifecycle.isActive)
+        end function
+
+        @it("rejects a queued selection after closing")
+        function _()
+            m.top.callFunc("openDiscovery")
+            previous = m.top.selectedServer
+            m.top.callFunc("cancelDiscovery")
+            'bs:disable-next-line 1140
+            commitServer({ address: "http://late" })
+
+            m.assertEqual(m.top.selectedServer, previous)
+        end function
+
+        @it("fits the frame around content height")
+        function _()
+            m.top.callFunc("openDiscovery")
+            content = m.top.callFunc("getContentComponent")
+            content.viewState = { searching: false, servers: [{ id: "one", name: "One", address: "http://one:8096" }], message: "Select a server..." }
+            m.assertEqual(m.top.dialogHeight, content.preferredHeight + 230)
+            m.top.callFunc("cancelDiscovery")
+        end function
+
+        function prepareCompletion(response as object)
+            m.top.contentComponentName = "ServerDiscoveryContent"
+            task = CreateObject("roSGNode", "Group")
+            task.addFields({ state: "stop", response: response })
+            m.top.appendChild(task)
+            lifecycle = AsyncLifecycle.Create()
+            AsyncLifecycle.Begin(lifecycle, "1")
+            m.node.discovery = { generation: 1, task: task, lifecycle: lifecycle, keyboard: invalid, closed: false }
+        end function
+
+    end class
+
+end namespace
