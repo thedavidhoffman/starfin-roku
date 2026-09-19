@@ -18,6 +18,7 @@ namespace tests
             m.top.overlayRequested = invalid
             m.top.closeRequested = false
         end function
+
         @describe("declarative component contract")
 
         @it("declares the mediaShell node")
@@ -48,11 +49,6 @@ namespace tests
         @it("declares the chevronFooter node")
         function _()
             m.assertNotInvalid(m.top.findNode("chevronFooter"))
-        end function
-
-        @it("declares the streamOptions node")
-        function _()
-            m.assertNotInvalid(m.top.findNode("streamOptions"))
         end function
 
         @it("declares the movieTask node")
@@ -88,7 +84,7 @@ namespace tests
             m.assertEqual(content.overview, "Overview")
         end function
 
-        @it("renders stream and chapter counts")
+        @it("supplies available streams and chapters to media options")
         function _()
             item = m.createMovie()
             item.MediaStreams = [{ Type: "Audio", Index: 1 }, { Type: "Subtitle", Index: 2 }]
@@ -97,10 +93,13 @@ namespace tests
             'bs:disable-next-line 1140
             renderMovie(item)
 
-            toolbar = m.top.findNode("mediaToolbar")
-            m.assertEqual(toolbar.audioStreamCount, 1)
-            m.assertEqual(toolbar.subtitleStreamCount, 1)
-            m.assertEqual(toolbar.chapterCount, 1)
+            m.node.state.item = item
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+            context = m.top.overlayRequested.optionsContext
+            m.assertEqual(context.audioOptions.Count(), 1)
+            m.assertEqual(context.subtitleOptions.Count(), 2)
+            m.assertEqual(context.chapterOptions.Count(), 1)
         end function
 
         @it("renders watched and resume state")
@@ -408,7 +407,9 @@ namespace tests
             'bs:disable-next-line 1140
             renderMovie(item)
 
-            m.node.streamOptions.selectedAudio = { streamIndex: 4, stream: item.MediaStreams[2] }
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: m.top.overlayRequested, overlay: { result: { audioStreamIndex: 4 } } })
 
             m.assertEqual(m.node.mediaToolbar.mediaInfoText, "1080p H.264 • AAC 2.0")
         end function
@@ -458,9 +459,9 @@ namespace tests
             m.node.mediaToolbar.isWatched = not m.node.mediaToolbar.isWatched
 
             button.buttonSelected = true
-            m.assertEqual(m.top.overlayRequested.componentName, "VideoMediaInfoDialog")
-            m.assertEqual(m.top.overlayRequested.openFunction, "openVideoMediaInfo")
-            m.top.callFunc("handleVideoMediaInfoOverlayClosed")
+            m.assertEqual(m.top.overlayRequested.componentName, "MediaOptionsDialog")
+            m.assertEqual(m.top.overlayRequested.openFunction, "openMediaOptions")
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: m.top.overlayRequested, overlay: { result: {} } })
 
             m.assertTrue(button.hasFocus())
             m.assertTrue(button.findNode("textLabel").visible)
@@ -577,6 +578,64 @@ namespace tests
             m.assertEqual(m.node.mediaToolbar.mediaInfoText, "")
             m.assertFalse(m.node.mediaToolbar.findNode("mediaInfoButton").visible)
         end function
+
+        @describe("media options boundary")
+
+        @it("commits audio video and subtitles together")
+        function _()
+            m.prepareMediaOptions()
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: m.top.overlayRequested, overlay: { result: { videoMode: "transcode-no-remux", audioStreamIndex: 2, subtitleStreamIndex: -1 } } })
+
+            m.assertEqual(m.node.state.videoMode, "transcode-no-remux")
+            m.assertEqual(m.node.state.selectedStreams.audio.streamIndex, 2)
+            m.assertTrue(m.node.state.selectedStreams.subtitleOff)
+            m.assertInvalid(m.node.state.mediaOptions.session)
+        end function
+
+        @it("ignores a result from an older opening")
+        function _()
+            m.prepareMediaOptions()
+            oldRequest = m.top.overlayRequested
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: oldRequest, overlay: { result: { audioStreamIndex: 2 } } })
+
+            m.assertInvalid(m.node.state.selectedStreams.audio)
+            m.assertNotInvalid(m.node.state.mediaOptions.session)
+        end function
+
+        @it("discards pending choices after navigation deactivates the page")
+        function _()
+            m.prepareMediaOptions()
+            request = m.top.overlayRequested
+            m.top.callFunc("deactivate")
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: request, overlay: { result: { audioStreamIndex: 2 } } })
+
+            m.assertInvalid(m.node.state.selectedStreams.audio)
+        end function
+
+        @it("starts a chapter using the final selected streams")
+        function _()
+            m.prepareMediaOptions()
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: m.top.overlayRequested, overlay: { result: { videoMode: "transcode-no-remux", audioStreamIndex: 2, subtitleStreamIndex: -1, chapter: { startPositionTicks: 600000000, startPositionSeconds: 60 } } } })
+
+            m.assertEqual(m.top.playSelected.startPositionTicks, 600000000)
+            m.assertEqual(m.top.playSelected.audioStreamIndex, 2)
+            m.assertEqual(m.top.playSelected.subtitleStreamIndex, -1)
+            m.assertEqual(m.top.playSelected.videoMode, "transcode-no-remux")
+        end function
+
+        private sub prepareMediaOptions()
+            item = { Id: "options-item", Name: "Options", Type: "Movie", MediaStreams: [{ Type: "Audio", Index: 1, Codec: "aac", Channels: 2 }, { Type: "Audio", Index: 2, Codec: "ac3", Channels: 6 }], Chapters: [{ StartPositionTicks: 600000000 }] }
+            m.node.state.mediaInfoPending = false
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.node.state.request = { itemId: "options-item", item: item, server: "http://server", token: "token", userId: "user" }
+            m.node.state.item = item
+            'bs:disable-next-line 1140
+            renderMovie(item)
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+        end sub
 
     end class
 

@@ -34,6 +34,39 @@ namespace tests
             m.node.playbackController.closed = invalid
         end function
 
+        @describe("media options routing")
+
+        @it("recognizes the shared media options overlay")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertTrue(isStreamOptionsOverlayRequest({ id: "mediaOptions" }))
+        end function
+
+        @it("does not recognize retired audio overlay requests")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertFalse(isStreamOptionsOverlayRequest({ id: "audioOptions" }))
+        end function
+
+        @it("forwards cancelled media options to the owning movie page")
+        function _()
+            owner = {
+                received: invalid
+                callFunc: function(name as string, closed as object) as dynamic
+                    m.received = { name: name, closed: closed }
+                    return invalid
+                end function
+            }
+            m.node.moviePage = owner
+            closed = { request: { id: "mediaOptions", sourcePage: "movie" }, overlay: invalid, cancelled: true }
+
+            'bs:disable-next-line 1140
+            navHandleStreamOptionsOverlayClosed(closed)
+
+            m.assertEqual(owner.received, { name: "handleStreamOptionsOverlayClosed", closed: closed })
+            m.node.moviePage = invalid
+        end function
+
         @describe("session permission forwarding")
 
         @it("routes discovery selection and refreshes accounts for the chosen server")

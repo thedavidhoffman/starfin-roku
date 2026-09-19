@@ -1,0 +1,124 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/MediaOptions.bs"
+import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/DateTime.bs"
+import "pkg:/source/SubtitleSelection.bs"
+
+namespace MediaOptionsSession
+    enum Overlay
+        Options = "mediaOptions"
+    end enum
+
+    enum Category
+        Information = "Media Info"
+        Video = "Video"
+        Audio = "Audio"
+        Subtitles = "Subtitles"
+        Chapters = "Chapters"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' MediaOptionsSession.CopySelection
+    '---------------------------------------------------------------------------
+    function CopySelection(selection as object) as object
+        return { videoMode: selection.videoMode, audioStreamIndex: selection.audioStreamIndex, subtitleStreamIndex: selection.subtitleStreamIndex }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaOptionsSession.Changes
+    '---------------------------------------------------------------------------
+    function Changes(initial as object, pending as object) as object
+        result = {}
+        for each key in ["videoMode", "audioStreamIndex", "subtitleStreamIndex"]
+            if pending[key] <> initial[key] then result[key] = pending[key]
+        end for
+        if pending.chapter <> invalid then result.chapter = pending.chapter
+        return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaOptionsSession.Context
+    '---------------------------------------------------------------------------
+    function Context(item as object, videoMode as dynamic, audioIndex as integer, subtitleIndex as integer, audioStreams as object, subtitleStreams as object) as object
+        return {
+            item: item
+            selection: { videoMode: PlaybackMode.Normalize(videoMode), audioStreamIndex: audioIndex, subtitleStreamIndex: subtitleIndex }
+            audioOptions: MediaOptions.BuildAudioOptions(audioStreams)
+            subtitleOptions: MediaOptions.BuildSubtitleOptions(subtitleStreams)
+            chapterOptions: MediaOptions.BuildChapterOptions(MediaOptions.GetChapters(item))
+        }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaOptionsSession.DisplaySelection
+    '---------------------------------------------------------------------------
+    function DisplaySelection(optionsContext as object, pending as object) as object
+        selection = CopySelection(pending)
+        if selection.audioStreamIndex < 0 and optionsContext.audioOptions.Count() > 0 then
+            selection.audioStreamIndex = optionsContext.audioOptions[0].value.streamIndex
+            for each option in optionsContext.audioOptions
+                if option.value.stream <> invalid and option.value.stream.IsDefault = true then
+                    selection.audioStreamIndex = option.value.streamIndex
+                    exit for
+                end if
+            end for
+        end if
+        if selection.subtitleStreamIndex = SubtitleSelection.NotSet then selection.subtitleStreamIndex = SubtitleSelection.None
+        return selection
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaOptionsSession.ApplyStreamChanges
+    '---------------------------------------------------------------------------
+    function ApplyStreamChanges(current as object, optionsContext as object, resultChanges as object) as object
+        streams = { audio: current.audio, subtitle: current.subtitle, subtitleOff: current.subtitleOff }
+        if resultChanges.audioStreamIndex <> invalid then streams.audio = FindValue(optionsContext.audioOptions, resultChanges.audioStreamIndex)
+        if resultChanges.subtitleStreamIndex <> invalid then
+            streams.subtitleOff = resultChanges.subtitleStreamIndex = SubtitleSelection.None
+            streams.subtitle = FindValue(optionsContext.subtitleOptions, resultChanges.subtitleStreamIndex)
+            if streams.subtitleOff then streams.subtitle = invalid
+        end if
+        return streams
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaOptionsSession.FindValue
+    '---------------------------------------------------------------------------
+    function FindValue(options as object, streamIndex as integer) as dynamic
+        for each option in options
+            if option.value.streamIndex = streamIndex then return option.value
+        end for
+        return invalid
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaOptionsSession.VideoOptions
+    '---------------------------------------------------------------------------
+    function VideoOptions() as object
+        return [
+            {
+                key: PlaybackMode.Mode.Automatic
+                label: "Automatic"
+                description: "Allows Jellyfin to choose Direct Play, remuxing, or transcoding based on the file, selected audio and subtitle tracks, device capabilities, and network limits. This is the normal playback mode and balances original quality, compatibility, and server processing."
+            }
+            {
+                key: PlaybackMode.Mode.AutomaticNoRemux
+                label: "Automatic (Remux Disabled)"
+                description: "Prefers Direct Play. When Direct Play is unavailable, Jellyfin fully converts the video instead of copying it into a new stream. Compatible audio may still be copied. This can resolve playback, timing, keyframe, and seeking problems caused by video remuxing."
+            }
+            {
+                key: PlaybackMode.Mode.TranscodeAllowRemux
+                label: "Force Transcode (Allow Remux)"
+                description: "Disables Direct Play. Jellyfin may repackage compatible video or audio without converting it, while transcoding anything the device cannot play. This can improve compatibility while preserving quality where possible."
+            }
+            {
+                key: PlaybackMode.Mode.TranscodeNoRemux
+                label: "Force Transcode (Remux Disabled)"
+                description: "Disables Direct Play and forces Jellyfin to convert the video to a supported format, usually H.264. This uses more server processing and may reduce quality, but can resolve playback, timing, keyframe, and seeking problems."
+            }
+        ]
+    end function
+end namespace

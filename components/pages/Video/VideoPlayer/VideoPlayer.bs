@@ -85,7 +85,7 @@ sub initReferences()
     m.fastSeekTimer = m.top.findNode("fastSeekTimer")
     m.leftSeekRepeatTimer = m.top.findNode("leftSeekRepeatTimer")
     m.rightSeekRepeatTimer = m.top.findNode("rightSeekRepeatTimer")
-    m.videoModeApplyTimer = m.top.findNode("videoModeApplyTimer")
+    m.mediaOptionsApplyTimer = m.top.findNode("mediaOptionsApplyTimer")
     m.recoveryBufferTimer = m.top.findNode("recoveryBufferTimer")
     m.recoveryStableTimer = m.top.findNode("recoveryStableTimer")
 
@@ -122,19 +122,14 @@ sub initReferences()
     m.overlay = {
         area: "none"
         hasCast: false
-        resumeAfterPlaybackInformation: false
         resumeAfterNavigation: false
         restoreCastAfterNavigation: false
     }
 
+    m.mediaOptions = { session: invalid, pendingCommit: invalid, generation: 0 }
     m.streamOptions = {
         subtitleStreams: []
         audioStreams: []
-        chapters: []
-        selectedSubtitleStreamIndex: -1
-        selectedAudioStreamIndex: -1
-        selectedChapterKey: ""
-        pendingVideoMode: ""
         pendingExternalSubtitleUrl: ""
         externalSubtitleTracks: []
         activeSubtitleDeliveryMethod: "none"
@@ -187,11 +182,7 @@ sub initHandlers()
     m.playbackControls.observeField("progressSeekCommit", "onProgressSeekCommit")
     m.playbackControls.observeField("progressSeekCancel", "onProgressSeekCancel")
     m.playbackControls.observeField("castOptionsPressed", "onCastOptionsPressed")
-    m.playbackControls.observeField("chapterOptionsPressed", "onChapterOptionsPressed")
-    m.playbackControls.observeField("subtitleOptionsPressed", "onSubtitleOptionsPressed")
-    m.playbackControls.observeField("audioOptionsPressed", "onAudioOptionsPressed")
-    m.playbackControls.observeField("videoOptionsPressed", "onVideoOptionsPressed")
-    m.playbackControls.observeField("playbackInfoPressed", "onPlaybackInfoPressed")
+    m.playbackControls.observeField("mediaOptionsPressed", "onMediaOptionsPressed")
     m.playbackControls.observeField("focusExitDown", "onPlaybackControlsFocusExitDown")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
@@ -204,7 +195,7 @@ sub initHandlers()
     m.fastSeekTimer.observeField("fire", "onFastSeekTimerFire")
     m.leftSeekRepeatTimer.observeField("fire", "onLeftSeekRepeatTimerFire")
     m.rightSeekRepeatTimer.observeField("fire", "onRightSeekRepeatTimerFire")
-    m.videoModeApplyTimer.observeField("fire", "onVideoModeApplyTimerFire")
+    m.mediaOptionsApplyTimer.observeField("fire", "onMediaOptionsApplyTimerFire")
     m.recoveryBufferTimer.observeField("fire", "onPlaybackRecoveryBufferTimerFire")
     m.recoveryStableTimer.observeField("fire", "onPlaybackRecoveryStableTimerFire")
 end sub
@@ -246,6 +237,8 @@ sub onVideoStateChanged()
         finishCompletedPlayback()
     else if state = VideoPlayerState.Value.Playing then
         m.top.ready = true
+        if m.mediaOptions.session <> invalid then m.videoPlayer.control = MediaControl.Command.Pause
+        restorePlaybackStartupState()
         if m.playback.hasReportedStart = true then
             if previousPlaybackState = VideoPlayerState.Value.Paused then m.log.activity("Resumed " + getPlaybackActivityTitle())
             if tracksCurrentPlaybackProgress() then
@@ -320,6 +313,7 @@ end sub
 ' onControlsHideTimerFire
 '-------------------------------------------------------------------------------
 sub onControlsHideTimerFire()
+    if m.mediaOptions.session <> invalid or m.mediaOptions.pendingCommit <> invalid then return
     if m.playback.isSeeking = true then return
     if m.overlay.area = "cast" then
         hideCast(true)
@@ -335,12 +329,13 @@ sub stopPlayback(preserveRecovery = false as boolean)
     if m.playback <> invalid then m.playback.startupPending = false
     m.playbackInfoTask.control = TaskControl.Command.Stop
     m.mediaSegmentsTask.control = TaskControl.Command.Stop
-    m.videoModeApplyTimer.control = TimerControl.Command.Stop
+    m.mediaOptionsApplyTimer.control = TimerControl.Command.Stop
     stopPlaybackRecoveryTimers()
 #if playbackChaosMonkey
     stopPlaybackChaosMonkeyTimer()
 #endif
-    m.streamOptions.pendingVideoMode = ""
+    m.mediaOptions.session = invalid
+    m.mediaOptions.pendingCommit = invalid
     Spinner.Hide()
     hideControls()
     hideCast()
@@ -373,9 +368,6 @@ sub updatePlaybackControlsMetadata(request as object, item as dynamic)
         m.playbackControls.musicVideoMetadata = false
         m.playbackControls.title = "Video"
         m.playbackControls.subtitle = ""
-        m.playbackControls.hasSubtitleOptions = false
-        m.playbackControls.hasAudioOptions = false
-        m.playbackControls.hasChapterOptions = false
         return
     end if
 

@@ -1,0 +1,59 @@
+import "pkg:/source/MediaOptionsSession.bs"
+
+namespace tests
+
+    @suite("MediaOptionsSession")
+    class MediaOptionsSessionTests extends rooibos.BaseTestSuite
+
+        @describe("detail stream changes")
+
+        @it("applies audio and subtitle changes without mutating the original state")
+        function _()
+            current = { audio: { streamIndex: 1 }, subtitle: { streamIndex: 3 }, subtitleOff: false }
+            context = { audioOptions: [{ value: { streamIndex: 2 } }], subtitleOptions: [{ value: { streamIndex: -1 } }] }
+
+            result = MediaOptionsSession.ApplyStreamChanges(current, context, { audioStreamIndex: 2, subtitleStreamIndex: -1 })
+
+            m.assertEqual(result.audio.streamIndex, 2)
+            m.assertInvalid(result.subtitle)
+            m.assertTrue(result.subtitleOff)
+            m.assertEqual(current.audio.streamIndex, 1)
+            m.assertEqual(current.subtitle.streamIndex, 3)
+            m.assertFalse(current.subtitleOff)
+        end function
+
+        @it("preserves stream choices when only video or chapter changes")
+        function _()
+            current = { audio: { streamIndex: 1 }, subtitle: invalid, subtitleOff: true }
+
+            result = MediaOptionsSession.ApplyStreamChanges(current, {}, { videoMode: "automatic", chapter: { startPositionTicks: 0 } })
+
+            m.assertEqual(result, current)
+        end function
+
+        @it("selects a subtitle track after an explicit Off selection")
+        function _()
+            current = { audio: invalid, subtitle: invalid, subtitleOff: true }
+            context = { subtitleOptions: [{ value: { streamIndex: 3, label: "English" } }] }
+
+            result = MediaOptionsSession.ApplyStreamChanges(current, context, { subtitleStreamIndex: 3 })
+
+            m.assertEqual(result.subtitle.streamIndex, 3)
+            m.assertFalse(result.subtitleOff)
+            m.assertTrue(current.subtitleOff)
+        end function
+
+        @it("leaves unavailable audio unset in the display selection")
+        function _()
+            selection = { videoMode: "automatic", audioStreamIndex: -1, subtitleStreamIndex: -2 }
+
+            result = MediaOptionsSession.DisplaySelection({ audioOptions: [] }, selection)
+
+            m.assertEqual(result.audioStreamIndex, -1)
+            m.assertEqual(result.subtitleStreamIndex, -1)
+            m.assertEqual(selection.subtitleStreamIndex, -2)
+        end function
+
+    end class
+
+end namespace

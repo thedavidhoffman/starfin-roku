@@ -1,0 +1,175 @@
+import "pkg:/source/MediaOptionsSession.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    m.selection = { initial: {}, pending: {}, categories: [], options: [] }
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.controls = {
+        categories: m.top.findNode("categories")
+        information: m.top.findNode("information")
+        choices: m.top.findNode("choices")
+        options: m.top.findNode("optionList")
+        description: m.top.findNode("description")
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.controls.categories.observeField("itemFocused", "showCategory")
+    m.controls.categories.observeField("itemSelected", "focusContent")
+    m.controls.options.observeField("itemSelected", "selectOption")
+    m.controls.options.observeField("itemFocused", "showDescription")
+end sub
+
+'-------------------------------------------------------------------------------
+' loadOptions
+'-------------------------------------------------------------------------------
+sub loadOptions()
+    context = m.top.optionsContext
+    if context = invalid then return
+    m.selection.initial = context.selection
+    m.selection.pending = MediaOptionsSession.CopySelection(context.selection)
+    m.selection.categories = [MediaOptionsSession.Category.Information, MediaOptionsSession.Category.Video]
+    if context.audioOptions.Count() > 1 then m.selection.categories.Push(MediaOptionsSession.Category.Audio)
+    if context.subtitleOptions.Count() > 1 then m.selection.categories.Push(MediaOptionsSession.Category.Subtitles)
+    if context.chapterOptions.Count() > 0 then m.selection.categories.Push(MediaOptionsSession.Category.Chapters)
+    content = CreateObject("roSGNode", "ContentNode")
+    for each category in m.selection.categories
+        child = content.createChild("ContentNode")
+        child.title = category
+    end for
+    m.controls.information.item = context.item
+    m.controls.information.playbackInfo = context.playbackInfo
+    m.controls.categories.content = content
+    m.controls.categories.jumpToItem = 0
+    showCategory()
+end sub
+
+'-------------------------------------------------------------------------------
+' showCategory
+'-------------------------------------------------------------------------------
+sub showCategory()
+    index = m.controls.categories.itemFocused
+    if index < 0 or index >= m.selection.categories.Count() then return
+    category = m.selection.categories[index]
+    m.selection.category = category
+    isInformation = category = MediaOptionsSession.Category.Information
+    m.controls.information.visible = isInformation
+    m.controls.choices.visible = not isInformation
+    if isInformation then return
+    context = m.top.optionsContext
+    displayed = MediaOptionsSession.DisplaySelection(context, m.selection.pending)
+    key = ""
+    if category = MediaOptionsSession.Category.Video then
+        m.selection.options = MediaOptionsSession.VideoOptions()
+        key = m.selection.pending.videoMode
+    else if category = MediaOptionsSession.Category.Audio then
+        m.selection.options = context.audioOptions
+        key = displayed.audioStreamIndex.ToStr()
+    else if category = MediaOptionsSession.Category.Subtitles then
+        m.selection.options = context.subtitleOptions
+        key = displayed.subtitleStreamIndex.ToStr()
+    else
+        m.selection.options = context.chapterOptions
+        if m.selection.pending.chapter <> invalid then key = m.selection.pending.chapter.startPositionTicks.ToStr()
+    end if
+    content = CreateObject("roSGNode", "ContentNode")
+    checked = -1
+    for i = 0 to m.selection.options.Count() - 1
+        option = m.selection.options[i]
+        child = content.createChild("ContentNode")
+        child.title = option.label
+        if option.key = key then checked = i
+    end for
+    m.controls.options.numRows = 10
+    if category = MediaOptionsSession.Category.Video then m.controls.options.numRows = 4
+    m.controls.options.content = content
+    m.controls.options.checkedItem = checked
+    m.controls.options.jumpToItem = 0
+    if checked >= 0 then m.controls.options.jumpToItem = checked
+    showDescription()
+end sub
+
+'-------------------------------------------------------------------------------
+' showDescription
+'-------------------------------------------------------------------------------
+sub showDescription()
+    m.controls.description.text = ""
+    if m.selection.category <> MediaOptionsSession.Category.Video then return
+    index = m.controls.options.itemFocused
+    if index < 0 or index >= m.selection.options.Count() then index = m.controls.options.checkedItem
+    if index < 0 then index = 0
+    if index >= 0 and index < m.selection.options.Count() then m.controls.description.text = m.selection.options[index].description
+end sub
+
+'-------------------------------------------------------------------------------
+' selectOption
+'-------------------------------------------------------------------------------
+sub selectOption()
+    index = m.controls.options.itemSelected
+    if index < 0 or index >= m.selection.options.Count() then return
+    option = m.selection.options[index]
+    category = m.selection.category
+    if category = MediaOptionsSession.Category.Video then
+        m.selection.pending.videoMode = option.key
+    else if category = MediaOptionsSession.Category.Audio then
+        m.selection.pending.audioStreamIndex = option.value.streamIndex
+    else if category = MediaOptionsSession.Category.Subtitles then
+        m.selection.pending.subtitleStreamIndex = option.value.streamIndex
+    else if category = MediaOptionsSession.Category.Chapters then
+        m.selection.pending.chapter = option.value
+    end if
+    m.controls.options.checkedItem = index
+end sub
+
+'-------------------------------------------------------------------------------
+' getChanges
+'-------------------------------------------------------------------------------
+function getChanges() as object
+    return MediaOptionsSession.Changes(m.selection.initial, m.selection.pending)
+end function
+
+'-------------------------------------------------------------------------------
+' focusFirstField
+'-------------------------------------------------------------------------------
+sub focusFirstField()
+    m.controls.categories.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusContent
+'-------------------------------------------------------------------------------
+sub focusContent()
+    if m.selection.category = MediaOptionsSession.Category.Information then
+        m.controls.information.setFocus(true)
+    else
+        m.controls.options.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "left" then
+        focusFirstField()
+        return true
+    end if
+    if key = "right" and m.controls.categories.isInFocusChain() then
+        focusContent()
+        return true
+    end if
+    return false
+end function

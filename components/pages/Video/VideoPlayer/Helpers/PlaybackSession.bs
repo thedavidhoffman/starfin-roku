@@ -311,6 +311,7 @@ sub onAvailableSubtitleTracksChanged()
     trackName = SubtitlePlayback.FindAvailableTrackName(m.videoPlayer.availableSubtitleTracks, deliveryUrl)
     if trackName = "" then return
 
+    m.streamOptions.pendingExternalSubtitleUrl = ""
     setSubtitleCaptionMode("On")
     m.videoPlayer.subtitleTrack = trackName
     m.log.write("External subtitle track selected resolvedIndex=" + Format.SafeString(m.activePlayback.subtitleStreamIndex, ""))
@@ -698,3 +699,20 @@ function boolToText(value as boolean) as string
     if value = true then return "true"
     return "false"
 end function
+
+'-------------------------------------------------------------------------------
+' restorePlaybackStartupState
+'-------------------------------------------------------------------------------
+sub restorePlaybackStartupState()
+    if m.activePlayback = invalid then return
+    request = m.activePlayback.request
+    pauseOnStart = request.startPaused = true
+    restoreFocus = request.restoreMediaOptionsFocus = true
+    if not pauseOnStart and not restoreFocus then return
+
+    ' Consume restoration only after video starts; recovery retains it until then.
+    m.activePlayback.request = PlaybackRequest.WithChanges(request, { startPaused: false, restoreMediaOptionsFocus: false })
+    if m.pendingPlaybackRequest <> invalid and m.pendingPlaybackRequest.requestId = m.activePlayback.requestId then m.pendingPlaybackRequest = m.activePlayback.request
+    if pauseOnStart then m.videoPlayer.control = MediaControl.Command.Pause
+    if restoreFocus then restoreMediaOptionsFocus()
+end sub

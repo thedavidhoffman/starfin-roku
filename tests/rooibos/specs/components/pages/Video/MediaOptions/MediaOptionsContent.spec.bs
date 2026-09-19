@@ -1,0 +1,212 @@
+namespace tests
+
+    @SGNode("MediaOptionsContent")
+    @suite("MediaOptionsContent component")
+    class MediaOptionsContentTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.optionsContext = {
+                item: { Id: "movie-1", Name: "Example", Chapters: [{ StartPositionTicks: 0 }] }
+                selection: { videoMode: "automatic", audioStreamIndex: 1, subtitleStreamIndex: 3 }
+                audioOptions: [{ key: "1", label: "English", value: { streamIndex: 1 } }, { key: "2", label: "French", value: { streamIndex: 2 } }]
+                subtitleOptions: [{ key: "-1", label: "Off", value: { streamIndex: -1 } }, { key: "3", label: "English", value: { streamIndex: 3 } }]
+                chapterOptions: [{ key: "0", label: "Opening", value: { startPositionTicks: 0, startPositionSeconds: 0 } }, { key: "600000000", label: "Next", value: { startPositionTicks: 600000000, startPositionSeconds: 60 } }]
+            }
+        end function
+
+        @describe("categories and deferred choices")
+
+        @it("renders all categories in the agreed order")
+        function _()
+            labels = []
+            for each child in m.top.findNode("categories").content.getChildren(-1, 0)
+                labels.Push(child.title)
+            end for
+            m.assertEqual(labels, ["Media Info", "Video", "Audio", "Subtitles", "Chapters"])
+        end function
+
+        @it("omits unavailable categories")
+        function _()
+            context = m.top.optionsContext
+            context.audioOptions = [context.audioOptions[0]]
+            context.subtitleOptions = [context.subtitleOptions[0]]
+            context.chapterOptions = []
+            m.top.optionsContext = context
+
+            m.assertEqual(m.top.findNode("categories").content.getChildCount(), 2)
+        end function
+
+        @it("opens on media information with navigation focused")
+        function _()
+            m.top.callFunc("focusFirstField")
+
+            m.assertTrue(m.top.findNode("categories").hasFocus())
+            m.assertTrue(m.top.findNode("information").visible)
+            m.assertFalse(m.top.findNode("choices").visible)
+        end function
+
+        @it("moves right into information and left back to categories")
+        function _()
+            m.top.callFunc("focusFirstField")
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertTrue(m.top.findNode("information").hasFocus())
+
+            'bs:disable-next-line 1140
+            onKeyEvent("left", true)
+            m.assertTrue(m.top.findNode("categories").hasFocus())
+        end function
+
+        @it("checks the default audio track without staging a choice")
+        function _()
+            context = m.top.optionsContext
+            context.selection.audioStreamIndex = -1
+            context.audioOptions[1].value.stream = { IsDefault: true }
+            m.top.optionsContext = context
+
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 1)
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+            m.assertEqual(m.top.optionsContext.selection.audioStreamIndex, -1)
+        end function
+
+        @it("checks the first audio track when no default is marked")
+        function _()
+            context = m.top.optionsContext
+            context.selection.audioStreamIndex = -1
+            m.top.optionsContext = context
+
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("preserves an explicit audio choice over the default display")
+        function _()
+            context = m.top.optionsContext
+            context.audioOptions[1].value.stream = { IsDefault: true }
+            m.top.optionsContext = context
+
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
+        end function
+
+        @it("keeps audio edits local and returns only the changed index")
+        function _()
+            m.choose(2, 1)
+
+            m.assertEqual(m.top.optionsContext.selection.audioStreamIndex, 1)
+            m.assertEqual(m.top.callFunc("getChanges"), { audioStreamIndex: 2 })
+        end function
+
+        @it("omits a choice changed back to its initial value")
+        function _()
+            m.choose(2, 1)
+            m.choose(2, 0)
+
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("checks Off for an unset initial subtitle selection without staging a change")
+        function _()
+            context = m.top.optionsContext
+            context.selection.subtitleStreamIndex = -2
+            m.top.optionsContext = context
+
+            m.top.findNode("categories").itemFocused = 3
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
+            m.assertEqual(m.top.optionsContext.selection.subtitleStreamIndex, -2)
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("checks Off for an explicitly disabled initial subtitle selection")
+        function _()
+            context = m.top.optionsContext
+            context.selection.subtitleStreamIndex = -1
+            m.top.optionsContext = context
+
+            m.top.findNode("categories").itemFocused = 3
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("checks the initially selected subtitle track")
+        function _()
+            m.top.findNode("categories").itemFocused = 3
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 1)
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("returns an explicit Off choice after an initially unset subtitle selection")
+        function _()
+            context = m.top.optionsContext
+            context.selection.subtitleStreamIndex = -2
+            m.top.optionsContext = context
+
+            m.choose(3, 1)
+            m.choose(3, 0)
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
+            m.assertEqual(m.top.callFunc("getChanges"), { subtitleStreamIndex: -1 })
+        end function
+
+        @it("returns subtitle Off explicitly")
+        function _()
+            m.choose(3, 0)
+
+            m.assertEqual(m.top.callFunc("getChanges"), { subtitleStreamIndex: -1 })
+        end function
+
+        @it("preserves choices across categories")
+        function _()
+            m.choose(2, 1)
+            m.choose(3, 0)
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 1)
+            m.assertEqual(m.top.callFunc("getChanges"), { audioStreamIndex: 2, subtitleStreamIndex: -1 })
+        end function
+
+        @it("does not select a chapter just by focusing it")
+        function _()
+            m.top.findNode("categories").itemFocused = 4
+
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("returns an explicitly selected zero-position chapter")
+        function _()
+            m.choose(4, 0)
+
+            m.assertEqual(m.top.callFunc("getChanges").chapter.startPositionTicks, 0)
+        end function
+
+        @it("shows video descriptions and defers mode changes")
+        function _()
+            m.choose(1, 3)
+
+            m.assertEqual(m.top.optionsContext.selection.videoMode, "automatic")
+            m.assertEqual(m.top.callFunc("getChanges").videoMode, "transcode-no-remux")
+            m.assertTrue(Len(m.top.findNode("description").text) > 0)
+        end function
+
+        @it("lets Back propagate to the owning dialog")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("back", true))
+        end function
+
+        private sub choose(category as integer, option as integer)
+            m.top.findNode("categories").itemFocused = category
+            m.top.findNode("optionList").itemSelected = option
+        end sub
+
+    end class
+
+end namespace

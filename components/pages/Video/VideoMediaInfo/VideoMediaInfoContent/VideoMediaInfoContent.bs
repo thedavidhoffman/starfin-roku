@@ -1,3 +1,5 @@
+import "pkg:/source/video-player-helpers/PlaybackInfoFormat.bs"
+import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Number.bs"
@@ -20,7 +22,9 @@ end function
 ' onItemChanged
 '-------------------------------------------------------------------------------
 sub onItemChanged()
-    m.top.sections = buildSections(m.top.item)
+    sections = buildSections(m.top.item)
+    if m.top.playbackInfo <> invalid then appendPlaybackSections(sections, m.top.playbackInfo)
+    m.top.sections = sections
 end sub
 
 '-------------------------------------------------------------------------------
@@ -270,3 +274,42 @@ function joinParts(parts as object, separator as string) as string
     return text
 end function
 
+
+'-------------------------------------------------------------------------------
+' appendPlaybackSections
+'-------------------------------------------------------------------------------
+sub appendPlaybackSections(sections as object, info as object)
+    transcodeReason = PlaybackInfoFormat_DisplayValue(info.transcodeReason)
+    entries = []
+    sections.Push({ title: "Playback: Transcoding Information", entries: entries })
+    entries.Push({ key: "Playback mode", value: PlaybackInfoFormat_ModeText(info.playbackMode), wrap: true })
+    entries.Push({ key: "Play method", value: playMethodText(info.playMethod), wrap: true })
+    entries.Push({ key: "Reason", value: transcodeReason, wrap: true })
+    entries.Push({ key: "Delivery format", value: UCase(PlaybackInfoFormat_DisplayValue(info.streamFormat)), wrap: true })
+    entries = []
+    sections.Push({ title: "Playback: Stream Information", entries: entries })
+    entries.Push({ key: "Container", value: UCase(PlaybackInfoFormat_DisplayValue(info.container)), wrap: true })
+    entries.Push({ key: "Resolution", value: PlaybackInfoFormat_ResolutionText(info), wrap: true })
+    entries.Push({ key: "Video", value: PlaybackInfoFormat_StreamText(info.videoCodec, info.videoBitrate), wrap: true })
+    entries.Push({ key: "Audio", value: PlaybackInfoFormat_AudioText(info), wrap: true })
+    entries.Push({ key: "Video stream", value: PlaybackInfoFormat_StreamTitleText(info.videoStreamTitle, info.videoStreamIndex, "Default"), wrap: true })
+    entries.Push({ key: "Audio stream", value: PlaybackInfoFormat_StreamTitleText(info.audioStreamTitle, info.audioStreamIndex, "Default"), wrap: true })
+    entries.Push({ key: "Subtitle stream", value: PlaybackInfoFormat_StreamTitleText(info.subtitleStreamTitle, info.subtitleStreamIndex, "Off"), wrap: true })
+    entries = []
+    sections.Push({ title: "Playback: Session Identity", entries: entries })
+    entries.Push({ key: "Item ID", value: PlaybackInfoFormat_DisplayValue(info.itemId), wrap: true })
+    entries.Push({ key: "Play session ID", value: PlaybackInfoFormat_DisplayValue(info.playSessionId), wrap: true })
+    entries.Push({ key: "Media source ID", value: PlaybackInfoFormat_DisplayValue(info.mediaSourceId), wrap: true })
+    entries.Push({ key: "Live stream ID", value: PlaybackInfoFormat_DisplayValue(info.liveStreamId), wrap: true })
+end sub
+
+'-------------------------------------------------------------------------------
+' playMethodText
+'-------------------------------------------------------------------------------
+function playMethodText(value as dynamic) as string
+    method = LCase(Format.SafeString(value, ""))
+    if method = "directplay" then return "Direct Play"
+    if method = "directstream" then return "Direct Stream"
+    if method = "transcode" then return "Transcode"
+    return PlaybackInfoFormat_DisplayValue(value)
+end function

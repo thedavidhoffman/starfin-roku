@@ -39,6 +39,7 @@ individual Starfin features.
 - [Video Library Capabilities](video-library-capabilities.md)
 - [Video Media Cards](video-media-cards.md)
 - [Video Media Information](video-media-information.md)
+- [Media Options](media-options.md)
 - [Video Playback Lifecycle](video-playback-lifecycle.md)
 - [Video Playback Options](video-playback-options.md)
 

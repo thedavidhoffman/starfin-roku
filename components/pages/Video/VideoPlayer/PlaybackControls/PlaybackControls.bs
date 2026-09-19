@@ -18,11 +18,6 @@ sub init()
         focusArea: "buttons"
         buttons: []
     }
-    m.optionButtonLayout = {
-        startX: 102
-        y: 962
-        spacing: 95
-    }
     m.trickplayPositions = {
         default: [102, 420]
         tall: [102, 360]
@@ -48,11 +43,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initReferences()
     m.castButton = m.top.findNode("castButton")
-    m.subtitleButton = m.top.findNode("subtitleButton")
-    m.audioButton = m.top.findNode("audioButton")
-    m.videoButton = m.top.findNode("videoButton")
-    m.playbackInfoButton = m.top.findNode("playbackInfoButton")
-    m.chapterButton = m.top.findNode("chapterButton")
+    m.mediaOptionsButton = m.top.findNode("mediaOptionsButton")
     m.skipBackButton = m.top.findNode("skipBackButton")
     m.playPauseButton = m.top.findNode("playPauseButton")
     m.skipForwardButton = m.top.findNode("skipForwardButton")
@@ -94,16 +85,6 @@ sub initIcons()
     }
     m.castButton.icon = "pkg:/images/icons/playback-controls/person-unfocused.png"
     m.castButton.focusedIcon = "pkg:/images/icons/playback-controls/person-focused.png"
-    m.subtitleButton.icon = "pkg:/images/icons/playback-controls/subtitles-unfocused.png"
-    m.subtitleButton.focusedIcon = "pkg:/images/icons/playback-controls/subtitles-focused.png"
-    m.audioButton.icon = "pkg:/images/icons/playback-controls/audio-unfocused.png"
-    m.audioButton.focusedIcon = "pkg:/images/icons/playback-controls/audio-focused.png"
-    m.videoButton.icon = "pkg:/images/icons/playback-controls/video-unfocused.png"
-    m.videoButton.focusedIcon = "pkg:/images/icons/playback-controls/video-focused.png"
-    m.playbackInfoButton.icon = "pkg:/images/icons/playback-controls/playback-info-unfocused.png"
-    m.playbackInfoButton.focusedIcon = "pkg:/images/icons/playback-controls/playback-info-focused.png"
-    m.chapterButton.icon = "pkg:/images/icons/playback-controls/chapters-unfocused.png"
-    m.chapterButton.focusedIcon = "pkg:/images/icons/playback-controls/chapters-focused.png"
     m.skipBackButton.icon = "pkg:/images/icons/playback-controls/skip-back-unfocused.png"
     m.skipBackButton.focusedIcon = "pkg:/images/icons/playback-controls/skip-back-focused.png"
     m.skipForwardButton.icon = "pkg:/images/icons/playback-controls/skip-forward-unfocused.png"
@@ -114,12 +95,9 @@ end sub
 ' initHandlers
 '-------------------------------------------------------------------------------
 sub initHandlers()
+    m.mediaOptionsButton.observeField("preferredWidth", "layoutOptionButtons")
     m.castButton.observeField("buttonSelected", "onCastButtonSelected")
-    m.subtitleButton.observeField("buttonSelected", "onSubtitleButtonSelected")
-    m.audioButton.observeField("buttonSelected", "onAudioButtonSelected")
-    m.videoButton.observeField("buttonSelected", "onVideoButtonSelected")
-    m.playbackInfoButton.observeField("buttonSelected", "onPlaybackInfoButtonSelected")
-    m.chapterButton.observeField("buttonSelected", "onChapterButtonSelected")
+    m.mediaOptionsButton.observeField("buttonSelected", "onMediaOptionsButtonSelected")
     m.skipBackButton.observeField("buttonSelected", "onSkipBackButtonSelected")
     m.playPauseButton.observeField("buttonSelected", "onPlayPauseButtonSelected")
     m.skipForwardButton.observeField("buttonSelected", "onSkipForwardButtonSelected")
@@ -208,10 +186,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub onOptionsChanged()
     m.castButton.visible = m.top.hasCastOptions = true
-    m.chapterButton.visible = m.top.hasChapterOptions = true
-    m.subtitleButton.visible = m.top.hasSubtitleOptions = true
-    m.audioButton.visible = m.top.hasAudioOptions = true
-    m.videoButton.visible = m.top.hasVideoOptions = true
     layoutOptionButtons()
     rebuildButtonList()
 end sub
@@ -235,14 +209,8 @@ end sub
 ' layoutOptionButtons
 '-------------------------------------------------------------------------------
 sub layoutOptionButtons()
-    x = m.optionButtonLayout.startX
-    optionButtons = [m.chapterButton, m.castButton, m.subtitleButton, m.audioButton, m.videoButton, m.playbackInfoButton]
-    for each button in optionButtons
-        if button <> invalid and button.visible <> false then
-            button.translation = [x, m.optionButtonLayout.y]
-            x = x + m.optionButtonLayout.spacing
-        end if
-    end for
+    m.mediaOptionsButton.translation = [102, 969]
+    m.castButton.translation = [102 + m.mediaOptionsButton.preferredWidth + 20, 962]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -276,38 +244,10 @@ sub onCastButtonSelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onSubtitleButtonSelected
+' onMediaOptionsButtonSelected
 '-------------------------------------------------------------------------------
-sub onSubtitleButtonSelected()
-    m.top.subtitleOptionsPressed = true
-end sub
-
-'-------------------------------------------------------------------------------
-' onAudioButtonSelected
-'-------------------------------------------------------------------------------
-sub onAudioButtonSelected()
-    m.top.audioOptionsPressed = true
-end sub
-
-'-------------------------------------------------------------------------------
-' onVideoButtonSelected
-'-------------------------------------------------------------------------------
-sub onVideoButtonSelected()
-    m.top.videoOptionsPressed = true
-end sub
-
-'-------------------------------------------------------------------------------
-' onPlaybackInfoButtonSelected
-'-------------------------------------------------------------------------------
-sub onPlaybackInfoButtonSelected()
-    m.top.playbackInfoPressed = true
-end sub
-
-'-------------------------------------------------------------------------------
-' onChapterButtonSelected
-'-------------------------------------------------------------------------------
-sub onChapterButtonSelected()
-    m.top.chapterOptionsPressed = true
+sub onMediaOptionsButtonSelected()
+    m.top.mediaOptionsPressed = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -424,7 +364,7 @@ end sub
 ' getAllButtons
 '-------------------------------------------------------------------------------
 function getAllButtons() as object
-    return [m.chapterButton, m.castButton, m.subtitleButton, m.audioButton, m.videoButton, m.playbackInfoButton, m.skipBackButton, m.playPauseButton, m.skipForwardButton, m.last5Button]
+    return [m.mediaOptionsButton, m.castButton, m.skipBackButton, m.playPauseButton, m.skipForwardButton, m.last5Button]
 end function
 
 '-------------------------------------------------------------------------------
@@ -631,4 +571,20 @@ sub updateFinishTime()
     text = "Ends at " + DateTime.ToLocalShortTime(DateTime.ToIsoOffset(remainingSeconds))
     if m.finishTime.label.text <> text then m.finishTime.label.text = text
     m.finishTime.label.visible = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaInfoTextChanged
+'-------------------------------------------------------------------------------
+sub onMediaInfoTextChanged()
+    m.mediaOptionsButton.text = Format.SafeString(m.top.mediaInfoText, "Media Info")
+    layoutOptionButtons()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusMediaOptions
+'-------------------------------------------------------------------------------
+sub focusMediaOptions()
+    m.controlState.focusedIndex = 0
+    focusButtons()
 end sub

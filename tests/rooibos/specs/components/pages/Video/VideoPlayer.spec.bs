@@ -138,22 +138,6 @@ namespace tests
             m.assertEqual(request.itemId, "active-item")
         end function
 
-        @it("commits a local subtitle selection consistently")
-        function _()
-            m.node.activePlayback.request = { itemId: "movie-1", subtitleStreamIndex: 2 }
-            m.node.activePlayback.subtitleStreamIndex = 2
-            m.node.activePlayback.subtitleStreamTitle = "Old"
-            m.node.streamOptions.selectedSubtitleStreamIndex = 2
-
-            'bs:disable-next-line 1140
-            applySubtitleSelection({ streamIndex: -1, label: "Off" })
-
-            m.assertEqual(m.node.activePlayback.request.subtitleStreamIndex, -1)
-            m.assertEqual(m.node.activePlayback.subtitleStreamIndex, -1)
-            m.assertEqual(m.node.activePlayback.subtitleStreamTitle, "Off")
-            m.assertEqual(m.node.pendingPlaybackRequest.subtitleStreamIndex, -1)
-        end function
-
         @describe("Back navigation")
 
         @it("stops for controller removal without requesting navigation")
@@ -401,136 +385,6 @@ namespace tests
             m.assertTrue(Instr(1, activities[0], "Selected chapter " + Char.DoubleQuote + "Chapter 2" + Char.DoubleQuote) > 0)
         end function
 
-        @it("logs a locally committed subtitle selection")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-            m.node.streamOptions.selectedSubtitleStreamIndex = 2
-
-            'bs:disable-next-line 1140
-            applySubtitleSelection({ streamIndex: -1, label: "Off" })
-
-            activities = m.getActivityEntries(collector)
-            m.assertEqual(activities.Count(), 1)
-            m.assertTrue(Instr(1, activities[0], "Selected subtitles " + Char.DoubleQuote + "Off" + Char.DoubleQuote) > 0)
-        end function
-
-        @it("logs a restart-required subtitle selection")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-
-            'bs:disable-next-line 1140
-            applySubtitleSelection({ streamIndex: 2, label: "English CC" })
-
-            activities = m.getActivityEntries(collector)
-            m.assertEqual(m.top.playRequest.subtitleStreamIndex, 2)
-            m.assertEqual(activities.Count(), 1)
-            m.assertTrue(Instr(1, activities[0], "Selected subtitles " + Char.DoubleQuote + "English CC" + Char.DoubleQuote) > 0)
-        end function
-
-        @it("restores subtitle selection when a restart request cannot be built")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-            m.node.streamOptions.selectedSubtitleStreamIndex = -1
-            m.node.activePlayback = invalid
-            m.node.pendingPlaybackRequest = invalid
-
-            'bs:disable-next-line 1140
-            applySubtitleSelection({ streamIndex: 2, label: "English CC" })
-
-            m.assertEqual(m.node.streamOptions.selectedSubtitleStreamIndex, -1)
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-        end function
-
-        @it("logs an accepted audio selection")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-
-            'bs:disable-next-line 1140
-            applyAudioSelection({ streamIndex: 3, label: "English 5.1" })
-
-            activities = m.getActivityEntries(collector)
-            m.assertEqual(activities.Count(), 1)
-            m.assertTrue(Instr(1, activities[0], "Selected audio " + Char.DoubleQuote + "English 5.1" + Char.DoubleQuote) > 0)
-        end function
-
-        @it("restores audio selection when a restart request cannot be built")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-            m.node.streamOptions.selectedAudioStreamIndex = 1
-            m.node.activePlayback = invalid
-            m.node.pendingPlaybackRequest = invalid
-
-            'bs:disable-next-line 1140
-            applyAudioSelection({ streamIndex: 3, label: "English 5.1" })
-
-            m.assertEqual(m.node.streamOptions.selectedAudioStreamIndex, 1)
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-        end function
-
-        @it("logs an accepted video mode selection after its delayed restart")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-
-            'bs:disable-next-line 1140
-            applyVideoModeSelection({ key: PlaybackMode.Mode.TranscodeNoRemux })
-
-            m.assertEqual(m.node.videoModeApplyTimer.control, "start")
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-
-            'bs:disable-next-line 1140
-            onVideoModeApplyTimerFire()
-
-            activities = m.getActivityEntries(collector)
-            m.assertEqual(activities.Count(), 1)
-            m.assertTrue(Instr(1, activities[0], "Selected video mode " + Char.DoubleQuote + PlaybackMode.Mode.TranscodeNoRemux + Char.DoubleQuote) > 0)
-        end function
-
-        @it("does not log a video mode when its delayed restart request cannot be built")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-
-            'bs:disable-next-line 1140
-            applyVideoModeSelection({ key: PlaybackMode.Mode.TranscodeNoRemux })
-            m.node.activePlayback = invalid
-            m.node.pendingPlaybackRequest = invalid
-            'bs:disable-next-line 1140
-            onVideoModeApplyTimerFire()
-
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-        end function
-
-        @it("does not log an unchanged audio selection")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-            m.node.streamOptions.selectedAudioStreamIndex = 3
-
-            'bs:disable-next-line 1140
-            applyAudioSelection({ streamIndex: 3, label: "English 5.1" })
-
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-        end function
-
-        @it("does not log an unchanged subtitle selection")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-            m.node.streamOptions.selectedSubtitleStreamIndex = 2
-
-            'bs:disable-next-line 1140
-            applySubtitleSelection({ streamIndex: 2, label: "English CC" })
-
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-        end function
-
-        @it("does not log an unchanged video mode selection")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-
-            'bs:disable-next-line 1140
-            applyVideoModeSelection({ key: PlaybackMode.Mode.Automatic })
-
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-        end function
-
         @it("does not log an unavailable intro skip")
         function _()
             collector = m.prepareActivityPlayback("playing", "playing")
@@ -548,27 +402,6 @@ namespace tests
 
             'bs:disable-next-line 1140
             applyChapterSelection(invalid)
-
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-        end function
-
-        @it("does not log an invalid audio selection")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-
-            'bs:disable-next-line 1140
-            applyAudioSelection(invalid)
-
-            m.assertEqual(m.getActivityEntries(collector).Count(), 0)
-        end function
-
-        @it("does not log an empty video mode selection")
-        function _()
-            collector = m.prepareActivityPlayback("playing", "playing")
-
-            m.node.streamOptions.pendingVideoMode = ""
-            'bs:disable-next-line 1140
-            onVideoModeApplyTimerFire()
 
             m.assertEqual(m.getActivityEntries(collector).Count(), 0)
         end function
@@ -626,24 +459,6 @@ namespace tests
             m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "http://server/base/sub.srt?ApiKey=server-token&x=a%26b#cue")
             m.assertEqual(content.HttpHeaders.Count(), 1)
             m.assertEqual(content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("session-token", "user")])
-        end function
-
-        @it("switches external subtitles using the unchanged server delivery URL")
-        function _()
-            m.prepareActivityPlayback("playing", "playing")
-            playbackInfo = { MediaSources: [{ MediaStreams: [{ Type: "Subtitle", Index: 4, DeliveryMethod: "External", DeliveryUrl: "/sub.srt?ApiKey=server-token#cue" }] }] }
-            m.node.streamOptions.externalSubtitleTracks = SubtitlePlayback.BuildExternalTracks(playbackInfo, "http://server")
-            m.node.streamOptions.activeSubtitleDeliveryMethod = "external"
-            m.node.streamOptions.selectedSubtitleStreamIndex = 2
-            m.node.videoPlayer.availableSubtitleTracks = [{ TrackName: "#EXT-X-MEDIA:http://server/sub.srt?ApiKey=server-token#cue" }]
-
-            'bs:disable-next-line 1140
-            applySubtitleSelection({ streamIndex: 4, label: "English" })
-
-            m.assertEqual(m.node.videoPlayer.subtitleTrack, "#EXT-X-MEDIA:http://server/sub.srt?ApiKey=server-token#cue")
-            m.assertEqual(m.node.videoPlayer.globalCaptionMode, "On")
-            m.assertEqual(m.node.activePlayback.request.subtitleStreamIndex, 4)
-            m.assertEqual(m.node.videoPlayer.control, "")
         end function
 
         @it("authenticates direct video without query credentials")
@@ -753,6 +568,339 @@ namespace tests
         private sub captureRequestFailureMessage(message as string)
             getGlobalAa().requestFailureMessage = message
         end sub
+
+        @describe("combined media options commit")
+
+        @it("pauses when opening and supplies source options and playback diagnostics")
+        function _()
+            m.prepareOptions({})
+            m.node.mediaOptions.pendingCommit = invalid
+            m.node.playback.startupPending = false
+            m.node.streamOptions.audioStreams = []
+            m.node.streamOptions.subtitleStreams = []
+            'bs:disable-next-line 1140
+            onMediaOptionsPressed()
+
+            m.assertEqual(m.node.videoPlayer.control, "pause")
+            m.assertEqual(m.top.overlayRequested.id, "mediaOptions")
+            m.assertEqual(m.top.overlayRequested.optionsContext.playbackInfo.itemId, "movie-1")
+            m.assertTrue(m.node.mediaOptions.session.wasPlaying)
+        end function
+
+        @it("combines all selections into one correlated restart")
+        function _()
+            m.prepareOptions({ videoMode: "transcode-no-remux", audioStreamIndex: 3, subtitleStreamIndex: -1, chapter: { startPositionTicks: 600000000, startPositionSeconds: 60 } })
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.playback.requestId, previousRequestId + 1)
+            m.assertEqual(m.top.playRequest.videoMode, "transcode-no-remux")
+            m.assertEqual(m.top.playRequest.audioStreamIndex, 3)
+            m.assertEqual(m.top.playRequest.subtitleStreamIndex, -1)
+            m.assertTrue(m.top.playRequest.startPositionTicks = 600000000)
+        end function
+
+        @it("does not publish requested audio before a response is accepted")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 })
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.activePlayback.audioStreamIndex, 1)
+            m.assertEqual(m.node.activePlayback.request.audioStreamIndex, 1)
+        end function
+
+        @it("preserves the captured position without a chapter selection")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 })
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertTrue(m.top.playRequest.startPositionTicks = 100000000)
+        end function
+
+        @it("requests paused startup when options were opened while paused")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 }, false)
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertTrue(m.top.playRequest.startPaused)
+        end function
+
+        @it("resumes unchanged playback without a restart")
+        function _()
+            m.prepareOptions({})
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.videoPlayer.control, "resume")
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+            m.assertTrue(m.top.findNode("playbackControls").findNode("mediaOptionsButton").hasFocus())
+        end function
+
+        @it("keeps unchanged paused playback paused")
+        function _()
+            m.prepareOptions({}, false)
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.videoPlayer.control, "pause")
+        end function
+
+        @it("seeks a chapter locally without a restart")
+        function _()
+            m.prepareOptions({ chapter: { label: "Next", startPositionTicks: 600000000, startPositionSeconds: 60 } })
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertTrue(m.node.videoPlayer.seek = 60)
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+            m.assertEqual(m.node.videoPlayer.control, "resume")
+        end function
+
+        @it("turns off external subtitles locally and commits accepted state")
+        function _()
+            m.prepareOptions({ subtitleStreamIndex: -1 })
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.activePlayback.subtitleStreamIndex, -1)
+            m.assertEqual(m.node.activePlayback.request.subtitleStreamIndex, -1)
+            m.assertEqual(m.node.pendingPlaybackRequest.subtitleStreamIndex, -1)
+            m.assertEqual(m.node.videoPlayer.globalCaptionMode, "Off")
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+        end function
+
+        @it("restarts to remove burned-in subtitles")
+        function _()
+            m.prepareOptions({ subtitleStreamIndex: -1 })
+            m.node.streamOptions.activeSubtitleDeliveryMethod = "encode"
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.playback.requestId, previousRequestId + 1)
+            m.assertEqual(m.top.playRequest.subtitleStreamIndex, -1)
+        end function
+
+        @it("switches external subtitles with the unchanged server delivery URL")
+        function _()
+            m.prepareOptions({ subtitleStreamIndex: 4 })
+            playbackInfo = { MediaSources: [{ MediaStreams: [{ Type: "Subtitle", Index: 4, DeliveryMethod: "External", DeliveryUrl: "/sub.srt?ApiKey=server-token#cue" }] }] }
+            m.node.streamOptions.externalSubtitleTracks = SubtitlePlayback.BuildExternalTracks(playbackInfo, "http://server")
+            m.node.videoPlayer.availableSubtitleTracks = [{ TrackName: "#EXT-X-MEDIA:http://server/sub.srt?ApiKey=server-token#cue" }]
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.videoPlayer.subtitleTrack, "#EXT-X-MEDIA:http://server/sub.srt?ApiKey=server-token#cue")
+            m.assertEqual(m.node.videoPlayer.globalCaptionMode, "On")
+            m.assertEqual(m.node.activePlayback.request.subtitleStreamIndex, 4)
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+        end function
+
+        @it("rejects an older playback generation")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 })
+            m.node.playback.requestId += 1
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+            m.assertEqual(m.node.videoPlayer.control, "")
+        end function
+
+        @it("ignores a repeated commit timer")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 })
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+        end function
+
+        @it("discards pending changes during teardown")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 })
+            m.top.callFunc("stopForRemoval")
+
+            m.assertInvalid(m.node.mediaOptions.pendingCommit)
+            m.assertInvalid(m.node.mediaOptions.session)
+            m.assertEqual(m.node.mediaOptionsApplyTimer.control, "stop")
+        end function
+
+        @it("ignores changes when the active session is unavailable")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 })
+            m.node.activePlayback = invalid
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+        end function
+
+        @it("preserves paused startup and focus through recovery after resolution")
+        function _()
+            m.prepareOptions({}, false)
+            request = PlaybackRequest.WithChanges(m.node.activePlayback.request, { requestId: m.node.playback.requestId, server: "http://server", token: "token", userId: "user", item: { Id: "movie-1", Type: "Movie", RunTimeTicks: 1200000000 }, videoMode: "automatic", startPaused: true, restoreMediaOptionsFocus: true })
+            response = { requestId: request.requestId, item: request.item, startPositionTicks: 0, streamUrl: "http://server/video.mp4", streamFormat: "mp4", audioStreamIndex: 3, subtitleStreamIndex: -1, subtitleDeliveryMethod: "none" }
+            m.node.pendingPlaybackRequest = request
+            'bs:disable-next-line 1140
+            applyPlaybackResponse(response, request)
+            m.node.recovery.originalMode = PlaybackMode.Mode.Automatic
+            m.node.recovery.effectiveMode = PlaybackMode.Mode.Automatic
+            m.node.recovery.sameModeRetryUsed = false
+
+            'bs:disable-next-line 1140
+            handled = handlePlaybackRecoveryFailure("videoError", "Startup failed")
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.playRequest.startPaused)
+            m.assertTrue(m.top.playRequest.restoreMediaOptionsFocus)
+            m.assertEqual(m.top.playRequest.audioStreamIndex, 3)
+            m.assertEqual(m.top.playRequest.subtitleStreamIndex, -1)
+
+            recovered = m.node.pendingPlaybackRequest
+            response.requestId = recovered.requestId
+            'bs:disable-next-line 1140
+            applyPlaybackResponse(response, recovered)
+            'bs:disable-next-line 1140
+            restorePlaybackStartupState()
+
+            m.assertEqual(m.node.videoPlayer.control, "pause")
+            m.assertTrue(m.top.findNode("playbackControls").findNode("mediaOptionsButton").hasFocus())
+            m.assertFalse(m.node.activePlayback.request.startPaused)
+            m.assertFalse(m.node.pendingPlaybackRequest.restoreMediaOptionsFocus)
+        end function
+
+        @it("does not reapply startup pause after it has been consumed")
+        function _()
+            m.prepareOptions({})
+            m.node.activePlayback.request.startPaused = true
+            'bs:disable-next-line 1140
+            restorePlaybackStartupState()
+            m.node.videoPlayer.control = "resume"
+
+            'bs:disable-next-line 1140
+            restorePlaybackStartupState()
+
+            m.assertEqual(m.node.videoPlayer.control, "resume")
+        end function
+
+        @it("does not let a repeated subtitle notification undo Off")
+        function _()
+            m.prepareOptions({ subtitleStreamIndex: -1 })
+            m.node.streamOptions.pendingExternalSubtitleUrl = "http://server/old.srt"
+            m.node.videoPlayer.availableSubtitleTracks = [{ TrackName: "http://server/old.srt" }]
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            'bs:disable-next-line 1140
+            onAvailableSubtitleTracksChanged()
+
+            m.assertEqual(m.node.videoPlayer.globalCaptionMode, "Off")
+            m.assertEqual(m.node.videoPlayer.subtitleTrack, "")
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "")
+        end function
+
+        @it("does not let a repeated subtitle notification undo a newer track")
+        function _()
+            m.prepareOptions({ subtitleStreamIndex: 4 })
+            m.node.streamOptions.pendingExternalSubtitleUrl = "http://server/old.srt"
+            m.node.streamOptions.externalSubtitleTracks = [{ index: 4, deliveryUrl: "http://server/new.srt" }]
+            m.node.videoPlayer.availableSubtitleTracks = [{ TrackName: "http://server/old.srt" }, { TrackName: "http://server/new.srt" }]
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            'bs:disable-next-line 1140
+            onAvailableSubtitleTracksChanged()
+
+            m.assertEqual(m.node.videoPlayer.subtitleTrack, "http://server/new.srt")
+            m.assertEqual(m.node.activePlayback.subtitleStreamIndex, 4)
+        end function
+
+        @it("consumes deferred subtitle application once its track becomes available")
+        function _()
+            m.prepareOptions({})
+            m.node.streamOptions.pendingExternalSubtitleUrl = "http://server/old.srt"
+            m.node.videoPlayer.availableSubtitleTracks = []
+            'bs:disable-next-line 1140
+            onAvailableSubtitleTracksChanged()
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "http://server/old.srt")
+
+            m.node.videoPlayer.availableSubtitleTracks = [{ TrackName: "http://server/old.srt" }]
+            'bs:disable-next-line 1140
+            onAvailableSubtitleTracksChanged()
+
+            m.assertEqual(m.node.videoPlayer.subtitleTrack, "http://server/old.srt")
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "")
+        end function
+
+        private sub prepareOptions(changes as object, wasPlaying = true as boolean)
+            m.prepareActivityPlayback("playing", "playing")
+            m.node.activePlayback.itemId = "movie-1"
+            m.node.activePlayback.requestId = m.node.playback.requestId
+            m.node.activePlayback.audioStreamIndex = 1
+            m.node.activePlayback.subtitleStreamIndex = 2
+            m.node.activePlayback.request.audioStreamIndex = 1
+            m.node.activePlayback.request.subtitleStreamIndex = 2
+            m.node.streamOptions.activeSubtitleDeliveryMethod = "external"
+            m.node.streamOptions.externalSubtitleTracks = []
+            m.node.videoPlayer.availableSubtitleTracks = []
+            m.node.playback.duration = 120
+            m.node.playback.position = 10
+            m.node.playbackInfoTask = { request: invalid, control: "" }
+            m.node.mediaOptions.session = invalid
+            m.node.mediaOptions.pendingCommit = {
+                session: {
+                    requestId: m.node.playback.requestId
+                    itemId: "movie-1"
+                    position: 10
+                    wasPlaying: wasPlaying
+                    context: { subtitleOptions: [{ value: { streamIndex: -1, label: "Off" } }, { value: { streamIndex: 4, label: "English" } }] }
+                }
+                changes: changes
+            }
+        end sub
+
+        @it("clears a cancelled opening without committing or stealing focus")
+        function _()
+            m.prepareOptions({})
+            session = m.node.mediaOptions.pendingCommit.session
+            session.context.generation = 9
+            m.node.mediaOptions.session = session
+            m.node.mediaOptions.pendingCommit = invalid
+
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: { optionsContext: { generation: 9 } }, overlay: invalid, cancelled: true })
+
+            m.assertInvalid(m.node.mediaOptions.session)
+            m.assertInvalid(m.node.mediaOptions.pendingCommit)
+            m.assertEqual(m.node.videoPlayer.control, "resume")
+        end function
+
+        @it("rejects an old dialog close without clearing the new opening")
+        function _()
+            m.prepareOptions({})
+            session = m.node.mediaOptions.pendingCommit.session
+            session.context.generation = 9
+            m.node.mediaOptions.session = session
+            m.node.mediaOptions.pendingCommit = invalid
+
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: { optionsContext: { generation: 8 } }, overlay: { result: { audioStreamIndex: 3 } } })
+
+            m.assertNotInvalid(m.node.mediaOptions.session)
+            m.assertInvalid(m.node.mediaOptions.pendingCommit)
+        end function
 
     end class
 

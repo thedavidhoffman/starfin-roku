@@ -1,3 +1,4 @@
+import "pkg:/source/MediaOptionsSession.bs"
 import "pkg:/source/VideoMediaSummary.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
@@ -42,7 +43,6 @@ sub initReferences()
     m.mediaShell = m.top.findNode("mediaShell")
     m.mediaToolbar = m.top.findNode("mediaToolbar")
     m.previousNextButton = m.top.findNode("previousNextButton")
-    m.streamOptions = m.top.findNode("streamOptions")
     m.cast = m.top.findNode("cast")
     m.chevronFooter = m.top.findNode("chevronFooter")
     m.movieTask = m.top.findNode("movieTask")
@@ -53,12 +53,12 @@ sub initReferences()
         request: invalid
         item: invalid
         mediaInfoPending: false
+        mediaOptions: { session: invalid, generation: 0 }
         selectedStreams: {
             audio: invalid
             subtitle: invalid
             subtitleOff: false
         }
-        selectedChapterKey: ""
         videoMode: PlaybackMode.Mode.Automatic
         focusArea: "toolbar"
         layout: {
@@ -94,21 +94,11 @@ sub initHandlers()
     m.mediaToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
     m.mediaToolbar.observeField("playSelected", "onVideoToolbarPlaySelected")
     m.mediaToolbar.observeField("restartSelected", "onVideoToolbarRestartSelected")
-    m.mediaToolbar.observeField("subtitlesSelected", "onVideoToolbarSubtitlesSelected")
-    m.mediaToolbar.observeField("audioSelected", "onVideoToolbarAudioSelected")
-    m.mediaToolbar.observeField("chaptersSelected", "onVideoToolbarChaptersSelected")
-    m.mediaToolbar.observeField("videoSelected", "onVideoToolbarVideoSelected")
     m.mediaToolbar.observeField("mediaInfoSelected", "onVideoToolbarMediaInfoSelected")
     m.mediaToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
     m.mediaToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.previousNextButton.observeField("previousSelected", "onPreviousLibraryItemSelected")
     m.previousNextButton.observeField("nextSelected", "onNextLibraryItemSelected")
-    m.streamOptions.observeField("overlayRequested", "onStreamOptionsOverlayRequested")
-    m.streamOptions.observeField("selectedSubtitle", "onSubtitleOptionSelected")
-    m.streamOptions.observeField("selectedAudio", "onAudioOptionSelected")
-    m.streamOptions.observeField("selectedChapter", "onChapterOptionSelected")
-    m.streamOptions.observeField("selectedVideoMode", "onVideoModeSelected")
-    m.streamOptions.observeField("closeRequested", "onStreamOptionsCloseRequested")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
@@ -134,9 +124,6 @@ sub renderMovie(item as dynamic, logoPending = false as boolean)
         overview: Format.FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)
-    m.mediaToolbar.subtitleStreamCount = getSubtitleStreams(item).Count()
-    m.mediaToolbar.audioStreamCount = getAudioStreams(item).Count()
-    m.mediaToolbar.chapterCount = getChapters(item).Count()
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isItemWatched(item)
 end sub
@@ -160,6 +147,7 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    m.state.mediaOptions.session = invalid
     AsyncLifecycle.Deactivate(m.state.lifecycle)
     LatestRequestLifecycle.Deactivate(m.state.detailsLoad)
     m.state.themeLookupActive = false
@@ -259,13 +247,6 @@ sub onCastAvailabilityChanged()
     end if
 
     applyCinematicLayout()
-end sub
-
-'-------------------------------------------------------------------------------
-' handleVideoMediaInfoOverlayClosed
-'-------------------------------------------------------------------------------
-sub handleVideoMediaInfoOverlayClosed()
-    focusVideoToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -471,122 +452,29 @@ sub applyPlaybackSubtitleSelection(playRequest as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoToolbarSubtitlesSelected
-'-------------------------------------------------------------------------------
-sub onVideoToolbarSubtitlesSelected()
-    item = m.state.item
-    if item = invalid then return
-
-    m.mediaToolbar.callFunc("deactivate")
-    m.state.focusArea = "subtitleOptions"
-    m.streamOptions.callFunc("openSubtitleOptions", {
-        subtitleStreams: getSubtitleStreams(item)
-        selectedSubtitleStreamIndex: getSelectedSubtitleStreamIndex()
-    })
-end sub
-
-'-------------------------------------------------------------------------------
-' onStreamOptionsOverlayRequested
-'-------------------------------------------------------------------------------
-sub onStreamOptionsOverlayRequested()
-    request = m.streamOptions.overlayRequested
-    if request = invalid then return
-
-    request.sourcePage = "movie"
-    m.top.streamOptionsRequested = request
-end sub
-
-'-------------------------------------------------------------------------------
 ' handleStreamOptionsOverlayClosed
 '-------------------------------------------------------------------------------
 sub handleStreamOptionsOverlayClosed(closed as object)
-    applyClosedStreamOptionsSelection(closed)
-    m.streamOptions.callFunc("closeOptions")
-end sub
-
-'-------------------------------------------------------------------------------
-' applyClosedStreamOptionsSelection
-'-------------------------------------------------------------------------------
-sub applyClosedStreamOptionsSelection(closed as object)
-    if closed = invalid then return
-    request = closed.request
-    overlay = closed.overlay
-    if request = invalid or overlay = invalid then return
-
-    selection = getClosedOptionValue(overlay)
-    if Format.SafeString(request.id, "") = "subtitleOptions" then
-        m.streamOptions.callFunc("applySubtitleSelection", selection)
-    else if Format.SafeString(request.id, "") = "audioOptions" then
-        m.streamOptions.callFunc("applyAudioSelection", selection)
-    else if Format.SafeString(request.id, "") = "chapterOptions" and overlay.selectedOptionChanged = true then
-        m.streamOptions.callFunc("applyChapterSelection", selection)
-    else if Format.SafeString(request.id, "") = "videoOptions" then
-        m.streamOptions.callFunc("applyVideoModeSelection", overlay.selectedOption)
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' getClosedOptionValue
-'-------------------------------------------------------------------------------
-function getClosedOptionValue(overlay as dynamic) as dynamic
-    if overlay = invalid then return invalid
-    if overlay.selectedOption = invalid then return invalid
-    return overlay.selectedOption.value
-end function
-
-'-------------------------------------------------------------------------------
-' onStreamOptionsCloseRequested
-'-------------------------------------------------------------------------------
-sub onStreamOptionsCloseRequested()
-    focusVideoToolbar()
-end sub
-
-'-------------------------------------------------------------------------------
-' onSubtitleOptionSelected
-'-------------------------------------------------------------------------------
-sub onSubtitleOptionSelected()
-    selection = m.streamOptions.selectedSubtitle
-    if selection = invalid then return
-
-    if selection.isOff = true then
-        m.state.selectedStreams.subtitle = invalid
-        m.state.selectedStreams.subtitleOff = true
-        m.log.write("Subtitle option selected: Off")
-        m.log.activity("Selected subtitles off")
-    else
-        m.state.selectedStreams.subtitle = selection
-        m.state.selectedStreams.subtitleOff = false
-        m.log.write("Subtitle option selected streamIndex=" + Format.SafeString(selection.streamIndex, "") + " label=" + Format.SafeString(selection.label, ""))
-        m.log.activity("Selected subtitles " + ActivityLog.Quote(selection.label, "subtitle track"))
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' onVideoToolbarAudioSelected
-'-------------------------------------------------------------------------------
-sub onVideoToolbarAudioSelected()
+    if closed = invalid or m.state.mediaOptions.session = invalid then return
+    session = m.state.mediaOptions.session
+    if closed.request = invalid or closed.request.optionsContext = invalid then return
+    if closed.request.optionsContext.generation <> session.context.generation then return
+    m.state.mediaOptions.session = invalid
+    if closed.cancelled = true or closed.overlay = invalid then return
     item = m.state.item
-    if item = invalid then return
-
-    m.mediaToolbar.callFunc("deactivate")
-    m.state.focusArea = "audioOptions"
-    m.streamOptions.callFunc("openAudioOptions", {
-        audioStreams: getAudioStreams(item)
-        selectedAudioStreamIndex: getSelectedAudioStreamIndex()
-    })
-end sub
-
-'-------------------------------------------------------------------------------
-' onAudioOptionSelected
-'-------------------------------------------------------------------------------
-sub onAudioOptionSelected()
-    selection = m.streamOptions.selectedAudio
-    if selection = invalid then return
-
-    m.state.selectedStreams.audio = selection
-    refreshMediaInfoText(m.state.item)
-    m.log.write("Audio option selected streamIndex=" + Format.SafeString(selection.streamIndex, "") + " label=" + Format.SafeString(selection.label, ""))
-    m.log.activity("Selected audio " + ActivityLog.Quote(selection.label, "audio track"))
+    if item = invalid or item.Id <> session.itemId then return
+    result = closed.overlay.result
+    if result = invalid then return
+    if result.videoMode <> invalid then applyPlaybackVideoMode(result.videoMode)
+    m.state.selectedStreams = MediaOptionsSession.ApplyStreamChanges(m.state.selectedStreams, session.context, result)
+    refreshMediaInfoText(item)
+    if result.Count() > 0 then m.log.activity("Updated media options")
+    if result.chapter <> invalid then
+        playSelection = buildPlaySelection(result.chapter.startPositionTicks)
+        if playSelection <> invalid then m.top.playSelected = playSelection
+        return
+    end if
+    focusVideoToolbar()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -658,56 +546,25 @@ sub onWatchedTaskResponse()
 end sub
 
 '-------------------------------------------------------------------------------
-' onVideoToolbarChaptersSelected
-'-------------------------------------------------------------------------------
-sub onVideoToolbarChaptersSelected()
-    item = m.state.item
-    if item = invalid then return
-
-    chapters = getChapters(item)
-    if chapters.Count() = 0 then return
-
-    m.mediaToolbar.callFunc("deactivate")
-    m.state.focusArea = "chapterOptions"
-    m.streamOptions.callFunc("openChapterOptions", {
-        chapters: chapters
-        selectedChapterKey: m.state.selectedChapterKey
-    })
-end sub
-
-'-------------------------------------------------------------------------------
 ' onVideoToolbarMediaInfoSelected
 '-------------------------------------------------------------------------------
 sub onVideoToolbarMediaInfoSelected()
     item = m.state.item
     if item = invalid then return
-
     m.mediaToolbar.callFunc("deactivate")
-    m.state.focusArea = "mediaInfo"
+    m.state.focusArea = "toolbar"
+    context = MediaOptionsSession.Context(item, m.state.videoMode, getSelectedAudioStreamIndex(), getSelectedSubtitleStreamIndex(), getAudioStreams(item), getSubtitleStreams(item))
+    m.state.mediaOptions.generation += 1
+    context.generation = m.state.mediaOptions.generation
+    m.state.mediaOptions.session = { context: context, itemId: item.Id }
     m.top.overlayRequested = {
-        id: "mediaInfo"
+        id: MediaOptionsSession.Overlay.Options
         sourcePage: "movie"
-        componentName: "VideoMediaInfoDialog"
-        openFunction: "openVideoMediaInfo"
+        componentName: "MediaOptionsDialog"
+        openFunction: "openMediaOptions"
         closeField: "closeRequested"
-        item: item
+        optionsContext: context
     }
-end sub
-
-'-------------------------------------------------------------------------------
-' onChapterOptionSelected
-'-------------------------------------------------------------------------------
-sub onChapterOptionSelected()
-    selection = m.streamOptions.selectedChapter
-    if selection = invalid or selection.startPositionTicks = invalid then return
-
-    playSelection = buildPlaySelection(selection.startPositionTicks)
-    if playSelection = invalid then return
-
-    m.state.selectedChapterKey = Format.SafeString(selection.startPositionTicks, "")
-    m.log.write("Chapter option selected startPositionTicks=" + Format.SafeString(selection.startPositionTicks, "") + " label=" + Format.SafeString(selection.label, ""))
-    m.log.activity("Selected chapter " + ActivityLog.Quote(selection.label, "chapter"))
-    m.top.playSelected = playSelection
 end sub
 
 '-------------------------------------------------------------------------------
@@ -729,29 +586,6 @@ sub onPlaybackProgressChange()
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isItemWatched(item)
     m.top.playbackProgressChanged = change
-end sub
-
-'-------------------------------------------------------------------------------
-' onVideoToolbarVideoSelected
-'-------------------------------------------------------------------------------
-sub onVideoToolbarVideoSelected()
-    m.mediaToolbar.callFunc("deactivate")
-    m.state.focusArea = "videoOptions"
-    m.streamOptions.callFunc("openVideoOptions", {
-        selectedKey: m.state.videoMode
-    })
-end sub
-
-'-------------------------------------------------------------------------------
-' onVideoModeSelected
-'-------------------------------------------------------------------------------
-sub onVideoModeSelected()
-    selection = m.streamOptions.selectedVideoMode
-    if selection = invalid then return
-
-    applyPlaybackVideoMode(selection.key)
-    m.log.write("Video mode selected: " + m.state.videoMode)
-    m.log.activity("Selected video mode " + ActivityLog.Quote(m.state.videoMode, "Automatic"))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -942,13 +776,6 @@ function getAudioStreams(item as dynamic) as object
 end function
 
 '-------------------------------------------------------------------------------
-' getChapters
-'-------------------------------------------------------------------------------
-function getChapters(item as dynamic) as object
-    return MediaOptions.GetChapters(item)
-end function
-
-'-------------------------------------------------------------------------------
 ' applySelectedStreamsToPlaySelection
 '-------------------------------------------------------------------------------
 sub applySelectedStreamsToPlaySelection(selection as dynamic)
@@ -987,8 +814,8 @@ end function
 '-------------------------------------------------------------------------------
 function getSelectedStreamIndex(selection as dynamic, fallback as integer) as integer
     if selection = invalid then return fallback
-    if selection.streamIndex <> invalid then return int(selection.streamIndex)
-    if selection.stream <> invalid and selection.stream.Index <> invalid then return int(selection.stream.Index)
+    if selection.streamIndex <> invalid then return Number.ToInteger(selection.streamIndex, fallback)
+    if selection.stream <> invalid and selection.stream.Index <> invalid then return Number.ToInteger(selection.stream.Index, fallback)
     return fallback
 end function
 

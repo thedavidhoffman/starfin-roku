@@ -1,7 +1,7 @@
 # Video Toolbar
 
 VideoToolbar owns button order, focus, and spacing. Ordinary buttons expand only while focused; otherwise they remain 64 pixels
-wide. Buttons have a 12-pixel gap. The final media-info button is text-only and
+wide. Buttons have a 12-pixel gap. The final media-options button has a cog icon and
 retains its measured width and visible label regardless of focus.
 
 DynamicButton lives in `components/controls/Buttons/DynamicButton/` and uses
@@ -19,8 +19,8 @@ minimum; losing focus restores the compact icon-only appearance.
 ## Media summary
 
 Movies and episodes show media info last in visual and remote navigation order.
-The text-only button opens the existing media-info view and retains focus when
-that view closes. Its label follows this format:
+The cog-and-summary button opens the shared [Media Options](media-options.md) dialog
+and retains focus when that dialog closes. Its label follows this format:
 
 `[resolution] [video codec] [HDR type] • [audio codec] [channel layout]`
 

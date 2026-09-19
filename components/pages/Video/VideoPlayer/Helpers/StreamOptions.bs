@@ -1,241 +1,14 @@
+import "pkg:/source/MediaOptionsSession.bs"
+import "pkg:/source/VideoMediaSummary.bs"
 '-------------------------------------------------------------------------------
 ' updatePlaybackControlsOptions
 '-------------------------------------------------------------------------------
 sub updatePlaybackControlsOptions(item as dynamic)
     subtitleStreams = VideoPlayerStreamSelection_GetSubtitleStreams(item)
     audioStreams = VideoPlayerStreamSelection_GetAudioStreams(item)
-    chapters = getChapters(item)
     m.streamOptions.subtitleStreams = subtitleStreams
     m.streamOptions.audioStreams = audioStreams
-    m.streamOptions.chapters = chapters
-    m.streamOptions.selectedChapterKey = ""
-    request = getAcceptedOrPendingPlaybackRequest()
-    m.streamOptions.selectedSubtitleStreamIndex = VideoPlayerStreamSelection_GetSubtitleIndex(request)
-    m.streamOptions.selectedAudioStreamIndex = VideoPlayerStreamSelection_GetAudioIndex(request, audioStreams)
-    m.playbackControls.hasSubtitleOptions = subtitleStreams.Count() > 0
-    m.playbackControls.hasAudioOptions = audioStreams.Count() > 1
-    m.playbackControls.hasChapterOptions = chapters.Count() > 0
-    m.playbackControls.hasVideoOptions = true
-end sub
-
-'-------------------------------------------------------------------------------
-' getChapters
-'-------------------------------------------------------------------------------
-function getChapters(item as dynamic) as object
-    return MediaOptions.GetChapters(item)
-end function
-
-'-------------------------------------------------------------------------------
-' onSubtitleOptionsPressed
-'-------------------------------------------------------------------------------
-sub onSubtitleOptionsPressed()
-    if m.streamOptions.subtitleStreams.Count() = 0 then return
-
-    m.controlsHideTimer.control = TimerControl.Command.Stop
-    m.top.streamOptionsRequested = {
-        id: "subtitleOptions"
-        sourcePage: "videoPlayer"
-        componentName: "OptionPickerDialog"
-        openFunction: "openOptions"
-        closeField: "closeRequested"
-        dialogTitle: "Subtitles"
-        options: MediaOptions.BuildSubtitleOptions(m.streamOptions.subtitleStreams)
-        selectedKey: m.streamOptions.selectedSubtitleStreamIndex.ToStr()
-        emptyText: "No subtitles available."
-    }
-end sub
-
-'-------------------------------------------------------------------------------
-' onAudioOptionsPressed
-'-------------------------------------------------------------------------------
-sub onAudioOptionsPressed()
-    if m.streamOptions.audioStreams.Count() <= 1 then return
-
-    m.controlsHideTimer.control = TimerControl.Command.Stop
-    m.top.streamOptionsRequested = {
-        id: "audioOptions"
-        sourcePage: "videoPlayer"
-        componentName: "OptionPickerDialog"
-        openFunction: "openOptions"
-        closeField: "closeRequested"
-        dialogTitle: "Audio"
-        options: MediaOptions.BuildAudioOptions(m.streamOptions.audioStreams)
-        selectedKey: m.streamOptions.selectedAudioStreamIndex.ToStr()
-        emptyText: "No audio tracks available."
-    }
-end sub
-
-'-------------------------------------------------------------------------------
-' onVideoOptionsPressed
-'-------------------------------------------------------------------------------
-sub onVideoOptionsPressed()
-    request = getAcceptedOrPendingPlaybackRequest()
-    if request = invalid then return
-
-    m.controlsHideTimer.control = TimerControl.Command.Stop
-    m.top.streamOptionsRequested = {
-        id: "videoOptions"
-        sourcePage: "videoPlayer"
-        componentName: "VideoOptionsDialog"
-        openFunction: "openVideoOptions"
-        closeField: "closeRequested"
-        selectedKey: Format.SafeString(request.videoMode, PlaybackMode.Mode.Automatic)
-    }
-end sub
-
-'-------------------------------------------------------------------------------
-' onChapterOptionsPressed
-'-------------------------------------------------------------------------------
-sub onChapterOptionsPressed()
-    if m.streamOptions.chapters.Count() = 0 then return
-
-    m.controlsHideTimer.control = TimerControl.Command.Stop
-    m.top.streamOptionsRequested = {
-        id: "chapterOptions"
-        sourcePage: "videoPlayer"
-        componentName: "OptionPickerDialog"
-        openFunction: "openOptions"
-        closeField: "closeRequested"
-        dialogTitle: "Chapters"
-        options: MediaOptions.BuildChapterOptions(m.streamOptions.chapters)
-        selectedKey: m.streamOptions.selectedChapterKey
-        allowDefaultSelection: false
-        emptyText: "No chapters available."
-    }
-end sub
-
-'-------------------------------------------------------------------------------
-' handleStreamOptionsOverlayClosed
-'-------------------------------------------------------------------------------
-sub handleStreamOptionsOverlayClosed(closed as object)
-    if closed = invalid then return
-    request = closed.request
-    overlay = closed.overlay
-    if request = invalid or overlay = invalid then return
-
-    requestId = Format.SafeString(request.id, "")
-    chapterSelected = false
-    if requestId = "subtitleOptions" then
-        selection = getClosedOptionValue(overlay)
-        applySubtitleSelection(selection)
-    else if requestId = "audioOptions" then
-        selection = getClosedOptionValue(overlay)
-        applyAudioSelection(selection)
-    else if requestId = "chapterOptions" and overlay.selectedOptionChanged = true then
-        selection = getClosedOptionValue(overlay)
-        applyChapterSelection(selection)
-        chapterSelected = true
-    else if requestId = "videoOptions" then
-        applyVideoModeSelection(overlay.selectedOption)
-    end if
-
-    if chapterSelected = true then
-        hideControls()
-        return
-    end if
-
-    if m.overlay.area = "controls" then
-        m.playbackControls.callFunc("activate")
-        m.playbackControls.callFunc("focusButtons")
-        m.controlsHideTimer.control = TimerControl.Command.Start
-    else
-        m.top.setFocus(true)
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' applyVideoModeSelection
-'-------------------------------------------------------------------------------
-sub applyVideoModeSelection(selection as dynamic)
-    if selection = invalid then return
-
-    videoMode = PlaybackMode.Normalize(selection.key)
-    request = getAcceptedOrPendingPlaybackRequest()
-    if request = invalid then return
-    if videoMode = PlaybackMode.Normalize(request.videoMode) then return
-
-    m.streamOptions.pendingVideoMode = videoMode
-
-    ' Yield one SceneGraph turn so OverlayHost removal renders before the
-    ' playRequest change performs synchronous player teardown and setup.
-    m.videoModeApplyTimer.control = TimerControl.Command.Stop
-    m.videoModeApplyTimer.control = TimerControl.Command.Start
-end sub
-
-'-------------------------------------------------------------------------------
-' onVideoModeApplyTimerFire
-'-------------------------------------------------------------------------------
-sub onVideoModeApplyTimerFire()
-    videoMode = m.streamOptions.pendingVideoMode
-    m.streamOptions.pendingVideoMode = ""
-    if videoMode = "" then return
-
-    restartRequest = buildStreamRestartPlayRequest()
-    if restartRequest = invalid then return
-
-    restartRequest = PlaybackRequest.WithChanges(restartRequest, { videoMode: videoMode })
-    dispatchStreamRestart(
-        restartRequest,
-        "Restarting playback with video mode=" + videoMode,
-        "Selected video mode " + ActivityLog.Quote(videoMode, "Automatic")
-    )
-end sub
-
-'-------------------------------------------------------------------------------
-' getClosedOptionValue
-'-------------------------------------------------------------------------------
-function getClosedOptionValue(overlay as dynamic) as dynamic
-    if overlay = invalid then return invalid
-    if overlay.selectedOption = invalid then return invalid
-    return overlay.selectedOption.value
-end function
-
-'-------------------------------------------------------------------------------
-' applySubtitleSelection
-'-------------------------------------------------------------------------------
-sub applySubtitleSelection(selection as dynamic)
-    if selection = invalid then return
-
-    streamIndex = SubtitleSelection.None
-    if selection.streamIndex <> invalid then streamIndex = Number.ToInteger(selection.streamIndex, SubtitleSelection.None)
-    if streamIndex = m.streamOptions.selectedSubtitleStreamIndex then return
-
-    previousDeliveryMethod = m.streamOptions.activeSubtitleDeliveryMethod
-    previousStreamIndex = m.streamOptions.selectedSubtitleStreamIndex
-    m.streamOptions.selectedSubtitleStreamIndex = streamIndex
-    updatedRequest = PlaybackRequest.WithChanges(getAcceptedOrPendingPlaybackRequest(), { subtitleStreamIndex: streamIndex })
-    if streamIndex = SubtitleSelection.None then
-        streamTitle = Format.SafeString(selection.label, "Off")
-        if commitLocalSubtitleSelection(updatedRequest, streamIndex, streamTitle) <> true then
-            m.streamOptions.selectedSubtitleStreamIndex = previousStreamIndex
-            return
-        end if
-        setSubtitleCaptionMode("Off")
-        m.videoPlayer.subtitleTrack = ""
-        m.streamOptions.activeSubtitleDeliveryMethod = "none"
-        m.log.activity("Selected subtitles " + ActivityLog.Quote(streamTitle, "Off"))
-        return
-    end if
-    externalTrack = SubtitlePlayback.FindExternalTrack(m.streamOptions.externalSubtitleTracks, streamIndex)
-    targetDeliveryMethod = "encode"
-    if externalTrack <> invalid then targetDeliveryMethod = "external"
-    if SubtitlePlayback.RequiresRestart(previousDeliveryMethod, targetDeliveryMethod) <> true and externalTrack <> invalid then
-        trackName = SubtitlePlayback.FindAvailableTrackName(m.videoPlayer.availableSubtitleTracks, externalTrack.deliveryUrl)
-        if trackName <> "" then
-            streamTitle = Format.SafeString(selection.label, "")
-            if commitLocalSubtitleSelection(updatedRequest, streamIndex, streamTitle) <> true then
-                m.streamOptions.selectedSubtitleStreamIndex = previousStreamIndex
-                return
-            end if
-            setSubtitleCaptionMode("On")
-            m.videoPlayer.subtitleTrack = trackName
-            m.streamOptions.activeSubtitleDeliveryMethod = "external"
-            m.log.activity("Selected subtitles " + ActivityLog.Quote(streamTitle, "Off"))
-            return
-        end if
-    end if
-    activityMessage = "Selected subtitles " + ActivityLog.Quote(selection.label, "subtitle track")
-    if restartPlaybackWithStreamOptions(activityMessage) <> true then m.streamOptions.selectedSubtitleStreamIndex = previousStreamIndex
+    m.playbackControls.mediaInfoText = VideoMediaSummary.GetText(item, m.activePlayback.audioStreamIndex)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -251,23 +24,9 @@ function commitLocalSubtitleSelection(request as dynamic, streamIndex as integer
     m.activePlayback.subtitleStreamIndex = streamIndex
     m.activePlayback.subtitleStreamTitle = streamTitle
     m.pendingPlaybackRequest = acceptedRequest
+    m.streamOptions.pendingExternalSubtitleUrl = ""
     return true
 end function
-
-'-------------------------------------------------------------------------------
-' applyAudioSelection
-'-------------------------------------------------------------------------------
-sub applyAudioSelection(selection as dynamic)
-    if selection = invalid or selection.streamIndex = invalid then return
-
-    streamIndex = Number.ToInteger(selection.streamIndex, -1)
-    if streamIndex = m.streamOptions.selectedAudioStreamIndex then return
-
-    previousStreamIndex = m.streamOptions.selectedAudioStreamIndex
-    m.streamOptions.selectedAudioStreamIndex = streamIndex
-    activityMessage = "Selected audio " + ActivityLog.Quote(selection.label, "audio track")
-    if restartPlaybackWithStreamOptions(activityMessage) <> true then m.streamOptions.selectedAudioStreamIndex = previousStreamIndex
-end sub
 
 '-------------------------------------------------------------------------------
 ' applyChapterSelection
@@ -275,7 +34,6 @@ end sub
 sub applyChapterSelection(selection as dynamic)
     if selection = invalid or selection.startPositionSeconds = invalid then return
 
-    m.streamOptions.selectedChapterKey = Format.SafeString(selection.startPositionTicks, "")
     targetPosition = selection.startPositionSeconds
     if m.playback.duration <> invalid and m.playback.duration > 0 then
         targetPosition = VideoPlayerMetadata_ClampSeconds(targetPosition, 0, m.playback.duration)
@@ -301,17 +59,6 @@ sub applyChapterSelection(selection as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' restartPlaybackWithStreamOptions
-'-------------------------------------------------------------------------------
-function restartPlaybackWithStreamOptions(activityMessage as string) as boolean
-    request = buildStreamRestartPlayRequest()
-    if request = invalid then return false
-
-    diagnosticMessage = "Restarting playback with stream options audioStreamIndex=" + Format.SafeString(request.audioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(request.subtitleStreamIndex, "")
-    return dispatchStreamRestart(request, diagnosticMessage, activityMessage)
-end function
-
-'-------------------------------------------------------------------------------
 ' dispatchStreamRestart
 '-------------------------------------------------------------------------------
 function dispatchStreamRestart(request as dynamic, diagnosticMessage as string, activityMessage as string) as boolean
@@ -323,19 +70,159 @@ function dispatchStreamRestart(request as dynamic, diagnosticMessage as string, 
     return true
 end function
 
+
+'-------------------------------------------------------------------------------
+' onMediaOptionsPressed
+'-------------------------------------------------------------------------------
+sub onMediaOptionsPressed()
+    if m.activePlayback = invalid or m.playback.startupPending then return
+    if m.mediaOptions.session <> invalid or m.mediaOptions.pendingCommit <> invalid then return
+    request = m.activePlayback.request
+    item = getCurrentPlaybackItem(request)
+    if item = invalid then return
+    context = MediaOptionsSession.Context(item, getOriginalPlaybackMode(), m.activePlayback.audioStreamIndex, m.activePlayback.subtitleStreamIndex, m.streamOptions.audioStreams, m.streamOptions.subtitleStreams)
+    context.playbackInfo = buildPlaybackInformation()
+    m.mediaOptions.generation += 1
+    context.generation = m.mediaOptions.generation
+    state = VideoPlayerState.Normalize(m.videoPlayer.state)
+    m.mediaOptions.session = {
+        requestId: m.playback.requestId
+        itemId: m.activePlayback.itemId
+        context: context
+        position: getCurrentPlaybackPosition()
+        wasPlaying: state = VideoPlayerState.Value.Playing or state = VideoPlayerState.Value.Buffering
+    }
+    if m.mediaOptions.session.wasPlaying then m.videoPlayer.control = MediaControl.Command.Pause
+    m.controlsHideTimer.control = TimerControl.Command.Stop
+    m.top.overlayRequested = {
+        id: MediaOptionsSession.Overlay.Options
+        sourcePage: "videoPlayer"
+        componentName: "MediaOptionsDialog"
+        openFunction: "openMediaOptions"
+        closeField: "closeRequested"
+        optionsContext: context
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' handleStreamOptionsOverlayClosed
+'-------------------------------------------------------------------------------
+sub handleStreamOptionsOverlayClosed(closed as object)
+    if closed = invalid then return
+    session = m.mediaOptions.session
+    if session = invalid or closed.request = invalid or closed.request.optionsContext = invalid then return
+    if closed.request.optionsContext.generation <> session.context.generation then return
+    m.mediaOptions.session = invalid
+    if session = invalid or m.activePlayback = invalid then return
+    if session.requestId <> m.playback.requestId or session.itemId <> m.activePlayback.itemId then return
+    if closed.cancelled = true then
+        if session.wasPlaying then m.videoPlayer.control = MediaControl.Command.Resume
+        return
+    end if
+    if closed.overlay = invalid then return
+    if closed.overlay.result = invalid then return
+    m.mediaOptions.pendingCommit = { session: session, changes: closed.overlay.result }
+    ' Wait for removal of the modal to render before rebuilding video content.
+    m.mediaOptionsApplyTimer.control = TimerControl.Command.Start
+end sub
+
+'-------------------------------------------------------------------------------
+' onMediaOptionsApplyTimerFire
+'-------------------------------------------------------------------------------
+sub onMediaOptionsApplyTimerFire()
+    commit = m.mediaOptions.pendingCommit
+    m.mediaOptions.pendingCommit = invalid
+    if commit = invalid or m.activePlayback = invalid then return
+    session = commit.session
+    if session.requestId <> m.playback.requestId or session.itemId <> m.activePlayback.itemId then return
+    changes = commit.changes
+    requestChanges = {
+        videoMode: getOriginalPlaybackMode()
+        audioStreamIndex: m.activePlayback.audioStreamIndex
+        subtitleStreamIndex: m.activePlayback.subtitleStreamIndex
+    }
+    restart = false
+    if changes.videoMode <> invalid then
+        requestChanges.videoMode = PlaybackMode.Normalize(changes.videoMode)
+        restart = true
+    end if
+    if changes.audioStreamIndex <> invalid then
+        requestChanges.audioStreamIndex = changes.audioStreamIndex
+        restart = true
+    end if
+    subtitleTrack = ""
+    subtitleTitle = "Off"
+    if changes.subtitleStreamIndex <> invalid then
+        requestChanges.subtitleStreamIndex = changes.subtitleStreamIndex
+        subtitle = MediaOptionsSession.FindValue(session.context.subtitleOptions, changes.subtitleStreamIndex)
+        if subtitle <> invalid then subtitleTitle = subtitle.label
+        if changes.subtitleStreamIndex = SubtitleSelection.None then
+            if m.streamOptions.activeSubtitleDeliveryMethod = "encode" then restart = true
+        else
+            external = SubtitlePlayback.FindExternalTrack(m.streamOptions.externalSubtitleTracks, changes.subtitleStreamIndex)
+            if external <> invalid then subtitleTrack = SubtitlePlayback.FindAvailableTrackName(m.videoPlayer.availableSubtitleTracks, external.deliveryUrl)
+            if subtitleTrack = "" or SubtitlePlayback.RequiresRestart(m.streamOptions.activeSubtitleDeliveryMethod, "external") then restart = true
+        end if
+    end if
+    position = session.position
+    if changes.chapter <> invalid then position = changes.chapter.startPositionSeconds
+    if m.playback.duration > 0 then position = VideoPlayerMetadata_ClampSeconds(position, 0, m.playback.duration)
+    request = PlaybackRequest.WithChanges(m.activePlayback.request, requestChanges)
+    if restart then
+        request = PlaybackRequest.WithChanges(request, {
+            startPositionTicks: secondsToTicks(position)
+            startPaused: session.wasPlaying <> true
+            restoreMediaOptionsFocus: true
+        })
+        dispatchStreamRestart(request, "Applying combined media options", "Updated media options")
+        return
+    end if
+    if changes.subtitleStreamIndex <> invalid then
+        if commitLocalSubtitleSelection(request, changes.subtitleStreamIndex, subtitleTitle) then
+            m.videoPlayer.subtitleTrack = subtitleTrack
+            if changes.subtitleStreamIndex = SubtitleSelection.None then
+                setSubtitleCaptionMode("Off")
+                m.streamOptions.activeSubtitleDeliveryMethod = "none"
+            else
+                setSubtitleCaptionMode("On")
+                m.streamOptions.activeSubtitleDeliveryMethod = "external"
+            end if
+            m.log.activity("Selected subtitles " + ActivityLog.Quote(subtitleTitle, "Off"))
+        end if
+    end if
+    if changes.chapter <> invalid then applyChapterSelection(changes.chapter)
+    if session.wasPlaying then
+        m.videoPlayer.control = MediaControl.Command.Resume
+    else
+        m.videoPlayer.control = MediaControl.Command.Pause
+    end if
+    restoreMediaOptionsFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreMediaOptionsFocus
+'-------------------------------------------------------------------------------
+sub restoreMediaOptionsFocus()
+    showControls(true)
+    m.playbackControls.callFunc("focusMediaOptions")
+end sub
+
 '-------------------------------------------------------------------------------
 ' buildStreamRestartPlayRequest
 '-------------------------------------------------------------------------------
 function buildStreamRestartPlayRequest() as dynamic
+    ' Recovery during resolution must retain the complete unaccepted selection.
+    if m.pendingPlaybackRequest <> invalid and m.pendingPlaybackRequest.requestId = m.playback.requestId then
+        if m.activePlayback = invalid or m.activePlayback.requestId <> m.playback.requestId then return PlaybackRequest.Create(m.pendingPlaybackRequest)
+    end if
     request = getAcceptedOrPendingPlaybackRequest()
     if request = invalid then return invalid
 
-    changes = {
+    return PlaybackRequest.WithChanges(request, {
         startPositionTicks: secondsToTicks(m.playback.position)
-        audioStreamIndex: m.streamOptions.selectedAudioStreamIndex
-        subtitleStreamIndex: m.streamOptions.selectedSubtitleStreamIndex
+        audioStreamIndex: m.activePlayback.audioStreamIndex
+        subtitleStreamIndex: m.activePlayback.subtitleStreamIndex
         subtitleBurnInMode: SubtitleBurnIn.Normalize(request.subtitleBurnInMode)
         videoMode: getOriginalPlaybackMode()
-    }
-    return PlaybackRequest.WithChanges(request, changes)
+    })
 end function

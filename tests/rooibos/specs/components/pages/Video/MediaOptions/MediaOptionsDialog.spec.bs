@@ -1,0 +1,50 @@
+namespace tests
+
+    @SGNode("MediaOptionsDialog")
+    @suite("MediaOptionsDialog component")
+    class MediaOptionsDialogTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.optionsContext = {
+                item: { Id: "movie-1", Name: "Example", Chapters: [{ StartPositionTicks: 0 }] }
+                selection: { videoMode: "automatic", audioStreamIndex: 1, subtitleStreamIndex: 3 }
+                audioOptions: [{ key: "1", label: "English", value: { streamIndex: 1 } }, { key: "2", label: "French", value: { streamIndex: 2 } }]
+                subtitleOptions: [{ key: "-1", label: "Off", value: { streamIndex: -1 } }, { key: "3", label: "English", value: { streamIndex: 3 } }]
+                chapterOptions: [{ key: "0", label: "Opening", value: { startPositionTicks: 0, startPositionSeconds: 0 } }, { key: "600000000", label: "Next", value: { startPositionTicks: 600000000, startPositionSeconds: 60 } }]
+            }
+            m.top.callFunc("openMediaOptions")
+        end function
+
+        @describe("close commits")
+
+        @it("has no Done button and does not commit on opening")
+        function _()
+            m.assertFalse(m.top.closeOnContentSelected)
+            m.assertInvalid(m.top.result)
+            m.assertFalse(m.top.findNode("saveButton").visible)
+        end function
+
+        @it("commits a pending selection when Back closes")
+        function _()
+            content = m.top.callFunc("getContentComponent")
+            content.findNode("categories").itemFocused = 2
+            content.findNode("optionList").itemSelected = 1
+            m.assertInvalid(m.top.result)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertEqual(m.top.result, { audioStreamIndex: 2 })
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("returns an empty result for unchanged close")
+        function _()
+            m.top.callFunc("closeDialog")
+
+            m.assertEqual(m.top.result, {})
+        end function
+
+    end class
+
+end namespace

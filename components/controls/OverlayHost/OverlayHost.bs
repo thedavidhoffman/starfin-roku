@@ -1,3 +1,4 @@
+import "pkg:/source/MediaOptionsSession.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 
@@ -81,15 +82,6 @@ sub applyOverlayRequestFields(overlay as object, request as object)
         return
     end if
 
-    if requestId = "subtitleOptions" or requestId = "audioOptions" or requestId = "chapterOptions" then
-        overlay.dialogTitle = request.dialogTitle
-        overlay.options = request.options
-        overlay.selectedKey = request.selectedKey
-        if request.allowDefaultSelection <> invalid then overlay.allowDefaultSelection = request.allowDefaultSelection
-        overlay.emptyText = request.emptyText
-        return
-    end if
-
     if requestId = "sort" then
         overlay.selectedSortKey = request.selectedSortKey
         if request.sortOptions <> invalid then overlay.sortOptions = request.sortOptions
@@ -108,18 +100,8 @@ sub applyOverlayRequestFields(overlay as object, request as object)
         return
     end if
 
-    if requestId = "mediaInfo" then
-        overlay.item = request.item
-        return
-    end if
-
-    if requestId = "videoOptions" then
-        overlay.selectedKey = request.selectedKey
-        return
-    end if
-
-    if requestId = "playbackInfo" then
-        overlay.playbackInfo = request.playbackInfo
+    if requestId = MediaOptionsSession.Overlay.Options then
+        overlay.optionsContext = request.optionsContext
         return
     end if
 
@@ -159,7 +141,7 @@ end function
 '-------------------------------------------------------------------------------
 ' closeOverlay
 '-------------------------------------------------------------------------------
-sub closeOverlay()
+sub closeOverlay(notifyCancellation = true as boolean)
     if m.activeOverlay = invalid then return
 
     for each field in getCloseFields(m.activeRequest)
@@ -171,9 +153,13 @@ sub closeOverlay()
     if m.activeRequest <> invalid and m.activeRequest.id = "serverDiscovery" then
         m.activeOverlay.callFunc("cancelDiscovery")
     end if
+    cancelledRequest = m.activeRequest
     m.top.removeChild(m.activeOverlay)
     m.activeOverlay = invalid
     m.activeRequest = invalid
+    if notifyCancellation and cancelledRequest <> invalid and cancelledRequest.id = MediaOptionsSession.Overlay.Options then
+        m.top.closed = { request: cancelledRequest, overlay: invalid, cancelled: true }
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -185,7 +171,7 @@ sub onOverlayClosed(event as object)
     if not event.getRoSGNode().isSameNode(m.activeOverlay) then return
     closedOverlay = m.activeOverlay
     closedRequest = m.activeRequest
-    closeOverlay()
+    closeOverlay(false)
     m.top.closed = {
         overlay: closedOverlay
         request: closedRequest

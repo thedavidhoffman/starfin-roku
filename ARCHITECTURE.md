@@ -109,6 +109,17 @@ media context, resume position, selected streams/mode, and any applicable queue.
 Progress and watched-state results flow back as narrow events so the originating
 surface can update its data.
 
+`MediaOptionsDialog` is shared by movie/episode detail pages and VideoPlayer.
+Its content owns an initial snapshot and pending selections; Back publishes one
+change-only result through OverlayHost. Pages own applying those selections.
+VideoPlayer owns a single combined commit that selects local updates or one
+correlated playback restart and restores prior playing/paused state. MainScene
+and PlaybackController route the overlay without applying individual options.
+MediaOptionsSession calculates display defaults and detail-page stream changes
+without side effects. ActivePlayback owns accepted stream indices; startup
+restoration intent stays on the playback request until the first playing state,
+including across recovery retries.
+
 `PlaybackController` owns the app-shell lifecycle of the active `VideoPlayer`
 node: creation, event wiring, delegated shell commands, restoration snapshot
 capture, and teardown. `VideoPlayer` remains the canonical owner of accepted

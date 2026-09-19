@@ -1,15 +1,15 @@
 # Video Playback Options
 
-The Video toolbar provides four playback modes for the current movie or
+The Video category in [Media Options](media-options.md) provides four playback modes for the current movie or
 episode. The selected mode remains active while the user stays on that title's
 MediaShell page, including after playback stops and returns to the page. It is
 retained during same-title audio or subtitle restarts, but it is not saved as
 an application preference or carried into the next queued title. Loading a
 different title resets the page to Automatic playback.
 
-The same options are available from the Video button in the in-player controls.
-Changing the mode there restarts the current title at its current position and
-retains the selected audio and subtitle tracks. The selected mode is reflected
+The same dialog is available from the cog-and-summary button in the player.
+Choices are staged until Back closes the dialog. Any required restart applies
+all changed options together, at the selected chapter or captured position. The selected mode is reflected
 on the title's MediaShell page when playback stops.
 
 Subtitle burn-in is requested only when a real subtitle stream is selected.

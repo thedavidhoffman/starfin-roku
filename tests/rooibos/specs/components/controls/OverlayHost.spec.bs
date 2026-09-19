@@ -191,6 +191,30 @@ namespace tests
             }
         end function
 
+        @it("copies the unified options payload without committing it")
+        function _()
+            context = { item: { Id: "movie-1" }, selection: { videoMode: "automatic", audioStreamIndex: 1, subtitleStreamIndex: -1 }, audioOptions: [], subtitleOptions: [], chapterOptions: [] }
+            overlay = m.top.callFunc("openOverlay", { id: "mediaOptions", componentName: "MediaOptionsDialog", openFunction: "openMediaOptions", closeField: "closeRequested", optionsContext: context })
+
+            m.assertEqual(overlay.optionsContext, context)
+            m.assertInvalid(overlay.result)
+        end function
+
+        @it("discards edits and reports cancellation when a media overlay is replaced")
+        function _()
+            context = { item: { Id: "movie-1" }, selection: { videoMode: "automatic", audioStreamIndex: 1, subtitleStreamIndex: -1 }, audioOptions: [], subtitleOptions: [], chapterOptions: [] }
+            overlay = m.top.callFunc("openOverlay", { id: "mediaOptions", componentName: "MediaOptionsDialog", openFunction: "openMediaOptions", closeField: "closeRequested", optionsContext: context })
+            content = overlay.callFunc("getContentComponent")
+            content.findNode("categories").itemFocused = 1
+            content.findNode("optionList").itemSelected = 3
+
+            m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", title: "Overview", text: "Replacement" })
+
+            m.assertInvalid(overlay.result)
+            m.assertTrue(m.top.closed.cancelled)
+            m.assertEqual(m.top.closed.request.id, "mediaOptions")
+        end function
+
     end class
 
 end namespace
