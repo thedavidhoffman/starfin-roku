@@ -118,7 +118,7 @@ describe('Starfin TV episode playback', function () {
       await startEpisodePlayback(environment, episode);
       await showControls();
       const playingText = await read('#finishTimeLabel.text');
-      assert.match(playingText, /^Finishes at (?:[1-9]|1[0-2]):[0-5][0-9] [AP]M$/);
+      assert.match(playingText, /^Ends at (?:[1-9]|1[0-2]):[0-5][0-9] [AP]M$/);
       assert.equal(await read('#finishTimeTimer.control'), 'start');
       await captureEvidence(this, 'finish-time-playing');
 
@@ -130,12 +130,12 @@ describe('Starfin TV episode playback', function () {
       await waitForPlayerState(environment, 'paused', 'playback to pause for finish-time verification');
       await showControls();
       const pausedText = await read('#finishTimeLabel.text');
-      const pausedClock = /^Finishes at ([1-9]|1[0-2]):([0-5][0-9]) ([AP]M)$/.exec(pausedText);
+      const pausedClock = /^Ends at ([1-9]|1[0-2]):([0-5][0-9]) ([AP]M)$/.exec(pausedText);
       assert.ok(pausedClock, `Unexpected paused finish time: ${pausedText}`);
       const pausedMinutes = (Number(pausedClock[1]) % 12 + (pausedClock[3] === 'PM' ? 12 : 0)) * 60 + Number(pausedClock[2]);
       // Wrap at midnight so the assertion also handles noon and day rollover.
       const nextMinute = (pausedMinutes + 1) % 1440;
-      const expectedText = `Finishes at ${Math.floor(nextMinute / 60) % 12 || 12}:${String(nextMinute % 60).padStart(2, '0')} ${nextMinute < 720 ? 'AM' : 'PM'}`;
+      const expectedText = `Ends at ${Math.floor(nextMinute / 60) % 12 || 12}:${String(nextMinute % 60).padStart(2, '0')} ${nextMinute < 720 ? 'AM' : 'PM'}`;
       const updatedText = await waitFor(async () => {
         const text = await read('#finishTimeLabel.text');
         return text !== pausedText ? text : false;

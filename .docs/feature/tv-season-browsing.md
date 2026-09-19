@@ -60,6 +60,9 @@ season navigation when available, otherwise the page. Updates beneath overlays o
 inactive pages do not take focus. Initial entry keeps focus on the page while episode data is pending, then focuses
 the first card (season summary when enabled, otherwise the first episode). Only a
 confirmed empty list uses the empty-season focus fallback, including on reactivation.
+When returning focus to the page without episode items, the page explicitly releases
+its focused child so a hidden list cannot retain focus. Down from season navigation
+during loading follows this same path, and Back remains available.
 Explicit previous/next season navigation continues to retain navigation focus. Empty season details hide playback actions and focus
 an available toolbar action; watched-action focus is resolved by button identity.
 Other toolbar callers retain playback actions by default, including TVShow

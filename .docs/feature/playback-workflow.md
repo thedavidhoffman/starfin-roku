@@ -6,7 +6,7 @@ use separate workflows.
 
 ## Estimated finish time
 
-PlaybackControls shows `Finishes at 1:50 PM` above the timeline's right edge.
+PlaybackControls shows `Ends at 1:50 PM` above the timeline's right edge.
 It estimates the current title's completion from the current local clock plus
 remaining duration, using the same 12-hour AM/PM format as the playback clock.
 The estimate follows the seek preview and returns to actual position on cancel.

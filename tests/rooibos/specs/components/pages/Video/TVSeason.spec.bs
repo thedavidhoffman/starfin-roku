@@ -921,6 +921,70 @@ namespace tests
             getGlobalAa().seasonFailureMessage = message
         end sub
 
+        @describe("retained child focus while loading")
+
+        @it("releases a hidden horizontal list on a production season node")
+        function _()
+            m.assertProductionLoadingFocus("episodesList")
+        end function
+
+        @it("releases a hidden vertical list on a production season node")
+        function _()
+            m.assertProductionLoadingFocus("episodesGrid")
+        end function
+
+        function assertProductionLoadingFocus(listId as string)
+            page = CreateObject("roSGNode", "TVSeason")
+            scene = m.top.getScene()
+            scene.appendChild(page)
+            list = page.findNode(listId)
+            list.visible = true
+            list.setFocus(true)
+            hadListFocus = list.hasFocus()
+            list.visible = false
+
+            page.callFunc("activate")
+
+            pageFocused = page.hasFocus()
+            listFocused = list.isInFocusChain()
+            page.callFunc("deactivate")
+            scene.removeChild(page)
+
+            m.assertTrue(hadListFocus, "The production list must own focus before loading")
+            m.assertTrue(pageFocused, "The production page must own focus while loading")
+            m.assertFalse(listFocused, "The hidden list must leave the focus chain")
+        end function
+
+        @it("moves Down from season navigation to page focus while loading")
+        function _()
+            m.preparePendingSeasonFocus()
+            'bs:disable-next-line 1140
+            focusSeasonNav()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.hasFocus())
+            m.assertFalse(m.node.seasonNav.isInFocusChain())
+            m.assertFalse(m.node.episodesList.isInFocusChain())
+            m.assertFalse(m.node.episodesGrid.isInFocusChain())
+        end function
+
+        @it("allows Back after releasing retained list focus while loading")
+        function _()
+            m.node.episodesList.setFocus(true)
+            m.preparePendingSeasonFocus()
+            m.top.callFunc("activate")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
         @describe("initial season focus while loading")
 
         @it("focuses the first horizontal card after loading with summary false")
