@@ -1,5 +1,6 @@
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -9,6 +10,8 @@ sub init()
     m.toolbarLayout = {
         collapsedWidth: 64
         buttonSpacing: 12
+        resumeDefaults: { expandedWidth: m.resumeButton.expandedWidth, maxWidth: m.resumeButton.maxWidth, centerContent: m.resumeButton.centerContent }
+        restartDefaults: { expandedWidth: m.restartButton.expandedWidth, maxWidth: m.restartButton.maxWidth, centerContent: m.restartButton.centerContent }
     }
     m.focusState = {
         focusedIndex: 0
@@ -233,9 +236,29 @@ function getToolbarState() as object
 end function
 
 '-------------------------------------------------------------------------------
+' configureResumeRestartWidths
+'-------------------------------------------------------------------------------
+sub configureResumeRestartWidths()
+    availableWidth = m.top.resumeRestartRowWidth - m.toolbarLayout.buttonSpacing
+    if availableWidth > 1 then
+        resumeWidth = Number.ToInteger(availableWidth / 2, 0)
+        ' Assign the rounding remainder to Restart so the row fills its exact width.
+        restartWidth = availableWidth - resumeWidth
+        m.resumeButton.setFields({ expandedWidth: resumeWidth, maxWidth: resumeWidth, centerContent: true })
+        m.restartButton.setFields({ expandedWidth: restartWidth, maxWidth: restartWidth, centerContent: true })
+    else
+        m.resumeButton.setFields(m.toolbarLayout.resumeDefaults)
+        m.restartButton.setFields(m.toolbarLayout.restartDefaults)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
 ' configureToolbarButtons
 '-------------------------------------------------------------------------------
 sub configureToolbarButtons(state as object)
+    configureResumeRestartWidths()
+    m.resumeButton.alwaysShowText = m.top.alwaysShowResumeRestartText
+    m.restartButton.alwaysShowText = m.top.alwaysShowResumeRestartText
     m.resumeButton.visible = state.hasResumeAction
     m.restartButton.visible = state.hasResumeProgress and m.top.supportsRestart <> false
     m.playButton.visible = state.supportsPlayback and state.hasResumeAction <> true

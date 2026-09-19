@@ -1,3 +1,4 @@
+import "pkg:/source/HomeVideoPlayback.bs"
 import "pkg:/source/HomeEpisodeImages.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
@@ -43,6 +44,7 @@ sub init()
         shelfNodes: []
         shelfPositions: []
         focusedShelfIndex: 0
+        playbackOverlay: { open: false, returnTarget: invalid }
         shelfOffsetY: 0
         refresh: {
             blocking: false
@@ -81,20 +83,21 @@ sub onHomeShelfSelected(event as object)
     if selection = invalid then return
 
     item = selection.item
+    m.homeState.focusedShelfIndex = Number.ToInteger(selection.rowIndex, m.homeState.focusedShelfIndex)
     rowKey = Format.SafeString(selection.rowKey, "")
     if isMusicLatestRow(rowKey) then
         selectHomeAlbum(item)
     else if isHomeMediaLatestRow(rowKey) then
-        selectHomeMediaLatestItem(item)
+        selectHomeMediaItem(item)
     else
         selectHomeItem(item)
     end if
 end sub
 
 '-------------------------------------------------------------------------------
-' selectHomeMediaLatestItem
+' selectHomeMediaItem
 '-------------------------------------------------------------------------------
-sub selectHomeMediaLatestItem(item as dynamic)
+sub selectHomeMediaItem(item as dynamic)
     itemId = Format.SafeString(item.Id, "")
     if itemId = "" then return
     itemType = LCase(Format.SafeString(item.Type, ""))
@@ -103,7 +106,18 @@ sub selectHomeMediaLatestItem(item as dynamic)
     else if itemType = "photo" then
         m.top.selectedHomeMediaPhoto = { items: [item], index: 0, sourceFolderId: Format.SafeString(item.ParentId, "") }
     else if itemType = "video" then
-        m.top.selectedHomeMediaVideo = { itemId: itemId, item: item, tracksPlaybackProgress: false }
+        request = HomeVideoPlayback.CreateOverlayRequest(item, m.homeState.request.server, "home")
+        if request <> invalid then
+            rowKey = ""
+            index = m.homeState.focusedShelfIndex
+            if index >= 0 and index < m.homeState.shelfNodes.Count() then
+                rowKey = Format.SafeString(m.homeState.shelfNodes[index].rowContent.rowKey, "")
+            end if
+            m.homeState.playbackOverlay = { open: true, returnTarget: { rowKey: rowKey, itemId: itemId } }
+            m.top.overlayRequested = request
+        else
+            m.top.selectedHomeMediaVideo = { itemId: itemId, item: item }
+        end if
     end if
 end sub
 
@@ -160,6 +174,8 @@ sub selectHomeItem(item as dynamic)
             itemId: itemId
             item: item
         }
+    else if LCase(Format.SafeString(item.Type, "")) = "video" then
+        selectHomeMediaItem(item)
     else if isPlayableMovie(item) then
         m.top.selectedMovie = {
             itemId: itemId
@@ -199,6 +215,17 @@ end sub
 ' focusHome
 '-------------------------------------------------------------------------------
 sub focusHome()
+    if m.homeState.playbackOverlay.open then return
+    target = m.homeState.playbackOverlay.returnTarget
+    m.homeState.playbackOverlay.returnTarget = invalid
+    if target <> invalid then
+        for i = 0 to m.homeState.shelfNodes.Count() - 1
+            if m.homeState.shelfNodes[i].rowContent.rowKey = target.rowKey then
+                focusShelf(i, target.itemId)
+                return
+            end if
+        end for
+    end if
     if m.homeState.shelfNodes.Count() > 0 then
         focusShelf(m.homeState.focusedShelfIndex)
     else
@@ -210,6 +237,7 @@ end sub
 ' onLoadRequestChanged
 '-------------------------------------------------------------------------------
 sub onLoadRequestChanged()
+    m.homeState.playbackOverlay = { open: false, returnTarget: invalid }
     invalidateHomeRequests()
     m.homeState.request = m.top.loadRequest
     m.homeState.sessionKey = getHomeSessionKey(m.homeState.request)
@@ -694,7 +722,8 @@ function buildRowContent(key as string, title as string, items as object) as obj
             showMetadata: shouldShowHomeItemMetadata(key)
             raw: item
         }
-        if isHomeMediaRow then fields.tracksPlaybackProgress = false
+        if isHomeMediaRow then fields.tracksPlaybackProgress = LCase(Format.SafeString(item.Type, "")) = "video"
+        if isHomeMediaRow or LCase(Format.SafeString(item.Type, "")) = "video" then fields.showWatchedIndicator = false
         child.AddFields(fields)
     end for
 
@@ -883,7 +912,8 @@ end function
 '-------------------------------------------------------------------------------
 ' focusShelf
 '-------------------------------------------------------------------------------
-sub focusShelf(index as integer)
+sub focusShelf(index as integer, itemId = "" as string)
+    if m.homeState.playbackOverlay.open then return
     if m.homeState.shelfNodes.Count() = 0 then return
     if index < 0 then index = 0
     if index >= m.homeState.shelfNodes.Count() then index = m.homeState.shelfNodes.Count() - 1
@@ -892,7 +922,7 @@ sub focusShelf(index as integer)
     updateShelfScroll(true)
 
     shelf = m.homeState.shelfNodes[index]
-    if shelf <> invalid then shelf.callFunc("activate")
+    if shelf <> invalid then shelf.callFunc("activate", itemId)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1131,7 +1161,7 @@ function isPlayableMovie(item as dynamic) as boolean
     if Arrays.IsAssocArray(item) = false then return false
 
     itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
-    return itemType = "movie" or itemType = "video"
+    return itemType = "movie"
 end function
 
 '-------------------------------------------------------------------------------
@@ -1339,4 +1369,16 @@ sub cleanupLatestMediaTask(task as object)
         end if
     end for
     m.top.removeChild(task)
+end sub
+
+'-------------------------------------------------------------------------------
+' handlePlaybackOverlayClosed
+'-------------------------------------------------------------------------------
+sub handlePlaybackOverlayClosed(selection as dynamic)
+    m.homeState.playbackOverlay.open = false
+    if selection <> invalid then
+        m.top.selectedHomeMediaVideo = selection
+    else
+        focusHome()
+    end if
 end sub

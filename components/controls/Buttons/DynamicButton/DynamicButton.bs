@@ -21,6 +21,7 @@ sub init()
         textY: 15
         rightPadding: 16
         textPadding: 8
+        measuredTextWidth: 0
     }
     m.top.observeField("focusedChild", "onFocusChanged")
     onTextChanged()
@@ -41,6 +42,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub updatePreferredWidth()
     textWidth = TextMeasurement.GetWidth(m.measurementLabel, m.textLabel.font, m.textLabel.text)
+    m.layout.measuredTextWidth = textWidth
 
     width = m.layout.expandedWidth
     if m.top.expandedWidth > 0 then width = m.top.expandedWidth
@@ -96,6 +98,18 @@ sub onFocusVisualChanged()
         m.textLabel.horizAlign = "center"
     end if
     m.textLabel.visible = hasFocus or m.top.alwaysShowText
+    if m.top.centerContent and m.iconPoster.visible and m.textLabel.visible then
+        ' Center the icon and measured text as one group, retaining their normal gap.
+        gap = m.layout.textX - m.layout.iconX - m.layout.iconSize
+        textWidth = m.layout.measuredTextWidth
+        availableTextWidth = m.background.width - 2 * m.layout.rightPadding - m.layout.iconSize - gap
+        if availableTextWidth < 0 then availableTextWidth = 0
+        if textWidth > availableTextWidth then textWidth = availableTextWidth
+        contentX = (m.background.width - m.layout.iconSize - gap - textWidth) / 2
+        m.iconPoster.translation = [contentX, m.layout.iconY]
+        m.textLabel.translation = [contentX + m.layout.iconSize + gap, m.layout.textY]
+        m.textLabel.width = textWidth
+    end if
     if hasFocus then
         m.textLabel.color = &h0F1A2AFF
     else

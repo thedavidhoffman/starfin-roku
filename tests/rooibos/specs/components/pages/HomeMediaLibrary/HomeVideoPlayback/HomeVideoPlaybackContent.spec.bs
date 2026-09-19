@@ -1,0 +1,72 @@
+namespace tests
+
+    @SGNode("HomeVideoPlaybackContent")
+    @suite("Home video playback content")
+    class HomeVideoPlaybackContentTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.item = { Id: "home-1", Type: "Video", Name: "Family video", RunTimeTicks: 1000000000&, UserData: { Played: false, PlaybackPositionTicks: 250000000&, PlayedPercentage: 25 } }
+        end function
+
+        @describe("rendering and selection")
+
+        @it("shows progress with a nonfocusable card and only playback actions")
+        function _()
+            m.top.callFunc("activate")
+            card = m.top.findNode("card")
+            toolbar = m.top.findNode("toolbar")
+
+            m.assertFalse(card.focusable)
+            m.assertTrue(card.findNode("progressBar").visible)
+            m.assertEqual(card.findNode("title").text, "Family video")
+            m.assertTrue(toolbar.findNode("resumeButton").visible)
+            m.assertTrue(toolbar.findNode("restartButton").visible)
+            m.assertTrue(toolbar.findNode("resumeButton").findNode("textLabel").visible)
+            m.assertTrue(toolbar.findNode("restartButton").findNode("textLabel").visible)
+            m.assertFalse(toolbar.findNode("playButton").visible)
+            m.assertFalse(toolbar.findNode("markWatchedButton").visible)
+            m.assertFalse(toolbar.findNode("mediaInfoButton").visible)
+            m.assertTrue(toolbar.findNode("resumeButton").isInFocusChain())
+        end function
+
+        @it("resumes from the exact saved ticks")
+        function _()
+            m.top.findNode("toolbar").playSelected = true
+
+            m.assertEqual(m.top.selectedVideo.itemId, "home-1")
+            m.assertEqual(m.top.selectedVideo.startPositionTicks, 250000000&)
+        end function
+
+        @it("restarts explicitly without modifying saved user data")
+        function _()
+            m.top.findNode("toolbar").restartSelected = true
+
+            m.assertEqual(PlaybackProgress.GetTicksFromSelection(m.top.selectedVideo), 0&)
+            m.assertEqual(m.top.item.UserData.PlaybackPositionTicks, 250000000&)
+        end function
+
+        @it("retains both choices for subsecond progress")
+        function _()
+            m.top.item = { Id: "home-1", Type: "Video", UserData: { PlaybackPositionTicks: 5000000& } }
+
+            m.assertTrue(m.top.findNode("toolbar").findNode("resumeButton").visible)
+            m.assertTrue(m.top.findNode("toolbar").findNode("restartButton").visible)
+            m.top.findNode("toolbar").playSelected = true
+            m.assertEqual(m.top.selectedVideo.startPositionTicks, 5000000&)
+        end function
+
+        @it("keeps vertical navigation on the toolbar and lets Back reach the dialog")
+        function _()
+            m.top.callFunc("activate")
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("up", true))
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("down", true))
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("back", true))
+            m.assertTrue(m.top.findNode("toolbar").isInFocusChain())
+        end function
+
+    end class
+
+end namespace

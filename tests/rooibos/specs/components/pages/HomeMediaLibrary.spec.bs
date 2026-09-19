@@ -7,6 +7,9 @@ namespace tests
     class HomeMediaLibraryTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.top.selectedVideo = invalid
+            m.top.overlayRequested = invalid
+            m.node.state.playbackOverlayOpen = false
             m.node.itemsGrid = m.node.top.findNode("itemsGrid")
             m.node.libraryTask = m.node.top.findNode("homeMediaLibraryTask")
             m.node.state.request = {
@@ -211,7 +214,7 @@ namespace tests
             m.node.itemsGrid.itemSelected = 0
 
             m.assertEqual(m.top.selectedVideo.itemId, "video-1")
-            m.assertFalse(m.top.selectedVideo.tracksPlaybackProgress)
+            m.assertInvalid(m.top.selectedVideo.tracksPlaybackProgress)
         end function
 
         @describe("browse modes")
@@ -566,7 +569,7 @@ namespace tests
             m.assertFalse(cardContent.showArtworkBackground)
         end function
 
-        @it("disables playback progress presentation for home videos")
+        @it("enables playback progress presentation for home videos")
         function _()
             video = { Id: "video-1", Type: "Video", Name: "Video", ImageTags: {} }
 
@@ -574,7 +577,8 @@ namespace tests
             renderItems([video])
 
             cardContent = m.node.itemsGrid.content.getChild(0)
-            m.assertFalse(cardContent.tracksPlaybackProgress)
+            m.assertTrue(cardContent.tracksPlaybackProgress)
+            m.assertFalse(cardContent.showWatchedIndicator)
         end function
 
         @it("disables playback progress presentation for home folders")
@@ -698,6 +702,64 @@ namespace tests
 
         private function failedResponse(queryId as integer, startIndex as integer) as object
             return { ok: false, action: "homeMediaLibrary", parentId: "root", queryId: queryId, startIndex: startIndex, errorMessage: "Unable to load home media." }
+        end function
+
+        @it("requests a resume overlay for a library video with progress")
+        function _()
+            video = { Id: "home-1", Type: "Video", UserData: { PlaybackPositionTicks: 20000000& } }
+            level = m.node.state.stack[0]
+            level.items = [video]
+            m.node.itemsGrid.content = m.buildContent(level.items)
+            m.node.itemsGrid.itemSelected = 0
+
+            m.assertEqual(m.top.overlayRequested.id, "homeVideoPlayback")
+            m.assertEqual(m.top.overlayRequested.sourcePage, "homeMediaLibrary")
+            m.assertEqual(m.top.overlayRequested.item.Id, "home-1")
+            m.assertInvalid(m.top.selectedVideo)
+        end function
+
+        @it("restores library focus when the resume dialog is cancelled")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "home-1", Type: "Video" }]
+            m.node.itemsGrid.content = m.buildContent(level.items)
+            m.top.callFunc("activate")
+            m.top.setFocus(true)
+
+            m.top.callFunc("handlePlaybackOverlayClosed", invalid)
+
+            m.assertTrue(m.node.itemsGrid.isInFocusChain())
+            m.assertInvalid(m.top.selectedVideo)
+        end function
+
+        @it("passes the explicit restart selection from the library dialog")
+        function _()
+            selection = { itemId: "home-1", item: { Id: "home-1", UserData: { PlaybackPositionTicks: 20000000& } }, startPositionTicks: 0& }
+            m.top.callFunc("handlePlaybackOverlayClosed", selection)
+
+            m.assertEqual(PlaybackProgress.GetTicksFromSelection(m.top.selectedVideo), 0&)
+        end function
+
+        @it("keeps pagination focus restoration suspended until the playback dialog closes")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "first", Type: "Video" }, { Id: "home-1", Type: "Video", UserData: { PlaybackPositionTicks: 20000000& } }]
+            m.node.itemsGrid.content = m.buildContent(level.items)
+            m.top.callFunc("activate")
+            m.node.itemsGrid.itemSelected = 1
+            m.top.setFocus(true)
+            m.node.itemsGrid.content = m.buildContent(level.items)
+            m.node.itemsGrid.itemFocused = 0
+
+            ' The pagination response finishes through this focus restoration path.
+            'bs:disable-next-line 1140
+            restoreFocusAfterLoad()
+
+            m.assertFalse(m.node.itemsGrid.isInFocusChain())
+            m.top.callFunc("handlePlaybackOverlayClosed", invalid)
+            m.assertTrue(m.node.itemsGrid.isInFocusChain())
+            m.assertFalse(m.node.state.playbackOverlayOpen)
+            m.assertEqual(m.node.itemsGrid.jumpToItem, 1)
         end function
 
     end class

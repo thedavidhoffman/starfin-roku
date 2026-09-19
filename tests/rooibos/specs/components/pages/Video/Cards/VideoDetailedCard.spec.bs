@@ -144,15 +144,15 @@ namespace tests
             m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").progressWidth, -1), 0)
         end function
 
-        @it("hides progress state for Home Media videos")
+        @it("shows progress state for Home Media videos")
         function _()
             item = m.createItem({ Type: "Video", Name: "Home Video", UserData: { Played: false, PlayedPercentage: 50 } })
-            item.AddFields({ tracksPlaybackProgress: false })
+            item.AddFields({ showWatchedIndicator: false })
 
             m.top.itemContent = item
 
-            m.assertFalse(m.top.findNode("progressBar").visible)
-            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").progressWidth, -1), 0)
+            m.assertTrue(m.top.findNode("progressBar").visible)
+            m.assertTrue(m.top.findNode("progressBar").progressWidth > 0)
         end function
 
         @it("hides watched state for Home Media folders")
@@ -165,15 +165,15 @@ namespace tests
             m.assertFalse(m.top.findNode("watchedIndicator").visible)
         end function
 
-        @it("restores progress when a Home Media card is recycled for an ordinary video")
+        @it("restores watched state when a Home Media card is recycled for an ordinary video")
         function _()
-            homeVideo = m.createItem({ Type: "Video", Name: "Home Video", UserData: { PlayedPercentage: 50 } })
-            homeVideo.AddFields({ tracksPlaybackProgress: false })
+            homeVideo = m.createItem({ Type: "Video", Name: "Home Video", UserData: { Played: true } })
+            homeVideo.AddFields({ showWatchedIndicator: false })
             m.top.itemContent = homeVideo
 
-            m.top.itemContent = m.createItem({ Type: "Video", Name: "Video", UserData: { PlayedPercentage: 50 } })
+            m.top.itemContent = m.createItem({ Type: "Video", Name: "Video", UserData: { Played: true } })
 
-            m.assertTrue(m.top.findNode("progressBar").visible)
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
         end function
 
         @it("restores watched rendering when a music-video card is recycled")
@@ -208,6 +208,17 @@ namespace tests
             item = CreateObject("roSGNode", "ContentNode")
             item.AddFields({ raw: raw, fitArtwork: false, showArtworkBackground: false })
             return item
+        end function
+
+        @it("hides home video watched badges without suppressing tracking")
+        function _()
+            item = m.createItem({ Type: "Video", Name: "Home Video", UserData: { Played: true } })
+            item.AddFields({ showWatchedIndicator: false })
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+            m.assertFalse(m.top.findNode("progressBar").visible)
         end function
 
     end class

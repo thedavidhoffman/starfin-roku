@@ -13,6 +13,7 @@ namespace tests
             m.node.homeState.playbackRows.continueWatchingItems = []
             m.node.homeState.playbackRows.nextUpItems = []
             m.node.homeState.focusedShelfIndex = 0
+            m.node.homeState.playbackOverlay = { open: false, returnTarget: invalid }
             m.top.overlayRequested = invalid
             m.top.selectedLibrary = invalid
             m.top.selectedHomeMediaLibrary = invalid
@@ -777,10 +778,10 @@ namespace tests
             item = { Id: "video-1", Type: "Video" }
 
             'bs:disable-next-line 1140
-            selectHomeMediaLatestItem(item)
+            selectHomeMediaItem(item)
 
             m.assertEqual(m.top.selectedHomeMediaVideo.itemId, "video-1")
-            m.assertFalse(m.top.selectedHomeMediaVideo.tracksPlaybackProgress)
+            m.assertInvalid(m.top.selectedHomeMediaVideo.tracksPlaybackProgress)
             m.assertInvalid(m.top.selectedMovie)
         end function
 
@@ -789,7 +790,7 @@ namespace tests
             item = { Id: "photo-1", Type: "Photo", ParentId: "folder-1" }
 
             'bs:disable-next-line 1140
-            selectHomeMediaLatestItem(item)
+            selectHomeMediaItem(item)
 
             m.assertEqual(m.top.selectedHomeMediaPhoto.items.Count(), 1)
             m.assertEqual(m.top.selectedHomeMediaPhoto.sourceFolderId, "folder-1")
@@ -877,14 +878,15 @@ namespace tests
             m.assertEqual(content.getChild(0).imageAspect, "thumbnail")
         end function
 
-        @it("disables playback progress presentation for Home Media latest videos")
+        @it("enables playback progress presentation for Home Media latest videos")
         function _()
             m.node.homeState.latestLibraries["home-media-1"] = { id: "home-media-1", collectionType: "homevideos" }
 
             'bs:disable-next-line 1140
             content = buildRowContent("latest:home-media-1", "Recently Added", [{ Id: "video-1", Type: "Video", ImageTags: {} }])
 
-            m.assertFalse(content.getChild(0).tracksPlaybackProgress)
+            m.assertTrue(content.getChild(0).tracksPlaybackProgress)
+            m.assertFalse(content.getChild(0).showWatchedIndicator)
         end function
 
         @it("disables playback progress presentation for Home Media latest folders")
@@ -1242,6 +1244,108 @@ namespace tests
 
             m.assertEqual(getGlobalAa().homeStatusCapture.writes, 1)
             m.assertEqual(getGlobalAa().homeStatusCapture.message, "Unable to load Continue Watching. The server took too long to respond.")
+        end function
+
+        @it("prompts for generic Continue Watching videos")
+        function _()
+            item = { Id: "home-1", Type: "Video", UserData: { PlaybackPositionTicks: 20000000& } }
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.overlayRequested.id, "homeVideoPlayback")
+            m.assertEqual(m.top.overlayRequested.sourcePage, "home")
+            m.assertEqual(m.top.overlayRequested.item.Id, "home-1")
+            m.assertInvalid(m.top.selectedHomeMediaVideo)
+        end function
+
+        @it("plays generic Home videos immediately without progress")
+        function _()
+            item = { Id: "home-1", Type: "Video" }
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+
+            m.assertEqual(m.top.selectedHomeMediaVideo.itemId, "home-1")
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("prompts for latest home videos with progress")
+        function _()
+            item = { Id: "home-1", Type: "Video", UserData: { PlaybackPositionTicks: 20000000& } }
+            'bs:disable-next-line 1140
+            selectHomeMediaItem(item)
+
+            m.assertEqual(m.top.overlayRequested.item.Id, "home-1")
+            m.assertInvalid(m.top.selectedHomeMediaVideo)
+        end function
+
+        @it("keeps explicit zero in the Home overlay result")
+        function _()
+            selection = { itemId: "home-1", item: { Id: "home-1", UserData: { PlaybackPositionTicks: 20000000& } }, startPositionTicks: 0& }
+            m.top.callFunc("handlePlaybackOverlayClosed", selection)
+
+            m.assertEqual(PlaybackProgress.GetTicksFromSelection(m.top.selectedHomeMediaVideo), 0&)
+        end function
+
+        @it("cancels a Home video dialog without launching playback")
+        function _()
+            m.top.callFunc("handlePlaybackOverlayClosed", invalid)
+
+            m.assertInvalid(m.top.selectedHomeMediaVideo)
+        end function
+
+        @it("hides Continue Watching video badges independently of progress")
+        function _()
+            item = { Id: "home-1", Type: "Video", UserData: { PlayedPercentage: 25 } }
+            'bs:disable-next-line 1140
+            content = buildRowContent("continueWatching", "Continue Watching", [item])
+
+            m.assertFalse(content.getChild(0).showWatchedIndicator)
+            m.assertInvalid(content.getChild(0).tracksPlaybackProgress)
+        end function
+
+        @it("restores the selected video by identity after Home shelves rebuild")
+        function _()
+            m.node.homeState.rowOrder = ["libraries", "continueWatching"]
+            item = { Id: "home-2", Type: "Video", UserData: { PlaybackPositionTicks: 20000000& } }
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Continue Watching", [{ Id: "home-1", Type: "Video" }, item])
+            'bs:disable-next-line 1140
+            renderRows()
+            'bs:disable-next-line 1140
+            selectHomeItem(item)
+            m.top.setFocus(true)
+
+            ' Change both the shelf index and the item index while the dialog is open.
+            'bs:disable-next-line 1140
+            addRow("libraries", "Libraries", [{ Id: "library", Type: "CollectionFolder" }])
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Continue Watching", [item, { Id: "home-1", Type: "Video" }])
+            'bs:disable-next-line 1140
+            renderRows()
+
+            m.assertFalse(m.node.homeState.shelfNodes[1].isInFocusChain())
+            m.top.callFunc("handlePlaybackOverlayClosed", invalid)
+
+            m.assertEqual(m.node.homeState.focusedShelfIndex, 1)
+            shelf = m.node.homeState.shelfNodes[1]
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertEqual(shelf.findNode("items").jumpToRowItem, [0, 0])
+            m.assertInvalid(m.top.selectedHomeMediaVideo)
+        end function
+
+        @it("falls back to an available shelf if the originating row disappears")
+        function _()
+            m.node.homeState.rowOrder = ["libraries", "continueWatching"]
+            'bs:disable-next-line 1140
+            addRow("libraries", "Libraries", [{ Id: "library", Type: "CollectionFolder" }])
+            'bs:disable-next-line 1140
+            renderRows()
+            m.node.homeState.playbackOverlay = { open: true, returnTarget: { rowKey: "removed", itemId: "home-1" } }
+
+            m.top.callFunc("handlePlaybackOverlayClosed", invalid)
+
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertInvalid(m.node.homeState.playbackOverlay.returnTarget)
         end function
 
     end class

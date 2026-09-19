@@ -1331,6 +1331,51 @@ namespace tests
             m.assertFalse(isMessageReturnFocusAvailable(button))
         end function
 
+        @describe("home video overlay routing")
+
+        @it("returns a home-video selection to its library owner")
+        function _()
+            owner = {
+                received: invalid
+                callFunc: function(name as string, selection as dynamic)
+                    m.received = { name: name, selection: selection }
+                end function
+            }
+            selection = { itemId: "home-1", startPositionTicks: 0& }
+            originalHost = m.node.overlayHost
+            m.node.homeMediaLibraryPage = owner
+            m.node.overlayHost = { closed: { request: { id: "homeVideoPlayback", sourcePage: "homeMediaLibrary" }, overlay: { selectedVideo: selection } } }
+
+            'bs:disable-next-line 1140
+            navHandleOverlayClosed()
+
+            m.assertEqual(owner.received, { name: "handlePlaybackOverlayClosed", selection: selection })
+            m.node.homeMediaLibraryPage = invalid
+            m.node.overlayHost = originalHost
+        end function
+
+        @it("returns home-video cancellation to Home")
+        function _()
+            owner = {
+                received: invalid
+                callFunc: function(name as string, selection as dynamic)
+                    m.received = { name: name, selection: selection }
+                end function
+            }
+            originalHome = m.node.homePage
+            originalHost = m.node.overlayHost
+            m.node.homePage = owner
+            m.node.overlayHost = { closed: { request: { id: "homeVideoPlayback", sourcePage: "home" }, overlay: { selectedVideo: invalid } } }
+
+            'bs:disable-next-line 1140
+            navHandleOverlayClosed()
+
+            m.assertEqual(owner.received.name, "handlePlaybackOverlayClosed")
+            m.assertInvalid(owner.received.selection)
+            m.node.homePage = originalHome
+            m.node.overlayHost = originalHost
+        end function
+
     end class
 
 end namespace

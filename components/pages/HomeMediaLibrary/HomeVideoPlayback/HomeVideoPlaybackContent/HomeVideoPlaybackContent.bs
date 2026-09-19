@@ -1,0 +1,80 @@
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.playbackNodes = { card: m.top.findNode("card"), toolbar: m.top.findNode("toolbar") }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.playbackNodes.toolbar.observeField("playSelected", "onResumeSelected")
+    m.playbackNodes.toolbar.observeField("restartSelected", "onRestartSelected")
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemChanged
+'-------------------------------------------------------------------------------
+sub onItemChanged()
+    item = m.top.item
+    if item = invalid then return
+    content = CreateObject("roSGNode", "ContentNode")
+    content.HDPosterUrl = m.top.itemImageUrl
+    content.AddFields({ raw: item, showMetadata: false, showWatchedIndicator: false })
+    m.playbackNodes.card.itemContent = content
+    ticks = PlaybackProgress.GetTicksFromItem(item)
+    seconds = PlaybackProgress.TicksToSeconds(ticks)
+    ' Expose both actions for subsecond progress; selections still carry exact ticks.
+    if ticks > 0 and seconds = 0 then seconds = 1
+    m.playbackNodes.toolbar.resumePositionSeconds = seconds
+end sub
+
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    m.playbackNodes.toolbar.callFunc("resetFocus")
+    m.playbackNodes.toolbar.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' onResumeSelected
+'-------------------------------------------------------------------------------
+sub onResumeSelected()
+    publishSelection(PlaybackProgress.GetTicksFromItem(m.top.item))
+end sub
+
+'-------------------------------------------------------------------------------
+' onRestartSelected
+'-------------------------------------------------------------------------------
+sub onRestartSelected()
+    publishSelection(0&)
+end sub
+
+'-------------------------------------------------------------------------------
+' publishSelection
+'-------------------------------------------------------------------------------
+sub publishSelection(positionTicks as longinteger)
+    m.top.selectedVideo = { itemId: Format.SafeString(m.top.item.Id, ""), item: m.top.item, startPositionTicks: positionTicks }
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    return key = "up" or key = "down"
+end function
