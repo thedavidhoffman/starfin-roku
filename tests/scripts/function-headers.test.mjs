@@ -4,12 +4,67 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { checkFunctionHeaders, checkProductionHeaders, newHeaderViolations } from '../../scripts/function-headers.mjs';
+import { checkFunctionHeaders, checkProductionHeaders } from '../../scripts/function-headers.mjs';
 
 function header(name, indent = '') {
   const rule = `${indent}'${'-'.repeat(79 - indent.length)}`;
   return `${rule}\n${indent}' ${name}\n${rule}\n`;
 }
+
+function exampleHeader(name, examples = ["' Example: input returns output."], indent = '') {
+  const rule = `${indent}'${'-'.repeat(79 - indent.length)}`;
+  return `${header(name, indent)}${examples.map(line => indent + line).join('\n')}\n${rule}\n`;
+}
+
+test('accepts a namespace header with its original single-line example format', () => {
+  const source = `namespace Encode\n${exampleHeader('Encode.Base64', ["' Example: input returns output."], '    ')}    function Base64()\n    end function\nend namespace`;
+  assert.equal(checkFunctionHeaders(source, 'source/Encode.bs').diagnostics.length, 0);
+});
+
+test('accepts multiline examples including empty comment lines', () => {
+  const source = `${exampleHeader('convert', ["' Example: input", "'", "' returns output."])}function convert()\nend function`;
+  assert.equal(checkFunctionHeaders(source, 'source/example.bs').diagnostics.length, 0);
+});
+
+test('preserves namespace-name validation with an example section', () => {
+  const source = `namespace Encode\n${exampleHeader('Other.Base64')}function Base64()\nend function\nend namespace`;
+  assert.equal(checkFunctionHeaders(source, 'source/Encode.bs').diagnostics.length, 1);
+});
+
+test('rejects examples missing the closing separator', () => {
+  const source = `${header('convert')}' Example: input returns output.\nfunction convert()`;
+  assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
+});
+
+test('rejects an incorrectly indented example line', () => {
+  const source = `${exampleHeader('convert', [" ' Example: input returns output."])}function convert()`;
+  assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
+});
+
+test('rejects an incorrectly indented example continuation', () => {
+  const source = `${exampleHeader('convert', ["' Example: input", " ' returns output."])}function convert()`;
+  assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
+});
+
+test('rejects a blank gap between an example header and declaration', () => {
+  const source = `${exampleHeader('convert')}\nfunction convert()`;
+  assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
+});
+
+test('rejects a closing example separator with the wrong width', () => {
+  const source = `${header('convert')}' Example: input returns output.\n'---\nfunction convert()`;
+  assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
+});
+
+test('requires the Example prefix for an extended header', () => {
+  const source = `${exampleHeader('convert', ["' Arbitrary comment."])}function convert()`;
+  assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
+});
+
+test('rejects a blank source line inside the example section', () => {
+  const source = `${exampleHeader('convert', ["' Example: input", '', "' returns output."])}function convert()`;
+  assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
+});
 
 test('accepts a named sub with its exact header', () => {
   assert.equal(checkFunctionHeaders(`${header('init')}sub init()\nend sub`, 'example.bs').diagnostics.length, 0);
@@ -84,30 +139,6 @@ test('does not overlook tab-indented declarations', () => {
   assert.equal(checkFunctionHeaders('\tsub init()', 'example.bs').diagnostics.length, 1);
 });
 
-test('grandfathers an unchanged legacy header after line numbers shift', () => {
-  const original = checkFunctionHeaders('\n\n\nsub legacy()', 'source/legacy.bs').diagnostics;
-  const moved = checkFunctionHeaders('\n\n\n\nsub legacy()', 'source/legacy.bs').diagnostics;
-  assert.equal(newHeaderViolations(moved, original).length, 0);
-});
-
-test('rejects a new missing header in a file with a legacy exception', () => {
-  const original = checkFunctionHeaders('sub legacy()', 'source/legacy.bs').diagnostics;
-  const changed = checkFunctionHeaders('sub legacy()\nend sub\nsub added()', 'source/legacy.bs').diagnostics;
-  assert.deepEqual(newHeaderViolations(changed, original).map(item => item.name), ['added']);
-});
-
-test('does not extend a legacy exception to a different file', () => {
-  const original = checkFunctionHeaders('sub legacy()', 'source/legacy.bs').diagnostics;
-  const copied = checkFunctionHeaders('sub legacy()', 'source/new.bs').diagnostics;
-  assert.equal(newHeaderViolations(copied, original).length, 1);
-});
-
-test('rejects an altered invalid header on a legacy function', () => {
-  const original = checkFunctionHeaders('sub legacy()', 'source/legacy.bs').diagnostics;
-  const changed = checkFunctionHeaders("' altered\nsub legacy()", 'source/legacy.bs').diagnostics;
-  assert.equal(newHeaderViolations(changed, original).length, 1);
-});
-
 test('ignores commented declarations and anonymous callbacks', () => {
   const result = checkFunctionHeaders("' sub ignored()\nrem function ignored()\ncallback = function()\nend function", 'example.bs');
   assert.equal(result.functions, 0);
@@ -134,7 +165,6 @@ test('CLI returns failure for violations even when run from another directory', 
   for (const file of ['function-headers.mjs', 'verify-function-headers.mjs']) {
     fs.copyFileSync(new URL(`../../scripts/${file}`, import.meta.url), path.join(root, 'scripts', file));
   }
-  fs.writeFileSync(path.join(root, 'scripts/function-header-baseline.json'), '[]');
   fs.writeFileSync(path.join(root, 'source/example.bs'), 'sub missing()\nend sub');
   const result = spawnSync(process.execPath, [path.join(root, 'scripts/verify-function-headers.mjs')], { cwd: os.tmpdir(), encoding: 'utf8' });
   assert.equal(result.status, 1);

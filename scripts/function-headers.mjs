@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 
 export function checkFunctionHeaders(text, file) {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
@@ -21,14 +20,25 @@ export function checkFunctionHeaders(text, file) {
     const headerName = namespaces.length && classDepth === 0 ? `${namespaces.join('.')}.${name}` : name;
     const rule = `${indent}'${'-'.repeat(Math.max(1, 79 - indent.length))}`;
     const expected = [rule, `${indent}' ${headerName}`, rule];
-    const actual = lines.slice(Math.max(0, index - 3), index);
-    if (indent.includes('\t') || actual.length !== 3 || expected.some((line, offset) => line !== actual[offset])) {
-      // Bind a legacy exception to its existing header and declaration, not its line number.
-      const fingerprint = createHash('sha256').update(JSON.stringify([...actual, lines[index]])).digest('hex');
-      diagnostics.push({ file, line: index + 1, name, expected, fingerprint });
+    let headerEnd = index;
+    if (!matchesHeader(lines, headerEnd, expected) && lines[index - 1] === rule) {
+      // An optional example section sits between the header and its closing separator.
+      let cursor = index - 2;
+      while (cursor >= 0 && lines[cursor] !== rule &&
+        (lines[cursor] === `${indent}'` || lines[cursor].startsWith(`${indent}' `))) cursor--;
+      if (cursor < index - 2 && lines[cursor + 1].startsWith(`${indent}' Example:`)) {
+        headerEnd = cursor + 1;
+      }
+    }
+    if (indent.includes('\t') || !matchesHeader(lines, headerEnd, expected)) {
+      diagnostics.push({ file, line: index + 1, name, expected });
     }
   }
   return { functions, diagnostics };
+}
+
+function matchesHeader(lines, end, expected) {
+  return end >= expected.length && expected.every((line, offset) => lines[end - expected.length + offset] === line);
 }
 
 export function checkProductionHeaders(root) {
@@ -51,16 +61,4 @@ export function checkProductionHeaders(root) {
   }
   for (const directory of ['components', 'source']) visit(path.join(root, directory));
   return { files, functions, diagnostics };
-}
-
-export function newHeaderViolations(diagnostics, baseline) {
-  const counts = new Map();
-  const key = item => JSON.stringify([item.file, item.name, item.fingerprint]);
-  for (const item of baseline) counts.set(key(item), (counts.get(key(item)) ?? 0) + 1);
-  return diagnostics.filter(item => {
-    const remaining = counts.get(key(item)) ?? 0;
-    if (!remaining) return true;
-    counts.set(key(item), remaining - 1);
-    return false;
-  });
 }

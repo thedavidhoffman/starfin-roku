@@ -4,6 +4,9 @@ import "pkg:/source/Number.bs"
 import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/VideoCardPresentation.bs"
 
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
 sub init()
     m.libraryLabels = m.top.findNode("libraryLabels")
     m.presentationLists = [m.top.findNode("posterOptions"), m.top.findNode("thumbnailOptions"), m.top.findNode("detailedOptions")]
@@ -25,6 +28,9 @@ sub init()
     onSelectionsChanged()
 end sub
 
+'-------------------------------------------------------------------------------
+' initializeContent
+'-------------------------------------------------------------------------------
 sub initializeContent()
     labels = CreateObject("roSGNode", "ContentNode")
     for each row in m.rows
@@ -46,6 +52,9 @@ sub initializeContent()
     end for
 end sub
 
+'-------------------------------------------------------------------------------
+' initializeHandlers
+'-------------------------------------------------------------------------------
 sub initializeHandlers()
     m.presentationLists[0].observeField("itemSelected", "onPosterSelected")
     m.presentationLists[1].observeField("itemSelected", "onThumbnailSelected")
@@ -56,12 +65,18 @@ sub initializeHandlers()
     end for
 end sub
 
+'-------------------------------------------------------------------------------
+' onPresentationFocused
+'-------------------------------------------------------------------------------
 sub onPresentationFocused(event as object)
     options = event.getRoSGNode()
     m.gridState.focusedRow = Number.ToInteger(options.itemFocused, 0)
     m.gridState.focusedPosition = Number.ToInteger(options.columnIndex, 0)
 end sub
 
+'-------------------------------------------------------------------------------
+' onSelectionsChanged
+'-------------------------------------------------------------------------------
 sub onSelectionsChanged()
     selections = m.top.selections
     if selections = invalid then selections = {}
@@ -82,6 +97,9 @@ sub onSelectionsChanged()
     if m.gridState.focusedPosition >= 3 and wasFocused then focusPosition(m.gridState.focusedRow, m.gridState.focusedPosition)
 end sub
 
+'-------------------------------------------------------------------------------
+' renderColumnButtons
+'-------------------------------------------------------------------------------
 sub renderColumnButtons(rowIndex as integer, layout as object)
     group = m.columnsGroups.getChild(rowIndex)
     group.removeChildrenIndex(group.getChildCount(), 0)
@@ -103,18 +121,30 @@ sub renderColumnButtons(rowIndex as integer, layout as object)
     m.gridState.columnButtons[rowIndex] = buttons
 end sub
 
+'-------------------------------------------------------------------------------
+' onPosterSelected
+'-------------------------------------------------------------------------------
 sub onPosterSelected()
     commitPresentation(0)
 end sub
 
+'-------------------------------------------------------------------------------
+' onThumbnailSelected
+'-------------------------------------------------------------------------------
 sub onThumbnailSelected()
     commitPresentation(1)
 end sub
 
+'-------------------------------------------------------------------------------
+' onDetailedSelected
+'-------------------------------------------------------------------------------
 sub onDetailedSelected()
     commitPresentation(2)
 end sub
 
+'-------------------------------------------------------------------------------
+' commitPresentation
+'-------------------------------------------------------------------------------
 sub commitPresentation(columnIndex as integer)
     if m.gridState.syncing then return
     rowIndex = Number.ToInteger(m.presentationLists[columnIndex].itemSelected, -1)
@@ -123,6 +153,9 @@ sub commitPresentation(columnIndex as integer)
     commitSelection(rowIndex, LibraryLayoutSetting.Format(presentation, LibraryLayoutSetting.DefaultColumns(presentation)))
 end sub
 
+'-------------------------------------------------------------------------------
+' onColumnSelected
+'-------------------------------------------------------------------------------
 sub onColumnSelected(event as object)
     button = event.getRoSGNode()
     rowIndex = Number.ToInteger(button.rowIndex, -1)
@@ -133,6 +166,9 @@ sub onColumnSelected(event as object)
     focusPosition(rowIndex, 3 + buttonIndex)
 end sub
 
+'-------------------------------------------------------------------------------
+' commitSelection
+'-------------------------------------------------------------------------------
 sub commitSelection(rowIndex as integer, value as string)
     selections = {}
     if m.top.selections <> invalid then
@@ -146,21 +182,33 @@ sub commitSelection(rowIndex as integer, value as string)
     m.top.selectionChanged = { settingKey: settingKey, value: value }
 end sub
 
+'-------------------------------------------------------------------------------
+' getRowLayout
+'-------------------------------------------------------------------------------
 function getRowLayout(rowIndex as integer) as object
     selections = m.top.selections
     if selections = invalid then selections = {}
     return LibraryLayoutSetting.Parse(selections[m.rows[rowIndex].settingKey])
 end function
 
+'-------------------------------------------------------------------------------
+' focusFirst
+'-------------------------------------------------------------------------------
 sub focusFirst()
     focusPosition(0, 0)
 end sub
 
+'-------------------------------------------------------------------------------
+' focusLast
+'-------------------------------------------------------------------------------
 sub focusLast()
     rowIndex = m.rows.Count() - 1
     focusPosition(rowIndex, 3 + m.gridState.columnButtons[rowIndex].Count() - 1)
 end sub
 
+'-------------------------------------------------------------------------------
+' focusPosition
+'-------------------------------------------------------------------------------
 sub focusPosition(rowIndex as integer, position as integer)
     if rowIndex < 0 or rowIndex >= m.rows.Count() then return
     maxPosition = 3 + m.gridState.columnButtons[rowIndex].Count() - 1
@@ -177,6 +225,9 @@ sub focusPosition(rowIndex as integer, position as integer)
     end if
 end sub
 
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
     positionCounts = []

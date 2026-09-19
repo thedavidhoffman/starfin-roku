@@ -89,13 +89,15 @@
 - Add an inline code comment when an operation's purpose or intent is not readily
   apparent from the code itself and the comment would materially improve
   understanding. Do not add comments that merely restate self-evident operations.
-- Add a three-line comment header immediately above every named `function` or `sub` definition in production `.bs` and `.brs` files under `components/` and `source/`, including namespace members and class methods. Anonymous callbacks, unit tests, and generated files are excluded.
-- Indent all three header lines to match the declaration, using spaces.
+- Add a comment header immediately above every named `function` or `sub` definition in production `.bs` and `.brs` files under `components/` and `source/`, including namespace members and class methods. Use the three-line format below, optionally extended with an example section. Anonymous callbacks, unit tests, and generated files are excluded.
+- Indent all header and example comment lines to match the declaration, using spaces.
 - Line 1 must be `'` followed immediately by dashes, extending to the 80th column with no space before the first dash.
 - Line 2 must be `' ` followed by the namespace-qualified name for namespace functions, such as `Number.ToFloat` (including the full namespace path for nested namespaces). For component-local functions, global functions, and class methods, use the exact declared name, such as `initReferences` or `write`, without a component or class prefix. Preserve the declared spelling and casing.
 - Line 3 must match line 1 exactly.
+- An optional example section follows line 3, beginning with `' Example:` and allowing additional comment lines prefixed with `' ` (or a lone `'` for an empty comment line). Close the example section with another separator matching line 1. Place examples inside this header block, not above it, and preserve existing example text and surrounding explanatory comments.
+- The final separator must immediately precede the function declaration, with no blank lines between them.
 - Run `npm run validate:function-headers` to check this rule. `npm run validate` also runs it before compilation, so build, package, and deploy fail on header violations.
-- Existing violations are recorded in `scripts/function-header-baseline.json`; the checker rejects new violations. Do not add exceptions or regenerate this baseline to make validation pass. When changing a grandfathered function, bring its header into compliance and remove its exception. The baseline is transitional, not an alternative header convention.
+- The checker audits all production functions. Fix invalid headers rather than weakening the check to make validation pass.
 
 ## Final change-set review
 
