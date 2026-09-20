@@ -79,8 +79,8 @@ refresh eligible to present messages.
 Settings > TV includes "TV artwork in Next Up and Continue Watching", stored
 per account as
 `home-episode-images`: `series`, `episode-with-logo`, or `episode-without-logo`. The options
-are TV show artwork, Episode artwork with show logo, and Episode artwork without
-show logo, respectively. The default is `series` for missing or unrecognized values.
+are Series artwork, Episode thumbnail with logo, and Episode thumbnail without
+logo, respectively. The default is `series` for missing or unrecognized values.
 Legacy values are not migrated or mapped. Settings retains its existing save-on-close
 behavior (including Back); there is no separate Cancel action.
 

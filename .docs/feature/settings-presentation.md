@@ -6,7 +6,7 @@ preserve acronyms and proper names, including TV, TMDB, API, Starfin, Roku,
 Next Up, and Up Next.
 
 Examples include Account badge, TV episode list scroll, Full screen,
-Play next immediately, and Episode artwork with show logo. Show "Up Next"
+Play next immediately, and Episode thumbnail with logo. Show "Up Next"
 retains the capitalization of the named Up Next screen.
 
 This is display text only: registry keys, stored values, defaults, option order,
