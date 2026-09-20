@@ -48,13 +48,24 @@ An intentional seek produces a message similar to:
 Playback seek requested reason=skipPlayback:-10 from=842.1 to=832.1 delta=-10
 ```
 
-The expected target remains active until Roku reports a position within five
-seconds of it. A matching backward movement is classified as `expected`.
+A requested seek retains its reason and target for up to ten seconds after the
+request. The first position within five seconds of the target establishes arrival;
+a matching initial backward movement is classified as `expected`. After arrival,
+a backward movement of more than two and at most five seconds is classified as
+`seek-adjustment` only when both positions are within five seconds of that target.
+The label indicates correlation with a recent seek, not proof of its cause.
+
+The context expires after ten seconds, when playback leaves the target's
+five-second neighborhood after arrival, or when replacement content is assigned.
+A newer seek replaces it. Larger regressions and movements without qualifying
+context remain `UNEXPECTED`. Content-assignment expectations keep their existing
+single-arrival behavior. These diagnostics do not change seek commands, recovery,
+completion decisions, or reported playback progress.
 
 ## Backward-Position Diagnostics
 
 The player tracks the last observed Roku `Video.position`. A movement more than
-two seconds backward is logged and classified as either expected or unexpected:
+two seconds backward is logged as `expected`, `seek-adjustment`, or `UNEXPECTED`:
 
 ```text
 Playback position moved backward classification=UNEXPECTED from=842.1 to=812.0 delta=-30.1
@@ -103,6 +114,64 @@ Project validation should continue to pass with:
 ```text
 npm run validate
 ```
+
+## Premature Completion
+
+Before accepting Roku `finished`, VideoPlayer compares the accepted item's
+metadata runtime with recovery's last position observed while playing or paused.
+It allows 2 percent of runtime at the end, clamped to a minimum of one second
+(two default Roku position-notification intervals) and a maximum of 30 seconds. Missing
+metadata runtime retains the existing completion behavior; the stream duration
+is not authoritative because a truncated stream may report a shortened duration.
+
+An earlier finish reports a normal stop at the saved position, emits unfinished
+progress, and enters the existing recovery retry/fallback path. It does not mark
+the item watched, advance the queue, or open Up Next. If retries are exhausted,
+the player reports failure with resume progress preserved.
+
+The playback state freezes that position until replacement content is accepted,
+so terminal position jumps, zero resets, duplicate finished notifications, and
+shutdown cannot overwrite it. Accepted content releases the freeze and seeds
+the recovery position from its start position. Subsequent observed seeks update
+the recovery position normally, including backward seeks. Explicit user actions
+to complete an item retain their existing behavior.
+
+All app-directed seeks use `requestPlaybackSeek`, which records the latest
+committed target separately from diagnostics before assigning `Video.seek`.
+A seek to the metadata endpoint allows completion without another position
+notification. A newer seek replaces that intent, and an observed playing/paused
+position or replacement content clears it. Merely seeking to the end of a
+truncated stream does not count as reaching the metadata endpoint.
+
+Playback session phase owns Video event handling for every request: `stopped`,
+`resolving`, or `active`. Stopping disables state, position, duration, and queued
+recovery timer effects before issuing `Video.control = stop`. Starting a request
+enters `resolving`; only its matching response can accept content and enter
+`active`. Recovery, media-option changes, and queue transitions all use this
+same path. The former recovery-only restart flag is removed.
+
+Outgoing events cannot complete an item, change duration/progress, report a new
+start, reset retries, or cancel replacement work. Playback-info failures remain
+actionable during resolution. Cancellation enters `stopped`, where late responses
+and terminal events cannot restart playback. Accepted replacement content can
+still fail before reaching `playing`, and its failures enter normal recovery.
+
+If playback finishes while a backward seek remains unresolved, completion uses
+the earlier requested position instead of the old near-end observation. Unfinished
+progress and recovery both use that position, including a restart at zero. A newer
+seek replaces the intent, and an observed playing/paused position takes precedence.
+Forward seeks below the metadata endpoint retain the last observed recovery
+position; the existing explicit endpoint exception remains.
+
+The diagnostic `Playback ended prematurely position=... runtime=...` records the
+decision; recovery logs use reason `prematureFinish`. This protects completion
+handling but does not establish or repair the underlying stream failure.
+
+Component regression coverage lives in `VideoPlayer.spec.bs` and covers early
+termination, shortened stream duration, terminal position jumps, repeated events,
+retry exhaustion, completion boundaries, short-clip sampling, missing runtime,
+endpoint seek event orderings, outgoing recovery notifications, replacement
+startup failures, cancellation, and replacement content initialization.
 
 ## Known Limitation: Repeated HLS Media
 

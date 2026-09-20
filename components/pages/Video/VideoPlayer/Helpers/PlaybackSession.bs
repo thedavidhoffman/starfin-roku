@@ -1,5 +1,15 @@
 import "pkg:/source/RequestFailure.bs"
 
+namespace PlaybackSession
+
+    enum Phase
+        Stopped = "stopped"
+        Resolving = "resolving"
+        Active = "active"
+    end enum
+
+end namespace
+
 '-------------------------------------------------------------------------------
 ' onPlayRequestChanged
 '-------------------------------------------------------------------------------
@@ -19,6 +29,7 @@ sub onPlayRequestChanged()
 #if playbackChaosMonkey
     beginPlaybackChaosMonkeyRequest(request, isRecoveryRestart)
 #endif
+    m.playback.phase = PlaybackSession.Phase.Resolving
     m.playback.startupPending = true
     Spinner.Show(0)
 
@@ -30,6 +41,7 @@ end sub
 ' onPlaybackInfoResponse
 '-------------------------------------------------------------------------------
 sub onPlaybackInfoResponse()
+    if m.playback.phase <> PlaybackSession.Phase.Resolving then return
     response = m.playbackInfoTask.response
     if response = invalid then return
     responseRequestId = Number.ToInteger(response.requestId, -1)
@@ -153,12 +165,11 @@ end function
 sub restartCurrentPlayback()
     stopSeekTimers()
     targetPosition = 0
-    logPlaybackSeekRequest("restartCurrentPlayback", targetPosition)
+    requestPlaybackSeek("restartCurrentPlayback", targetPosition)
     m.log.activity("Restarting " + getPlaybackActivityTitle() + " from the beginning")
     m.playback.isSeeking = false
     m.playback.previewPosition = targetPosition
     m.playback.position = targetPosition
-    m.videoPlayer.seek = targetPosition
     if m.playback.isPlaying = true then
         m.videoPlayer.control = MediaControl.Command.Resume
     else
@@ -263,6 +274,10 @@ end function
 ' resetPlaybackForStart
 '-------------------------------------------------------------------------------
 sub resetPlaybackForStart(item as dynamic, startPositionSeconds as integer)
+    m.playback.phase = PlaybackSession.Phase.Active
+    m.recovery.pendingSeekTarget = invalid
+    m.playback.prematureFinish = false
+    m.recovery.lastSafePosition = startPositionSeconds
     m.playback.duration = VideoPlayerMetadata_GetRuntimeSeconds(item)
     m.playback.hasEmittedFinalProgress = false
     m.playback.position = startPositionSeconds
@@ -463,6 +478,7 @@ end function
 ' getCurrentPlaybackPosition
 '-------------------------------------------------------------------------------
 function getCurrentPlaybackPosition() as float
+    if m.playback.prematureFinish = true then return m.playback.position
     position = m.videoPlayer.position
     if position <> invalid and position > 0 then return position
 

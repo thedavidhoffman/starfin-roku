@@ -90,11 +90,13 @@ sub initReferences()
     m.recoveryStableTimer = m.top.findNode("recoveryStableTimer")
 
     m.playback = {
+        phase: PlaybackSession.Phase.Stopped
         isSeeking: false
         isPlaying: false
         startupPending: false
         hasReportedStart: false
         hasEmittedFinalProgress: false
+        prematureFinish: false
         waitingForStartPosition: false
         requestId: 0
         previewPosition: 0
@@ -216,6 +218,9 @@ sub onVideoStateChanged()
     previousPlaybackState = m.playbackDiagnostics.lastState
     activityStateChanged = previousPlaybackState <> state
     diagnosePlaybackState(state)
+    ' Only accepted content owns Video events. Stopping and resolving a new
+    ' request can still produce notifications from the outgoing stream.
+    if m.playback.phase <> PlaybackSession.Phase.Active then return
     updateBufferingSpinner(state)
     onPlaybackRecoveryStateChanged(state)
 #if playbackChaosMonkey
@@ -229,6 +234,7 @@ sub onVideoStateChanged()
         if handlePlaybackRecoveryFailure("videoError", Format.SafeString(m.videoPlayer.errorStr, "")) then return
         finalizePlaybackRecoveryFailure("Unable to play this video after recovery attempts.")
     else if state = VideoPlayerState.Value.Finished then
+        if handlePrematurePlaybackFinish() then return
         if activityStateChanged then m.log.activity("Completed " + getPlaybackActivityTitle())
         stopPlaybackRecoveryTimers()
         finalizeCurrentPlaybackItem()
@@ -258,7 +264,6 @@ sub onVideoStateChanged()
         m.playstateTimer.control = TimerControl.Command.Stop
         reportPlaystateUpdate()
     else if state = VideoPlayerState.Value.Stopped then
-        if isPlaybackRecoveryRestarting() then return
         if activityStateChanged and m.playback.hasReportedStart = true then m.log.activity("Stopped " + getPlaybackActivityTitle())
         emitPlaybackProgress(false)
         reportPlaystateStop()
@@ -285,6 +290,8 @@ end sub
 ' onVideoPositionChanged
 '-------------------------------------------------------------------------------
 sub onVideoPositionChanged()
+    if m.playback.phase <> PlaybackSession.Phase.Active then return
+    if m.playback.prematureFinish = true then return
     position = Number.ToFloat(m.videoPlayer.position, 0)
     if m.playback.waitingForStartPosition and position <= 0 then return
 
@@ -302,6 +309,7 @@ end sub
 ' onVideoDurationChanged
 '-------------------------------------------------------------------------------
 sub onVideoDurationChanged()
+    if m.playback.phase <> PlaybackSession.Phase.Active then return
     duration = m.videoPlayer.duration
     if duration = invalid or duration <= 0 then return
 
@@ -326,6 +334,7 @@ end sub
 ' stopPlayback
 '-------------------------------------------------------------------------------
 sub stopPlayback(preserveRecovery = false as boolean)
+    m.playback.phase = PlaybackSession.Phase.Stopped
     if m.playback <> invalid then m.playback.startupPending = false
     m.playbackInfoTask.control = TaskControl.Command.Stop
     m.mediaSegmentsTask.control = TaskControl.Command.Stop

@@ -1,3 +1,13 @@
+namespace PlaybackDiagnostic
+
+    enum Classification
+        Unexpected = "UNEXPECTED"
+        Expected = "expected"
+        SeekAdjustment = "seek-adjustment"
+    end enum
+
+end namespace
+
 '-------------------------------------------------------------------------------
 ' initPlaybackDiagnostics
 '-------------------------------------------------------------------------------
@@ -7,6 +17,8 @@ sub initPlaybackDiagnostics()
         lastState: ""
         expectedPosition: -1
         expectedReason: ""
+        seekClock: invalid
+        seekMatched: false
     }
 end sub
 
@@ -26,6 +38,8 @@ sub logPlaybackContentAssignment(response as dynamic, startPosition as dynamic)
     m.playbackDiagnostics.lastObservedPosition = Number.ToFloat(startPosition, 0)
     m.playbackDiagnostics.expectedPosition = Number.ToFloat(startPosition, 0)
     m.playbackDiagnostics.expectedReason = "contentAssignment"
+    m.playbackDiagnostics.seekClock = invalid
+    m.playbackDiagnostics.seekMatched = false
 
     m.log.write("Playback content assignment method=" + Format.SafeString(response.playMethod, "") + " format=" + Format.SafeString(response.streamFormat, "") + " startPosition=" + Format.SafeString(startPosition, ""))
 end sub
@@ -38,6 +52,9 @@ sub logPlaybackSeekRequest(reason as string, targetPosition as dynamic)
     target = Number.ToFloat(targetPosition, 0)
     m.playbackDiagnostics.expectedPosition = target
     m.playbackDiagnostics.expectedReason = reason
+    m.playbackDiagnostics.seekClock = CreateObject("roTimespan")
+    m.playbackDiagnostics.seekClock.Mark()
+    m.playbackDiagnostics.seekMatched = false
 
     identity = getPlaybackDiagnosticIdentity()
     m.log.write("Playback seek requested reason=" + reason + " from=" + Format.SafeString(sourcePosition, "") + " to=" + Format.SafeString(target, "") + " delta=" + Format.SafeString(target - sourcePosition, "") + " state=" + VideoPlayerState.Normalize(m.videoPlayer.state) + " itemId=" + identity.itemId + " playSessionId=" + identity.playSessionId)
@@ -47,19 +64,44 @@ end sub
 ' diagnosePlaybackPosition
 '-------------------------------------------------------------------------------
 sub diagnosePlaybackPosition(position as float)
+    if m.playbackDiagnostics.seekClock <> invalid then
+        if m.playbackDiagnostics.seekClock.TotalMilliseconds() > 10000 then
+            m.playbackDiagnostics.expectedPosition = -1
+            m.playbackDiagnostics.expectedReason = ""
+            m.playbackDiagnostics.seekClock = invalid
+            m.playbackDiagnostics.seekMatched = false
+        end if
+    end if
     previousPosition = m.playbackDiagnostics.lastObservedPosition
     if previousPosition >= 0 and position < previousPosition - 2 then
         expected = isExpectedPlaybackPosition(position)
-        severity = "UNEXPECTED"
-        if expected then severity = "expected"
+        severity = PlaybackDiagnostic.Classification.Unexpected
+        if expected then
+            if m.playbackDiagnostics.seekMatched then
+                if previousPosition - position <= 5 and isExpectedPlaybackPosition(previousPosition) then severity = PlaybackDiagnostic.Classification.SeekAdjustment
+            else
+                severity = PlaybackDiagnostic.Classification.Expected
+            end if
+        end if
 
         identity = getPlaybackDiagnosticIdentity()
         m.log.write("Playback position moved backward classification=" + severity + " from=" + Format.SafeString(previousPosition, "") + " to=" + Format.SafeString(position, "") + " delta=" + Format.SafeString(position - previousPosition, "") + " expectedReason=" + m.playbackDiagnostics.expectedReason + " expectedPosition=" + Format.SafeString(m.playbackDiagnostics.expectedPosition, "") + " state=" + VideoPlayerState.Normalize(m.videoPlayer.state) + " bufferPercent=" + Format.SafeString(getPlaybackBufferPercent(), "") + " itemId=" + identity.itemId + " playSessionId=" + identity.playSessionId)
     end if
 
     if isExpectedPlaybackPosition(position) then
+        ' Retain the target after arrival: Roku can report it before settling
+        ' onto an earlier sync frame. This context only affects diagnostics.
+        if m.playbackDiagnostics.seekClock <> invalid then
+            m.playbackDiagnostics.seekMatched = true
+        else
+            m.playbackDiagnostics.expectedPosition = -1
+            m.playbackDiagnostics.expectedReason = ""
+        end if
+    else if m.playbackDiagnostics.seekMatched then
         m.playbackDiagnostics.expectedPosition = -1
         m.playbackDiagnostics.expectedReason = ""
+        m.playbackDiagnostics.seekClock = invalid
+        m.playbackDiagnostics.seekMatched = false
     end if
     m.playbackDiagnostics.lastObservedPosition = position
 end sub

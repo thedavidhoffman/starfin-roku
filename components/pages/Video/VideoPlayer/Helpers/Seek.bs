@@ -1,4 +1,13 @@
 '-------------------------------------------------------------------------------
+' requestPlaybackSeek
+'-------------------------------------------------------------------------------
+sub requestPlaybackSeek(reason as string, targetPosition as dynamic)
+    m.recovery.pendingSeekTarget = Number.ToFloat(targetPosition, 0)
+    logPlaybackSeekRequest(reason, targetPosition)
+    m.videoPlayer.seek = targetPosition
+end sub
+
+'-------------------------------------------------------------------------------
 ' beginSeek
 '-------------------------------------------------------------------------------
 sub beginSeek(direction as integer)
@@ -216,8 +225,7 @@ sub commitSeek()
     if m.playback.isSeeking <> true then return
 
     stopSeekTimers()
-    logPlaybackSeekRequest("progressSeekCommit", m.playback.previewPosition)
-    m.videoPlayer.seek = m.playback.previewPosition
+    requestPlaybackSeek("progressSeekCommit", m.playback.previewPosition)
     m.videoPlayer.control = MediaControl.Command.Resume
     m.playback.isSeeking = false
     m.playbackControls.isSeeking = false
@@ -290,8 +298,7 @@ sub seekToLast5Seconds()
 
     stopSeekTimers()
     m.playback.isSeeking = false
-    logPlaybackSeekRequest("seekToLast5Seconds", targetPosition)
-    m.videoPlayer.seek = targetPosition
+    requestPlaybackSeek("seekToLast5Seconds", targetPosition)
     m.playback.position = targetPosition
     m.playback.previewPosition = targetPosition
     if m.playback.isPlaying = true then
@@ -371,11 +378,10 @@ sub skipPlayback(offsetSeconds as integer)
 
     stopSeekTimers()
     targetPosition = VideoPlayerMetadata_ClampSeconds(m.videoPlayer.position + offsetSeconds, 0, m.playback.duration)
-    logPlaybackSeekRequest("skipPlayback:" + Format.SafeString(offsetSeconds, ""), targetPosition)
+    requestPlaybackSeek("skipPlayback:" + Format.SafeString(offsetSeconds, ""), targetPosition)
     m.playback.isSeeking = false
     m.playback.previewPosition = targetPosition
     m.playback.position = targetPosition
-    m.videoPlayer.seek = targetPosition
     if m.playback.isPlaying = true then
         m.videoPlayer.control = MediaControl.Command.Resume
     else

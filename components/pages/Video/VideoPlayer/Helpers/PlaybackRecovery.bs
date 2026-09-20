@@ -7,11 +7,11 @@ sub initPlaybackRecovery()
         originalMode: PlaybackMode.Mode.Automatic
         effectiveMode: PlaybackMode.Mode.Automatic
         internalRestartPending: false
-        restartInProgress: false
         sameModeRetryUsed: false
         hasEverPlayed: false
         isStable: false
         lastSafePosition: 0
+        pendingSeekTarget: invalid
         bufferLastPercent: -1
         bufferLastPosition: 0
         bufferStalledSeconds: 0
@@ -55,11 +55,11 @@ sub resetPlaybackRecovery(request = invalid as dynamic)
     m.recovery.originalMode = mode
     m.recovery.effectiveMode = mode
     m.recovery.internalRestartPending = false
-    m.recovery.restartInProgress = false
     m.recovery.sameModeRetryUsed = false
     m.recovery.hasEverPlayed = false
     m.recovery.isStable = false
     m.recovery.lastSafePosition = startPosition
+    m.recovery.pendingSeekTarget = invalid
     resetPlaybackRecoveryBufferState()
 end sub
 
@@ -88,7 +88,10 @@ sub recordPlaybackRecoveryPosition(position as dynamic)
     if state <> VideoPlayerState.Value.Playing and state <> VideoPlayerState.Value.Paused then return
 
     value = Number.ToFloat(position, 0)
-    if value >= 0 then m.recovery.lastSafePosition = value
+    if value >= 0 then
+        m.recovery.lastSafePosition = value
+        m.recovery.pendingSeekTarget = invalid
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -96,7 +99,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlaybackRecoveryStateChanged(state as string)
     if state = VideoPlayerState.Value.Buffering then
-        m.recovery.restartInProgress = false
         m.recovery.isStable = false
         m.recoveryStableTimer.control = TimerControl.Command.Stop
         startPlaybackRecoveryBufferMonitor()
@@ -105,7 +107,6 @@ sub onPlaybackRecoveryStateChanged(state as string)
 
     stopPlaybackRecoveryBufferMonitor()
     if state = VideoPlayerState.Value.Playing then
-        m.recovery.restartInProgress = false
         m.recovery.hasEverPlayed = true
         m.recovery.isStable = false
         m.recoveryStableTimer.control = TimerControl.Command.Stop
@@ -153,6 +154,7 @@ end sub
 ' onPlaybackRecoveryBufferTimerFire
 '-------------------------------------------------------------------------------
 sub onPlaybackRecoveryBufferTimerFire()
+    if m.playback.phase <> PlaybackSession.Phase.Active then return
     if VideoPlayerState.Normalize(m.videoPlayer.state) <> VideoPlayerState.Value.Buffering then
         stopPlaybackRecoveryBufferMonitor()
         return
@@ -203,6 +205,7 @@ end function
 ' onPlaybackRecoveryStableTimerFire
 '-------------------------------------------------------------------------------
 sub onPlaybackRecoveryStableTimerFire()
+    if m.playback.phase <> PlaybackSession.Phase.Active then return
     if VideoPlayerState.Normalize(m.videoPlayer.state) <> VideoPlayerState.Value.Playing then return
     m.recovery.isStable = true
     m.recovery.sameModeRetryUsed = false
@@ -211,6 +214,44 @@ sub onPlaybackRecoveryStableTimerFire()
     onPlaybackChaosMonkeyRecoveryStabilized()
 #endif
 end sub
+
+'-------------------------------------------------------------------------------
+' handlePrematurePlaybackFinish
+'-------------------------------------------------------------------------------
+function handlePrematurePlaybackFinish() as boolean
+    if m.playback.prematureFinish = true then return true
+    if m.activePlayback = invalid then return false
+
+    ' A truncated stream can report its own short duration and an end position.
+    ' Compare item metadata with the last position observed while playing/paused.
+    duration = VideoPlayerMetadata_GetRuntimeSeconds(m.activePlayback.context.item)
+    if duration <= 0 then return false
+    ' An explicit endpoint seek may finish without another playing position.
+    if m.recovery.pendingSeekTarget <> invalid and m.recovery.pendingSeekTarget >= duration then return false
+    tolerance = duration * 0.02
+    ' Allow two default Roku position-notification intervals for short clips.
+    if tolerance < 1 then tolerance = 1
+    if tolerance > 30 then tolerance = 30
+    position = m.recovery.lastSafePosition
+    ' A backward seek invalidates the old near-end position as completion
+    ' evidence, even if Roku finishes before reporting the requested landing.
+    if m.recovery.pendingSeekTarget <> invalid and m.recovery.pendingSeekTarget < position then position = m.recovery.pendingSeekTarget
+    if duration - position <= tolerance then return false
+
+    ' Freeze progress before stop/restart notifications can replace it with zero
+    ' or the stream's terminal position. A new content assignment releases it.
+    m.recovery.lastSafePosition = position
+    m.playback.prematureFinish = true
+    m.playback.position = position
+    detail = "position=" + Format.SafeString(position, "") + " runtime=" + Format.SafeString(duration, "")
+    m.log.write("Playback ended prematurely " + detail)
+    reportPlaystateStop()
+    emitPlaybackProgress(false)
+    if handlePlaybackRecoveryFailure("prematureFinish", detail) <> true then
+        finalizePlaybackRecoveryFailure("Playback ended early and could not be recovered. Your resume position has been saved.")
+    end if
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' handlePlaybackRecoveryFailure
@@ -261,7 +302,6 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
     m.recovery.effectiveMode = nextMode
     m.recovery.isStable = false
     m.recovery.internalRestartPending = true
-    m.recovery.restartInProgress = true
     m.log.activity("Restarting " + getPlaybackActivityTitle() + " using " + nextMode)
 #if playbackChaosMonkey
     onPlaybackChaosMonkeyRecoveryStarted(reason)
@@ -303,10 +343,3 @@ sub stopPlaybackRecoveryTimers()
     m.recoveryStableTimer.control = TimerControl.Command.Stop
     if m.recovery <> invalid then m.recovery.bufferMonitoring = false
 end sub
-
-'-------------------------------------------------------------------------------
-' isPlaybackRecoveryRestarting
-'-------------------------------------------------------------------------------
-function isPlaybackRecoveryRestarting() as boolean
-    return m.recovery <> invalid and m.recovery.restartInProgress = true
-end function

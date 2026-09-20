@@ -10,6 +10,8 @@ namespace tests
         protected override function beforeEach()
             m.node.playback.hasReportedStart = true
             m.node.playback.hasEmittedFinalProgress = false
+            m.node.playback.phase = "active"
+            m.node.recovery.pendingSeekTarget = invalid
             m.node.activePlayback = {
                 request: { itemId: "movie-1" }
                 context: { item: { Id: "movie-1" }, series: invalid, season: invalid }
@@ -30,6 +32,134 @@ namespace tests
             m.top.findNode("playbackControls").visible = false
             m.top.findNode("playbackActionButton").visible = false
             m.top.findNode("musicVideoIntroMetadata").visible = false
+        end function
+
+        @describe("Seek adjustment diagnostics")
+
+        @it("retains seek context through target arrival and labels a small settling movement")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1836.91), "classification=seek-adjustment") > 0)
+            m.assertEqual(m.node.playbackDiagnostics.expectedReason, "progressSeekCommit")
+            m.assertEqual(m.node.playbackDiagnostics.expectedPosition, 1841.54)
+        end function
+
+        @it("keeps unrelated backward movements unexpected")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1800), "classification=UNEXPECTED") > 0)
+        end function
+
+        @it("keeps regressions larger than five seconds unexpected even near the target")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            m.capturePositionDiagnostic(1845)
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1837), "classification=UNEXPECTED") > 0)
+        end function
+
+        @it("expires seek context after ten seconds")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            m.node.playbackDiagnostics.seekClock.elapsed = 10001
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1837), "classification=UNEXPECTED") > 0)
+            m.assertEqual(m.node.playbackDiagnostics.expectedReason, "")
+        end function
+
+        @it("includes the ten second time boundary")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            m.node.playbackDiagnostics.seekClock.elapsed = 10000
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1837), "classification=seek-adjustment") > 0)
+        end function
+
+        @it("clears matched context when playback leaves the target neighborhood")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            m.capturePositionDiagnostic(1850)
+            m.capturePositionDiagnostic(1841.54)
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1837), "classification=UNEXPECTED") > 0)
+        end function
+
+        @it("replaces previous seek context with the latest seek")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            'bs:disable-next-line 1140
+            logPlaybackSeekRequest("chapterSelection", 2000)
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1837), "classification=UNEXPECTED") > 0)
+            m.assertEqual(m.node.playbackDiagnostics.expectedReason, "chapterSelection")
+        end function
+
+        @it("clears seek adjustment context on content replacement")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            'bs:disable-next-line 1140
+            logPlaybackContentAssignment({}, 1841.54)
+            m.capturePositionDiagnostic(1841.54)
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1837), "classification=UNEXPECTED") > 0)
+        end function
+
+        @it("still labels the initial intentional backward seek as expected")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            'bs:disable-next-line 1140
+            logPlaybackSeekRequest("skipPlayback:-10", 1831.54)
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1831.54), "classification=expected") > 0)
+        end function
+
+        @it("includes the five second movement boundary")
+        function _()
+            m.prepareSeekDiagnostic()
+
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(1836.54), "classification=seek-adjustment") > 0)
+        end function
+
+        @it("keeps backward movements without a seek unexpected")
+        function _()
+            'bs:disable-next-line 1140
+            initPlaybackDiagnostics()
+            m.capturePositionDiagnostic(2088.23)
+
+            m.assertTrue(Instr(1, m.capturePositionDiagnostic(2084.11), "classification=UNEXPECTED") > 0)
+        end function
+
+        private function prepareSeekDiagnostic()
+            'bs:disable-next-line 1140
+            initPlaybackDiagnostics()
+            'bs:disable-next-line 1140
+            logPlaybackSeekRequest("progressSeekCommit", 1841.54)
+            m.node.playbackDiagnostics.seekClock = {
+                elapsed: 0
+                TotalMilliseconds: function()
+                    return m.elapsed
+                end function
+            }
+            m.capturePositionDiagnostic(1841.54)
+        end function
+
+        private function capturePositionDiagnostic(position as float) as string
+            originalLog = m.node.log
+            capture = {
+                message: ""
+                write: sub(message as string)
+                    m.message = message
+                end sub
+            }
+            m.node.log = capture
+
+            'bs:disable-next-line 1140
+            diagnosePlaybackPosition(position)
+
+            m.node.log = originalLog
+            return capture.message
         end function
 
         @describe("Playback restoration")
@@ -73,6 +203,7 @@ namespace tests
 
         @it("ignores a stale response without replacing active playback")
         function _()
+            m.node.playback.phase = "resolving"
             m.node.playback.requestId = 4
             m.node.activePlayback.request = { itemId: "active-item" }
             m.node.playbackInfoTask = { response: { ok: true, requestId: 3 } }
@@ -116,6 +247,7 @@ namespace tests
 
         @it("preserves accepted playback when a matching response fails")
         function _()
+            m.node.playback.phase = "resolving"
             m.node.playback.requestId = 6
             m.node.pendingPlaybackRequest = { requestId: 6, itemId: "failed-item" }
             m.node.playbackInfoTask = { response: { ok: false, requestId: 6, errorMessage: "Failed" } }
@@ -442,6 +574,749 @@ namespace tests
             return activities
         end function
 
+        @describe("Premature completion")
+
+        @it("recovers a halfway ending without completing or advancing the episode")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            m.node.activePlayback.queue.items = [{ itemId: "movie-1", item: m.node.activePlayback.context.item }, { itemId: "episode-2", item: { Id: "episode-2", Type: "Episode" } }]
+            m.node.activePlayback.queue.index = 0
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.playstateTask.request.status, "stop")
+            m.assertEqual(m.node.playstateTask.request.position, 2160.0)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 21600000000&)
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playbackProgressChanged.positionTicks, 21600000000&)
+            m.assertFalse(m.node.activePlayback.context.item.UserData.Played)
+            m.assertInvalid(m.top.upNextRequested)
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("still opens Up Next after a genuine ending")
+        function _()
+            m.preparePrematureFinish(4370, 4370)
+            m.node.activePlayback.queue.items = [{ itemId: "movie-1", item: m.node.activePlayback.context.item }, { itemId: "episode-2", item: { Id: "episode-2", Type: "Episode" } }]
+            m.node.activePlayback.queue.index = 0
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.upNextRequested.nextItem.itemId, "episode-2")
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("recovers from a restored start before any playing position arrives")
+        function _()
+            m.preparePrematureFinish(0, 4370)
+            'bs:disable-next-line 1140
+            resetPlaybackForStart(m.node.activePlayback.context.item, 2160)
+            m.node.playback.hasReportedStart = false
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.top.playRequest.startPositionTicks, 21600000000&)
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertInvalid(m.node.playstateTask.request)
+        end function
+
+        @it("uses metadata even when the stream reports a truncated duration")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            m.node.playback.duration = 2160
+            m.node.videoPlayer.duration = 2160
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.top.playRequest.startPositionTicks, 21600000000&)
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+        end function
+
+        @it("ignores a terminal position jump to the full runtime")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            m.node.videoPlayer.position = 4370
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.playstateTask.request.position, 2160.0)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 21600000000&)
+        end function
+
+        @it("keeps saved progress through repeated finished and stopped notifications")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            request = m.top.playRequest
+            m.node.videoPlayer.position = 0
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            m.node.videoPlayer.state = "stopped"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.top.playRequest, request)
+            m.assertEqual(m.node.playback.position, 2160.0)
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("preserves resume progress when recovery is exhausted")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            m.node.recovery.originalMode = PlaybackMode.Mode.TranscodeNoRemux
+            m.node.recovery.effectiveMode = PlaybackMode.Mode.TranscodeNoRemux
+            m.node.recovery.sameModeRetryUsed = true
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            m.node.videoPlayer.position = 0
+            m.node.videoPlayer.state = "stopped"
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.playstateTask.request.position, 2160.0)
+            m.assertEqual(m.node.activePlayback.context.item.UserData.PlaybackPositionTicks, 21600000000&)
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertTrue(m.top.playbackFailed <> "")
+            m.assertInvalid(m.top.upNextRequested)
+        end function
+
+        @it("allows normal completion at the thirty second tolerance boundary")
+        function _()
+            m.preparePrematureFinish(4340, 4370)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.node.playstateTask.request.position, 4370.0)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("recovers just outside the completion tolerance")
+        function _()
+            m.preparePrematureFinish(4339, 4370)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 43390000000&)
+        end function
+
+        @it("uses a proportional tolerance for short videos")
+        function _()
+            m.preparePrematureFinish(90, 100)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+        end function
+
+        @it("retains completion behavior when metadata runtime is missing")
+        function _()
+            m.preparePrematureFinish(2160, 0)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("accepts completion after a seek reaches the end")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 4365
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "finished"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+        end function
+
+        @it("uses the latest position after seeking backward from near the end")
+        function _()
+            m.preparePrematureFinish(4365, 4370)
+            m.node.videoPlayer.state = "paused"
+            m.node.videoPlayer.position = 2160
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "finished"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 21600000000&)
+        end function
+
+        @it("recovers an unresolved backward seek instead of completing from the old position")
+        function _()
+            m.preparePrematureFinish(4365, 4370)
+            m.node.playback.isSeeking = true
+            m.node.playback.previewPosition = 2160
+            'bs:disable-next-line 1140
+            commitSeek()
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playbackProgressChanged.positionTicks, 21600000000&)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 21600000000&)
+            m.assertFalse(m.node.activePlayback.context.item.UserData.Played)
+            m.assertInvalid(m.top.upNextRequested)
+        end function
+
+        @it("preserves a pending restart at zero when playback finishes")
+        function _()
+            m.preparePrematureFinish(4365, 4370)
+            'bs:disable-next-line 1140
+            restartCurrentPlayback()
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 0&)
+        end function
+
+        @it("uses the latest unresolved backward seek for recovery")
+        function _()
+            m.preparePrematureFinish(4365, 4370)
+            'bs:disable-next-line 1140
+            requestPlaybackSeek("chapterSelection", 2160)
+            'bs:disable-next-line 1140
+            requestPlaybackSeek("chapterSelection", 1800)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 18000000000&)
+        end function
+
+        @it("uses an observed landing after a pending backward seek")
+        function _()
+            m.preparePrematureFinish(4365, 4370)
+            'bs:disable-next-line 1140
+            requestPlaybackSeek("chapterSelection", 2160)
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 2156
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "finished"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 21560000000&)
+        end function
+
+        @it("releases frozen progress when replacement content is accepted")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            'bs:disable-next-line 1140
+            resetPlaybackForStart(m.node.activePlayback.context.item, 2160)
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 2165
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertFalse(m.node.playback.prematureFinish)
+            m.assertFalse(m.node.playback.hasEmittedFinalProgress)
+            m.assertEqual(m.node.recovery.lastSafePosition, 2165.0)
+            m.assertEqual(m.node.playback.position, 2165.0)
+        end function
+
+        @it("completes an endpoint seek without an intermediate position update")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            m.node.playback.isSeeking = true
+            m.node.playback.previewPosition = 4370
+            'bs:disable-next-line 1140
+            commitSeek()
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.node.videoPlayer.seek = 4370)
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertInvalid(m.top.playRequest)
+        end function
+
+        @it("does not treat a seek to a truncated stream endpoint as full completion")
+        function _()
+            m.preparePrematureFinish(2100, 4370)
+            m.node.playback.duration = 2200
+            m.node.playback.isSeeking = true
+            m.node.playback.previewPosition = 2200
+            'bs:disable-next-line 1140
+            commitSeek()
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 21000000000&)
+        end function
+
+        @it("replaces endpoint intent when the user restarts from the beginning")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            'bs:disable-next-line 1140
+            requestPlaybackSeek("progressSeekCommit", 4370)
+            'bs:disable-next-line 1140
+            restartCurrentPlayback()
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+        end function
+
+        @it("expires endpoint intent when playback reports an earlier landing")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            'bs:disable-next-line 1140
+            requestPlaybackSeek("progressSeekCommit", 4370)
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 2200
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "finished"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playRequest.startPositionTicks, 22000000000&)
+        end function
+
+        @it("clears endpoint intent when new content is accepted")
+        function _()
+            m.preparePrematureFinish(2160, 4370)
+            'bs:disable-next-line 1140
+            requestPlaybackSeek("progressSeekCommit", 4370)
+
+            'bs:disable-next-line 1140
+            resetPlaybackForStart(m.node.activePlayback.context.item, 2160)
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+        end function
+
+        @it("allows a short clip to finish between position notifications")
+        function _()
+            m.preparePrematureFinish(9.6, 10)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertInvalid(m.top.playRequest)
+        end function
+
+        @it("allows completion at the one second sampling margin")
+        function _()
+            m.preparePrematureFinish(9, 10)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+        end function
+
+        @it("still recovers short clips ending outside the sampling margin")
+        function _()
+            m.preparePrematureFinish(8.9, 10)
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertNotInvalid(m.top.playRequest)
+        end function
+
+        @describe("Ordinary replacement ownership")
+
+        @it("preserves an audio replacement through outgoing finished events")
+        function _()
+            m.prepareOrdinaryReplacement()
+            request = m.node.playbackInfoTask.request
+            m.node.videoPlayer.state = "finished"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.playbackInfoTask.request, request)
+            m.assertEqual(request.audioStreamIndex, 2)
+            m.assertEqual(m.node.playbackInfoTask.control, "run")
+            m.assertEqual(m.node.playback.phase, "resolving")
+            m.assertFalse(m.node.recovery.sameModeRetryUsed)
+            m.assertInvalid(m.top.playbackProgressChanged)
+            m.assertInvalid(m.top.upNextRequested)
+            m.assertEqual(m.top.playbackFailed, "")
+        end function
+
+        @it("preserves a video mode replacement through an outgoing error")
+        function _()
+            m.prepareOrdinaryReplacement()
+            request = PlaybackRequest.WithChanges(m.node.pendingPlaybackRequest, { videoMode: "transcode-no-remux" })
+            'bs:disable-next-line 1140
+            dispatchStreamRestart(request, "test mode change", "test mode change")
+            requestId = m.node.playback.requestId
+            m.node.videoPlayer.state = "error"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.playback.requestId, requestId)
+            m.assertEqual(m.node.playbackInfoTask.request.videoMode, "transcode-no-remux")
+            m.assertFalse(m.node.recovery.sameModeRetryUsed)
+            m.assertEqual(m.top.playbackFailed, "")
+        end function
+
+        @it("preserves a queue transition through the previous episode finishing")
+        function _()
+            m.prepareOrdinaryReplacement()
+            m.acceptRecoveryContent()
+            m.node.activePlayback.queue.items = [{ itemId: "movie-1", item: m.node.activePlayback.context.item }, { itemId: "episode-2", item: { Id: "episode-2", Type: "Episode", RunTimeTicks: 40000000000& } }]
+            m.node.activePlayback.queue.index = 0
+            'bs:disable-next-line 1140
+            started = startQueueItemAtOffset(1)
+            requestId = m.node.playback.requestId
+            m.node.videoPlayer.state = "finished"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(started)
+            m.assertEqual(m.node.playback.requestId, requestId)
+            m.assertEqual(m.node.playbackInfoTask.request.itemId, "episode-2")
+            m.assertEqual(m.node.playbackInfoTask.control, "run")
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertFalse(m.node.recovery.sameModeRetryUsed)
+        end function
+
+        @it("ignores outgoing playing position and duration while resolving")
+        function _()
+            m.prepareOrdinaryReplacement()
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 0
+            m.node.videoPlayer.duration = 1
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            'bs:disable-next-line 1140
+            onVideoDurationChanged()
+
+            m.assertEqual(m.node.playback.phase, "resolving")
+            m.assertFalse(m.node.playback.hasReportedStart)
+            m.assertEqual(m.node.playback.position, 2200.0)
+            m.assertEqual(m.node.playback.duration, 4370.0)
+            m.assertEqual(m.node.recovery.lastSafePosition, 2200)
+        end function
+
+        @it("keeps a newer replacement resolving when an older response arrives")
+        function _()
+            m.prepareOrdinaryReplacement()
+            oldId = m.node.playback.requestId
+            request = PlaybackRequest.WithChanges(m.node.pendingPlaybackRequest, { audioStreamIndex: 3 })
+            'bs:disable-next-line 1140
+            dispatchStreamRestart(request, "new selection", "new selection")
+            m.node.playbackInfoTask.response = { ok: true, requestId: oldId }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.node.playback.phase, "resolving")
+            m.assertEqual(m.node.playbackInfoTask.request.audioStreamIndex, 3)
+            m.assertEqual(m.node.activePlayback.playSessionId, "old-session")
+        end function
+
+        @it("accepts ordinary replacement content before processing its events")
+        function _()
+            m.prepareOrdinaryReplacement()
+            m.acceptRecoveryContent()
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 2202
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertEqual(m.node.playback.phase, "active")
+            m.assertEqual(m.node.playstateTask.request.status, "start")
+            m.assertEqual(m.node.recovery.lastSafePosition, 2202.0)
+        end function
+
+        @it("recovers an actual playback info failure during ordinary replacement")
+        function _()
+            m.prepareOrdinaryReplacement()
+            oldId = m.node.playback.requestId
+            m.node.playbackInfoTask.response = { ok: false, requestId: oldId, errorMessage: "failed" }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertTrue(m.node.playback.requestId > oldId)
+            m.assertTrue(m.node.recovery.sameModeRetryUsed)
+            m.assertEqual(m.node.playback.phase, "resolving")
+            m.assertEqual(m.node.playbackInfoTask.request.audioStreamIndex, 2)
+            m.assertEqual(m.node.playbackInfoTask.request.startPositionTicks, 22000000000&)
+        end function
+
+        @it("ignores a matching late response after replacement is cancelled")
+        function _()
+            m.prepareOrdinaryReplacement()
+            'bs:disable-next-line 1140
+            stopForRemoval()
+
+            m.acceptRecoveryContent()
+
+            m.assertEqual(m.node.playback.phase, "stopped")
+            m.assertEqual(m.node.activePlayback.playSessionId, "old-session")
+            m.assertEqual(m.node.videoPlayer.control, "stop")
+            m.assertEqual(m.node.playbackInfoTask.control, "stop")
+        end function
+
+        @it("ignores outgoing terminal events after cancellation")
+        function _()
+            m.prepareOrdinaryReplacement()
+            'bs:disable-next-line 1140
+            stopForRemoval()
+            requestId = m.node.playback.requestId
+            m.node.videoPlayer.state = "finished"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.playback.phase, "stopped")
+            m.assertEqual(m.node.playback.requestId, requestId)
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertInvalid(m.top.upNextRequested)
+        end function
+
+        @it("ignores queued recovery timer callbacks during replacement")
+        function _()
+            m.prepareOrdinaryReplacement()
+            m.node.recovery.sameModeRetryUsed = true
+            m.node.videoPlayer.state = "playing"
+            'bs:disable-next-line 1140
+            onPlaybackRecoveryStableTimerFire()
+            m.node.videoPlayer.state = "buffering"
+            m.node.recovery.bufferStalledSeconds = 30
+            requestId = m.node.playback.requestId
+
+            'bs:disable-next-line 1140
+            onPlaybackRecoveryBufferTimerFire()
+
+            m.assertTrue(m.node.recovery.sameModeRetryUsed)
+            m.assertEqual(m.node.playback.requestId, requestId)
+            m.assertEqual(m.node.playback.phase, "resolving")
+        end function
+
+        private sub prepareOrdinaryReplacement()
+            m.preparePrematureFinish(2200, 4370)
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 2200
+            m.node.playbackInfoTask = { control: "", request: invalid, response: invalid }
+            request = PlaybackRequest.WithChanges(m.node.activePlayback.request, { server: "http://server", token: "token", userId: "user", startPositionTicks: 22000000000&, audioStreamIndex: 2 })
+            'bs:disable-next-line 1140
+            dispatchStreamRestart(request, "test audio change", "test audio change")
+        end sub
+
+        @describe("Recovery transition ownership")
+
+        @it("keeps the full transcode request running after outgoing error to finished")
+        function _()
+            m.prepareRecoveryTransition()
+            request = m.node.playbackInfoTask.request
+            m.node.videoPlayer.state = "finished"
+            m.node.videoPlayer.position = 0
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertEqual(request.videoMode, "transcode-no-remux")
+            m.assertEqual(request.startPositionTicks, 22000000000&)
+            m.assertEqual(m.node.playbackInfoTask.request, request)
+            m.assertEqual(m.node.playbackInfoTask.control, "run")
+            m.assertEqual(m.node.playback.phase, "resolving")
+            m.assertTrue(m.node.playback.startupPending)
+            m.assertEqual(m.node.playback.position, 2200.0)
+            m.assertEqual(m.top.playbackFailed, "")
+            m.assertInvalid(m.top.playbackProgressChanged)
+            m.assertInvalid(m.top.upNextRequested)
+        end function
+
+        @it("does not release pending recovery for outgoing buffering or playing events")
+        function _()
+            m.prepareRecoveryTransition()
+            m.node.videoPlayer.state = "buffering"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 0
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertEqual(m.node.playback.phase, "resolving")
+            m.assertEqual(m.node.recovery.lastSafePosition, 2200.0)
+            m.assertFalse(m.node.playback.hasReportedStart)
+        end function
+
+        @it("ignores repeated outgoing errors and stopped events while recovery resolves")
+        function _()
+            m.prepareRecoveryTransition()
+            requestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            m.node.videoPlayer.state = "stopped"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.playback.requestId, requestId)
+            m.assertEqual(m.node.playbackInfoTask.control, "run")
+            m.assertEqual(m.top.playbackFailed, "")
+        end function
+
+        @it("accepts the replacement response and resumes position tracking")
+        function _()
+            m.prepareRecoveryTransition()
+            m.acceptRecoveryContent()
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 2201
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertEqual(m.node.playback.phase, "active")
+            m.assertEqual(m.node.activePlayback.playSessionId, "recovered-session")
+            m.assertEqual(m.node.playstateTask.request.status, "start")
+            m.assertEqual(m.node.recovery.lastSafePosition, 2201.0)
+        end function
+
+        @it("handles a genuine early finish of replacement content before playing")
+        function _()
+            m.prepareRecoveryTransition()
+            m.acceptRecoveryContent()
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            m.node.videoPlayer.state = "finished"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.top.playbackFailed <> "")
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playbackProgressChanged.positionTicks, 22000000000&)
+        end function
+
+        @it("handles failure of the pending recovery info request")
+        function _()
+            m.prepareRecoveryTransition()
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            m.node.playbackInfoTask.response = { ok: false, requestId: m.node.playback.requestId, errorMessage: "Request failed" }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.node.playback.phase, "stopped")
+            m.assertTrue(m.top.playbackFailed <> "")
+            m.assertEqual(m.node.playbackInfoTask.control, "stop")
+        end function
+
+        @it("allows removal to cancel pending recovery and preserve progress")
+        function _()
+            m.prepareRecoveryTransition()
+
+            'bs:disable-next-line 1140
+            stopForRemoval()
+
+            m.assertEqual(m.node.playback.phase, "stopped")
+            m.assertEqual(m.node.playbackInfoTask.control, "stop")
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
+            m.assertEqual(m.top.playbackProgressChanged.positionTicks, 22000000000&)
+        end function
+
+        private sub prepareRecoveryTransition()
+            m.preparePrematureFinish(2200, 4370)
+            m.node.activePlayback.request.server = "http://server"
+            m.node.activePlayback.request.token = "token"
+            m.node.activePlayback.request.userId = "user"
+            m.node.videoPlayer.state = "error"
+            m.node.videoPlayer.errorStr = "buffer loop exception"
+            m.node.recovery.originalMode = PlaybackMode.Mode.Automatic
+            m.node.recovery.effectiveMode = PlaybackMode.Mode.TranscodeAllowRemux
+            m.node.recovery.sameModeRetryUsed = true
+            m.node.playbackInfoTask = { control: "", request: invalid, response: invalid }
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+        end sub
+
+        private sub acceptRecoveryContent()
+            request = m.node.pendingPlaybackRequest
+            m.node.playbackInfoTask.response = { ok: true, requestId: request.requestId, item: request.item, playSessionId: "recovered-session", startPositionTicks: 22000000000&, streamUrl: "http://server/video.m3u8", streamFormat: "hls", audioStreamIndex: 1, subtitleStreamIndex: -1, subtitleDeliveryMethod: "none" }
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+        end sub
+
+        private sub preparePrematureFinish(position as float, runtime as float)
+            m.prepareActivityPlayback("finished", "playing")
+            m.top.unobserveField("playRequest")
+            m.top.playRequest = invalid
+            m.top.upNextRequested = invalid
+            m.top.playbackFailed = ""
+            m.top.playbackProgressChanged = invalid
+            m.node.activePlayback.context.item.Type = "Episode"
+            m.node.activePlayback.context.item.RunTimeTicks = runtime * 10000000.0
+            m.node.playback.duration = runtime
+            m.node.playback.position = position
+            m.node.playback.prematureFinish = false
+            m.node.videoPlayer.position = 0
+            m.node.recovery.lastSafePosition = position
+            m.node.recovery.sameModeRetryUsed = false
+            m.node.pendingPlaybackRequest = invalid
+        end sub
+
         @describe("Media request authentication")
 
         @it("passes server subtitle URLs to content alongside the playback header")
@@ -549,6 +1424,7 @@ namespace tests
 
         @it("displays the request failure after playback recovery is exhausted")
         function _()
+            m.node.playback.phase = "resolving"
             getGlobalAa().requestFailureMessage = ""
             m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
             m.node.playback.requestId = 6
