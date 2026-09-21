@@ -248,6 +248,636 @@ namespace tests
             }
         end function
 
+        @describe("rating metadata")
+
+        @it("renders the community score with its star instead of a Rating prefix")
+        function _()
+            content = m.createContent("movie")
+            content.communityRating = 8.25
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("communityRatingGroup").visible)
+            m.assertEqual(m.top.findNode("communityRatingLabel").text, "8.3")
+            m.assertEqual(m.top.findNode("communityRatingGroup").getChild(0).uri, "pkg:/images/icons/ratings/rating-star.png")
+            m.assertFalse(m.top.findNode("criticRatingGroup").visible)
+        end function
+
+        @it("renders fresh threshold")
+        function _()
+            content = m.createContent("movie")
+            content.criticRating = 60
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("criticRatingGroup").visible)
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "60%")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-fresh.png")
+            m.assertFalse(m.top.findNode("communityRatingGroup").visible)
+        end function
+
+        @it("renders rotten score")
+        function _()
+            content = m.createContent("movie")
+            content.criticRating = 59
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("criticRatingGroup").visible)
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "59%")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-rotten.png")
+            m.assertFalse(m.top.findNode("communityRatingGroup").visible)
+        end function
+
+        @it("renders zero critic score")
+        function _()
+            content = m.createContent("movie")
+            content.criticRating = 0
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("criticRatingGroup").visible)
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "0%")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-rotten.png")
+            m.assertFalse(m.top.findNode("communityRatingGroup").visible)
+        end function
+
+        @it("renders maximum critic score")
+        function _()
+            content = m.createContent("movie")
+            content.criticRating = 100
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("criticRatingGroup").visible)
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "100%")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-fresh.png")
+            m.assertFalse(m.top.findNode("communityRatingGroup").visible)
+        end function
+
+        @it("clears ratings when the next item has none")
+        function _()
+            content = m.createContent("movie")
+            content.communityRating = 8
+            content.criticRating = 85
+            m.top.mediaContent = content
+
+            m.top.mediaContent = m.createContent("movie")
+
+            m.assertFalse(m.top.findNode("ratingsGroup").visible)
+            m.assertEqual(m.top.findNode("communityRatingLabel").text, "")
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "")
+        end function
+
+        @it("places episode ratings beside secondary metadata")
+        function _()
+            content = m.createContent("tv-episode")
+            content.communityRating = 8
+            content.criticRating = 90
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("ratingsGroup").getParent().id, "secondaryInfoRow")
+            m.assertTrue(m.top.findNode("communityRatingGroup").visible)
+            m.assertTrue(m.top.findNode("criticRatingGroup").visible)
+        end function
+
+        @it("moves ratings back to the primary row for movies")
+        function _()
+            m.top.mediaContent = m.createContent("tv-episode")
+            content = m.createContent("movie")
+            content.communityRating = 8
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("ratingsGroup").getParent().id, "primaryInfoRow")
+        end function
+
+        @it("hides an empty metadata label beside ratings")
+        function _()
+            content = m.createContent("movie")
+            content.primaryInfoText = ""
+            content.communityRating = 8
+            m.top.mediaContent = content
+
+            m.assertFalse(m.top.findNode("primaryInfoLabel").visible)
+            m.assertTrue(m.top.findNode("ratingsGroup").visible)
+        end function
+
+        @it("reserves space for ratings beside long metadata")
+        function _()
+            content = m.createContent("movie")
+            content.primaryInfoText = String(200, "W")
+            content.communityRating = 8
+            content.criticRating = 90
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("primaryInfoLabel").width < 1220)
+            m.assertTrue(m.top.findNode("primaryInfoLabel").width > 0)
+            m.assertTrue(m.top.findNode("communityRatingGroup").visible)
+            m.assertTrue(m.top.findNode("criticRatingGroup").visible)
+        end function
+
+        @it("hides invalid critic data while retaining a community score")
+        function _()
+            content = m.createContent("movie")
+            content.communityRating = 8
+            content.criticRating = 101
+            m.top.mediaContent = content
+
+            m.assertFalse(m.top.findNode("criticRatingGroup").visible)
+            m.assertTrue(m.top.findNode("communityRatingGroup").visible)
+        end function
+
+        @describe("runtime and content rating styling")
+
+        @it("shows runtime with a clock and no bullet prefix")
+        function _()
+            content = m.createContent("movie")
+            content.runtimeText = "2h 5m"
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("runtimeGroup").visible)
+            m.assertEqual(m.top.findNode("runtimeLabel").text, "2h 5m")
+            m.assertEqual(m.top.findNode("runtimeGroup").getChild(0).uri, "pkg:/images/icons/ratings/runtime-clock.png")
+        end function
+
+        @it("frames the content rating with a padded rounded border")
+        function _()
+            content = m.createContent("movie")
+            content.officialRating = "PG-13"
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("contentRatingGroup").visible)
+            m.assertEqual(m.top.findNode("contentRatingLabel").text, "PG-13")
+            m.assertEqual(m.top.findNode("contentRatingLabel").translation, [8.0, 3.0])
+            m.assertEqual(m.top.findNode("contentRatingBorder").uri, "pkg:/images/icons/ratings/content-rating-border.9.png")
+            m.assertEqual(m.top.findNode("contentRatingBorder").width, m.top.findNode("contentRatingLabel").width + 16)
+        end function
+
+        @it("clears runtime and the rating badge for an item without them")
+        function _()
+            content = m.createContent("movie")
+            content.runtimeText = "2h"
+            content.officialRating = "R"
+            m.top.mediaContent = content
+
+            m.top.mediaContent = m.createContent("movie")
+
+            m.assertFalse(m.top.findNode("runtimeGroup").visible)
+            m.assertFalse(m.top.findNode("contentRatingGroup").visible)
+            m.assertEqual(m.top.findNode("runtimeLabel").text, "")
+            m.assertEqual(m.top.findNode("contentRatingLabel").text, "")
+        end function
+
+        @it("moves runtime to the episode metadata row")
+        function _()
+            content = m.createContent("tv-episode")
+            content.runtimeText = "45m"
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("runtimeGroup").getParent().id, "secondaryInfoRow")
+            m.assertTrue(m.top.findNode("runtimeGroup").visible)
+        end function
+
+        @it("caps unusually long content ratings")
+        function _()
+            content = m.createContent("movie")
+            content.officialRating = String(100, "W")
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("contentRatingLabel").width, 180.0)
+            m.assertEqual(m.top.findNode("contentRatingBorder").width, 196.0)
+        end function
+
+        @describe("loaded logo spacing")
+
+        @it("keeps the reserved gap for a tall movie logo")
+        function _()
+            m.top.backgroundDisplay = "full-screen"
+            m.top.mediaContent = m.createContent("movie")
+            originalLogo = m.node.titleLogo
+            originalState = m.node.logoState
+            ' Substitute the asynchronous Poster load result, retaining production fitting.
+            loadedLogo = { loadStatus: "ready", uri: "pkg:/logo.png", bitmapWidth: 400, bitmapHeight: 800 }
+            m.node.titleLogo = loadedLogo
+            m.node.logoState = { url: "pkg:/logo.png", mediaType: "movie", fittedMediaType: "" }
+
+            'bs:disable-next-line 1140
+            onTitleLogoLoadStatusChanged()
+
+            m.node.titleLogo = originalLogo
+            m.node.logoState = originalState
+            m.assertEqual(loadedLogo.width, 95)
+            m.assertEqual(loadedLogo.height, 190)
+            m.assertEqual(loadedLogo.translation, [0, 0])
+            m.assertTrue(loadedLogo.visible)
+            'bs:disable-next-line 1140
+            layout = getContentLayout("movie")
+            m.assertEqual(layout.logoAnchorTop - loadedLogo.translation[1] - loadedLogo.height, 40)
+        end function
+
+        @it("keeps the reserved gap for a wide movie logo")
+        function _()
+            m.top.backgroundDisplay = "full-screen"
+            m.top.mediaContent = m.createContent("movie")
+            originalLogo = m.node.titleLogo
+            originalState = m.node.logoState
+            ' Substitute the asynchronous Poster load result, retaining production fitting.
+            loadedLogo = { loadStatus: "ready", uri: "pkg:/logo.png", bitmapWidth: 1200, bitmapHeight: 200 }
+            m.node.titleLogo = loadedLogo
+            m.node.logoState = { url: "pkg:/logo.png", mediaType: "movie", fittedMediaType: "" }
+
+            'bs:disable-next-line 1140
+            onTitleLogoLoadStatusChanged()
+
+            m.node.titleLogo = originalLogo
+            m.node.logoState = originalState
+            m.assertEqual(loadedLogo.width, 600)
+            m.assertEqual(loadedLogo.height, 100)
+            m.assertEqual(loadedLogo.translation, [0, 90])
+            m.assertTrue(loadedLogo.visible)
+            'bs:disable-next-line 1140
+            layout = getContentLayout("movie")
+            m.assertEqual(layout.logoAnchorTop - loadedLogo.translation[1] - loadedLogo.height, 40)
+        end function
+
+        @it("keeps the reserved gap for a tall partial-screen movie logo")
+        function _()
+            m.top.backgroundDisplay = "partial-screen"
+            m.top.mediaContent = m.createContent("movie")
+            originalLogo = m.node.titleLogo
+            originalState = m.node.logoState
+            ' Substitute the asynchronous Poster load result, retaining production fitting.
+            loadedLogo = { loadStatus: "ready", uri: "pkg:/logo.png", bitmapWidth: 400, bitmapHeight: 800 }
+            m.node.titleLogo = loadedLogo
+            m.node.logoState = { url: "pkg:/logo.png", mediaType: "movie", fittedMediaType: "" }
+
+            'bs:disable-next-line 1140
+            onTitleLogoLoadStatusChanged()
+
+            m.node.titleLogo = originalLogo
+            m.node.logoState = originalState
+            m.assertEqual(loadedLogo.width, 95)
+            m.assertEqual(loadedLogo.height, 190)
+            m.assertEqual(loadedLogo.translation, [0, 0])
+            m.assertTrue(loadedLogo.visible)
+            'bs:disable-next-line 1140
+            layout = getContentLayout("movie")
+            m.assertEqual(layout.logoAnchorTop - loadedLogo.translation[1] - loadedLogo.height, 40)
+        end function
+
+        @it("keeps the reserved gap for a tall cinematic movie logo")
+        function _()
+            m.top.backgroundDisplay = "cinematic"
+            m.top.mediaContent = m.createContent("movie")
+            originalLogo = m.node.titleLogo
+            originalState = m.node.logoState
+            ' Substitute the asynchronous Poster load result, retaining production fitting.
+            loadedLogo = { loadStatus: "ready", uri: "pkg:/logo.png", bitmapWidth: 400, bitmapHeight: 800 }
+            m.node.titleLogo = loadedLogo
+            m.node.logoState = { url: "pkg:/logo.png", mediaType: "movie", fittedMediaType: "" }
+
+            'bs:disable-next-line 1140
+            onTitleLogoLoadStatusChanged()
+
+            m.node.titleLogo = originalLogo
+            m.node.logoState = originalState
+            m.assertEqual(loadedLogo.width, 110)
+            m.assertEqual(loadedLogo.height, 220)
+            m.assertEqual(loadedLogo.translation, [0, 343])
+            m.assertTrue(loadedLogo.visible)
+            'bs:disable-next-line 1140
+            layout = getContentLayout("movie")
+            m.assertEqual(layout.logoAnchorTop - loadedLogo.translation[1] - loadedLogo.height, 40)
+        end function
+
+        @it("keeps the reserved gap for a episode logo above its title")
+        function _()
+            m.top.backgroundDisplay = "full-screen"
+            m.top.mediaContent = m.createContent("tv-episode")
+            originalLogo = m.node.titleLogo
+            originalState = m.node.logoState
+            ' Substitute the asynchronous Poster load result, retaining production fitting.
+            loadedLogo = { loadStatus: "ready", uri: "pkg:/logo.png", bitmapWidth: 400, bitmapHeight: 800 }
+            m.node.titleLogo = loadedLogo
+            m.node.logoState = { url: "pkg:/logo.png", mediaType: "tv-episode", fittedMediaType: "" }
+
+            'bs:disable-next-line 1140
+            onTitleLogoLoadStatusChanged()
+
+            m.node.titleLogo = originalLogo
+            m.node.logoState = originalState
+            m.assertEqual(loadedLogo.width, 60)
+            m.assertEqual(loadedLogo.height, 120)
+            m.assertEqual(loadedLogo.translation, [0, 26])
+            m.assertTrue(loadedLogo.visible)
+            'bs:disable-next-line 1140
+            layout = getContentLayout("tv-episode")
+            m.assertEqual(layout.logoAnchorTop - loadedLogo.translation[1] - loadedLogo.height, 24)
+        end function
+
+        @describe("metadata color hierarchy")
+
+        @it("uses the row color for movie metadata")
+        function _()
+            content = m.createContent("movie")
+            content.runtimeText = "45m"
+            content.communityRating = 8
+            content.criticRating = 90
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("primaryInfoLabel").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("secondaryInfoLabel").color, &hB9C7D6FF)
+            m.assertEqual(m.top.findNode("runtimeLabel").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("communityRatingLabel").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("criticRatingLabel").color, &hFFFFFFFF)
+        end function
+
+        @it("uses the row color for tv-episode metadata")
+        function _()
+            content = m.createContent("tv-episode")
+            content.runtimeText = "45m"
+            content.communityRating = 8
+            content.criticRating = 90
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("primaryInfoLabel").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("secondaryInfoLabel").color, &hB9C7D6FF)
+            m.assertEqual(m.top.findNode("runtimeLabel").color, &hB9C7D6FF)
+            m.assertEqual(m.top.findNode("communityRatingLabel").color, &hB9C7D6FF)
+            m.assertEqual(m.top.findNode("criticRatingLabel").color, &hB9C7D6FF)
+        end function
+
+        @describe("metadata layout regression coverage")
+
+        @it("uses one gap between runtime and stars without a classification")
+        function _()
+            content = m.createContent("movie")
+            content.runtimeText = "2h 5m"
+            content.communityRating = 8.3
+            m.top.mediaContent = content
+
+            runtime = m.top.findNode("runtimeGroup")
+            ratings = m.top.findNode("ratingsGroup")
+            ' Resolve the row layout before reading child translations.
+            m.assertTrue(m.top.findNode("primaryInfoRow").boundingRect().width > 0)
+            gap = ratings.translation[0] - runtime.translation[0] - runtime.boundingRect().width
+
+            m.assertEqual(gap, m.top.findNode("primaryInfoRow").itemSpacings[0])
+        end function
+
+        @it("removes the classification gap when switching to an unrated movie")
+        function _()
+            content = m.createContent("movie")
+            content.runtimeText = "2h 5m"
+            content.communityRating = 8.3
+            content.officialRating = "PG-13"
+            m.top.mediaContent = content
+
+            content.officialRating = ""
+            m.top.mediaContent = content
+            runtime = m.top.findNode("runtimeGroup")
+            ratings = m.top.findNode("ratingsGroup")
+            ' Resolve the row layout before reading child translations.
+            m.assertTrue(m.top.findNode("primaryInfoRow").boundingRect().width > 0)
+            gap = ratings.translation[0] - runtime.translation[0] - runtime.boundingRect().width
+
+            m.assertEqual(gap, m.top.findNode("primaryInfoRow").itemSpacings[0])
+        end function
+
+        @it("restores the classification badge after an unrated movie")
+        function _()
+            content = m.createContent("movie")
+            content.runtimeText = "2h 5m"
+            content.communityRating = 8.3
+            m.top.mediaContent = content
+
+            content.officialRating = "PG-13"
+            m.top.mediaContent = content
+            badge = m.top.findNode("contentRatingGroup")
+            ratings = m.top.findNode("ratingsGroup")
+            ' Resolve the row layout before reading child translations.
+            m.assertTrue(m.top.findNode("primaryInfoRow").boundingRect().width > 0)
+            gap = ratings.translation[0] - badge.translation[0] - badge.boundingRect().width
+
+            m.assertTrue(m.top.findNode("contentRatingBorder").visible)
+            m.assertTrue(m.top.findNode("contentRatingLabel").visible)
+            m.assertEqual(gap, m.top.findNode("primaryInfoRow").itemSpacings[0])
+        end function
+
+        @it("uses one gap between runtime and stars without an episode classification")
+        function _()
+            content = m.createContent("tv-episode")
+            content.runtimeText = "2h 5m"
+            content.communityRating = 8.3
+            m.top.mediaContent = content
+
+            runtime = m.top.findNode("runtimeGroup")
+            ratings = m.top.findNode("ratingsGroup")
+            ' Resolve the row layout before reading child translations.
+            m.assertTrue(m.top.findNode("secondaryInfoRow").boundingRect().width > 0)
+            gap = ratings.translation[0] - runtime.translation[0] - runtime.boundingRect().width
+
+            m.assertEqual(gap, m.top.findNode("secondaryInfoRow").itemSpacings[0])
+        end function
+
+        @it("removes the classification gap when switching to an unrated episode")
+        function _()
+            content = m.createContent("tv-episode")
+            content.runtimeText = "2h 5m"
+            content.communityRating = 8.3
+            content.officialRating = "PG-13"
+            m.top.mediaContent = content
+
+            content.officialRating = ""
+            m.top.mediaContent = content
+            runtime = m.top.findNode("runtimeGroup")
+            ratings = m.top.findNode("ratingsGroup")
+            ' Resolve the row layout before reading child translations.
+            m.assertTrue(m.top.findNode("secondaryInfoRow").boundingRect().width > 0)
+            gap = ratings.translation[0] - runtime.translation[0] - runtime.boundingRect().width
+
+            m.assertEqual(gap, m.top.findNode("secondaryInfoRow").itemSpacings[0])
+        end function
+
+        @it("restores the classification badge after an unrated episode")
+        function _()
+            content = m.createContent("tv-episode")
+            content.runtimeText = "2h 5m"
+            content.communityRating = 8.3
+            m.top.mediaContent = content
+
+            content.officialRating = "PG-13"
+            m.top.mediaContent = content
+            badge = m.top.findNode("contentRatingGroup")
+            ratings = m.top.findNode("ratingsGroup")
+            ' Resolve the row layout before reading child translations.
+            m.assertTrue(m.top.findNode("secondaryInfoRow").boundingRect().width > 0)
+            gap = ratings.translation[0] - badge.translation[0] - badge.boundingRect().width
+
+            m.assertTrue(m.top.findNode("contentRatingBorder").visible)
+            m.assertTrue(m.top.findNode("contentRatingLabel").visible)
+            m.assertEqual(gap, m.top.findNode("secondaryInfoRow").itemSpacings[0])
+        end function
+
+        @it("measures the real content badge by node identity")
+        function _()
+            content = m.createContent("movie")
+            content.officialRating = "PG-13"
+            m.top.mediaContent = content
+
+            'bs:disable-next-line 1140
+            width = measureMetadataItem(m.top.findNode("contentRatingGroup"))
+
+            m.assertEqual(width, m.top.findNode("contentRatingBorder").width)
+            m.assertTrue(width > 16)
+        end function
+
+        @it("measures a different real node as ordinary metadata")
+        function _()
+            content = m.createContent("movie")
+            content.runtimeText = "2h 5m"
+            m.top.mediaContent = content
+            group = m.top.findNode("runtimeGroup")
+
+            'bs:disable-next-line 1140
+            width = measureMetadataItem(group)
+
+            m.assertTrue(width > group.getChild(0).width + group.itemSpacings[0])
+            m.assertTrue(width < 300)
+        end function
+
+        @it("keeps percentage and icon consistent for 59.4")
+        function _()
+            content = m.createContent("movie")
+            content.criticRating = 59.4
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "59%")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-rotten.png")
+        end function
+
+        @it("keeps percentage and icon consistent for 59.6")
+        function _()
+            content = m.createContent("movie")
+            content.criticRating = 59.6
+            m.top.mediaContent = content
+
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "60%")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-fresh.png")
+        end function
+
+        @it("fits the complete populated row within its width")
+        function _()
+            content = m.createContent("movie")
+            content.primaryInfoText = String(200, "W")
+            content.runtimeText = "2h 5m"
+            content.officialRating = "PG-13"
+            content.communityRating = 8.3
+            content.criticRating = 92
+            m.top.mediaContent = content
+
+            rowWidth = m.top.findNode("primaryInfoRow").boundingRect().width
+            m.assertTrue(rowWidth <= 1220)
+            m.assertTrue(rowWidth >= 1218)
+        end function
+
+        @it("uses XML icon dimensions and spacing when reserving row space")
+        function _()
+            content = m.createContent("movie")
+            content.primaryInfoText = String(200, "W")
+            content.runtimeText = "2h 5m"
+            m.top.mediaContent = content
+            initialWidth = m.top.findNode("primaryInfoLabel").width
+            icon = m.top.findNode("runtimeGroup").getChild(0)
+            originalWidth = icon.width
+            originalSpacing = m.top.findNode("runtimeGroup").itemSpacings
+            originalRowSpacing = m.top.findNode("primaryInfoRow").itemSpacings
+            icon.width = originalWidth + 20
+            m.top.findNode("runtimeGroup").itemSpacings = [originalSpacing[0] + 5]
+            m.top.findNode("primaryInfoRow").itemSpacings = [originalRowSpacing[0] + 7]
+            content.title = "Updated"
+            m.top.mediaContent = content
+            actualWidth = m.top.findNode("primaryInfoLabel").width
+            rowWidth = m.top.findNode("primaryInfoRow").boundingRect().width
+            icon.width = originalWidth
+            m.top.findNode("runtimeGroup").itemSpacings = originalSpacing
+            m.top.findNode("primaryInfoRow").itemSpacings = originalRowSpacing
+
+            m.assertEqual(actualWidth, initialWidth - 32)
+            m.assertTrue(rowWidth <= 1220)
+        end function
+
+        @it("restores natural metadata width after a long item")
+        function _()
+            content = m.createContent("movie")
+            content.primaryInfoText = String(200, "W")
+            content.communityRating = 8
+            m.top.mediaContent = content
+            longWidth = m.top.findNode("primaryInfoLabel").width
+
+            content.primaryInfoText = "2026"
+            m.top.mediaContent = content
+
+            m.assertTrue(m.top.findNode("primaryInfoLabel").width < longWidth)
+            m.assertTrue(m.top.findNode("primaryInfoLabel").width > 0)
+            m.assertTrue(m.top.findNode("primaryInfoRow").boundingRect().width < 300)
+        end function
+
+        @it("clears episode decorations when switching to a season summary")
+        function _()
+            content = m.createContent("tv-episode")
+            content.runtimeText = "45m"
+            content.communityRating = 8
+            content.criticRating = 90
+            m.top.mediaContent = content
+
+            m.top.mediaContent = m.createContent("tv-season")
+
+            m.assertFalse(m.top.findNode("runtimeGroup").visible)
+            m.assertFalse(m.top.findNode("ratingsGroup").visible)
+            m.assertEqual(m.top.findNode("ratingsGroup").getParent().id, "inactiveMetadata")
+        end function
+
+        @it("refits a loaded logo from full-screen to cinematic")
+        function _()
+            m.top.backgroundDisplay = "full-screen"
+            m.top.mediaContent = m.createContent("movie")
+            originalLogo = m.node.titleLogo
+            originalState = m.node.logoState
+            loadedLogo = { loadStatus: "ready", uri: "pkg:/logo.png", bitmapWidth: 400, bitmapHeight: 800 }
+            m.node.titleLogo = loadedLogo
+            m.node.logoState = { url: "pkg:/logo.png", mediaType: "movie", fittedMediaType: "" }
+            'bs:disable-next-line 1140
+            onTitleLogoLoadStatusChanged()
+
+            m.top.backgroundDisplay = "cinematic"
+
+            m.node.titleLogo = originalLogo
+            m.node.logoState = originalState
+            m.assertEqual(loadedLogo.width, 110)
+            m.assertEqual(loadedLogo.height, 220)
+            m.assertEqual(loadedLogo.translation, [0, 343])
+            m.assertEqual(m.top.findNode("infoGroup").translation[1] - loadedLogo.translation[1] - loadedLogo.height, 40.0)
+        end function
+
+        @it("refits a loaded logo from cinematic to full-screen")
+        function _()
+            m.top.backgroundDisplay = "cinematic"
+            m.top.mediaContent = m.createContent("movie")
+            originalLogo = m.node.titleLogo
+            originalState = m.node.logoState
+            loadedLogo = { loadStatus: "ready", uri: "pkg:/logo.png", bitmapWidth: 400, bitmapHeight: 800 }
+            m.node.titleLogo = loadedLogo
+            m.node.logoState = { url: "pkg:/logo.png", mediaType: "movie", fittedMediaType: "" }
+            'bs:disable-next-line 1140
+            onTitleLogoLoadStatusChanged()
+
+            m.top.backgroundDisplay = "full-screen"
+
+            m.node.titleLogo = originalLogo
+            m.node.logoState = originalState
+            m.assertEqual(loadedLogo.width, 95)
+            m.assertEqual(loadedLogo.height, 190)
+            m.assertEqual(loadedLogo.translation, [0, 0])
+            m.assertEqual(m.top.findNode("infoGroup").translation[1] - loadedLogo.translation[1] - loadedLogo.height, 40.0)
+        end function
+
     end class
 
 end namespace

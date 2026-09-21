@@ -43,6 +43,8 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
     title = getDisplayTitle(item)
     episodePositionText = getEpisodePositionText(item)
     episodeMetadataText = getSecondaryMetadataText(item)
+    ratingItem = item.raw
+    if ratingItem = invalid or isSeasonDetailsItem(item) then ratingItem = {}
     m.mediaShell.mediaContent = {
         mediaType: getMediaShellType(item)
         backdropUrl: Format.SafeString(item.HDPosterUrl, "")
@@ -52,6 +54,9 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
         title: title
         primaryInfoText: episodePositionText
         secondaryInfoText: episodeMetadataText
+        runtimeText: MediaMetadata.FormatRuntime(ratingItem.RunTimeTicks)
+        communityRating: ratingItem.CommunityRating
+        criticRating: ratingItem.CriticRating
         overview: Format.SafeString(item.description, "")
     }
 
@@ -126,32 +131,8 @@ end function
 function getSecondaryMetadataText(item as dynamic) as string
     if item = invalid then return ""
     if isSeasonDetailsItem(item) then return getSeasonMetadataText(item.raw)
-
-    raw = item.raw
-    if raw = invalid then return ""
-
-    parts = []
-
-    dateText = Format.SafeString(item.episodeDate, "")
-    if dateText <> "" then parts.Push(dateText)
-
-    runtimeText = MediaMetadata.FormatRuntime(raw.RunTimeTicks)
-    if runtimeText <> "" then parts.Push(runtimeText)
-
-    ratingText = getRatingText(raw)
-    if ratingText <> "" then parts.Push(ratingText)
-
-    return Arrays.JoinStringValues(parts, MediaMetadata.BulletSeparator())
-end function
-
-'-------------------------------------------------------------------------------
-' getRatingText
-'-------------------------------------------------------------------------------
-function getRatingText(item as dynamic) as string
-    rating = MediaMetadata.FormatRating(item.CommunityRating)
-    if rating = "" then return ""
-
-    return "Rating " + rating
+    if item.raw = invalid then return ""
+    return Format.SafeString(item.episodeDate, "")
 end function
 
 '-------------------------------------------------------------------------------

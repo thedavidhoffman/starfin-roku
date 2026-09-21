@@ -1,4 +1,7 @@
 import "pkg:/source/Format.bs"
+import "pkg:/source/MediaMetadata.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/TextMeasurement.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/MaskAssets.bs"
 import "pkg:/source/ResolutionProfile.bs"
@@ -8,12 +11,7 @@ import "pkg:/source/ResolutionAssets.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.mediaBackgroundFull = m.top.findNode("mediaBackgroundFull")
-    m.mediaBackgroundPartialGroup = m.top.findNode("mediaBackgroundPartialGroup")
-    MaskAssets.Apply(m.mediaBackgroundPartialGroup, "media-shell-backdrop-mask.png", [1152, 648], [768, 432])
-    m.mediaBackgroundPartial = m.top.findNode("mediaBackgroundPartial")
-    m.contentGradient = m.top.findNode("contentGradient")
-    m.contentGroup = m.top.findNode("contentGroup")
+    initReferences()
     m.mediaBackgroundUrl = ""
     m.logoState = {
         url: ""
@@ -21,6 +19,22 @@ sub init()
         mediaType: ""
         fittedMediaType: ""
     }
+    initHandlers()
+    onContentTranslationChanged()
+    applyBackgroundDisplay()
+    onDetailsVisibleChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.mediaBackgroundFull = m.top.findNode("mediaBackgroundFull")
+    m.mediaBackgroundPartialGroup = m.top.findNode("mediaBackgroundPartialGroup")
+    MaskAssets.Apply(m.mediaBackgroundPartialGroup, "media-shell-backdrop-mask.png", [1152, 648], [768, 432])
+    m.mediaBackgroundPartial = m.top.findNode("mediaBackgroundPartial")
+    m.contentGradient = m.top.findNode("contentGradient")
+    m.contentGroup = m.top.findNode("contentGroup")
     m.titleLogo = m.top.findNode("titleLogo")
     m.logoFallbackTitleLabel = m.top.findNode("logoFallbackTitleLabel")
     m.episodeTitleLabel = m.top.findNode("episodeTitleLabel")
@@ -29,11 +43,33 @@ sub init()
     m.secondaryInfoLabel = m.top.findNode("secondaryInfoLabel")
     m.overviewDescription = m.top.findNode("overviewDescription")
 
+    m.metadata = {
+        inactive: m.top.findNode("inactiveMetadata")
+        measurementLabel: CreateObject("roSGNode", "Label")
+        maxWidth: m.primaryInfoLabel.width
+        badgeMaxWidth: m.top.findNode("contentRatingLabel").width
+        runtimeGroup: m.top.findNode("runtimeGroup")
+        runtimeLabel: m.top.findNode("runtimeLabel")
+        contentRatingGroup: m.top.findNode("contentRatingGroup")
+        contentRatingLabel: m.top.findNode("contentRatingLabel")
+        contentRatingBorder: m.top.findNode("contentRatingBorder")
+        group: m.top.findNode("ratingsGroup")
+        primaryRow: m.top.findNode("primaryInfoRow")
+        secondaryRow: m.top.findNode("secondaryInfoRow")
+        communityGroup: m.top.findNode("communityRatingGroup")
+        communityLabel: m.top.findNode("communityRatingLabel")
+        criticGroup: m.top.findNode("criticRatingGroup")
+        criticLabel: m.top.findNode("criticRatingLabel")
+        criticIcon: m.top.findNode("criticRatingIcon")
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.overviewDescription.observeField("overlayRequested", "onDescriptionOverlayRequested")
     m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
-    onContentTranslationChanged()
-    applyBackgroundDisplay()
-    onDetailsVisibleChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -93,6 +129,7 @@ sub onMediaContentChanged()
     renderTitle(Format.SafeString(content.title, ""), Format.SafeString(content.logoUrl, ""), Format.SafeString(content.logoTitle, ""), mediaType, logoPending)
     m.primaryInfoLabel.text = Format.SafeString(content.primaryInfoText, "")
     m.secondaryInfoLabel.text = Format.SafeString(content.secondaryInfoText, "")
+    renderMetadata(content, mediaType)
     m.overviewDescription.title = Format.SafeString(content.title, "Description")
     m.overviewDescription.text = Strings.CollapseWhitespace(content.overview)
 end sub
@@ -331,15 +368,18 @@ sub onTitleLogoLoadStatusChanged()
     layout = getContentLayout(mediaType)
     maxWidth = layout.logoMaxWidth
     maxHeight = layout.logoMaxHeight
+    ' Reserve the gap before fitting so tall logos never need a clamped top edge.
+    availableHeight = layout.logoAnchorTop - layout.logoGap
+    if maxHeight > availableHeight then maxHeight = availableHeight
     logoRatio = bitmapWidth / bitmapHeight
     boxRatio = maxWidth / maxHeight
 
     if logoRatio > boxRatio then
         fittedWidth = maxWidth
-        fittedHeight = int(maxWidth / logoRatio)
+        fittedHeight = Number.ToInteger(maxWidth / logoRatio)
     else
         fittedHeight = maxHeight
-        fittedWidth = int(maxHeight * logoRatio)
+        fittedWidth = Number.ToInteger(maxHeight * logoRatio)
     end if
 
     if fittedWidth < 1 then fittedWidth = 1
@@ -377,4 +417,112 @@ function getLogoBottomAlignedY(logoHeight as integer, layout as object) as integ
     y = layout.logoAnchorTop - layout.logoGap - logoHeight
     if y < 0 then return 0
     return y
+end function
+
+'-------------------------------------------------------------------------------
+' renderMetadata
+'-------------------------------------------------------------------------------
+sub renderMetadata(content as object, mediaType as string)
+    runtimeText = Format.SafeString(content.runtimeText, "")
+    contentRatingText = Format.SafeString(content.officialRating, "")
+    m.metadata.runtimeLabel.text = runtimeText
+    m.metadata.runtimeGroup.visible = runtimeText <> ""
+    m.metadata.contentRatingLabel.text = contentRatingText
+    m.metadata.contentRatingGroup.visible = contentRatingText <> ""
+    badgeTextWidth = TextMeasurement.GetWidth(m.metadata.measurementLabel, m.metadata.contentRatingLabel.font, contentRatingText)
+    if badgeTextWidth > m.metadata.badgeMaxWidth then badgeTextWidth = m.metadata.badgeMaxWidth
+    m.metadata.contentRatingLabel.width = badgeTextWidth
+    m.metadata.contentRatingBorder.width = badgeTextWidth + (2 * m.metadata.contentRatingLabel.translation[0])
+
+    communityText = MediaMetadata.FormatRating(content.communityRating)
+    criticRating = MediaMetadata.NormalizeCriticRating(content.criticRating)
+    criticText = ""
+    if criticRating <> invalid then criticText = criticRating.ToStr() + "%"
+    m.metadata.communityLabel.text = communityText
+    m.metadata.communityGroup.visible = communityText <> ""
+    m.metadata.criticLabel.text = criticText
+    m.metadata.criticGroup.visible = criticText <> ""
+    m.metadata.criticIcon.uri = ""
+    if criticText <> "" then
+        m.metadata.criticIcon.uri = "pkg:/images/icons/ratings/tomato-rotten.png"
+        if criticRating >= 60 then m.metadata.criticIcon.uri = "pkg:/images/icons/ratings/tomato-fresh.png"
+    end if
+    m.metadata.group.visible = communityText <> "" or criticText <> ""
+
+    layoutMetadataRow(mediaType)
+end sub
+
+'-------------------------------------------------------------------------------
+' layoutMetadataRow
+'-------------------------------------------------------------------------------
+sub layoutMetadataRow(mediaType as string)
+    ' Episode ratings follow date/runtime; movies and series use the first row.
+    metadataColor = &hFFFFFFFF
+    row = m.metadata.primaryRow
+    metadataLabel = m.primaryInfoLabel
+    m.primaryInfoLabel.width = 0
+    m.secondaryInfoLabel.width = m.metadata.maxWidth
+    if mediaType = "tv-episode" then
+        metadataColor = &hB9C7D6FF
+        row = m.metadata.secondaryRow
+        metadataLabel = m.secondaryInfoLabel
+        m.primaryInfoLabel.width = m.metadata.maxWidth
+        m.secondaryInfoLabel.width = 0
+    end if
+    m.metadata.runtimeLabel.color = metadataColor
+    m.metadata.communityLabel.color = metadataColor
+    m.metadata.criticLabel.color = metadataColor
+    m.primaryInfoLabel.visible = m.primaryInfoLabel.text <> ""
+    m.secondaryInfoLabel.visible = m.secondaryInfoLabel.text <> ""
+    ' Keep layout membership consistent with the visible items measured below.
+    placeMetadataItem(m.primaryInfoLabel, m.metadata.primaryRow)
+    placeMetadataItem(m.secondaryInfoLabel, m.metadata.secondaryRow)
+    placeMetadataItem(m.metadata.communityGroup, m.metadata.group)
+    placeMetadataItem(m.metadata.criticGroup, m.metadata.group)
+    trailingWidth = 0
+    trailingCount = 0
+    for each group in [m.metadata.runtimeGroup, m.metadata.contentRatingGroup, m.metadata.group]
+        placeMetadataItem(group, row)
+        if group.visible then
+            trailingWidth += measureMetadataItem(group)
+            trailingCount++
+        end if
+    end for
+    availableWidth = m.metadata.maxWidth - trailingWidth - (trailingCount * row.itemSpacings[0])
+    textWidth = TextMeasurement.GetWidth(m.metadata.measurementLabel, metadataLabel.font, metadataLabel.text)
+    if textWidth > availableWidth then textWidth = availableWidth
+    if textWidth < 0 then textWidth = 0
+    metadataLabel.width = textWidth
+end sub
+
+'-------------------------------------------------------------------------------
+' placeMetadataItem
+'-------------------------------------------------------------------------------
+sub placeMetadataItem(node as object, row as object)
+    ' Hidden nodes must leave the LayoutGroup so they consume neither width nor spacing.
+    if node.visible then
+        row.appendChild(node)
+    else
+        m.metadata.inactive.appendChild(node)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' measureMetadataItem
+'-------------------------------------------------------------------------------
+function measureMetadataItem(node as object) as float
+    if node.isSameNode(m.metadata.contentRatingGroup) then return m.metadata.contentRatingBorder.width
+    if node.subtype() = "Label" then return TextMeasurement.GetWidth(m.metadata.measurementLabel, node.font, node.text)
+    if node.subtype() = "Poster" then return node.width
+
+    width = 0
+    visibleCount = 0
+    for each child in node.getChildren(-1, 0)
+        if child.visible then
+            if visibleCount > 0 then width += node.itemSpacings[0]
+            width += measureMetadataItem(child)
+            visibleCount++
+        end if
+    end for
+    return width
 end function
