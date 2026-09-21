@@ -60,7 +60,18 @@ npm run automation:test:release
 Release mode runs the same complete suite, requires every registered test to
 pass with no pending, skipped, or unexpected results, and then creates a
 credential-safe ZIP. It preserves the private report while masking the server
-field in copied Login screenshots. The public copy excludes logs and is scanned
+field in copied Login screenshots. Discovery screenshots use explicit layouts:
+the selected server field, the complete moving results viewport (including the
+Login field visible behind it), or the native manual-entry keyboard field.
+The initial `discovery-searching` checkpoint has an empty server field and no
+results, so it remains unmasked; verify that state when reviewing the archive.
+Masks scale to 1080p and 720p and round outward to cover edge pixels. An unknown
+discovery checkpoint or failure screenshot stops archive generation until its
+layout is classified; it cannot silently bypass redaction. Private originals
+remain unchanged. Public HTML and JSON (including nested discovery metadata)
+replace every non-exempt IPv4 address with `[ip_redacted]`, regardless of whether
+it matches a configured host. Only the exact `127.0.0.1` is exempt. The public
+copy excludes logs and is scanned
 for the configured Jellyfin server, Roku host, Roku developer password, and
 Jellyfin password. Fixed loopback and synthetic test values are not secrets.
 

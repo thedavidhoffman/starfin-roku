@@ -243,6 +243,29 @@ metadata. Extract each ZIP into a separate directory and verify that the HTML
 report renders with its local scripts, styles, fonts, and screenshots available.
 Do not attach private reports or logs to a public release.
 
+Redaction verification must cover both image pixels and report data:
+
+- Inspect Login and discovery screenshots, including discovered-server lists,
+  the selected server field, and native manual-entry keyboards. Results move
+  as lists grow; verify masks at both resolutions rather than applying only
+  the Login field rectangle. Unknown discovery screenshot layouts must stop
+  packaging until their redaction coverage is defined and tested.
+  The initial `discovery-searching` checkpoint remains unmasked: confirm that
+  it shows only the searching state, with an empty server field and no results.
+- Sanitize and then scan every public HTML and JSON file, including nested or
+  escaped context metadata and `verification.json`, for all IPv4 addresses.
+  Do not limit this to configured host values: discovery may find other servers.
+  Preserve JSON/HTML encoding and the exact loopback exception below. Continue
+  checking configured hosts and credentials separately.
+- Preserve private originals. Test report generation with unconfigured
+  discovered addresses, nested JSON, HTML-encoded metadata, and screenshot
+  layouts at both 1080p and 720p. Run `npm run automation:report:test` after
+  changing sanitization. Extract the final ZIP and verify its actual contents;
+  a successful generator exit or a "credential-safe" label is not sufficient.
+- When scanning bundled scripts and styles, distinguish literal template values
+  from exposed credentials (especially short passwords); verify matching assets
+  against the installed report template rather than blindly replacing values.
+
 The exact loopback address `127.0.0.1` may remain visible in screenshots, report
 text, and metadata because it does not identify a private device or server.
 This exception also applies to the unit-test report below. All other IP addresses

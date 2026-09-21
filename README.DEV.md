@@ -100,9 +100,12 @@ come from the injected test framework and do not indicate failures in Starfin.
 Test specifications live under `tests/rooibos/specs/` and mirror the corresponding
 production paths. `bsconfig-test.json` maps them into the test channel's
 executable source scope without including them in production packages.
-Feature-owned pure helpers remain beside their owning component in the
-repository and are mapped into an executable package source directory by the
-production and test build configurations.
+Component-specific pure playback helpers live in `source/video-player-helpers`,
+with their pure unit suites in `tests/rooibos/specs/source/video-player-helpers`.
+Purity means independence from component `m` state; it does not imply that a
+helper is used by multiple components.
+All three build configurations include the helpers through `source/**/*` without
+relocating them. Component-local orchestration stays beside its owning component.
 
 ## Debugging and Logs
 

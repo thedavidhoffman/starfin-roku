@@ -1,0 +1,50 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/Number.bs"
+
+namespace PlaybackControlsLogic
+
+    '---------------------------------------------------------------------------
+    ' PlaybackControlsLogic.GetDefaultButtonIndex
+    '---------------------------------------------------------------------------
+    function GetDefaultButtonIndex(buttons as object) as integer
+        if buttons = invalid then return 0
+        for i = 0 to buttons.Count() - 1
+            if buttons[i] <> invalid and Format.SafeString(buttons[i].id, "") = "playPauseButton" then return i
+        end for
+        return 0
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackControlsLogic.FormatTime
+    '---------------------------------------------------------------------------
+    function FormatTime(totalSeconds as dynamic) as string
+        seconds = Fix(Number.ToFloat(totalSeconds, 0.0))
+        if seconds < 0 then seconds = 0
+        hours = Fix(seconds / 3600)
+        minutes = Fix((seconds mod 3600) / 60)
+        seconds = seconds mod 60
+        if hours > 0 then return hours.ToStr() + ":" + PlaybackControlsLogic.__TwoDigits(minutes) + ":" + PlaybackControlsLogic.__TwoDigits(seconds)
+        return minutes.ToStr() + ":" + PlaybackControlsLogic.__TwoDigits(seconds)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackControlsLogic.__TwoDigits
+    '---------------------------------------------------------------------------
+    function __TwoDigits(value as integer) as string
+        if value < 10 then return "0" + value.ToStr()
+        return value.ToStr()
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackControlsLogic.GetProgress
+    '---------------------------------------------------------------------------
+    function GetProgress(position as dynamic, duration as dynamic) as object
+        safeDuration = Number.ToFloat(duration, 1.0)
+        if safeDuration <= 0 then safeDuration = 1.0
+        safePosition = Number.ToFloat(position, 0.0)
+        if safePosition < 0 then safePosition = 0
+        if safePosition > safeDuration then safePosition = safeDuration
+        return { position: safePosition, duration: safeDuration, fraction: safePosition / safeDuration }
+    end function
+
+end namespace

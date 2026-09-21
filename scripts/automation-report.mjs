@@ -11,6 +11,21 @@ const loginServerField = {
   height: 105
 };
 const referenceResolution = { width: 1920, height: 1080 };
+// Cover the complete results viewport: centering and wrapped status text move
+// the rows as the list grows. The Login field can remain visible behind it.
+const discoveryResults = { left: 435, top: 370, width: 1050, height: 440 };
+const serverKeyboardField = { left: 270, top: 260, width: 1380, height: 90 };
+const discoveryRedactions = new Map([
+  ['discovery-login.png', [loginServerField]],
+  // This checkpoint shows the initial scan with an empty Login server field.
+  ['discovery-searching.png', []],
+  ['discovery-results.png', [loginServerField, discoveryResults]],
+  ['discovery-server-focused.png', [loginServerField, discoveryResults]],
+  ['discovery-footer-focused.png', [loginServerField, discoveryResults]],
+  ['discovery-selected.png', [loginServerField]],
+  ['discovery-manual-selected.png', [loginServerField]],
+  ['discovery-manual-keyboard.png', [serverKeyboardField]]
+]);
 
 export function validateAutomationReport(report) {
   const stats = report?.stats;
@@ -36,38 +51,49 @@ export function shouldRedactLoginScreenshot(filename) {
     && (normalized.startsWith('login-') || normalized.includes('authenticated-smoke-test'));
 }
 
-export function scaleLoginServerField(width, height) {
-  const scaleX = width / referenceResolution.width;
-  const scaleY = height / referenceResolution.height;
-  return {
-    left: Math.round(loginServerField.left * scaleX),
-    top: Math.round(loginServerField.top * scaleY),
-    width: Math.round(loginServerField.width * scaleX),
-    height: Math.round(loginServerField.height * scaleY)
-  };
+export function screenshotRedactionRegions(filename, width, height) {
+  const normalized = path.basename(filename).toLowerCase();
+  const discovery = discoveryRedactions.get(normalized);
+  if (!discovery && (normalized.startsWith('discovery-') || normalized.includes('server-discovery'))) {
+    throw new Error(`No redaction layout defined for discovery screenshot: ${filename}`);
+  }
+  const regions = discovery ?? (shouldRedactLoginScreenshot(normalized) ? [loginServerField] : []);
+  return regions.map(region => ({
+    left: Math.floor(region.left * width / referenceResolution.width),
+    top: Math.floor(region.top * height / referenceResolution.height),
+    width: Math.ceil((region.left + region.width) * width / referenceResolution.width)
+      - Math.floor(region.left * width / referenceResolution.width),
+    height: Math.ceil((region.top + region.height) * height / referenceResolution.height)
+      - Math.floor(region.top * height / referenceResolution.height)
+  }));
 }
 
-export async function redactLoginScreenshot(inputPath, outputPath = inputPath) {
+export async function redactScreenshot(inputPath, outputPath = inputPath) {
   const metadata = await sharp(inputPath).metadata();
   if (!metadata.width || !metadata.height) throw new Error('Unable to determine screenshot dimensions for redaction.');
 
-  const rectangle = scaleLoginServerField(metadata.width, metadata.height);
+  const rectangles = screenshotRedactionRegions(path.basename(inputPath), metadata.width, metadata.height);
+  if (rectangles.length === 0) return rectangles;
   const fontSize = Math.max(12, Math.round(28 * metadata.width / referenceResolution.width));
-  const overlay = Buffer.from(`
+  const overlays = rectangles.map(rectangle => ({
+    left: rectangle.left,
+    top: rectangle.top,
+    input: Buffer.from(`
     <svg width="${rectangle.width}" height="${rectangle.height}" xmlns="http://www.w3.org/2000/svg">
       <rect width="100%" height="100%" fill="#111827" />
       <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
         fill="#ffffff" font-family="sans-serif" font-size="${fontSize}" font-weight="bold">REDACTED</text>
     </svg>
-  `);
+  `)
+  }));
   const redacted = await sharp(inputPath)
-    .composite([{ input: overlay, left: rectangle.left, top: rectangle.top }])
+    .composite(overlays)
     .removeAlpha()
     .png()
     .toBuffer();
   await fs.writeFile(outputPath, redacted);
 
-  return rectangle;
+  return rectangles;
 }
 
 function serverAddresses(server) {
@@ -103,11 +129,24 @@ export function buildSensitiveValues({ rokuHost, rokuPassword, server, jellyfinP
 }
 
 export function assertNoSensitiveText(text, sensitiveValues, sourceName = 'public report') {
+  if (redactReportAddresses(text) !== text) {
+    throw new Error(`${sourceName} contains a non-exempt IPv4 address.`);
+  }
   for (const sensitive of sensitiveValues) {
     if (containsSensitiveValue(text, sensitive)) {
       throw new Error(`${sourceName} contains the ${sensitive.label}.`);
     }
   }
+}
+
+export function redactReportAddresses(text) {
+  // Also recognize addresses adjacent to the protocol label in console output.
+  return text.replace(/(?:(IPv4)|(?<!\d))((?:\d{1,3}\.){3}\d{1,3})(?!\d)/g,
+    (match, prefix, address) => {
+      if (address === '127.0.0.1' || address.split('.').some(octet => Number(octet) > 255)) return match;
+      // Brackets are safe in JSON strings and in the HTML report's encoded data.
+      return `${prefix ?? ''}[ip_redacted]`;
+    });
 }
 
 function containsSensitiveValue(text, sensitive) {
@@ -153,12 +192,14 @@ async function listFiles(root, current = root) {
   return files;
 }
 
-async function scanPublicText(publicDir, sensitiveValues) {
+async function sanitizePublicText(publicDir, sensitiveValues) {
   const files = await listFiles(publicDir);
   for (const file of files) {
     if (!['.html', '.json'].includes(path.extname(file.relativePath).toLowerCase())) continue;
-    const text = await fs.readFile(file.absolutePath, 'utf8');
+    const original = await fs.readFile(file.absolutePath, 'utf8');
+    const text = redactReportAddresses(original);
     assertNoSensitiveText(text, sensitiveValues, file.relativePath);
+    if (text !== original) await fs.writeFile(file.absolutePath, text);
   }
 }
 
@@ -213,11 +254,12 @@ export async function createReleaseAutomationReport({
   }));
   const uniqueDimensions = [...new Set(dimensions)];
   if (uniqueDimensions.length !== 1) throw new Error('Release screenshots do not have consistent dimensions.');
-  const redactedScreenshots = screenshots.filter(shouldRedactLoginScreenshot);
-  for (const screenshot of redactedScreenshots) {
-    await redactLoginScreenshot(path.join(publicDir, 'screenshots', screenshot));
+  const redactedScreenshots = [];
+  for (const screenshot of screenshotFiles) {
+    const regions = await redactScreenshot(path.join(publicDir, 'screenshots', screenshot));
+    if (regions.length > 0) redactedScreenshots.push(screenshot);
   }
-  if (redactedScreenshots.length === 0) {
+  if (!screenshots.some(shouldRedactLoginScreenshot)) {
     throw new Error('Release report did not contain a Login screenshot to redact.');
   }
 
@@ -236,7 +278,7 @@ export async function createReleaseAutomationReport({
     path.join(publicDir, 'verification.json'),
     `${JSON.stringify(verification, null, 2)}\n`
   );
-  await scanPublicText(publicDir, sensitiveValues);
+  await sanitizePublicText(publicDir, sensitiveValues);
 
   const archiveEntries = await createZip(publicDir, archivePath);
   const requiredEntries = ['report.html', 'report.json', 'verification.json'];

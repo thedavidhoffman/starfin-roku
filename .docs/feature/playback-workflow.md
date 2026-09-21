@@ -4,6 +4,24 @@ Video playback uses three explicit assocarray value contracts. These contracts
 cover every media type routed through `VideoPlayer`; music audio and theme audio
 use separate workflows.
 
+## Pure playback helpers
+
+The six component-specific pure playback helpers live in
+`source/video-player-helpers`: playback control calculations,
+playback-information formatting, media segments, metadata,
+stream selection, and trickplay calculations. Each exposes a responsibility-named
+namespace, such as `VideoPlayerMetadata.GetRuntimeSeconds`; internal members use
+the `__` prefix. Their calculations and state ownership are unchanged.
+
+Pure means independent of component `m` state; it does not imply use by multiple
+components. These helpers retain their component-specific playback responsibilities.
+
+Their source paths match the existing package import paths. Production, Rooibos,
+and automation builds include them once through `source/**/*`, with no helper
+remapping or exclusion rules. The six existing pure test suites mirror that
+location under `tests/rooibos/specs/source/video-player-helpers`; component suites
+continue to cover rendering, focus, events, and playback integration.
+
 ## Estimated finish time
 
 PlaybackControls shows `Ends at 1:50 PM` above the timeline's right edge.

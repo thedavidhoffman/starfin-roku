@@ -1,0 +1,86 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackMode.bs"
+
+namespace PlaybackInfoFormat
+
+    '---------------------------------------------------------------------------
+    ' PlaybackInfoFormat.ModeText
+    '---------------------------------------------------------------------------
+    function ModeText(value as dynamic) as string
+        mode = LCase(Format.SafeString(value, ""))
+        if mode = LCase(PlaybackMode.Mode.Automatic) then return "Automatic"
+        if mode = LCase(PlaybackMode.Mode.AutomaticNoRemux) then return "Automatic — Remux Disabled"
+        if mode = LCase(PlaybackMode.Mode.TranscodeAllowRemux) then return "Force Transcode — Remux Allowed"
+        if mode = LCase(PlaybackMode.Mode.TranscodeNoRemux) then return "Force Transcode — Remux Disabled"
+        return "Not available"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackInfoFormat.DisplayValue
+    '---------------------------------------------------------------------------
+    function DisplayValue(value as dynamic) as string
+        text = Format.SafeString(value, "")
+        if text = "" then return "Not available"
+        return text
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackInfoFormat.ResolutionText
+    '---------------------------------------------------------------------------
+    function ResolutionText(info as object) as string
+        width = Number.ToInteger(info.width, 0)
+        height = Number.ToInteger(info.height, 0)
+        if width <= 0 or height <= 0 then return "Not available"
+        return width.ToStr() + " × " + height.ToStr()
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackInfoFormat.__BitrateText
+    '---------------------------------------------------------------------------
+    function __BitrateText(value as dynamic) as string
+        bitrate = Number.ToInteger(value, 0)
+        if bitrate <= 0 then return ""
+        if bitrate >= 1000000 then return Number.ToInteger(bitrate / 1000000, 0).ToStr() + " Mbps"
+        return Number.ToInteger(bitrate / 1000, 0).ToStr() + " Kbps"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackInfoFormat.StreamText
+    '---------------------------------------------------------------------------
+    function StreamText(codec as dynamic, bitrate as dynamic) as string
+        text = UCase(PlaybackInfoFormat.DisplayValue(codec))
+        bitrateText = PlaybackInfoFormat.__BitrateText(bitrate)
+        if bitrateText <> "" then text = text + "  •  " + bitrateText
+        return text
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackInfoFormat.AudioText
+    '---------------------------------------------------------------------------
+    function AudioText(info as object) as string
+        text = PlaybackInfoFormat.StreamText(info.audioCodec, info.audioBitrate)
+        channels = Number.ToInteger(info.audioChannels, 0)
+        if channels > 0 then text = text + "  •  " + channels.ToStr() + " channels"
+        return text
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackInfoFormat.__IndexText
+    '---------------------------------------------------------------------------
+    function __IndexText(value as dynamic, fallback as string) as string
+        index = Number.ToInteger(value, -1)
+        if index < 0 then return fallback
+        return index.ToStr()
+    end function
+
+    '---------------------------------------------------------------------------
+    ' PlaybackInfoFormat.StreamTitleText
+    '---------------------------------------------------------------------------
+    function StreamTitleText(title as dynamic, index as dynamic, fallback as string) as string
+        text = Format.SafeString(title, "")
+        if text <> "" then return text
+        return PlaybackInfoFormat.__IndexText(index, fallback)
+    end function
+
+end namespace

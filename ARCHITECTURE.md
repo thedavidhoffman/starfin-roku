@@ -129,9 +129,13 @@ and routing decisions and does not access the player node directly.
 
 ## Build and test boundaries
 
-`bsconfig.json` builds the production channel. Pure VideoPlayer helper files are
-remapped into `source/video-player-helpers` because multiple SceneGraph components
-import them through a shared package path.
+`bsconfig.json` builds the production channel. Component-specific pure playback
+helpers live directly in `source/video-player-helpers`, using responsibility-named
+namespaces. Purity means independence from component `m` state, not necessarily
+use by multiple components. Production, Rooibos, and automation builds include
+them through the ordinary `source/**/*` rule; their repository and package paths match without
+remapping. Their pure unit suites live in
+`tests/rooibos/specs/source/video-player-helpers`.
 
 `bsconfig-test.json` builds the Rooibos channel. It remaps test specs into the
 package's `source/tests` tree and also includes component scripts so `@SGNode`
