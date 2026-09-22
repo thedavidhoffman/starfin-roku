@@ -276,3 +276,8 @@ Settings previews update existing cards. Other card layouts keep the panel hidde
 Artwork masks, content positions, progress, watched badges, and focus highlights
 are unchanged. generate-detailed-library-assets.ps1 generates the shared masks
 and all three solid panel assets.
+
+Detailed-card titles use `SmallBoldSystemFont`. Their top aligns with the poster at y=32. The title box is 64 pixels tall, with both metadata presentations starting at y=96 beneath it. The overview remains at y=142.
+
+An experimental 2-pixel solid-white divider spans the detailed card's 516-pixel
+text column at y=135, below the metadata row and above the overview.

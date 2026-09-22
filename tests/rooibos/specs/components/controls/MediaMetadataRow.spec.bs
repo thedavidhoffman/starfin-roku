@@ -1,0 +1,233 @@
+namespace tests
+
+    @SGNode("MediaMetadataRow")
+    @suite("MediaMetadataRow component")
+    class MediaMetadataRowTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.setFields({ leadingText: "", runtimeText: "", officialRating: "", ratings: {}, availableWidth: 516, truncateLeadingText: false, scaleToFit: true })
+        end function
+
+        @describe("metadata rendering")
+
+        @it("keeps the existing icon sizes and gaps")
+        function _()
+            m.assertEqual(m.top.findNode("runtimeGroup").getChild(0).width, 26.0)
+            m.assertEqual(m.top.findNode("communityRatingGroup").getChild(0).width, 26.0)
+            m.assertEqual(m.top.findNode("criticRatingIcon").width, 28.0)
+            m.assertEqual(m.top.itemSpacings, [18.0])
+            m.assertEqual(m.top.findNode("runtimeGroup").itemSpacings, [8.0])
+        end function
+
+        @it("hides missing metadata without leftover gaps")
+        function _()
+            m.top.runtimeText = "2h 5m"
+            m.top.ratings = { communityRating: 8.3 }
+
+            m.top.runtimeText = ""
+            m.top.ratings = {}
+
+            m.assertEqual(m.top.findNode("layout").getChildCount(), 0)
+        end function
+
+        @it("rounds the score and uses the fresh icon at sixty percent")
+        function _()
+            m.top.ratings = { communityRating: 8.25, criticRating: 59.6 }
+
+            m.assertEqual(m.top.findNode("communityRatingLabel").text, "8.3")
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "60%")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-fresh.png")
+        end function
+
+        @it("uses the rotten icon below sixty percent")
+        function _()
+            m.top.ratings = { criticRating: 59.4 }
+
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "59%")
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-rotten.png")
+        end function
+
+        @it("preserves a valid zero critic score")
+        function _()
+            m.top.ratings = { criticRating: 0 }
+
+            m.assertTrue(m.top.findNode("criticRatingGroup").visible)
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "0%")
+        end function
+
+        @it("clears invalid ratings after a populated row")
+        function _()
+            m.top.ratings = { communityRating: 8, criticRating: 90 }
+
+            m.top.ratings = { communityRating: 0, criticRating: "bad" }
+
+            m.assertFalse(m.top.findNode("ratingsGroup").visible)
+            m.assertEqual(m.top.findNode("criticRatingIcon").uri, "")
+        end function
+
+        @it("removes a missing badge without adding a blank gap")
+        function _()
+            m.top.setFields({ runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3 } })
+
+            m.top.officialRating = ""
+            rowWidth = m.top.findNode("layout").boundingRect().width
+            runtime = m.top.findNode("runtimeGroup")
+            ratings = m.top.findNode("ratingsGroup")
+
+            m.assertTrue(rowWidth > 0)
+            m.assertEqual(ratings.translation[0] - runtime.translation[0] - runtime.boundingRect().width, 18.0)
+        end function
+
+        @it("measures the badge border rather than its unconstrained text box")
+        function _()
+            m.top.officialRating = "PG-13"
+
+            'bs:disable-next-line 1140
+            width = measureMetadataItem(m.top.findNode("contentRatingGroup"))
+
+            m.assertEqual(width, m.top.findNode("contentRatingBorder").width)
+            m.assertTrue(width > 16)
+        end function
+
+        @it("measures ordinary runtime nodes")
+        function _()
+            m.top.runtimeText = "2h 5m"
+
+            'bs:disable-next-line 1140
+            width = measureMetadataItem(m.top.findNode("runtimeGroup"))
+
+            m.assertTrue(width > 34)
+            m.assertTrue(width < 300)
+        end function
+
+        @it("always renders metadata and badge text in white")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 90 } })
+
+            m.assertEqual(m.top.findNode("leadingLabel").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("runtimeLabel").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("communityRatingLabel").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("contentRatingLabel").color, &hFFFFFFFF)
+        end function
+
+        @it("fits 2h 5m PG-13 with both ratings using scale-to-fit")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 95 } })
+
+            width = m.top.boundingRect().width
+            print "METADATA_FIT 2h 5m PG-13: "; width
+
+            m.assertFalse(m.top.truncateLeadingText)
+            m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
+            m.assertTrue(width <= 516.01)
+        end function
+
+        @it("fits 3h 45m PG-13 with both ratings using scale-to-fit")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "3h 45m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 100 } })
+
+            width = m.top.boundingRect().width
+            print "METADATA_FIT 3h 45m PG-13: "; width
+
+            m.assertFalse(m.top.truncateLeadingText)
+            m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
+            m.assertTrue(width <= 516.01)
+        end function
+
+        @it("fits 2h 5m TV-MA with both ratings using scale-to-fit")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "TV-MA", ratings: { communityRating: 8.3, criticRating: 95 } })
+
+            width = m.top.boundingRect().width
+            print "METADATA_FIT 2h 5m TV-MA: "; width
+
+            m.assertFalse(m.top.truncateLeadingText)
+            m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
+            m.assertTrue(width <= 516.01)
+        end function
+
+        @it("fits 3h 45m NC-17 with both ratings using scale-to-fit")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "3h 45m", officialRating: "NC-17", ratings: { communityRating: 10, criticRating: 100 } })
+
+            width = m.top.boundingRect().width
+            print "METADATA_FIT 3h 45m NC-17: "; width
+
+            m.assertFalse(m.top.truncateLeadingText)
+            m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
+            m.assertTrue(width <= 516.01)
+        end function
+
+        @it("fits 12h 45m Not Rated with both ratings using scale-to-fit")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+
+            width = m.top.boundingRect().width
+            print "METADATA_FIT 12h 45m Not Rated: "; width
+
+            m.assertFalse(m.top.truncateLeadingText)
+            m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
+            m.assertTrue(width <= 516.01)
+        end function
+
+        @it("scales uniformly and centers the complete row vertically")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 }, availableWidth: 2000 })
+            row = m.top.findNode("layout")
+            natural = row.boundingRect()
+
+            m.top.availableWidth = 516
+
+            factor = 516 / natural.width
+            m.assertEqual(row.scale, [factor, factor])
+            m.assertEqual(row.translation, [0.0, natural.height * (1 - factor) / 2])
+            m.assertEqual(m.top.findNode("runtimeLabel").text, "12h 45m")
+            m.assertEqual(m.top.findNode("contentRatingLabel").text, "Not Rated")
+            m.assertEqual(m.top.findNode("criticRatingLabel").text, "100%")
+        end function
+
+        @it("restores natural size when a reused row has shorter content")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+            m.assertTrue(m.top.findNode("layout").scale[0] < 1)
+
+            m.top.setFields({ runtimeText: "", officialRating: "", ratings: {} })
+
+            m.assertEqual(m.top.findNode("layout").scale, [1.0, 1.0])
+            m.assertEqual(m.top.findNode("layout").translation, [0.0, 0.0])
+        end function
+
+        @it("recalculates scale on resizing without compounding it")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+            initialScale = m.top.findNode("layout").scale
+
+            m.top.availableWidth = 400
+            m.assertTrue(m.top.boundingRect().width <= 400.01)
+            m.top.availableWidth = 516
+            m.assertEqual(m.top.findNode("layout").scale, initialScale)
+            m.top.availableWidth = 2000
+            m.assertEqual(m.top.findNode("layout").scale, [1.0, 1.0])
+        end function
+
+        @it("leaves rows unscaled when fitting is disabled")
+        function _()
+            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+
+            m.top.scaleToFit = false
+
+            m.assertEqual(m.top.findNode("layout").scale, [1.0, 1.0])
+            m.assertEqual(m.top.findNode("layout").translation, [0.0, 0.0])
+        end function
+
+        @it("keeps empty rows at natural scale")
+        function _()
+            m.top.availableWidth = 0
+
+            m.assertEqual(m.top.findNode("layout").scale, [1.0, 1.0])
+        end function
+
+    end class
+
+end namespace
+

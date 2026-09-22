@@ -11,13 +11,18 @@ import "pkg:/source/Theme.bs"
 '-------------------------------------------------------------------------------
 sub init()
     initBase()
+    m.cardNodes.title.font = "font:SmallBoldSystemFont"
+    m.cardNodes.metadataRow = m.top.findNode("metadataRow")
+    m.cardNodes.contentGroup.appendChild(m.cardNodes.metadataRow)
+    m.cardNodes.titleDivider = m.top.findNode("titleDivider")
+    m.cardNodes.contentGroup.appendChild(m.cardNodes.titleDivider)
     m.top.callFunc("applyCardLayout", {
         contentTranslation: [27, 0], posterMaskName: "detailed-poster-mask.png"
         posterSize: [288, 432], hdPosterSize: [192, 288], posterTranslation: [24, 32]
         progressTranslation: [9, 414], progressWidth: 270, progressHeight: 9
         watchedTranslation: [258, 44], watchedSize: 42
-        title: { translation: [336, 28], width: 516, height: 48, numLines: 1 }
-        metadata: { translation: [336, 76], width: 516, height: 34, numLines: 1 }
+        title: { translation: [336, 32], width: 516, height: 64, numLines: 1 }
+        metadata: { translation: [336, 96], width: 516, height: 34, numLines: 1 }
     })
     MaskAssets.Apply(m.cardNodes.cardMask, "detailed-card-mask.png", [882, 496], [588, 331])
     m.cardNodes.cardMask.visible = true
@@ -48,27 +53,16 @@ sub renderPresentation(content as object)
     m.cardNodes.title.text = Format.FirstNonEmpty([item.Name], "Untitled")
     if content.hasField("metadataText") then
         m.cardNodes.metadataLabel.text = Format.SafeString(content.metadataText, "")
-    else
-        m.cardNodes.metadataLabel.text = getDetailedMetadata(item)
     end if
-    m.cardNodes.metadataLabel.visible = content.showMetadata <> false
+    m.cardNodes.metadataLabel.visible = content.hasField("metadataText") and content.showMetadata <> false
+    runtimeText = ""
+    if LCase(Format.SafeString(item.Type, "")) <> "series" then runtimeText = MediaMetadata.FormatRuntime(item.RunTimeTicks)
+    m.cardNodes.metadataRow.setFields({
+        leadingText: Format.SafeString(item.ProductionYear, "")
+        runtimeText: runtimeText
+        officialRating: Format.SafeString(item.OfficialRating, "")
+        ratings: { communityRating: item.CommunityRating, criticRating: item.CriticRating }
+        visible: not content.hasField("metadataText") and content.showMetadata <> false
+    })
     m.cardNodes.overviewLabel.text = Format.FirstNonEmpty([item.Overview], "No description available.")
-end sub
-
-'-------------------------------------------------------------------------------
-' getDetailedMetadata
-'-------------------------------------------------------------------------------
-function getDetailedMetadata(item as object) as string
-    parts = []
-    appendDetailedPart(parts, Format.SafeString(item.ProductionYear, ""))
-    if LCase(Format.SafeString(item.Type, "")) <> "series" then appendDetailedPart(parts, MediaMetadata.FormatRuntime(item.RunTimeTicks))
-    appendDetailedPart(parts, Format.SafeString(item.OfficialRating, ""))
-    return parts.Join(MediaMetadata.BulletSeparator())
-end function
-
-'-------------------------------------------------------------------------------
-' appendDetailedPart
-'-------------------------------------------------------------------------------
-sub appendDetailedPart(parts as object, value as string)
-    if value <> "" then parts.Push(value)
 end sub

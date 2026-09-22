@@ -136,6 +136,78 @@ namespace tests
 
         @describe("detailed rendering")
 
+        @it("aligns the larger named title font with the poster and places metadata below it")
+        function _()
+            reference = CreateObject("roSGNode", "Label")
+            reference.font = "font:SmallBoldSystemFont"
+            title = m.top.findNode("title")
+            metadata = m.top.findNode("metadataLabel")
+            row = m.top.findNode("metadataRow")
+
+            m.assertEqual(title.font.size, reference.font.size)
+            m.assertEqual(title.height, 64.0)
+            divider = m.top.findNode("titleDivider")
+            m.assertEqual(divider.getParent(), m.top.findNode("contentGroup"))
+            m.assertEqual(divider.translation, [336.0, 135.0])
+            m.assertEqual(divider.width, 516.0)
+            m.assertEqual(divider.height, 2.0)
+            m.assertEqual(divider.color, &hFFFFFFFF)
+            m.assertEqual(title.translation[1], m.top.findNode("posterMask").translation[1])
+            m.assertEqual(metadata.translation, [336.0, 96.0])
+            m.assertEqual(row.translation, metadata.translation)
+            m.assertEqual(metadata.translation[1], title.translation[1] + title.height)
+            m.assertTrue(metadata.translation[1] + metadata.height < m.top.findNode("overviewLabel").translation[1])
+        end function
+
+        @it("renders review icons and fits the unchanged card width")
+        function _()
+            m.top.itemContent = m.createItem({ Type: "Movie", Name: "Movie", ProductionYear: 2026, RunTimeTicks: 135000000000&, OfficialRating: "PG-13", CommunityRating: 8.3, CriticRating: 100 })
+
+            row = m.top.findNode("metadataRow")
+            m.assertTrue(row.visible)
+            m.assertEqual(row.findNode("communityRatingLabel").text, "8.3")
+            m.assertEqual(row.findNode("criticRatingLabel").text, "100%")
+            m.assertEqual(row.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-fresh.png")
+            m.assertTrue(row.boundingRect().width <= 516.01)
+            m.assertTrue(row.scaleToFit)
+            m.assertFalse(row.truncateLeadingText)
+        end function
+
+        @it("clears ratings when a detailed card is reused")
+        function _()
+            m.top.itemContent = m.createItem({ Name: "Rated", CommunityRating: 8.3, CriticRating: 90 })
+
+            m.top.itemContent = m.createItem({ Name: "Unrated" })
+
+            m.assertFalse(m.top.findNode("metadataRow").findNode("ratingsGroup").visible)
+        end function
+
+        @it("uses plain text for custom metadata and restores icons on reuse")
+        function _()
+            photo = m.createItem({ Name: "Photo" })
+            photo.AddFields({ metadataText: "Aug 14, 2022" })
+            m.top.itemContent = photo
+            m.assertTrue(m.top.findNode("metadataLabel").visible)
+            m.assertFalse(m.top.findNode("metadataRow").visible)
+
+            m.top.itemContent = m.createItem({ Name: "Movie", CommunityRating: 8.3 })
+
+            m.assertFalse(m.top.findNode("metadataLabel").visible)
+            m.assertTrue(m.top.findNode("metadataRow").visible)
+            m.assertTrue(m.top.findNode("metadataRow").findNode("ratingsGroup").visible)
+        end function
+
+        @it("hides metadata when explicitly disabled")
+        function _()
+            item = m.createItem({ Name: "Movie", CommunityRating: 8.3 })
+            item.AddFields({ showMetadata: false })
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("metadataLabel").visible)
+            m.assertFalse(m.top.findNode("metadataRow").visible)
+        end function
+
         @it("renders poster title compact metadata and overview")
         function _()
             item = m.createItem({
@@ -152,9 +224,9 @@ namespace tests
 
             m.assertEqual(m.top.findNode("poster").uri, "http://server/poster.jpg")
             m.assertEqual(m.top.findNode("title").text, "Detailed Movie")
-            m.assertTrue(Instr(1, m.top.findNode("metadataLabel").text, "2025") > 0)
-            m.assertTrue(Instr(1, m.top.findNode("metadataLabel").text, "2h 5m") > 0)
-            m.assertTrue(Instr(1, m.top.findNode("metadataLabel").text, "PG-13") > 0)
+            m.assertEqual(m.top.findNode("metadataRow").findNode("leadingLabel").text, "2025")
+            m.assertEqual(m.top.findNode("metadataRow").findNode("runtimeLabel").text, "2h 5m")
+            m.assertEqual(m.top.findNode("metadataRow").findNode("contentRatingLabel").text, "PG-13")
             m.assertEqual(m.top.findNode("overviewLabel").text, "A detailed description.")
         end function
 
@@ -217,10 +289,10 @@ namespace tests
                 UserData: {}
             })
 
-            metadata = m.top.findNode("metadataLabel").text
-            m.assertTrue(Instr(1, metadata, "2024") > 0)
-            m.assertTrue(Instr(1, metadata, "TV-14") > 0)
-            m.assertEqual(Instr(1, metadata, "2h 5m"), 0)
+            row = m.top.findNode("metadataRow")
+            m.assertEqual(row.leadingText, "2024")
+            m.assertEqual(row.officialRating, "TV-14")
+            m.assertFalse(row.findNode("runtimeGroup").visible)
         end function
 
         @it("renders watched and progress state")

@@ -1,0 +1,151 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/MediaMetadata.bs"
+import "pkg:/source/TextMeasurement.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    render()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.metadata = {
+        inactive: m.top.findNode("inactiveMetadata")
+        row: m.top.findNode("layout")
+        measurementLabel: CreateObject("roSGNode", "Label")
+        leadingLabel: m.top.findNode("leadingLabel")
+        badgeMaxWidth: m.top.findNode("contentRatingLabel").width
+        runtimeGroup: m.top.findNode("runtimeGroup")
+        runtimeLabel: m.top.findNode("runtimeLabel")
+        contentRatingGroup: m.top.findNode("contentRatingGroup")
+        contentRatingLabel: m.top.findNode("contentRatingLabel")
+        contentRatingBorder: m.top.findNode("contentRatingBorder")
+        group: m.top.findNode("ratingsGroup")
+        communityGroup: m.top.findNode("communityRatingGroup")
+        communityLabel: m.top.findNode("communityRatingLabel")
+        criticGroup: m.top.findNode("criticRatingGroup")
+        criticLabel: m.top.findNode("criticRatingLabel")
+        criticIcon: m.top.findNode("criticRatingIcon")
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' render
+'-------------------------------------------------------------------------------
+sub render()
+    ratings = m.top.ratings
+    if ratings = invalid then ratings = {}
+    runtimeText = Format.SafeString(m.top.runtimeText, "")
+    contentRatingText = Format.SafeString(m.top.officialRating, "")
+    m.metadata.runtimeLabel.text = runtimeText
+    m.metadata.runtimeGroup.visible = runtimeText <> ""
+    m.metadata.contentRatingLabel.text = contentRatingText
+    m.metadata.contentRatingGroup.visible = contentRatingText <> ""
+    badgeTextWidth = TextMeasurement.GetWidth(m.metadata.measurementLabel, m.metadata.contentRatingLabel.font, contentRatingText)
+    if badgeTextWidth > m.metadata.badgeMaxWidth then badgeTextWidth = m.metadata.badgeMaxWidth
+    m.metadata.contentRatingLabel.width = badgeTextWidth
+    m.metadata.contentRatingBorder.width = badgeTextWidth + (2 * m.metadata.contentRatingLabel.translation[0])
+
+    communityText = MediaMetadata.FormatRating(ratings.communityRating)
+    criticRating = MediaMetadata.NormalizeCriticRating(ratings.criticRating)
+    criticText = ""
+    if criticRating <> invalid then criticText = criticRating.ToStr() + "%"
+    m.metadata.communityLabel.text = communityText
+    m.metadata.communityGroup.visible = communityText <> ""
+    m.metadata.criticLabel.text = criticText
+    m.metadata.criticGroup.visible = criticText <> ""
+    m.metadata.criticIcon.uri = ""
+    if criticText <> "" then
+        m.metadata.criticIcon.uri = "pkg:/images/icons/ratings/tomato-rotten.png"
+        if criticRating >= 60 then m.metadata.criticIcon.uri = "pkg:/images/icons/ratings/tomato-fresh.png"
+    end if
+    m.metadata.group.visible = communityText <> "" or criticText <> ""
+
+    layoutRow()
+end sub
+
+'-------------------------------------------------------------------------------
+' layoutRow
+'-------------------------------------------------------------------------------
+sub layoutRow()
+    m.metadata.leadingLabel.text = m.top.leadingText
+    m.metadata.leadingLabel.visible = m.top.leadingText <> ""
+    placeMetadataItem(m.metadata.leadingLabel, m.metadata.row)
+    placeMetadataItem(m.metadata.communityGroup, m.metadata.group)
+    placeMetadataItem(m.metadata.criticGroup, m.metadata.group)
+    trailingWidth = 0
+    trailingCount = 0
+    for each group in [m.metadata.runtimeGroup, m.metadata.contentRatingGroup, m.metadata.group]
+        placeMetadataItem(group, m.metadata.row)
+        if group.visible then
+            trailingWidth += measureMetadataItem(group)
+            trailingCount++
+        end if
+    end for
+    textWidth = TextMeasurement.GetWidth(m.metadata.measurementLabel, m.metadata.leadingLabel.font, m.top.leadingText)
+    if m.top.truncateLeadingText and not m.top.scaleToFit then
+        availableWidth = m.top.availableWidth - trailingWidth - (trailingCount * m.top.itemSpacings[0])
+        if textWidth > availableWidth then textWidth = availableWidth
+        if textWidth < 0 then textWidth = 0
+    end if
+    m.metadata.leadingLabel.width = textWidth
+    fitRow()
+end sub
+
+'-------------------------------------------------------------------------------
+' fitRow
+'-------------------------------------------------------------------------------
+sub fitRow()
+    ' Measure at natural size so reused cards never compound an earlier scale.
+    m.metadata.row.scale = [1, 1]
+    m.metadata.row.translation = [0, 0]
+    if not m.top.scaleToFit then return
+
+    bounds = m.metadata.row.boundingRect()
+    if bounds.width <= 0 then return
+    availableWidth = m.top.availableWidth
+    if availableWidth < 0 then availableWidth = 0
+    if bounds.width <= availableWidth then return
+
+    factor = availableWidth / bounds.width
+    m.metadata.row.scale = [factor, factor]
+    m.metadata.row.translation = [0, bounds.height * (1 - factor) / 2]
+end sub
+
+'-------------------------------------------------------------------------------
+' placeMetadataItem
+'-------------------------------------------------------------------------------
+sub placeMetadataItem(node as object, row as object)
+    ' Hidden nodes must leave the LayoutGroup so they consume neither width nor spacing.
+    if node.visible then
+        row.appendChild(node)
+    else
+        m.metadata.inactive.appendChild(node)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' measureMetadataItem
+'-------------------------------------------------------------------------------
+function measureMetadataItem(node as object) as float
+    if node.isSameNode(m.metadata.contentRatingGroup) then return m.metadata.contentRatingBorder.width
+    if node.subtype() = "Label" then return TextMeasurement.GetWidth(m.metadata.measurementLabel, node.font, node.text)
+    if node.subtype() = "Poster" then return node.width
+
+    width = 0
+    visibleCount = 0
+    for each child in node.getChildren(-1, 0)
+        if child.visible then
+            if visibleCount > 0 then width += node.itemSpacings[0]
+            width += measureMetadataItem(child)
+            visibleCount++
+        end if
+    end for
+    return width
+end function
