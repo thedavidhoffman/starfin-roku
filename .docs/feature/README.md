@@ -34,6 +34,7 @@ individual Starfin features.
 - [Search](search.md)
 - [Sign In and Unified Server Picker](sign-in.md)
 - [Settings Presentation](settings-presentation.md)
+- [Themes](themes.md)
 - [Theme Songs](theme-songs.md)
 - [TV Season Browsing](tv-season-browsing.md)
 - [Filmography](filmography.md)

@@ -4,7 +4,150 @@ namespace tests
     @suite("Dialog component")
     class DialogTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.originalPanel = m.node.panel
+            m.originalTheme = m.global.theme
+            m.originalProfile = m.global.resolutionProfile
+            if not m.global.hasField("resolutionProfile") then m.global.addField("resolutionProfile", "assocarray", false)
+            m.global.resolutionProfile = { resolution: "fhd" }
+        end function
+
+        protected override function afterEach()
+            m.node.panel = m.originalPanel
+            m.global.resolutionProfile = m.originalProfile
+            m.global.theme = m.originalTheme
+        end function
+
         @describe("Dialog behavior")
+
+        @it("retains the last ready panel through a loading replacement")
+        function _()
+            m.node.panel = { uri: "pkg:/images/themes/blue/fhd/dialog-panel.9.png", loadStatus: "ready" }
+            'bs:disable-next-line 1140
+            onPanelLoadStatusChanged()
+            m.node.panel.uri = "pkg:/images/themes/black/fhd/dialog-panel.9.png"
+            m.node.panel.loadStatus = "loading"
+
+            m.global.theme = "grey"
+            'bs:disable-next-line 1140
+            updateTheme()
+
+            m.assertEqual(m.node.panel.uri, "pkg:/images/themes/grey/fhd/dialog-panel.9.png")
+            m.assertEqual(m.node.panel.loadingBitmapUri, "pkg:/images/themes/blue/fhd/dialog-panel.9.png")
+            m.assertEqual(m.node.panel.failedBitmapUri, "pkg:/images/themes/blue/fhd/dialog-panel.9.png")
+        end function
+
+        @it("retains the last ready panel through a failed replacement")
+        function _()
+            m.node.panel = { uri: "pkg:/images/themes/blue/fhd/dialog-panel.9.png", loadStatus: "ready" }
+            'bs:disable-next-line 1140
+            onPanelLoadStatusChanged()
+            m.node.panel.uri = "pkg:/images/themes/black/fhd/dialog-panel.9.png"
+            m.node.panel.loadStatus = "failed"
+
+            m.global.theme = "grey"
+            'bs:disable-next-line 1140
+            updateTheme()
+
+            m.assertEqual(m.node.panel.uri, "pkg:/images/themes/grey/fhd/dialog-panel.9.png")
+            m.assertEqual(m.node.panel.loadingBitmapUri, "pkg:/images/themes/blue/fhd/dialog-panel.9.png")
+            m.assertEqual(m.node.panel.failedBitmapUri, "pkg:/images/themes/blue/fhd/dialog-panel.9.png")
+        end function
+
+        @it("promotes a ready replacement to the next loading placeholder")
+        function _()
+            m.node.panel = { uri: "pkg:/images/themes/grey/fhd/dialog-panel.9.png", loadStatus: "ready" }
+
+            'bs:disable-next-line 1140
+            onPanelLoadStatusChanged()
+            m.node.panel.loadStatus = "loading"
+            m.global.theme = "black"
+            'bs:disable-next-line 1140
+            updateTheme()
+
+            m.assertEqual(m.node.panel.loadingBitmapUri, "pkg:/images/themes/grey/fhd/dialog-panel.9.png")
+            m.assertEqual(m.node.panel.failedBitmapUri, "pkg:/images/themes/grey/fhd/dialog-panel.9.png")
+        end function
+
+        @it("does not promote an unfinished initial panel")
+        function _()
+            m.node.dialogImages = { lastReadyUri: "" }
+            m.node.panel = { uri: "pkg:/images/themes/blue/fhd/dialog-panel.9.png", loadStatus: "loading" }
+            m.global.theme = "grey"
+
+            'bs:disable-next-line 1140
+            updateTheme()
+
+            m.assertEqual(m.node.panel.loadingBitmapUri, "")
+            m.assertEqual(m.node.dialogImages.lastReadyUri, "")
+        end function
+
+        @it("keeps the ready image when the theme is unchanged")
+        function _()
+            m.global.theme = "blue"
+            m.node.panel = { uri: "pkg:/images/themes/blue/fhd/dialog-panel.9.png", loadStatus: "ready" }
+
+            'bs:disable-next-line 1140
+            updateTheme()
+
+            m.assertEqual(m.node.panel.uri, "pkg:/images/themes/blue/fhd/dialog-panel.9.png")
+            m.assertEqual(m.node.panel.loadingBitmapUri, m.node.panel.uri)
+        end function
+
+        @it("applies blue when constructed")
+        function _()
+            m.global.theme = "blue"
+
+            dialog = createObject("roSGNode", "Dialog")
+
+            m.assertEqual(dialog.findNode("panel").uri, "pkg:/images/themes/blue/fhd/dialog-panel.9.png")
+        end function
+
+        @it("applies black when constructed")
+        function _()
+            m.global.theme = "black"
+
+            dialog = createObject("roSGNode", "Dialog")
+
+            m.assertEqual(dialog.findNode("panel").uri, "pkg:/images/themes/black/fhd/dialog-panel.9.png")
+        end function
+
+        @it("applies grey when constructed")
+        function _()
+            m.global.theme = "grey"
+
+            dialog = createObject("roSGNode", "Dialog")
+
+            m.assertEqual(dialog.findNode("panel").uri, "pkg:/images/themes/grey/fhd/dialog-panel.9.png")
+        end function
+
+        @it("switches theme without replacing content or disturbing an open dialog")
+        function _()
+            m.global.theme = "blue"
+            m.top.contentComponentName = "DescriptionDialogContent"
+            content = m.top.callFunc("getContentComponent")
+            m.top.showButtons = true
+            m.top.callFunc("openDialog")
+            m.top.callFunc("focusSaveButton")
+            panelPosition = m.node.panel.translation
+
+            m.global.theme = "black"
+
+            m.assertEqual(m.node.panel.uri, "pkg:/images/themes/black/fhd/dialog-panel.9.png")
+            m.assertEqual(m.top.callFunc("getContentComponent"), content)
+            m.assertTrue(m.node.dialog.visible)
+            m.assertTrue(m.node.saveButton.hasFocus())
+            m.assertEqual(m.node.panel.translation, panelPosition)
+        end function
+
+        @it("returns an existing dialog to blue")
+        function _()
+            m.global.theme = "grey"
+
+            m.global.theme = "blue"
+
+            m.assertEqual(m.node.panel.uri, "pkg:/images/themes/blue/fhd/dialog-panel.9.png")
+        end function
 
         @it("uses the default title")
         function _()

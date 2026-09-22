@@ -50,3 +50,18 @@ margin have been visually confirmed on both 1280x720 and 1920x1080 displays.
 Device automation changes the General setting through the production Settings
 dialog, closes it, and verifies and captures the badge first visible and then
 hidden on the authenticated application header.
+
+## Theme colors
+
+Header observes global.theme and applies Theme.AccountBadge on construction and
+live theme changes, including Settings preview. The shared white matte/ring/glass
+artwork remains under images/header; no per-theme duplicate bitmap is needed.
+The inverse-alpha matte and the renderer-compatible Poster composition are preserved.
+
+Blue retains its original palette. Black uses #0B0B0B for the matte, #121212 for
+the ring, and #E8E8E8 for glass. Grey uses #2D2C2C, #343434, and #E8E8E8 respectively.
+Matte colors are sampled from the corresponding images/themes background near the
+badge's position, rather than from the dialog fill. This removes the blue corner
+patches. Because the background is a gradient, these flat colors approximate the
+local background. Identity, visibility preference, geometry, and username do not
+change when a theme changes. Runtime appearance still needs device verification.

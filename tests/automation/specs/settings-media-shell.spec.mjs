@@ -1,6 +1,7 @@
 import { categories, exerciseRadioSetting } from '../support/settings.mjs';
 
 const cases = [
+
   { label: 'partial screen', nodeId: 'mediaShellBackgroundOptions', index: 1, key: 'media-shell-background', value: 'partial-screen' },
   { label: 'cinematic', nodeId: 'mediaShellBackgroundOptions', index: 2, key: 'media-shell-background', value: 'cinematic' },
   { label: 'full screen', nodeId: 'mediaShellBackgroundOptions', index: 0, key: 'media-shell-background', value: 'full-screen' },

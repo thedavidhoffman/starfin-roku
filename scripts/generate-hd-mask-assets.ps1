@@ -20,13 +20,13 @@ $hdDirectory = Join-Path $OutputRoot "images\masks\hd"
 New-Item -ItemType Directory -Force -Path $fhdDirectory, $hdDirectory | Out-Null
 
 $assets = @(
+    @{ Source = "images\media-card\detailed-card-mask-882x496.png"; Name = "detailed-card-mask.png"; Width = 882; Height = 496 },
     @{ Source = "images\header\account-badge-user-mask-96x96.png"; Name = "account-badge-user-mask.png"; Width = 96; Height = 96 },
     @{ Source = "images\header\account-menu-user-mask-144x144.png"; Name = "account-menu-user-mask.png"; Width = 144; Height = 144 },
     @{ Source = "images\cast\cast-mask-195x195.png"; Name = "cast-mask.png"; Width = 195; Height = 195 },
     @{ Source = "images\cast\person-mask-399x600.png"; Name = "person-mask.png"; Width = 399; Height = 600 },
     @{ Source = "images\cast\filmography-movie-mask-342x513.png"; Name = "filmography-movie-mask.png"; Width = 342; Height = 513 },
     @{ Source = "images\media-card\detailed-poster-mask-288x432.png"; Name = "detailed-poster-mask.png"; Width = 288; Height = 432 },
-    @{ Source = "images\media-card\detailed-card-mask-882x496.png"; Name = "detailed-card-mask.png"; Width = 882; Height = 496 },
     @{ Source = "images\music\album-mask-300x300.png"; Name = "album-mask-300.png"; Width = 300; Height = 300 },
     @{ Source = "images\music\album-mask-342x342.png"; Name = "album-mask-342.png"; Width = 342; Height = 342 },
     @{ Source = "images\music\audio-player-album-mask-651x651.png"; Name = "audio-player-album-mask.png"; Width = 651; Height = 651 },

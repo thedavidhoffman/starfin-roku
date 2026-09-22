@@ -10,6 +10,17 @@ if ([string]::IsNullOrWhiteSpace($Root)) {
 }
 $Root = [System.IO.Path]::GetFullPath($Root)
 
+function Save-Png([System.Drawing.Bitmap]$bitmap, [string]$path) {
+    # Keep filesystem writes in .NET; GDI+ file saves can fail in restricted environments.
+    $stream = New-Object System.IO.MemoryStream
+    try {
+        $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
+        [System.IO.File]::WriteAllBytes($path, $stream.ToArray())
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function New-RoundedPath([System.Drawing.RectangleF]$rectangle, [float]$radius) {
     $path = New-Object System.Drawing.Drawing2D.GraphicsPath
     $diameter = $radius * 2
@@ -45,7 +56,7 @@ function New-RoundedMask([string]$path, [int]$width, [int]$height, [float]$radiu
         } finally {
             $graphics.Dispose()
         }
-        $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+        Save-Png $bitmap $path
     } finally {
         $bitmap.Dispose()
     }
@@ -67,7 +78,7 @@ function New-ScaledMask([string]$sourcePath, [string]$outputPath, [int]$width, [
             } finally {
                 $graphics.Dispose()
             }
-            $bitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+            Save-Png $bitmap $outputPath
         } finally {
             $bitmap.Dispose()
         }
@@ -76,24 +87,24 @@ function New-ScaledMask([string]$sourcePath, [string]$outputPath, [int]$width, [
     }
 }
 
-function New-CardPanel([string]$path) {
+function New-CardPanel([string]$path, [string]$color) {
     $bitmap = New-Object System.Drawing.Bitmap 882, 496, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     try {
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
         try {
-            $graphics.Clear([System.Drawing.Color]::FromArgb(255, 16, 28, 42))
+            $graphics.Clear([System.Drawing.ColorTranslator]::FromHtml($color))
         } finally {
             $graphics.Dispose()
         }
-        $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+        Save-Png $bitmap $path
     } finally {
         $bitmap.Dispose()
     }
 }
 
 $assets = @(
-    @{ SourceName = "detailed-poster-mask-288x432.png"; RuntimeName = "detailed-poster-mask.png"; Width = 288; Height = 432; HdWidth = 192; HdHeight = 288; Radius = 14 },
-    @{ SourceName = "detailed-card-mask-882x496.png"; RuntimeName = "detailed-card-mask.png"; Width = 882; Height = 496; HdWidth = 588; HdHeight = 331; Radius = 18 }
+    @{ SourceName = "detailed-card-mask-882x496.png"; RuntimeName = "detailed-card-mask.png"; Width = 882; Height = 496; HdWidth = 588; HdHeight = 331; Radius = 18 },
+    @{ SourceName = "detailed-poster-mask-288x432.png"; RuntimeName = "detailed-poster-mask.png"; Width = 288; Height = 432; HdWidth = 192; HdHeight = 288; Radius = 14 }
 )
 
 foreach ($asset in $assets) {
@@ -106,6 +117,9 @@ foreach ($asset in $assets) {
     New-ScaledMask $sourcePath $hdPath $asset.HdWidth $asset.HdHeight
 }
 
-New-CardPanel (Join-Path $Root "images\media-card\detailed-card-panel-882x496.png")
+$themeColors = @{ blue = '#101C2A'; black = '#262626'; grey = '#4A4A4A' }
+foreach ($theme in $themeColors.Keys) {
+    New-CardPanel (Join-Path $Root "images\themes\$theme\detailed-card-panel.png") $themeColors[$theme]
+}
 
-Write-Output "Generated $($assets.Count) detailed library mask pairs."
+Write-Output "Generated $($assets.Count) detailed library mask pairs and three themed panels."

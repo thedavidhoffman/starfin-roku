@@ -5,6 +5,164 @@ namespace tests
     @suite("SettingsContent component")
     class SettingsContentTests extends rooibos.BaseTestSuite
 
+        @describe("theme preference")
+
+        @it("does not preview while moving focus")
+        function _()
+            m.top.themePreviewRequested = ""
+
+            m.node.settingsControls.themeOptions.itemFocused = 2
+
+            m.assertEqual(m.top.themePreviewRequested, "")
+        end function
+
+        @it("does not preview while loading saved values")
+        function _()
+            m.top.themePreviewRequested = ""
+            m.top.accountKey = ""
+
+            m.top.callFunc("loadSettingsValues")
+
+            m.assertEqual(m.top.themePreviewRequested, "")
+        end function
+
+        @it("places all three colors in the Theme category with Blue selected by default")
+        function _()
+            m.top.accountKey = ""
+            m.top.callFunc("loadSettingsValues")
+            options = m.node.settingsControls.themeOptions
+
+            m.assertEqual(options.checkedItem, 0)
+            m.assertEqual(options.content.getChildCount(), 3)
+            m.assertEqual(options.content.getChild(0).title, "Blue")
+            m.assertEqual(options.content.getChild(1).title, "Black")
+            m.assertEqual(options.content.getChild(2).title, "Grey")
+            m.assertEqual(m.node.categoryControls[2], [options])
+            m.assertEqual(options.getParent(), m.top.findNode("themePanel"))
+        end function
+
+        @it("includes selected blue in save values")
+        function _()
+            m.node.settingsControls.themeOptions.itemSelected = 0
+            'bs:disable-next-line 1140
+            onThemeSelected()
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.Theme], "blue")
+            m.assertEqual(m.top.themePreviewRequested, "blue")
+            m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 0)
+        end function
+
+        @it("restores the blue selection")
+        function _()
+            'bs:disable-next-line 1140
+            setThemeOption("blue")
+
+            m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 0)
+            m.assertEqual(m.node.settingsControls.themeOptions.jumpToItem, 0)
+        end function
+
+        @it("includes selected black in save values")
+        function _()
+            m.node.settingsControls.themeOptions.itemSelected = 1
+            'bs:disable-next-line 1140
+            onThemeSelected()
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.Theme], "black")
+            m.assertEqual(m.top.themePreviewRequested, "black")
+            m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 1)
+        end function
+
+        @it("restores the black selection")
+        function _()
+            'bs:disable-next-line 1140
+            setThemeOption("black")
+
+            m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 1)
+            m.assertEqual(m.node.settingsControls.themeOptions.jumpToItem, 1)
+        end function
+
+        @it("includes selected grey in save values")
+        function _()
+            m.node.settingsControls.themeOptions.itemSelected = 2
+            'bs:disable-next-line 1140
+            onThemeSelected()
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.Theme], "grey")
+            m.assertEqual(m.top.themePreviewRequested, "grey")
+            m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 2)
+        end function
+
+        @it("restores the grey selection")
+        function _()
+            'bs:disable-next-line 1140
+            setThemeOption("grey")
+
+            m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 2)
+            m.assertEqual(m.node.settingsControls.themeOptions.jumpToItem, 2)
+        end function
+
+        @it("discards an unsaved theme on reload")
+        function _()
+            m.top.accountKey = ""
+            m.node.settingsControls.themeOptions.itemSelected = 2
+            'bs:disable-next-line 1140
+            onThemeSelected()
+
+            m.top.callFunc("loadSettingsValues")
+
+            m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 0)
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.Theme], "blue")
+        end function
+
+        @it("moves focus from the last background option to theme music")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(1)
+            'bs:disable-next-line 1140
+            focusCategoryControl(0, 2)
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.settingsControls.themeMusicOptions.isInFocusChain())
+        end function
+
+        @it("moves focus from theme music back to background")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(1)
+            'bs:disable-next-line 1140
+            focusCategoryControl(1, 0)
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.settingsControls.mediaShellBackgroundOptions.isInFocusChain())
+        end function
+
+        @it("opens the Theme category and focuses its options")
+        function _()
+            m.node.userCategoryList.itemSelected = 2
+            'bs:disable-next-line 1140
+            onUserCategorySelected()
+
+            m.assertTrue(m.top.findNode("themePanel").visible)
+            m.assertFalse(m.top.findNode("mediaShellPanel").visible)
+            m.assertTrue(m.node.settingsControls.themeOptions.isInFocusChain())
+        end function
+
+        @it("restores Media shell spacing with a centered full-width divider")
+        function _()
+            divider = m.top.findNode("mediaShellBackgroundDivider")
+
+            m.assertEqual(m.node.categoryControls[1], [m.node.settingsControls.mediaShellBackgroundOptions, m.node.settingsControls.themeMusicOptions])
+            m.assertEqual(m.node.settingsControls.mediaShellBackgroundOptions.translation, [0.0, 48.0])
+            m.assertEqual(m.node.settingsControls.themeMusicOptions.translation, [0.0, 324.0])
+            m.assertEqual(divider.translation, [0.0, 239.0])
+            m.assertEqual(divider.height, 2.0)
+            m.assertEqual(divider.width, 1040.0)
+        end function
+
         @describe("season summary preference")
 
         @it("loads enabled by default between scroll and episode images")
@@ -12,7 +170,7 @@ namespace tests
             m.top.accountKey = "rooibos-summary-default"
             m.top.callFunc("loadSettingsValues")
             m.assertEqual(m.node.settingsControls.showSeasonSummaryCardOptions.checkedItem, 1)
-            m.assertEqual(m.node.categoryControls[3][1], m.node.settingsControls.showSeasonSummaryCardOptions)
+            m.assertEqual(m.node.categoryControls[4][1], m.node.settingsControls.showSeasonSummaryCardOptions)
             m.assertEqual(m.top.findNode("showSeasonSummaryCardLabel").text, "Show season summary card in TV episode list")
         end function
 
@@ -54,7 +212,7 @@ namespace tests
             m.top.accountKey = "rooibos-episode-images-default"
             m.top.callFunc("loadSettingsValues")
             m.assertEqual(m.node.settingsControls.homeEpisodeImagesOptions.checkedItem, 0)
-            m.assertEqual(m.node.categoryControls[3][2], m.node.settingsControls.homeEpisodeImagesOptions)
+            m.assertEqual(m.node.categoryControls[4][2], m.node.settingsControls.homeEpisodeImagesOptions)
             options = m.node.settingsControls.homeEpisodeImagesOptions.content
             m.assertEqual(options.getChild(0).title, "Series artwork")
             m.assertEqual(options.getChild(1).title, "Episode thumbnail with logo")
@@ -82,6 +240,46 @@ namespace tests
 
         @describe("category and panel setup")
 
+        @it("centers the divider between General settings")
+        function _()
+            divider = m.top.findNode("generalSettingsDivider")
+
+            m.assertEqual(divider.translation, [0.0, 187.0])
+            m.assertEqual(divider.width, 1040.0)
+            m.assertEqual(divider.height, 2.0)
+            m.assertEqual(divider.color, &hF3F7FB33)
+        end function
+
+        @it("centers the divider between TV scroll and summary settings")
+        function _()
+            divider = m.top.findNode("tvScrollDivider")
+
+            m.assertEqual(divider.translation, [0.0, 177.0])
+            m.assertEqual(divider.width, 1040.0)
+            m.assertEqual(divider.height, 2.0)
+            m.assertEqual(divider.color, &hF3F7FB33)
+        end function
+
+        @it("centers the divider between TV summary and artwork settings")
+        function _()
+            divider = m.top.findNode("tvSummaryDivider")
+
+            m.assertEqual(divider.translation, [0.0, 381.0])
+            m.assertEqual(divider.width, 1040.0)
+            m.assertEqual(divider.height, 2.0)
+            m.assertEqual(divider.color, &hF3F7FB33)
+        end function
+
+        @it("centers the divider between Screensaver settings")
+        function _()
+            divider = m.top.findNode("screensaverSettingsDivider")
+
+            m.assertEqual(divider.translation, [0.0, 239.0])
+            m.assertEqual(divider.width, 1040.0)
+            m.assertEqual(divider.height, 2.0)
+            m.assertEqual(divider.color, &hF3F7FB33)
+        end function
+
         @it("uses one font size for settings descriptions")
         function _()
             expectedSize = m.node.videoStreamingModeDescription.font.size
@@ -95,7 +293,7 @@ namespace tests
         @it("initializes every settings category and matching panel")
         function _()
             deviceTitles = ["General", "Video", "Subtitles", "Advanced"]
-            userTitles = ["Libraries", "Media shell", "Playback", "TV", "Screensaver"]
+            userTitles = ["Libraries", "Media shell", "Theme", "Playback", "TV", "Screensaver"]
 
             m.assertEqual(m.node.categoryPanels.Count(), deviceTitles.Count() + userTitles.Count())
             m.assertEqual(m.node.categoryControls.Count(), deviceTitles.Count() + userTitles.Count())

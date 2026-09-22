@@ -1,0 +1,124 @@
+namespace tests
+
+    @SGNode("ThemeBackground")
+    @suite("ThemeBackground component")
+    class ThemeBackgroundTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.originalTheme = m.global.theme
+            m.global.theme = "blue"
+            m.top.width = 1920
+            m.top.height = 1080
+        end function
+
+        protected override function afterEach()
+            m.global.theme = m.originalTheme
+        end function
+
+        @describe("background rendering")
+
+        @it("renders the current theme when constructed")
+        function _()
+            m.global.theme = "grey"
+
+            background = CreateObject("roSGNode", "ThemeBackground")
+
+            m.assertEqual(background.findNode("fill").color, &h343434FF)
+            m.assertTrue(background.findNode("gradient").visible)
+            m.assertEqual(background.findNode("gradient").uri, "pkg:/images/themes/grey/background.png")
+        end function
+
+        @it("preserves the Blue gradient over an opaque black backing")
+        function _()
+            m.assertTrue(m.top.findNode("gradient").visible)
+            m.assertEqual(m.top.findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+            m.assertEqual(m.top.findNode("gradient").loadDisplayMode, "scaletofill")
+            m.assertEqual(m.top.findNode("fill").color, &h000000FF)
+            m.assertEqual(m.top.findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+            m.assertTrue(m.top.findNode("fill").visible)
+        end function
+
+        @it("updates to the black background when global theme changes")
+        function _()
+            m.global.theme = "black"
+
+            m.assertEqual(m.top.findNode("fill").color, &h121212FF)
+            m.assertEqual(m.top.findNode("gradient").uri, "pkg:/images/themes/black/background.png")
+            m.assertTrue(m.top.findNode("fill").visible)
+            m.assertTrue(m.top.findNode("gradient").visible)
+        end function
+
+        @it("updates to the grey background when global theme changes")
+        function _()
+            m.global.theme = "grey"
+
+            m.assertEqual(m.top.findNode("fill").color, &h343434FF)
+            m.assertEqual(m.top.findNode("gradient").uri, "pkg:/images/themes/grey/background.png")
+            m.assertTrue(m.top.findNode("fill").visible)
+            m.assertTrue(m.top.findNode("gradient").visible)
+        end function
+
+        @it("falls back to Blue for a unknown theme")
+        function _()
+            m.global.theme = "grey"
+            m.global.theme = "unsupported"
+
+            m.assertTrue(m.top.findNode("gradient").visible)
+            m.assertEqual(m.top.findNode("fill").color, &h000000FF)
+            m.assertEqual(m.top.findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+        end function
+
+        @it("falls back to Blue for a missing theme")
+        function _()
+            m.global.theme = "grey"
+            m.global.theme = ""
+
+            m.assertTrue(m.top.findNode("gradient").visible)
+            m.assertEqual(m.top.findNode("fill").color, &h000000FF)
+            m.assertEqual(m.top.findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+        end function
+
+        @it("restores the Blue gradient after repeated theme changes")
+        function _()
+            m.global.theme = "grey"
+            m.global.theme = "black"
+            m.global.theme = "grey"
+            m.global.theme = "blue"
+
+            m.assertTrue(m.top.findNode("gradient").visible)
+            m.assertEqual(m.top.findNode("fill").color, &h000000FF)
+            m.assertEqual(m.top.findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+        end function
+
+        @it("keeps the selected gradient on repeated assignments")
+        function _()
+            m.global.theme = "grey"
+            m.global.theme = "grey"
+
+            m.assertTrue(m.top.findNode("gradient").visible)
+            m.assertEqual(m.top.findNode("fill").color, &h343434FF)
+            m.assertEqual(m.top.findNode("gradient").uri, "pkg:/images/themes/grey/background.png")
+        end function
+
+        @it("sizes both layers to the fullscreen dimensions")
+        function _()
+            m.assertEqual(m.top.findNode("fill").width, 1920.0)
+            m.assertEqual(m.top.findNode("fill").height, 1080.0)
+            m.assertEqual(m.top.findNode("gradient").width, 1920.0)
+            m.assertEqual(m.top.findNode("gradient").height, 1080.0)
+        end function
+
+        @it("resizes both layers when dimensions change")
+        function _()
+            m.top.width = 1280
+            m.top.height = 720
+
+            m.assertEqual(m.top.findNode("fill").width, 1280.0)
+            m.assertEqual(m.top.findNode("fill").height, 720.0)
+            m.assertEqual(m.top.findNode("gradient").width, 1280.0)
+            m.assertEqual(m.top.findNode("gradient").height, 720.0)
+        end function
+
+    end class
+
+end namespace

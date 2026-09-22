@@ -44,7 +44,10 @@ sub navHandleHeaderOverlayRequested()
     request = m.header.overlayRequested
     if request = invalid then return
 
-    if request.id = "settings" and m.session <> invalid then request.accountKey = Format.SafeString(m.session.accountKey, "")
+    if request.id = "settings" then
+        if m.session <> invalid then request.accountKey = Format.SafeString(m.session.accountKey, "")
+        request.eventFields = ["themePreviewRequested"]
+    end if
 
     m.overlayHost.callFunc("openOverlay", request)
 end sub
@@ -115,13 +118,19 @@ sub navHandleOverlayClosed()
         return
     end if
 
-    if request <> invalid and request.id = "settings" and m.header <> invalid and m.header.visible = true then
+    if request <> invalid and request.id = "settings" then
         if closed.overlay <> invalid and closed.overlay.resetStarfinConfirmed = true then
             authHandleResetStarfinConfirmed()
             return
         end if
         applySettingsFromOverlay(closed.overlay)
-        m.header.callFunc("focusSystemMenuButton")
+        ' A dismissed preview returns to the current session, not a stale dialog snapshot.
+        if m.login.visible then
+            syncTheme(invalid)
+        else
+            syncTheme(m.settings)
+        end if
+        if closed.cancelled <> true and m.header <> invalid and m.header.visible then m.header.callFunc("focusSystemMenuButton")
         return
     end if
 
@@ -139,6 +148,12 @@ end sub
 sub navHandleOverlayEventRaised()
     raised = m.overlayHost.eventRaised
     if raised = invalid or raised.request = invalid then return
+
+    if raised.request.id = "settings" and raised.field = "themePreviewRequested" then
+        if m.login.visible then return
+        syncTheme({ theme: raised.value })
+        return
+    end if
 
     if Format.SafeString(raised.request.id, "") = "letterGrid" and Format.SafeString(raised.field, "") = "letterSelected" then
         if Format.SafeString(raised.request.sourcePage, "videoLibrary") = "musicLibrary" then
@@ -507,6 +522,7 @@ end sub
 ' fanOutSettings
 '-------------------------------------------------------------------------------
 sub fanOutSettings()
+    syncTheme(m.settings)
     applySettingsToPage(m.homePage)
     applySettingsToPage(m.header)
     applySettingsToPage(m.collectionsPage)
@@ -537,6 +553,8 @@ sub navShowLoginRoute()
     clearStatus()
     m.login.visible = true
     m.authenticatedContent.visible = false
+    m.overlayHost.callFunc("closeOverlay")
+    syncTheme(invalid)
     hideHome()
     resetDynamicPages()
     m.login.callFunc("activate")
@@ -615,4 +633,11 @@ end sub
 sub clearStatus()
     Spinner.Hide()
     dismissMessage()
+end sub
+
+'-------------------------------------------------------------------------------
+' syncTheme
+'-------------------------------------------------------------------------------
+sub syncTheme(settings as dynamic)
+    m.global.theme = SettingsStore.GetSettingValue(settings, SettingsStore.Key.Theme)
 end sub

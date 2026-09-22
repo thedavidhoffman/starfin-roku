@@ -12,15 +12,18 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) { $OutputRoot = $SourceRoot }
 
 $SourceRoot = [System.IO.Path]::GetFullPath($SourceRoot)
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
-$fhdDirectory = Join-Path $OutputRoot "images\buttons\fhd"
-$hdDirectory = Join-Path $OutputRoot "images\buttons\hd"
 $assets = @(
-    @{ Source = "header-glass-background.9.png"; Name = "header-glass-background.9.png" },
-    @{ Source = "header-glass-background-fill.9.png"; Name = "header-glass-background-fill.9.png" },
     @{ Source = "header-button-focused.9.png"; Name = "header-button-focused.9.png" },
     @{ Source = "primary_focused.9.png"; Name = "primary-focused.9.png" },
     @{ Source = "primary_unfocused.9.png"; Name = "primary-unfocused.9.png" }
 )
+
+foreach ($asset in $assets) { $asset.Directory = "images\buttons" }
+foreach ($theme in @("blue", "black", "grey")) {
+    foreach ($name in @("header-menu-fill.9.png", "header-menu-glass.9.png", "dialog-panel.9.png")) {
+        $assets += @{ Source = $name; Name = $name; Directory = "images\themes\$theme" }
+    }
+}
 
 function Test-IsMarkerPixel([System.Drawing.Color]$Pixel) {
     return $Pixel.A -eq 255 -and $Pixel.R -eq 0 -and $Pixel.G -eq 0 -and $Pixel.B -eq 0
@@ -118,16 +121,20 @@ function Assert-NinePatch([string]$Path, [int]$Width, [int]$Height) {
 }
 
 if (-not $ValidateOnly) {
-    New-Item -ItemType Directory -Force -Path $fhdDirectory, $hdDirectory | Out-Null
     foreach ($asset in $assets) {
-        $sourcePath = Join-Path $SourceRoot ("images\buttons\" + $asset.Source)
+        $fhdDirectory = Join-Path $OutputRoot ($asset.Directory + "\fhd")
+        $hdDirectory = Join-Path $OutputRoot ($asset.Directory + "\hd")
+        New-Item -ItemType Directory -Force -Path $fhdDirectory, $hdDirectory | Out-Null
+        $sourcePath = Join-Path $SourceRoot ($asset.Directory + "\" + $asset.Source)
         Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $fhdDirectory $asset.Name) -Force
         New-HdNinePatch $sourcePath (Join-Path $hdDirectory $asset.Name)
     }
 }
 
 foreach ($asset in $assets) {
-    $sourcePath = Join-Path $SourceRoot ("images\buttons\" + $asset.Source)
+    $fhdDirectory = Join-Path $OutputRoot ($asset.Directory + "\fhd")
+    $hdDirectory = Join-Path $OutputRoot ($asset.Directory + "\hd")
+    $sourcePath = Join-Path $SourceRoot ($asset.Directory + "\" + $asset.Source)
     $source = [System.Drawing.Bitmap]::FromFile($sourcePath)
     try {
         $fhdWidth = $source.Width

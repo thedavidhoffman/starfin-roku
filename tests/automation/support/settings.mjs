@@ -4,6 +4,7 @@ import { ensureAuthenticated } from './authentication.mjs';
 import { waitFor } from './lifecycle.mjs';
 
 export const accountDefaults = {
+  theme: 'blue',
   'tv-library-layout': 'poster;6',
   'movie-library-layout': 'poster;6',
   'collection-cards-layout': 'poster;6',
@@ -32,9 +33,10 @@ export const globalDefaults = {
 export const categories = {
   libraries: { listNode: 'userCategoryList', index: 0, panelNode: 'libraryPanel' },
   mediaShell: { listNode: 'userCategoryList', index: 1, panelNode: 'mediaShellPanel' },
-  playback: { listNode: 'userCategoryList', index: 2, panelNode: 'playbackPanel' },
-  tv: { listNode: 'userCategoryList', index: 3, panelNode: 'tvPanel' },
-  screensaver: { listNode: 'userCategoryList', index: 4, panelNode: 'screensaverPanel' },
+  theme: { listNode: 'userCategoryList', index: 2, panelNode: 'themePanel' },
+  playback: { listNode: 'userCategoryList', index: 3, panelNode: 'playbackPanel' },
+  tv: { listNode: 'userCategoryList', index: 4, panelNode: 'tvPanel' },
+  screensaver: { listNode: 'userCategoryList', index: 5, panelNode: 'screensaverPanel' },
   general: { listNode: 'deviceCategoryList', index: 0, panelNode: 'systemPanel' },
   video: { listNode: 'deviceCategoryList', index: 1, panelNode: 'videoPanel' },
   subtitles: { listNode: 'deviceCategoryList', index: 2, panelNode: 'subtitlesPanel' },

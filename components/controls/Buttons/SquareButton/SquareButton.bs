@@ -1,3 +1,4 @@
+import "pkg:/source/Theme.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Number.bs"
@@ -8,12 +9,27 @@ import "pkg:/source/ResolutionProfile.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    initHandlers()
+    onItemWidthChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.background = m.top.findNode("background")
     m.focusBackground = m.top.findNode("focusBackground")
     m.selectedBackground = m.top.findNode("selectedBackground")
     m.letterLabel = m.top.findNode("letterLabel")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.top.observeField("focusedChild", "onFocusChanged")
-    updateFocusVisual()
+    m.global.observeField("theme", "updateTheme")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -52,18 +68,34 @@ end sub
 '-------------------------------------------------------------------------------
 sub onItemWidthChanged()
     width = Number.ToInteger(m.top.itemWidth, 64)
-    if width > 64 then
-        m.background.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
-        m.background.blendColor = &h092452FF
-        m.selectedBackground.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
-        m.selectedBackground.blendColor = &hF3F7FBFF
-        m.focusBackground.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
-        m.focusBackground.blendColor = &hF3F7FBFF
-    end if
     m.background.width = width
     m.selectedBackground.width = width
     m.focusBackground.width = width
     m.letterLabel.width = width - 1
+    updateTheme()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateTheme
+'-------------------------------------------------------------------------------
+sub updateTheme()
+    m.themePalette = Theme.SquareButton(m.global.theme)
+    if Number.ToInteger(m.top.itemWidth, 64) > 64 then
+        m.background.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
+        m.background.blendColor = m.themePalette.wideFill
+        m.selectedBackground.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
+        m.focusBackground.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
+        m.selectedBackground.blendColor = &hF3F7FBFF
+        m.focusBackground.blendColor = &hF3F7FBFF
+    else
+        m.background.uri = m.themePalette.backgroundUri
+        m.background.blendColor = &hFFFFFFFF
+        m.selectedBackground.uri = "pkg:/images/library/letter-tile-highlight.png"
+        m.focusBackground.uri = "pkg:/images/library/letter-tile-highlight.png"
+        m.selectedBackground.blendColor = &hFFFFFFFF
+        m.focusBackground.blendColor = &hFFFFFFFF
+    end if
+    updateFocusVisual()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -78,9 +110,9 @@ sub updateFocusVisual()
     m.selectedBackground.visible = isSelected and hasFocus = false
 
     if hasFocus or isSelected then
-        m.letterLabel.color = &h0F1A2AFF
+        m.letterLabel.color = m.themePalette.focusedText
     else
-        m.letterLabel.color = &hF3F7FBFF
+        m.letterLabel.color = m.themePalette.text
     end if
 end sub
 

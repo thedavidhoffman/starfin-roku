@@ -6,6 +6,123 @@ namespace tests
     @suite("HeaderDropdownMenu component")
     class HeaderDropdownMenuTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.originalTheme = m.global.theme
+            m.originalProfile = m.global.resolutionProfile
+            if not m.global.hasField("resolutionProfile") then m.global.addField("resolutionProfile", "assocarray", false)
+            m.global.resolutionProfile = { resolution: "fhd" }
+            m.global.theme = "blue"
+            m.top.callFunc("closeMenu")
+            m.top.identity = invalid
+            m.top.items = []
+            m.top.itemWidth = 220
+            m.top.itemHeight = 56
+            m.top.itemSpacing = 10
+        end function
+
+        protected override function afterEach()
+            m.global.resolutionProfile = m.originalProfile
+            m.global.theme = m.originalTheme
+        end function
+
+        @describe("theme appearance")
+
+        @it("uses the blue assets and readable menu colors")
+        function _()
+            m.global.theme = "blue"
+            m.top.items = m.createItems()
+            m.top.identity = m.createIdentity()
+
+            m.assertEqual(m.top.findNode("backgroundColor").uri, "pkg:/images/themes/blue/fhd/header-menu-fill.9.png")
+            m.assertEqual(m.top.findNode("backgroundGlass").uri, "pkg:/images/themes/blue/fhd/header-menu-glass.9.png")
+            m.assertEqual(m.top.findNode("identityName").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("identityDivider").color, &hF3F7FB33)
+            m.assertEqual(m.top.findNode("itemsGroup").getChild(0).headerBgColor, &h12112BFF)
+        end function
+
+        @it("uses the black assets and readable menu colors")
+        function _()
+            m.global.theme = "black"
+            m.top.items = m.createItems()
+            m.top.identity = m.createIdentity()
+
+            m.assertEqual(m.top.findNode("backgroundColor").uri, "pkg:/images/themes/black/fhd/header-menu-fill.9.png")
+            m.assertEqual(m.top.findNode("backgroundGlass").uri, "pkg:/images/themes/black/fhd/header-menu-glass.9.png")
+            m.assertEqual(m.top.findNode("identityName").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("identityDivider").color, &hFFFFFF33)
+            m.assertEqual(m.top.findNode("itemsGroup").getChild(0).headerBgColor, &h121212FF)
+        end function
+
+        @it("uses the grey assets and readable menu colors")
+        function _()
+            m.global.theme = "grey"
+            m.top.items = m.createItems()
+            m.top.identity = m.createIdentity()
+
+            m.assertEqual(m.top.findNode("backgroundColor").uri, "pkg:/images/themes/grey/fhd/header-menu-fill.9.png")
+            m.assertEqual(m.top.findNode("backgroundGlass").uri, "pkg:/images/themes/grey/fhd/header-menu-glass.9.png")
+            m.assertEqual(m.top.findNode("identityName").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("identityDivider").color, &hFFFFFF33)
+            m.assertEqual(m.top.findNode("itemsGroup").getChild(0).headerBgColor, &h242424FF)
+        end function
+
+        @it("updates an open menu without rebuilding or moving focus")
+        function _()
+            m.top.items = m.createItems()
+            m.top.callFunc("openMenu")
+            m.top.callFunc("focusItemById", "settings")
+            button = m.top.findNode("itemsGroup").getChild(1)
+
+            m.global.theme = "black"
+
+            m.assertTrue(m.top.isOpen)
+            m.assertEqual(m.top.findNode("itemsGroup").getChild(1), button)
+            m.assertTrue(button.hasFocus())
+            m.assertEqual(button.findNode("textLabel").color, &h121212FF)
+            m.assertTrue(button.findNode("bg").visible)
+            button.buttonSelected = true
+            m.assertEqual(m.top.selectedItem.id, "settings")
+        end function
+
+        @it("updates a closed menu before it is opened")
+        function _()
+            m.top.items = m.createItems()
+            m.top.callFunc("closeMenu")
+
+            m.global.theme = "grey"
+            m.top.callFunc("openMenu")
+
+            m.assertEqual(m.top.findNode("backgroundColor").uri, "pkg:/images/themes/grey/fhd/header-menu-fill.9.png")
+            m.assertTrue(m.top.findNode("itemsGroup").getChild(0).hasFocus())
+        end function
+
+        @it("uses HD menu assets on a 720p display")
+        function _()
+            m.global.resolutionProfile = { resolution: "hd" }
+            m.global.theme = "black"
+
+            m.assertEqual(m.top.findNode("backgroundColor").uri, "pkg:/images/themes/black/hd/header-menu-fill.9.png")
+            m.assertEqual(m.top.findNode("backgroundGlass").uri, "pkg:/images/themes/black/hd/header-menu-glass.9.png")
+        end function
+
+        @it("restores Blue assets after an unsupported theme")
+        function _()
+            m.global.theme = "grey"
+            m.global.theme = "unsupported"
+
+            m.assertEqual(m.top.findNode("backgroundColor").uri, "pkg:/images/themes/blue/fhd/header-menu-fill.9.png")
+            m.assertEqual(m.top.findNode("identityDivider").color, &hF3F7FB33)
+        end function
+
+        @it("reads the active theme during construction")
+        function _()
+            m.global.theme = "grey"
+
+            menu = CreateObject("roSGNode", "HeaderDropdownMenu")
+
+            m.assertEqual(menu.findNode("backgroundGlass").uri, "pkg:/images/themes/grey/fhd/header-menu-glass.9.png")
+        end function
+
         @describe("declarative component contract")
 
         @it("declares the backgroundColor node")

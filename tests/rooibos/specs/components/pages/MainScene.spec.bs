@@ -7,6 +7,8 @@ namespace tests
     class MainSceneTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.originalTheme = m.global.theme
+            m.node.homePage = m.top.findNode("homePage")
             m.node.authController = m.top.findNode("authController")
             'bs:disable-next-line 1140
             resetDynamicPages()
@@ -32,6 +34,10 @@ namespace tests
             m.node.playbackController.playerOpened = false
             m.node.playbackController.selectedPerson = invalid
             m.node.playbackController.closed = invalid
+        end function
+
+        protected override function afterEach()
+            m.global.theme = m.originalTheme
         end function
 
         @describe("media options routing")
@@ -122,9 +128,12 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("bg"))
         end function
 
-        @it("declares the gradientBg node")
+        @it("uses ThemeBackground behind the scene content")
         function _()
-            m.assertNotInvalid(m.top.findNode("gradientBg"))
+            m.assertEqual(m.top.findNode("bg").subtype(), "ThemeBackground")
+            m.assertEqual(m.top.getChild(0), m.top.findNode("bg"))
+            m.assertEqual(m.top.findNode("bg").width, 1920.0)
+            m.assertEqual(m.top.findNode("bg").height, 1080.0)
         end function
 
         @it("declares the login node")
@@ -657,6 +666,231 @@ namespace tests
         end function
 
         @describe("settings propagation")
+
+        @it("previews the selected theme across the open dialog and background")
+        function _()
+            m.node.login.visible = false
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["themePreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("themeOptions").itemSelected = 2
+
+
+            m.assertEqual(m.global.theme, "grey")
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/grey/background.png")
+            m.assertEqual(m.node.settings[SettingsStore.Key.Theme], "blue")
+            m.assertFalse(overlay.settingsSaved)
+            m.assertEqual(overlay.findNode("panel").uri, Theme.DialogPanelUri("grey"))
+            m.assertTrue(overlay.findNode("dialog").visible)
+            m.node.overlayHost.callFunc("closeOverlay")
+        end function
+
+        @it("restores committed theme after settings cancellation")
+        function _()
+            m.node.login.visible = false
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["themePreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("themeOptions").itemSelected = 2
+            m.node.overlayHost.callFunc("closeOverlay")
+
+            m.assertEqual(m.global.theme, "blue")
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+        end function
+
+        @it("restores the new account theme rather than the opening theme")
+        function _()
+            m.node.login.visible = false
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["themePreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("themeOptions").itemSelected = 2
+            m.node.settings[SettingsStore.Key.Theme] = "black"
+            m.node.overlayHost.callFunc("closeOverlay")
+
+            m.assertEqual(m.global.theme, "black")
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/black/background.png")
+        end function
+
+        @it("cancels settings without committing its preview when returning to login")
+        function _()
+            m.node.login.visible = false
+            m.node.authenticatedContent.visible = true
+            m.node.settings[SettingsStore.Key.Theme] = "black"
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["themePreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("themeOptions").itemSelected = 2
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+
+            m.assertTrue(m.node.login.visible)
+            m.assertFalse(m.node.authenticatedContent.visible)
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertTrue(m.node.overlayHost.closed.cancelled)
+            m.assertFalse(overlay.settingsSaved)
+            m.assertEqual(m.node.settings[SettingsStore.Key.Theme], "black")
+            m.assertEqual(m.global.theme, "blue")
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+        end function
+
+        @it("ignores theme preview events while login is visible")
+        function _()
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+
+            m.node.overlayHost.eventRaised = { request: { id: "settings" }, field: "themePreviewRequested", value: "grey" }
+
+            m.assertEqual(m.global.theme, "blue")
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+        end function
+
+        @it("stops forwarding previews from settings detached during login transition")
+        function _()
+            m.node.login.visible = false
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["themePreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+            content.findNode("themeOptions").itemSelected = 2
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+            previousEvent = m.node.overlayHost.eventRaised
+            m.node.login.visible = false
+            m.global.theme = "black"
+
+            content.findNode("themeOptions").itemSelected = 0
+
+            m.assertEqual(m.node.overlayHost.eventRaised, previousEvent)
+            m.assertEqual(m.global.theme, "black")
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/black/background.png")
+        end function
+
+        @it("commits a preview on normal close")
+        function _()
+            m.stubCall(SettingsStore.Save, function(accountKey as string, settings as object) as dynamic
+                return invalid
+            end function)
+            m.node.login.visible = false
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["themePreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+            content.findNode("themeOptions").itemSelected = 1
+
+            overlay.callFunc("closeDialog")
+
+            m.assertTrue(overlay.settingsSaved)
+            m.assertEqual(m.node.settings[SettingsStore.Key.Theme], "black")
+            m.assertEqual(m.global.theme, "black")
+        end function
+
+        @it("publishes a committed theme and updates the scene background")
+        function _()
+            savedSettings = SettingsStore.Defaults()
+            savedSettings[SettingsStore.Key.Theme] = "grey"
+
+            'bs:disable-next-line 1140
+            applySettingsFromOverlay({ settingsSaved: true, savedSettings: savedSettings })
+
+            m.assertEqual(m.global.theme, "grey")
+            m.assertEqual(m.top.findNode("bg").findNode("fill").color, &h343434FF)
+            m.assertTrue(m.top.findNode("bg").findNode("gradient").visible)
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/grey/background.png")
+        end function
+
+        @it("ignores uncommitted theme edits")
+        function _()
+            m.global.theme = "black"
+            savedSettings = SettingsStore.Defaults()
+            savedSettings[SettingsStore.Key.Theme] = "grey"
+
+            'bs:disable-next-line 1140
+            applySettingsFromOverlay({ settingsSaved: false, savedSettings: savedSettings })
+
+            m.assertEqual(m.global.theme, "black")
+        end function
+
+        @it("ignores a saved notification without settings data")
+        function _()
+            m.global.theme = "grey"
+
+            'bs:disable-next-line 1140
+            applySettingsFromOverlay({ settingsSaved: true, savedSettings: invalid })
+
+            m.assertEqual(m.global.theme, "grey")
+        end function
+
+        @it("normalizes an unsupported committed theme to Blue")
+        function _()
+            m.global.theme = "grey"
+            savedSettings = SettingsStore.Defaults()
+            savedSettings[SettingsStore.Key.Theme] = "unsupported"
+
+            'bs:disable-next-line 1140
+            applySettingsFromOverlay({ settingsSaved: true, savedSettings: savedSettings })
+
+            m.assertEqual(m.global.theme, "blue")
+        end function
+
+        @it("loads the authenticated account theme before showing the app")
+        function _()
+            m.stubCall(SettingsStore.Load, function(accountKey as string) as object
+                return { theme: "grey" }
+            end function)
+            m.node.homePage = {}
+            'bs:disable-next-line 1001
+            m.stubCall(navShowAppRoute, function() as dynamic
+                return invalid
+            end function)
+
+            'bs:disable-next-line 1140
+            navShowApp()
+
+            m.assertEqual(m.global.theme, "grey")
+        end function
+
+        @it("replaces the previous account theme when another account is loaded")
+        function _()
+            m.global.theme = "grey"
+            m.node.session.accountKey = "account-2"
+            m.stubCall(SettingsStore.Load, function(accountKey as string) as object
+                if accountKey = "account-2" then return { theme: "black" }
+                return { theme: "grey" }
+            end function)
+            m.node.homePage = {}
+            'bs:disable-next-line 1001
+            m.stubCall(navShowAppRoute, function() as dynamic
+                return invalid
+            end function)
+
+            'bs:disable-next-line 1140
+            navShowApp()
+
+            m.assertEqual(m.global.theme, "black")
+        end function
+
+        @it("restores Blue when returning to login")
+        function _()
+            m.global.theme = "grey"
+
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+
+            m.assertEqual(m.global.theme, "blue")
+            m.assertTrue(m.top.findNode("bg").findNode("gradient").visible)
+        end function
+
+        @it("restores Blue when application settings are reset")
+        function _()
+            m.global.theme = "grey"
+            m.node.authController = {
+                callFunc: function(name as string, server as string) as object
+                    return []
+                end function
+            }
+
+            'bs:disable-next-line 1140
+            authHandleResetStarfinConfirmed()
+
+            m.assertEqual(m.global.theme, "blue")
+        end function
 
         @it("logs each committed layout change")
         function _()

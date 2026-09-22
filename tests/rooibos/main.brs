@@ -1,3 +1,3 @@
 sub Main()
-    Rooibos_init("RooibosScene")
+    Rooibos_init("StarfinTestScene")
 end sub

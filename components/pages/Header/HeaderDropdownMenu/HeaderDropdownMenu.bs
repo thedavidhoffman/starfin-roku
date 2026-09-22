@@ -3,8 +3,6 @@ import "pkg:/source/Logger.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Theme.bs"
 import "pkg:/source/Number.bs"
-import "pkg:/source/ResolutionProfile.bs"
-import "pkg:/source/ResolutionAssets.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -13,7 +11,8 @@ sub init()
     m.log = new Logger("HeaderDropdownMenu", m.global.logService)
     initReferences()
     initValues()
-    initStyle()
+    initHandlers()
+    updateTheme()
     updateIdentity()
     renderItems()
     onOpenChanged()
@@ -23,16 +22,18 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.backgroundColor = m.top.findNode("backgroundColor")
-    m.backgroundGlass = m.top.findNode("backgroundGlass")
+    m.backgroundNodes = {
+        fill: m.top.findNode("backgroundColor")
+        glass: m.top.findNode("backgroundGlass")
+    }
     m.itemsGroup = m.top.findNode("itemsGroup")
     m.identityNodes = {
         group: m.top.findNode("identityGroup")
         mask: m.top.findNode("identityImageMask")
         image: m.top.findNode("identityImage")
         name: m.top.findNode("identityName")
+        divider: m.top.findNode("identityDivider")
     }
-    m.identityNodes.image.observeField("loadStatus", "onIdentityImageLoadStatusChanged")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -44,13 +45,26 @@ sub initValues()
 end sub
 
 '-------------------------------------------------------------------------------
-' initStyle
+' initHandlers
 '-------------------------------------------------------------------------------
-sub initStyle()
-    palette = Theme.Get()
-    m.backgroundColor.uri = ResolutionAssets.GetButtonImageUri("header-glass-background-fill.9.png")
-    m.backgroundGlass.uri = ResolutionAssets.GetButtonImageUri("header-glass-background.9.png")
-    if m.top.headerBgColor = invalid or m.top.headerBgColor = 0 then m.top.headerBgColor = palette.background.header
+sub initHandlers()
+    m.identityNodes.image.observeField("loadStatus", "onIdentityImageLoadStatusChanged")
+    m.global.observeField("theme", "updateTheme")
+end sub
+
+'-------------------------------------------------------------------------------
+' updateTheme
+'-------------------------------------------------------------------------------
+sub updateTheme()
+    palette = Theme.HeaderMenu(m.global.theme)
+    m.backgroundNodes.fill.uri = palette.fillUri
+    m.backgroundNodes.glass.uri = palette.glassUri
+    m.identityNodes.name.color = palette.text
+    m.identityNodes.divider.color = palette.divider
+    ' Update the existing buttons so an open menu retains focus and selection.
+    for each button in m.itemButtons
+        button.headerBgColor = palette.focusedText
+    end for
 end sub
 
 '-------------------------------------------------------------------------------
@@ -98,15 +112,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub onIdentityImageLoadStatusChanged()
     m.log.write("Identity image loadStatus=" + m.identityNodes.image.loadStatus + " uri=" + m.identityNodes.image.uri)
-end sub
-
-'-------------------------------------------------------------------------------
-' onStyleChanged
-'-------------------------------------------------------------------------------
-sub onStyleChanged()
-    for each button in m.itemButtons
-        if button <> invalid then button.headerBgColor = m.top.headerBgColor
-    end for
 end sub
 
 '-------------------------------------------------------------------------------
@@ -230,6 +235,7 @@ sub renderItems()
     if itemHeight <= 0 then itemHeight = 56
     if itemWidth <= 0 then itemWidth = 220
 
+    palette = Theme.HeaderMenu(m.global.theme)
     index = 0
     for each item in items
         if item <> invalid and item.id <> invalid then
@@ -241,7 +247,7 @@ sub renderItems()
             button.textAlign = "center"
             button.textInset = 0
             button.text = Format.FirstNonEmpty([item.text], "")
-            button.headerBgColor = m.top.headerBgColor
+            button.headerBgColor = palette.focusedText
             button.observeField("buttonSelected", "onItemPressed")
             m.itemsGroup.appendChild(button)
             m.itemButtons.Push(button)
@@ -311,10 +317,10 @@ sub updateBackground(itemCount as integer)
 
     menuHeight = 36 + (itemCount * itemHeight) + spacingHeight
     if m.identityNodes.group.visible then menuHeight = menuHeight + 212
-    m.backgroundColor.width = menuWidth
-    m.backgroundColor.height = menuHeight
-    m.backgroundGlass.width = menuWidth
-    m.backgroundGlass.height = menuHeight
+    m.backgroundNodes.fill.width = menuWidth
+    m.backgroundNodes.fill.height = menuHeight
+    m.backgroundNodes.glass.width = menuWidth
+    m.backgroundNodes.glass.height = menuHeight
 end sub
 
 '-------------------------------------------------------------------------------

@@ -20,6 +20,36 @@ namespace tests
             m.registrySnapshot = invalid
         end function
 
+        @describe("theme preference")
+
+        @it("defaults missing themes to blue")
+        function _()
+            m.assertEqual(SettingsStore.Key.Theme, "theme")
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.Theme), "blue")
+        end function
+
+        @it("normalizes unsupported themes to blue")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ theme: "unknown" }, SettingsStore.Key.Theme), "blue")
+        end function
+
+        @it("persists themes separately for each account")
+        function _()
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName("rooibos-theme-a"), RegistryStore.AccountSectionName("rooibos-theme-b")]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.Theme] = "black"
+            SettingsStore.Save("rooibos-theme-a", settings)
+            settings[SettingsStore.Key.Theme] = "grey"
+            SettingsStore.Save("rooibos-theme-b", settings)
+
+            m.assertEqual(SettingsStore.Load("rooibos-theme-a")[SettingsStore.Key.Theme], "black")
+            m.assertEqual(SettingsStore.Load("rooibos-theme-b")[SettingsStore.Key.Theme], "grey")
+        end function
+
         @describe("season summary setting")
 
         @it("defaults existing and new accounts to On")
@@ -179,7 +209,7 @@ namespace tests
         function _()
             defaults = SettingsStore.Defaults()
 
-            m.assertEqual(defaults.Count(), 20)
+            m.assertEqual(defaults.Count(), 21)
             m.assertEqual(defaults[SettingsStore.Key.TvLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.MovieLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.CollectionCardsLayout], "poster;6")
@@ -190,7 +220,9 @@ namespace tests
             m.assertEqual(defaults[SettingsStore.Key.HomeVideosLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.TvEpisodeListDisplay], "vertical")
             m.assertEqual(defaults[SettingsStore.Key.ShowSeasonSummaryCard], "on")
+            m.assertEqual(defaults[SettingsStore.Key.HomeEpisodeImages], "series")
             m.assertEqual(defaults[SettingsStore.Key.MediaShellBackground], "full-screen")
+            m.assertEqual(defaults[SettingsStore.Key.Theme], "blue")
             m.assertEqual(defaults[SettingsStore.Key.ThemeMusic], "off")
             m.assertEqual(defaults[SettingsStore.Key.NextItemPlayback], NextItemPlayback.Mode.ShowUpNext)
             m.assertEqual(defaults[SettingsStore.Key.ScreensaverType], "none")
@@ -218,6 +250,7 @@ namespace tests
                 SettingsStore.Key.ShowSeasonSummaryCard
                 SettingsStore.Key.HomeEpisodeImages
                 SettingsStore.Key.MediaShellBackground
+                SettingsStore.Key.Theme
                 SettingsStore.Key.ThemeMusic
                 SettingsStore.Key.NextItemPlayback
                 SettingsStore.Key.ScreensaverType

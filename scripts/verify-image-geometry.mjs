@@ -9,6 +9,8 @@ const root = process.cwd();
 
 // Bounds are inclusive and describe the intended visible mask or focus artwork.
 const assets = {
+  "images/masks/fhd/detailed-card-mask.png": [882, 496, [0, 0, 880, 494]],
+  "images/media-card/detailed-card-mask-882x496.png": [882, 496, [0, 0, 880, 494]],
   "images/header/fhd/account-badge-glass.png": [102, 102, [0, 0, 101, 101]],
   "images/header/fhd/account-badge-ring.png": [102, 102, [0, 0, 101, 101]],
   "images/icons/fhd/busy-spinner.png": [192, 192, [29, 29, 162, 162]],
@@ -18,7 +20,6 @@ const assets = {
   "images/masks/fhd/person-mask.png": [399, 600, [0, 0, 398, 599]],
   "images/masks/fhd/filmography-movie-mask.png": [342, 513, [0, 0, 341, 512]],
   "images/masks/fhd/detailed-poster-mask.png": [288, 432, [0, 0, 286, 430]],
-  "images/masks/fhd/detailed-card-mask.png": [882, 496, [0, 0, 880, 494]],
   "images/masks/fhd/album-mask-300.png": [300, 300, [0, 0, 299, 299]],
   "images/masks/fhd/album-mask-342.png": [342, 342, [0, 0, 341, 341]],
   "images/masks/fhd/audio-player-album-mask.png": [651, 651, [0, 0, 650, 650]],
@@ -35,7 +36,6 @@ const assets = {
   "images/media-card/poster-placeholder-252x378.png": [252, 378, [0, 0, 251, 377]],
   "images/media-card/thumbnail-placeholder-441x249.png": [441, 249, [0, 0, 440, 248]],
   "images/media-card/detailed-poster-mask-288x432.png": [288, 432, [0, 0, 286, 430]],
-  "images/media-card/detailed-card-mask-882x496.png": [882, 496, [0, 0, 880, 494]],
   "images/music/album-mask-300x300.png": [300, 300, [0, 0, 299, 299]],
   "images/music/album-placeholder-300x300.png": [300, 300, [0, 0, 299, 299]],
   "images/music/album-mask-342x342.png": [342, 342, [0, 0, 341, 341]],
@@ -50,13 +50,13 @@ const assets = {
 };
 
 const hdMaskAssets = {
+  "images/masks/hd/detailed-card-mask.png": [588, 331, [0, 0, 587, 330], 882, 496],
   "images/masks/hd/account-badge-user-mask.png": [64, 64, [0, 0, 63, 63], 96, 96],
   "images/masks/hd/account-menu-user-mask.png": [96, 96, [0, 0, 95, 95], 144, 144],
   "images/masks/hd/cast-mask.png": [130, 130, [0, 0, 129, 129], 195, 195],
   "images/masks/hd/person-mask.png": [266, 400, [0, 0, 265, 399], 399, 600],
   "images/masks/hd/filmography-movie-mask.png": [228, 342, [0, 0, 227, 341], 342, 513],
   "images/masks/hd/detailed-poster-mask.png": [192, 288, [0, 0, 191, 287], 288, 432],
-  "images/masks/hd/detailed-card-mask.png": [588, 331, [0, 0, 587, 330], 882, 496],
   "images/masks/hd/album-mask-300.png": [200, 200, [0, 0, 199, 199], 300, 300],
   "images/masks/hd/album-mask-342.png": [228, 228, [0, 0, 227, 227], 342, 342],
   "images/masks/hd/audio-player-album-mask.png": [434, 434, [0, 0, 433, 433], 651, 651],
@@ -74,13 +74,13 @@ const hdImageAssets = {
 };
 
 const generatedMaskSources = {
+  "detailed-card-mask.png": "images/media-card/detailed-card-mask-882x496.png",
   "account-badge-user-mask.png": "images/header/account-badge-user-mask-96x96.png",
   "account-menu-user-mask.png": "images/header/account-menu-user-mask-144x144.png",
   "cast-mask.png": "images/cast/cast-mask-195x195.png",
   "person-mask.png": "images/cast/person-mask-399x600.png",
   "filmography-movie-mask.png": "images/cast/filmography-movie-mask-342x513.png",
   "detailed-poster-mask.png": "images/media-card/detailed-poster-mask-288x432.png",
-  "detailed-card-mask.png": "images/media-card/detailed-card-mask-882x496.png",
   "album-mask-300.png": "images/music/album-mask-300x300.png",
   "album-mask-342.png": "images/music/album-mask-342x342.png",
   "audio-player-album-mask.png": "images/music/audio-player-album-mask-651x651.png",
@@ -130,7 +130,7 @@ const geometryChecks = {
   "components/pages/Video/TVShow/TVShow.xml": ["itemSize=\"[207,381]\""],
   "components/pages/Music/MusicLibrary/MusicLibrary.xml": ["itemSize=\"[360,432]\""],
   "components/pages/MediaShell/MediaShell.bs": ["MaskAssets.Apply(m.mediaBackgroundPartialGroup, \"media-shell-backdrop-mask.png\", [1152, 648], [768, 432])"],
-  "source/main.bs": ["globalNode.AddFields({ resolutionProfile: ResolutionProfile.Create() })"],
+  "source/main.bs": ["globalNode.AddFields({ resolutionProfile: ResolutionProfile.Create(), theme: Theme.Mode.Blue })"],
   "source/MaskAssets.bs": ["if ResolutionProfile.IsHd() then", "ResolutionAssets.GetMaskImageUri(filename)"],
   "source/ResolutionProfile.bs": ["deviceInfo.GetUIResolution()", "uiResolution.height <= 720", "profile = m.global.resolutionProfile", "return ResolutionProfile.GetName() = \"hd\""],
 };

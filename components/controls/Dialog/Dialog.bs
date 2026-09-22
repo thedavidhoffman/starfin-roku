@@ -1,3 +1,4 @@
+import "pkg:/source/Theme.bs"
 import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
@@ -5,6 +6,21 @@ import "pkg:/source/Number.bs"
 '-------------------------------------------------------------------------------
 sub init()
     m.dialogLayout = { contentMargin: 60, contentTop: 170 }
+    m.dialogImages = { lastReadyUri: "" }
+    initReferences()
+    initHandlers()
+    initStyle()
+    updateDialogSize()
+    updateTitle()
+    updateContentComponent()
+    updateButtonVisibility()
+    updateButtonText()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.dialog = m.top.findNode("dialog")
     m.panel = m.top.findNode("panel")
     m.titleLabel = m.top.findNode("titleLabel")
@@ -13,12 +29,39 @@ sub init()
     m.footer = m.top.findNode("footer")
     m.saveButton = m.top.findNode("saveButton")
     m.cancelButton = m.top.findNode("cancelButton")
-    initStyle()
-    updateDialogSize()
-    updateTitle()
-    updateContentComponent()
-    updateButtonVisibility()
-    updateButtonText()
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.global.observeField("theme", "updateTheme")
+    m.panel.observeField("loadStatus", "onPanelLoadStatusChanged")
+end sub
+
+'-------------------------------------------------------------------------------
+' updateTheme
+'-------------------------------------------------------------------------------
+sub updateTheme()
+    onPanelLoadStatusChanged()
+    nextUri = Theme.DialogPanelUri(m.global.theme)
+    if m.panel.uri = nextUri then return
+
+    ' Retain a decoded image when another theme is selected before loading finishes.
+    m.panel.loadingBitmapUri = m.dialogImages.lastReadyUri
+    m.panel.failedBitmapUri = m.dialogImages.lastReadyUri
+    m.panel.uri = nextUri
+end sub
+
+'-------------------------------------------------------------------------------
+' onPanelLoadStatusChanged
+'-------------------------------------------------------------------------------
+sub onPanelLoadStatusChanged()
+    if m.panel.loadStatus <> "ready" then return
+
+    m.dialogImages.lastReadyUri = m.panel.uri
+    m.panel.loadingBitmapUri = m.dialogImages.lastReadyUri
+    m.panel.failedBitmapUri = m.dialogImages.lastReadyUri
 end sub
 
 '-------------------------------------------------------------------------------
@@ -90,6 +133,7 @@ end function
 ' initStyle
 '-------------------------------------------------------------------------------
 sub initStyle()
+    updateTheme()
     if m.footer <> invalid then m.footer.color = &h00000040
     if m.titleRule <> invalid then m.titleRule.color = &hF3F7FB33
 end sub

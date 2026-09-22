@@ -6,7 +6,7 @@ belong beside the owning component.
 
 ## Runtime entry point
 
-`source/main.bs` creates the `roSGScreen`, initializes global resolution and
+`source/main.bs` creates the `roSGScreen`, initializes global resolution, the active theme, and
 logging services, creates `MainScene`, and owns application exit and Roku memory
 events.
 
@@ -98,6 +98,32 @@ messages during page/session cleanup. Home owns that refresh-level suppression.
   models may use locally defined lower-camel-case fields.
 - Group related component state under a named state object rather than adding
   several unrelated `m.*` variables.
+
+## Theme state and rendering
+
+The theme preference remains in SettingsStore's per-account registry data.
+`source/main.bs` creates the observable global string field `theme` with Blue
+before creating MainScene. MainScene's `syncTheme` is the runtime writer: settings
+fan-out publishes the loaded or committed account theme, while login routing and
+application reset restore Blue. Settings selection previews travel through
+SettingsContent, SettingsDialog, and OverlayHost events to syncTheme without
+changing committed settings. Dismissal restores the current session theme. Components read the global value without registry
+access or knowledge of the active session.
+
+`ThemeBackground` owns the app-shell background's solid backing Rectangle and themed gradient
+Poster, reading the current theme during initialization and observing subsequent
+changes. `source/Theme.bs` owns normalization, background colors, and image paths. MainScene
+hosts a single ThemeBackground behind its pages and overlays. Up Next has no
+local backdrop and shows this same background after the player is removed. HeaderDropdownMenu
+also observes the global theme and applies the Theme.HeaderMenu palette to its
+background layers, identity divider/text, and existing menu item buttons. Theme
+asset paths are centralized under images/themes/{theme}, with fhd/hd variants
+for nine-patch menu and dialog assets. Shared Dialog observes global.theme and
+uses Theme.DialogPanelUri to update its frame without replacing content or focus. The existing Theme.Get palette used by other controls
+remains unchanged. SquareButton observes the same global field, applying its
+Theme.SquareButton palette to fixed tiles, wide-button tints, and active text.
+Header observes theme changes and supplies Theme.AccountBadge colors to the
+badge; AccountBadge continues to own its renderer-compatible compositing.
 
 ## Media flow
 

@@ -1,3 +1,4 @@
+import "pkg:/source/Theme.bs"
 import "pkg:/source/Char.bs"
 import "pkg:/source/HomeEpisodeImages.bs"
 import "pkg:/source/PlaybackMode.bs"
@@ -34,6 +35,7 @@ sub initReferences()
     m.categoryPanels = [
         m.top.findNode("libraryPanel")
         m.top.findNode("mediaShellPanel")
+        m.top.findNode("themePanel")
         m.top.findNode("playbackPanel")
         m.top.findNode("tvPanel")
         m.top.findNode("screensaverPanel")
@@ -45,6 +47,7 @@ sub initReferences()
     m.settingsControls = {
         displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
         mediaShellBackgroundOptions: m.top.findNode("mediaShellBackgroundOptions")
+        themeOptions: m.top.findNode("themeOptions")
         themeMusicOptions: m.top.findNode("themeMusicOptions")
         nextItemPlaybackOptions: m.top.findNode("nextItemPlaybackOptions")
         librarySettingsGrid: m.top.findNode("librarySettingsGrid")
@@ -68,6 +71,7 @@ sub initReferences()
     m.categoryControls = [
         [m.settingsControls.librarySettingsGrid]
         [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
+        [m.settingsControls.themeOptions]
         [m.settingsControls.nextItemPlaybackOptions]
         [m.settingsControls.tvEpisodeListDisplayOptions, m.settingsControls.showSeasonSummaryCardOptions, m.settingsControls.homeEpisodeImagesOptions]
         [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
@@ -77,7 +81,7 @@ sub initReferences()
         [m.settingsControls.resetStarfinButton]
     ]
     m.categoryState = {
-        userTitles: ["Libraries", "Media shell", "Playback", "TV", "Screensaver"]
+        userTitles: ["Libraries", "Media shell", "Theme", "Playback", "TV", "Screensaver"]
         deviceTitles: ["General", "Video", "Subtitles", "Advanced"]
     }
     m.categoryState.userCount = m.categoryState.userTitles.Count()
@@ -110,6 +114,7 @@ sub initHandlers()
     m.settingsControls.homeEpisodeImagesOptions.observeField("itemSelected", "onHomeEpisodeImagesSelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
+    m.settingsControls.themeOptions.observeField("itemSelected", "onThemeSelected")
     m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
     m.settingsControls.nextItemPlaybackOptions.observeField("itemSelected", "onNextItemPlaybackSelected")
     m.settingsControls.nextItemPlaybackOptions.observeField("itemFocused", "onNextItemPlaybackFocused")
@@ -141,6 +146,7 @@ sub initOptionContent()
     setOptionTitles(m.settingsControls.homeEpisodeImagesOptions, ["Series artwork", "Episode thumbnail with logo", "Episode thumbnail without logo"])
     setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
     setOptionTitles(m.settingsControls.mediaShellBackgroundOptions, ["Full screen", "Partial screen", "Cinematic"])
+    setOptionTitles(m.settingsControls.themeOptions, ["Blue", "Black", "Grey"])
     setOptionTitles(m.settingsControls.themeMusicOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.nextItemPlaybackOptions, ["Show " + Char.DoubleQuote + "Up Next" + Char.DoubleQuote, "Play next immediately"])
     setOptionTitles(m.settingsControls.screensaverTypeOptions, ["None", "Bouncing artwork", "Starfield"])
@@ -181,6 +187,7 @@ sub loadSettingsValues()
     m.settingsState.values[SettingsStore.Key.HomeEpisodeImages] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.HomeEpisodeImages)
     m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvEpisodeListDisplay)
     m.settingsState.values[SettingsStore.Key.MediaShellBackground] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
+    m.settingsState.values[SettingsStore.Key.Theme] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.Theme)
     m.settingsState.values[SettingsStore.Key.ThemeMusic] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ThemeMusic)
     m.settingsState.values[SettingsStore.Key.NextItemPlayback] = NextItemPlayback.Normalize(SettingsStore.GetSettingValue(settings, SettingsStore.Key.NextItemPlayback))
     m.settingsState.values[SettingsStore.Key.ScreensaverType] = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ScreensaverType)
@@ -195,6 +202,7 @@ sub loadSettingsValues()
     setHomeEpisodeImagesOption(m.settingsState.values[SettingsStore.Key.HomeEpisodeImages])
     setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
     setMediaShellBackgroundOption(m.settingsState.values[SettingsStore.Key.MediaShellBackground])
+    setThemeOption(m.settingsState.values[SettingsStore.Key.Theme])
     setOnOffOption(m.settingsControls.themeMusicOptions, m.settingsState.values[SettingsStore.Key.ThemeMusic])
     setNextItemPlaybackOption(m.settingsState.values[SettingsStore.Key.NextItemPlayback])
     setScreensaverTypeOption(m.settingsState.values[SettingsStore.Key.ScreensaverType])
@@ -907,3 +915,29 @@ function getListIndex(value as dynamic, count as integer) as integer
     if value >= count then return count - 1
     return value
 end function
+
+'-------------------------------------------------------------------------------
+' onThemeSelected
+'-------------------------------------------------------------------------------
+sub onThemeSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.themeOptions)
+    if selectedIndex < 0 then return
+    values = [Theme.Mode.Blue, Theme.Mode.Black, Theme.Mode.Grey]
+    m.settingsControls.themeOptions.checkedItem = selectedIndex
+    m.settingsState.values[SettingsStore.Key.Theme] = values[selectedIndex]
+    m.top.themePreviewRequested = values[selectedIndex]
+end sub
+
+'-------------------------------------------------------------------------------
+' setThemeOption
+'-------------------------------------------------------------------------------
+sub setThemeOption(value as dynamic)
+    normalizedValue = Theme.Normalize(value)
+    values = [Theme.Mode.Blue, Theme.Mode.Black, Theme.Mode.Grey]
+    for i = 0 to values.Count() - 1
+        if values[i] = normalizedValue then
+            m.settingsControls.themeOptions.checkedItem = i
+            m.settingsControls.themeOptions.jumpToItem = i
+        end if
+    end for
+end sub
