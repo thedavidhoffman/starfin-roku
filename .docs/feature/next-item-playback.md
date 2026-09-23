@@ -34,3 +34,13 @@ Back dismisses the action for the current outro without completing playback.
 The player does not infer credits from duration or recognize a non-standard
 `Credits` segment type. Skip Intro and the random music-video Skip action retain
 their existing priority and behavior.
+
+## Series Artwork
+
+Episode queue expansion supplies lightweight series identities. When the next
+episode belongs to the same series, playback retains already-loaded series
+metadata instead of replacing it with only an ID and name. Both the Up Next
+request and direct episode advancement use this selection, preserving the show
+logo after playback launched from Home. Incoming loaded metadata (including
+confirmed missing artwork) and explicit playlist contexts remain authoritative;
+artwork is never borrowed from a different series.

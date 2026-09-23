@@ -489,6 +489,67 @@ namespace tests
             m.assertEqual(m.top.playRequest.itemId, continuedItemId)
         end function
 
+        @describe("series artwork across queue transitions")
+
+        @it("retains loaded series artwork in the Up Next request")
+        function _()
+            m.node.activePlayback.context.series = { Id: "show", Name: "Show", metadataLoaded: true, logoUrl: "http://server/logo.png" }
+            m.node.activePlayback.queue.items[1].series = { Id: "show", Name: "Show" }
+
+            'bs:disable-next-line 1140
+            requested = requestUpNextAutoPlay()
+
+            m.assertTrue(requested)
+            m.assertEqual(m.top.upNextRequested.series.logoUrl, "http://server/logo.png")
+            page = CreateObject("roSGNode", "TVEpisodeUpNextAutoPlay")
+            page.autoPlayRequest = m.top.upNextRequested
+            m.assertEqual(page.findNode("logoBanner").logoUrl, "http://server/logo.png")
+        end function
+
+        @it("retains loaded artwork when advancing directly to the next episode")
+        function _()
+            m.node.activePlayback.context.series = { Id: "show", Name: "Show", ImageTags: { Logo: "logo-tag" } }
+            nextItem = m.node.activePlayback.queue.items[1]
+            nextItem.series = { Id: "show", Name: "Show" }
+
+            'bs:disable-next-line 1140
+            request = buildQueuePlaybackRequest(nextItem, 1)
+
+            m.assertEqual(request.series.ImageTags.Logo, "logo-tag")
+        end function
+
+        @it("does not borrow artwork from a different show")
+        function _()
+            m.node.activePlayback.context.series = { Id: "other", Name: "Other", metadataLoaded: true, logoUrl: "other-logo" }
+            nextItem = { series: { Id: "show", Name: "Show" } }
+
+            'bs:disable-next-line 1140
+            series = getQueueItemSeries(nextItem)
+
+            m.assertEqual(series, nextItem.series)
+        end function
+
+        @it("preserves confirmed missing artwork on the incoming series")
+        function _()
+            m.node.activePlayback.context.series = { Id: "show", Name: "Show", metadataLoaded: true, logoUrl: "old-logo" }
+            nextItem = { series: { Id: "show", Name: "Show", metadataLoaded: true, logoUrl: "" } }
+
+            'bs:disable-next-line 1140
+            series = getQueueItemSeries(nextItem)
+
+            m.assertEqual(series.logoUrl, "")
+        end function
+
+        @it("preserves explicit playlist context even when series data is absent")
+        function _()
+            m.node.activePlayback.context.series = { Id: "show", Name: "Show", metadataLoaded: true, logoUrl: "show-logo" }
+
+            'bs:disable-next-line 1140
+            series = getQueueItemSeries({ hasPlaybackContext: true, series: invalid })
+
+            m.assertInvalid(series)
+        end function
+
     end class
 
 end namespace

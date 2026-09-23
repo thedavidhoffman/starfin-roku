@@ -201,15 +201,8 @@ end function
 ' buildQueuePlaybackRequest
 '-------------------------------------------------------------------------------
 function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) as object
-    series = m.activePlayback.context.series
-    season = m.activePlayback.context.season
-    if queueItem.hasPlaybackContext = true then
-        series = queueItem.series
-        season = queueItem.season
-    else
-        if queueItem.series <> invalid then series = queueItem.series
-        if queueItem.season <> invalid then season = queueItem.season
-    end if
+    series = getQueueItemSeries(queueItem)
+    season = getQueueItemSeason(queueItem)
 
     request = {
         server: m.activePlayback.session.server
@@ -630,7 +623,12 @@ end sub
 '-------------------------------------------------------------------------------
 function getQueueItemSeries(item as dynamic) as dynamic
     if item <> invalid and item.hasPlaybackContext = true then return item.series
-    if item <> invalid and item.series <> invalid then return item.series
+    if item <> invalid and item.series <> invalid then
+        seriesId = Format.SafeString(item.series.Id, "")
+        ' Queue expansion supplies identity-only series data; retain loaded artwork for the same show.
+        if not SeriesIdentity.HasDetails(item.series, seriesId) and SeriesIdentity.HasDetails(m.activePlayback.context.series, seriesId) then return m.activePlayback.context.series
+        return item.series
+    end if
     return m.activePlayback.context.series
 end function
 
