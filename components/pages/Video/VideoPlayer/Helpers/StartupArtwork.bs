@@ -1,0 +1,91 @@
+'-------------------------------------------------------------------------------
+' initStartupArtwork
+'-------------------------------------------------------------------------------
+sub initStartupArtwork()
+    m.startupArtwork = {
+        group: m.top.findNode("startupArtwork")
+        backdrop: m.top.findNode("startupBackdrop")
+        logo: m.top.findNode("startupLogo")
+        title: m.top.findNode("startupTitle")
+        server: ""
+        itemId: ""
+        started: false
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' beginStartupArtwork
+'-------------------------------------------------------------------------------
+sub beginStartupArtwork(request as object)
+    server = Format.SafeString(request.server, "")
+    itemId = Format.SafeString(request.itemId, "")
+    if server <> m.startupArtwork.server or itemId <> m.startupArtwork.itemId then
+        m.startupArtwork.started = false
+    end if
+    m.startupArtwork.server = server
+    m.startupArtwork.itemId = itemId
+    m.startupArtwork.group.visible = not m.startupArtwork.started
+    renderStartupArtwork(request, request.item)
+end sub
+
+'-------------------------------------------------------------------------------
+' renderStartupArtwork
+'-------------------------------------------------------------------------------
+sub renderStartupArtwork(request as object, item as dynamic)
+    if not m.startupArtwork.group.visible then return
+    artwork = VideoPlayerMetadata.GetStartupArtwork(request, item)
+    m.startupArtwork.title.text = artwork.title
+    if m.startupArtwork.backdrop.uri <> artwork.backdropUrl then
+        m.startupArtwork.backdrop.visible = false
+        m.startupArtwork.backdrop.uri = artwork.backdropUrl
+    end if
+    if m.startupArtwork.logo.uri <> artwork.logoUrl then
+        m.startupArtwork.logo.visible = false
+        m.startupArtwork.logo.width = 600
+        m.startupArtwork.logo.height = 220
+        m.startupArtwork.logo.uri = artwork.logoUrl
+    end if
+    onStartupArtworkLoadStatusChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' onStartupArtworkLoadStatusChanged
+'-------------------------------------------------------------------------------
+sub onStartupArtworkLoadStatusChanged()
+    logo = m.startupArtwork.logo
+    backdrop = m.startupArtwork.backdrop
+    backdrop.visible = backdrop.uri <> "" and backdrop.loadStatus = "ready"
+    logo.visible = logo.uri <> "" and logo.loadStatus = "ready"
+    m.startupArtwork.title.visible = not logo.visible
+    if not logo.visible then return
+    if logo.bitmapWidth <= 0 or logo.bitmapHeight <= 0 then return
+
+    ' Size the node to the image so scaleToFit does not center narrow logos in the box.
+    ratio = logo.bitmapWidth / logo.bitmapHeight
+    width = 600
+    height = width / ratio
+    if height > 220 then
+        height = 220
+        width = height * ratio
+    end if
+    logo.width = width
+    logo.height = height
+end sub
+
+'-------------------------------------------------------------------------------
+' finishStartupArtwork
+'-------------------------------------------------------------------------------
+sub finishStartupArtwork()
+    m.startupArtwork.started = true
+    clearStartupArtwork()
+end sub
+
+'-------------------------------------------------------------------------------
+' clearStartupArtwork
+'-------------------------------------------------------------------------------
+sub clearStartupArtwork()
+    m.startupArtwork.group.visible = false
+    m.startupArtwork.backdrop.uri = ""
+    m.startupArtwork.logo.uri = ""
+    m.startupArtwork.title.text = ""
+end sub

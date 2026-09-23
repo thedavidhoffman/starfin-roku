@@ -1,6 +1,8 @@
 import "pkg:/source/Format.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/SeriesIdentity.bs"
+import "pkg:/source/ItemImage.bs"
+import "pkg:/source/Url.bs"
 import "pkg:/source/DateTime.bs"
 import "pkg:/source/MediaMetadata.bs"
 
@@ -160,4 +162,31 @@ namespace VideoPlayerMetadata
         return value
     end function
 
+    '---------------------------------------------------------------------------
+    ' VideoPlayerMetadata.GetStartupArtwork
+    '---------------------------------------------------------------------------
+    function GetStartupArtwork(request as object, item as dynamic) as object
+        server = Format.SafeString(request.server, "")
+        artwork = { title: VideoPlayerMetadata.GetItemTitle(item), logoUrl: "", backdropUrl: "" }
+        episode = VideoPlayerMetadata.IsEpisode(request, item)
+        if episode then
+            artwork.title = VideoPlayerMetadata.GetSeriesTitle(request, item)
+            artwork.logoUrl = SeriesIdentity.GetLogoUrl(server, request.series)
+        end if
+        if server = "" then return artwork
+
+        for each candidate in [item, request.item]
+            if candidate = invalid then continue for
+            if episode then
+                logoId = Format.SafeString(candidate.ParentLogoItemId, "")
+                logoTag = Format.SafeString(candidate.ParentLogoImageTag, "")
+                if artwork.logoUrl = "" and logoId <> "" and logoTag <> "" then artwork.logoUrl = Url.BuildImageUrl(server, logoId, JellyfinImage.Type.Logo, logoTag, 600, 300, { format: "Png" })
+                if artwork.backdropUrl = "" then artwork.backdropUrl = ItemImage.GetUrl(server, candidate, JellyfinImage.Type.Primary, 1920, 1080)
+            else
+                if artwork.logoUrl = "" then artwork.logoUrl = ItemImage.GetUrl(server, candidate, JellyfinImage.Type.Logo, 600, 300, { format: "Png" })
+                if artwork.backdropUrl = "" then artwork.backdropUrl = ItemImage.GetUrl(server, candidate, JellyfinImage.Type.Backdrop, 1920, 1080)
+            end if
+        end for
+        return artwork
+    end function
 end namespace

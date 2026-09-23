@@ -37,6 +37,7 @@ import "pkg:/components/pages/Video/VideoPlayer/Helpers/Cast.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/StreamOptions.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/Seek.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/Trickplay.bs"
+import "pkg:/components/pages/Video/VideoPlayer/Helpers/StartupArtwork.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackSession.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/EpisodeQueueController.bs"
 import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackRecovery.bs"
@@ -51,6 +52,7 @@ import "pkg:/components/pages/Video/VideoPlayer/Helpers/PlaybackDiagnostics.bs"
 '-------------------------------------------------------------------------------
 sub init()
     initReferences()
+    initStartupArtwork()
     initHandlers()
 end sub
 
@@ -161,6 +163,8 @@ end sub
 ' initHandlers
 '-------------------------------------------------------------------------------
 sub initHandlers()
+    m.startupArtwork.logo.observeField("loadStatus", "onStartupArtworkLoadStatusChanged")
+    m.startupArtwork.backdrop.observeField("loadStatus", "onStartupArtworkLoadStatusChanged")
     m.playbackInfoTask.observeField("response", "onPlaybackInfoResponse")
     m.episodeQueueTask.observeField("response", "onEpisodeQueueResponse")
     m.mediaSegmentsTask.observeField("response", "onMediaSegmentsResponse")
@@ -242,6 +246,7 @@ sub onVideoStateChanged()
         if beginEpisodeQueueFinishResolution() then return
         finishCompletedPlayback()
     else if state = VideoPlayerState.Value.Playing then
+        finishStartupArtwork()
         m.top.ready = true
         if m.mediaOptions.session <> invalid then m.videoPlayer.control = MediaControl.Command.Pause
         restorePlaybackStartupState()
@@ -334,6 +339,7 @@ end sub
 ' stopPlayback
 '-------------------------------------------------------------------------------
 sub stopPlayback(preserveRecovery = false as boolean)
+    clearStartupArtwork()
     m.playback.phase = PlaybackSession.Phase.Stopped
     if m.playback <> invalid then m.playback.startupPending = false
     m.playbackInfoTask.control = TaskControl.Command.Stop

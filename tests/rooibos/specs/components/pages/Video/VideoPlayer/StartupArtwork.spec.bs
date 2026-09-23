@@ -1,0 +1,162 @@
+namespace tests
+
+    @SGNode("VideoPlayer")
+    @suite("VideoPlayer startup artwork")
+    class VideoPlayerStartupArtworkTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            scene = m.top.getScene()
+            if scene.findNode("loadingSpinner") = invalid then
+                spinnerNode = CreateObject("roSGNode", "Spinner")
+                spinnerNode.id = "loadingSpinner"
+                scene.appendChild(spinnerNode)
+            end if
+            m.node.playbackInfoTask = { request: invalid, response: invalid, control: "" }
+            'bs:disable-next-line 1140
+            initStartupArtwork()
+        end function
+
+        @describe("startup presentation lifecycle")
+
+        @it("shows artwork immediately when a playback request starts")
+        function _()
+            m.top.playRequest = { server: "http://server", itemId: "movie", item: { Id: "movie", Name: "Movie", ImageTags: { Logo: "logo" }, BackdropImageTags: ["bg"] } }
+
+            m.assertTrue(m.top.findNode("startupArtwork").visible)
+            m.assertEqual(m.top.findNode("startupTitle").text, "Movie")
+            m.assertTrue(Instr(1, m.top.findNode("startupBackdrop").uri, "/Items/movie/Images/Backdrop") > 0)
+            m.assertTrue(Instr(1, m.top.findNode("startupLogo").uri, "/Items/movie/Images/Logo") > 0)
+        end function
+
+        @it("keeps startup artwork during initial buffering")
+        function _()
+            m.top.playRequest = { itemId: "movie", item: { Name: "Movie" } }
+
+            'bs:disable-next-line 1140
+            updateBufferingSpinner("buffering")
+
+            m.assertTrue(m.top.findNode("startupArtwork").visible)
+        end function
+
+        @it("does not restore artwork for later buffering or seeking")
+        function _()
+            m.top.playRequest = { itemId: "movie", item: { Name: "Movie" } }
+            'bs:disable-next-line 1140
+            finishStartupArtwork()
+
+            'bs:disable-next-line 1140
+            updateBufferingSpinner("buffering")
+
+            m.assertFalse(m.top.findNode("startupArtwork").visible)
+            m.assertEqual(m.top.findNode("startupLogo").uri, "")
+        end function
+
+        @it("keeps artwork for retries before the title has played")
+        function _()
+            m.top.playRequest = { itemId: "movie", item: { Name: "Movie" } }
+
+            m.top.playRequest = { itemId: "movie", item: { Name: "Movie" }, videoMode: "transcode" }
+
+            m.assertTrue(m.top.findNode("startupArtwork").visible)
+        end function
+
+        @it("does not restore artwork for same-title stream restarts after playing")
+        function _()
+            m.top.playRequest = { itemId: "movie", item: { Name: "Movie" } }
+            'bs:disable-next-line 1140
+            finishStartupArtwork()
+
+            m.top.playRequest = { itemId: "movie", item: { Name: "Movie" }, videoMode: "transcode" }
+
+            m.assertFalse(m.top.findNode("startupArtwork").visible)
+        end function
+
+        @it("resets the presentation when advancing to another title")
+        function _()
+            m.top.playRequest = { itemId: "first", item: { Name: "First" } }
+            'bs:disable-next-line 1140
+            finishStartupArtwork()
+
+            m.top.playRequest = { itemId: "second", item: { Name: "Second" } }
+
+            m.assertTrue(m.top.findNode("startupArtwork").visible)
+            m.assertEqual(m.top.findNode("startupTitle").text, "Second")
+        end function
+
+        @it("ignores artwork in stale playback-info responses")
+        function _()
+            m.top.playRequest = { itemId: "current", item: { Name: "Current" } }
+            m.node.playbackInfoTask.response = { ok: true, requestId: m.node.playback.requestId - 1, item: { Name: "Old" } }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.top.findNode("startupTitle").text, "Current")
+        end function
+
+        @it("refreshes artwork from richer accepted item metadata")
+        function _()
+            request = { itemId: "movie", server: "http://server", item: { Id: "movie", Name: "Movie" } }
+            m.top.playRequest = request
+
+            'bs:disable-next-line 1140
+            renderStartupArtwork(request, { Id: "movie", Name: "Movie", BackdropImageTags: ["new"] })
+
+            m.assertTrue(Instr(1, m.top.findNode("startupBackdrop").uri, "tag=new") > 0)
+        end function
+
+        @it("clears startup artwork on teardown")
+        function _()
+            m.top.playRequest = { itemId: "movie", item: { Name: "Movie" } }
+
+            m.top.callFunc("stopForRemoval")
+
+            m.assertFalse(m.top.findNode("startupArtwork").visible)
+            m.assertEqual(m.top.findNode("startupTitle").text, "")
+        end function
+
+        @it("uses text and black backing after image failures")
+        function _()
+            m.node.startupArtwork.logo = { uri: "bad-logo", loadStatus: "failed", visible: true }
+            m.node.startupArtwork.backdrop = { uri: "bad-backdrop", loadStatus: "failed", visible: true }
+            m.node.startupArtwork.title.text = "Movie"
+
+            'bs:disable-next-line 1140
+            onStartupArtworkLoadStatusChanged()
+
+            m.assertFalse(m.node.startupArtwork.logo.visible)
+            m.assertFalse(m.node.startupArtwork.backdrop.visible)
+            m.assertTrue(m.node.startupArtwork.title.visible)
+            m.assertEqual(m.node.startupArtwork.title.text, "Movie")
+        end function
+
+        @it("fits loaded logos without shifting their upper-left origin")
+        function _()
+            m.node.startupArtwork.logo = { uri: "logo", loadStatus: "ready", bitmapWidth: 400, bitmapHeight: 400, visible: false, width: 600, height: 220 }
+            m.node.startupArtwork.backdrop = { uri: "backdrop", loadStatus: "ready", visible: false }
+
+            'bs:disable-next-line 1140
+            onStartupArtworkLoadStatusChanged()
+
+            m.assertTrue(m.node.startupArtwork.logo.visible)
+            m.assertEqual(m.node.startupArtwork.logo.width, 220.0)
+            m.assertEqual(m.node.startupArtwork.logo.height, 220.0)
+            m.assertFalse(m.node.startupArtwork.title.visible)
+            m.assertTrue(m.node.startupArtwork.backdrop.visible)
+        end function
+
+        @it("layers the gradient between backdrop and logo")
+        function _()
+            m.top.playRequest = { itemId: "movie", item: { Name: "Movie" } }
+            group = m.top.findNode("startupArtwork")
+
+            m.assertTrue(group.visible)
+            m.assertEqual(group.getChild(1).id, "startupBackdrop")
+            m.assertEqual(group.getChild(2).id, "startupGradient")
+            m.assertEqual(group.getChild(3).id, "startupLogo")
+            m.assertEqual(group.getChild(3).translation, [96.0, 64.0])
+        end function
+
+    end class
+
+end namespace

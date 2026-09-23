@@ -179,6 +179,77 @@ namespace tests
             m.assertTrue(VideoPlayerMetadata.ClampSeconds(101, 0, 100) = 100)
         end function
 
+        @describe("startup artwork")
+
+        @it("uses the movie backdrop and logo")
+        function _()
+            item = { Id: "movie", Name: "Movie", Type: "Movie", ImageTags: { Logo: "logo" }, BackdropImageTags: ["backdrop"] }
+
+            artwork = VideoPlayerMetadata.GetStartupArtwork({ server: "http://server", item: item }, item)
+
+            m.assertEqual(artwork.title, "Movie")
+            m.assertTrue(Instr(1, artwork.logoUrl, "/Items/movie/Images/Logo") > 0)
+            m.assertTrue(Instr(1, artwork.backdropUrl, "/Items/movie/Images/Backdrop") > 0)
+        end function
+
+        @it("uses episode artwork while retaining the series logo")
+        function _()
+            item = { Id: "episode", Name: "Episode", Type: "Episode", ImageTags: { Primary: "episode-still" }, SeriesName: "Show", ParentLogoItemId: "parent", ParentLogoImageTag: "tag" }
+            request = { server: "http://server", series: { Id: "show", Name: "Show", logoUrl: "series-logo", detailBackdropUrl: "series-backdrop" } }
+
+            artwork = VideoPlayerMetadata.GetStartupArtwork(request, item)
+
+            m.assertEqual(artwork.title, "Show")
+            m.assertEqual(artwork.logoUrl, "series-logo")
+            m.assertTrue(Instr(1, artwork.backdropUrl, "/Items/episode/Images/Primary") > 0)
+        end function
+
+        @it("uses an inherited logo without borrowing the parent backdrop")
+        function _()
+            item = { Id: "episode", Type: "Episode", SeriesName: "Show", ParentLogoItemId: "show", ParentLogoImageTag: "logo", ParentBackdropItemId: "show", ParentBackdropImageTags: ["backdrop"] }
+
+            artwork = VideoPlayerMetadata.GetStartupArtwork({ server: "http://server" }, item)
+
+            m.assertEqual(artwork.title, "Show")
+            m.assertTrue(Instr(1, artwork.logoUrl, "/Items/show/Images/Logo") > 0)
+            m.assertEqual(artwork.backdropUrl, "")
+        end function
+
+        @it("preserves request artwork when a response omits image tags")
+        function _()
+            request = { server: "http://server", item: { Id: "movie", ImageTags: { Logo: "logo" }, BackdropImageTags: ["backdrop"] } }
+
+            artwork = VideoPlayerMetadata.GetStartupArtwork(request, { Id: "movie", Name: "Movie" })
+
+            m.assertTrue(artwork.logoUrl <> "")
+            m.assertTrue(artwork.backdropUrl <> "")
+        end function
+
+        @it("returns text and empty artwork for a title without images")
+        function _()
+            artwork = VideoPlayerMetadata.GetStartupArtwork({ server: "http://server" }, { Id: "movie", Name: "Movie" })
+
+            m.assertEqual(artwork, { title: "Movie", logoUrl: "", backdropUrl: "" })
+        end function
+
+        @it("preserves the requested episode still when the response omits images")
+        function _()
+            request = { server: "http://server", item: { Id: "episode", Type: "Episode", ImageTags: { Primary: "still" } }, series: { Id: "show", Name: "Show", detailBackdropUrl: "series-backdrop" } }
+
+            artwork = VideoPlayerMetadata.GetStartupArtwork(request, { Id: "episode", Type: "Episode", Name: "Episode" })
+
+            m.assertTrue(Instr(1, artwork.backdropUrl, "/Items/episode/Images/Primary") > 0)
+        end function
+
+        @it("keeps black backing when an episode lacks its own artwork")
+        function _()
+            request = { server: "http://server", series: { Id: "show", Name: "Show", detailBackdropUrl: "series-backdrop" } }
+
+            artwork = VideoPlayerMetadata.GetStartupArtwork(request, { Id: "episode", Type: "Episode", Name: "Episode" })
+
+            m.assertEqual(artwork.backdropUrl, "")
+        end function
+
     end class
 
 end namespace
