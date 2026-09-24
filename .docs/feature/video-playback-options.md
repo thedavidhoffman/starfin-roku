@@ -198,3 +198,8 @@ incorrect playback starts, test the options in this order:
 If Remux Disabled works but Allow Remux does not, the source video stream or
 its timestamp or keyframe structure is more likely to be involved than the
 container alone.
+
+Series-page Play and Resume requests include episode `People`, as does the series
+playback queue. The player uses those episode details for Cast availability and
+content, including queued advancement; no additional playback-time request or
+series-cast fallback is required. Episodes without usable people keep Cast hidden.

@@ -1,3 +1,5 @@
+import "pkg:/source/api/HttpClient.bs"
+
 namespace tests
 
     @SGNode("TVShowTask")
@@ -90,6 +92,59 @@ namespace tests
             m.assertEqual(m.top.response.status, 401)
             m.assertTrue(m.top.response.authExpired)
             m.assertEqual(m.top.response.failureKind, "authenticationRequired")
+        end function
+
+        @describe("episode cast metadata")
+
+        @it("requests and preserves People for the Play target")
+        function _()
+            getGlobalAa().tvShowCastRequest = ""
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().tvShowCastRequest = requestUrl
+                return { ok: true, data: { Items: [{ Id: "episode", SeasonId: "season", People: [{ Id: "person", Name: "Actor" }] }] } }
+            end function)
+            request = { server: "http://server", token: "token", userId: "user", itemId: "series" }
+
+            'bs:disable-next-line 1140
+            response = loadUpNextItem(request)
+
+            m.assertTrue(Instr(1, getGlobalAa().tvShowCastRequest, "fields=SeriesInfo%2CPeople") > 0)
+            m.assertEqual(response.data.Items[0].People[0].Name, "Actor")
+            getGlobalAa().Delete("tvShowCastRequest")
+        end function
+
+        @it("requests and preserves People for the Resume target")
+        function _()
+            getGlobalAa().tvShowCastRequest = ""
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().tvShowCastRequest = requestUrl
+                return { ok: true, data: { Items: [{ Id: "episode", SeasonId: "season", People: [{ Id: "person", Name: "Actor" }] }] } }
+            end function)
+            request = { server: "http://server", token: "token", userId: "user", itemId: "series" }
+
+            'bs:disable-next-line 1140
+            response = loadResumeItem(request)
+
+            m.assertTrue(Instr(1, getGlobalAa().tvShowCastRequest, "fields=SeriesInfo%2CPeople") > 0)
+            m.assertEqual(response.data.Items[0].People[0].Name, "Actor")
+            getGlobalAa().Delete("tvShowCastRequest")
+        end function
+
+        @it("requests and preserves People for the playback queue")
+        function _()
+            getGlobalAa().tvShowCastRequest = ""
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().tvShowCastRequest = requestUrl
+                return { ok: true, data: { Items: [{ Id: "episode", SeasonId: "season", People: [{ Id: "person", Name: "Actor" }] }] } }
+            end function)
+            request = { server: "http://server", token: "token", userId: "user", itemId: "series" }
+
+            'bs:disable-next-line 1140
+            response = loadPlaybackQueue(request, { Id: "episode", SeasonId: "season" })
+
+            m.assertTrue(Instr(1, getGlobalAa().tvShowCastRequest, "fields=MediaStreams%2CMediaSources%2COverview%2CTrickplay%2CUserData%2CPeople") > 0)
+            m.assertEqual(response.items[0].item.People[0].Name, "Actor")
+            getGlobalAa().Delete("tvShowCastRequest")
         end function
 
     end class
