@@ -29,6 +29,7 @@ individual Starfin features.
 - [Preview Sheets](preview-sheets.md)
 - [Primary Button](primary-button.md)
 - [Request Failure Classification](request-failures.md)
+- [Remote Keys](remote-keys.md)
 - [Video Toolbar](video-toolbar.md)
 - [Quick Connect](quick-connect.md)
 - [Search](search.md)
