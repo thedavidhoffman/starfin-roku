@@ -280,6 +280,43 @@ namespace tests
             m.assertTrue(m.node.background.width = m.top.preferredWidth)
         end function
 
+        @describe("focused content centering")
+
+        @it("centers icon and measured text inside a larger minimum width")
+        function _()
+            m.top.setFields({ icon: "pkg:/images/icons/media-toolbar/play-light.png", text: "Play", expandedWidth: 300, maxWidth: 0, centerContent: false, alwaysShowText: false })
+            width = m.top.preferredWidth
+
+            m.top.hasFocusVisual = true
+
+            rightInset = m.node.background.width - m.node.textLabel.translation[0] - m.node.textLabel.width
+            m.assertTrue(m.node.iconPoster.translation[0] = rightInset - 2)
+            m.assertTrue(m.node.textLabel.translation[0] - m.node.iconPoster.translation[0] - m.node.iconPoster.width = 12)
+            m.assertEqual(m.top.preferredWidth, width)
+            m.assertTrue(m.node.background.width = width)
+        end function
+
+        @it("applies the one-pixel optical adjustment to capped text")
+        function _()
+            m.top.setFields({ icon: "pkg:/images/icons/media-toolbar/play-light.png", text: String(100, "W"), expandedWidth: 64, maxWidth: 200, centerContent: false, hasFocusVisual: true })
+
+            m.assertEqual(m.top.preferredWidth, 200)
+            m.assertEqual(m.node.iconPoster.translation[0], 15.0)
+            m.assertEqual(m.node.textLabel.width, 124.0)
+            m.assertTrue(m.node.background.width - m.node.textLabel.translation[0] - m.node.textLabel.width = 17)
+        end function
+
+        @it("restores collapsed icon placement after focus leaves")
+        function _()
+            m.top.setFields({ icon: "pkg:/images/icons/media-toolbar/play-light.png", text: "Play", expandedWidth: 300, maxWidth: 0, centerContent: false, alwaysShowText: false, hasFocusVisual: true })
+
+            m.top.hasFocusVisual = false
+
+            m.assertEqual(m.node.background.width, 64.0)
+            m.assertEqual(m.node.iconPoster.translation[0], 16.0)
+            m.assertFalse(m.node.textLabel.visible)
+        end function
+
         @describe("text-only alignment")
 
         @it("centers unfocused text inside equal horizontal insets")
@@ -319,7 +356,9 @@ namespace tests
             m.top.icon = "pkg:/images/icons/media-toolbar/play-light.png"
 
             m.assertEqual(m.node.textLabel.horizAlign, "left")
-            m.assertEqual(m.node.textLabel.translation[0], 60.0)
+            m.assertTrue(m.node.textLabel.translation[0] = m.node.iconPoster.translation[0] + 44)
+            rightInset = m.node.background.width - m.node.textLabel.translation[0] - m.node.textLabel.width
+            m.assertTrue(m.node.iconPoster.translation[0] = rightInset - 2)
         end function
 
     end class

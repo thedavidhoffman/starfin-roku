@@ -76,6 +76,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub onFocusVisualChanged()
     hasFocus = m.top.hasFocusVisual = true
+    updateBackground(hasFocus)
+    layoutContent(hasFocus)
+    updateContentColors(hasFocus)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateBackground
+'-------------------------------------------------------------------------------
+sub updateBackground(hasFocus as boolean)
     if hasFocus then
         m.background.uri = "pkg:/images/buttons/media-toolbar-button-focused.9.png"
         m.background.width = m.top.preferredWidth
@@ -85,8 +94,14 @@ sub onFocusVisualChanged()
     end if
 
     if m.top.alwaysShowText then m.background.width = m.top.preferredWidth
-    m.iconPoster.visible = m.top.icon <> "" or m.top.focusedIcon <> ""
     m.background.height = m.layout.height
+end sub
+
+'-------------------------------------------------------------------------------
+' layoutContent
+'-------------------------------------------------------------------------------
+sub layoutContent(hasFocus as boolean)
+    m.iconPoster.visible = m.top.icon <> "" or m.top.focusedIcon <> ""
     m.iconPoster.width = m.layout.iconSize
     m.iconPoster.height = m.layout.iconSize
     m.iconPoster.translation = [m.layout.iconX, m.layout.iconY]
@@ -98,7 +113,7 @@ sub onFocusVisualChanged()
         m.textLabel.horizAlign = "center"
     end if
     m.textLabel.visible = hasFocus or m.top.alwaysShowText
-    if m.top.centerContent and m.iconPoster.visible and m.textLabel.visible then
+    if (hasFocus or m.top.centerContent) and m.iconPoster.visible and m.textLabel.visible then
         ' Center the icon and measured text as one group, retaining their normal gap.
         gap = m.layout.textX - m.layout.iconX - m.layout.iconSize
         textWidth = m.layout.measuredTextWidth
@@ -106,10 +121,18 @@ sub onFocusVisualChanged()
         if availableTextWidth < 0 then availableTextWidth = 0
         if textWidth > availableTextWidth then textWidth = availableTextWidth
         contentX = (m.background.width - m.layout.iconSize - gap - textWidth) / 2
+        ' Optical adjustment accounts for transparent padding around the icon artwork.
+        if hasFocus then contentX -= 1
         m.iconPoster.translation = [contentX, m.layout.iconY]
         m.textLabel.translation = [contentX + m.layout.iconSize + gap, m.layout.textY]
         m.textLabel.width = textWidth
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' updateContentColors
+'-------------------------------------------------------------------------------
+sub updateContentColors(hasFocus as boolean)
     if hasFocus then
         m.textLabel.color = &h0F1A2AFF
     else

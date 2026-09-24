@@ -16,6 +16,20 @@ VideoToolbar observes preferred-width changes and repositions neighboring
 buttons without changing focus. Shorter labels shrink back toward the configured
 minimum; losing focus restores the compact icon-only appearance.
 
+## Button appearance
+
+DynamicButton uses fully rounded pill ends, matching the player toolbar's shape.
+The unfocused fill remains blue-grey (`#182130`, alpha 210/255); focus uses solid
+white with dark icons and text. The existing 58-pixel height, 64-pixel collapsed
+width, expansion, and persistent-summary behavior are unchanged. Focused buttons
+center the icon and measured text together with their existing 12-pixel gap and
+equal outer insets, then apply a 1-pixel left optical adjustment to the focused
+icon/text group. Button widths stay fixed by the existing measurement rules;
+text is constrained to the available space when a width cap applies. Losing focus
+restores the existing unfocused placement.
+`scripts/generate-dynamic-button-assets.mjs` generates the two nine-patch backgrounds
+with fixed rounded ends and a stretchable center.
+
 ## Media summary
 
 Movies and episodes show media info last in visual and remote navigation order.
