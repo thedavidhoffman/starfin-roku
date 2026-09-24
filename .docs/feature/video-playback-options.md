@@ -8,6 +8,17 @@ an application preference or carried into the next queued title. Loading a
 different title resets the page to Automatic playback.
 
 The same dialog is available from the cog-and-summary button in the player.
+Playback uses the same `PlayerToolbarButton` component for Cast, transport, and Media Info.
+Without text it retains the circular icon presentation; optional text creates a
+75-pixel-high black pill with a larger icon and persistent
+white summary text. Focus inverts the entire pill to white with a dark cog and
+summary, matching the other playback controls. The text has a 1.5-pixel downward
+optical adjustment to balance its padding. The control remains one
+focus stop. It aligns with Cast and keeps the existing 600-pixel width cap and
+20-pixel gap. The MediaShell button retains its existing presentation. Pill assets
+are generated for FHD and HD by scripts/generate-playback-summary-assets.mjs.
+Back from the Cast view restores toolbar focus to Cast, matching Media Info dismissal.
+If Cast is unavailable, focus falls back to Play/Pause.
 Choices are staged until Back closes the dialog. Any required restart applies
 all changed options together, at the selected chapter or captured position. The selected mode is reflected
 on the title's MediaShell page when playback stops.

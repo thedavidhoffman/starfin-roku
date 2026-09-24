@@ -1,0 +1,75 @@
+import "pkg:/source/TextMeasurement.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/ResolutionProfile.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.presentation = {
+        background: m.top.findNode("background")
+        label: m.top.findNode("textLabel")
+        icon: m.top.findNode("iconPoster")
+        measurementLabel: CreateObject("roSGNode", "Label")
+    }
+    m.top.observeField("focusedChild", "onFocusChanged")
+    render()
+end sub
+
+'-------------------------------------------------------------------------------
+' render
+'-------------------------------------------------------------------------------
+sub render()
+    if not m.top.enabled then m.top.hasFocusVisual = false
+    hasText = m.top.text <> ""
+    m.presentation.background.visible = hasText
+    m.presentation.label.visible = hasText
+    m.presentation.label.text = m.top.text
+    width = 75
+    m.presentation.icon.translation = [0, 0]
+    m.presentation.icon.width = 75
+    m.presentation.icon.height = 75
+    if hasText then
+        textX = m.presentation.label.translation[0]
+        width = TextMeasurement.GetWidth(m.presentation.measurementLabel, m.presentation.label.font, m.top.text) + textX + 28
+        if width < 150 then width = 150
+        if m.top.maxWidth >= 150 and width > m.top.maxWidth then width = m.top.maxWidth
+        m.presentation.background.width = width
+        m.presentation.label.width = width - textX - 28
+        m.presentation.icon.translation = [13.5, 13.5]
+        m.presentation.icon.width = 48
+        m.presentation.icon.height = 48
+    end if
+    filename = "playback-summary-unfocused.9.png"
+    m.presentation.label.color = &hFFFFFFFF
+    m.presentation.icon.uri = m.top.icon
+    if m.top.hasFocusVisual and m.top.enabled then
+        filename = "playback-summary-focused.9.png"
+        m.presentation.label.color = &h0F1A2AFF
+        m.presentation.icon.uri = m.top.focusedIcon
+    end if
+    if hasText then m.presentation.background.uri = ResolutionAssets.GetButtonImageUri(filename)
+    opacity = 1.0
+    if not m.top.enabled then opacity = 0.35
+    m.presentation.background.opacity = opacity
+    m.presentation.label.opacity = opacity
+    m.presentation.icon.opacity = opacity
+    m.top.preferredWidth = width
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusChanged
+'-------------------------------------------------------------------------------
+sub onFocusChanged()
+    m.top.hasFocusVisual = m.top.enabled and m.top.isInFocusChain()
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key <> "OK" and key <> "select" then return false
+    if m.top.enabled then m.top.buttonSelected = true
+    return true
+end function
