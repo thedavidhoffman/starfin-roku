@@ -13,7 +13,8 @@ Cast and Media Info opt into its compact presentation: 58 pixels high, verticall
 centered alongside the unchanged 75-pixel transport controls. Cast stays circular;
 Media Info keeps its persistent summary with a 32-pixel cog, the MediaShell's text
 font and spacing, and centered content with the focused 1-pixel optical adjustment.
-The background stays black unfocused and white focused, with inverted icon/text
+The compact controls experimentally reuse DynamicButton?s blue-grey translucent
+unfocused background; focus remains white with inverted icon/text
 colors. Both remain single focus stops. The summary retains its 600-pixel cap and
 20-pixel gap before Cast. Both sit on the left beneath the title, before the
 centered transport controls. Pill assets for both sizes are generated for FHD and HD
@@ -203,3 +204,6 @@ Series-page Play and Resume requests include episode `People`, as does the serie
 playback queue. The player uses those episode details for Cast availability and
 content, including queued advancement; no additional playback-time request or
 series-cast fallback is required. Episodes without usable people keep Cast hidden.
+
+The unfocused-fill experiment is isolated to compact `PlayerToolbarButton`
+rendering. Removing that override restores the previous playback backgrounds.
