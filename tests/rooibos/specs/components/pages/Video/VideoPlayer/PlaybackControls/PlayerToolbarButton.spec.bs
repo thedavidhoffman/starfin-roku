@@ -5,7 +5,7 @@ namespace tests
     class PlayerToolbarButtonTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
-            m.top.setFields({ text: "", maxWidth: 600, enabled: true, hasFocusVisual: false })
+            m.top.setFields({ text: "", compact: false, maxWidth: 600, enabled: true, hasFocusVisual: false })
         end function
 
         @describe("declarative component contract")
@@ -129,6 +129,44 @@ namespace tests
             handled = onKeyEvent("left", true)
 
             m.assertFalse(handled)
+        end function
+
+        @describe("compact presentation")
+
+        @it("uses a 58-pixel circle for compact icon-only controls")
+        function _()
+            m.top.compact = true
+
+            m.assertEqual(m.top.preferredWidth, 58)
+            m.assertEqual(m.top.findNode("iconPoster").width, 58.0)
+            m.assertEqual(m.top.findNode("iconPoster").height, 58.0)
+            m.assertFalse(m.top.findNode("background").visible)
+        end function
+
+        @it("uses shell-sized summary content and preserves width on focus")
+        function _()
+            m.top.setFields({ compact: true, text: "4K HEVC" })
+            width = m.top.preferredWidth
+
+            m.top.hasFocusVisual = true
+
+            m.assertEqual(m.top.preferredWidth, width)
+            m.assertEqual(m.top.findNode("background").height, 58.0)
+            m.assertEqual(m.top.findNode("iconPoster").width, 32.0)
+            m.assertEqual(m.top.findNode("iconPoster").translation[1], 13.0)
+            m.assertEqual(m.top.findNode("textLabel").translation[1], 15.0)
+            m.assertTrue(Instr(1, m.top.findNode("background").uri, "compact-playback-summary-focused.9.png") > 0)
+        end function
+
+        @it("restores full-sized geometry when compact mode is removed")
+        function _()
+            m.top.setFields({ compact: true, text: "4K HEVC" })
+
+            m.top.compact = false
+
+            m.assertEqual(m.top.findNode("background").height, 75.0)
+            m.assertEqual(m.top.findNode("iconPoster").width, 48.0)
+            m.assertEqual(m.top.findNode("textLabel").translation, [75.0, 23.0])
         end function
 
         @describe("summary presentation")

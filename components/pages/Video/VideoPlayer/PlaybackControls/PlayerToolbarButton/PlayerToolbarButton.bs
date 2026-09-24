@@ -25,20 +25,47 @@ sub render()
     m.presentation.background.visible = hasText
     m.presentation.label.visible = hasText
     m.presentation.label.text = m.top.text
-    width = 75
+    height = 75
+    textX = 75
+    textY = 23
+    padding = 28
+    minimumWidth = 150
+    iconSize = 48
+    iconX = 13.5
+    if m.top.compact then
+        height = 58
+        textX = 60
+        textY = 15
+        padding = 24
+        minimumWidth = 64
+        iconSize = 32
+        iconX = 16
+    end if
+    width = height
+    m.presentation.background.height = height
+    m.presentation.label.translation = [textX, textY]
     m.presentation.icon.translation = [0, 0]
-    m.presentation.icon.width = 75
-    m.presentation.icon.height = 75
+    m.presentation.icon.width = height
+    m.presentation.icon.height = height
     if hasText then
-        textX = m.presentation.label.translation[0]
-        width = TextMeasurement.GetWidth(m.presentation.measurementLabel, m.presentation.label.font, m.top.text) + textX + 28
-        if width < 150 then width = 150
-        if m.top.maxWidth >= 150 and width > m.top.maxWidth then width = m.top.maxWidth
+        textWidth = TextMeasurement.GetWidth(m.presentation.measurementLabel, m.presentation.label.font, m.top.text)
+        width = textWidth + textX + padding
+        if width < minimumWidth then width = minimumWidth
+        if m.top.maxWidth >= minimumWidth and width > m.top.maxWidth then width = m.top.maxWidth
         m.presentation.background.width = width
-        m.presentation.label.width = width - textX - 28
-        m.presentation.icon.translation = [13.5, 13.5]
-        m.presentation.icon.width = 48
-        m.presentation.icon.height = 48
+        m.presentation.label.width = width - textX - padding
+        if m.top.compact then
+            ' Match DynamicButton's centered group and focused optical adjustment.
+            availableTextWidth = width - 76
+            if textWidth > availableTextWidth then textWidth = availableTextWidth
+            iconX = (width - 44 - textWidth) / 2
+            if m.top.hasFocusVisual and m.top.enabled then iconX -= 1
+            m.presentation.label.translation = [iconX + 44, textY]
+            m.presentation.label.width = textWidth
+        end if
+        m.presentation.icon.translation = [iconX, (height - iconSize) / 2]
+        m.presentation.icon.width = iconSize
+        m.presentation.icon.height = iconSize
     end if
     filename = "playback-summary-unfocused.9.png"
     m.presentation.label.color = &hFFFFFFFF
@@ -48,6 +75,7 @@ sub render()
         m.presentation.label.color = &h0F1A2AFF
         m.presentation.icon.uri = m.top.focusedIcon
     end if
+    if m.top.compact then filename = "compact-" + filename
     if hasText then m.presentation.background.uri = ResolutionAssets.GetButtonImageUri(filename)
     opacity = 1.0
     if not m.top.enabled then opacity = 0.35
