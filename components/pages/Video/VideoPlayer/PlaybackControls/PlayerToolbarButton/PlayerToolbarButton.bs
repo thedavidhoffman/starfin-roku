@@ -23,55 +23,86 @@ sub render()
     if not m.top.enabled then m.top.hasFocusVisual = false
     hasText = m.top.text <> ""
     hasFocus = m.top.hasFocusVisual and m.top.enabled
-    m.presentation.background.visible = hasText or (m.top.compact and not hasFocus)
-    m.presentation.label.visible = hasText
-    m.presentation.label.text = m.top.text
-    height = 75
-    textX = 75
-    textY = 23
-    padding = 28
-    minimumWidth = 150
-    iconSize = 48
-    iconX = 13.5
+    metrics = getLayoutMetrics()
+    width = renderLayout(metrics, hasText, hasFocus)
+    renderAppearance(hasText, hasFocus)
+    m.top.preferredWidth = width
+end sub
+
+'-------------------------------------------------------------------------------
+' getLayoutMetrics
+'-------------------------------------------------------------------------------
+function getLayoutMetrics() as object
     if m.top.compact then
-        height = 58
-        textX = 60
-        textY = 15
-        padding = 24
-        minimumWidth = 64
-        iconSize = 32
-        iconX = 16
+        return {
+            height: 58
+            textX: 60
+            textY: 15
+            padding: 24
+            minimumWidth: 64
+            iconSize: 32
+            iconX: 16
+            iconTextSpacing: 44
+            textWidthInset: 76
+        }
     end if
-    width = height
-    m.presentation.background.height = height
-    m.presentation.label.translation = [textX, textY]
+    return {
+        height: 75
+        textX: 75
+        textY: 23
+        padding: 28
+        minimumWidth: 150
+        iconSize: 48
+        iconX: 13.5
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' renderLayout
+'-------------------------------------------------------------------------------
+function renderLayout(metrics as object, hasText as boolean, hasFocus as boolean) as float
+    m.presentation.label.text = m.top.text
+    width = metrics.height
+    iconX = metrics.iconX
+    m.presentation.background.height = metrics.height
+    m.presentation.label.translation = [metrics.textX, metrics.textY]
     m.presentation.icon.translation = [0, 0]
-    m.presentation.icon.width = height
-    m.presentation.icon.height = height
+    m.presentation.icon.width = metrics.height
+    m.presentation.icon.height = metrics.height
     if hasText then
         textWidth = TextMeasurement.GetWidth(m.presentation.measurementLabel, m.presentation.label.font, m.top.text)
-        width = textWidth + textX + padding
-        if width < minimumWidth then width = minimumWidth
-        if m.top.maxWidth >= minimumWidth and width > m.top.maxWidth then width = m.top.maxWidth
+        width = textWidth + metrics.textX + metrics.padding
+        if width < metrics.minimumWidth then width = metrics.minimumWidth
+        if m.top.maxWidth >= metrics.minimumWidth and width > m.top.maxWidth then width = m.top.maxWidth
         m.presentation.background.width = width
-        m.presentation.label.width = width - textX - padding
+        m.presentation.label.width = width - metrics.textX - metrics.padding
         if m.top.compact then
             ' Match DynamicButton's centered group and focused optical adjustment.
-            availableTextWidth = width - 76
+            availableTextWidth = width - metrics.textWidthInset
             if textWidth > availableTextWidth then textWidth = availableTextWidth
-            iconX = (width - 44 - textWidth) / 2
-            if m.top.hasFocusVisual and m.top.enabled then iconX -= 1
-            m.presentation.label.translation = [iconX + 44, textY]
+            iconX = (width - metrics.iconTextSpacing - textWidth) / 2
+            if hasFocus then iconX -= 1
+            m.presentation.label.translation = [iconX + metrics.iconTextSpacing, metrics.textY]
             m.presentation.label.width = textWidth
         end if
-        m.presentation.icon.translation = [iconX, (height - iconSize) / 2]
-        m.presentation.icon.width = iconSize
-        m.presentation.icon.height = iconSize
+        m.presentation.icon.translation = [iconX, (metrics.height - metrics.iconSize) / 2]
+        m.presentation.icon.width = metrics.iconSize
+        m.presentation.icon.height = metrics.iconSize
     end if
+    if m.top.compact and not hasFocus then m.presentation.background.width = width
+    return width
+end function
+
+'-------------------------------------------------------------------------------
+' renderAppearance
+'-------------------------------------------------------------------------------
+sub renderAppearance(hasText as boolean, hasFocus as boolean)
+    m.presentation.background.visible = hasText or (m.top.compact and not hasFocus)
+    m.presentation.label.visible = hasText
     filename = "playback-summary-unfocused.9.png"
     m.presentation.label.color = &hFFFFFFFF
     m.presentation.icon.uri = m.top.icon
-    if m.top.hasFocusVisual and m.top.enabled then
+    if hasFocus then
         filename = "playback-summary-focused.9.png"
         m.presentation.label.color = &h0F1A2AFF
         m.presentation.icon.uri = m.top.focusedIcon
@@ -80,7 +111,6 @@ sub render()
     if hasText then m.presentation.background.uri = ResolutionAssets.GetButtonImageUri(filename)
     ' Temporary experiment: match the MediaShell unfocused fill on compact options.
     if m.top.compact and not hasFocus then
-        m.presentation.background.width = width
         m.presentation.background.uri = "pkg:/images/buttons/media-toolbar-button-unfocused.9.png"
     end if
     opacity = 1.0
@@ -88,7 +118,6 @@ sub render()
     m.presentation.background.opacity = opacity
     m.presentation.label.opacity = opacity
     m.presentation.icon.opacity = opacity
-    m.top.preferredWidth = width
 end sub
 
 '-------------------------------------------------------------------------------

@@ -19,6 +19,9 @@ colors. Both remain single focus stops. The summary retains its 600-pixel cap an
 20-pixel gap before Cast. Both sit on the left beneath the title, before the
 centered transport controls. Pill assets for both sizes are generated for FHD and HD
 by `scripts/generate-playback-summary-assets.mjs`.
+`PlayerToolbarButton` keeps layout metrics, text/icon geometry, and appearance in
+separate component-local helpers. Its `render()` normalizes disabled focus and
+publishes `preferredWidth` after applying layout and appearance.
 Back from the Cast view restores toolbar focus to Cast, matching Media Info dismissal.
 If Cast is unavailable, focus falls back to Play/Pause.
 Choices are staged until Back closes the dialog. Any required restart applies
