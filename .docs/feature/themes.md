@@ -89,17 +89,17 @@ alpha/marker pixels and checking a stretched composite preview.
 
 ## Gradient asset generation
 
-Black and Grey were generated with the built-in image generation tool, using
-the existing Blue image as the reference. The generated images were resized to
-1920 by 1080 PNGs for the app. Blue remains unchanged.
+Black and Grey are deterministic 1920-by-1080 RGB PNG gradients. Regenerate them
+from the repository root with `node scripts/generate-theme-backgrounds.mjs`.
+The generator preserves the previous backgrounds' broad tonal range and lower
+center lift, using neutral grayscale values and a repeating 4-by-4 sub-level
+dither to soften 8-bit banding. Blue remains unchanged.
 
-Black prompt:
-
-> Use case: style-transfer. Asset type: fullscreen Roku TV UI background bitmap. Reference/edit target: attached existing Blue gradient. Create a BLACK theme sibling, preserving the smooth subtle spatial gradient layout: almost black at top, softly lighter charcoal toward bottom and lower center, quiet darker edges. Neutral grayscale only. Restrained values approximately #090909 at top/edges to #202020 at lightest lower center. Pure smooth gradient, no objects, no texture, no shapes, no text, no watermark, no bright hotspot, no border. Keep the reference's understated seamless appearance and 16:9 landscape framing. Output 1920x1080 PNG.
-
-Grey prompt:
-
-> Use case: style-transfer. Asset type: fullscreen Roku TV UI background bitmap. Reference/edit target: attached existing Blue gradient. Create a GREY theme sibling preserving the smooth subtle spatial gradient layout: darker charcoal at top and edges, softly lighter dark grey toward bottom and lower center. Neutral grayscale only. Restrained values approximately #252525 at top/edges to #414141 at lightest lower center. Clearly a dark grey theme, softer and lighter than near-black but never light grey. Pure smooth gradient, no objects, no texture, no shapes, no text, no watermark, no bright hotspot, no border. Keep the reference's understated seamless appearance and 16:9 landscape framing. Output 1920x1080 PNG.
+These replace the original AI-generated backgrounds, whose fine pixel noise
+made them exceed 1 MB each. Maximum PNG compression and predictable pixel
+patterns keep each replacement below the 100 KB asset budget checked by
+`tests/scripts/theme-assets.test.mjs`. No runtime theme logic or image paths
+change.
 
 ## Verification
 
@@ -279,5 +279,5 @@ and all three solid panel assets.
 
 Detailed-card titles use `SmallBoldSystemFont`. Their top aligns with the poster at y=32. The title box is 64 pixels tall, with both metadata presentations starting at y=96 beneath it. The overview remains at y=142.
 
-An experimental 2-pixel white divider at 60% opacity spans the detailed card's
+A 2-pixel white divider at 60% opacity spans the detailed card's
 516-pixel text column at y=125, below the metadata row and above the overview.

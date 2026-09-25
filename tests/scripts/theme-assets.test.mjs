@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';
+import { stat } from 'node:fs/promises';
 
 const themes = ['blue', 'black', 'grey'];
 const detailedColors = { blue: [16, 28, 42, 255], black: [38, 38, 38, 255], grey: [74, 74, 74, 255] };
@@ -27,6 +28,11 @@ for (const theme of themes) {
 }
 
 for (const theme of ['black', 'grey']) {
+  test(`${theme} background stays within its 100 KB package budget`, async () => {
+    const file = await stat(`images/themes/${theme}/background.png`);
+    assert.ok(file.size <= 100_000, `${file.size} bytes exceeds the background budget`);
+  });
+
   for (const profile of profiles) {
     for (const file of panelFiles) {
       test(`${theme}/${profile}${file} preserves alpha and nine-patch markers`, async () => {
