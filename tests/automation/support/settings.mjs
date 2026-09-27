@@ -19,6 +19,7 @@ export const accountDefaults = {
   'media-shell-background': 'full-screen',
   'theme-music': 'off',
   'next-item-playback': 'show-up-next',
+  'next-episode-prompt-seconds': '0',
   'screensaver-type': 'none',
   'screensaver-delay': '1'
 };
@@ -35,8 +36,9 @@ export const categories = {
   mediaShell: { listNode: 'userCategoryList', index: 1, panelNode: 'mediaShellPanel' },
   theme: { listNode: 'userCategoryList', index: 2, panelNode: 'themePanel' },
   playback: { listNode: 'userCategoryList', index: 3, panelNode: 'playbackPanel' },
-  tv: { listNode: 'userCategoryList', index: 4, panelNode: 'tvPanel' },
-  screensaver: { listNode: 'userCategoryList', index: 5, panelNode: 'screensaverPanel' },
+  credits: { listNode: 'userCategoryList', index: 4, panelNode: 'creditsPanel' },
+  tv: { listNode: 'userCategoryList', index: 5, panelNode: 'tvPanel' },
+  screensaver: { listNode: 'userCategoryList', index: 6, panelNode: 'screensaverPanel' },
   general: { listNode: 'deviceCategoryList', index: 0, panelNode: 'systemPanel' },
   video: { listNode: 'deviceCategoryList', index: 1, panelNode: 'videoPanel' },
   subtitles: { listNode: 'deviceCategoryList', index: 2, panelNode: 'subtitlesPanel' },

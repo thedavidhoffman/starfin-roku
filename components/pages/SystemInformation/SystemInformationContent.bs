@@ -8,8 +8,6 @@ import "pkg:/source/Json.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/AuthStore.bs"
-import "pkg:/source/PlaybackMode.bs"
-import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/store/LibraryViewStateStore.bs"
 
@@ -128,16 +126,19 @@ end function
 ' getGlobalRegistrySection
 '-------------------------------------------------------------------------------
 function getGlobalRegistrySection() as object
+    settings = SettingsStore.Load("")
+    entries = [
+        { key: "active-account-key", value: AuthStore.GetActiveAccountKey() }
+        { key: "last-server", value: AuthStore.GetLastServer() }
+    ]
+    for each key in SettingsStore.GlobalKeys()
+        value = settings[key]
+        if key = SettingsStore.Key.TmdbApiKey then value = truncateText(value, 40)
+        entries.Push({ key: key, value: value })
+    end for
     return {
         title: "Global Application Registry"
-        entries: [
-            { key: "active-account-key", value: AuthStore.GetActiveAccountKey() }
-            { key: "last-server", value: AuthStore.GetLastServer() }
-            { key: SettingsStore.Key.DisplayAccountBadge, value: SettingsStore.LoadGlobal(SettingsStore.Key.DisplayAccountBadge) }
-            { key: SettingsStore.Key.VideoStreamingMode, value: PlaybackMode.Normalize(SettingsStore.LoadGlobal(SettingsStore.Key.VideoStreamingMode)) }
-            { key: SettingsStore.Key.SubtitleBurnInMode, value: SubtitleBurnIn.Normalize(SettingsStore.LoadGlobal(SettingsStore.Key.SubtitleBurnInMode)) }
-            { key: SettingsStore.Key.TmdbApiKey, value: truncateText(SettingsStore.LoadIntegration(SettingsStore.Key.TmdbApiKey), 40) }
-        ]
+        entries: entries
     }
 end function
 

@@ -2,13 +2,20 @@
 ' initMediaSegments
 '-------------------------------------------------------------------------------
 sub initMediaSegments()
+    requestId = 0
+    ' Preserve the sequence across resets so a same-item reload cannot reuse an ID.
+    if m.mediaSegments <> invalid then requestId = m.mediaSegments.requestId
     m.mediaSegments = {
+        requestId: requestId
+        pending: false
         itemId: ""
         intros: []
         outros: []
-        loaded: false
+        resolved: false
         introDismissedEndSeconds: -1
         outroDismissedEndSeconds: -1
+        fallbackDismissedItemId: ""
+        activeOutroIsFallback: false
         activeEndSeconds: -1
     }
 end sub
@@ -18,8 +25,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub resetMediaSegments()
     hidePlaybackActionButton()
-    m.mediaSegmentsTask.control = TaskControl.Command.Stop
+    cancelMediaSegmentsLoad()
     initMediaSegments()
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelMediaSegmentsLoad
+'-------------------------------------------------------------------------------
+sub cancelMediaSegmentsLoad()
+    m.mediaSegments.pending = false
+    m.mediaSegmentsTask.control = TaskControl.Command.Stop
 end sub
 
 '-------------------------------------------------------------------------------
@@ -27,15 +42,26 @@ end sub
 '-------------------------------------------------------------------------------
 sub loadMediaSegments(playbackResponse as dynamic)
     if playbackResponse = invalid then return
-    if m.activePlayback.session.itemId = "" then return
-    if m.mediaSegments.itemId = m.activePlayback.session.itemId and m.mediaSegments.loaded = true then return
+    itemId = m.activePlayback.session.itemId
+    if itemId = "" then return
+    if m.mediaSegments.itemId = itemId and m.mediaSegments.resolved then return
 
-    if m.mediaSegments.itemId <> m.activePlayback.session.itemId then resetMediaSegments()
-    if VideoPlayerMediaSegments.HasSegments(playbackResponse.payload) <> true then return
+    if m.mediaSegments.itemId <> itemId then
+        resetMediaSegments()
+    else
+        cancelMediaSegmentsLoad()
+    end if
+    m.mediaSegments.itemId = itemId
+    if VideoPlayerMediaSegments.HasSegments(playbackResponse.payload) <> true then
+        resolveMediaSegments([])
+        return
+    end if
 
-    m.mediaSegments.itemId = m.activePlayback.session.itemId
     m.log.write("Loading media segments itemId=" + m.activePlayback.session.itemId)
+    m.mediaSegments.requestId++
+    m.mediaSegments.pending = true
     m.mediaSegmentsTask.request = {
+        requestId: m.mediaSegments.requestId
         server: m.activePlayback.session.server
         token: m.activePlayback.session.token
         itemId: m.activePlayback.session.itemId
@@ -48,18 +74,28 @@ end sub
 '-------------------------------------------------------------------------------
 sub onMediaSegmentsResponse()
     response = m.mediaSegmentsTask.response
-    if response = invalid then return
+    if response = invalid or m.mediaSegments.pending <> true then return
+    if Number.ToInteger(response.requestId, -1) <> m.mediaSegments.requestId then return
+    if Format.SafeString(response.itemId, "") <> m.mediaSegments.itemId then return
     if Format.SafeString(response.itemId, "") <> m.activePlayback.session.itemId then return
 
+    m.mediaSegments.pending = false
     if response.ok <> true then
         m.log.write("Unable to load media segments itemId=" + m.activePlayback.session.itemId + " error=" + Format.SafeString(response.errorMessage, ""))
         return
     end if
 
-    m.mediaSegments.intros = VideoPlayerMediaSegments.BuildIntros(response.segments)
-    m.mediaSegments.outros = VideoPlayerMediaSegments.BuildOutros(response.segments)
-    m.mediaSegments.loaded = true
-    m.log.write("Media segments loaded itemId=" + m.activePlayback.session.itemId + " introCount=" + m.mediaSegments.intros.Count().ToStr() + " outroCount=" + m.mediaSegments.outros.Count().ToStr())
+    resolveMediaSegments(response.segments)
+end sub
+
+'-------------------------------------------------------------------------------
+' resolveMediaSegments
+'-------------------------------------------------------------------------------
+sub resolveMediaSegments(segments as dynamic)
+    m.mediaSegments.intros = VideoPlayerMediaSegments.BuildIntros(segments)
+    m.mediaSegments.outros = VideoPlayerMediaSegments.BuildOutros(segments)
+    m.mediaSegments.resolved = true
+    m.log.write("Media segments resolved itemId=" + m.activePlayback.session.itemId + " introCount=" + m.mediaSegments.intros.Count().ToStr() + " outroCount=" + m.mediaSegments.outros.Count().ToStr())
     updatePlaybackActionButton(m.playback.position)
 end sub
 
@@ -78,9 +114,43 @@ end function
 '-------------------------------------------------------------------------------
 function getActiveOutroSegment(position as float) as dynamic
     if m.mediaSegments = invalid then return invalid
+
+    ' Official ranges exclude fallback even when no official range is active.
+    if m.mediaSegments.outros.Count() > 0 then return getActiveOfficialOutroSegment(position)
+    if m.mediaSegments.resolved <> true then return invalid
+    return getActiveFallbackOutroSegment(position)
+end function
+
+'-------------------------------------------------------------------------------
+' getActiveOfficialOutroSegment
+'-------------------------------------------------------------------------------
+function getActiveOfficialOutroSegment(position as float) as dynamic
     result = VideoPlayerMediaSegments.EvaluateOutro(m.mediaSegments.outros, position, m.mediaSegments.outroDismissedEndSeconds)
     m.mediaSegments.outroDismissedEndSeconds = result.dismissedEndSeconds
-    return result.activeOutro
+    if result.activeOutro = invalid then return invalid
+    return {
+        startSeconds: result.activeOutro.startSeconds
+        endSeconds: result.activeOutro.endSeconds
+        isFallback: false
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' getActiveFallbackOutroSegment
+'-------------------------------------------------------------------------------
+function getActiveFallbackOutroSegment(position as float) as dynamic
+    if m.mediaSegments.fallbackDismissedItemId = m.activePlayback.session.itemId then return invalid
+
+    item = getCurrentPlaybackItem(getAcceptedOrPendingPlaybackRequest())
+    outros = VideoPlayerMediaSegments.BuildFallbackOutro(item, m.playback.duration, m.activePlayback.request.nextEpisodePromptSeconds)
+    ' Fallback dismissal follows the episode, not the derived range's end time.
+    result = VideoPlayerMediaSegments.EvaluateOutro(outros, position, -1)
+    if result.activeOutro = invalid then return invalid
+    return {
+        startSeconds: result.activeOutro.startSeconds
+        endSeconds: result.activeOutro.endSeconds
+        isFallback: true
+    }
 end function
 
 '-------------------------------------------------------------------------------

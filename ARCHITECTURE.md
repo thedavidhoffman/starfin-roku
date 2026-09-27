@@ -50,8 +50,10 @@ files imported by the owning component. Those functions share the component's
 `m` context and remain lower-camel-case component functions.
 
 Shared helpers under `source/` use BrighterScript namespaces and should generally
-be independent of a particular component context. Public calls use
-`Namespace.Member()` syntax. File-private namespace helpers use the `__` prefix.
+be independent of a particular component context. Qualify calls across namespace
+boundaries using `Namespace.Member()` syntax. Within the same namespace, prefer
+unqualified calls unless explicit qualification is needed to resolve ambiguity.
+File-private namespace helpers use the `__` prefix.
 
 Move logic to `source/` when it is reused or is a self-contained calculation.
 Keep it local when it coordinates child nodes, focus, observers, or the owning
@@ -177,7 +179,7 @@ The shared manifest disables RTA by default, and only the automation build
 overrides that value. Automation components and runtime initialization are not
 shipped in the production or Rooibos packages.
 
-Use these checks:
+Available checks (choose according to the development stage and change scope):
 
 1. `npm run validate` for the production build.
 2. `npm run test:build` for test compilation and packaging.
@@ -185,9 +187,18 @@ Use these checks:
    full runtime suite on a Roku development device.
 4. `npm run automation:test` for the RTA device smoke suite and evidence report.
 
-Run the device suite for component, observer, focus, field-type, and Roku runtime
-behavior. Compilation alone cannot validate those semantics. Keep credentials out
-of version control and command examples with real values.
+During active development, use focused checks proportional to the change. Do not
+run the full device suite, broad UI automation, or repeated screenshot verification
+after every incremental adjustment. Documentation-only changes need a scoped diff
+review and whitespace check, not builds or runtime tests.
+
+Reserve comprehensive verification for the end of the development cycle or an
+explicit user request, rather than the end of every conversational turn. Then run
+the full device suite for component, observer, focus, field-type, and Roku runtime
+behavior changes, plus applicable UI automation. Run targeted device checks earlier
+when a specific runtime uncertainty warrants them; compilation alone cannot validate
+those semantics. Report completed checks and deferred end-of-cycle verification.
+Keep credentials out of version control and command examples with real values.
 
 ## Generated and local files
 

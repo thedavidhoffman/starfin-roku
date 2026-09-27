@@ -209,7 +209,7 @@ namespace tests
         function _()
             defaults = SettingsStore.Defaults()
 
-            m.assertEqual(defaults.Count(), 21)
+            m.assertEqual(defaults.Count(), 22)
             m.assertEqual(defaults[SettingsStore.Key.TvLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.MovieLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.CollectionCardsLayout], "poster;6")
@@ -253,6 +253,7 @@ namespace tests
                 SettingsStore.Key.Theme
                 SettingsStore.Key.ThemeMusic
                 SettingsStore.Key.NextItemPlayback
+                SettingsStore.Key.NextEpisodePromptSeconds
                 SettingsStore.Key.ScreensaverType
                 SettingsStore.Key.ScreensaverDelay
             ])
@@ -318,6 +319,127 @@ namespace tests
             m.assertEqual(SettingsStore.GetSettingValue({}, "unknown-key"), "")
         end function
 
+        @it("normalizes next-item playback when reading settings")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "next-item-playback": "PLAY-NEXT-IMMEDIATELY" }, SettingsStore.Key.NextItemPlayback), "play-next-immediately")
+        end function
+
+        @it("defaults unsupported next-item playback when reading settings")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "next-item-playback": "unknown" }, SettingsStore.Key.NextItemPlayback), "show-up-next")
+        end function
+
+        @it("normalizes external subtitle preference when reading settings")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "subtitle-burn-in-mode": "PREFER-EXTERNAL" }, SettingsStore.Key.SubtitleBurnInMode), "prefer-external")
+        end function
+
+        @it("normalizes always-burn subtitles when reading settings")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "subtitle-burn-in-mode": "ALWAYS" }, SettingsStore.Key.SubtitleBurnInMode), "always")
+        end function
+
+        @it("defaults unsupported subtitle burn-in when reading settings")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "subtitle-burn-in-mode": "unknown" }, SettingsStore.Key.SubtitleBurnInMode), "during-transcoding")
+        end function
+
+        @it("defaults invalid tv-library-layout on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "tv-library-layout": "unknown" }, SettingsStore.Key.TvLibraryLayout), "poster;6")
+        end function
+
+        @it("defaults invalid movie-library-layout on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "movie-library-layout": "unknown" }, SettingsStore.Key.MovieLibraryLayout), "poster;6")
+        end function
+
+        @it("defaults invalid collection-cards-layout on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "collection-cards-layout": "unknown" }, SettingsStore.Key.CollectionCardsLayout), "poster;6")
+        end function
+
+        @it("defaults invalid collection-items-layout on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "collection-items-layout": "unknown" }, SettingsStore.Key.CollectionItemsLayout), "poster;6")
+        end function
+
+        @it("defaults invalid playlist-cards-layout on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "playlist-cards-layout": "unknown" }, SettingsStore.Key.PlaylistCardsLayout), "poster;6")
+        end function
+
+        @it("defaults invalid playlist-items-layout on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "playlist-items-layout": "unknown" }, SettingsStore.Key.PlaylistItemsLayout), "poster;6")
+        end function
+
+        @it("defaults invalid music-videos-layout on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "music-videos-layout": "unknown" }, SettingsStore.Key.MusicVideosLayout), "poster;6")
+        end function
+
+        @it("defaults invalid home-videos-layout on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "home-videos-layout": "unknown" }, SettingsStore.Key.HomeVideosLayout), "poster;6")
+        end function
+
+        @it("preserves valid library layouts on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "tv-library-layout": "thumbnail;4" }, SettingsStore.Key.TvLibraryLayout), "thumbnail;4")
+        end function
+
+        @it("preserves valid video modes on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "video-streaming-mode": "transcode-no-remux" }, SettingsStore.Key.VideoStreamingMode), "transcode-no-remux")
+        end function
+
+        @it("defaults invalid video modes on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "video-streaming-mode": "unknown" }, SettingsStore.Key.VideoStreamingMode), "automatic")
+        end function
+
+        @it("normalizes screensaver types on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "screensaver-type": "STARFIELD" }, SettingsStore.Key.ScreensaverType), "starfield")
+        end function
+
+        @it("defaults invalid screensaver types on direct reads")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "screensaver-type": "unknown" }, SettingsStore.Key.ScreensaverType), "none")
+        end function
+
+        @it("normalizes raw account settings during load")
+        function _()
+            name = RegistryStore.AccountSectionName("rooibos-normalization")
+            section = CreateObject("roRegistrySection", name)
+            m.registrySnapshot = {}
+            m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            section.Write("screensaver-type", "STARFIELD")
+            section.Flush()
+
+            settings = SettingsStore.Load("rooibos-normalization")
+
+            m.assertEqual(settings[SettingsStore.Key.ScreensaverType], "starfield")
+        end function
+
+        @it("normalizes account settings before writing to registry")
+        function _()
+            m.registrySnapshot = {}
+            name = RegistryStore.AccountSectionName("rooibos-normalization")
+            for each sectionName in ["STARFIN_ROKU", name]
+                section = CreateObject("roRegistrySection", sectionName)
+                m.registrySnapshot[sectionName] = section.ReadMulti(section.GetKeyList())
+            end for
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.ScreensaverType] = "STARFIELD"
+
+            SettingsStore.Save("rooibos-normalization", settings)
+
+            section = CreateObject("roRegistrySection", name)
+            m.assertEqual(section.Read("screensaver-type"), "starfield")
+        end function
+
         @describe("SettingsStore.IsThemeMusicEnabled")
 
         @it("enables theme music for on")
@@ -360,6 +482,98 @@ namespace tests
             m.assertFalse(SettingsStore.AreEqual(invalid, right))
             m.assertFalse(SettingsStore.AreEqual(left, invalid))
         end function
+
+        @it("treats unsupported values as equal to their effective defaults")
+        function _()
+            m.assertTrue(SettingsStore.AreEqual({ "next-episode-prompt-seconds": "1000" }, { "next-episode-prompt-seconds": "0" }))
+        end function
+
+        @it("treats equivalent normalized values as equal")
+        function _()
+            m.assertTrue(SettingsStore.AreEqual({ "screensaver-type": "STARFIELD" }, { "screensaver-type": "starfield" }))
+        end function
+
+        @it("distinguishes different valid normalized settings")
+        function _()
+            m.assertFalse(SettingsStore.AreEqual({ "next-episode-prompt-seconds": "30" }, { "next-episode-prompt-seconds": "60" }))
+        end function
+
+        @describe("bulk global settings")
+
+        @it("defines the complete global settings scope")
+        function _()
+            m.assertEqual(SettingsStore.GlobalKeys(), ["display-account-badge", "video-streaming-mode", "subtitle-burn-in-mode", "tmdb-api-key"])
+        end function
+
+        @it("loads defaults for missing global settings without an account")
+        function _()
+            section = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            m.registrySnapshot = {}
+            m.registrySnapshot["STARFIN_ROKU"] = section.ReadMulti(section.GetKeyList())
+            for each key in SettingsStore.GlobalKeys()
+                section.Delete(key)
+            end for
+            section.Flush()
+
+            settings = SettingsStore.Load("")
+
+            m.assertEqual(settings[SettingsStore.Key.DisplayAccountBadge], "off")
+            m.assertEqual(settings[SettingsStore.Key.VideoStreamingMode], "automatic")
+            m.assertEqual(settings[SettingsStore.Key.SubtitleBurnInMode], "during-transcoding")
+            m.assertEqual(settings[SettingsStore.Key.TmdbApiKey], "")
+        end function
+
+        @it("persists global settings separately from account settings")
+        function _()
+            accountKey = "rooibos-bulk-global"
+            accountSectionName = RegistryStore.AccountSectionName(accountKey)
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", accountSectionName]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.Theme] = "black"
+            settings[SettingsStore.Key.DisplayAccountBadge] = "on"
+            settings[SettingsStore.Key.VideoStreamingMode] = "transcode-no-remux"
+            settings[SettingsStore.Key.SubtitleBurnInMode] = "ALWAYS"
+            settings[SettingsStore.Key.TmdbApiKey] = "test-api-key"
+
+            SettingsStore.Save(accountKey, settings)
+            loaded = SettingsStore.Load(accountKey)
+
+            globalSection = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            m.assertEqual(globalSection.Read("display-account-badge"), "on")
+            m.assertEqual(globalSection.Read("video-streaming-mode"), "transcode-no-remux")
+            m.assertEqual(globalSection.Read("subtitle-burn-in-mode"), "always")
+            m.assertEqual(globalSection.Read("tmdb-api-key"), "test-api-key")
+            m.assertEqual(loaded[SettingsStore.Key.DisplayAccountBadge], "on")
+            m.assertEqual(loaded[SettingsStore.Key.VideoStreamingMode], "transcode-no-remux")
+            m.assertEqual(loaded[SettingsStore.Key.SubtitleBurnInMode], "always")
+            m.assertEqual(loaded[SettingsStore.Key.TmdbApiKey], "test-api-key")
+            accountSection = CreateObject("roRegistrySection", accountSectionName)
+            m.assertEqual(accountSection.Read("theme"), "black")
+            m.assertEqual(loaded[SettingsStore.Key.Theme], "black")
+        end function
+
+        @it("saves global settings without an account")
+        function _()
+            section = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            m.registrySnapshot = {}
+            m.registrySnapshot["STARFIN_ROKU"] = section.ReadMulti(section.GetKeyList())
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.VideoStreamingMode] = "transcode-allow-remux"
+            settings[SettingsStore.Key.Theme] = "black"
+
+            SettingsStore.Save("", settings)
+            loaded = SettingsStore.Load("")
+
+            m.assertEqual(section.Read("video-streaming-mode"), "transcode-allow-remux")
+            m.assertEqual(loaded[SettingsStore.Key.VideoStreamingMode], "transcode-allow-remux")
+            m.assertEqual(loaded[SettingsStore.Key.Theme], "blue")
+        end function
+
+        @describe("Home episode image persistence")
 
         @it("loads and saves canonical episode image mode for series")
         function _()
@@ -428,6 +642,36 @@ namespace tests
             SettingsStore.Save(accountKey, settings)
 
             m.assertEqual(section.Read("home-episode-images"), "episode-with-logo")
+        end function
+
+        @describe("credits fallback persistence")
+
+        @it("defaults credits fallback to Off")
+        function _()
+            m.assertEqual(SettingsStore.Key.NextEpisodePromptSeconds, "next-episode-prompt-seconds")
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.NextEpisodePromptSeconds), "0")
+        end function
+
+        @it("normalizes unsupported credits fallback values")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "next-episode-prompt-seconds": "1000" }, SettingsStore.Key.NextEpisodePromptSeconds), "0")
+        end function
+
+        @it("persists credits fallback separately for each account")
+        function _()
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName("rooibos-credits-a"), RegistryStore.AccountSectionName("rooibos-credits-b")]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.NextEpisodePromptSeconds] = "75"
+            SettingsStore.Save("rooibos-credits-a", settings)
+            settings[SettingsStore.Key.NextEpisodePromptSeconds] = "30"
+            SettingsStore.Save("rooibos-credits-b", settings)
+
+            m.assertEqual(SettingsStore.Load("rooibos-credits-a")[SettingsStore.Key.NextEpisodePromptSeconds], "75")
+            m.assertEqual(SettingsStore.Load("rooibos-credits-b")[SettingsStore.Key.NextEpisodePromptSeconds], "30")
         end function
 
     end class

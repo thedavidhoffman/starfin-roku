@@ -33,6 +33,41 @@ namespace tests
             m.assertEqual(response.itemId, "")
         end function
 
+        @it("preserves request correlation on success")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", itemId: "episode-1", requestId: 42 }
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertEqual(m.node.top.response.requestId, 42)
+            m.assertEqual(m.node.top.response.itemId, "episode-1")
+        end function
+
+        @it("preserves request correlation on HTTP failure")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", itemId: "episode-1", requestId: 42 }
+            m.stubCall(HttpClient.Request, { ok: false, errorMessage: "Unavailable" })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertEqual(m.node.top.response.requestId, 42)
+            m.assertEqual(m.node.top.response.itemId, "episode-1")
+        end function
+
+        @it("preserves request correlation on validation failure")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", requestId: 42 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.requestId, 42)
+        end function
+
     end class
 
 end namespace

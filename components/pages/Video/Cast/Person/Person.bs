@@ -32,6 +32,33 @@ import "pkg:/source/Array.bs"
 '-------------------------------------------------------------------------------
 sub init()
     m.log = new Logger("Person", m.global.logService)
+    initReferences()
+    initHandlers()
+
+    m.pageState = {
+        request: invalid
+        person: invalid
+        filmography: invalid
+        focusArea: "person"
+        lifecycle: AsyncLifecycle.Create()
+    }
+    m.layout = {
+        mode: "bio"
+        bioDefault: [0, 0]
+        bioRelatedFocused: [0, -258]
+        bioEpisodesFocused: [0, -680]
+        rowsDefault: [76, 750]
+        rowsRelatedFocused: [76, 492]
+        rowsEpisodesFocused: [76, 50]
+        overviewDefaultTranslation: [536, 266]
+        overviewNoMetadataTranslation: [536, 175]
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     MaskAssets.Apply(m.top.findNode("personImageMask"), "person-mask.png", [399, 600], [266, 400])
     m.bioGroup = m.top.findNode("bioGroup")
     m.personImage = m.top.findNode("personImage")
@@ -54,31 +81,17 @@ sub init()
     m.bioTranslation = m.top.findNode("bioTranslation")
     m.relatedRowsTranslation = m.top.findNode("relatedRowsTranslation")
     m.personTask = m.top.findNode("personTask")
+end sub
 
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.personTask.observeField("response", "onPersonResponse")
     m.readMoreButton.observeField("buttonSelected", "onReadMoreButtonSelected")
     m.filmographyButton.observeField("buttonSelected", "onFilmographyButtonSelected")
     m.relatedRows.observeField("rowItemSelected", "onRelatedItemSelected")
     m.relatedEpisodeRows.observeField("rowItemSelected", "onRelatedEpisodeSelected")
-
-    m.pageState = {
-        request: invalid
-        person: invalid
-        filmography: invalid
-        focusArea: "person"
-        lifecycle: AsyncLifecycle.Create()
-    }
-    m.layout = {
-        mode: "bio"
-        bioDefault: [0, 0]
-        bioRelatedFocused: [0, -258]
-        bioEpisodesFocused: [0, -680]
-        rowsDefault: [76, 750]
-        rowsRelatedFocused: [76, 492]
-        rowsEpisodesFocused: [76, 50]
-        overviewDefaultTranslation: [536, 266]
-        overviewNoMetadataTranslation: [536, 175]
-    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -202,7 +215,9 @@ sub updateReadMoreButton()
     end if
 
     updateFocusVisual()
-    if m.pageState.focusArea <> "related" then focusDefaultBioAction()
+    if m.pageState.lifecycle.isActive <> true then return
+    if m.pageState.focusArea = "related" or m.pageState.focusArea = "relatedEpisodes" then return
+    focusDefaultBioAction()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -225,7 +240,8 @@ function isOverviewTextTruncated(text as string) as boolean
     normalizedText = Strings.Replace(text, Char.CarriageReturn, "")
     paragraphs = normalizedText.Split(Char.NewLine)
 
-    for each paragraph in paragraphs
+    for paragraphIndex = 0 to paragraphs.Count() - 1
+        paragraph = paragraphs[paragraphIndex]
         words = Strings.Trim(paragraph).Split(" ")
 
         for each word in words
@@ -245,7 +261,7 @@ function isOverviewTextTruncated(text as string) as boolean
             if lineCount > maxLines then return true
         end for
 
-        if paragraph <> paragraphs[paragraphs.Count() - 1] then
+        if paragraphIndex < paragraphs.Count() - 1 then
             lineCount = lineCount + 1
             currentLineLength = 0
             if lineCount > maxLines then return true
@@ -674,7 +690,7 @@ end function
 ' buildFilmographySelection
 '-------------------------------------------------------------------------------
 function buildFilmographySelection(person as dynamic, imageUrl as string) as dynamic
-    tmdbApiKey = getTmdbApiKey()
+    tmdbApiKey = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.TmdbApiKey)
     if tmdbApiKey = "" then return invalid
 
     tmdbId = getTmdbPersonId(person)
@@ -686,29 +702,6 @@ function buildFilmographySelection(person as dynamic, imageUrl as string) as dyn
         imageUrl: imageUrl
         apiKey: tmdbApiKey
     }
-end function
-
-'-------------------------------------------------------------------------------
-' hasTmdbApiKey
-'-------------------------------------------------------------------------------
-function hasTmdbApiKey() as boolean
-    return getTmdbApiKey() <> ""
-end function
-
-'-------------------------------------------------------------------------------
-' getTmdbApiKey
-'-------------------------------------------------------------------------------
-function getTmdbApiKey() as string
-    apiKey = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.TmdbApiKey)
-    if apiKey <> "" then return apiKey
-
-    request = m.pageState.request
-    if request = invalid then return ""
-
-    apiKey = SettingsStore.GetSettingValue(request.settings, SettingsStore.Key.TmdbApiKey)
-    if apiKey <> "" then return apiKey
-
-    return SettingsStore.LoadIntegration(SettingsStore.Key.TmdbApiKey)
 end function
 
 '-------------------------------------------------------------------------------
@@ -788,18 +781,18 @@ end function
 function getAge(birthDate as string, deathDate as string) as integer
     if Len(birthDate) < 10 then return -1
 
-    birthYear = val(Left(birthDate, 4))
-    birthMonth = val(Mid(birthDate, 6, 2))
-    birthDay = val(Mid(birthDate, 9, 2))
+    birthYear = Number.ToInteger(Left(birthDate, 4), 0)
+    birthMonth = Number.ToInteger(Mid(birthDate, 6, 2), 0)
+    birthDay = Number.ToInteger(Mid(birthDate, 9, 2), 0)
     if birthYear <= 0 or birthMonth <= 0 or birthDay <= 0 then return -1
 
     endYear = 0
     endMonth = 0
     endDay = 0
     if Len(deathDate) >= 10 then
-        endYear = val(Left(deathDate, 4))
-        endMonth = val(Mid(deathDate, 6, 2))
-        endDay = val(Mid(deathDate, 9, 2))
+        endYear = Number.ToInteger(Left(deathDate, 4), 0)
+        endMonth = Number.ToInteger(Mid(deathDate, 6, 2), 0)
+        endDay = Number.ToInteger(Mid(deathDate, 9, 2), 0)
     else
         today = CreateObject("roDateTime")
         today.Mark()
@@ -852,8 +845,6 @@ function getItemImageUrl(item as dynamic, imageAspect as string) as string
 
     if imageAspect = VideoCardPresentation.Type.Thumbnail then return Url.BuildImageUrl(request.server, itemId, JellyfinImage.Type.Primary, primaryTag, 440, 248)
     return Url.BuildImageUrl(request.server, itemId, JellyfinImage.Type.Primary, primaryTag, 250, 375)
-
-    return ""
 end function
 
 '-------------------------------------------------------------------------------

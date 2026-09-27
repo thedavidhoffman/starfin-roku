@@ -1,4 +1,5 @@
 import "pkg:/source/Format.bs"
+import "pkg:/source/Number.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/api/HttpClient.bs"
@@ -18,11 +19,14 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
+    requestId = -1
+    if request <> invalid then requestId = Number.ToInteger(request.requestId, -1)
     validationError = TaskRequest.ValidateRequest(request, "mediaSegments", ["itemId"])
     if validationError <> invalid then
         itemId = ""
         if request <> invalid then itemId = Format.SafeString(request.itemId, "")
         validationError.AddReplace("itemId", itemId)
+        validationError.AddReplace("requestId", requestId)
         m.top.response = validationError
         return
     end if
@@ -34,6 +38,7 @@ sub executeRequest()
     if result.ok <> true then
         result.AddReplace("action", "mediaSegments")
         result.AddReplace("itemId", itemId)
+        result.AddReplace("requestId", requestId)
         m.top.response = result
         return
     end if
@@ -42,6 +47,7 @@ sub executeRequest()
     if result.data <> invalid and result.data.Items <> invalid then segments = result.data.Items
     m.top.response = {
         ok: true
+        requestId: requestId
         action: "mediaSegments"
         itemId: itemId
         segments: segments

@@ -4,6 +4,7 @@ import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/LibraryLayoutSetting.bs"
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/NextItemPlayback.bs"
+import "pkg:/source/NextEpisodePromptSeconds.bs"
 import "pkg:/source/store/RegistryStore.bs"
 
 namespace SettingsStore
@@ -27,6 +28,7 @@ namespace SettingsStore
         Theme = "theme"
         ThemeMusic = "theme-music"
         NextItemPlayback = "next-item-playback"
+        NextEpisodePromptSeconds = "next-episode-prompt-seconds"
         ScreensaverType = "screensaver-type"
         ScreensaverDelay = "screensaver-delay"
         VideoStreamingMode = "video-streaming-mode"
@@ -55,6 +57,7 @@ namespace SettingsStore
         defaultSettings[Key.Theme] = Theme.Mode.Blue
         defaultSettings[Key.ThemeMusic] = "off"
         defaultSettings[Key.NextItemPlayback] = NextItemPlayback.Mode.ShowUpNext
+        defaultSettings[Key.NextEpisodePromptSeconds] = NextEpisodePromptSeconds.Preset.Off
         defaultSettings[Key.ScreensaverType] = "none"
         defaultSettings[Key.ScreensaverDelay] = "1"
         defaultSettings[Key.VideoStreamingMode] = PlaybackMode.Mode.Automatic
@@ -68,7 +71,14 @@ namespace SettingsStore
     ' SettingsStore.AccountKeys
     '---------------------------------------------------------------------------
     function AccountKeys() as object
-        return [Key.TvLibraryLayout, Key.MovieLibraryLayout, Key.CollectionCardsLayout, Key.CollectionItemsLayout, Key.PlaylistCardsLayout, Key.PlaylistItemsLayout, Key.MusicVideosLayout, Key.HomeVideosLayout, Key.TvEpisodeListDisplay, Key.ShowSeasonSummaryCard, Key.HomeEpisodeImages, Key.MediaShellBackground, Key.Theme, Key.ThemeMusic, Key.NextItemPlayback, Key.ScreensaverType, Key.ScreensaverDelay]
+        return [Key.TvLibraryLayout, Key.MovieLibraryLayout, Key.CollectionCardsLayout, Key.CollectionItemsLayout, Key.PlaylistCardsLayout, Key.PlaylistItemsLayout, Key.MusicVideosLayout, Key.HomeVideosLayout, Key.TvEpisodeListDisplay, Key.ShowSeasonSummaryCard, Key.HomeEpisodeImages, Key.MediaShellBackground, Key.Theme, Key.ThemeMusic, Key.NextItemPlayback, Key.NextEpisodePromptSeconds, Key.ScreensaverType, Key.ScreensaverDelay]
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsStore.GlobalKeys
+    '---------------------------------------------------------------------------
+    function GlobalKeys() as object
+        return [Key.DisplayAccountBadge, Key.VideoStreamingMode, Key.SubtitleBurnInMode, Key.TmdbApiKey]
     end function
 
     '---------------------------------------------------------------------------
@@ -82,7 +92,6 @@ namespace SettingsStore
     ' SettingsStore.Load
     '---------------------------------------------------------------------------
     function Load(accountKey as string) as object
-        defaultSettings = SettingsStore.Defaults()
         settings = {}
         values = {}
         if accountKey <> "" then
@@ -91,20 +100,12 @@ namespace SettingsStore
             if values = invalid then values = {}
         end if
 
-        for each key in SettingsStore.AccountKeys()
-            settings[key] = SettingsStore.GetValue(values, key, defaultSettings[key])
+        globalStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
+        globalValues = globalStore.ReadMulti(GlobalKeys())
+        if globalValues <> invalid then values.Append(globalValues)
+        for each key in SettingsStore.Defaults()
+            settings[key] = SettingsStore.GetSettingValue(values, key)
         end for
-        for each key in SettingsStore.LibraryKeys()
-            settings[key] = LibraryLayoutSetting.Normalize(settings[key])
-        end for
-        settings[Key.Theme] = Theme.Normalize(settings[Key.Theme])
-        settings[Key.ScreensaverType] = SettingsStore.NormalizeScreensaverType(settings[Key.ScreensaverType])
-        settings[Key.NextItemPlayback] = NextItemPlayback.Normalize(settings[Key.NextItemPlayback])
-        settings[Key.HomeEpisodeImages] = HomeEpisodeImages.Normalize(settings[Key.HomeEpisodeImages])
-        settings[Key.DisplayAccountBadge] = SettingsStore.LoadGlobal(Key.DisplayAccountBadge)
-        settings[Key.VideoStreamingMode] = PlaybackMode.Normalize(SettingsStore.LoadGlobal(Key.VideoStreamingMode))
-        settings[Key.SubtitleBurnInMode] = SubtitleBurnIn.Normalize(SettingsStore.LoadGlobal(Key.SubtitleBurnInMode))
-        settings[Key.TmdbApiKey] = SettingsStore.LoadIntegration(Key.TmdbApiKey)
         return settings
     end function
 
@@ -116,17 +117,15 @@ namespace SettingsStore
             accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
             for each key in SettingsStore.AccountKeys()
                 value = SettingsStore.GetSettingValue(settings, key)
-                if SettingsStore.__IsLibraryKey(key) then value = LibraryLayoutSetting.Normalize(value)
-                if key = Key.ScreensaverType then value = SettingsStore.NormalizeScreensaverType(value)
-                if key = Key.NextItemPlayback then value = NextItemPlayback.Normalize(value)
                 accountStore.Write(key, value)
             end for
             accountStore.Flush()
         end if
-        SettingsStore.SaveGlobal(Key.DisplayAccountBadge, SettingsStore.GetSettingValue(settings, Key.DisplayAccountBadge))
-        SettingsStore.SaveGlobal(Key.VideoStreamingMode, PlaybackMode.Normalize(SettingsStore.GetSettingValue(settings, Key.VideoStreamingMode)))
-        SettingsStore.SaveGlobal(Key.SubtitleBurnInMode, SubtitleBurnIn.Normalize(SettingsStore.GetSettingValue(settings, Key.SubtitleBurnInMode)))
-        SettingsStore.SaveIntegration(Key.TmdbApiKey, SettingsStore.GetSettingValue(settings, Key.TmdbApiKey))
+        globalStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
+        for each key in GlobalKeys()
+            globalStore.Write(key, GetSettingValue(settings, key))
+        end for
+        globalStore.Flush()
     end sub
 
     '---------------------------------------------------------------------------
@@ -157,20 +156,6 @@ namespace SettingsStore
     end sub
 
     '---------------------------------------------------------------------------
-    ' SettingsStore.LoadIntegration
-    '---------------------------------------------------------------------------
-    function LoadIntegration(key as string) as string
-        return SettingsStore.LoadGlobal(key)
-    end function
-
-    '---------------------------------------------------------------------------
-    ' SettingsStore.SaveIntegration
-    '---------------------------------------------------------------------------
-    sub SaveIntegration(key as string, value as string)
-        SettingsStore.SaveGlobal(key, value)
-    end sub
-
-    '---------------------------------------------------------------------------
     ' SettingsStore.GetValue
     '---------------------------------------------------------------------------
     function GetValue(values as dynamic, key as string, defaultValue as string) as string
@@ -195,6 +180,12 @@ namespace SettingsStore
         if defaultSettings[key] <> invalid then defaultValue = defaultSettings[key]
         if settings = invalid then return defaultValue
         if settings[key] = invalid or settings[key] = "" then return defaultValue
+        if SettingsStore.__IsLibraryKey(key) then return LibraryLayoutSetting.Normalize(settings[key])
+        if key = Key.VideoStreamingMode then return PlaybackMode.Normalize(settings[key])
+        if key = Key.ScreensaverType then return SettingsStore.NormalizeScreensaverType(settings[key])
+        if key = Key.NextItemPlayback then return NextItemPlayback.Normalize(settings[key])
+        if key = Key.SubtitleBurnInMode then return SubtitleBurnIn.Normalize(settings[key])
+        if key = Key.NextEpisodePromptSeconds then return NextEpisodePromptSeconds.Normalize(settings[key])
         if key = Key.Theme then return Theme.Normalize(settings[key])
         if key = Key.HomeEpisodeImages then return HomeEpisodeImages.Normalize(settings[key])
         return settings[key].ToStr()

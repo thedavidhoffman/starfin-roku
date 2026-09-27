@@ -5,6 +5,7 @@ namespace tests
     class VideoPlayerPlaybackActionsTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.node.mediaSegmentsTask = m.top.findNode("mediaSegmentsTask")
             scene = m.node.top.getScene()
             if scene.findNode("loadingSpinner") = invalid then
                 spinnerNode = CreateObject("roSGNode", "Spinner")
@@ -44,6 +45,8 @@ namespace tests
                     scope: "random"
                 }
             }
+            m.node.playback.phase = "active"
+            m.node.playbackAction.pendingCompletion = invalid
             m.node.playbackAction.itemId = "music-video-1"
             m.node.playbackAction.mode = PlaybackAction.Mode.None
             m.node.playbackAction.randomSkipDismissed = false
@@ -548,6 +551,670 @@ namespace tests
             series = getQueueItemSeries({ hasPlaybackContext: true, series: invalid })
 
             m.assertInvalid(series)
+        end function
+
+        protected function prepareEpisodeFallback() as object
+            item = { Id: "episode-1", Type: "Episode", UserData: {} }
+            nextItem = { Id: "episode-2", Type: "Episode", UserData: {} }
+            m.node.activePlayback.context.item = item
+            m.node.activePlayback.session.itemId = item.Id
+            m.node.activePlayback.request.itemId = item.Id
+            m.node.activePlayback.request.item = item
+            m.node.activePlayback.request.nextEpisodePromptSeconds = "60"
+            m.node.activePlayback.request.nextItemPlayback = "show-up-next"
+            m.node.activePlayback.queue = {
+                items: [
+                    { itemId: item.Id, item: item, startPositionTicks: 0 }
+                    { itemId: nextItem.Id, item: nextItem, startPositionTicks: 0 }
+                ]
+                index: 0
+                mode: "sequential"
+                scope: "playlist"
+            }
+            'bs:disable-next-line 1140
+            initMediaSegments()
+            m.node.mediaSegments.itemId = item.Id
+            m.node.mediaSegments.resolved = true
+            m.node.playback.duration = 600
+            m.node.playback.position = 540
+            m.node.videoPlayer = { state: "playing", duration: 600 }
+            m.node.playback.phase = "active"
+            m.node.playback.isSeeking = false
+            m.node.overlay.area = "none"
+            return item
+        end function
+
+        @describe("prompt lifecycle visibility")
+
+        @it("hides the prompt during stopped playback despite a playing Video node")
+        function _()
+            m.prepareEpisodeFallback()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.capturePromptLogs()
+            m.node.playback.phase = "stopped"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(541)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackAction.mode, "none")
+            m.assertEqual(m.promptLogs().Count(), 0)
+        end function
+
+        @it("hides the prompt during resolving playback despite a playing Video node")
+        function _()
+            m.prepareEpisodeFallback()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.capturePromptLogs()
+            m.node.playback.phase = "resolving"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(541)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackAction.mode, "none")
+            m.assertEqual(m.promptLogs().Count(), 0)
+        end function
+
+        @it("hides the prompt during pending completion despite a playing Video node")
+        function _()
+            m.prepareEpisodeFallback()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.capturePromptLogs()
+            m.node.playbackAction.pendingCompletion = { itemId: "episode-1", mode: "skipCredits" }
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(541)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackAction.mode, "none")
+            m.assertEqual(m.promptLogs().Count(), 0)
+        end function
+
+        @describe("credits fallback actions")
+
+        @it("shows Skip Credits at the fallback threshold")
+        function _()
+            item = m.prepareEpisodeFallback()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackActionButton.text, "Skip Credits")
+        end function
+
+        @it("shows Play Next for the immediate preference")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.activePlayback.request.nextItemPlayback = "play-next-immediately"
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackActionButton.text, "Play Next")
+        end function
+
+        @it("hides fallback while segment loading is pending")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.resolved = false
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("does not infer fallback outside an official outro")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.outros = [{ startSeconds: 570.0, endSeconds: 600.0 }]
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("shows the official outro action at its start with fallback enabled")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.outros = [{ startSeconds: 570.0, endSeconds: 590.0 }]
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(570)
+
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackActionButton.text, "Skip Credits")
+            m.assertEqual(m.node.playbackAction.mode, PlaybackAction.Mode.SkipCredits)
+            m.assertTrue(m.node.mediaSegments.activeEndSeconds = 590)
+        end function
+
+        @it("hides fallback without a next item")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.activePlayback.queue.items = []
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("hides fallback while seeking")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.playback.isSeeking = true
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("keeps intro priority over fallback")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.intros = [{ startSeconds: 530.0, endSeconds: 560.0 }]
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackActionButton.text, "Skip Intro")
+        end function
+
+        @it("Back dismissal remains effective after seeking back into fallback")
+        function _()
+            item = m.prepareEpisodeFallback()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            dismissPlaybackAction()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(500)
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(550)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.mediaSegments.fallbackDismissedItemId, "episode-1")
+            m.assertInvalid(m.node.playbackAction.pendingCompletion)
+        end function
+
+        @it("enables fallback when playback reports no segments")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.resolved = false
+            m.node.mediaSegments.itemId = ""
+
+            'bs:disable-next-line 1140
+            loadMediaSegments({ payload: { MediaSources: [{ HasSegments: false }] } })
+
+            m.assertTrue(m.node.mediaSegments.resolved)
+            m.assertTrue(m.node.playbackActionButton.visible)
+        end function
+
+        @it("enables fallback after a successful response without an outro")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.resolved = false
+
+            m.node.mediaSegments.pending = true
+            m.node.mediaSegmentsTask.response = { requestId: m.node.mediaSegments.requestId, ok: true, itemId: "episode-1", segments: [] }
+
+            m.assertTrue(m.node.mediaSegments.resolved)
+            m.assertTrue(m.node.playbackActionButton.visible)
+        end function
+
+        @it("does not enable fallback after a failed response")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.resolved = false
+
+            m.node.mediaSegments.pending = true
+            m.node.mediaSegmentsTask.response = { requestId: m.node.mediaSegments.requestId, ok: false, itemId: "episode-1", errorMessage: "Unavailable" }
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.assertFalse(m.node.mediaSegments.resolved)
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("ignores a stale segment response")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.resolved = false
+
+            m.node.mediaSegments.pending = true
+            m.node.mediaSegmentsTask.response = { requestId: m.node.mediaSegments.requestId, ok: true, itemId: "old-episode", segments: [] }
+
+            m.assertFalse(m.node.mediaSegments.resolved)
+        end function
+
+        @it("resets fallback dismissal and availability for a new item")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.mediaSegments.fallbackDismissedItemId = "episode-1"
+
+            'bs:disable-next-line 1140
+            resetMediaSegments()
+
+            m.assertFalse(m.node.mediaSegments.resolved)
+            m.assertEqual(m.node.mediaSegments.fallbackDismissedItemId, "")
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("completes fallback through show-up-next and retains the preference")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.activePlayback.request.nextItemPlayback = "show-up-next"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.playback.hasEmittedFinalProgress = false
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.assertNotInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertTrue(item.UserData.Played)
+
+            m.node.playbackCompletionTask.response = { ok: true, action: "MarkAsWatched", itemId: "episode-1" }
+
+            m.assertEqual(m.top.upNextRequested.nextEpisodePromptSeconds, "60")
+            m.assertEqual(m.top.upNextRequested.nextItemPlayback, "show-up-next")
+        end function
+
+        @it("completes fallback through play-next-immediately and retains the preference")
+        function _()
+            item = m.prepareEpisodeFallback()
+            m.node.activePlayback.request.nextItemPlayback = "play-next-immediately"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.node.playback.hasEmittedFinalProgress = false
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.assertNotInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertTrue(m.top.playbackProgressChanged.isFinished)
+            m.assertTrue(item.UserData.Played)
+
+            m.node.playbackCompletionTask.response = { ok: true, action: "MarkAsWatched", itemId: "episode-1" }
+
+            m.assertEqual(m.top.playRequest.nextEpisodePromptSeconds, "60")
+            m.assertEqual(m.top.playRequest.nextItemPlayback, "play-next-immediately")
+        end function
+
+        @it("keeps fallback dismissed after a duration correction")
+        function _()
+            m.prepareEpisodeFallback()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(550)
+            'bs:disable-next-line 1140
+            dismissPlaybackAction()
+
+            m.node.videoPlayer.duration = 601
+            'bs:disable-next-line 1140
+            onVideoDurationChanged()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(551)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.mediaSegments.fallbackDismissedItemId, "episode-1")
+        end function
+
+        @it("does not suppress an official outro after fallback dismissal")
+        function _()
+            m.prepareEpisodeFallback()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(550)
+            'bs:disable-next-line 1140
+            dismissPlaybackAction()
+
+            m.node.mediaSegments.pending = true
+            m.node.mediaSegmentsTask.response = { requestId: m.node.mediaSegments.requestId, ok: true, itemId: "episode-1", segments: [{ Type: "Outro", StartTicks: 5700000000&, EndTicks: 6000000000& }] }
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(570)
+
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertFalse(m.node.mediaSegments.activeOutroIsFallback)
+        end function
+
+        @it("allows fallback for the next episode after dismissal")
+        function _()
+            m.prepareEpisodeFallback()
+            thirdItem = { Id: "episode-3", Type: "Episode", UserData: {} }
+            m.node.activePlayback.queue.items.Push({ itemId: thirdItem.Id, item: thirdItem, startPositionTicks: 0 })
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(550)
+            'bs:disable-next-line 1140
+            dismissPlaybackAction()
+
+            nextItem = m.node.activePlayback.queue.items[1].item
+            m.node.activePlayback.session.itemId = nextItem.Id
+            m.node.activePlayback.context.item = nextItem
+            m.node.activePlayback.queue.index = 1
+            m.node.activePlayback.request.itemId = nextItem.Id
+            m.node.activePlayback.request.item = nextItem
+            m.node.activePlayback.request.playbackQueue = m.node.activePlayback.queue.items
+            m.node.activePlayback.request.playbackQueueIndex = 1
+            'bs:disable-next-line 1140
+            loadMediaSegments({ payload: { MediaSources: [{ HasSegments: false }] } })
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(550)
+
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.mediaSegments.fallbackDismissedItemId, "")
+        end function
+
+        @it("does not use fallback after dismissing an official outro")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.mediaSegments.outros = [{ startSeconds: 570.0, endSeconds: 590.0 }]
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(570)
+            'bs:disable-next-line 1140
+            dismissPlaybackAction()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(580)
+
+            m.assertFalse(m.node.playbackActionButton.visible)
+            m.assertTrue(m.node.mediaSegments.outroDismissedEndSeconds = 590)
+            m.assertEqual(m.node.mediaSegments.fallbackDismissedItemId, "")
+        end function
+
+        protected function startSegmentRequest() as integer
+            m.node.mediaSegments.resolved = false
+            m.node.mediaSegmentsTask = {}
+            'bs:disable-next-line 1140
+            loadMediaSegments({ payload: { MediaSources: [{ HasSegments: true }] } })
+            return m.node.mediaSegmentsTask.request.requestId
+        end function
+
+        @describe("segment request ownership")
+
+        @it("ignores a successful response after reset")
+        function _()
+            m.prepareEpisodeFallback()
+            requestId = m.startSegmentRequest()
+            'bs:disable-next-line 1140
+            resetMediaSegments()
+
+            m.node.mediaSegmentsTask.response = { ok: true, requestId: requestId, itemId: "episode-1", segments: [] }
+            'bs:disable-next-line 1140
+            onMediaSegmentsResponse()
+
+            m.assertFalse(m.node.mediaSegments.resolved)
+            m.assertFalse(m.node.mediaSegments.pending)
+        end function
+
+        @it("ignores a successful response after cancellation while preserving cached state")
+        function _()
+            m.prepareEpisodeFallback()
+            requestId = m.startSegmentRequest()
+            m.node.mediaSegments.fallbackDismissedItemId = "episode-1"
+            'bs:disable-next-line 1140
+            cancelMediaSegmentsLoad()
+
+            m.node.mediaSegmentsTask.response = { ok: true, requestId: requestId, itemId: "episode-1", segments: [] }
+            'bs:disable-next-line 1140
+            onMediaSegmentsResponse()
+
+            m.assertFalse(m.node.mediaSegments.resolved)
+            m.assertEqual(m.node.mediaSegments.fallbackDismissedItemId, "episode-1")
+        end function
+
+        @it("ignores an old same-item response and accepts the replacement request")
+        function _()
+            m.prepareEpisodeFallback()
+            oldId = m.startSegmentRequest()
+            'bs:disable-next-line 1140
+            resetMediaSegments()
+            currentId = m.startSegmentRequest()
+
+            m.node.mediaSegmentsTask.response = { ok: true, requestId: oldId, itemId: "episode-1", segments: [] }
+            'bs:disable-next-line 1140
+            onMediaSegmentsResponse()
+
+            m.assertFalse(m.node.mediaSegments.resolved)
+            m.assertTrue(m.node.mediaSegments.pending)
+            m.assertTrue(currentId > oldId)
+
+            m.node.mediaSegmentsTask.response = { ok: true, requestId: currentId, itemId: "episode-1", segments: [] }
+            'bs:disable-next-line 1140
+            onMediaSegmentsResponse()
+
+            m.assertTrue(m.node.mediaSegments.resolved)
+            m.assertFalse(m.node.mediaSegments.pending)
+        end function
+
+        @it("ignores duplicate responses after resolution")
+        function _()
+            m.prepareEpisodeFallback()
+            requestId = m.startSegmentRequest()
+            m.node.mediaSegmentsTask.response = { ok: true, requestId: requestId, itemId: "episode-1", segments: [] }
+            'bs:disable-next-line 1140
+            onMediaSegmentsResponse()
+
+            m.node.mediaSegmentsTask.response = { ok: true, requestId: requestId, itemId: "episode-1", segments: [{ Type: "Outro", StartTicks: 5700000000&, EndTicks: 6000000000& }] }
+            'bs:disable-next-line 1140
+            onMediaSegmentsResponse()
+
+            m.assertEqual(m.node.mediaSegments.outros.Count(), 0)
+        end function
+
+        @it("returns official outro metadata without modifying the stored range")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.mediaSegments.outros = [{ startSeconds: 570.0, endSeconds: 600.0 }]
+
+            'bs:disable-next-line 1140
+            activeOutro = getActiveOfficialOutroSegment(575)
+
+            m.assertEqual(activeOutro, { startSeconds: 570.0, endSeconds: 600.0, isFallback: false })
+            m.assertEqual(m.node.mediaSegments.outros[0], { startSeconds: 570.0, endSeconds: 600.0 })
+            activeOutro.endSeconds = 590
+            m.assertTrue(m.node.mediaSegments.outros[0].endSeconds = 600)
+        end function
+
+        protected function capturePromptLogs()
+            m.promptLogCollector = CreateObject("roSGNode", "LogService")
+            m.node.log = new Logger("VideoPlayer", m.promptLogCollector)
+        end function
+
+        protected function promptLogs() as object
+            entries = []
+            for each entry in m.promptLogCollector.callFunc("getSnapshot")
+                if Instr(1, entry, "Playback action ") > 0 then entries.Push(entry)
+            end for
+            return entries
+        end function
+
+        @describe("prompt logging")
+
+        @it("logs intro display")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.mediaSegments.intros = [{ startSeconds: 530.0, endSeconds: 560.0 }]
+            m.capturePromptLogs()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            entries = m.promptLogs()
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Playback action displayed action=skipIntro itemId=episode-1 position=540 source=intro-segment") > 0)
+        end function
+
+        @it("logs official credits display")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.mediaSegments.outros = [{ startSeconds: 530.0, endSeconds: 560.0 }]
+            m.capturePromptLogs()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            entries = m.promptLogs()
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Playback action displayed action=skipCredits itemId=episode-1 position=540 source=outro-segment") > 0)
+        end function
+
+        @it("logs fallback credits display")
+        function _()
+            m.prepareEpisodeFallback()
+
+            m.capturePromptLogs()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            entries = m.promptLogs()
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Playback action displayed action=skipCredits itemId=episode-1 position=540 source=next-episode-setting") > 0)
+            m.assertTrue(Instr(1, entries[0], "settingSeconds=60") > 0)
+        end function
+
+        @it("logs fallback Play Next display")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.activePlayback.request.nextItemPlayback = "play-next-immediately"
+            m.capturePromptLogs()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            entries = m.promptLogs()
+            m.assertEqual(entries.Count(), 1)
+            m.assertTrue(Instr(1, entries[0], "Playback action displayed action=playNext itemId=episode-1 position=540 source=next-episode-setting") > 0)
+            m.assertTrue(Instr(1, entries[0], "settingSeconds=60") > 0)
+        end function
+
+        @it("logs an unchanged visible prompt only once")
+        function _()
+            m.prepareEpisodeFallback()
+            m.capturePromptLogs()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(541)
+
+            m.assertEqual(m.promptLogs().Count(), 1)
+        end function
+
+        @it("logs a source change while the action stays visible")
+        function _()
+            m.prepareEpisodeFallback()
+            m.capturePromptLogs()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            m.node.mediaSegments.outros = [{ startSeconds: 530.0, endSeconds: 580.0 }]
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(541)
+
+            entries = m.promptLogs()
+            m.assertEqual(entries.Count(), 2)
+            m.assertTrue(Instr(1, entries[1], "source=outro-segment") > 0)
+        end function
+
+        @it("logs a prompt appearing again after hiding")
+        function _()
+            m.prepareEpisodeFallback()
+            m.capturePromptLogs()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            hidePlaybackActionButton()
+
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(541)
+
+            m.assertEqual(m.promptLogs().Count(), 2)
+        end function
+
+        @it("logs skipCredits selection and its source")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.mediaSegments.outros = [{ startSeconds: 530.0, endSeconds: 580.0 }]
+            m.node.activePlayback.request.nextItemPlayback = "show-up-next"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.capturePromptLogs()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            entries = m.promptLogs()
+            m.assertEqual(entries.Count(), 2)
+            m.assertTrue(Instr(1, entries[1], "Playback action clicked action=skipCredits itemId=episode-1 position=540 source=outro-segment") > 0)
+        end function
+
+        @it("logs playNext selection and its source")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.activePlayback.request.nextItemPlayback = "play-next-immediately"
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.capturePromptLogs()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            entries = m.promptLogs()
+            m.assertEqual(entries.Count(), 2)
+            m.assertTrue(Instr(1, entries[1], "Playback action clicked action=playNext itemId=episode-1 position=540 source=next-episode-setting") > 0)
+        end function
+
+        @it("does not log a click for Back dismissal")
+        function _()
+            m.prepareEpisodeFallback()
+            m.capturePromptLogs()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+
+            'bs:disable-next-line 1140
+            dismissPlaybackAction()
+
+            m.assertEqual(m.promptLogs().Count(), 1)
+        end function
+
+        @it("does not log repeated clicks while completion is pending")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.activePlayback.request.tracksPlaybackProgress = true
+            m.capturePromptLogs()
+            'bs:disable-next-line 1140
+            updatePlaybackActionButton(540)
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            'bs:disable-next-line 1140
+            onPlaybackActionSelected()
+
+            m.assertEqual(m.promptLogs().Count(), 2)
         end function
 
     end class

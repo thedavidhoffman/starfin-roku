@@ -102,6 +102,71 @@ namespace tests
             m.assertTrue(result.dismissedEndSeconds = -1)
         end function
 
+        @describe("fallback outro ranges")
+
+        @it("derives the range from episode duration")
+        function _()
+            m.assertEqual(VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, 600, "75"), [{ startSeconds: 525.0, endSeconds: 600.0 }])
+        end function
+
+        @it("disables fallback for Off")
+        function _()
+            m.assertEqual(VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, 600, "0"), [])
+        end function
+
+        @it("disables fallback for movies")
+        function _()
+            m.assertEqual(VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Movie" }, 600, "60"), [])
+        end function
+
+        @it("disables fallback for missing items")
+        function _()
+            m.assertEqual(VideoPlayerMediaSegments.BuildFallbackOutro(invalid, 600, "60"), [])
+        end function
+
+        @it("disables fallback for unknown duration")
+        function _()
+            m.assertEqual(VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, invalid, "60"), [])
+        end function
+
+        @it("disables fallback for equal duration")
+        function _()
+            m.assertEqual(VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, 60, "60"), [])
+        end function
+
+        @it("disables fallback for short duration")
+        function _()
+            m.assertEqual(VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, 30, "60"), [])
+        end function
+
+        @it("evaluates fallback before threshold")
+        function _()
+            ranges = VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, 600, "60")
+
+            m.assertInvalid(VideoPlayerMediaSegments.EvaluateOutro(ranges, 539.9, -1).activeOutro)
+        end function
+
+        @it("evaluates fallback at threshold")
+        function _()
+            ranges = VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, 600, "60")
+
+            m.assertNotInvalid(VideoPlayerMediaSegments.EvaluateOutro(ranges, 540, -1).activeOutro)
+        end function
+
+        @it("evaluates fallback before cutoff")
+        function _()
+            ranges = VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, 600, "60")
+
+            m.assertNotInvalid(VideoPlayerMediaSegments.EvaluateOutro(ranges, 594.9, -1).activeOutro)
+        end function
+
+        @it("evaluates fallback at cutoff")
+        function _()
+            ranges = VideoPlayerMediaSegments.BuildFallbackOutro({ Type: "Episode" }, 600, "60")
+
+            m.assertInvalid(VideoPlayerMediaSegments.EvaluateOutro(ranges, 595, -1).activeOutro)
+        end function
+
     end class
 
 end namespace

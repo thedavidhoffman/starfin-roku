@@ -217,6 +217,107 @@ namespace tests
             m.assertTrue(truncated)
         end function
 
+        @it("keeps twelve identical short paragraphs within the overview limit")
+        function _()
+            text = "same"
+            for i = 2 to 12
+                text += Chr(10) + "same"
+            end for
+
+            'bs:disable-next-line 1140
+            truncated = isOverviewTextTruncated(text)
+
+            m.assertFalse(truncated)
+        end function
+
+        @it("detects thirteen identical short paragraphs beyond the overview limit")
+        function _()
+            text = "same"
+            for i = 2 to 13
+                text += Chr(10) + "same"
+            end for
+
+            'bs:disable-next-line 1140
+            truncated = isOverviewTextTruncated(text)
+
+            m.assertTrue(truncated)
+        end function
+
+        @it("keeps twelve blank lines within the overview limit")
+        function _()
+            text = ""
+            for i = 2 to 12
+                text += Chr(10) + ""
+            end for
+
+            'bs:disable-next-line 1140
+            truncated = isOverviewTextTruncated(text)
+
+            m.assertFalse(truncated)
+        end function
+
+        @it("detects thirteen blank lines beyond the overview limit")
+        function _()
+            text = ""
+            for i = 2 to 13
+                text += Chr(10) + ""
+            end for
+
+            'bs:disable-next-line 1140
+            truncated = isOverviewTextTruncated(text)
+
+            m.assertTrue(truncated)
+        end function
+
+        @it("preserves related focus when settings change")
+        function _()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "person-1")
+            'bs:disable-next-line 1140
+            renderRelated([m.createRelated("movie-1", "Movie", "Movie")], [])
+            'bs:disable-next-line 1140
+            focusRelated()
+            layoutMode = m.node.layout.mode
+
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertEqual(m.node.pageState.focusArea, "related")
+            m.assertEqual(m.node.layout.mode, layoutMode)
+            m.assertTrue(m.node.relatedRows.isInFocusChain())
+        end function
+
+        @it("preserves relatedEpisodes focus when settings change")
+        function _()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "person-1")
+            'bs:disable-next-line 1140
+            renderRelated([], [m.createRelated("episode-1", "Episode", "Episode")])
+            'bs:disable-next-line 1140
+            focusRelatedEpisodes()
+            layoutMode = m.node.layout.mode
+
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertEqual(m.node.pageState.focusArea, "relatedEpisodes")
+            m.assertEqual(m.node.layout.mode, layoutMode)
+            m.assertTrue(m.node.relatedEpisodeRows.isInFocusChain())
+        end function
+
+        @it("does not assign biography focus while inactive")
+        function _()
+            'bs:disable-next-line 1140
+            renderRelated([m.createRelated("movie-1", "Movie", "Movie")], [])
+            m.node.relatedRows.setFocus(true)
+            m.node.pageState.focusArea = "person"
+            m.top.callFunc("deactivate")
+
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertTrue(m.node.relatedRows.isInFocusChain())
+            m.assertEqual(m.node.pageState.focusArea, "person")
+        end function
+
         @describe("related content")
 
         @it("renders related movies and series")
@@ -322,6 +423,43 @@ namespace tests
             m.assertEqual(selection.personId, "1234")
             m.assertEqual(selection.apiKey, "api-key")
             m.assertEqual(selection.imageUrl, "person.jpg")
+        end function
+
+        @it("hides filmography when the current API key is cleared despite stale request settings")
+        function _()
+            person = m.createPerson()
+            person.ExternalUrls = [{ Name: "TMDB", Url: "https://www.themoviedb.org/person/1234" }]
+            m.node.pageState.person = person
+            m.node.pageState.request.settings = { "tmdb-api-key": "old-key" }
+            m.top.settings = { "tmdb-api-key": "old-key" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+            m.assertTrue(m.node.filmographyButton.visible)
+
+            m.top.settings = { "tmdb-api-key": "" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertInvalid(m.node.pageState.filmography)
+            m.assertFalse(m.node.filmographyButton.visible)
+        end function
+
+        @it("refreshes filmography selection when the current API key is replaced")
+        function _()
+            person = m.createPerson()
+            person.ExternalUrls = [{ Name: "TMDB", Url: "https://www.themoviedb.org/person/1234" }]
+            m.node.pageState.person = person
+            m.node.pageState.request.settings = { "tmdb-api-key": "old-key" }
+            m.top.settings = { "tmdb-api-key": "old-key" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.top.settings = { "tmdb-api-key": "new-key" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertEqual(m.node.pageState.filmography.apiKey, "new-key")
+            m.assertTrue(m.node.filmographyButton.visible)
         end function
 
         @it("does not build filmography selection without API key")

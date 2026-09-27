@@ -5,6 +5,7 @@ sub initPlaybackActions()
     m.playbackAction = {
         itemId: ""
         mode: PlaybackAction.Mode.None
+        displayedSource: PlaybackAction.Source.None
         pendingCompletion: invalid
         randomSkipDismissed: false
         musicVideoMetadataDismissed: false
@@ -55,6 +56,7 @@ sub updatePlaybackActionButton(position as dynamic)
     activeOutro = getActiveOutroSegment(Number.ToFloat(position, 0))
     if activeOutro <> invalid and hasQueueItemAtOffset(1) then
         m.mediaSegments.activeEndSeconds = activeOutro.endSeconds
+        m.mediaSegments.activeOutroIsFallback = activeOutro.isFallback = true
         if NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback) = NextItemPlayback.Mode.PlayNextImmediately then
             showPlaybackActionButton(PlaybackAction.Mode.PlayNext, "Play Next")
         else
@@ -86,6 +88,8 @@ end sub
 ' canShowPlaybackActionButton
 '-------------------------------------------------------------------------------
 function canShowPlaybackActionButton() as boolean
+    if m.playback.phase <> PlaybackSession.Phase.Active then return false
+    if m.playbackAction.pendingCompletion <> invalid then return false
     if m.playback.isSeeking = true then return false
     if m.overlay.area <> "none" then return false
     return VideoPlayerState.Normalize(m.videoPlayer.state) = VideoPlayerState.Value.Playing
@@ -95,7 +99,11 @@ end function
 ' showPlaybackActionButton
 '-------------------------------------------------------------------------------
 sub showPlaybackActionButton(mode as string, text as string)
+    source = getPlaybackActionSource(mode)
+    presentationChanged = m.playbackActionButton.visible <> true or m.playbackAction.mode <> mode or m.playbackAction.displayedSource <> source
+    if presentationChanged then logPlaybackAction("displayed", mode, source)
     m.playbackAction.mode = mode
+    m.playbackAction.displayedSource = source
     m.playbackActionButton.text = text
     if m.playbackActionButton.visible = true then return
 
@@ -109,6 +117,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub hidePlaybackActionButton()
     m.playbackAction.mode = PlaybackAction.Mode.None
+    m.playbackAction.displayedSource = PlaybackAction.Source.None
     m.playbackActionButton.visible = false
     m.playbackActionButton.hasFocusVisual = false
 end sub
@@ -145,7 +154,12 @@ sub dismissPlaybackActionPresentation(mode as string)
     else if mode = PlaybackAction.Mode.SkipIntro and m.mediaSegments.activeEndSeconds >= 0 then
         m.mediaSegments.introDismissedEndSeconds = m.mediaSegments.activeEndSeconds
     else if (mode = PlaybackAction.Mode.SkipCredits or mode = PlaybackAction.Mode.PlayNext) and m.mediaSegments.activeEndSeconds >= 0 then
-        m.mediaSegments.outroDismissedEndSeconds = m.mediaSegments.activeEndSeconds
+        if m.mediaSegments.activeOutroIsFallback then
+            ' A duration correction must not revive a dismissed episode prompt.
+            m.mediaSegments.fallbackDismissedItemId = m.activePlayback.session.itemId
+        else
+            m.mediaSegments.outroDismissedEndSeconds = m.mediaSegments.activeEndSeconds
+        end if
     end if
     m.playbackAction.musicVideoMetadataDismissed = true
     hidePlaybackIntroPresentation()
@@ -158,6 +172,9 @@ sub onPlaybackActionSelected()
     if m.playbackAction.pendingCompletion <> invalid then return
 
     mode = m.playbackAction.mode
+    if mode = PlaybackAction.Mode.SkipCredits or mode = PlaybackAction.Mode.PlayNext then
+        logPlaybackAction("clicked", mode, getPlaybackActionSource(mode))
+    end if
     dismissPlaybackActionPresentation(mode)
     if mode = PlaybackAction.Mode.RandomSkip then
         startQueueItemAtOffset(1)
@@ -166,4 +183,28 @@ sub onPlaybackActionSelected()
     else if mode = PlaybackAction.Mode.SkipCredits or mode = PlaybackAction.Mode.PlayNext then
         completeCurrentItemFromPlaybackAction(mode)
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' getPlaybackActionSource
+'-------------------------------------------------------------------------------
+function getPlaybackActionSource(mode as string) as string
+    if mode = PlaybackAction.Mode.SkipIntro then return PlaybackAction.Source.IntroSegment
+    if mode = PlaybackAction.Mode.SkipCredits or mode = PlaybackAction.Mode.PlayNext then
+        if m.mediaSegments.activeOutroIsFallback then return PlaybackAction.Source.NextEpisodeSetting
+        return PlaybackAction.Source.OutroSegment
+    end if
+    return PlaybackAction.Source.None
+end function
+
+'-------------------------------------------------------------------------------
+' logPlaybackAction
+'-------------------------------------------------------------------------------
+sub logPlaybackAction(eventName as string, mode as string, source as string)
+    if source = PlaybackAction.Source.None then return
+    message = "Playback action " + eventName + " action=" + mode + " itemId=" + m.activePlayback.session.itemId + " position=" + Format.SafeString(m.playback.position, "") + " source=" + source + " endSeconds=" + Format.SafeString(m.mediaSegments.activeEndSeconds, "")
+    if source = PlaybackAction.Source.NextEpisodeSetting then
+        message += " settingSeconds=" + NextEpisodePromptSeconds.Normalize(m.activePlayback.request.nextEpisodePromptSeconds)
+    end if
+    m.log.write(message)
 end sub

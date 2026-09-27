@@ -115,3 +115,13 @@ Relevant automated coverage lives in:
 - `tests/specs/components/pages/Video/Cast/Person.spec.bs`
 - `tests/specs/components/pages/Video/Cast/Filmography.spec.bs`
 - `tests/specs/components/pages/Video/Cast/Filmography/FilmographyCard.spec.bs`
+
+The Person page reads the TMDB API key from its current `settings` field, supplied
+and refreshed by MainScene. Clearing the key hides the filmography action; replacing
+it updates the selection to use the new key. Person does not fall back to a request
+snapshot or a direct registry read.
+
+Person settings updates preserve focus on either related-content row and do not
+assign biography focus while the page is inactive. The biography overflow check
+counts paragraph breaks by position, including repeated paragraphs and blank lines,
+so content exceeding twelve estimated lines exposes Read more.

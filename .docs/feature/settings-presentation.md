@@ -15,8 +15,8 @@ labels; persistence tests continue to assert the existing registry values.
 
 ## Theme and Media shell categories
 
-Current user categories are Libraries, Media shell, Theme, Playback, TV, and
-Screensaver. The Device section sits below all six user categories.
+Current user categories are Libraries, Media shell, Theme, Playback, Credits, TV, and
+Screensaver. The Device section sits below all seven user categories.
 
 Theme contains the Theme setting with Blue, Black, and Grey in that order,
 defaulting to Blue. The account-scoped `theme` registry value stores `blue`,
@@ -40,3 +40,40 @@ between the preceding option list and the next setting label, without changing
 setting positions. TV has two rules (y=177 and y=381); Screensaver has one
 (y=239); General has one (y=187). Descriptions stay with their setting and do not
 receive separate dividers.
+
+## Credits category
+
+Credits follows Playback and uses the same single-column RadioButtonList as
+other categories. Show next episode prompt displays all nine presets at once,
+with 52-pixel rows starting at y=48 and its description at y=548. Off is selected
+by default. Left returns to the category list; Up/Down navigate the presets and
+OK selects the pending value through the normal settings save flow.
+Preset labels and stored values are paired in `NextEpisodePromptSeconds.Options()` so
+display order and selection mapping come from the same definition.
+
+The user category list displays seven rows. The Device heading and list move
+down 50 pixels to y=438 and y=472, retaining the existing row sizes and keeping
+all four device categories visible. This adds no nested category or picker.
+The description reads: “When Jellyfin hasn’t identified where an episode’s closing credits begin, show the next episode prompt this long before the episode ends.”
+See [Next Item Playback](next-item-playback.md#credits-fallback) for behavior.
+
+## Settings normalization
+
+`SettingsStore.GetSettingValue()` owns the existing normalization rules for library
+layouts, theme, Home episode images, screensaver type, video streaming mode,
+subtitle burn-in, next-item playback, and next-episode prompt seconds. `Load()`
+collects stored values and reads them through this function; `Save()` uses it before
+writing. Settings consumers use the returned values directly. Independent inputs,
+such as selection overrides and pending control edits, retain their own validation.
+
+`SettingsStore.GlobalKeys()` identifies the four device-wide settings: account badge
+visibility, video streaming mode, subtitle burn-in, and the TMDB API key. Bulk load
+reads them together from `STARFIN_ROKU`; bulk save writes them through one registry
+section and flushes once, including when no account is selected. Account settings
+remain in their account-specific sections. `LoadGlobal()` and `SaveGlobal()` retain
+their existing single-key behavior.
+
+SettingsContent uses the complete normalized snapshot returned by `SettingsStore.Load()`
+as its pending settings state and uses `SettingsStore.LibraryKeys()` for library edits.
+In General, Down from the last Account badge option focuses the TMDB API-key field;
+Up from that field returns to Account badge options and clears the input focus highlight.

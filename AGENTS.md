@@ -35,7 +35,7 @@
 
 ## BrighterScript naming
 
-- Put shared helpers under `/source` in a namespace named for their responsibility, and call public members through that namespace, such as `AuthStore.Load()` or `PlaybackProgress.GetTicksFromItem()`.
+- Put shared helpers under `/source` in a namespace named for their responsibility. Qualify calls across namespace boundaries, such as `AuthStore.Load()` or `PlaybackProgress.GetTicksFromItem()`. Within the same namespace, prefer unqualified calls unless explicit qualification is needed to resolve ambiguity.
 - Name public namespace members in PascalCase without repeating the namespace in the member name.
 - For namespace helpers that are internal to a single file, use a leading `__` prefix, such as `__GetCollapseSeriesQueryValue()`.
 - Component-local functions in `components/` are not namespace members; name them by their local behavior in lower camel case, such as `initStyle`, `onKeyEvent`, or `colorString`.
@@ -50,8 +50,9 @@
 - Within a test function, use blank lines intentionally to delineate setup, action, assertion groups, and other distinct test steps. Preserve these meaningful internal blank lines when normalizing suite-level spacing.
 - When changing a file with an existing corresponding unit-test suite, update that suite to cover the changed behavior.
 - Do not modify production source code or expand production interfaces solely to make a unit test possible or pass. Adapt the test to existing production behavior and boundaries. If a new unit test reveals a genuine production bug, stop and report the bug instead of silently changing production code as part of the test work.
-- Run the relevant unit tests after making the change.
-- A successful test build does not verify SceneGraph runtime behavior. When tests exercise components or Roku behavior, run the full Rooibos suite on the configured development device and iterate until it passes.
+- During active development, use focused checks proportional to the change. Run relevant unit tests when practical, but do not run the full Rooibos suite, broad UI automation, or repeated screenshot verification after every incremental adjustment. Documentation-only changes need a scoped diff review and whitespace check, not builds or runtime tests.
+- Reserve comprehensive verification for the end of the development cycle or an explicit user request; an individual conversational turn or small follow-up is not automatically the end of that cycle. At that point, run the full Rooibos suite on the configured development device for component or Roku behavior changes, plus applicable UI automation, and resolve failures.
+- A successful test build does not verify SceneGraph runtime behavior. Run targeted device checks earlier when a specific runtime uncertainty warrants them. Clearly report what was verified and what remains deferred without treating deferred end-of-cycle checks as a blocker to incremental work.
 - Run device tests with `npm test -- --host <roku-host> --password "<developer-password>"`. Do not commit the developer password or place it in command examples with a real value.
 - If no test change is necessary, verify that the existing tests still cover the behavior and mention that in the final response.
 
