@@ -35,6 +35,17 @@ Each content node carries the resolved card layout alongside `imageAspect`.
 Poster and Thumbnail cards use that geometry for artwork, masks, progress,
 watched state, and text. Detailed remains a fixed two-column presentation.
 
+The shared watched badge follows the account's [watched indicator style](watched-indicator.md):
+Subtle (black with a white check) by default, or High contrast (gold with a black
+check). Both backgrounds are opaque. Badge sizing and visibility rules are unchanged.
+Poster media cards keep the badge 9 logical pixels from the artwork's top and
+right edges. The poster content group has 6 pixels of top padding within the
+existing item canvas, giving the focus border room above the artwork. Poster
+focus assets extend their lower edge by the same 6 pixels to follow the content.
+This applies to default and configurable poster sizes, including library grids
+and Home/Search/person shelves. Thumbnail and detailed layouts are unchanged.
+Only the rounded outer edge uses transparency for smooth corners.
+
 Every Poster and Thumbnail size has a native mask and focus bitmap. Masks use
 exact FHD dimensions plus exact two-thirds HD dimensions. Focus bitmaps retain
 the logical grid-cell canvas size in both profiles, with separately rasterized

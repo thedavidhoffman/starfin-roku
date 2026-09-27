@@ -8,6 +8,7 @@ namespace tests
 
         protected override function beforeEach()
             m.originalTheme = m.global.theme
+            m.originalWatchedStyle = m.global.watchedIndicatorStyle
             m.node.homePage = m.top.findNode("homePage")
             m.node.authController = m.top.findNode("authController")
             'bs:disable-next-line 1140
@@ -38,6 +39,7 @@ namespace tests
 
         protected override function afterEach()
             m.global.theme = m.originalTheme
+            m.global.watchedIndicatorStyle = m.originalWatchedStyle
         end function
 
         @describe("media options routing")
@@ -1634,6 +1636,111 @@ namespace tests
 
             m.assertEqual(m.node.playbackController.playRequest.nextEpisodePromptSeconds, "75")
             m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @describe("watched indicator lifecycle")
+
+        @it("applies watched preview without changing the theme")
+        function _()
+            m.node.login.visible = false
+            m.global.theme = "grey"
+
+            m.node.overlayHost.eventRaised = { request: { id: "settings" }, field: "watchedIndicatorPreviewRequested", value: "high-contrast" }
+
+            m.assertEqual(m.global.watchedIndicatorStyle, "high-contrast")
+            m.assertEqual(m.global.theme, "grey")
+        end function
+
+        @it("ignores watched previews on login")
+        function _()
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+
+            m.node.overlayHost.eventRaised = { request: { id: "settings" }, field: "watchedIndicatorPreviewRequested", value: "high-contrast" }
+
+            m.assertEqual(m.global.watchedIndicatorStyle, "subtle")
+        end function
+
+        @it("applies committed watched style")
+        function _()
+            savedSettings = SettingsStore.Defaults()
+            savedSettings[SettingsStore.Key.WatchedIndicatorStyle] = "high-contrast"
+
+            'bs:disable-next-line 1140
+            applySettingsFromOverlay({ settingsSaved: true, savedSettings: savedSettings })
+
+            m.assertEqual(m.global.watchedIndicatorStyle, "high-contrast")
+        end function
+
+        @it("resets watched style when returning to login")
+        function _()
+            m.global.watchedIndicatorStyle = "high-contrast"
+
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+
+            m.assertEqual(m.global.watchedIndicatorStyle, "subtle")
+        end function
+
+        @it("previews watched style through the settings overlay")
+        function _()
+            m.node.login.visible = false
+            m.node.settings[SettingsStore.Key.WatchedIndicatorStyle] = "subtle"
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["watchedIndicatorPreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("watchedIndicatorOptions").itemSelected = 1
+
+            m.assertEqual(m.global.watchedIndicatorStyle, "high-contrast")
+            m.assertEqual(m.node.settings[SettingsStore.Key.WatchedIndicatorStyle], "subtle")
+            m.assertFalse(overlay.settingsSaved)
+            m.node.overlayHost.callFunc("closeOverlay")
+        end function
+
+        @it("restores watched style after cancellation")
+        function _()
+            m.node.login.visible = false
+            m.node.settings[SettingsStore.Key.WatchedIndicatorStyle] = "subtle"
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["watchedIndicatorPreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("watchedIndicatorOptions").itemSelected = 1
+            m.node.overlayHost.callFunc("closeOverlay")
+
+            m.assertEqual(m.global.watchedIndicatorStyle, "subtle")
+        end function
+
+        @it("restores current account watched style after cancellation")
+        function _()
+            m.node.login.visible = false
+            m.node.settings[SettingsStore.Key.WatchedIndicatorStyle] = "subtle"
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["watchedIndicatorPreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("watchedIndicatorOptions").itemSelected = 0
+            m.node.settings[SettingsStore.Key.WatchedIndicatorStyle] = "high-contrast"
+            m.node.overlayHost.callFunc("closeOverlay")
+
+            m.assertEqual(m.global.watchedIndicatorStyle, "high-contrast")
+        end function
+
+        @it("loads the new account watched style")
+        function _()
+            m.global.watchedIndicatorStyle = "high-contrast"
+            m.node.session.accountKey = "account-2"
+            m.stubCall(SettingsStore.Load, function(accountKey as string) as object
+                return { "watched-indicator-style": "subtle" }
+            end function)
+            m.node.homePage = {}
+            'bs:disable-next-line 1001
+            m.stubCall(navShowAppRoute, function() as dynamic
+                return invalid
+            end function)
+
+            'bs:disable-next-line 1140
+            navShowApp()
+
+            m.assertEqual(m.global.watchedIndicatorStyle, "subtle")
         end function
 
     end class

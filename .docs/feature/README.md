@@ -47,3 +47,5 @@ individual Starfin features.
 - [Video Playback Options](video-playback-options.md)
 
 - [Message Dialog](message-dialog.md)
+
+- [Watched Indicator Style](watched-indicator.md)

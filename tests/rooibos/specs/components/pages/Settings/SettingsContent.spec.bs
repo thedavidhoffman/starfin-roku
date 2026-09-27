@@ -37,7 +37,7 @@ namespace tests
             m.assertEqual(options.content.getChild(0).title, "Blue")
             m.assertEqual(options.content.getChild(1).title, "Black")
             m.assertEqual(options.content.getChild(2).title, "Grey")
-            m.assertEqual(m.node.categoryControls[2], [options])
+            m.assertEqual(m.node.categoryControls[2], [options, m.node.settingsControls.watchedIndicatorOptions])
             m.assertEqual(options.getParent(), m.top.findNode("themePanel"))
         end function
 
@@ -777,6 +777,66 @@ namespace tests
             onKeyEvent("left", true)
 
             m.assertTrue(m.node.userCategoryList.isInFocusChain())
+        end function
+
+        @describe("watched indicator preference")
+
+        @it("selects and previews high contrast")
+        function _()
+            m.node.settingsControls.watchedIndicatorOptions.itemSelected = 1
+            'bs:disable-next-line 1140
+            onWatchedIndicatorSelected()
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.WatchedIndicatorStyle], "high-contrast")
+            m.assertEqual(m.top.watchedIndicatorPreviewRequested, "high-contrast")
+        end function
+
+        @it("selects and previews subtle")
+        function _()
+            m.node.settingsControls.watchedIndicatorOptions.itemSelected = 0
+            'bs:disable-next-line 1140
+            onWatchedIndicatorSelected()
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.WatchedIndicatorStyle], "subtle")
+            m.assertEqual(m.top.watchedIndicatorPreviewRequested, "subtle")
+        end function
+
+        @it("loads watched style without previewing")
+        function _()
+            m.top.watchedIndicatorPreviewRequested = ""
+            'bs:disable-next-line 1140
+            setWatchedIndicatorOption("high-contrast")
+
+            m.assertEqual(m.node.settingsControls.watchedIndicatorOptions.checkedItem, 1)
+            m.assertEqual(m.top.watchedIndicatorPreviewRequested, "")
+        end function
+
+        @it("moves down from theme to watched style")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+            'bs:disable-next-line 1140
+            focusCategoryControl(0, 2)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.settingsControls.watchedIndicatorOptions.isInFocusChain())
+        end function
+
+        @it("moves up from watched style to theme")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+            'bs:disable-next-line 1140
+            focusCategoryControl(1, 0)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.settingsControls.themeOptions.isInFocusChain())
         end function
 
     end class

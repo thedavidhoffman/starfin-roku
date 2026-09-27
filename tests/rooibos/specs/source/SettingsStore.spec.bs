@@ -209,7 +209,7 @@ namespace tests
         function _()
             defaults = SettingsStore.Defaults()
 
-            m.assertEqual(defaults.Count(), 22)
+            m.assertEqual(defaults.Count(), 23)
             m.assertEqual(defaults[SettingsStore.Key.TvLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.MovieLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.CollectionCardsLayout], "poster;6")
@@ -251,6 +251,7 @@ namespace tests
                 SettingsStore.Key.HomeEpisodeImages
                 SettingsStore.Key.MediaShellBackground
                 SettingsStore.Key.Theme
+                SettingsStore.Key.WatchedIndicatorStyle
                 SettingsStore.Key.ThemeMusic
                 SettingsStore.Key.NextItemPlayback
                 SettingsStore.Key.NextEpisodePromptSeconds
@@ -672,6 +673,36 @@ namespace tests
 
             m.assertEqual(SettingsStore.Load("rooibos-credits-a")[SettingsStore.Key.NextEpisodePromptSeconds], "75")
             m.assertEqual(SettingsStore.Load("rooibos-credits-b")[SettingsStore.Key.NextEpisodePromptSeconds], "30")
+        end function
+
+        @describe("watched indicator preference")
+
+        @it("defaults watched style to subtle")
+        function _()
+            m.assertEqual(SettingsStore.Key.WatchedIndicatorStyle, "watched-indicator-style")
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.WatchedIndicatorStyle), "subtle")
+        end function
+
+        @it("normalizes invalid watched style")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "watched-indicator-style": "unknown" }, SettingsStore.Key.WatchedIndicatorStyle), "subtle")
+        end function
+
+        @it("persists watched style per account")
+        function _()
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName("rooibos-watched-a"), RegistryStore.AccountSectionName("rooibos-watched-b")]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.WatchedIndicatorStyle] = "high-contrast"
+            SettingsStore.Save("rooibos-watched-a", settings)
+            settings[SettingsStore.Key.WatchedIndicatorStyle] = "subtle"
+            SettingsStore.Save("rooibos-watched-b", settings)
+
+            m.assertEqual(SettingsStore.Load("rooibos-watched-a")[SettingsStore.Key.WatchedIndicatorStyle], "high-contrast")
+            m.assertEqual(SettingsStore.Load("rooibos-watched-b")[SettingsStore.Key.WatchedIndicatorStyle], "subtle")
         end function
 
     end class

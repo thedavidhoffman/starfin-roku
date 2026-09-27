@@ -102,10 +102,10 @@ const libraryMaskAssets = {
 };
 
 const libraryFocusAssets = {
-  "poster-3-col-focus.png": [582, 893, [15, 0, 564, 810]],
-  "poster-4-col-focus.png": [438, 677, [15, 0, 420, 594]],
-  "poster-5-col-focus.png": [354, 551, [15, 0, 336, 468]],
-  "poster-6-col-focus.png": [297, 465, [15, 0, 279, 382]],
+  "poster-3-col-focus.png": [582, 893, [15, 0, 564, 816]],
+  "poster-4-col-focus.png": [438, 677, [15, 0, 420, 600]],
+  "poster-5-col-focus.png": [354, 551, [15, 0, 336, 474]],
+  "poster-6-col-focus.png": [297, 465, [15, 0, 279, 388]],
   "thumbnail-2-col-focus.png": [930, 609, [15, 0, 929, 514]],
   "thumbnail-3-col-focus.png": [620, 434, [15, 0, 619, 339]],
   "thumbnail-4-col-focus.png": [465, 348, [15, 0, 464, 253]],
@@ -130,7 +130,7 @@ const geometryChecks = {
   "components/pages/Video/TVShow/TVShow.xml": ["itemSize=\"[207,381]\""],
   "components/pages/Music/MusicLibrary/MusicLibrary.xml": ["itemSize=\"[360,432]\""],
   "components/pages/MediaShell/MediaShell.bs": ["MaskAssets.Apply(m.mediaBackgroundPartialGroup, \"media-shell-backdrop-mask.png\", [1152, 648], [768, 432])"],
-  "source/main.bs": ["globalNode.AddFields({ resolutionProfile: ResolutionProfile.Create(), theme: Theme.Mode.Blue })"],
+  "source/main.bs": ["globalNode.AddFields({ resolutionProfile: ResolutionProfile.Create(), theme: Theme.Mode.Blue, watchedIndicatorStyle: WatchedIndicator.Style.Subtle })"],
   "source/MaskAssets.bs": ["if ResolutionProfile.IsHd() then", "ResolutionAssets.GetMaskImageUri(filename)"],
   "source/ResolutionProfile.bs": ["deviceInfo.GetUIResolution()", "uiResolution.height <= 720", "profile = m.global.resolutionProfile", "return ResolutionProfile.GetName() = \"hd\""],
 };
@@ -205,6 +205,7 @@ function decodePng(filePath) {
   return {
     ...header,
     bounds,
+    getAlpha,
     alphaSignature: [
       getAlpha(0, 0),
       getAlpha(header.width - 1, 0),
@@ -344,6 +345,23 @@ for (const [filename, [expectedWidth, expectedHeight, expectedBounds]] of Object
       const actual = decodePng(path.join(root, relativePath));
       if (actual.width !== expectedWidth || actual.height !== expectedHeight) failures.push(`${relativePath}: expected ${expectedWidth}x${expectedHeight}, found ${actual.width}x${actual.height}`);
       if (actual.bounds.join(",") !== expectedBounds.join(",")) failures.push(`${relativePath}: expected alpha bounds ${expectedBounds}, found ${actual.bounds}`);
+      if (filename.startsWith("poster-")) {
+        const artworkWidth = expectedWidth - 45;
+        const badgeSize = Math.floor(artworkWidth / 6);
+        const badgeTop = 6 + 9;
+        const badgeRight = 21 + artworkWidth - 9;
+        const badgeCenterX = badgeRight - Math.floor(badgeSize / 2);
+        const badgeCenterY = badgeTop + Math.floor(badgeSize / 2);
+        let topInnerEdge = 0;
+        for (let y = 0; y < badgeTop; y++) {
+          if (actual.getAlpha(badgeCenterX, y) > 127) topInnerEdge = y + 1;
+        }
+        let rightInnerEdge = badgeRight;
+        while (rightInnerEdge < actual.width && actual.getAlpha(rightInnerEdge, badgeCenterY) <= 127) rightInnerEdge++;
+        const topGap = badgeTop - topInnerEdge;
+        const rightGap = rightInnerEdge - badgeRight;
+        if (topGap <= 0 || topGap !== rightGap) failures.push(`${relativePath}: unequal watched badge focus gaps: top ${topGap}, right ${rightGap}`);
+      }
     } catch (error) {
       failures.push(`${relativePath}: ${error.message}`);
     }

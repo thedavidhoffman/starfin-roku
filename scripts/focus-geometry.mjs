@@ -109,8 +109,8 @@ export const focusGeometry = [
     owner: "components/pages/HomePage/HomeShelf/HomeShelf.xml",
     surface: "RowList",
     canvas: [297, 465],
-    image: [21, 0, 252, 378],
-    outline: [3, 0, 3, 3],
+    image: [21, 6, 252, 378],
+    outline: [3, 6, 3, 3],
     anchorCompensation: [21, 0, 22, 0],
   },
   {
@@ -119,8 +119,8 @@ export const focusGeometry = [
     owner: "components/pages/HomePage/HomeShelf/HomeShelf.xml",
     surface: "RowList",
     canvas: [297, 465],
-    image: [21, 0, 252, 378],
-    outline: [3, 0, 3, 3],
+    image: [21, 6, 252, 378],
+    outline: [3, 6, 3, 3],
     anchorCompensation: [17, 0, 18, -2],
   },
   {
@@ -202,7 +202,7 @@ export const focusSourceChecks = {
     "focusBitmapFilename = \"home-page-my-media-first-focus.png\"",
   ],
   "components/pages/Video/Cards/VideoPosterCard/VideoPosterCard.bs": [
-    "contentTranslation: [21, 0]",
+    "contentTranslation: [21, 6]",
     "posterSize: [252, 378]",
   ],
   "components/pages/Video/Cards/VideoThumbnailCard/VideoThumbnailCard.bs": [

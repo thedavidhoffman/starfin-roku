@@ -5,6 +5,7 @@ import { waitFor } from './lifecycle.mjs';
 
 export const accountDefaults = {
   theme: 'blue',
+  'watched-indicator-style': 'subtle',
   'tv-library-layout': 'poster;6',
   'movie-library-layout': 'poster;6',
   'collection-cards-layout': 'poster;6',
@@ -90,6 +91,32 @@ export async function openSettings(category) {
     return response.found && response.value === true;
   }, 'the requested Settings category');
 
+  return { environment, accountKey };
+}
+
+// Uses the real Header routing so MainScene supplies preview event subscriptions.
+// Accept the authenticated environment because the underlying library stays open.
+export async function openSettingsFromSystemMenu(environment, category) {
+  const accountKey = await getAccountKey(environment);
+  settingsTestsRan = true;
+  activeAccountKey = accountKey;
+
+  await environment.odc.callFunc({ base: 'scene', keyPath: '#header', funcName: 'focusSystemMenuButton' });
+  await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
+  await waitFor(async () => {
+    const response = await environment.odc.getValue({ base: 'scene', keyPath: '#systemDropdownMenu.isOpen' });
+    return response.value === true;
+  }, 'the System menu to open');
+  await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
+  await waitFor(async () => {
+    const response = await environment.odc.getValue({ base: 'scene', keyPath: '#overlayHost.0.subtype()' });
+    return response.value === 'SettingsDialog';
+  }, 'Settings to open through the System menu');
+  await environment.odc.setValue({ base: 'scene', keyPath: '#' + category.listNode + '.itemSelected', value: category.index });
+  await waitFor(async () => {
+    const response = await environment.odc.getValue({ base: 'scene', keyPath: '#' + category.panelNode + '.visible' });
+    return response.value === true;
+  }, 'the requested Settings category');
   return { environment, accountKey };
 }
 

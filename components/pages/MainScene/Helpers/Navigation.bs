@@ -46,7 +46,7 @@ sub navHandleHeaderOverlayRequested()
 
     if request.id = "settings" then
         if m.session <> invalid then request.accountKey = Format.SafeString(m.session.accountKey, "")
-        request.eventFields = ["themePreviewRequested"]
+        request.eventFields = ["themePreviewRequested", "watchedIndicatorPreviewRequested"]
     end if
 
     m.overlayHost.callFunc("openOverlay", request)
@@ -127,8 +127,10 @@ sub navHandleOverlayClosed()
         ' A dismissed preview returns to the current session, not a stale dialog snapshot.
         if m.login.visible then
             syncTheme(invalid)
+            syncWatchedIndicatorStyle(invalid)
         else
             syncTheme(m.settings)
+            syncWatchedIndicatorStyle(m.settings)
         end if
         if closed.cancelled <> true and m.header <> invalid and m.header.visible then m.header.callFunc("focusSystemMenuButton")
         return
@@ -148,6 +150,14 @@ end sub
 sub navHandleOverlayEventRaised()
     raised = m.overlayHost.eventRaised
     if raised = invalid or raised.request = invalid then return
+
+    if raised.request.id = "settings" and raised.field = "watchedIndicatorPreviewRequested" then
+        if m.login.visible then return
+        settings = {}
+        settings[SettingsStore.Key.WatchedIndicatorStyle] = raised.value
+        syncWatchedIndicatorStyle(settings)
+        return
+    end if
 
     if raised.request.id = "settings" and raised.field = "themePreviewRequested" then
         if m.login.visible then return
@@ -523,6 +533,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub fanOutSettings()
     syncTheme(m.settings)
+    syncWatchedIndicatorStyle(m.settings)
     applySettingsToPage(m.homePage)
     applySettingsToPage(m.header)
     applySettingsToPage(m.collectionsPage)
@@ -555,6 +566,7 @@ sub navShowLoginRoute()
     m.authenticatedContent.visible = false
     m.overlayHost.callFunc("closeOverlay")
     syncTheme(invalid)
+    syncWatchedIndicatorStyle(invalid)
     hideHome()
     resetDynamicPages()
     m.login.callFunc("activate")
@@ -640,4 +652,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub syncTheme(settings as dynamic)
     m.global.theme = SettingsStore.GetSettingValue(settings, SettingsStore.Key.Theme)
+end sub
+
+'-------------------------------------------------------------------------------
+' syncWatchedIndicatorStyle
+'-------------------------------------------------------------------------------
+sub syncWatchedIndicatorStyle(settings as dynamic)
+    m.global.watchedIndicatorStyle = SettingsStore.GetSettingValue(settings, SettingsStore.Key.WatchedIndicatorStyle)
 end sub

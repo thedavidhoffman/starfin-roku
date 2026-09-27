@@ -96,6 +96,9 @@ function Write-Focus([hashtable]$spec, [string]$prefix, [string]$profile) {
             $focusWidth = ($spec.CellWidth - 17) * $scale
         }
         $focusHeight = ($spec.ArtworkHeight + 4) * $scale
+        # Poster content has six pixels of top padding so the focus stroke can
+        # extend above the artwork. Carry the bottom edge down by the same amount.
+        if ($prefix -eq "poster") { $focusHeight += 6 * $scale }
         $path = New-RoundedPath $insetX 0 $focusWidth $focusHeight ($radius * $scale)
         try {
             $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::White), ($stroke * $scale)
