@@ -98,7 +98,8 @@ namespace tests
             onVideoToolbarMediaInfoSelected()
             context = m.top.overlayRequested.optionsContext
             m.assertEqual(context.audioOptions.Count(), 1)
-            m.assertEqual(context.subtitleOptions.Count(), 2)
+            m.assertEqual(context.subtitleOptions.Count(), 3)
+            m.assertEqual(context.subtitleOptions[0].label, "Jellyfin Account Default")
             m.assertEqual(context.chapterOptions.Count(), 1)
         end function
 
@@ -666,6 +667,38 @@ namespace tests
             m.assertEqual(content.primaryInfoText, "2026")
             m.assertEqual(content.runtimeText, "2h 5m")
             m.assertEqual(content.officialRating, "PG-13")
+        end function
+
+        @it("restores automatic intent after playback")
+        function _()
+            m.node.state.item = { Id: "item" }
+            m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
+
+            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", resolvedSubtitleStreamIndex: 4 })
+
+            m.assertInvalid(m.node.state.selectedStreams.subtitle)
+            m.assertFalse(m.node.state.selectedStreams.subtitleOff)
+        end function
+
+        @it("restores manual Off after playback")
+        function _()
+            m.node.state.item = { Id: "item" }
+            m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
+
+            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", subtitleStreamIndex: -1 })
+
+            m.assertInvalid(m.node.state.selectedStreams.subtitle)
+            m.assertTrue(m.node.state.selectedStreams.subtitleOff)
+        end function
+
+        @it("restores manual track after playback")
+        function _()
+            m.node.state.item = { Id: "item" }
+            m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
+
+            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", subtitleStreamIndex: 5 })
+
+            m.assertEqual(m.node.state.selectedStreams.subtitle.streamIndex, 5)
         end function
 
     end class

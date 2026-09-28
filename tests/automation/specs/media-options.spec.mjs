@@ -58,7 +58,25 @@ describe('Starfin unified media options', function () {
       await environment.ecp.sendKeypress(environment.ecp.Key.Right);
       assert.equal(await value(environment, '#optionList.checkedItem'), 0);
       assert.equal(await value(environment, '#overlayHost.0.optionsContext.selection.subtitleStreamIndex'), -2);
-      await captureEvidence(this, 'media-options-initial-subtitles-off');
+      assert.equal(await value(environment, '#optionList.content.0.title'), 'Jellyfin Account Default');
+      await captureEvidence(this, 'media-options-initial-subtitles-automatic');
+      await environment.ecp.sendKeypress(environment.ecp.Key.Down);
+      await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
+      await closeOptions(environment);
+      await openOptions(environment);
+      for (let index = 0; index < subtitleCategory; index++) await environment.ecp.sendKeypress(environment.ecp.Key.Down);
+      await environment.ecp.sendKeypress(environment.ecp.Key.Right);
+      assert.equal(await value(environment, '#optionList.checkedItem'), 1);
+      assert.equal(await value(environment, '#optionList.content.0.title'), 'Jellyfin Account Default');
+      await environment.ecp.sendKeypress(environment.ecp.Key.Up);
+      await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
+      await closeOptions(environment);
+      await openOptions(environment);
+      for (let index = 0; index < subtitleCategory; index++) await environment.ecp.sendKeypress(environment.ecp.Key.Down);
+      await environment.ecp.sendKeypress(environment.ecp.Key.Right);
+      assert.equal(await value(environment, '#optionList.checkedItem'), 0);
+      assert.equal(await value(environment, '#overlayHost.0.optionsContext.selection.subtitleStreamIndex'), -2);
+      await captureEvidence(this, 'media-options-restored-account-default');
       await environment.ecp.sendKeypress(environment.ecp.Key.Left);
       for (let index = 0; index < subtitleCategory; index++) await environment.ecp.sendKeypress(environment.ecp.Key.Up);
       await environment.ecp.sendKeypress(environment.ecp.Key.Right);
@@ -81,6 +99,16 @@ describe('Starfin unified media options', function () {
       await openOptions(environment, true);
       await waitFor(async () => await value(environment, '#videoPlayer.state') === 'paused', 'playback to pause for options');
       await captureEvidence(this, 'media-options-playing-information');
+      const initialResponse = await value(environment, '#playbackController.0.#playbackInfoTask.response');
+      const source = initialResponse.payload.MediaSources[0];
+      const serverIndex = source.DefaultSubtitleStreamIndex;
+      const expectedIndex = Number.isInteger(serverIndex) && serverIndex >= 0
+        && source.MediaStreams.some(stream => stream.Type === 'Subtitle' && stream.Index === serverIndex)
+        ? serverIndex : -1;
+      assert.equal(await value(environment, '#playbackController.0.#playbackInfoTask.response.subtitleStreamIndex'), expectedIndex);
+      assert.equal(await value(environment, '#overlayHost.0.optionsContext.selection.subtitleStreamIndex'), -2);
+      assert.equal(await value(environment, '#overlayHost.0.optionsContext.resolvedSubtitleStreamIndex'), expectedIndex);
+
       const original = await value(environment, '#playbackController.0.playRequest.videoMode');
       await environment.ecp.sendKeypress(environment.ecp.Key.Down);
       await environment.ecp.sendKeypress(environment.ecp.Key.Right);
@@ -108,6 +136,24 @@ describe('Starfin unified media options', function () {
         const request = await value(environment, '#playbackController.0.playRequest.videoMode');
         return request === 'automatic' && await value(environment, '#videoPlayer.state') === 'paused';
       }, 'changed playback to remain paused', 120000);
+
+      await openOptions(environment, true);
+      let activeSubtitleCategory = 0;
+      while (await value(environment, `#categories.content.${activeSubtitleCategory}.title`) !== 'Subtitles') {
+        assert.ok(activeSubtitleCategory < 4, 'Playback should expose subtitle choices.');
+        await environment.ecp.sendKeypress(environment.ecp.Key.Down);
+        activeSubtitleCategory++;
+      }
+      await environment.ecp.sendKeypress(environment.ecp.Key.Right);
+      for (let index = 0; index < 30; index++) await environment.ecp.sendKeypress(environment.ecp.Key.Up);
+      assert.equal(await value(environment, '#optionList.content.0.title'), 'Off');
+      await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
+      await closeOptions(environment);
+      await waitFor(async () => await value(environment, '#videoPlayer.state') === 'paused', 'manual Off to preserve pause', 120000);
+      await openOptions(environment, true);
+      assert.equal(await value(environment, '#overlayHost.0.optionsContext.selection.subtitleStreamIndex'), -1);
+      await closeOptions(environment);
+
     } finally {
       if (await value(environment, '#overlayHost.0.title') === 'Media Options') await closeOptions(environment);
       if (await isPlayerAttached(environment)) await stopPlaybackForCleanup(environment);

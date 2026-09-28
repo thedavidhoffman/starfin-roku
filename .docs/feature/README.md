@@ -43,6 +43,7 @@ individual Starfin features.
 - [Video Media Cards](video-media-cards.md)
 - [Video Media Information](video-media-information.md)
 - [Media Options](media-options.md)
+- [Automatic Subtitles](automatic-subtitles.md)
 - [Video Playback Lifecycle](video-playback-lifecycle.md)
 - [Video Playback Options](video-playback-options.md)
 

@@ -39,68 +39,55 @@ sub executeRequest()
         return
     end if
 
-    requestedAudioStreamIndex = getPlaybackRequestAudioStreamIndex(request)
-    requestedSubtitleStreamIndex = getPlaybackRequestSubtitleStreamIndex(request)
-    displaySize = DeviceCapabilities.GetDisplaySize()
-    requestedMediaSourceId = getPlaybackRequestMediaSourceId(request)
-    requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
-    requestedMediaSource = getPlaybackRequestMediaSource(request)
-    resolvedRequestedSubtitleIndex = getExistingSubtitleStreamIndex(requestedMediaSource, requestedSubtitleStreamIndex)
-    subtitleBurnInMode = SubtitleBurnIn.Normalize(request.subtitleBurnInMode)
-    alwaysBurnSelectedSubtitle = subtitleBurnInMode = SubtitleBurnIn.Mode.Always and resolvedRequestedSubtitleIndex >= 0
-    forceTranscode = shouldForceTranscodeAudio(requestedAudioStream, requestedMediaSource)
-    forceStreamSelection = shouldForceStreamSelection(request, requestedMediaSource, requestedAudioStreamIndex)
-    forceSubtitleSelection = requestedSubtitleStreamIndex >= 0
-    selectedPlaybackMode = getPlaybackMode(request)
-    playbackFlags = getPlaybackFlags(selectedPlaybackMode, forceTranscode, forceStreamSelection, forceSubtitleSelection)
-    if alwaysBurnSelectedSubtitle then
-        playbackFlags.enableDirectPlay = false
-        playbackFlags.enableDirectStream = false
-        playbackFlags.enableTranscoding = true
-    end if
-    bitrateLimits = DeviceCapabilities.GetBitrateLimits()
-    params = {
-        UserId: Format.SafeString(request.userId, "")
-        StartTimeTicks: getStartPositionTicks(request)
-        IsPlayback: true
-        AutoOpenLiveStream: true
-        MaxStreamingBitrate: bitrateLimits.maxStreaming
-        MaxStaticBitrate: bitrateLimits.maxStatic
-        EnableDirectPlay: playbackFlags.enableDirectPlay
-        EnableDirectStream: playbackFlags.enableDirectStream
-        EnableTranscoding: playbackFlags.enableTranscoding
-        AllowVideoStreamCopy: alwaysBurnSelectedSubtitle <> true and selectedPlaybackMode <> PlaybackMode.Mode.AutomaticNoRemux and selectedPlaybackMode <> PlaybackMode.Mode.TranscodeNoRemux
-        AllowAudioStreamCopy: true
-    }
-
-    if (selectedPlaybackMode = PlaybackMode.Mode.Automatic or selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux) and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
-    if (selectedPlaybackMode = PlaybackMode.Mode.Automatic or selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux) and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
-    m.log.write("Device profile display cap width=" + Format.SafeString(displaySize.width, "") + " height=" + Format.SafeString(displaySize.height, "") + " source=" + Format.SafeString(displaySize.source, ""))
-    m.log.write("Requested streams audioStreamIndex=" + Format.SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(requestedSubtitleStreamIndex, ""))
-    m.log.write("Requested video mode=" + selectedPlaybackMode)
-    if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
-    if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex
-    if requestedSubtitleStreamIndex >= -1 then params.SubtitleStreamIndex = requestedSubtitleStreamIndex
-
-    requestUrl = request.server + "/Items/" + request.itemId + "/PlaybackInfo" + Url.BuildQueryString(params)
-    alwaysBurnInSubtitleWhenTranscoding = shouldAlwaysBurnSubtitleWhenTranscoding(subtitleBurnInMode, requestedSubtitleStreamIndex)
-    body = buildPlaybackInfoBody(alwaysBurnInSubtitleWhenTranscoding, alwaysBurnSelectedSubtitle <> true)
-    m.log.write("Subtitle burn-in mode=" + subtitleBurnInMode + " activeSubtitle=" + boolToText(resolvedRequestedSubtitleIndex >= 0) + " alwaysBurnInSubtitleWhenTranscoding=" + boolToText(alwaysBurnInSubtitleWhenTranscoding))
-    logPlaybackRequest(request, body)
-
-    result = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token))
+    negotiation = negotiatePlaybackInfo(request)
+    result = negotiation.result
     if result.ok <> true then
         logPlaybackError(result)
         m.top.response = PlaybackResponse.Failure(request, result)
         return
     end if
 
+    mediaSource = PlaybackRequest.FirstMediaSource(result.data)
+    if negotiation.subtitleIndex = SubtitleSelection.NotSet and mediaSource <> invalid then
+        defaultIndex = getExistingSubtitleStreamIndex(mediaSource, Number.ToInteger(mediaSource.DefaultSubtitleStreamIndex, SubtitleSelection.None))
+        negotiation.subtitleIndex = defaultIndex
+        if defaultIndex >= 0 then
+            ' Negotiate delivery using the server's choice without changing the viewer's intent.
+            followup = PlaybackRequest.WithChanges(request, {
+                subtitleStreamIndex: defaultIndex
+                audioStreamIndex: getResolvedAudioStreamIndex(mediaSource, negotiation.audioIndex)
+                mediaSourceId: Format.SafeString(mediaSource.Id, "")
+                liveStreamId: Format.SafeString(mediaSource.LiveStreamId, "")
+            })
+            followup.item = buildSelectedSourceItem(request, mediaSource)
+            negotiation = negotiatePlaybackInfo(followup)
+            result = negotiation.result
+            if result.ok <> true then
+                logPlaybackError(result)
+                failPlaybackNegotiation(request, result, mediaSource)
+                return
+            end if
+            finalSource = PlaybackRequest.FirstMediaSource(result.data)
+            if finalSource = invalid or Format.SafeString(finalSource.Id, "") <> followup.mediaSourceId then
+                failPlaybackNegotiation(request, { errorMessage: "Subtitle negotiation changed the selected media source." }, mediaSource)
+                return
+            end if
+            if getExistingSubtitleStreamIndex(finalSource, defaultIndex) <> defaultIndex then
+                failPlaybackNegotiation(request, { errorMessage: "The selected subtitle is no longer available." }, mediaSource)
+                return
+            end if
+        end if
+    end if
+    requestedAudioStreamIndex = negotiation.audioIndex
+    requestedSubtitleStreamIndex = negotiation.subtitleIndex
+    playbackFlags = negotiation.flags
+    alwaysBurnInSubtitleWhenTranscoding = negotiation.burnDuringTranscoding
     logPlaybackResponse(result.data)
 
     streamInfo = buildStreamInfo(request, result.data, requestedAudioStreamIndex, requestedSubtitleStreamIndex, playbackFlags)
     if streamInfo.ok <> true then
         m.log.error(streamInfo.errorMessage)
-        m.top.response = PlaybackResponse.Failure(request, streamInfo)
+        failPlaybackNegotiation(request, streamInfo, mediaSource)
         return
     end if
 
@@ -117,9 +104,10 @@ sub executeRequest()
     end if
     m.log.write("Resolved subtitle stream index=" + Format.SafeString(streamInfo.subtitleStreamIndex, "") + " deliveryMethod=" + subtitleDeliveryMethod + " externalTrackAttached=" + boolToText(externalSubtitleTrack <> invalid))
 
+    resolvedItem = buildSelectedSourceItem(request, PlaybackRequest.FirstMediaSource(result.data))
     responseData = {
         payload: result.data
-        item: request.item
+        item: resolvedItem
         streamUrl: streamInfo.streamUrl
         streamFormat: streamInfo.streamFormat
         playSessionId: streamInfo.playSessionId

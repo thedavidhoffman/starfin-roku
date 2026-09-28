@@ -21,10 +21,11 @@ There is no Done button or hint.
 Media Info preserves source and stream details in the scrollable information
 control. During playback it also includes clearly labeled playback diagnostics:
 transcoding, resolved streams, and session identity. Video retains the four
-existing playback modes and their descriptions. Subtitles includes Off, checked
-when the initial selection has no subtitle track. An untouched detail-page
-selection displays Off without staging a change; explicitly choosing Off still
-returns a request to disable subtitles. Audio uses the marked default track,
+existing playback modes and their descriptions. An unresolved detail-page subtitle
+selection displays Jellyfin Account Default; that option remains available after
+manual selections. Off remains an explicit choice. During
+playback the actual resolved track or Off is displayed without changing automatic
+intent. Explicitly choosing that displayed track makes it a manual selection. Audio uses the marked default track,
 or the first available track, when no explicit choice exists. Display defaults
 are calculated separately from the original request and never stage edits.
 
@@ -42,7 +43,7 @@ It includes source data, option lists, initial selection, an opening generation,
 and optional playback diagnostics. The dialog publishes `result` before the
 normal close event, with optional `videoMode`, `audioStreamIndex`,
 `subtitleStreamIndex`, and `chapter` fields. Missing fields mean unchanged;
-subtitle index -1 explicitly means Off. Replacing/removing an overlay does not
+subtitle index -1 explicitly means Off and -2 means Jellyfin Account Default. Replacing/removing an overlay does not
 invoke its user-close hook and therefore does not commit pending edits.
 
 MainScene and PlaybackController only route. Movie and TVEpisode update their

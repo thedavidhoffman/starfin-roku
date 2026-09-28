@@ -50,8 +50,57 @@ namespace tests
             result = MediaOptionsSession.DisplaySelection({ audioOptions: [] }, selection)
 
             m.assertEqual(result.audioStreamIndex, -1)
-            m.assertEqual(result.subtitleStreamIndex, -1)
+            m.assertEqual(result.subtitleStreamIndex, -2)
             m.assertEqual(selection.subtitleStreamIndex, -2)
+        end function
+
+        @it("shows automatic selection without changing pending intent")
+        function _()
+            context = MediaOptionsSession.Context({}, "automatic", -1, -2, [], [{ Index: 4, Language: "eng" }])
+            display = MediaOptionsSession.DisplaySelection(context, context.selection)
+            m.assertEqual(context.subtitleOptions[0].label, "Jellyfin Account Default")
+            m.assertEqual(display.subtitleStreamIndex, -2)
+            m.assertEqual(MediaOptionsSession.Changes(context.selection, display).Count(), 0)
+        end function
+
+        @it("keeps account default available after Off")
+        function _()
+            context = MediaOptionsSession.Context({}, "automatic", -1, -1, [], [{ Index: 4, Language: "eng" }])
+
+            m.assertEqual(context.subtitleOptions[0].label, "Jellyfin Account Default")
+            m.assertEqual(context.subtitleOptions[0].value.streamIndex, -2)
+            m.assertEqual(MediaOptionsSession.DisplaySelection(context, context.selection).subtitleStreamIndex, -1)
+        end function
+
+        @it("keeps account default available after manual track")
+        function _()
+            context = MediaOptionsSession.Context({}, "automatic", -1, 4, [], [{ Index: 4, Language: "eng" }])
+
+            m.assertEqual(context.subtitleOptions[0].label, "Jellyfin Account Default")
+            m.assertEqual(context.subtitleOptions[0].value.streamIndex, -2)
+            m.assertEqual(MediaOptionsSession.DisplaySelection(context, context.selection).subtitleStreamIndex, 4)
+        end function
+
+        @it("constructs active options with separate intent and resolved selection")
+        function _()
+            context = MediaOptionsSession.Context({}, "automatic", -1, -2, [], [{ Index: 4, Language: "eng" }], 4)
+
+            m.assertEqual(context.selection.subtitleStreamIndex, -2)
+            m.assertEqual(context.subtitleOptions.Count(), 2)
+            m.assertEqual(context.subtitleOptions[0].value.streamIndex, -1)
+            m.assertEqual(MediaOptionsSession.DisplaySelection(context, context.selection).subtitleStreamIndex, 4)
+        end function
+
+        @it("clears manual Off when returning to account default")
+        function _()
+            current = { audio: invalid, subtitle: invalid, subtitleOff: true }
+            context = MediaOptionsSession.Context({}, "automatic", -1, -1, [], [{ Index: 4, Language: "eng" }])
+
+            result = MediaOptionsSession.ApplyStreamChanges(current, context, { subtitleStreamIndex: -2 })
+
+            m.assertInvalid(result.subtitle)
+            m.assertFalse(result.subtitleOff)
+            m.assertTrue(current.subtitleOff)
         end function
 
     end class

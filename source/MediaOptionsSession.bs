@@ -42,12 +42,17 @@ namespace MediaOptionsSession
     '---------------------------------------------------------------------------
     ' MediaOptionsSession.Context
     '---------------------------------------------------------------------------
-    function Context(item as object, videoMode as dynamic, audioIndex as integer, subtitleIndex as integer, audioStreams as object, subtitleStreams as object) as object
+    function Context(item as object, videoMode as dynamic, audioIndex as integer, subtitleIndex as integer, audioStreams as object, subtitleStreams as object, resolvedSubtitleIndex = invalid as dynamic) as object
+        subtitleOptions = MediaOptions.BuildSubtitleOptions(subtitleStreams)
+        if resolvedSubtitleIndex = invalid and subtitleStreams.Count() > 0 then
+            subtitleOptions.Unshift({ key: "-2", label: "Jellyfin Account Default", value: { streamIndex: SubtitleSelection.NotSet, label: "Jellyfin Account Default" } })
+        end if
         return {
             item: item
+            resolvedSubtitleStreamIndex: resolvedSubtitleIndex
             selection: { videoMode: PlaybackMode.Normalize(videoMode), audioStreamIndex: audioIndex, subtitleStreamIndex: subtitleIndex }
             audioOptions: MediaOptions.BuildAudioOptions(audioStreams)
-            subtitleOptions: MediaOptions.BuildSubtitleOptions(subtitleStreams)
+            subtitleOptions: subtitleOptions
             chapterOptions: MediaOptions.BuildChapterOptions(MediaOptions.GetChapters(item))
         }
     end function
@@ -66,7 +71,9 @@ namespace MediaOptionsSession
                 end if
             end for
         end if
-        if selection.subtitleStreamIndex = SubtitleSelection.NotSet then selection.subtitleStreamIndex = SubtitleSelection.None
+        if selection.subtitleStreamIndex = SubtitleSelection.NotSet and optionsContext.resolvedSubtitleStreamIndex <> invalid then
+            selection.subtitleStreamIndex = optionsContext.resolvedSubtitleStreamIndex
+        end if
         return selection
     end function
 
@@ -79,7 +86,7 @@ namespace MediaOptionsSession
         if resultChanges.subtitleStreamIndex <> invalid then
             streams.subtitleOff = resultChanges.subtitleStreamIndex = SubtitleSelection.None
             streams.subtitle = FindValue(optionsContext.subtitleOptions, resultChanges.subtitleStreamIndex)
-            if streams.subtitleOff then streams.subtitle = invalid
+            if resultChanges.subtitleStreamIndex < 0 then streams.subtitle = invalid
         end if
         return streams
     end function

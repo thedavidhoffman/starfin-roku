@@ -21,6 +21,7 @@ function commitLocalSubtitleSelection(request as dynamic, streamIndex as integer
     acceptedRequest = PlaybackRequest.Create(request)
     if acceptedRequest = invalid then return false
 
+    acceptedRequest.resolvedSubtitleStreamIndex = streamIndex
     m.activePlayback.request = acceptedRequest
     m.activePlayback.subtitleStreamIndex = streamIndex
     m.activePlayback.subtitleStreamTitle = streamTitle
@@ -80,7 +81,8 @@ sub onMediaOptionsPressed()
     request = m.activePlayback.request
     item = getCurrentPlaybackItem(request)
     if item = invalid then return
-    context = MediaOptionsSession.Context(item, getOriginalPlaybackMode(), m.activePlayback.audioStreamIndex, m.activePlayback.subtitleStreamIndex, m.streamOptions.audioStreams, m.streamOptions.subtitleStreams)
+    subtitleIntent = Number.ToInteger(request.subtitleStreamIndex, SubtitleSelection.NotSet)
+    context = MediaOptionsSession.Context(item, getOriginalPlaybackMode(), m.activePlayback.audioStreamIndex, subtitleIntent, m.streamOptions.audioStreams, m.streamOptions.subtitleStreams, m.activePlayback.subtitleStreamIndex)
     context.playbackInfo = buildPlaybackInformation()
     m.mediaOptions.generation += 1
     context.generation = m.mediaOptions.generation
@@ -139,7 +141,7 @@ sub onMediaOptionsApplyTimerFire()
     requestChanges = {
         videoMode: getOriginalPlaybackMode()
         audioStreamIndex: m.activePlayback.audioStreamIndex
-        subtitleStreamIndex: m.activePlayback.subtitleStreamIndex
+        subtitleStreamIndex: Number.ToInteger(m.activePlayback.request.subtitleStreamIndex, SubtitleSelection.NotSet)
     }
     restart = false
     if changes.videoMode <> invalid then
@@ -148,6 +150,7 @@ sub onMediaOptionsApplyTimerFire()
     end if
     if changes.audioStreamIndex <> invalid then
         requestChanges.audioStreamIndex = changes.audioStreamIndex
+        requestChanges.resolvedSubtitleStreamIndex = invalid
         restart = true
     end if
     subtitleTrack = ""
@@ -221,7 +224,7 @@ function buildStreamRestartPlayRequest() as dynamic
     return PlaybackRequest.WithChanges(request, {
         startPositionTicks: secondsToTicks(m.playback.position)
         audioStreamIndex: m.activePlayback.audioStreamIndex
-        subtitleStreamIndex: m.activePlayback.subtitleStreamIndex
+        resolvedSubtitleStreamIndex: m.activePlayback.subtitleStreamIndex
         subtitleBurnInMode: SubtitleBurnIn.Normalize(request.subtitleBurnInMode)
         videoMode: getOriginalPlaybackMode()
     })

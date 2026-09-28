@@ -110,17 +110,14 @@ namespace tests
             m.assertEqual(m.top.callFunc("getChanges"), {})
         end function
 
-        @it("checks Off for an unset initial subtitle selection without staging a change")
+        @it("checks Automatic for an unresolved detail selection without staging a change")
         function _()
-            context = m.top.optionsContext
-            context.selection.subtitleStreamIndex = -2
-            m.top.optionsContext = context
-
-            m.top.findNode("categories").itemFocused = 3
+            m.top.optionsContext = MediaOptionsSession.Context({}, "automatic", -1, -2, [], [{ Index: 3, Language: "eng" }])
+            m.top.findNode("categories").itemFocused = 2
 
             m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
-            m.assertEqual(m.top.optionsContext.selection.subtitleStreamIndex, -2)
-            m.assertEqual(m.top.callFunc("getChanges"), {})
+            m.assertEqual(m.top.findNode("optionList").content.getChild(0).title, "Jellyfin Account Default")
+            m.assertEqual(m.top.callFunc("getChanges").Count(), 0)
         end function
 
         @it("checks Off for an explicitly disabled initial subtitle selection")
@@ -206,6 +203,58 @@ namespace tests
             m.top.findNode("categories").itemFocused = category
             m.top.findNode("optionList").itemSelected = option
         end sub
+
+        @it("displays the active automatic track without making it explicit")
+        function _()
+            context = m.top.optionsContext
+            context.selection.subtitleStreamIndex = -2
+            context.resolvedSubtitleStreamIndex = 3
+            m.top.optionsContext = context
+            m.top.findNode("categories").itemFocused = 3
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 1)
+            m.assertEqual(m.top.callFunc("getChanges").Count(), 0)
+        end function
+
+        @it("makes a deliberate selection of the active automatic track explicit")
+        function _()
+            context = m.top.optionsContext
+            context.selection.subtitleStreamIndex = -2
+            context.resolvedSubtitleStreamIndex = 3
+            m.top.optionsContext = context
+            m.top.findNode("categories").itemFocused = 3
+            m.top.findNode("optionList").itemSelected = 1
+
+            m.assertEqual(m.top.callFunc("getChanges").subtitleStreamIndex, 3)
+        end function
+
+        @it("returns to account default when reopened after Off")
+        function _()
+            m.top.optionsContext = MediaOptionsSession.Context({}, "automatic", -1, -1, [], [{ Index: 3, Language: "eng" }])
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 1)
+            m.assertEqual(m.top.findNode("optionList").content.getChild(0).title, "Jellyfin Account Default")
+            m.assertEqual(m.top.callFunc("getChanges").Count(), 0)
+
+            m.top.findNode("optionList").itemSelected = 0
+
+            m.assertEqual(m.top.callFunc("getChanges"), { subtitleStreamIndex: -2 })
+        end function
+
+        @it("returns to account default when reopened after manual track")
+        function _()
+            m.top.optionsContext = MediaOptionsSession.Context({}, "automatic", -1, 3, [], [{ Index: 3, Language: "eng" }])
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 2)
+            m.assertEqual(m.top.findNode("optionList").content.getChild(0).title, "Jellyfin Account Default")
+            m.assertEqual(m.top.callFunc("getChanges").Count(), 0)
+
+            m.top.findNode("optionList").itemSelected = 0
+
+            m.assertEqual(m.top.callFunc("getChanges"), { subtitleStreamIndex: -2 })
+        end function
 
     end class
 

@@ -1664,7 +1664,8 @@ namespace tests
             m.assertTrue(m.top.playRequest.startPaused)
             m.assertTrue(m.top.playRequest.restoreMediaOptionsFocus)
             m.assertEqual(m.top.playRequest.audioStreamIndex, 3)
-            m.assertEqual(m.top.playRequest.subtitleStreamIndex, -1)
+            m.assertEqual(m.top.playRequest.subtitleStreamIndex, 2)
+            m.assertEqual(m.top.playRequest.resolvedSubtitleStreamIndex, -1)
 
             recovered = m.node.pendingPlaybackRequest
             response.requestId = recovered.requestId
@@ -1796,6 +1797,81 @@ namespace tests
 
             m.assertNotInvalid(m.node.mediaOptions.session)
             m.assertInvalid(m.node.mediaOptions.pendingCommit)
+        end function
+
+        @it("requests a fresh automatic selection when audio changes")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 })
+            m.node.activePlayback.request.resolvedSubtitleStreamIndex = 2
+            m.node.activePlayback.request.Delete("subtitleStreamIndex")
+
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertInvalid(m.top.playRequest.resolvedSubtitleStreamIndex)
+            m.assertEqual(m.top.playRequest.subtitleStreamIndex, -2)
+        end function
+
+        @it("preserves manual intent when audio changes")
+        function _()
+            m.prepareOptions({ audioStreamIndex: 3 })
+            m.node.activePlayback.request.resolvedSubtitleStreamIndex = 2
+
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertInvalid(m.top.playRequest.resolvedSubtitleStreamIndex)
+            m.assertEqual(m.top.playRequest.subtitleStreamIndex, 2)
+        end function
+
+        @it("preserves automatic intent and its accepted track during a video mode restart")
+        function _()
+            m.prepareOptions({ videoMode: "transcode-no-remux" })
+            m.node.activePlayback.request.Delete("subtitleStreamIndex")
+            m.node.activePlayback.request.resolvedSubtitleStreamIndex = 2
+
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.top.playRequest.subtitleStreamIndex, -2)
+            m.assertEqual(m.top.playRequest.resolvedSubtitleStreamIndex, 2)
+        end function
+
+        @it("drops both explicit and resolved subtitle indices when advancing titles")
+        function _()
+            m.prepareOptions({})
+            m.node.activePlayback.request.resolvedSubtitleStreamIndex = 2
+
+            'bs:disable-next-line 1140
+            request = buildQueuePlaybackRequest({ itemId: "next", item: { Id: "next" } }, 1)
+
+            m.assertInvalid(request.subtitleStreamIndex)
+            m.assertInvalid(request.resolvedSubtitleStreamIndex)
+        end function
+
+        @it("ignores a final subtitle response from an obsolete playback request")
+        function _()
+            m.prepareOptions({})
+            m.node.playback.phase = "resolving"
+            m.node.playbackInfoTask.response = { ok: true, requestId: m.node.playback.requestId - 1, subtitleStreamIndex: 5 }
+
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+
+            m.assertEqual(m.node.activePlayback.subtitleStreamIndex, 2)
+        end function
+
+        @it("keeps automatic intent in the accepted recovery restart path")
+        function _()
+            m.prepareOptions({})
+            m.node.activePlayback.request.Delete("subtitleStreamIndex")
+            m.node.pendingPlaybackRequest = invalid
+
+            'bs:disable-next-line 1140
+            request = buildStreamRestartPlayRequest()
+
+            m.assertInvalid(request.subtitleStreamIndex)
+            m.assertEqual(request.resolvedSubtitleStreamIndex, 2)
         end function
 
     end class

@@ -144,7 +144,10 @@ VideoPlayer owns a single combined commit that selects local updates or one
 correlated playback restart and restores prior playing/paused state. MainScene
 and PlaybackController route the overlay without applying individual options.
 MediaOptionsSession calculates display defaults and detail-page stream changes
-without side effects. ActivePlayback owns accepted stream indices; startup
+without side effects. Its context accepts selection intent and an optional resolved
+subtitle index separately; playback supplies both and detail pages supply intent. ActivePlayback owns accepted stream indices; subtitle request intent remains separate
+from the resolved subtitle index used for same-title recovery. VideoPlaybackInfoTask
+owns bounded automatic-subtitle discovery and delivery negotiation; startup
 restoration intent stays on the playback request until the first playing state,
 including across recovery retries.
 

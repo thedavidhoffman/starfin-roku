@@ -53,3 +53,96 @@ function getStartPositionTicks(request as dynamic) as longinteger
 
     return PlaybackProgress.GetTicksFromItem(request.item)
 end function
+
+'-------------------------------------------------------------------------------
+' negotiatePlaybackInfo
+'-------------------------------------------------------------------------------
+function negotiatePlaybackInfo(request as object) as object
+    requestedAudioStreamIndex = getPlaybackRequestAudioStreamIndex(request)
+    requestedSubtitleStreamIndex = getPlaybackRequestSubtitleStreamIndex(request)
+    displaySize = DeviceCapabilities.GetDisplaySize()
+    requestedMediaSourceId = getPlaybackRequestMediaSourceId(request)
+    requestedAudioStream = getPlaybackRequestMediaStream(request, requestedAudioStreamIndex)
+    requestedMediaSource = getPlaybackRequestMediaSource(request)
+    resolvedRequestedSubtitleIndex = getExistingSubtitleStreamIndex(requestedMediaSource, requestedSubtitleStreamIndex)
+    subtitleBurnInMode = SubtitleBurnIn.Normalize(request.subtitleBurnInMode)
+    alwaysBurnSelectedSubtitle = subtitleBurnInMode = SubtitleBurnIn.Mode.Always and resolvedRequestedSubtitleIndex >= 0
+    forceTranscode = shouldForceTranscodeAudio(requestedAudioStream, requestedMediaSource)
+    forceStreamSelection = shouldForceStreamSelection(request, requestedMediaSource, requestedAudioStreamIndex)
+    forceSubtitleSelection = requestedSubtitleStreamIndex >= 0
+    selectedPlaybackMode = getPlaybackMode(request)
+    playbackFlags = getPlaybackFlags(selectedPlaybackMode, forceTranscode, forceStreamSelection, forceSubtitleSelection)
+    if alwaysBurnSelectedSubtitle then
+        playbackFlags.enableDirectPlay = false
+        playbackFlags.enableDirectStream = false
+        playbackFlags.enableTranscoding = true
+    end if
+    bitrateLimits = DeviceCapabilities.GetBitrateLimits()
+    params = {
+        UserId: Format.SafeString(request.userId, "")
+        StartTimeTicks: getStartPositionTicks(request)
+        IsPlayback: true
+        AutoOpenLiveStream: true
+        MaxStreamingBitrate: bitrateLimits.maxStreaming
+        MaxStaticBitrate: bitrateLimits.maxStatic
+        EnableDirectPlay: playbackFlags.enableDirectPlay
+        EnableDirectStream: playbackFlags.enableDirectStream
+        EnableTranscoding: playbackFlags.enableTranscoding
+        AllowVideoStreamCopy: alwaysBurnSelectedSubtitle <> true and selectedPlaybackMode <> PlaybackMode.Mode.AutomaticNoRemux and selectedPlaybackMode <> PlaybackMode.Mode.TranscodeNoRemux
+        AllowAudioStreamCopy: true
+    }
+
+    if (selectedPlaybackMode = PlaybackMode.Mode.Automatic or selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux) and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
+    if (selectedPlaybackMode = PlaybackMode.Mode.Automatic or selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux) and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
+    m.log.write("Device profile display cap width=" + Format.SafeString(displaySize.width, "") + " height=" + Format.SafeString(displaySize.height, "") + " source=" + Format.SafeString(displaySize.source, ""))
+    m.log.write("Requested streams audioStreamIndex=" + Format.SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(requestedSubtitleStreamIndex, ""))
+    m.log.write("Requested video mode=" + selectedPlaybackMode)
+    if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
+    if Format.SafeString(request.liveStreamId, "") <> "" then
+        params.LiveStreamId = request.liveStreamId
+        params.AutoOpenLiveStream = false
+    end if
+    if requestedAudioStreamIndex >= 0 then params.AudioStreamIndex = requestedAudioStreamIndex
+    if requestedSubtitleStreamIndex >= -1 then params.SubtitleStreamIndex = requestedSubtitleStreamIndex
+
+    requestUrl = request.server + "/Items/" + request.itemId + "/PlaybackInfo" + Url.BuildQueryString(params)
+    alwaysBurnInSubtitleWhenTranscoding = shouldAlwaysBurnSubtitleWhenTranscoding(subtitleBurnInMode, requestedSubtitleStreamIndex)
+    body = buildPlaybackInfoBody(alwaysBurnInSubtitleWhenTranscoding, alwaysBurnSelectedSubtitle <> true)
+    m.log.write("Subtitle burn-in mode=" + subtitleBurnInMode + " activeSubtitle=" + boolToText(resolvedRequestedSubtitleIndex >= 0) + " alwaysBurnInSubtitleWhenTranscoding=" + boolToText(alwaysBurnInSubtitleWhenTranscoding))
+    logPlaybackRequest(request, body)
+
+    result = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token))
+    return {
+        result: result
+        audioIndex: requestedAudioStreamIndex
+        subtitleIndex: requestedSubtitleStreamIndex
+        flags: playbackFlags
+        burnDuringTranscoding: alwaysBurnInSubtitleWhenTranscoding
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' buildSelectedSourceItem
+'-------------------------------------------------------------------------------
+function buildSelectedSourceItem(request as object, mediaSource as object) as object
+    item = PlaybackRequest.Create({ item: request.item }).item
+    if item = invalid then item = { Id: request.itemId }
+    item.MediaSources = [mediaSource]
+    item.MediaStreams = mediaSource.MediaStreams
+    return item
+end function
+
+'-------------------------------------------------------------------------------
+' failPlaybackNegotiation
+'-------------------------------------------------------------------------------
+sub failPlaybackNegotiation(request as object, failure as object, mediaSource as dynamic)
+    liveStreamId = ""
+    if mediaSource <> invalid then liveStreamId = Format.SafeString(mediaSource.LiveStreamId, "")
+    ' Release only a stream acquired by this negotiation, before recovery can retry.
+    if liveStreamId <> "" and liveStreamId <> Format.SafeString(request.liveStreamId, "") then
+        closeUrl = request.server + "/LiveStreams/Close" + Url.BuildQueryString({ LiveStreamId: liveStreamId })
+        result = HttpClient.Request(closeUrl, "POST", invalid, "", JellyfinAuth.BuildTokenHeaders(request.token), true, 5000)
+        if result.ok <> true then m.log.error("Unable to close the live stream after failed playback negotiation.")
+    end if
+    m.top.response = PlaybackResponse.Failure(request, failure)
+end sub

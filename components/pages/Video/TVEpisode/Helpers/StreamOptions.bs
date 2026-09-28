@@ -114,6 +114,7 @@ sub applySelectedStreamsToPlaySelection(selection as dynamic)
     if audioIndex >= 0 then selection.AddReplace("audioStreamIndex", audioIndex)
 
     subtitleIndex = getSelectedSubtitleStreamIndex()
+    selection.Delete("subtitleStreamIndex")
     if subtitleIndex >= -1 then selection.AddReplace("subtitleStreamIndex", subtitleIndex)
 end sub
 
@@ -147,3 +148,16 @@ function getSelectedStreamIndex(selection as dynamic, fallback as integer) as in
     if selection.stream <> invalid and selection.stream.Index <> invalid then return Number.ToInteger(selection.stream.Index, fallback)
     return fallback
 end function
+
+'-------------------------------------------------------------------------------
+' applyPlaybackSubtitleSelection
+'-------------------------------------------------------------------------------
+sub applyPlaybackSubtitleSelection(playRequest as dynamic)
+    if playRequest = invalid or m.state.request = invalid then return
+    if Format.SafeString(playRequest.itemId, "") <> Format.SafeString(m.state.request.itemId, "") then return
+    streamIndex = Number.ToInteger(playRequest.subtitleStreamIndex, SubtitleSelection.NotSet)
+    m.state.selectedStreams.subtitleOff = streamIndex = SubtitleSelection.None
+    m.state.selectedStreams.subtitle = invalid
+    if streamIndex >= 0 then m.state.selectedStreams.subtitle = { streamIndex: streamIndex }
+    applySelectedStreamsToPlaySelection(m.state.playSelection)
+end sub

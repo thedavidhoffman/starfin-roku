@@ -318,6 +318,307 @@ namespace tests
             m.assertEqual(mediaRequest.headers.Count(), 0)
         end function
 
+        @describe("automatic subtitle negotiation")
+
+        @it("negotiates the server default without making the first request explicit")
+        function _()
+            m.runSubtitleNegotiation({}, 4)
+            capture = getGlobalAa().subtitleNegotiation
+            m.assertEqual(capture.calls.Count(), 2)
+            m.assertEqual(Instr(1, LCase(capture.calls[0].url), "subtitlestreamindex="), 0)
+            m.assertTrue(Instr(1, LCase(capture.calls[1].url), "subtitlestreamindex=4") > 0)
+            m.assertEqual(m.node.top.response.subtitleStreamIndex, 4)
+            m.assertEqual(m.node.top.response.requestId, 42)
+            m.assertInvalid(m.node.top.request.subtitleStreamIndex)
+        end function
+
+        @it("treats a missing server default as off")
+        function _()
+            m.runSubtitleNegotiation({}, invalid)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.calls.Count(), 1)
+            m.assertEqual(m.node.top.response.subtitleStreamIndex, -1)
+        end function
+
+        @it("treats a negative server default as off")
+        function _()
+            m.runSubtitleNegotiation({}, -1)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.calls.Count(), 1)
+            m.assertEqual(m.node.top.response.subtitleStreamIndex, -1)
+        end function
+
+        @it("treats a nonexistent server default as off")
+        function _()
+            m.runSubtitleNegotiation({}, 99)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.calls.Count(), 1)
+            m.assertEqual(m.node.top.response.subtitleStreamIndex, -1)
+        end function
+
+        @it("preserves manual Off without a discovery request")
+        function _()
+            m.runSubtitleNegotiation({ subtitleStreamIndex: -1 }, 4)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.calls.Count(), 1)
+            m.assertEqual(m.node.top.response.subtitleStreamIndex, -1)
+        end function
+
+        @it("preserves manual track without a discovery request")
+        function _()
+            m.runSubtitleNegotiation({ subtitleStreamIndex: 5 }, 4)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.calls.Count(), 1)
+            m.assertEqual(m.node.top.response.subtitleStreamIndex, 5)
+        end function
+
+        @it("preserves accepted automatic track without a discovery request")
+        function _()
+            m.runSubtitleNegotiation({ resolvedSubtitleStreamIndex: 4 }, 4)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.calls.Count(), 1)
+            m.assertEqual(m.node.top.response.subtitleStreamIndex, 4)
+        end function
+
+        @it("gives explicit Off precedence over an accepted automatic track")
+        function _()
+            m.runSubtitleNegotiation({ subtitleStreamIndex: -1, resolvedSubtitleStreamIndex: 4 }, 4)
+            m.assertEqual(m.node.top.response.subtitleStreamIndex, -1)
+        end function
+
+        @it("applies external delivery policy to the automatic followup")
+        function _()
+            m.runSubtitleNegotiation({ subtitleBurnInMode: "prefer-external" }, 4)
+            call = getGlobalAa().subtitleNegotiation.calls[1]
+            body = ParseJson(call.body)
+            m.assertEqual(body.AlwaysBurnInSubtitleWhenTranscoding, false)
+        end function
+
+        @it("applies transcoding delivery policy to the automatic followup")
+        function _()
+            m.runSubtitleNegotiation({ subtitleBurnInMode: "during-transcoding" }, 4)
+            call = getGlobalAa().subtitleNegotiation.calls[1]
+            body = ParseJson(call.body)
+            m.assertEqual(body.AlwaysBurnInSubtitleWhenTranscoding, true)
+        end function
+
+        @it("applies always burned delivery policy to the automatic followup")
+        function _()
+            m.runSubtitleNegotiation({ subtitleBurnInMode: "always" }, 4)
+            call = getGlobalAa().subtitleNegotiation.calls[1]
+            body = ParseJson(call.body)
+            m.assertEqual(body.AlwaysBurnInSubtitleWhenTranscoding, true)
+            m.assertTrue(Instr(1, LCase(call.url), "allowvideostreamcopy=false") > 0)
+            m.assertTrue(Instr(1, LCase(call.url), "enabledirectplay=false") > 0)
+        end function
+
+        @it("reuses the opened live stream and selected source for the followup")
+        function _()
+            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live" }, 4)
+            call = getGlobalAa().subtitleNegotiation.calls[1]
+            m.assertTrue(Instr(1, LCase(call.url), "livestreamid=opened-live") > 0)
+            m.assertTrue(Instr(1, LCase(call.url), "mediasourceid=source") > 0)
+            m.assertTrue(Instr(1, LCase(call.url), "autoopenlivestream=false") > 0)
+        end function
+
+        @it("publishes followup failure without exposing the discovery URL")
+        function _()
+            m.runSubtitleNegotiation({ fixtureFailFollowup: true }, 4)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.calls.Count(), 2)
+            m.assertFalse(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.streamUrl)
+            m.assertEqual(m.node.top.response.requestId, 42)
+        end function
+
+        @it("rejects a different source returned by the followup")
+        function _()
+            m.runSubtitleNegotiation({ fixtureChangeSource: true }, 4)
+            m.assertFalse(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.streamUrl)
+        end function
+
+        @it("rejects a subtitle removed during the followup")
+        function _()
+            m.runSubtitleNegotiation({ fixtureRemoveTrack: true }, 4)
+            m.assertFalse(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.streamUrl)
+        end function
+
+        function runSubtitleNegotiation(overrides as object, defaultIndex as dynamic)
+            request = { server: "http://server", token: "token", userId: "user", itemId: "item", requestId: 42, item: { Id: "item", Type: "Movie" } }
+            request.Append(overrides)
+            getGlobalAa().subtitleNegotiation = { calls: [], closes: [], request: request, defaultIndex: defaultIndex }
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                capture = getGlobalAa().subtitleNegotiation
+                if Instr(1, requestUrl, "/LiveStreams/Close") > 0 then
+                    capture.closes.Push({ url: requestUrl, method: method, headers: headers, timeoutMs: timeoutMs })
+                    return { ok: capture.request.fixtureFailClose <> true }
+                end if
+                capture.calls.Push({ url: requestUrl, body: body })
+                followup = capture.calls.Count() > 1
+                if followup and capture.request.fixtureFailFollowup = true then return { ok: false, errorMessage: "Followup failed" }
+                source = {
+                    Id: "source"
+                    Container: "mp4"
+                    SupportsDirectPlay: true
+                    TranscodingUrl: "/discovery.m3u8"
+                    DefaultSubtitleStreamIndex: capture.defaultIndex
+                    DefaultAudioStreamIndex: capture.request.fixtureDefaultAudio
+                    MediaStreams: [
+                        { Type: "Audio", Index: 1, Codec: "aac", IsDefault: true }
+                        { Type: "Audio", Index: 2, Codec: "aac" }
+                        { Type: "Subtitle", Index: 4, DeliveryMethod: "External", DeliveryUrl: "/four.srt" }
+                        { Type: "Subtitle", Index: 5, DeliveryMethod: "External", DeliveryUrl: "/five.srt" }
+                    ]
+                }
+                sessionId = "discovery-session"
+                if followup then
+                    sessionId = "final-session"
+                    source.TranscodingUrl = "/final.m3u8"
+                    source.MediaStreams[2].DeliveryUrl = "/final-four.srt"
+                end if
+                if followup and capture.request.fixtureNoFinalUrl = true then source.TranscodingUrl = ""
+                if capture.request.fixtureLiveStream <> invalid then source.LiveStreamId = capture.request.fixtureLiveStream
+                if followup and capture.request.fixtureChangeSource = true then source.Id = "other"
+                if followup and capture.request.fixtureRemoveTrack = true then source.MediaStreams = []
+                return { ok: true, data: { PlaySessionId: sessionId, MediaSources: [source] } }
+            end function)
+            m.node.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+        end function
+
+        @it("preserves the server audio default over the file default in the followup")
+        function _()
+            m.runSubtitleNegotiation({ fixtureDefaultAudio: 2 }, 4)
+            capture = getGlobalAa().subtitleNegotiation
+
+            m.assertEqual(Instr(1, LCase(capture.calls[0].url), "audiostreamindex="), 0)
+            m.assertTrue(Instr(1, LCase(capture.calls[1].url), "audiostreamindex=2") > 0)
+            m.assertEqual(m.node.top.response.audioStreamIndex, 2)
+        end function
+
+        @it("falls back to file audio for a missing server audio default")
+        function _()
+            m.runSubtitleNegotiation({ fixtureDefaultAudio: invalid }, 4)
+
+            m.assertEqual(m.node.top.response.audioStreamIndex, 1)
+        end function
+
+        @it("falls back to file audio for a nonexistent server audio default")
+        function _()
+            m.runSubtitleNegotiation({ fixtureDefaultAudio: 99 }, 4)
+
+            m.assertEqual(m.node.top.response.audioStreamIndex, 1)
+        end function
+
+        @it("falls back to file audio for a subtitle-valued server audio default")
+        function _()
+            m.runSubtitleNegotiation({ fixtureDefaultAudio: 4 }, 4)
+
+            m.assertEqual(m.node.top.response.audioStreamIndex, 1)
+        end function
+
+        @it("falls back to file audio for a negative server audio default")
+        function _()
+            m.runSubtitleNegotiation({ fixtureDefaultAudio: -1 }, 4)
+
+            m.assertEqual(m.node.top.response.audioStreamIndex, 1)
+        end function
+
+        @it("preserves explicit audio over the server default")
+        function _()
+            m.runSubtitleNegotiation({ fixtureDefaultAudio: 2, audioStreamIndex: 1 }, 4)
+
+            m.assertEqual(m.node.top.response.audioStreamIndex, 1)
+        end function
+
+        @it("publishes only the final negotiated URL session and subtitle metadata")
+        function _()
+            m.runSubtitleNegotiation({ subtitleBurnInMode: "prefer-external" }, 4)
+            response = m.node.top.response
+
+            m.assertTrue(response.ok)
+            m.assertEqual(response.streamUrl, "http://server/final.m3u8")
+            m.assertEqual(response.playSessionId, "final-session")
+            m.assertEqual(response.subtitleDeliveryMethod, "external")
+            m.assertEqual(response.externalSubtitleTrack.deliveryUrl, "http://server/final-four.srt")
+            m.assertEqual(response.item.MediaStreams[2].DeliveryUrl, "/final-four.srt")
+            m.assertInvalid(m.node.top.request.item.MediaSources)
+        end function
+
+        @it("closes an acquired live stream after followup failure")
+        function _()
+            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live", fixtureFailFollowup: true }, 4)
+            capture = getGlobalAa().subtitleNegotiation
+
+            m.assertEqual(capture.calls.Count(), 2)
+            m.assertEqual(capture.closes.Count(), 1)
+            m.assertEqual(capture.closes[0].method, "POST")
+            m.assertTrue(Instr(1, LCase(capture.closes[0].url), "/livestreams/close?livestreamid=opened-live") > 0)
+            m.assertFalse(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.streamUrl)
+        end function
+
+        @it("closes an acquired live stream after source mismatch")
+        function _()
+            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live", fixtureChangeSource: true }, 4)
+            capture = getGlobalAa().subtitleNegotiation
+
+            m.assertEqual(capture.calls.Count(), 2)
+            m.assertEqual(capture.closes.Count(), 1)
+            m.assertEqual(capture.closes[0].method, "POST")
+            m.assertTrue(Instr(1, LCase(capture.closes[0].url), "/livestreams/close?livestreamid=opened-live") > 0)
+            m.assertFalse(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.streamUrl)
+        end function
+
+        @it("closes an acquired live stream after removed subtitle")
+        function _()
+            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live", fixtureRemoveTrack: true }, 4)
+            capture = getGlobalAa().subtitleNegotiation
+
+            m.assertEqual(capture.calls.Count(), 2)
+            m.assertEqual(capture.closes.Count(), 1)
+            m.assertEqual(capture.closes[0].method, "POST")
+            m.assertTrue(Instr(1, LCase(capture.closes[0].url), "/livestreams/close?livestreamid=opened-live") > 0)
+            m.assertFalse(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.streamUrl)
+        end function
+
+        @it("closes an acquired live stream after unplayable final response")
+        function _()
+            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live", fixtureNoFinalUrl: true }, 4)
+            capture = getGlobalAa().subtitleNegotiation
+
+            m.assertEqual(capture.calls.Count(), 2)
+            m.assertEqual(capture.closes.Count(), 1)
+            m.assertEqual(capture.closes[0].method, "POST")
+            m.assertTrue(Instr(1, LCase(capture.closes[0].url), "/livestreams/close?livestreamid=opened-live") > 0)
+            m.assertFalse(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.streamUrl)
+        end function
+
+        @it("leaves successful live negotiation open for playback")
+        function _()
+            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live" }, 4)
+
+            m.assertTrue(m.node.top.response.ok)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.closes.Count(), 0)
+        end function
+
+        @it("does not close a caller-owned live stream on failure")
+        function _()
+            m.runSubtitleNegotiation({ fixtureLiveStream: "existing-live", liveStreamId: "existing-live", fixtureFailFollowup: true }, 4)
+
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.closes.Count(), 0)
+        end function
+
+        @it("retains the original failure when live cleanup fails")
+        function _()
+            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live", fixtureFailFollowup: true, fixtureFailClose: true }, 4)
+
+            m.assertEqual(m.node.top.response.errorMessage, "Followup failed")
+            m.assertEqual(getGlobalAa().subtitleNegotiation.closes.Count(), 1)
+            m.assertEqual(getGlobalAa().subtitleNegotiation.closes[0].timeoutMs, 5000)
+        end function
+
     end class
 
 end namespace
