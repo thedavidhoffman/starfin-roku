@@ -14,6 +14,8 @@ namespace tests
             m.node.playbackInfoTask = { request: invalid, response: invalid, control: "" }
             'bs:disable-next-line 1140
             initStartupArtwork()
+            m.node.startupArtwork.group.visible = false
+            m.node.playbackControls.visible = false
         end function
 
         @describe("startup presentation lifecycle")
@@ -132,6 +134,7 @@ namespace tests
 
         @it("fits loaded logos without shifting their upper-left origin")
         function _()
+            m.node.startupArtwork.group.visible = true
             m.node.startupArtwork.logo = { uri: "logo", loadStatus: "ready", bitmapWidth: 400, bitmapHeight: 400, visible: false, width: 600, height: 220 }
             m.node.startupArtwork.backdrop = { uri: "backdrop", loadStatus: "ready", visible: false }
 
@@ -153,8 +156,112 @@ namespace tests
             m.assertTrue(group.visible)
             m.assertEqual(group.getChild(1).id, "startupBackdrop")
             m.assertEqual(group.getChild(2).id, "startupGradient")
-            m.assertEqual(group.getChild(3).id, "startupLogo")
-            m.assertEqual(group.getChild(3).translation, [96.0, 64.0])
+            logo = m.top.findNode("startupLogo")
+            m.assertTrue(logo.getParent().isSameNode(group.getParent()))
+            m.assertEqual(logo.translation, [96.0, 64.0])
+        end function
+
+
+        @describe("playback controls logo")
+
+        @it("retains the loaded logo but hides it when playback starts without controls")
+        function _()
+            m.node.startupArtwork.logo = { uri: "logo", loadStatus: "ready", visible: true }
+            m.node.startupArtwork.group.visible = true
+
+            'bs:disable-next-line 1140
+            finishStartupArtwork()
+
+            m.assertEqual(m.node.startupArtwork.logo.uri, "logo")
+            m.assertFalse(m.node.startupArtwork.logo.visible)
+            m.assertFalse(m.node.startupArtwork.group.visible)
+        end function
+
+        @it("shows the retained logo when playback controls open")
+        function _()
+            m.node.startupArtwork.logo = { uri: "logo", loadStatus: "ready", visible: false }
+            m.node.startupArtwork.started = true
+
+            m.node.playbackControls.visible = true
+
+            m.assertTrue(m.node.startupArtwork.logo.visible)
+            m.assertFalse(m.node.startupArtwork.group.visible)
+        end function
+
+        @it("hides the retained logo when playback controls close")
+        function _()
+            m.node.startupArtwork.logo = { uri: "logo", loadStatus: "ready", visible: false }
+            m.node.startupArtwork.started = true
+            m.node.playbackControls.visible = true
+
+            m.node.playbackControls.visible = false
+
+            m.assertFalse(m.node.startupArtwork.logo.visible)
+            m.assertEqual(m.node.startupArtwork.logo.uri, "logo")
+        end function
+
+        @it("shows a logo that finishes loading after the controls open")
+        function _()
+            m.node.startupArtwork.logo = { uri: "logo", loadStatus: "loading", visible: false, bitmapWidth: 600, bitmapHeight: 220 }
+            m.node.startupArtwork.started = true
+            m.node.playbackControls.visible = true
+            m.assertFalse(m.node.startupArtwork.logo.visible)
+
+            m.node.startupArtwork.logo.loadStatus = "ready"
+            'bs:disable-next-line 1140
+            onStartupArtworkLoadStatusChanged()
+
+            m.assertTrue(m.node.startupArtwork.logo.visible)
+        end function
+
+        @it("keeps missing logos and the startup text hidden during playback")
+        function _()
+            m.node.startupArtwork.logo = { uri: "", loadStatus: "ready", visible: false }
+            m.node.startupArtwork.started = true
+
+            m.node.playbackControls.visible = true
+
+            m.assertFalse(m.node.startupArtwork.logo.visible)
+            m.assertFalse(m.node.startupArtwork.group.visible)
+        end function
+
+        @it("clears a visible playback logo on teardown")
+        function _()
+            m.node.startupArtwork.logo = { uri: "logo", loadStatus: "ready", visible: true }
+            m.node.startupArtwork.started = true
+            m.node.playbackControls.visible = true
+
+            'bs:disable-next-line 1140
+            clearStartupArtwork()
+
+            m.assertFalse(m.node.startupArtwork.logo.visible)
+            m.assertEqual(m.node.startupArtwork.logo.uri, "")
+        end function
+
+        @it("restores logo metadata without restoring the backdrop on a same-title restart")
+        function _()
+            request = { server: "http://server", itemId: "movie", item: { Id: "movie", ImageTags: { Logo: "logo" }, BackdropImageTags: ["bg"] } }
+            m.top.playRequest = request
+            'bs:disable-next-line 1140
+            finishStartupArtwork()
+
+            m.top.playRequest = request
+
+            m.assertTrue(Instr(1, m.node.startupArtwork.logo.uri, "/Items/movie/Images/Logo") > 0)
+            m.assertFalse(m.node.startupArtwork.group.visible)
+            m.assertEqual(m.node.startupArtwork.backdrop.uri, "")
+        end function
+
+        @it("does not retain the previous title logo when the next title has none")
+        function _()
+            m.top.playRequest = { server: "http://server", itemId: "first", item: { Id: "first", ImageTags: { Logo: "logo" } } }
+            'bs:disable-next-line 1140
+            finishStartupArtwork()
+
+            m.top.playRequest = { server: "http://server", itemId: "second", item: { Id: "second", Name: "Second" } }
+
+            m.assertEqual(m.node.startupArtwork.logo.uri, "")
+            m.assertFalse(m.node.startupArtwork.logo.visible)
         end function
 
     end class

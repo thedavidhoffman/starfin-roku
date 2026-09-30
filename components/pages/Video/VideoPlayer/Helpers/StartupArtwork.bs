@@ -32,12 +32,13 @@ end sub
 ' renderStartupArtwork
 '-------------------------------------------------------------------------------
 sub renderStartupArtwork(request as object, item as dynamic)
-    if not m.startupArtwork.group.visible then return
     artwork = VideoPlayerMetadata.GetStartupArtwork(request, item)
     m.startupArtwork.title.text = artwork.title
-    if m.startupArtwork.backdrop.uri <> artwork.backdropUrl then
+    backdropUrl = ""
+    if m.startupArtwork.group.visible then backdropUrl = artwork.backdropUrl
+    if m.startupArtwork.backdrop.uri <> backdropUrl then
         m.startupArtwork.backdrop.visible = false
-        m.startupArtwork.backdrop.uri = artwork.backdropUrl
+        m.startupArtwork.backdrop.uri = backdropUrl
     end if
     if m.startupArtwork.logo.uri <> artwork.logoUrl then
         m.startupArtwork.logo.visible = false
@@ -55,9 +56,10 @@ sub onStartupArtworkLoadStatusChanged()
     logo = m.startupArtwork.logo
     backdrop = m.startupArtwork.backdrop
     backdrop.visible = backdrop.uri <> "" and backdrop.loadStatus = "ready"
-    logo.visible = logo.uri <> "" and logo.loadStatus = "ready"
-    m.startupArtwork.title.visible = not logo.visible
-    if not logo.visible then return
+    updatePlaybackLogoVisibility()
+    logoReady = logo.uri <> "" and logo.loadStatus = "ready"
+    m.startupArtwork.title.visible = not logoReady
+    if not logoReady then return
     if logo.bitmapWidth <= 0 or logo.bitmapHeight <= 0 then return
 
     ' Size the node to the image so scaleToFit does not center narrow logos in the box.
@@ -73,11 +75,23 @@ sub onStartupArtworkLoadStatusChanged()
 end sub
 
 '-------------------------------------------------------------------------------
+' updatePlaybackLogoVisibility
+'-------------------------------------------------------------------------------
+sub updatePlaybackLogoVisibility()
+    logo = m.startupArtwork.logo
+    showLogo = m.startupArtwork.group.visible or (m.startupArtwork.started and m.playbackControls.visible)
+    logo.visible = showLogo and logo.uri <> "" and logo.loadStatus = "ready"
+end sub
+
+'-------------------------------------------------------------------------------
 ' finishStartupArtwork
 '-------------------------------------------------------------------------------
 sub finishStartupArtwork()
     m.startupArtwork.started = true
-    clearStartupArtwork()
+    m.startupArtwork.group.visible = false
+    m.startupArtwork.backdrop.uri = ""
+    m.startupArtwork.title.text = ""
+    updatePlaybackLogoVisibility()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -87,5 +101,6 @@ sub clearStartupArtwork()
     m.startupArtwork.group.visible = false
     m.startupArtwork.backdrop.uri = ""
     m.startupArtwork.logo.uri = ""
+    m.startupArtwork.logo.visible = false
     m.startupArtwork.title.text = ""
 end sub
