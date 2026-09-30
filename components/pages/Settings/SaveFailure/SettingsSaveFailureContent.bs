@@ -1,0 +1,116 @@
+import "pkg:/source/Remote.bs"
+import "pkg:/source/SettingsClose.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    initHandlers()
+    m.navigation = { index: 2, offset: 0, maximum: 0 }
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.controls = { viewport: m.top.findNode("errorViewport"), text: m.top.findNode("errorText"), track: m.top.findNode("scrollTrack"), thumb: m.top.findNode("scrollThumb"), buttons: [m.top.findNode("retry"), m.top.findNode("discard"), m.top.findNode("keepEditing")] }
+    m.controls.viewport.focusable = true
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    for each button in m.controls.buttons
+        button.observeField("buttonSelected", "onButtonSelected")
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' onMessageChanged
+'-------------------------------------------------------------------------------
+sub onMessageChanged()
+    m.controls.text.text = m.top.message + Chr(10) + Chr(10) + "Your subtitle changes haven't been saved."
+    m.navigation.offset = 0
+    m.navigation.maximum = m.controls.text.boundingRect().height - 180
+    if m.navigation.maximum < 0 then m.navigation.maximum = 0
+    updateScroll()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateScroll
+'-------------------------------------------------------------------------------
+sub updateScroll()
+    m.controls.text.translation = [0, -m.navigation.offset]
+    m.controls.track.visible = m.navigation.maximum > 0
+    m.controls.thumb.visible = m.navigation.maximum > 0
+    if m.navigation.maximum <= 0 then return
+    height = 180 * 180 / (180 + m.navigation.maximum)
+    if height < 24 then height = 24
+    m.controls.thumb.height = height
+    m.controls.thumb.translation = [970, (180 - height) * m.navigation.offset / m.navigation.maximum]
+end sub
+
+'-------------------------------------------------------------------------------
+' focusKeepEditing
+'-------------------------------------------------------------------------------
+sub focusKeepEditing()
+    focusChoice(2)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusChoice
+'-------------------------------------------------------------------------------
+sub focusChoice(index as integer)
+    m.navigation.index = index
+    for i = 0 to 2
+        m.controls.buttons[i].hasFocusVisual = i = index
+    end for
+    m.controls.buttons[index].setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onButtonSelected
+'-------------------------------------------------------------------------------
+sub onButtonSelected(event as object)
+    choices = [SettingsClose.Decision.Retry, SettingsClose.Decision.Discard, SettingsClose.Decision.KeepEditing]
+    for i = 0 to 2
+        if event.getRoSGNode().isSameNode(m.controls.buttons[i]) then m.top.decision = choices[i]
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = Remote.Key.Back then
+        m.top.decision = SettingsClose.Decision.KeepEditing
+        return true
+    end if
+    if m.controls.viewport.hasFocus() then
+        if key = Remote.Key.Down then
+            if m.navigation.offset >= m.navigation.maximum then
+                focusChoice(0)
+            else
+                m.navigation.offset += 40
+                if m.navigation.offset > m.navigation.maximum then m.navigation.offset = m.navigation.maximum
+            end if
+        else if key = Remote.Key.Up then
+            m.navigation.offset -= 40
+            if m.navigation.offset < 0 then m.navigation.offset = 0
+        end if
+        updateScroll()
+    else if key = Remote.Key.Up then
+        if m.navigation.index > 0 then
+            focusChoice(m.navigation.index - 1)
+        else if m.navigation.maximum > 0 then
+            m.controls.buttons[0].hasFocusVisual = false
+            m.controls.viewport.setFocus(true)
+        end if
+    else if key = Remote.Key.Down and m.navigation.index < 2 then
+        focusChoice(m.navigation.index + 1)
+    end if
+    return true
+end function

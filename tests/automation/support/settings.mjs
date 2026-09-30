@@ -22,13 +22,13 @@ export const accountDefaults = {
   'next-item-playback': 'show-up-next',
   'next-episode-prompt-seconds': '0',
   'screensaver-type': 'none',
-  'screensaver-delay': '1'
+  'screensaver-delay': '1',
+  'subtitle-burn-in-mode': 'during-transcoding'
 };
 
 export const globalDefaults = {
   'display-account-badge': 'off',
   'video-streaming-mode': 'automatic',
-  'subtitle-burn-in-mode': 'during-transcoding',
   'tmdb-api-key': ''
 };
 
@@ -37,13 +37,14 @@ export const categories = {
   mediaShell: { listNode: 'userCategoryList', index: 1, panelNode: 'mediaShellPanel' },
   theme: { listNode: 'userCategoryList', index: 2, panelNode: 'themePanel' },
   playback: { listNode: 'userCategoryList', index: 3, panelNode: 'playbackPanel' },
-  credits: { listNode: 'userCategoryList', index: 4, panelNode: 'creditsPanel' },
-  tv: { listNode: 'userCategoryList', index: 5, panelNode: 'tvPanel' },
-  screensaver: { listNode: 'userCategoryList', index: 6, panelNode: 'screensaverPanel' },
+  accountSubtitles: { listNode: 'userCategoryList', index: 4, panelNode: 'accountSubtitlesPanel' },
+  credits: { listNode: 'userCategoryList', index: 5, panelNode: 'creditsPanel' },
+  tv: { listNode: 'userCategoryList', index: 6, panelNode: 'tvPanel' },
+  screensaver: { listNode: 'userCategoryList', index: 7, panelNode: 'screensaverPanel' },
   general: { listNode: 'deviceCategoryList', index: 0, panelNode: 'systemPanel' },
   video: { listNode: 'deviceCategoryList', index: 1, panelNode: 'videoPanel' },
-  subtitles: { listNode: 'deviceCategoryList', index: 2, panelNode: 'subtitlesPanel' },
-  advanced: { listNode: 'deviceCategoryList', index: 3, panelNode: 'advancedPanel' }
+  subtitles: { listNode: 'userCategoryList', index: 4, panelNode: 'accountSubtitlesPanel' },
+  advanced: { listNode: 'deviceCategoryList', index: 2, panelNode: 'advancedPanel' }
 };
 
 let settingsTestsRan = false;
@@ -64,6 +65,10 @@ export async function openSettings(category) {
   const accountKey = await getAccountKey(environment);
   settingsTestsRan = true;
   activeAccountKey = accountKey;
+  // Read scalars: RTA serializes associative-array keys in lowercase.
+  const [server, token, userId] = await Promise.all(['server', 'token', 'userId'].map(async field =>
+    (await environment.odc.getValue({ base: 'scene', keyPath: `#authController.authenticatedSession.${field}` })).value
+  ));
 
   await environment.odc.callFunc({
     base: 'scene',
@@ -74,7 +79,10 @@ export async function openSettings(category) {
       componentName: 'SettingsDialog',
       closeField: 'closeRequested',
       openFunction: 'openSettings',
-      accountKey
+      accountKey,
+      server,
+      token,
+      userId
     }]
   });
   await environment.odc.setValue({
@@ -101,12 +109,21 @@ export async function openSettingsFromSystemMenu(environment, category) {
   settingsTestsRan = true;
   activeAccountKey = accountKey;
 
+  // Initial Home loading restores shelf focus; wait before opening the header menu.
+  const homeVisible = await environment.odc.getValue({ base: 'scene', keyPath: '#homePage.visible' });
+  if (homeVisible.value === true) {
+    await waitFor(async () => {
+      const ready = await environment.odc.getValue({ base: 'scene', keyPath: '#homePage.ready' });
+      return ready.value === true;
+    }, 'Home loading to finish before opening Settings', 45000);
+  }
+
   await environment.odc.callFunc({ base: 'scene', keyPath: '#header', funcName: 'focusSystemMenuButton' });
   await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
   await waitFor(async () => {
     const response = await environment.odc.getValue({ base: 'scene', keyPath: '#systemDropdownMenu.isOpen' });
-    return response.value === true;
-  }, 'the System menu to open');
+    return response.value === true && await environment.odc.isInFocusChain({ base: 'scene', keyPath: '#systemDropdownMenu' });
+  }, 'the System menu to open and receive focus');
   await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
   await waitFor(async () => {
     const response = await environment.odc.getValue({ base: 'scene', keyPath: '#overlayHost.0.subtype()' });

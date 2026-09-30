@@ -1337,6 +1337,98 @@ namespace tests
             m.node.pendingPlaybackRequest = invalid
         end sub
 
+        @describe("external subtitle startup")
+
+        @it("keeps captions selected when tracks arrive during content assignment")
+        function _()
+            m.stubCall(Spinner.Show, invalid)
+            originalPlayer = m.node.videoPlayer
+            player = m.prepareSubtitleStartup()
+            player.availableSubtitleTracks = [{ TrackName: "http://server/sub.srt" }]
+            ' Reproduce a synchronous track notification from assigning content.
+            player.observeField("content", "onAvailableSubtitleTracksChanged")
+
+            'bs:disable-next-line 1140
+            startVideoContent(CreateObject("roSGNode", "ContentNode"), { externalSubtitleTrack: { deliveryUrl: "http://server/sub.srt" } }, 0)
+            player.unobserveField("content")
+            m.node.videoPlayer = originalPlayer
+
+            m.assertEqual(player.globalCaptionMode, "On")
+            m.assertEqual(player.subtitleTrack, "http://server/sub.srt")
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "")
+            m.assertEqual(player.control, "play")
+        end function
+
+        @it("selects external captions when tracks arrive after startup")
+        function _()
+            m.stubCall(Spinner.Show, invalid)
+            originalPlayer = m.node.videoPlayer
+            player = m.prepareSubtitleStartup()
+
+            'bs:disable-next-line 1140
+            startVideoContent(CreateObject("roSGNode", "ContentNode"), { externalSubtitleTrack: { deliveryUrl: "http://server/sub.srt" } }, 0)
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "http://server/sub.srt")
+            player.availableSubtitleTracks = [{ TrackName: "http://server/sub.srt" }]
+            'bs:disable-next-line 1140
+            onAvailableSubtitleTracksChanged()
+            m.node.videoPlayer = originalPlayer
+
+            m.assertEqual(player.globalCaptionMode, "On")
+            m.assertEqual(player.subtitleTrack, "http://server/sub.srt")
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "")
+        end function
+
+        @it("clears previous captions when playback has no external track")
+        function _()
+            m.stubCall(Spinner.Show, invalid)
+            originalPlayer = m.node.videoPlayer
+            player = m.prepareSubtitleStartup()
+            m.node.streamOptions.pendingExternalSubtitleUrl = ""
+            player.globalCaptionMode = "On"
+            player.subtitleTrack = "http://server/previous.srt"
+
+            'bs:disable-next-line 1140
+            startVideoContent(CreateObject("roSGNode", "ContentNode"), {}, 0)
+            m.node.videoPlayer = originalPlayer
+
+            m.assertEqual(player.globalCaptionMode, "Off")
+            m.assertEqual(player.subtitleTrack, "")
+            m.assertEqual(player.control, "play")
+        end function
+
+        @it("keeps a pending subtitle until the matching track arrives")
+        function _()
+            m.stubCall(Spinner.Show, invalid)
+            originalPlayer = m.node.videoPlayer
+            player = m.prepareSubtitleStartup()
+            player.availableSubtitleTracks = [{ TrackName: "http://server/other.srt" }]
+
+            'bs:disable-next-line 1140
+            startVideoContent(CreateObject("roSGNode", "ContentNode"), { externalSubtitleTrack: { deliveryUrl: "http://server/sub.srt" } }, 0)
+            'bs:disable-next-line 1140
+            onAvailableSubtitleTracksChanged()
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "http://server/sub.srt")
+            m.assertEqual(player.subtitleTrack, "")
+            player.availableSubtitleTracks = [{ TrackName: "http://server/sub.srt" }]
+            'bs:disable-next-line 1140
+            onAvailableSubtitleTracksChanged()
+            m.node.videoPlayer = originalPlayer
+
+            m.assertEqual(player.globalCaptionMode, "On")
+            m.assertEqual(player.subtitleTrack, "http://server/sub.srt")
+            m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "")
+        end function
+
+        function prepareSubtitleStartup() as object
+            player = CreateObject("roSGNode", "Node")
+            player.addFields({ content: CreateObject("roSGNode", "ContentNode"), availableSubtitleTracks: [], globalCaptionMode: "Off", subtitleTrack: "", control: "" })
+            m.node.videoPlayer = player
+            m.node.streamOptions.pendingExternalSubtitleUrl = "http://server/sub.srt"
+            m.node.streamOptions.captionModeCaptured = false
+            m.node.activePlayback.subtitleStreamIndex = 2
+            return player
+        end function
+
         @describe("Media request authentication")
 
         @it("passes server subtitle URLs to content alongside the playback header")

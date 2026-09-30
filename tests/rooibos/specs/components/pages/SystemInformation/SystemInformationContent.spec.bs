@@ -33,7 +33,7 @@ namespace tests
             end for
 
             m.assertEqual(section.title, "Global Application Registry")
-            m.assertEqual(keys, ["active-account-key", "last-server", "display-account-badge", "video-streaming-mode", "subtitle-burn-in-mode", "tmdb-api-key"])
+            m.assertEqual(keys, ["active-account-key", "last-server", "display-account-badge", "video-streaming-mode", "tmdb-api-key"])
         end function
 
         @it("reports defaults for missing global settings")
@@ -49,8 +49,7 @@ namespace tests
 
             m.assertEqual(section.entries[2].value, "off")
             m.assertEqual(section.entries[3].value, "automatic")
-            m.assertEqual(section.entries[4].value, "during-transcoding")
-            m.assertEqual(section.entries[5].value, "(not set)")
+            m.assertEqual(section.entries[4].value, "(not set)")
         end function
 
         @it("normalizes unsupported video modes from fresh registry values")
@@ -65,16 +64,20 @@ namespace tests
             m.assertEqual(section.entries[3].value, "automatic")
         end function
 
-        @it("normalizes subtitle modes from fresh registry values")
+        @it("reports subtitle burn-in with account settings")
         function _()
-            registry = m.prepareGlobalRegistry()
-            registry.Write("subtitle-burn-in-mode", "ALWAYS")
-            registry.Flush()
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.SubtitleBurnInMode] = "always"
+            m.stubCall(SettingsStore.Load, settings)
 
             'bs:disable-next-line 1140
-            section = getGlobalRegistrySection()
+            section = getAccountRegistrySection({ accountKey: "test-account", username: "Viewer", isActive: false })
 
-            m.assertEqual(section.entries[4].value, "always")
+            value = invalid
+            for each entry in section.entries
+                if entry.key = "subtitle-burn-in-mode" then value = entry.value
+            end for
+            m.assertEqual(value, "always")
         end function
 
         @it("truncates the TMDB key to forty characters without an ellipsis")
@@ -86,7 +89,7 @@ namespace tests
             'bs:disable-next-line 1140
             section = getGlobalRegistrySection()
 
-            m.assertEqual(section.entries[5].value, "1234567890123456789012345678901234567890")
+            m.assertEqual(section.entries[4].value, "1234567890123456789012345678901234567890")
         end function
 
         @describe("season summary reporting")

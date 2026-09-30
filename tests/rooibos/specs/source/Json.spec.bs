@@ -5,6 +5,33 @@ namespace tests
     @suite("JSON helpers")
     class JsonTests extends rooibos.BaseTestSuite
 
+        @describe("Json.Serialize")
+
+        @it("round trips nested JSON while preserving server field names")
+        function _()
+            original = "{" + Json.String("PascalCase") + ":[true,false,null,42,1.25,{" + Json.Pair("UnknownField", "value") + "}]}"
+            encoded = Json.Serialize(ParseJson(original))
+            m.assertEqual(encoded, original)
+        end function
+
+        @it("escapes control characters in strings")
+        function _()
+            value = "line" + Chr(10) + Chr(13) + Chr(9) + Chr(1)
+            encoded = Json.Serialize(value)
+            m.assertEqual(encoded, Char.DoubleQuote + "line\u000a\u000d\u0009\u0001" + Char.DoubleQuote)
+            m.assertEqual(ParseJson(encoded), value)
+        end function
+
+        @it("serializes a null value")
+        function _()
+            m.assertEqual(Json.Serialize(invalid), "null")
+        end function
+
+        @it("preserves unicode text")
+        function _()
+            m.assertEqual(ParseJson(Json.Serialize("Français 日本語")), "Français 日本語")
+        end function
+
         @describe("Json.String")
 
         @it("quotes strings and escapes backslashes and quotation marks")

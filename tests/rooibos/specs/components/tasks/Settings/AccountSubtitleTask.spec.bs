@@ -1,0 +1,177 @@
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/Char.bs"
+
+namespace tests
+
+    @SGNode("AccountSubtitleTask")
+    @suite("AccountSubtitleTask component")
+    class AccountSubtitleTaskTests extends rooibos.BaseTestSuite
+
+        @describe("account requests")
+
+        @it("loads the current configuration and language catalog")
+        function _()
+            m.captureResponses([{ ok: true, data: { Id: "user", Configuration: { SubtitleMode: "Smart" } } }, { ok: true, data: [] }])
+            result = m.execute(m.request("load"))
+            calls = getGlobalAa().accountHttp.calls
+            m.assertTrue(result.ok)
+            m.assertEqual(result.configuration.SubtitleMode, "Smart")
+            m.assertEqual(calls[0].url, "https://server/Users/Me")
+            m.assertEqual(calls[1].url, "https://server/Localization/Cultures")
+            m.assertEqual(calls[0].timeoutMs, 15000)
+        end function
+
+        @it("merges an edited mode into freshly loaded configuration and accepts 204")
+        function _()
+            config = ParseJson("{" + Json.Pair("SubtitleMode", "Default") + "," + Json.Pair("SubtitleLanguagePreference", "fra") + "," + Json.BooleanPair("RememberSubtitleSelections", true) + "," + Json.ObjectPair("FutureField", [Json.ArrayPair("Values", ["one", "two"])]) + "}")
+            m.captureResponses([{ ok: true, data: { Id: "user", Configuration: config } }, { ok: true, status: 204, data: invalid }])
+            request = m.request("save")
+            request.changes = ParseJson(Json.Object([Json.Pair("SubtitleMode", "Always")]))
+
+            result = m.execute(request)
+
+            call = getGlobalAa().accountHttp.calls[1]
+            m.assertTrue(result.ok)
+            m.assertEqual(call.url, "https://server/Users/Configuration")
+            m.assertEqual(call.method, "POST")
+            body = ParseJson(call.body)
+            m.assertEqual(body.SubtitleMode, "Always")
+            m.assertEqual(body.SubtitleLanguagePreference, "fra")
+            m.assertTrue(body.RememberSubtitleSelections)
+            m.assertEqual(body.FutureField.Values, ["one", "two"])
+            m.assertTrue(Instr(1, call.body, Json.String("FutureField")) > 0)
+            m.assertTrue(Instr(1, call.body, Json.String("SubtitleMode")) > 0)
+        end function
+
+        @it("does not post after a fresh read fails")
+        function _()
+            m.captureResponses([{ ok: false, status: 401, authExpired: true }])
+            result = m.execute(m.request("save"))
+            m.assertFalse(result.ok)
+            m.assertTrue(result.authExpired)
+            m.assertEqual(getGlobalAa().accountHttp.calls.Count(), 1)
+        end function
+
+        @it("rejects a response for another account")
+        function _()
+            m.captureResponses([{ ok: true, data: { Id: "other", Configuration: {} } }])
+            result = m.execute(m.request("save"))
+            m.assertFalse(result.ok)
+            m.assertEqual(getGlobalAa().accountHttp.calls.Count(), 1)
+        end function
+
+        @it("preserves a server save failure")
+        function _()
+            m.captureResponses([{ ok: true, data: { Id: "user", Configuration: {} } }, { ok: false, status: 403, errorMessage: "Forbidden" }])
+            request = m.request("save")
+            request.changes = ParseJson(Json.Object([Json.Pair("SubtitleMode", "None")]))
+            result = m.execute(request)
+            m.assertFalse(result.ok)
+            m.assertEqual(result.errorMessage, "Forbidden")
+        end function
+
+        @it("rejects writes to unrelated account fields")
+        function _()
+            m.captureResponses([{ ok: true, data: { Id: "user", Configuration: {} } }])
+            request = m.request("save")
+            request.changes = { AudioLanguagePreference: "eng" }
+            result = m.execute(request)
+            m.assertFalse(result.ok)
+            m.assertEqual(getGlobalAa().accountHttp.calls.Count(), 1)
+        end function
+
+        @it("publishes request and account correlation on failure")
+        function _()
+            m.captureResponses([{ ok: false, status: 500 }])
+            m.node.top.request = m.request("load")
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertEqual(m.node.top.response.requestId, 12)
+            m.assertEqual(m.node.top.response.userId, "user")
+            m.assertEqual(m.node.top.response.server, "https://server")
+        end function
+
+        @it("rejects an unknown command without HTTP requests")
+        function _()
+            m.captureResponses([])
+
+            result = m.execute(m.request("unknown"))
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.errorMessage, "Unknown account settings command.")
+            m.assertEqual(result.requestId, 12)
+            m.assertEqual(getGlobalAa().accountHttp.calls.Count(), 0)
+        end function
+
+        @it("rejects a missing session before dispatch")
+        function _()
+            m.captureResponses([])
+            request = m.request("load")
+            request.token = ""
+
+            result = m.execute(request)
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.errorMessage, "Missing account session.")
+            m.assertEqual(getGlobalAa().accountHttp.calls.Count(), 0)
+        end function
+
+        @it("does not fetch cultures after configuration loading fails")
+        function _()
+            m.captureResponses([{ ok: false, status: 500, errorMessage: "Account unavailable" }])
+
+            result = m.execute(m.request("load"))
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.errorMessage, "Account unavailable")
+            m.assertEqual(getGlobalAa().accountHttp.calls.Count(), 1)
+        end function
+
+        @it("preserves a cultures request failure")
+        function _()
+            m.captureResponses([{ ok: true, data: { Id: "user", Configuration: {} } }, { ok: false, status: 500, errorMessage: "Cultures unavailable" }])
+
+            result = m.execute(m.request("load"))
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.errorMessage, "Cultures unavailable")
+            m.assertEqual(getGlobalAa().accountHttp.calls.Count(), 2)
+        end function
+
+        @it("rejects an invalid culture catalog")
+        function _()
+            m.captureResponses([{ ok: true, data: { Id: "user", Configuration: {} } }, { ok: true, data: {} }])
+
+            result = m.execute(m.request("load"))
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.errorMessage, "The server did not return subtitle languages.")
+        end function
+
+        function execute(request as object) as object
+            m.node.top.request = request
+            'bs:disable-next-line 1140
+            executeRequest()
+            return m.node.top.response
+        end function
+
+        function request(command as string) as object
+            return { server: "https://server", token: "test-token", userId: "user", command: command, requestId: 12 }
+        end function
+
+        function captureResponses(responses as object)
+            getGlobalAa().accountHttp = { responses: responses, calls: [] }
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                capture = getGlobalAa().accountHttp
+                capture.calls.Push({ url: requestUrl, method: method, body: body, timeoutMs: timeoutMs })
+                return capture.responses.Shift()
+            end function)
+        end function
+
+        protected override function tearDown()
+            getGlobalAa().Delete("accountHttp")
+        end function
+
+    end class
+
+end namespace

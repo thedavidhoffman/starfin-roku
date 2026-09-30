@@ -1,79 +1,81 @@
 # Settings presentation
 
-Settings uses sentence case for setting labels, option labels, category names,
-library layout row labels, and action labels. Capitalize the first word and
-preserve acronyms and proper names, including TV, TMDB, API, Starfin, Roku,
-Next Up, and Up Next.
+Settings uses a centered 1680px-wide, 900px-high dialog. The category lists and
+vertical divider retain their positions; the right-hand panels start at x=400
+within the dialog content area and contain 1160px-wide glass cards.
 
-Examples include Account badge, TV episode list scroll, Full screen,
-Play next immediately, and Episode thumbnail with logo. Show "Up Next"
-retains the capitalization of the named Up Next screen.
+## Categories and cards
 
-This is display text only: registry keys, stored values, defaults, option order,
-navigation, and save behavior are unchanged. Exact-text tests should match the
-labels; persistence tests continue to assert the existing registry values.
+Current user contains Libraries, Media shell, Theme, Playback, Subtitles,
+Credits, TV, and Screensaver. All eight rows are visible. The Device heading is
+at y=488 and its three-row list starts at y=522: General, Video, and Advanced.
+Category navigation wraps across both lists: Up from Libraries moves to Advanced,
+and Down from Advanced moves to Libraries, updating the displayed panel with focus.
 
-## Theme and Media shell categories
+Every category uses [SettingsCard](settings-cards.md). Card headings render in
+uppercase SmallBoldSystemFont. Options, categories, table rows, and actions use
+sentence case, preserving proper names and acronyms such as TV, TMDB, and API.
+Descriptions use muted SmallestSystemFont. The native control highlight indicates
+focus; cards have no additional focus outline or horizontal divider rules.
 
-Current user categories are Libraries, Media shell, Theme, Playback, Credits, TV, and
-Screensaver. The Device section sits below all seven user categories.
+SettingsDialog owns its fixed dimensions. SettingsContent owns the card width;
+SettingsCard owns the content inset and radio focus overhang.
+SettingsContent supplies the width and initializes card layout after
+content children exist. SettingsCard derives radio positions and widths while
+preserving each page's vertical layout. With a 24px inset and 32px native focus
+overhang, radio lists start at x=56 and use 1048px items, leaving equal margins.
 
-Theme contains the Theme setting with Blue, Black, and Grey in that order,
-defaulting to Blue. The account-scoped `theme` registry value stores `blue`,
-`black`, or `grey` when Settings closes through the existing save flow.
-Reloading settings discards pending edits. Missing or unsupported values fall
-back to Blue. The active app background updates when the selection is committed; see
-[Themes](themes.md) for colors and account lifecycle behavior.
+Libraries uses one titleless 1160 x 640px card around its unchanged table. The
+1045px table is centered at x=57.5 with a 24px vertical inset; all eight rows,
+column spacing, controls and navigation remain intact. Credits shows all nine
+presets. General retains the API-key text-input focus frame. Advanced keeps its
+Reset, Abort and Erase all data confirmation inside one card.
 
-Media shell contains Media shell background followed by Theme music, restoring
-the original label positions at y=0 and y=276 and option lists at y=48 and y=324.
-The 72-pixel gap between the first list and the next label contains one centered
-horizontal rule: y=239, height=2, width=1040, color `0xF3F7FB33`. Its right edge
-aligns with the dialog header rule: the 1560-pixel dialog has 60-pixel inner
-margins and the settings panel starts 400 pixels into that inner area.
+## Subtitle pages and saving
 
-## Settings dividers
+Current user -> Subtitles has two fixed pages: Jellyfin mode and preferred language,
+then local per-account burn-in. A bottom-right page number and chevron
+indicate navigation; both chevrons appear to the right of the number. Pages use
+a short fade. The language picker replaces page one temporarily and Back returns
+to Edit without saving. See [account subtitle settings](account-subtitle-settings.md).
 
-TV, Screensaver, and General use the same 1040-by-2-pixel translucent horizontal
-rules as Media shell, aligned to the header rule's right edge. Each is centered
-between the preceding option list and the next setting label, without changing
-setting positions. TV has two rules (y=177 and y=381); Screensaver has one
-(y=239); General has one (y=187). Descriptions stay with their setting and do not
-receive separate dividers.
+Burn-in and other local settings save when Settings closes. Mode and language
+save to Jellyfin when closing Settings, before local preferences are saved.
+Failures open a separate Retry/Discard/Keep editing confirmation above Settings.
+Closing saves block input immediately and delay spinner visuals by two seconds.
+Retry retains page-two focus while loading;
+completion focuses the mode list or Retry unless the viewer has navigated away.
+Mode descriptions follow the focused mode while its list owns focus, otherwise
+the saved/pending selection, including pending edits.
 
-## Credits category
+## Local preferences and previews
 
-Credits follows Playback and uses the same single-column RadioButtonList as
-other categories. Show next episode prompt displays all nine presets at once,
-with 52-pixel rows starting at y=48 and its description at y=548. Off is selected
-by default. Left returns to the category list; Up/Down navigate the presets and
-OK selects the pending value through the normal settings save flow.
-Preset labels and stored values are paired in `NextEpisodePromptSeconds.Options()` so
-display order and selection mapping come from the same definition.
+SettingsStore owns normalization and the local snapshot. Account settings include
+burn-in; the three device-wide values are account badge visibility, video
+streaming mode, and the TMDB API key. The old global burn-in value is ignored
+and deleted during normal settings saving, as described in the account subtitle
+document. Accounts without a saved burn-in value use During transcoding.
 
-The user category list displays seven rows. The Device heading and list move
-down 50 pixels to y=438 and y=472, retaining the existing row sizes and keeping
-all four device categories visible. This adds no nested category or picker.
-The description reads: “When Jellyfin hasn’t identified where an episode’s closing credits begin, show the next episode prompt this long before the episode ends.”
-See [Next Item Playback](next-item-playback.md#credits-fallback) for behavior.
+Theme offers Blue, Black and Grey. Theme and watched-indicator changes preview
+through the existing dialog events; local persistence still occurs on close.
+Media shell contains background style followed by theme music. Credits uses
+NextEpisodePromptSeconds.Options() for its nine labels and stored values; Off
+remains the default. These presentation changes do not alter playback rules.
 
-## Settings normalization
+## Retained experiment references
 
-`SettingsStore.GetSettingValue()` owns the existing normalization rules for library
-layouts, theme, Home episode images, screensaver type, video streaming mode,
-subtitle burn-in, next-item playback, and next-episode prompt seconds. `Load()`
-collects stored values and reads them through this function; `Save()` uses it before
-writing. Settings consumers use the returned values directly. Independent inputs,
-such as selection overrides and pending control edits, retain their own validation.
+The glass graphic is generated by scripts/generate-settings-card-assets.mjs.
+The earlier solid graphic remains available as images/buttons/fhd/primary-focused.9.png,
+with historical tints Blue 0x203957FF, Black 0x282828FF and Grey 0x505050FF.
+There is no remaining TV-only theme updater; switching variants would now be a
+SettingsCard rendering change.
 
-`SettingsStore.GlobalKeys()` identifies the four device-wide settings: account badge
-visibility, video streaming mode, subtitle burn-in, and the TMDB API key. Bulk load
-reads them together from `STARFIN_ROKU`; bulk save writes them through one registry
-section and flushes once, including when no account is selected. Account settings
-remain in their account-specific sections. `LoadGlobal()` and `SaveGlobal()` retain
-their existing single-key behavior.
+The original wider-dialog patch is retained at
+build/wider-settings-experiment/experiment.patch. It predates the shared-layout
+cleanup and is a historical reference, not a patch to reverse blindly against
+the current tree. Reversing the experiment now requires restoring a 1040px card
+width in SettingsContent and a 1560px dialog width in SettingsDialog, the matching custom input/text widths
+and subtitle indicator position, and the unframed Libraries table. Earlier
+subtitle functionality and the card redesign must remain intact.
 
-SettingsContent uses the complete normalized snapshot returned by `SettingsStore.Load()`
-as its pending settings state and uses `SettingsStore.LibraryKeys()` for library edits.
-In General, Down from the last Account badge option focuses the TMDB API-key field;
-Up from that field returns to Account badge options and clears the input focus highlight.
+Full runtime suites and UI automation remain deferred during active iteration.

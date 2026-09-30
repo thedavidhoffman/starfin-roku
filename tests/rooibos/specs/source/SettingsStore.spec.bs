@@ -257,6 +257,7 @@ namespace tests
                 SettingsStore.Key.NextEpisodePromptSeconds
                 SettingsStore.Key.ScreensaverType
                 SettingsStore.Key.ScreensaverDelay
+                SettingsStore.Key.SubtitleBurnInMode
             ])
         end function
 
@@ -503,7 +504,7 @@ namespace tests
 
         @it("defines the complete global settings scope")
         function _()
-            m.assertEqual(SettingsStore.GlobalKeys(), ["display-account-badge", "video-streaming-mode", "subtitle-burn-in-mode", "tmdb-api-key"])
+            m.assertEqual(SettingsStore.GlobalKeys(), ["display-account-badge", "video-streaming-mode", "tmdb-api-key"])
         end function
 
         @it("loads defaults for missing global settings without an account")
@@ -546,7 +547,7 @@ namespace tests
             globalSection = CreateObject("roRegistrySection", "STARFIN_ROKU")
             m.assertEqual(globalSection.Read("display-account-badge"), "on")
             m.assertEqual(globalSection.Read("video-streaming-mode"), "transcode-no-remux")
-            m.assertEqual(globalSection.Read("subtitle-burn-in-mode"), "always")
+            m.assertFalse(globalSection.Exists("subtitle-burn-in-mode"))
             m.assertEqual(globalSection.Read("tmdb-api-key"), "test-api-key")
             m.assertEqual(loaded[SettingsStore.Key.DisplayAccountBadge], "on")
             m.assertEqual(loaded[SettingsStore.Key.VideoStreamingMode], "transcode-no-remux")
@@ -554,6 +555,7 @@ namespace tests
             m.assertEqual(loaded[SettingsStore.Key.TmdbApiKey], "test-api-key")
             accountSection = CreateObject("roRegistrySection", accountSectionName)
             m.assertEqual(accountSection.Read("theme"), "black")
+            m.assertEqual(accountSection.Read("subtitle-burn-in-mode"), "always")
             m.assertEqual(loaded[SettingsStore.Key.Theme], "black")
         end function
 
@@ -703,6 +705,95 @@ namespace tests
 
             m.assertEqual(SettingsStore.Load("rooibos-watched-a")[SettingsStore.Key.WatchedIndicatorStyle], "high-contrast")
             m.assertEqual(SettingsStore.Load("rooibos-watched-b")[SettingsStore.Key.WatchedIndicatorStyle], "subtle")
+        end function
+
+        @describe("burn-in legacy device cleanup")
+
+        @it("ignores the legacy device value without modifying registry during load")
+        function _()
+            m.snapshotBurnInRegistry()
+            legacy = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            legacy.Write("subtitle-burn-in-mode", "always")
+            legacy.Flush()
+            account = CreateObject("roRegistrySection", RegistryStore.AccountSectionName("rooibos-burn-in-cleanup"))
+            account.Delete("subtitle-burn-in-mode")
+            account.Flush()
+
+            settings = SettingsStore.Load("rooibos-burn-in-cleanup")
+
+            m.assertEqual(settings[SettingsStore.Key.SubtitleBurnInMode], "during-transcoding")
+            m.assertEqual(legacy.Read("subtitle-burn-in-mode"), "always")
+            m.assertFalse(account.Exists("subtitle-burn-in-mode"))
+        end function
+
+        @it("loads an existing account burn-in value instead of the legacy device value")
+        function _()
+            m.snapshotBurnInRegistry()
+            legacy = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            legacy.Write("subtitle-burn-in-mode", "always")
+            legacy.Flush()
+            account = CreateObject("roRegistrySection", RegistryStore.AccountSectionName("rooibos-burn-in-cleanup"))
+            account.Write("subtitle-burn-in-mode", "prefer-external")
+            account.Flush()
+
+            settings = SettingsStore.Load("rooibos-burn-in-cleanup")
+
+            m.assertEqual(settings[SettingsStore.Key.SubtitleBurnInMode], "prefer-external")
+        end function
+
+        @it("saves account burn-in and removes only the obsolete device key")
+        function _()
+            m.snapshotBurnInRegistry()
+            legacy = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            legacy.Write("subtitle-burn-in-mode", "always")
+            legacy.Write("rooibos-unrelated", "preserve")
+            legacy.Flush()
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.SubtitleBurnInMode] = "prefer-external"
+
+            SettingsStore.Save("rooibos-burn-in-cleanup", settings)
+
+            account = CreateObject("roRegistrySection", RegistryStore.AccountSectionName("rooibos-burn-in-cleanup"))
+            m.assertEqual(account.Read("subtitle-burn-in-mode"), "prefer-external")
+            m.assertFalse(legacy.Exists("subtitle-burn-in-mode"))
+            m.assertEqual(legacy.Read("rooibos-unrelated"), "preserve")
+            m.assertEqual(legacy.Read("video-streaming-mode"), settings[SettingsStore.Key.VideoStreamingMode])
+        end function
+
+        @it("cleans up the device key when saving without an account")
+        function _()
+            m.snapshotBurnInRegistry()
+            legacy = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            legacy.Write("subtitle-burn-in-mode", "always")
+            legacy.Flush()
+
+            SettingsStore.Save("", SettingsStore.Defaults())
+
+            m.assertFalse(legacy.Exists("subtitle-burn-in-mode"))
+        end function
+
+        @it("can save repeatedly after the legacy key is removed")
+        function _()
+            m.snapshotBurnInRegistry()
+            legacy = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            legacy.Delete("subtitle-burn-in-mode")
+            legacy.Flush()
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.SubtitleBurnInMode] = "always"
+
+            SettingsStore.Save("rooibos-burn-in-cleanup", settings)
+            SettingsStore.Save("rooibos-burn-in-cleanup", settings)
+
+            m.assertFalse(legacy.Exists("subtitle-burn-in-mode"))
+            m.assertEqual(SettingsStore.Load("rooibos-burn-in-cleanup")[SettingsStore.Key.SubtitleBurnInMode], "always")
+        end function
+
+        function snapshotBurnInRegistry()
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName("rooibos-burn-in-cleanup")]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
         end function
 
     end class

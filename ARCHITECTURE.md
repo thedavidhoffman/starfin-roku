@@ -83,8 +83,31 @@ must not dismiss messages. Home aggregates failures within its current refresh
 before presenting them; progress and empty-state labels remain with their owners.
 MainScene routes Home hiding through hideHome() and suppresses outgoing refresh
 messages during page/session cleanup. Home owns that refresh-level suppression.
+Message acknowledgment respects the current confirmation host and blocking spinner
+before restoring older focus. MainScene chooses the active layer; the Settings
+failure dialog owns its default Keep editing focus through the Dialog focusContent
+interface. Message dismissal does not restart save progress or make save decisions.
 
 ## Requests, responses, and state
+
+SettingsDialog owns account subtitle configuration loading, serialized
+saves on close, and retained pending edits on failure. SettingsContent owns its editor and language
+picker. A separate top-level confirmation OverlayHost preserves Settings underneath
+a feature-owned failure dialog. MainScene routes correlated requests/results;
+SettingsDialog owns Retry/Discard/Keep editing and the canonical close path.
+Its component-local AccountSubtitleSession.bs helper contains account session state,
+requests, response handling and failure decisions; SettingsDialog.bs retains
+dialog setup, local persistence, previews and closure. Both share the same
+component context; no separate controller or additional routing layer is involved.
+Its response boundary handles correlation and task cleanup, then dispatches to
+separate load/save completion handlers. SettingsContent owns captured editor focus
+and its restoration, including focus-dependent descriptions. The dialog supplies a
+stable language catalog after loading; selection/status updates do not rebuild it.
+Closing saves use Spinner.ShowBlocking(2): input is blocked immediately, visuals
+are delayed, and existing callers retain immediate visuals by default. AccountSubtitleTask fetches and updates the signed-in Jellyfin account
+using explicit session context passed through MainScene and OverlayHost. These
+preferences do not enter SettingsStore; local settings still save on dialog close.
+Playback continues to use Jellyfin's resolved subtitle default.
 
 - Pass session and feature context explicitly in request assocarrays, including
   values such as `server`, `token`, `userId`, library IDs, and item IDs.
@@ -209,3 +232,19 @@ Keep credentials out of version control and command examples with real values.
 `tests/automation/.env.automation`, and logs are not application source. Preserve
 unrelated working-tree changes and follow the special handling for user-owned
 files documented in `AGENTS.md`.
+
+## Settings presentation and persistence
+
+SettingsDialog owns its fixed dimensions, SettingsContent owns the card width,
+and SettingsCard owns its content inset and native radio focus overhang. SettingsCard
+derives radio geometry and owns reusable card rendering. SettingsNavigation names
+subtitle category, control and page indices. SettingsContent owns controls, focus
+and the two-page subtitle editor. Local burn-in is an account setting,
+while mode/language retain SettingsDialog-owned Jellyfin writes. SettingsStore
+ignores the legacy device burn-in value and deletes that obsolete key during
+normal settings saving. Accounts without a saved value use During transcoding;
+startup and settings loading perform no migration or registry cleanup.
+
+Subtitle navigation uses two fixed pages (Jellyfin preferences, then local
+burn-in) with a non-focusable chevron/page indicator and a short fade. This
+keeps SettingsContent responsible for paging.

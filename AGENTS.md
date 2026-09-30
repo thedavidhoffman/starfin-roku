@@ -63,6 +63,9 @@
 
 ## Repeated fixes and workflow design
 
+- Give each function one coherent responsibility, and name it for that responsibility. Separate distinct operations—such as loading editor data versus saving account changes—when combining them obscures their behavior or failure handling.
+- Apply this proportionally. A function may contain substantial logic, branching, validation, and multiple steps needed to complete one task. Length, multiple API calls, or several side effects alone do not justify splitting it.
+- Extract helpers when they clarify a meaningful operation, isolate reused logic, or make orchestration easier to follow. Avoid trivial wrappers, one-use objects for fixed values, and fragmentation that forces readers to jump between functions to understand a straightforward operation.
 - For bugs spanning handlers, asynchronous responses, persistence, focus or navigation, or rendering, trace the complete workflow before changing code: identify the canonical state, its owner, every writer and reader, and the events that advance the workflow.
 - When an earlier fix for the same behavior fails or exposes another inconsistency, pause before adding another localized workaround and assess whether state ownership or transitions are fragmented.
 - Before a third attempted fix in the same workflow, explicitly map the event sequence, competing state, bypassed owners, and obsolete prior fixes; then decide whether a canonical commit path, reconciler, or state machine is warranted.

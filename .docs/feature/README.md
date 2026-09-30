@@ -6,6 +6,8 @@ individual Starfin features.
 
 ## Table of Contents
 
+- [Settings Cards](settings-cards.md)
+
 - [Account Badge](account-badge.md)
 - [Activity Logging](activity-logging.md)
 - [Audio Playback](audio-playback.md)
@@ -44,6 +46,7 @@ individual Starfin features.
 - [Video Media Information](video-media-information.md)
 - [Media Options](media-options.md)
 - [Automatic Subtitles](automatic-subtitles.md)
+- [Jellyfin Account Subtitle Settings](account-subtitle-settings.md)
 - [Video Playback Lifecycle](video-playback-lifecycle.md)
 - [Video Playback Options](video-playback-options.md)
 

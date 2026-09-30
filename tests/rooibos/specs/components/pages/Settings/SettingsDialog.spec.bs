@@ -1,8 +1,14 @@
+import "pkg:/source/Spinner.bs"
 namespace tests
 
     @SGNode("SettingsDialog")
     @suite("SettingsDialog component")
     class SettingsDialogTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.stubCall(Spinner.ShowBlocking, invalid)
+            m.stubCall(Spinner.HideBlocking, invalid)
+        end function
 
         @describe("dialog behavior")
 
@@ -27,7 +33,7 @@ namespace tests
             m.top.callFunc("openSettings")
 
             m.assertEqual(m.top.title, "Settings")
-            m.assertTrue(m.top.dialogWidth = 1560)
+            m.assertTrue(m.top.dialogWidth = 1680)
             m.assertTrue(m.top.dialogHeight = 900)
             m.assertEqual(m.top.contentComponentName, "SettingsContent")
         end function
@@ -92,6 +98,441 @@ namespace tests
             content.watchedIndicatorPreviewRequested = "high-contrast"
 
             m.assertEqual(m.top.watchedIndicatorPreviewRequested, "high-contrast")
+        end function
+
+        @describe("account subtitle lifecycle")
+
+        @it("selecting a new mode changes only the pending snapshot")
+        function _()
+            content = m.readyAccount()
+            'bs:disable-next-line 1001
+            m.stubCall(startAccountRequest, function(command)
+                getGlobalAa().subtitleSaveCommand = command
+            end function)
+            content.accountSubtitleAction = { kind: "mode", value: "Always" }
+            m.assertInvalid(getGlobalAa().subtitleSaveCommand)
+            m.assertEqual(m.node.accountState.pending.mode, "Always")
+            getGlobalAa().Delete("subtitleSaveCommand")
+        end function
+
+        @it("Back closes when no save is in flight")
+        function _()
+            content = m.readyAccount()
+            m.top.callFunc("closeDialog")
+            m.assertFalse(m.top.findNode("dialog").visible)
+        end function
+
+        @it("selecting a language changes only the pending snapshot")
+        function _()
+            content = m.readyAccount()
+            'bs:disable-next-line 1001
+            m.stubCall(startAccountRequest, function(command)
+                getGlobalAa().subtitleSaveCommand = command
+            end function)
+            content.accountSubtitleAction = { kind: "language", value: "fra" }
+            m.assertInvalid(getGlobalAa().subtitleSaveCommand)
+            m.assertEqual(m.node.accountState.pending.language, "fra")
+            getGlobalAa().Delete("subtitleSaveCommand")
+        end function
+
+        @it("selecting the saved language does not send a request")
+        function _()
+            content = m.readyAccount()
+            content.accountSubtitleAction = { kind: "language", value: "eng" }
+            m.assertInvalid(m.node.accountState.task)
+        end function
+
+        @it("selecting the saved mode does not send a request")
+        function _()
+            content = m.readyAccount()
+            content.accountSubtitleAction = { kind: "mode", value: "Smart" }
+            m.assertInvalid(m.node.accountState.task)
+            m.assertEqual(m.node.accountState.requestId, 0)
+        end function
+
+        @it("closing still commits changed local settings through the existing close flow")
+        function _()
+            content = m.readyAccount()
+            m.stubCall(SettingsStore.Save, function(accountKey, settings)
+                getGlobalAa().accountSubtitleLocalSave = settings
+            end function)
+            themeIndex = 1
+            expectedTheme = "black"
+            if content.callFunc("getSettingsValues")[SettingsStore.Key.Theme] = "black" then
+                themeIndex = 2
+                expectedTheme = "grey"
+            end if
+            content.findNode("themeOptions").itemSelected = themeIndex
+            m.top.callFunc("closeDialog")
+
+
+            m.assertTrue(m.top.settingsSaved)
+            m.assertEqual(getGlobalAa().accountSubtitleLocalSave[SettingsStore.Key.Theme], expectedTheme)
+            m.assertInvalid(m.node.accountState.task)
+            getGlobalAa().Delete("accountSubtitleLocalSave")
+        end function
+
+        @it("returning to the loaded category does not request it again")
+        function _()
+            content = m.readyAccount()
+            content.accountSubtitleAction = { kind: "load" }
+            m.assertEqual(m.node.accountState.requestId, 0)
+            m.assertEqual(content.accountSubtitleState.status, "ready")
+        end function
+
+        @it("teardown stops the account loading spinner")
+        function _()
+            content = m.readyAccount()
+            content.findNode("userCategoryList").itemSelected = 4
+            content.findNode("accountSubtitleLanguage").buttonSelected = true
+            content.findNode("accountSubtitleLanguages").itemSelected = 1
+            m.node.accountState.status = "loading"
+            'bs:disable-next-line 1140
+            publishAccountState()
+            m.assertTrue(content.findNode("accountSubtitleSpinner").visible)
+            m.top.callFunc("deactivateAccountSession")
+            m.assertFalse(content.findNode("accountSubtitleSpinner").visible)
+        end function
+
+        @it("ignores further choices while saving")
+        function _()
+            content = m.readyAccount()
+            requestId = m.node.accountState.requestId
+            m.node.accountState.status = "saving"
+            m.node.closeState.phase = "saving"
+            content.accountSubtitleAction = { kind: "mode", value: "Always" }
+            m.assertEqual(m.node.accountState.requestId, requestId)
+            m.assertEqual(m.node.accountState.pending.mode, "Smart")
+        end function
+
+        @it("blocks closure during saving")
+        function _()
+            content = m.readyAccount()
+            m.node.accountState.status = "saving"
+            m.node.closeState.phase = "saving"
+            m.top.callFunc("closeDialog")
+            m.assertTrue(m.top.findNode("dialog").visible)
+        end function
+
+        @it("retains pending values and requests confirmation after a save failure")
+        function _()
+            content = m.readyAccount()
+            m.node.accountState.pending.mode = "Always"
+            event = m.responseEvent({ ok: false, errorMessage: "Save rejected" })
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+            m.assertEqual(content.accountSubtitleState.pending.mode, "Always")
+            m.assertEqual(content.accountSubtitleState.status, "ready")
+            m.assertEqual(m.top.subtitleSaveFailureRequested.kind, "open")
+            m.assertEqual(m.node.closeState.phase, "awaitingDecision")
+        end function
+
+        @it("closes the editor after a successful save")
+        function _()
+            content = m.readyAccount()
+            event = m.responseEvent({ ok: true, configuration: { SubtitleMode: "Always", SubtitleLanguagePreference: "eng" } })
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+            m.assertEqual(m.node.accountState.pending.mode, "Always")
+            m.assertFalse(m.top.findNode("dialog").visible)
+        end function
+
+        @it("successful closing save refreshes the committed snapshot")
+        function _()
+            content = m.readyAccount()
+            event = m.responseEvent({ ok: true, configuration: { SubtitleMode: "Always", SubtitleLanguagePreference: "fra" } })
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+            m.assertEqual(m.node.accountState.original, { mode: "Always", language: "fra" })
+            m.assertFalse(m.top.findNode("dialog").visible)
+        end function
+
+        @it("ignores a response with a stale request identity")
+        function _()
+            content = m.readyAccount()
+            event = m.responseEvent({ ok: true, configuration: { SubtitleMode: "Always" } })
+            event.data.requestId = -1
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+            m.assertEqual(m.node.accountState.pending.mode, "Smart")
+        end function
+
+        @it("ignores a response after teardown")
+        function _()
+            content = m.readyAccount()
+            event = m.responseEvent({ ok: true, configuration: { SubtitleMode: "Always" } })
+            m.top.callFunc("deactivateAccountSession")
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+            m.assertEqual(m.node.accountState.pending.mode, "Smart")
+        end function
+
+        @it("drops old account edits when the session changes")
+        function _()
+            content = m.readyAccount()
+            m.node.accountState.pending.mode = "Always"
+            m.top.userId = "another-user"
+            m.assertInvalid(m.node.accountState.pending)
+            m.assertEqual(content.accountSubtitleState.status, "idle")
+        end function
+
+        @it("Back starts exactly one save for changed preferences")
+        function _()
+            content = m.readyAccount()
+            'bs:disable-next-line 1001
+            m.stubCall(startAccountRequest, function(command)
+                getGlobalAa().closingSaveCommand = command
+            end function)
+            content.accountSubtitleAction = { kind: "mode", value: "Always" }
+
+            m.top.callFunc("closeDialog")
+            m.top.callFunc("closeDialog")
+
+            m.assertEqual(getGlobalAa().closingSaveCommand, "save")
+            m.assertEqual(m.node.closeState.phase, "saving")
+            m.assertTrue(m.top.findNode("dialog").visible)
+            getGlobalAa().Delete("closingSaveCommand")
+        end function
+
+        @it("reverting account edits closes without an API save")
+        function _()
+            content = m.readyAccount()
+            content.accountSubtitleAction = { kind: "mode", value: "Always" }
+            content.accountSubtitleAction = { kind: "mode", value: "Smart" }
+
+            m.top.callFunc("closeDialog")
+
+            m.assertInvalid(m.node.accountState.task)
+            m.assertFalse(m.top.findNode("dialog").visible)
+        end function
+
+        @it("Keep editing retains changes and restores the captured control")
+        function _()
+            content = m.failedClose()
+            target = content.findNode("userCategoryList")
+            target.setFocus(true)
+            content.callFunc("captureEditorFocus")
+            m.top.setFocus(true)
+
+            m.top.callFunc("resolveSubtitleSaveFailure", { requestId: m.node.closeState.requestId, decision: "keepEditing" })
+
+            m.assertTrue(target.isInFocusChain())
+            m.assertEqual(m.node.accountState.pending.mode, "Always")
+            m.assertEqual(m.node.closeState.phase, "open")
+            m.assertTrue(m.top.findNode("dialog").visible)
+        end function
+
+        @it("Discard closes and still saves local changes")
+        function _()
+            content = m.failedClose()
+            m.stubCall(SettingsStore.Save, invalid)
+            m.node.originalSettings = {}
+            m.node.originalSettings[SettingsStore.Key.Theme] = "unknown"
+            content.findNode("themeOptions").itemSelected = 1
+
+            m.top.callFunc("resolveSubtitleSaveFailure", { requestId: m.node.closeState.requestId, decision: "discard" })
+
+            m.assertFalse(m.top.findNode("dialog").visible)
+            m.assertTrue(m.top.settingsSaved)
+            m.assertInvalid(m.node.accountState.task)
+        end function
+
+        @it("Retry starts a new save without losing pending edits")
+        function _()
+            content = m.failedClose()
+            'bs:disable-next-line 1001
+            m.stubCall(startAccountRequest, function(command)
+                getGlobalAa().retrySaveCommand = command
+            end function)
+
+            m.top.callFunc("resolveSubtitleSaveFailure", { requestId: m.node.closeState.requestId, decision: "retry" })
+
+            m.assertEqual(getGlobalAa().retrySaveCommand, "save")
+            m.assertEqual(m.node.accountState.pending.mode, "Always")
+            m.assertEqual(m.node.closeState.phase, "saving")
+            getGlobalAa().Delete("retrySaveCommand")
+        end function
+
+        @it("rejects an obsolete confirmation result")
+        function _()
+            content = m.failedClose()
+            m.top.callFunc("resolveSubtitleSaveFailure", { requestId: m.node.closeState.requestId - 1, decision: "discard" })
+            m.assertTrue(m.top.findNode("dialog").visible)
+            m.assertEqual(m.node.closeState.phase, "awaitingDecision")
+        end function
+
+        @it("context changes dismiss the active failure confirmation")
+        function _()
+            content = m.failedClose()
+            m.top.userId = "replacement"
+            m.assertEqual(m.top.subtitleSaveFailureRequested.kind, "dismiss")
+            m.assertInvalid(m.node.accountState.pending)
+        end function
+
+        function failedClose() as object
+            content = m.readyAccount()
+            m.node.accountState.pending.mode = "Always"
+            event = m.responseEvent({ ok: false, errorMessage: "Save rejected" })
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+            return content
+        end function
+
+        @it("Back cancels initial loading and saves local edits")
+        function _()
+            content = m.readyAccount()
+            m.stubCall(SettingsStore.Save, invalid)
+            m.node.originalSettings = {}
+            m.node.accountState.original = invalid
+            m.node.accountState.pending = invalid
+            m.node.accountState.status = "loading"
+            task = CreateObject("roSGNode", "AccountSubtitleTask")
+            m.node.accountState.task = task
+
+            m.top.callFunc("closeDialog")
+
+            m.assertEqual(task.control, "stop")
+            m.assertInvalid(m.node.accountState.task)
+            m.assertTrue(m.top.settingsSaved)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("category changes retain pending account edits")
+        function _()
+            content = m.readyAccount()
+            content.accountSubtitleAction = { kind: "language", value: "fra" }
+            content.findNode("userCategoryList").itemSelected = 2
+            content.findNode("userCategoryList").itemSelected = 4
+
+            m.assertEqual(m.node.accountState.pending.language, "fra")
+            m.assertInvalid(m.node.accountState.task)
+        end function
+
+        @it("retains an unknown loaded language so an edit can be reversed without saving")
+        function _()
+            content = m.readyAccount()
+            'bs:disable-next-line 1140
+            onAccountLoadCompleted({ ok: true, configuration: { SubtitleMode: "Smart", SubtitleLanguagePreference: "custom-code" }, cultures: [] })
+            options = content.findNode("accountSubtitleLanguages").content
+
+            content.accountSubtitleAction = { kind: "language", value: "" }
+
+            m.assertEqual(content.accountSubtitleLanguageOptions[1].value, "custom-code")
+            m.assertTrue(content.findNode("accountSubtitleLanguages").content.isSameNode(options))
+            content.accountSubtitleAction = { kind: "language", value: "custom-code" }
+            m.top.callFunc("closeDialog")
+
+            m.assertInvalid(m.node.accountState.task)
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("Keep editing refreshes the description for the restored highlighted mode")
+        function _()
+            content = m.readyAccount()
+            content.findNode("userCategoryList").itemSelected = 4
+            modes = content.findNode("accountSubtitleModes")
+            content.findNode("accountSubtitleLanguage").buttonSelected = true
+            content.findNode("accountSubtitleLanguages").itemSelected = 1
+            content.accountSubtitleAction = { kind: "mode", value: "Always" }
+            modes.setFocus(true)
+            modes.jumpToItem = 4
+            content.callFunc("captureEditorFocus")
+            content.findNode("accountSubtitleLanguage").setFocus(true)
+
+            event = m.responseEvent({ ok: false, errorMessage: "Save rejected" })
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+            m.assertEqual(content.findNode("accountSubtitleModeCard").description, AccountSubtitles.Modes()[3].description)
+
+            m.top.callFunc("resolveSubtitleSaveFailure", { requestId: m.node.closeState.requestId, decision: "keepEditing" })
+
+            m.assertTrue(modes.isInFocusChain())
+            m.assertEqual(modes.itemFocused, 4)
+            m.assertEqual(content.findNode("accountSubtitleModeCard").description, AccountSubtitles.Modes()[4].description)
+        end function
+
+        @it("releases the blocker once when a successful save closes Settings")
+        function _()
+            m.readyAccount()
+            getGlobalAa().subtitleBlockerReleaseCount = 0
+            m.stubCall(Spinner.HideBlocking, sub()
+                getGlobalAa().subtitleBlockerReleaseCount++
+            end sub)
+            event = m.responseEvent({ ok: true, configuration: { SubtitleMode: "Always", SubtitleLanguagePreference: "eng" } })
+
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+
+            m.assertEqual(getGlobalAa().subtitleBlockerReleaseCount, 1)
+            m.assertTrue(m.top.closeRequested)
+            getGlobalAa().Delete("subtitleBlockerReleaseCount")
+        end function
+
+        @it("releases the blocker once when a failed save requests confirmation")
+        function _()
+            m.readyAccount()
+            getGlobalAa().subtitleBlockerReleaseCount = 0
+            m.stubCall(Spinner.HideBlocking, sub()
+                getGlobalAa().subtitleBlockerReleaseCount++
+            end sub)
+            event = m.responseEvent({ ok: false, errorMessage: "Save rejected" })
+
+            'bs:disable-next-line 1140
+            onAccountResponse(event)
+
+            m.assertEqual(getGlobalAa().subtitleBlockerReleaseCount, 1)
+            m.assertEqual(m.top.subtitleSaveFailureRequested.kind, "open")
+            m.assertTrue(m.top.findNode("dialog").visible)
+            getGlobalAa().Delete("subtitleBlockerReleaseCount")
+        end function
+
+        @it("does not reset the editor again after session deactivation")
+        function _()
+            content = m.readyAccount()
+            m.top.callFunc("deactivateAccountSession")
+            getGlobalAa().subtitleContentReads = 0
+            'bs:disable-next-line 1001
+            m.stubCall(getSettingsContent, function()
+                getGlobalAa().subtitleContentReads++
+                return invalid
+            end function)
+
+            m.top.callFunc("deactivateAccountSession")
+
+            m.assertEqual(getGlobalAa().subtitleContentReads, 0)
+            m.assertFalse(m.node.accountState.active)
+            getGlobalAa().Delete("subtitleContentReads")
+        end function
+
+        function readyAccount() as object
+            m.top.callFunc("deactivateAccountSession")
+            content = m.top.callFunc("getContentComponent")
+            if content <> invalid then content.findNode("userCategoryList").itemSelected = 0
+            m.top.userId = "test-user"
+            m.top.accountKey = "rooibos-settings-dialog-read-only"
+            m.top.callFunc("openSettings")
+            'bs:disable-next-line 1140
+            onAccountLoadCompleted({ ok: true, configuration: { SubtitleMode: "Smart", SubtitleLanguagePreference: "eng" }, cultures: [{ Name: "en", DisplayName: "English", ThreeLetterISOLanguageName: "eng" }] })
+            return m.top.callFunc("getContentComponent")
+        end function
+
+        function responseEvent(data as object) as object
+            task = CreateObject("roSGNode", "AccountSubtitleTask")
+            m.node.accountState.task = task
+            m.node.accountState.status = "saving"
+            m.node.closeState.phase = "saving"
+            data.requestId = m.node.accountState.requestId
+            data.userId = m.top.userId
+            data.server = m.top.server
+            return {
+                node: task, data: data
+                getRoSGNode: function()
+                    return m.node
+                end function
+                getData: function()
+                    return m.data
+                end function
+            }
         end function
 
     end class

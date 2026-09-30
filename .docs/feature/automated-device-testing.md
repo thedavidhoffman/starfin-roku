@@ -166,7 +166,13 @@ specs restore movie and TV layouts to `poster;6` before later suites run.
 Separate automation specs cover every selectable value in Media Shell, Playback,
 TV, Screensaver, General, Video, and Subtitles. They operate the production
 controls and dialog save lifecycle, then read only the affected account-scoped or
-global registry key. A separate account-badge display spec verifies that closing
+global registry key. The Jellyfin account-subtitle spec uses the real System-menu
+route and verifies mode/language updates against `/Users/Me`, preservation of
+unrelated configuration, saving pending choices only on Settings close, picker cancellation,
+and Back closing without confirmation. Burn-in persistence is account-scoped.
+Its teardown restores and verifies the account's original subtitle preferences;
+tokens and account configuration are not included in screenshot reports.
+A separate account-badge display spec verifies that closing
 Settings updates the authenticated header for both On and Off. General includes
 the real TMDB API-key keyboard flow using a
 synthetic value. Opening Roku's keyboard can display an OS-owned mobile-keyboard

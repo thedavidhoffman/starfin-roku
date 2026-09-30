@@ -1,0 +1,97 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
+
+namespace AccountSubtitles
+
+    enum Mode
+        Default = "Default"
+        Smart = "Smart"
+        OnlyForced = "OnlyForced"
+        Always = "Always"
+        None = "None"
+    end enum
+
+    enum Command
+        Load = "load"
+        Save = "save"
+    end enum
+
+    enum Action
+        Load = "load"
+        Retry = "retry"
+        Mode = "mode"
+        Language = "language"
+    end enum
+
+    enum Status
+        Idle = "idle"
+        Loading = "loading"
+        Ready = "ready"
+        Saving = "saving"
+        Failed = "failed"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' AccountSubtitles.Modes
+    '---------------------------------------------------------------------------
+    function Modes() as object
+        return [
+            { value: Mode.Default, title: "Default", description: "Use Jellyfin's defaults and your preferred subtitle language." }
+            { value: Mode.Smart, title: "Smart", description: "Use preferred subtitles when audio is in another language." }
+            { value: Mode.OnlyForced, title: "Only forced", description: "Automatically select only eligible subtitles marked as forced." }
+            { value: Mode.Always, title: "Always", description: "Use subtitles in your preferred language regardless of the audio language." }
+            { value: Mode.None, title: "None", description: "Do not select subtitles automatically. You can still choose a track during playback." }
+        ]
+    end function
+
+    '---------------------------------------------------------------------------
+    ' AccountSubtitles.Snapshot
+    '---------------------------------------------------------------------------
+    function Snapshot(configuration as object) as object
+        return { mode: Format.SafeString(configuration.SubtitleMode, ""), language: Format.SafeString(configuration.SubtitleLanguagePreference, "") }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' AccountSubtitles.Changes
+    '---------------------------------------------------------------------------
+    function Changes(original as object, pending as object) as object
+        updates = {}
+        if pending.mode <> original.mode then updates.AddReplace("SubtitleMode", pending.mode)
+        if pending.language <> original.language then updates.AddReplace("SubtitleLanguagePreference", pending.language)
+        return updates
+    end function
+
+    '---------------------------------------------------------------------------
+    ' AccountSubtitles.IsMode
+    '---------------------------------------------------------------------------
+    function IsMode(value as string) as boolean
+        for each option in Modes()
+            if option.value = value then return true
+        end for
+        return false
+    end function
+
+    '---------------------------------------------------------------------------
+    ' AccountSubtitles.Languages
+    '---------------------------------------------------------------------------
+    function Languages(cultures as object, current as string) as object
+        entries = []
+        seen = {}
+        seen[""] = true
+        for each culture in cultures
+            code = Format.SafeString(culture.ThreeLetterISOLanguageName, "")
+            name = Format.SafeString(culture.Name, "")
+            if Instr(1, name, "-") > 0 then code = name
+            if code <> "" and not seen.DoesExist(code) then
+                title = Format.SafeString(culture.DisplayName, code)
+                entries.Push({ value: code, title: title, sortTitle: LCase(title) })
+                seen[code] = true
+            end if
+        end for
+        if current <> "" and not seen.DoesExist(current) then entries.Push({ value: current, title: current + " (current)", sortTitle: LCase(current) })
+        entries.SortBy("sortTitle")
+        entries.Unshift({ value: "", title: "Any language" })
+        return entries
+    end function
+
+end namespace

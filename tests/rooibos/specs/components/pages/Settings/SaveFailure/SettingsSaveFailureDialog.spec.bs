@@ -1,0 +1,58 @@
+namespace tests
+
+    @SGNode("SettingsSaveFailureDialog")
+    @suite("SettingsSaveFailureDialog component")
+    class SettingsSaveFailureDialogTests extends rooibos.BaseTestSuite
+
+        @describe("failure presentation")
+
+        @it("opens with the server error and Keep editing focused")
+        function _()
+            m.top.message = "Server rejected the update"
+            m.top.callFunc("openFailure")
+            content = m.top.callFunc("getContentComponent")
+
+            m.assertEqual(content.message, "Server rejected the update")
+            m.assertTrue(content.findNode("keepEditing").isInFocusChain())
+            m.assertTrue(m.top.findNode("dialog").visible)
+        end function
+
+        @it("returns Retry before requesting closure")
+        function _()
+            m.top.callFunc("openFailure")
+            content = m.top.callFunc("getContentComponent")
+            content.decision = "retry"
+
+            m.assertEqual(m.top.decision, "retry")
+            m.assertTrue(m.top.closeRequested)
+            m.assertFalse(m.top.findNode("dialog").visible)
+        end function
+
+        @it("focusContent enters Keep editing without reopening the dialog")
+        function _()
+            m.top.message = "Save rejected"
+            m.top.callFunc("openFailure")
+            m.top.closeRequested = false
+            content = m.top.callFunc("getContentComponent")
+            content.findNode("retry").setFocus(true)
+
+            m.assertTrue(m.top.callFunc("focusContent"))
+
+            m.assertTrue(content.findNode("keepEditing").hasFocus())
+            m.assertEqual(content.message, "Save rejected")
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Back defaults to Keep editing")
+        function _()
+            m.top.callFunc("openFailure")
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertEqual(m.top.decision, "keepEditing")
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+    end class
+
+end namespace

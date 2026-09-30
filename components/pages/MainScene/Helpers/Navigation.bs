@@ -45,8 +45,13 @@ sub navHandleHeaderOverlayRequested()
     if request = invalid then return
 
     if request.id = "settings" then
-        if m.session <> invalid then request.accountKey = Format.SafeString(m.session.accountKey, "")
-        request.eventFields = ["themePreviewRequested", "watchedIndicatorPreviewRequested"]
+        if m.session <> invalid then
+            request.accountKey = Format.SafeString(m.session.accountKey, "")
+            request.server = m.session.server
+            request.token = m.session.token
+            request.userId = m.session.userId
+        end if
+        request.eventFields = ["themePreviewRequested", "watchedIndicatorPreviewRequested", "subtitleSaveFailureRequested"]
     end if
 
     m.overlayHost.callFunc("openOverlay", request)
@@ -119,6 +124,7 @@ sub navHandleOverlayClosed()
     end if
 
     if request <> invalid and request.id = "settings" then
+        clearSettingsConfirmation()
         if closed.overlay <> invalid and closed.overlay.resetStarfinConfirmed = true then
             authHandleResetStarfinConfirmed()
             return
@@ -150,6 +156,11 @@ end sub
 sub navHandleOverlayEventRaised()
     raised = m.overlayHost.eventRaised
     if raised = invalid or raised.request = invalid then return
+
+    if raised.request.id = "settings" and raised.field = "subtitleSaveFailureRequested" then
+        routeSettingsSaveFailure(raised.value)
+        return
+    end if
 
     if raised.request.id = "settings" and raised.field = "watchedIndicatorPreviewRequested" then
         if m.login.visible then return

@@ -1,0 +1,75 @@
+namespace tests
+
+    @suite("Account subtitle preferences")
+    class AccountSubtitlesTests extends rooibos.BaseTestSuite
+
+        @describe("server contracts")
+
+        @it("preserves the five Jellyfin mode values")
+        function _()
+            values = []
+            for each option in AccountSubtitles.Modes()
+                values.Push(option.value)
+            end for
+            m.assertEqual(values, ["Default", "Smart", "OnlyForced", "Always", "None"])
+        end function
+
+        @it("does not replace an unknown server mode")
+        function _()
+            snapshot = AccountSubtitles.Snapshot({ SubtitleMode: "FutureMode", SubtitleLanguagePreference: "eng" })
+            m.assertEqual(snapshot.mode, "FutureMode")
+            m.assertEqual(AccountSubtitles.Changes(snapshot, snapshot).Count(), 0)
+        end function
+
+        @it("changes only the edited field")
+        function _()
+            changes = AccountSubtitles.Changes({ mode: "Smart", language: "eng" }, { mode: "Always", language: "eng" })
+            m.assertEqual(changes.Count(), 1)
+            m.assertEqual(changes.SubtitleMode, "Always")
+        end function
+
+        @it("clears dirty state when an edit is reversed")
+        function _()
+            original = { mode: "Smart", language: "eng" }
+            pending = { mode: "Always", language: "eng" }
+            pending.mode = "Smart"
+            m.assertEqual(AccountSubtitles.Changes(original, pending).Count(), 0)
+        end function
+
+        @it("maps Any language to an empty preference")
+        function _()
+            changes = AccountSubtitles.Changes({ mode: "Smart", language: "eng" }, { mode: "Smart", language: "" })
+            m.assertEqual(changes.SubtitleLanguagePreference, "")
+        end function
+
+        @describe("language options")
+
+        @it("sorts and deduplicates languages after Any language")
+        function _()
+            options = AccountSubtitles.Languages([
+                { Name: "fr", DisplayName: "French", ThreeLetterISOLanguageName: "fra" }
+                { Name: "en", DisplayName: "English", ThreeLetterISOLanguageName: "eng" }
+                { Name: "en", DisplayName: "English duplicate", ThreeLetterISOLanguageName: "eng" }
+            ], "eng")
+            m.assertEqual(options.Count(), 3)
+            m.assertEqual(options[0].value, "")
+            m.assertEqual(options[1].title, "English")
+            m.assertEqual(options[2].value, "fra")
+        end function
+
+        @it("retains regional language identifiers")
+        function _()
+            options = AccountSubtitles.Languages([{ Name: "es-MX", DisplayName: "Spanish (Mexico)", ThreeLetterISOLanguageName: "spa" }], "es-MX")
+            m.assertEqual(options[1].value, "es-MX")
+        end function
+
+        @it("retains current values absent from the server language list")
+        function _()
+            options = AccountSubtitles.Languages([], "custom-code")
+            m.assertEqual(options[1].value, "custom-code")
+            m.assertEqual(options[1].title, "custom-code (current)")
+        end function
+
+    end class
+
+end namespace

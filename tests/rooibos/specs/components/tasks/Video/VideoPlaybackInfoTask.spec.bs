@@ -4,6 +4,38 @@ namespace tests
     @suite("VideoPlaybackInfoTask component")
     class VideoPlaybackInfoTaskTests extends rooibos.BaseTestSuite
 
+        @describe("playback logging")
+
+        @it("logs a transcode reason without stream metadata")
+        function _()
+            originalLog = m.node.log
+            capture = { message: "", write: sub(message)
+                m.message = message
+            end sub }
+            m.node.log = capture
+
+            'bs:disable-next-line 1140
+            logForcedTranscodeReason(invalid)
+            m.node.log = originalLog
+
+            m.assertEqual(capture.message, "Forcing audio transcode; stream metadata unavailable.")
+        end function
+
+        @it("logs explicit audio selection without stream metadata")
+        function _()
+            originalLog = m.node.log
+            capture = { message: "", write: sub(message)
+                m.message = message
+            end sub }
+            m.node.log = capture
+
+            'bs:disable-next-line 1140
+            logForcedStreamSelection(invalid)
+            m.node.log = originalLog
+
+            m.assertEqual(capture.message, "Disabling direct play for explicit audio selection; stream metadata unavailable.")
+        end function
+
         @describe("request validation")
 
         @it("rejects a missing request")
@@ -454,7 +486,7 @@ namespace tests
                 source = {
                     Id: "source"
                     Container: "mp4"
-                    SupportsDirectPlay: true
+                    SupportsDirectPlay: capture.request.fixtureTranscodeOnly <> true
                     TranscodingUrl: "/discovery.m3u8"
                     DefaultSubtitleStreamIndex: capture.defaultIndex
                     DefaultAudioStreamIndex: capture.request.fixtureDefaultAudio
@@ -523,14 +555,27 @@ namespace tests
 
         @it("preserves explicit audio over the server default")
         function _()
+            item = { Id: "item", Type: "Movie", MediaStreams: [
+                { Type: "Audio", Index: 1, Codec: "aac", IsDefault: true }
+                { Type: "Audio", Index: 2, Codec: "aac" }
+            ] }
+            m.runSubtitleNegotiation({ fixtureDefaultAudio: 2, audioStreamIndex: 1, item: item }, 4)
+
+            m.assertTrue(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.audioStreamIndex, 1)
+        end function
+
+        @it("negotiates explicit audio when the initial request lacks stream metadata")
+        function _()
             m.runSubtitleNegotiation({ fixtureDefaultAudio: 2, audioStreamIndex: 1 }, 4)
 
+            m.assertTrue(m.node.top.response.ok)
             m.assertEqual(m.node.top.response.audioStreamIndex, 1)
         end function
 
         @it("publishes only the final negotiated URL session and subtitle metadata")
         function _()
-            m.runSubtitleNegotiation({ subtitleBurnInMode: "prefer-external" }, 4)
+            m.runSubtitleNegotiation({ subtitleBurnInMode: "prefer-external", fixtureTranscodeOnly: true }, 4)
             response = m.node.top.response
 
             m.assertTrue(response.ok)
@@ -583,7 +628,7 @@ namespace tests
 
         @it("closes an acquired live stream after unplayable final response")
         function _()
-            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live", fixtureNoFinalUrl: true }, 4)
+            m.runSubtitleNegotiation({ fixtureLiveStream: "opened-live", fixtureNoFinalUrl: true, fixtureTranscodeOnly: true }, 4)
             capture = getGlobalAa().subtitleNegotiation
 
             m.assertEqual(capture.calls.Count(), 2)

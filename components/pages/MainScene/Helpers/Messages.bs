@@ -48,7 +48,18 @@ sub dismissMessage(restoreFocus = false as boolean)
     m.messageOverlayHost.closed = invalid
     m.messageOverlayHost.visible = false
     if restoreFocus <> true then return
-    if isMessageReturnFocusAvailable(target) then
+    ' A save may finish or fail while the acknowledgment is open. Respect the
+    ' current modal layer before returning to the control captured at opening.
+    if m.confirmationOverlayHost.getChildCount() > 0 then
+        confirmation = m.confirmationOverlayHost.getChild(0)
+        if isMessageReturnFocusAvailable(target, confirmation) then
+            target.setFocus(true)
+        else
+            confirmation.callFunc("focusContent")
+        end if
+    else if m.loadingSpinner.blockInteraction then
+        m.loadingSpinner.setFocus(true)
+    else if isMessageReturnFocusAvailable(target) then
         target.setFocus(true)
     else if m.overlayHost.getChildCount() > 0 then
         m.overlayHost.getChild(0).callFunc("focusContent")
@@ -93,15 +104,17 @@ end function
 '-------------------------------------------------------------------------------
 ' isMessageReturnFocusAvailable
 '-------------------------------------------------------------------------------
-function isMessageReturnFocusAvailable(node as dynamic) as boolean
+function isMessageReturnFocusAvailable(node as dynamic, owner = invalid as dynamic) as boolean
     if node = invalid then return false
     scene = node.getScene()
     if scene = invalid then return false
     ' The captured control already accepted focus; existing buttons need not declare focusable.
+    belongsToOwner = owner = invalid
     ancestor = node
     while ancestor <> invalid
         if ancestor.visible = false then return false
-        if ancestor.isSameNode(m.top) then return true
+        if owner <> invalid and ancestor.isSameNode(owner) then belongsToOwner = true
+        if ancestor.isSameNode(m.top) then return belongsToOwner
         ancestor = ancestor.getParent()
     end while
     return false

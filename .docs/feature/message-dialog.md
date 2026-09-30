@@ -2,8 +2,12 @@
 
 AppMessage.Show(message) queues a nonblank acknowledgment message through MainScene.
 AppMessage.Dismiss() cancels deferred/visible messages without restoring outgoing
-page focus. User OK and Back share the dialog close path and restore a still-valid
-previous focus target, then fall back to the underlying overlay or active surface.
+page focus. User OK and Back share the dialog close path. On acknowledgment, an
+active Settings failure confirmation takes precedence, followed by a blocking
+spinner, then the previous focus target or underlying overlay/active surface.
+Within the same confirmation, the captured control is restored; a confirmation
+that appeared during the message defaults to Keep editing. Removed confirmations
+are never restored. Returning to a save blocker does not restart its visual timer.
 The originating page continues to own request errors and recovery; no new requests
 or persistence are introduced.
 

@@ -1,8 +1,13 @@
+import "pkg:/source/Spinner.bs"
 namespace tests
 
     @SGNode("Spinner")
     @suite("Spinner component")
     class SpinnerTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.control = "stop"
+        end function
 
         @describe("Spinner behavior")
 
@@ -102,6 +107,39 @@ namespace tests
             m.assertFalse(m.node.spinner.visible)
             m.assertEqual(m.node.showDelayTimer.duration.ToStr(), m.top.showDelay.ToStr())
             m.assertEqual(m.node.showDelayTimer.control, "start")
+        end function
+
+        @it("ShowBlocking defaults to immediate visuals")
+        function _()
+            m.stubCall(Spinner.__GetNode, m.top)
+            Spinner.ShowBlocking()
+            m.assertTrue(m.top.blockInteraction)
+            m.assertTrue(m.node.scrim.visible)
+            m.assertEqual(m.top.showDelay, 0.0)
+        end function
+
+        @it("ShowBlocking delays visuals but consumes input immediately")
+        function _()
+            m.stubCall(Spinner.__GetNode, m.top)
+            Spinner.ShowBlocking(2)
+            m.assertTrue(m.top.blockInteraction)
+            m.assertFalse(m.node.scrim.visible)
+            m.assertFalse(m.node.spinner.visible)
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("down", true))
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("OK", true))
+            m.assertEqual(m.node.showDelayTimer.control, "start")
+        end function
+
+        @it("HideBlocking cancels delayed visuals")
+        function _()
+            m.stubCall(Spinner.__GetNode, m.top)
+            Spinner.ShowBlocking(2)
+            Spinner.HideBlocking()
+            m.assertFalse(m.top.visible)
+            m.assertFalse(m.top.blockInteraction)
+            m.assertEqual(m.node.showDelayTimer.control, "stop")
         end function
 
     end class

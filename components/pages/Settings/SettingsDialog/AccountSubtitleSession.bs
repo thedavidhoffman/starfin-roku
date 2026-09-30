@@ -1,0 +1,188 @@
+import "pkg:/source/AccountSubtitles.bs"
+import "pkg:/source/AppMessage.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/TaskControl.bs"
+import "pkg:/source/Spinner.bs"
+import "pkg:/source/SettingsClose.bs"
+
+'-------------------------------------------------------------------------------
+' resetAccountState
+'-------------------------------------------------------------------------------
+sub resetAccountState()
+    deactivateAccountSession()
+    sequence = 0
+    if m.closeState <> invalid then sequence = m.closeState.requestId
+    m.closeState = { phase: SettingsClose.Phase.Open, requestId: sequence + 1 }
+    m.accountState = {
+        active: true, status: AccountSubtitles.Status.Idle, requestId: 0, task: invalid
+        original: invalid, pending: invalid
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountContextChanged
+'-------------------------------------------------------------------------------
+sub onAccountContextChanged()
+    if m.accountState = invalid then return
+    if m.accountState.active <> true then return
+    resetAccountState()
+    publishAccountState()
+    content = getSettingsContent()
+    if content <> invalid then content.callFunc("focusFirstField")
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivateAccountSession
+'-------------------------------------------------------------------------------
+sub deactivateAccountSession()
+    if m.accountState = invalid then return
+    if m.accountState.active <> true then return
+    m.accountState.active = false
+    if m.closeState.phase = SettingsClose.Phase.Saving then Spinner.HideBlocking()
+    if m.closeState.phase = SettingsClose.Phase.AwaitingDecision then m.top.subtitleSaveFailureRequested = { kind: SettingsClose.Request.Dismiss, requestId: m.closeState.requestId }
+    m.closeState.phase = SettingsClose.Phase.Closed
+    if m.accountState.task <> invalid then
+        m.accountState.task.unobserveFieldScoped("response")
+        m.accountState.task.control = TaskControl.Command.Stop
+        m.accountState.task = invalid
+    end if
+    content = getSettingsContent()
+    if content <> invalid then
+        content.accountSubtitleLanguageOptions = []
+        content.accountSubtitleState = { status: AccountSubtitles.Status.Idle, pending: invalid }
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' publishAccountState
+'-------------------------------------------------------------------------------
+sub publishAccountState()
+    content = getSettingsContent()
+    if content = invalid then return
+    content.accountSubtitleState = {
+        status: m.accountState.status, pending: m.accountState.pending
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountSubtitleAction
+'-------------------------------------------------------------------------------
+sub onAccountSubtitleAction()
+    if m.accountState.active <> true or m.closeState.phase <> SettingsClose.Phase.Open then return
+    content = getSettingsContent()
+    action = content.accountSubtitleAction
+    if action = invalid then return
+    if action.kind = AccountSubtitles.Action.Load then
+        if m.accountState.status = AccountSubtitles.Status.Idle then startAccountRequest(AccountSubtitles.Command.Load)
+    else if action.kind = AccountSubtitles.Action.Retry then
+        if m.accountState.status = AccountSubtitles.Status.Failed then startAccountRequest(AccountSubtitles.Command.Load)
+    else if action.kind = AccountSubtitles.Action.Mode then
+        if m.accountState.status <> AccountSubtitles.Status.Ready then return
+        if not AccountSubtitles.IsMode(action.value) then return
+        m.accountState.pending.mode = action.value
+        publishAccountState()
+    else if action.kind = AccountSubtitles.Action.Language then
+        if m.accountState.status <> AccountSubtitles.Status.Ready then return
+        m.accountState.pending.language = action.value
+        publishAccountState()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' startAccountRequest
+'-------------------------------------------------------------------------------
+sub startAccountRequest(command as string)
+    AppMessage.Dismiss()
+    if m.accountState.task <> invalid then m.accountState.task.unobserveFieldScoped("response")
+    m.accountState.requestId++
+    request = {
+        command: command, requestId: m.accountState.requestId
+        server: m.top.server, token: m.top.token, userId: m.top.userId
+    }
+    m.accountState.status = AccountSubtitles.Status.Loading
+    if command = AccountSubtitles.Command.Save then
+        request.changes = AccountSubtitles.Changes(m.accountState.original, m.accountState.pending)
+        m.accountState.status = AccountSubtitles.Status.Saving
+    end if
+    task = CreateObject("roSGNode", "AccountSubtitleTask")
+    m.accountState.task = task
+    task.observeFieldScoped("response", "onAccountResponse")
+    task.request = request
+    publishAccountState()
+    if command = AccountSubtitles.Command.Save then Spinner.ShowBlocking(2)
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountResponse
+'-------------------------------------------------------------------------------
+sub onAccountResponse(event as object)
+    if m.accountState.active <> true or m.accountState.task = invalid then return
+    if not event.getRoSGNode().isSameNode(m.accountState.task) then return
+    response = event.getData()
+    if response = invalid then return
+    if response.requestId <> m.accountState.requestId or response.server <> m.top.server or response.userId <> m.top.userId then return
+    wasSaving = m.accountState.status = AccountSubtitles.Status.Saving
+    m.accountState.task.unobserveFieldScoped("response")
+    m.accountState.task = invalid
+    if wasSaving then
+        onAccountSaveCompleted(response)
+    else
+        onAccountLoadCompleted(response)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountLoadCompleted
+'-------------------------------------------------------------------------------
+sub onAccountLoadCompleted(response as object)
+    if response.ok <> true then
+        m.accountState.status = AccountSubtitles.Status.Failed
+        publishAccountState()
+        AppMessage.Show(Format.SafeString(response.errorMessage, "Unable to load Jellyfin subtitle settings."))
+        return
+    end if
+    m.accountState.original = AccountSubtitles.Snapshot(response.configuration)
+    m.accountState.pending = AccountSubtitles.Snapshot(response.configuration)
+    content = getSettingsContent()
+    content.accountSubtitleLanguageOptions = AccountSubtitles.Languages(response.cultures, m.accountState.original.language)
+    m.accountState.status = AccountSubtitles.Status.Ready
+    publishAccountState()
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountSaveCompleted
+'-------------------------------------------------------------------------------
+sub onAccountSaveCompleted(response as object)
+    if response.ok <> true then
+        Spinner.HideBlocking()
+        m.accountState.status = AccountSubtitles.Status.Ready
+        m.closeState.phase = SettingsClose.Phase.AwaitingDecision
+        publishAccountState()
+        m.closeState.requestId++
+        message = Format.SafeString(response.errorMessage, "Unable to update Jellyfin subtitle settings.")
+        m.top.subtitleSaveFailureRequested = { kind: SettingsClose.Request.Open, requestId: m.closeState.requestId, message: message }
+        return
+    end if
+    m.accountState.original = AccountSubtitles.Snapshot(response.configuration)
+    m.accountState.pending = AccountSubtitles.Snapshot(response.configuration)
+    m.accountState.status = AccountSubtitles.Status.Ready
+    finishSettingsClose()
+end sub
+
+'-------------------------------------------------------------------------------
+' resolveSubtitleSaveFailure
+'-------------------------------------------------------------------------------
+sub resolveSubtitleSaveFailure(result as object)
+    if m.accountState.active <> true or m.closeState.phase <> SettingsClose.Phase.AwaitingDecision then return
+    if result.requestId <> m.closeState.requestId then return
+    if result.decision = SettingsClose.Decision.Retry then
+        m.closeState.phase = SettingsClose.Phase.Saving
+        startAccountRequest(AccountSubtitles.Command.Save)
+    else if result.decision = SettingsClose.Decision.Discard then
+        finishSettingsClose()
+    else if result.decision = SettingsClose.Decision.KeepEditing then
+        m.closeState.phase = SettingsClose.Phase.Open
+        getSettingsContent().callFunc("restoreEditorFocus")
+    end if
+end sub

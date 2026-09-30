@@ -1,0 +1,269 @@
+import "pkg:/source/AccountSubtitles.bs"
+import "pkg:/source/SpinnerControl.bs"
+import "pkg:/source/AnimationControl.bs"
+import "pkg:/source/SettingsNavigation.bs"
+
+'-------------------------------------------------------------------------------
+' initAccountSubtitleReferences
+'-------------------------------------------------------------------------------
+sub initAccountSubtitleReferences()
+    m.accountUi = {
+        modes: m.top.findNode("accountSubtitleModes"), modeCard: m.top.findNode("accountSubtitleModeCard")
+        currentLanguage: m.top.findNode("accountSubtitleCurrentLanguage")
+        language: m.top.findNode("accountSubtitleLanguage")
+        retry: m.top.findNode("accountSubtitleRetry"), languages: m.top.findNode("accountSubtitleLanguages")
+        picker: m.top.findNode("accountSubtitlePicker"), editor: m.top.findNode("accountSubtitleEditor")
+        fields: m.top.findNode("accountSubtitleFields"), failure: m.top.findNode("accountSubtitleFailure")
+        spinner: m.top.findNode("accountSubtitleSpinner"), state: invalid
+        pages: { localPage: m.top.findNode("subtitleLocalPage"), accountPage: m.top.findNode("subtitleAccountPage"), up: m.top.findNode("subtitlePageUp"), down: m.top.findNode("subtitlePageDown"), number: m.top.findNode("subtitlePageNumber"), fade: m.top.findNode("subtitlePageFade"), index: SettingsNavigation.SubtitlePage.Account }
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initAccountSubtitleHandlers
+'-------------------------------------------------------------------------------
+sub initAccountSubtitleHandlers()
+    m.accountUi.modes.observeField("itemSelected", "onAccountModeSelected")
+    m.accountUi.modes.observeField("itemFocused", "onAccountModeFocused")
+    m.accountUi.language.observeField("buttonSelected", "onAccountLanguageOpen")
+    m.accountUi.languages.observeField("itemSelected", "onAccountLanguageSelected")
+    m.accountUi.retry.observeField("buttonSelected", "onAccountRetry")
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountSubtitleState
+'-------------------------------------------------------------------------------
+sub onAccountSubtitleState()
+    state = m.top.accountSubtitleState
+    if state = invalid then return
+    ownedLoadingFocus = m.accountUi.spinner.hasFocus()
+    m.accountUi.state = state
+    updateSubtitleBusyIndicator()
+    m.accountUi.fields.visible = state.pending <> invalid
+    m.accountUi.failure.visible = state.status = AccountSubtitles.Status.Failed
+    updateAccountSelections()
+    if state.status = AccountSubtitles.Status.Idle then
+        m.focusState.returnFocus = invalid
+        m.accountUi.picker.visible = false
+        m.accountUi.editor.visible = true
+    end if
+    if ownedLoadingFocus and m.accountUi.pages.index = SettingsNavigation.SubtitlePage.Account and m.focusState.categoryIndex = SettingsNavigation.Category.Subtitles then
+        if state.status = AccountSubtitles.Status.Ready or state.status = AccountSubtitles.Status.Failed then focusAccountSubtitleControl(SettingsNavigation.SubtitleControl.Mode)
+    end if
+    updateAccountModeDescription()
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountLanguageOptionsChanged
+'-------------------------------------------------------------------------------
+sub onAccountLanguageOptionsChanged()
+    titles = []
+    for each language in m.top.accountSubtitleLanguageOptions
+        titles.Push(language.title)
+    end for
+    setOptionTitles(m.accountUi.languages, titles)
+    updateAccountSelections()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateAccountSelections
+'-------------------------------------------------------------------------------
+sub updateAccountSelections()
+    state = m.accountUi.state
+    if state = invalid or state.pending = invalid then return
+    checked = -1
+    modes = AccountSubtitles.Modes()
+    for i = 0 to modes.Count() - 1
+        if modes[i].value = state.pending.mode then checked = i
+    end for
+    m.accountUi.modes.checkedItem = checked
+    languages = m.top.accountSubtitleLanguageOptions
+    for i = 0 to languages.Count() - 1
+        if languages[i].value = state.pending.language then
+            m.accountUi.currentLanguage.text = languages[i].title
+            m.accountUi.languages.checkedItem = i
+            exit for
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' focusAccountSubtitleControl
+'-------------------------------------------------------------------------------
+function focusAccountSubtitleControl(index as integer) as boolean
+    state = m.accountUi.state
+    if state <> invalid and state.status = AccountSubtitles.Status.Saving then return false
+    if index < SettingsNavigation.SubtitleControl.Mode or index > SettingsNavigation.SubtitleControl.BurnIn then return false
+    controls = [m.accountUi.modes, m.accountUi.language, m.settingsControls.subtitleBurnInOptions]
+    if index <> SettingsNavigation.SubtitleControl.BurnIn then
+        if state = invalid then return false
+        if state.status = AccountSubtitles.Status.Failed then
+            if index <> SettingsNavigation.SubtitleControl.Mode then return false
+            controls[SettingsNavigation.SubtitleControl.Mode] = m.accountUi.retry
+        else if state.status <> AccountSubtitles.Status.Ready then
+            m.focusState.controlIndex = SettingsNavigation.SubtitleControl.Mode
+            showSubtitlePage(SettingsNavigation.SubtitlePage.Account)
+            m.accountUi.spinner.setFocus(true)
+            return true
+        end if
+    end if
+    m.focusState.controlIndex = index
+    for each button in [m.accountUi.language, m.accountUi.retry]
+        button.hasFocusVisual = button.isSameNode(controls[index])
+    end for
+    pageIndex = SettingsNavigation.SubtitlePage.Local
+    if index <> SettingsNavigation.SubtitleControl.BurnIn then pageIndex = SettingsNavigation.SubtitlePage.Account
+    if m.accountUi.pages.index <> pageIndex then
+        if index = SettingsNavigation.SubtitleControl.BurnIn then m.settingsControls.subtitleBurnInOptions.jumpToItem = 0
+        if index = SettingsNavigation.SubtitleControl.Mode and state.status = AccountSubtitles.Status.Ready then m.accountUi.modes.jumpToItem = 0
+    end if
+    showSubtitlePage(pageIndex)
+    controls[index].setFocus(true)
+    updateAccountModeDescription()
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' handleAccountSubtitleKey
+'-------------------------------------------------------------------------------
+function handleAccountSubtitleKey(key as string) as boolean
+    state = m.accountUi.state
+    if state = invalid then return false
+    if state.status = AccountSubtitles.Status.Saving then return true
+    if m.accountUi.picker.visible then
+        if key = Remote.Key.Back or key = Remote.Key.Left then closeAccountLanguagePicker()
+        return true
+    end if
+    if m.focusState.categoryIndex <> SettingsNavigation.Category.Subtitles then return false
+    if m.userCategoryList.isInFocusChain() or m.deviceCategoryList.isInFocusChain() then return false
+    if key = Remote.Key.Left then
+        for each button in [m.accountUi.language, m.accountUi.retry]
+            button.hasFocusVisual = false
+        end for
+        focusFirstField()
+        updateAccountModeDescription()
+        return true
+    end if
+    if key = Remote.Key.Down then
+        if m.accountUi.language.isInFocusChain() or m.accountUi.retry.isInFocusChain() or m.accountUi.spinner.hasFocus() then return focusAccountSubtitleControl(SettingsNavigation.SubtitleControl.BurnIn)
+        if m.accountUi.modes.isInFocusChain() and m.accountUi.modes.itemFocused = AccountSubtitles.Modes().Count() - 1 then return focusAccountSubtitleControl(SettingsNavigation.SubtitleControl.Language)
+        return true
+    end if
+    if key = Remote.Key.Up then
+        if m.accountUi.language.isInFocusChain() then return focusAccountSubtitleControl(SettingsNavigation.SubtitleControl.Mode)
+        if m.settingsControls.subtitleBurnInOptions.isInFocusChain() and m.settingsControls.subtitleBurnInOptions.itemFocused = 0 then
+            if state.status = AccountSubtitles.Status.Ready then return focusAccountSubtitleControl(SettingsNavigation.SubtitleControl.Language)
+            return focusAccountSubtitleControl(SettingsNavigation.SubtitleControl.Mode)
+        end if
+        return true
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' onAccountModeSelected
+'-------------------------------------------------------------------------------
+sub onAccountModeSelected()
+    index = m.accountUi.modes.itemSelected
+    if index >= 0 and index < AccountSubtitles.Modes().Count() then m.top.accountSubtitleAction = { kind: AccountSubtitles.Action.Mode, value: AccountSubtitles.Modes()[index].value }
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountModeFocused
+'-------------------------------------------------------------------------------
+sub onAccountModeFocused()
+    updateAccountModeDescription()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateAccountModeDescription
+'-------------------------------------------------------------------------------
+sub updateAccountModeDescription()
+    state = m.accountUi.state
+    if state = invalid or state.pending = invalid then return
+    index = m.accountUi.modes.checkedItem
+    if m.accountUi.modes.isInFocusChain() then index = m.accountUi.modes.itemFocused
+    modes = AccountSubtitles.Modes()
+    if index >= 0 and index < modes.Count() then
+        m.accountUi.modeCard.description = modes[index].description
+    else
+        m.accountUi.modeCard.description = "Current server mode: " + state.pending.mode + ". Choose a mode to change it."
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountLanguageOpen
+'-------------------------------------------------------------------------------
+sub onAccountLanguageOpen()
+    if m.accountUi.state = invalid then return
+    if m.accountUi.state.status <> AccountSubtitles.Status.Ready then return
+    m.accountUi.picker.visible = true
+    m.accountUi.editor.visible = false
+    m.accountUi.languages.jumpToItem = m.accountUi.languages.checkedItem
+    m.accountUi.languages.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' closeAccountLanguagePicker
+'-------------------------------------------------------------------------------
+sub closeAccountLanguagePicker()
+    m.accountUi.picker.visible = false
+    m.accountUi.editor.visible = true
+    focusAccountSubtitleControl(SettingsNavigation.SubtitleControl.Language)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAccountLanguageSelected
+'-------------------------------------------------------------------------------
+sub onAccountLanguageSelected()
+    index = m.accountUi.languages.itemSelected
+    if not m.accountUi.picker.visible or index < 0 then return
+    value = m.top.accountSubtitleLanguageOptions[index].value
+    closeAccountLanguagePicker()
+    m.top.accountSubtitleAction = { kind: AccountSubtitles.Action.Language, value: value }
+end sub
+
+
+'-------------------------------------------------------------------------------
+' onAccountRetry
+'-------------------------------------------------------------------------------
+sub onAccountRetry()
+    m.accountUi.retry.hasFocusVisual = false
+    m.focusState.controlIndex = SettingsNavigation.SubtitleControl.Mode
+    showSubtitlePage(SettingsNavigation.SubtitlePage.Account)
+    m.accountUi.spinner.control = SpinnerControl.Command.Start
+    m.accountUi.spinner.setFocus(true)
+    m.top.accountSubtitleAction = { kind: AccountSubtitles.Action.Retry }
+end sub
+
+'-------------------------------------------------------------------------------
+' showSubtitlePage
+'-------------------------------------------------------------------------------
+sub showSubtitlePage(index as integer)
+    pages = m.accountUi.pages
+    changed = pages.index <> index
+    pages.index = index
+    pages.localPage.visible = index = SettingsNavigation.SubtitlePage.Local
+    pages.accountPage.visible = index = SettingsNavigation.SubtitlePage.Account
+    pages.up.visible = index = SettingsNavigation.SubtitlePage.Local
+    pages.down.visible = index = SettingsNavigation.SubtitlePage.Account
+    pages.number.text = "1 / 2"
+    if index = SettingsNavigation.SubtitlePage.Local then pages.number.text = "2 / 2"
+    if changed then
+        pages.fade.control = AnimationControl.Command.Stop
+        pages.fade.control = AnimationControl.Command.Start
+    end if
+    updateSubtitleBusyIndicator()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSubtitleBusyIndicator
+'-------------------------------------------------------------------------------
+sub updateSubtitleBusyIndicator()
+    state = m.accountUi.state
+    command = SpinnerControl.Command.Stop
+    if state <> invalid and m.accountUi.pages.index = SettingsNavigation.SubtitlePage.Account then
+        if state.status = AccountSubtitles.Status.Loading then command = SpinnerControl.Command.Start
+    end if
+    if m.accountUi.spinner.control <> command then m.accountUi.spinner.control = command
+end sub

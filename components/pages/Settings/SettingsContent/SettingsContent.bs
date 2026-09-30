@@ -12,12 +12,15 @@ import "pkg:/source/String.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/VideoCardPresentation.bs"
+import "pkg:/source/SettingsNavigation.bs"
 
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
     initReferences()
+    initCardLayout(m.top)
+    initAccountSubtitleReferences()
     initCategoryList()
     initOptionContent()
     initHandlers()
@@ -26,25 +29,40 @@ sub init()
 end sub
 
 '-------------------------------------------------------------------------------
+' initCardLayout
+'-------------------------------------------------------------------------------
+sub initCardLayout(parent as object)
+    for each child in parent.getChildren(-1, 0)
+        if child.subtype() = "SettingsCard" then
+            child.cardWidth = 1160
+            ' Declarative content children are available after the parent initializes.
+            child.callFunc("updateCard")
+        else if child.subtype() = "Group" then
+            initCardLayout(child)
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
     m.deviceCategoryList = m.top.findNode("deviceCategoryList")
     m.userCategoryList = m.top.findNode("userCategoryList")
-    m.videoStreamingModeDescription = m.top.findNode("videoStreamingModeDescription")
-    m.nextItemPlaybackDescription = m.top.findNode("nextItemPlaybackDescription")
-    m.subtitleBurnInDescription = m.top.findNode("subtitleBurnInDescription")
+    m.videoStreamingModeCard = m.top.findNode("videoStreamingModeCard")
+    m.nextItemPlaybackCard = m.top.findNode("nextItemPlaybackCard")
+    m.subtitleBurnInCard = m.top.findNode("subtitleBurnInCard")
     m.categoryPanels = [
         m.top.findNode("libraryPanel")
         m.top.findNode("mediaShellPanel")
         m.top.findNode("themePanel")
         m.top.findNode("playbackPanel")
+        m.top.findNode("accountSubtitlesPanel")
         m.top.findNode("creditsPanel")
         m.top.findNode("tvPanel")
         m.top.findNode("screensaverPanel")
         m.top.findNode("systemPanel")
         m.top.findNode("videoPanel")
-        m.top.findNode("subtitlesPanel")
         m.top.findNode("advancedPanel")
     ]
     m.settingsControls = {
@@ -78,17 +96,17 @@ sub initReferences()
         [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
         [m.settingsControls.themeOptions, m.settingsControls.watchedIndicatorOptions]
         [m.settingsControls.nextItemPlaybackOptions]
+        []
         [m.settingsControls.nextEpisodePromptSecondsOptions]
         [m.settingsControls.tvEpisodeListDisplayOptions, m.settingsControls.showSeasonSummaryCardOptions, m.settingsControls.homeEpisodeImagesOptions]
         [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
         [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
         [m.settingsControls.videoStreamingModeOptions]
-        [m.settingsControls.subtitleBurnInOptions]
         [m.settingsControls.resetStarfinButton]
     ]
     m.categoryState = {
-        userTitles: ["Libraries", "Media shell", "Theme", "Playback", "Credits", "TV", "Screensaver"]
-        deviceTitles: ["General", "Video", "Subtitles", "Advanced"]
+        userTitles: ["Libraries", "Media shell", "Theme", "Playback", "Subtitles", "Credits", "TV", "Screensaver"]
+        deviceTitles: ["General", "Video", "Advanced"]
     }
     m.categoryState.userCount = m.categoryState.userTitles.Count()
     m.categoryState.deviceCount = m.categoryState.deviceTitles.Count()
@@ -99,6 +117,7 @@ sub initReferences()
         categoryIndex: 0
         controlIndex: 0
         activeKeyboardField: invalid
+        returnFocus: invalid
     }
     m.settingsState = {
         values: SettingsStore.Defaults()
@@ -109,6 +128,7 @@ end sub
 ' initHandlers
 '-------------------------------------------------------------------------------
 sub initHandlers()
+    initAccountSubtitleHandlers()
     m.deviceCategoryList.observeField("itemFocused", "onDeviceCategoryFocused")
     m.deviceCategoryList.observeField("itemSelected", "onDeviceCategorySelected")
     m.userCategoryList.observeField("itemFocused", "onUserCategoryFocused")
@@ -149,6 +169,11 @@ end sub
 ' initOptionContent
 '-------------------------------------------------------------------------------
 sub initOptionContent()
+    subtitleModeTitles = []
+    for each option in AccountSubtitles.Modes()
+        subtitleModeTitles.Push(option.title)
+    end for
+    setOptionTitles(m.accountUi.modes, subtitleModeTitles)
     setOptionTitles(m.settingsControls.displayAccountBadgeOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.showSeasonSummaryCardOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.homeEpisodeImagesOptions, ["Series artwork", "Episode thumbnail with logo", "Episode thumbnail without logo"])
@@ -221,6 +246,33 @@ sub focusFirstField()
 end sub
 
 '-------------------------------------------------------------------------------
+' captureEditorFocus
+'-------------------------------------------------------------------------------
+sub captureEditorFocus()
+    target = m.top
+    while target.focusedChild <> invalid
+        child = target.focusedChild
+        if child.isSameNode(target) then exit while
+        target = child
+    end while
+    m.focusState.returnFocus = target
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreEditorFocus
+'-------------------------------------------------------------------------------
+sub restoreEditorFocus()
+    target = m.focusState.returnFocus
+    m.focusState.returnFocus = invalid
+    if target <> invalid then
+        target.setFocus(true)
+    else
+        focusFirstField()
+    end if
+    updateAccountModeDescription()
+end sub
+
+'-------------------------------------------------------------------------------
 ' focusLastField
 '-------------------------------------------------------------------------------
 sub focusLastField()
@@ -287,6 +339,10 @@ sub showCategory(index as integer)
     for i = 0 to m.categoryPanels.Count() - 1
         m.categoryPanels[i].visible = (i = index)
     end for
+    if index = SettingsNavigation.Category.Subtitles then
+        showSubtitlePage(SettingsNavigation.SubtitlePage.Account)
+        m.top.accountSubtitleAction = { kind: AccountSubtitles.Action.Load }
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -294,8 +350,21 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
+    if handleAccountSubtitleKey(key) then return true
 
     if m.deviceCategoryList.isInFocusChain() or m.userCategoryList.isInFocusChain() then
+        if key = Remote.Key.Up and m.userCategoryList.isInFocusChain() and getListIndex(m.userCategoryList.itemFocused, m.categoryState.userCount) = 0 then
+            m.deviceCategoryList.jumpToItem = m.categoryState.deviceCount - 1
+            m.deviceCategoryList.setFocus(true)
+            showCategory(m.categoryState.deviceOffset + m.categoryState.deviceCount - 1)
+            return true
+        end if
+        if key = Remote.Key.Down and m.deviceCategoryList.isInFocusChain() and getListIndex(m.deviceCategoryList.itemFocused, m.categoryState.deviceCount) = m.categoryState.deviceCount - 1 then
+            m.userCategoryList.jumpToItem = 0
+            m.userCategoryList.setFocus(true)
+            showCategory(0)
+            return true
+        end if
         if key = Remote.Key.Down and m.userCategoryList.isInFocusChain() and getListIndex(m.userCategoryList.itemFocused, m.categoryState.userCount) = m.categoryState.lastUserIndex then
             m.deviceCategoryList.jumpToItem = 0
             m.deviceCategoryList.setFocus(true)
@@ -385,6 +454,7 @@ end sub
 ' focusCategoryControl
 '-------------------------------------------------------------------------------
 function focusCategoryControl(index as integer, itemIndex as dynamic) as boolean
+    if m.focusState.categoryIndex = SettingsNavigation.Category.Subtitles then return focusAccountSubtitleControl(index)
     controls = m.categoryControls[m.focusState.categoryIndex]
     if index < 0 or index >= controls.Count() then return false
 
@@ -455,7 +525,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onNextItemPlaybackFocused()
     index = getListIndex(m.settingsControls.nextItemPlaybackOptions.itemFocused, 2)
-    m.nextItemPlaybackDescription.text = getNextItemPlaybackDescription(index)
+    m.nextItemPlaybackCard.description = getNextItemPlaybackDescription(index)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -466,7 +536,7 @@ sub setNextItemPlaybackOption(value as dynamic)
     if value = NextItemPlayback.Mode.PlayNextImmediately then selectedIndex = 1
     m.settingsControls.nextItemPlaybackOptions.checkedItem = selectedIndex
     m.settingsControls.nextItemPlaybackOptions.jumpToItem = selectedIndex
-    m.nextItemPlaybackDescription.text = getNextItemPlaybackDescription(selectedIndex)
+    m.nextItemPlaybackCard.description = getNextItemPlaybackDescription(selectedIndex)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -578,7 +648,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onVideoStreamingModeFocused()
     index = getListIndex(m.settingsControls.videoStreamingModeOptions.itemFocused, 4)
-    m.videoStreamingModeDescription.text = getVideoStreamingModeDescription(index)
+    m.videoStreamingModeCard.description = getVideoStreamingModeDescription(index)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -596,7 +666,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub onSubtitleBurnInFocused()
     index = getListIndex(m.settingsControls.subtitleBurnInOptions.itemFocused, 3)
-    m.subtitleBurnInDescription.text = getSubtitleBurnInDescription(index)
+    m.subtitleBurnInCard.description = getSubtitleBurnInDescription(index)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -651,7 +721,7 @@ sub setVideoStreamingModeOption(value as dynamic)
     end if
     m.settingsControls.videoStreamingModeOptions.checkedItem = selectedIndex
     m.settingsControls.videoStreamingModeOptions.jumpToItem = selectedIndex
-    m.videoStreamingModeDescription.text = getVideoStreamingModeDescription(selectedIndex)
+    m.videoStreamingModeCard.description = getVideoStreamingModeDescription(selectedIndex)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -683,7 +753,7 @@ sub setSubtitleBurnInOption(value as dynamic)
     if value = SubtitleBurnIn.Mode.Always then selectedIndex = 2
     m.settingsControls.subtitleBurnInOptions.checkedItem = selectedIndex
     m.settingsControls.subtitleBurnInOptions.jumpToItem = selectedIndex
-    m.subtitleBurnInDescription.text = getSubtitleBurnInDescription(selectedIndex)
+    m.subtitleBurnInCard.description = getSubtitleBurnInDescription(selectedIndex)
 end sub
 
 '-------------------------------------------------------------------------------

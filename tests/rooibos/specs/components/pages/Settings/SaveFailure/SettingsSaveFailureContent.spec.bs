@@ -1,0 +1,61 @@
+namespace tests
+
+    @SGNode("SettingsSaveFailureContent")
+    @suite("SettingsSaveFailureContent component")
+    class SettingsSaveFailureContentTests extends rooibos.BaseTestSuite
+
+        @describe("failure decisions")
+
+        @it("initially focuses Keep editing")
+        function _()
+            m.top.callFunc("focusKeepEditing")
+            m.assertTrue(m.top.findNode("keepEditing").hasFocusVisual)
+            m.assertTrue(m.top.findNode("keepEditing").isInFocusChain())
+        end function
+
+        @it("Back chooses Keep editing")
+        function _()
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+            m.assertEqual(m.top.decision, "keepEditing")
+        end function
+
+        @it("Retry publishes its exact decision")
+        function _()
+            m.top.findNode("retry").buttonSelected = true
+            m.assertEqual(m.top.decision, "retry")
+        end function
+
+        @it("Discard publishes its exact decision")
+        function _()
+            m.top.findNode("discard").buttonSelected = true
+            m.assertEqual(m.top.decision, "discard")
+        end function
+
+        @it("allows scrolling an oversized error before returning to Retry")
+        function _()
+            message = ""
+            for index = 1 to 100
+                message += "Long server error. "
+            end for
+            m.top.message = message
+            m.top.callFunc("focusKeepEditing")
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+            m.assertTrue(m.top.findNode("errorViewport").hasFocus())
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            m.assertTrue(m.node.navigation.offset > 0)
+            m.node.navigation.offset = m.node.navigation.maximum
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            m.assertTrue(m.top.findNode("retry").isInFocusChain())
+        end function
+
+    end class
+
+end namespace

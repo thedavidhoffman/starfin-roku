@@ -1,14 +1,15 @@
-import "pkg:/source/PlaybackMode.bs"
-import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
+import "pkg:/source/AccountSubtitles.bs"
+import "pkg:/source/SettingsClose.bs"
 
 '-------------------------------------------------------------------------------
 ' openSettings
 '-------------------------------------------------------------------------------
 sub openSettings()
+    resetAccountState()
     m.originalSettings = invalid
     m.top.title = "Settings"
-    m.top.dialogWidth = 1560
+    m.top.dialogWidth = 1680
     m.top.dialogHeight = 900
     m.top.closeOnContentSelected = false
     m.top.contentComponentName = "SettingsContent"
@@ -19,11 +20,13 @@ sub openSettings()
         content.observeField("resetStarfinConfirmed", "onResetStarfinConfirmed")
         content.observeField("watchedIndicatorPreviewRequested", "onWatchedIndicatorPreviewRequested")
         content.observeField("themePreviewRequested", "onThemePreviewRequested")
+        content.observeField("accountSubtitleAction", "onAccountSubtitleAction")
         content.callFunc("loadSettingsValues")
         m.originalSettings = content.callFunc("getSettingsValues")
     end if
     m.top.callFunc("openDialog")
     if content <> invalid then content.callFunc("focusFirstField")
+    publishAccountState()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -38,7 +41,7 @@ end function
 '-------------------------------------------------------------------------------
 sub onResetStarfinConfirmed()
     m.top.resetStarfinConfirmed = true
-    m.top.callFunc("closeDialog")
+    finishSettingsClose()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -78,4 +81,32 @@ end sub
 sub onWatchedIndicatorPreviewRequested()
     content = getSettingsContent()
     m.top.watchedIndicatorPreviewRequested = content.watchedIndicatorPreviewRequested
+end sub
+
+'-------------------------------------------------------------------------------
+' closeDialog
+'-------------------------------------------------------------------------------
+sub closeDialog()
+    if m.closeState.phase <> SettingsClose.Phase.Open then return
+    if m.accountState.original <> invalid and m.accountState.pending <> invalid then
+        if AccountSubtitles.Changes(m.accountState.original, m.accountState.pending).Count() > 0 then
+            content = getSettingsContent()
+            content.callFunc("captureEditorFocus")
+            m.closeState.phase = SettingsClose.Phase.Saving
+            startAccountRequest(AccountSubtitles.Command.Save)
+            return
+        end if
+    end if
+    finishSettingsClose()
+end sub
+
+'-------------------------------------------------------------------------------
+' finishSettingsClose
+'-------------------------------------------------------------------------------
+sub finishSettingsClose()
+    if m.closeState.phase = SettingsClose.Phase.Closed then return
+    deactivateAccountSession()
+    m.dialog.visible = false
+    onCloseRequested()
+    m.top.closeRequested = true
 end sub

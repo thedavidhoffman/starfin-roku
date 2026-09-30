@@ -42,6 +42,43 @@ namespace tests
             m.global.watchedIndicatorStyle = m.originalWatchedStyle
         end function
 
+        @describe("Settings failure confirmation routing")
+
+        @it("opens the confirmation without replacing Settings")
+        function _()
+            owner = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings" })
+            'bs:disable-next-line 1140
+            routeSettingsSaveFailure({ kind: "open", requestId: 17, message: "Rejected" })
+
+            m.assertTrue(owner.isSameNode(m.node.overlayHost.getChild(0)))
+            confirmation = m.node.confirmationOverlayHost.getChild(0)
+            m.assertEqual(confirmation.message, "Rejected")
+            m.assertEqual(m.node.settingsConfirmation.requestId, 17)
+            m.assertTrue(confirmation.callFunc("getContentComponent").findNode("keepEditing").isInFocusChain())
+
+            'bs:disable-next-line 1140
+            clearSettingsConfirmation()
+            m.node.overlayHost.callFunc("closeOverlay", false)
+        end function
+
+        @it("ignores a dismissal from an obsolete confirmation request")
+        function _()
+            m.node.settingsConfirmation = { owner: invalid, requestId: 18 }
+            'bs:disable-next-line 1140
+            routeSettingsSaveFailure({ kind: "dismiss", requestId: 17 })
+            m.assertEqual(m.node.settingsConfirmation.requestId, 18)
+        end function
+
+        @it("matching dismissal clears confirmation ownership")
+        function _()
+            m.node.settingsConfirmation = { owner: invalid, requestId: 18 }
+            'bs:disable-next-line 1140
+            routeSettingsSaveFailure({ kind: "dismiss", requestId: 18 })
+            m.assertInvalid(m.node.settingsConfirmation.owner)
+            m.assertEqual(m.node.settingsConfirmation.requestId, -1)
+            m.assertEqual(m.node.confirmationOverlayHost.getChildCount(), 0)
+        end function
+
         @describe("media options routing")
 
         @it("recognizes the shared media options overlay")
@@ -668,6 +705,18 @@ namespace tests
         end function
 
         @describe("settings propagation")
+
+        @it("routes the active session into the Settings dialog")
+        function _()
+            m.node.header.overlayRequested = { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested" }
+            'bs:disable-next-line 1140
+            navHandleHeaderOverlayRequested()
+            overlay = m.node.overlayHost.getChild(0)
+            m.assertEqual(overlay.server, "http://server")
+            m.assertEqual(overlay.token, "token")
+            m.assertEqual(overlay.userId, "user")
+            m.assertEqual(overlay.accountKey, "account-1")
+        end function
 
         @it("previews the selected theme across the open dialog and background")
         function _()
@@ -1371,6 +1420,128 @@ namespace tests
         end function
 
         @describe("message lifecycle")
+
+        @it("acknowledgment returns to the blocker while a Settings save is pending")
+        function _()
+            m.openSettingsForMessageOverlap()
+            m.startMessageOverlapBlocker()
+            m.openOverlapMessage()
+
+            m.node.messageState.overlay.callFunc("closeDialog")
+
+            m.assertTrue(m.node.loadingSpinner.hasFocus())
+            m.assertTrue(m.node.loadingSpinner.blockInteraction)
+            m.cleanupMessageOverlap()
+        end function
+
+        @it("a blocker takes precedence over a previously captured Settings control")
+        function _()
+            m.openSettingsForMessageOverlap()
+            m.openOverlapMessage()
+            m.startMessageOverlapBlocker()
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.node.messageState.overlay.callFunc("closeDialog")
+
+            m.assertTrue(m.node.loadingSpinner.hasFocus())
+            m.cleanupMessageOverlap()
+        end function
+
+        @it("acknowledgment focuses the failure confirmation that appeared during the message")
+        function _()
+            m.openSettingsForMessageOverlap()
+            m.startMessageOverlapBlocker()
+            m.openOverlapMessage()
+            m.node.loadingSpinner.blockInteraction = false
+            m.node.loadingSpinner.control = "stop"
+            'bs:disable-next-line 1140
+            routeSettingsSaveFailure({ kind: "open", requestId: 31, message: "Save failed" })
+            confirmation = m.node.confirmationOverlayHost.getChild(0)
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.node.messageState.overlay.callFunc("closeDialog")
+
+            m.assertTrue(confirmation.callFunc("getContentComponent").findNode("keepEditing").hasFocus())
+            m.assertFalse(m.node.overlayHost.isInFocusChain())
+            m.cleanupMessageOverlap()
+        end function
+
+        @it("acknowledgment preserves a captured choice within the active failure confirmation")
+        function _()
+            m.openSettingsForMessageOverlap()
+            'bs:disable-next-line 1140
+            routeSettingsSaveFailure({ kind: "open", requestId: 32, message: "Save failed" })
+            confirmation = m.node.confirmationOverlayHost.getChild(0)
+            retry = confirmation.callFunc("getContentComponent").findNode("retry")
+            retry.setFocus(true)
+            m.openOverlapMessage()
+
+            m.node.messageState.overlay.callFunc("closeDialog")
+
+            m.assertTrue(retry.hasFocus())
+            m.cleanupMessageOverlap()
+        end function
+
+        @it("a new failure confirmation takes precedence over captured Settings focus")
+        function _()
+            m.openSettingsForMessageOverlap()
+            m.openOverlapMessage()
+            'bs:disable-next-line 1140
+            routeSettingsSaveFailure({ kind: "open", requestId: 33, message: "Save failed" })
+            confirmation = m.node.confirmationOverlayHost.getChild(0)
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.node.messageState.overlay.callFunc("closeDialog")
+
+            m.assertTrue(confirmation.callFunc("getContentComponent").findNode("keepEditing").hasFocus())
+            m.cleanupMessageOverlap()
+        end function
+
+        @it("does not restore a confirmation removed while the message was open")
+        function _()
+            m.openSettingsForMessageOverlap()
+            'bs:disable-next-line 1140
+            routeSettingsSaveFailure({ kind: "open", requestId: 34, message: "Save failed" })
+            m.openOverlapMessage()
+            'bs:disable-next-line 1140
+            clearSettingsConfirmation()
+
+            m.node.messageState.overlay.callFunc("closeDialog")
+
+            m.assertEqual(m.node.confirmationOverlayHost.getChildCount(), 0)
+            m.assertTrue(m.node.overlayHost.isInFocusChain())
+            m.cleanupMessageOverlap()
+        end function
+
+        function openSettingsForMessageOverlap()
+            m.top.visible = true
+            m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", accountKey: "" })
+        end function
+
+        function startMessageOverlapBlocker()
+            m.node.loadingSpinner.blockInteraction = true
+            m.node.loadingSpinner.showDelay = 2
+            m.node.loadingSpinner.control = "start"
+            m.node.loadingSpinner.setFocus(true)
+        end function
+
+        function openOverlapMessage()
+            'bs:disable-next-line 1140
+            showMessage("Unrelated background failure")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+        end function
+
+        function cleanupMessageOverlap()
+            m.node.loadingSpinner.blockInteraction = false
+            m.node.loadingSpinner.control = "stop"
+            'bs:disable-next-line 1140
+            clearSettingsConfirmation()
+            m.node.overlayHost.callFunc("closeOverlay")
+        end function
 
         @it("defers opening and combines distinct messages without replacing an existing overlay")
         function _()

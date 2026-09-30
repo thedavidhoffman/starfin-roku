@@ -5,7 +5,7 @@ namespace Json
     ' JSON helpers for outbound API bodies.
     '
     ' Roku FormatJson() lowercases object keys during serialization. Some APIs are
-    ' case-sensitive, unlike many .NET JSON consumers where key casing may be 
+    ' case-sensitive, unlike many .NET JSON consumers where key casing may be
     ' tolerated. These helpers preserve exact key casing by requiring API field
     ' names as explicit string literals.
 
@@ -18,7 +18,46 @@ namespace Json
         text = Format.SafeString(value, "")
         text = Strings.Replace(text, "\", "\\")
         text = Strings.Replace(text, Char.DoubleQuote, "\" + Char.DoubleQuote)
-        return Char.DoubleQuote + text + Char.DoubleQuote
+        ' JSON strings cannot contain literal control characters.
+        hexDigits = "0123456789abcdef"
+        escapedText = ""
+        for index = 1 to Len(text)
+            character = Mid(text, index, 1)
+            code = Asc(character)
+            if code < 32 then
+                escapedText += "\u00" + Mid(hexDigits, (code \ 16) + 1, 1) + Mid(hexDigits, (code mod 16) + 1, 1)
+            else
+                escapedText += character
+            end if
+        end for
+        return Char.DoubleQuote + escapedText + Char.DoubleQuote
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Json.Serialize
+    '---------------------------------------------------------------------------
+    function Serialize(value as dynamic) as string
+        if value = invalid then return "null"
+        if GetInterface(value, "ifString") <> invalid then return Json.String(value)
+        if GetInterface(value, "ifBoolean") <> invalid then
+            if value then return "true"
+            return "false"
+        end if
+        parts = []
+        if GetInterface(value, "ifArray") <> invalid then
+            for each element in value
+                parts.Push(Json.Serialize(element))
+            end for
+            return "[" + JoinParts(parts) + "]"
+        end if
+        if GetInterface(value, "ifAssociativeArray") <> invalid then
+            ' Enumerated keys preserve the spelling received from ParseJson.
+            for each key in value
+                parts.Push(Json.String(key) + ":" + Json.Serialize(value[key]))
+            end for
+            return Object(parts)
+        end if
+        return Json.Number(value)
     end function
 
     '---------------------------------------------------------------------------

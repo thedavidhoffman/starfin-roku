@@ -1,0 +1,98 @@
+import "pkg:/source/AccountSubtitles.bs"
+import "pkg:/source/Json.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    if request = invalid then
+        m.top.response = { ok: false, errorMessage: "Missing account settings request." }
+        return
+    end if
+    if Format.SafeString(request.server, "") = "" or Format.SafeString(request.token, "") = "" or Format.SafeString(request.userId, "") = "" then
+        result = { ok: false, errorMessage: "Missing account session." }
+    else if request.command = AccountSubtitles.Command.Load then
+        result = loadAccountSubtitles(request)
+    else if request.command = AccountSubtitles.Command.Save then
+        result = saveAccountSubtitles(request)
+    else
+        result = { ok: false, errorMessage: "Unknown account settings command." }
+    end if
+    result.requestId = request.requestId
+    result.userId = request.userId
+    result.server = request.server
+    m.top.response = result
+end sub
+
+'-------------------------------------------------------------------------------
+' loadAccountSubtitles
+'-------------------------------------------------------------------------------
+function loadAccountSubtitles(request as object) as object
+    accountResult = loadAccountConfiguration(request)
+    if accountResult.ok <> true then return accountResult
+    culturesResult = loadCultures(request)
+    if culturesResult.ok <> true then return culturesResult
+    return { ok: true, configuration: accountResult.configuration, cultures: culturesResult.cultures }
+end function
+
+'-------------------------------------------------------------------------------
+' loadAccountConfiguration
+'-------------------------------------------------------------------------------
+function loadAccountConfiguration(request as object) as object
+    headers = JellyfinAuth.BuildTokenHeaders(request.token)
+    result = HttpClient.Request(request.server + "/Users/Me", "GET", invalid, invalid, headers, true, 15000)
+    if result.ok <> true then return result
+    user = result.data
+    if user = invalid then return { ok: false, errorMessage: "The server did not return account settings." }
+    if user.Id <> request.userId or GetInterface(user.Configuration, "ifAssociativeArray") = invalid then return { ok: false, errorMessage: "The server returned invalid account settings." }
+    return { ok: true, configuration: user.Configuration }
+end function
+
+'-------------------------------------------------------------------------------
+' loadCultures
+'-------------------------------------------------------------------------------
+function loadCultures(request as object) as object
+    headers = JellyfinAuth.BuildTokenHeaders(request.token)
+    result = HttpClient.Request(request.server + "/Localization/Cultures", "GET", invalid, invalid, headers, true, 15000)
+    if result.ok <> true then return result
+    if GetInterface(result.data, "ifArray") = invalid then return { ok: false, errorMessage: "The server did not return subtitle languages." }
+    return { ok: true, cultures: result.data }
+end function
+
+'-------------------------------------------------------------------------------
+' saveAccountSubtitles
+'-------------------------------------------------------------------------------
+function saveAccountSubtitles(request as object) as object
+    result = loadAccountConfiguration(request)
+    if result.ok <> true then return result
+    configuration = result.configuration
+    changes = request.changes
+    if GetInterface(changes, "ifAssociativeArray") = invalid then return { ok: false, errorMessage: "Missing subtitle changes." }
+    for each key in changes
+        if key = "SubtitleMode" then
+            if not AccountSubtitles.IsMode(Format.SafeString(changes[key], "")) then return { ok: false, errorMessage: "Unsupported subtitle mode." }
+        else if key = "SubtitleLanguagePreference" then
+            if GetInterface(changes[key], "ifString") = invalid then return { ok: false, errorMessage: "Invalid subtitle language." }
+        else
+            return { ok: false, errorMessage: "Unsupported account setting." }
+        end if
+        configuration.AddReplace(key, changes[key])
+    end for
+    if changes.Count() > 0 then
+        headers = JellyfinAuth.BuildTokenHeaders(request.token)
+        result = HttpClient.Request(request.server + "/Users/Configuration", "POST", invalid, Json.Serialize(configuration), headers, true, 15000)
+        if result.ok <> true then return result
+    end if
+    return { ok: true, configuration: configuration }
+end function
