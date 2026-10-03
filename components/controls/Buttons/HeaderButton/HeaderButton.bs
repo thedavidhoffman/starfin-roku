@@ -2,19 +2,23 @@ import "pkg:/source/Remote.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/ResolutionAssets.bs"
 import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/TextMeasurement.bs"
 
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
     m.background = m.top.findNode("bg")
+    m.iconPoster = m.top.findNode("icon")
     m.textLabel = m.top.findNode("textLabel")
+    m.measurementLabel = CreateObject("roSGNode", "Label")
     m.background.uri = ResolutionAssets.GetButtonImageUri("header-button-focused.9.png")
     if m.top.headerBgColor = 0 then m.top.headerBgColor = &h12112BFF
     m.top.observeField("focusedChild", "onFocusChanged")
     onDimensionsChanged()
     onTextLayoutChanged()
     onTextChanged()
+    onIconUriChanged()
     onFocusVisualChanged()
 end sub
 
@@ -23,6 +27,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub onTextChanged()
     m.textLabel.text = m.top.text
+    onTextLayoutChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' onIconUriChanged
+'-------------------------------------------------------------------------------
+sub onIconUriChanged()
+    m.iconPoster.uri = m.top.iconUri
+    m.iconPoster.visible = m.top.iconUri <> invalid and m.top.iconUri <> ""
+    onTextLayoutChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -53,9 +67,43 @@ sub updateTextLayout(width as integer, height as integer)
     if inset < 0 then inset = 0
     if inset * 2 >= width then inset = 0
 
-    m.textLabel.horizAlign = getTextAlign()
-    m.textLabel.width = width - (inset * 2)
-    m.textLabel.translation = [inset, Number.ToInteger((height - 28) / 2, 0)]
+    textY = Number.ToInteger((height - 28) / 2, 0)
+    if m.iconPoster.visible then
+        layoutIconAndText(width, height, inset, textY)
+    else
+        m.textLabel.horizAlign = getTextAlign()
+        m.textLabel.width = width - (inset * 2)
+        m.textLabel.translation = [inset, textY]
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' layoutIconAndText
+'-------------------------------------------------------------------------------
+sub layoutIconAndText(width as integer, height as integer, inset as integer, textY as integer)
+    iconHeight = 22
+    iconWidth = Number.ToInteger(m.top.iconWidth, 22)
+    if iconWidth < 1 then iconWidth = 22
+    iconSlotWidth = Number.ToInteger(m.top.iconSlotWidth, 0)
+    if iconSlotWidth < iconWidth then iconSlotWidth = iconWidth
+    iconGap = 10
+    textWidth = TextMeasurement.GetWidth(m.measurementLabel, m.textLabel.font, m.top.text) + 8
+    maxTextWidth = width - (inset * 2) - iconSlotWidth - iconGap
+    if maxTextWidth < 1 then maxTextWidth = 1
+    if textWidth > maxTextWidth then textWidth = maxTextWidth
+
+    contentWidth = iconSlotWidth + iconGap + textWidth
+    contentX = Number.ToInteger((width - contentWidth) / 2, 0)
+    if getTextAlign() = "left" then contentX = inset
+    if contentX < inset then contentX = inset
+
+    m.iconPoster.width = iconWidth
+    m.iconPoster.height = iconHeight
+    iconX = contentX + Number.ToInteger((iconSlotWidth - iconWidth) / 2, 0)
+    m.iconPoster.translation = [iconX, Number.ToInteger((height - iconHeight) / 2, 0)]
+    m.textLabel.horizAlign = "left"
+    m.textLabel.width = textWidth
+    m.textLabel.translation = [contentX + iconSlotWidth + iconGap, textY]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -108,6 +156,7 @@ sub onFocusVisualChanged()
     else
         m.textLabel.color = &hFFFFFFFF
     end if
+    m.iconPoster.blendColor = m.textLabel.color
 end sub
 
 '-------------------------------------------------------------------------------

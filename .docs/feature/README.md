@@ -18,6 +18,7 @@ individual Starfin features.
 - [Episode Detail Browsing](episode-detail-browsing.md)
 - [Home Media Playback](home-media.md)
 - [Home Refresh Lifecycle](home-refresh-lifecycle.md)
+- [Header Navigation](header-navigation.md)
 - [Library Genre Browsing](library-genre-browsing.md)
 - [Media Authentication](media-authentication.md)
 - [Music Video Playback](music-videos.md)
