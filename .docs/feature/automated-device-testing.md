@@ -213,6 +213,9 @@ test can be opened for a continuous evidence review without changing screenshot
 presentation. A failed test writes its error immediately to the private log and
 attempts an additional screenshot, so stopping a run preserves the original
 failure. Screenshot failure does not replace the original test error.
+Screenshot evidence comes from the ECP client's capture API and is converted to
+PNG with Sharp. If capture or conversion fails, the device automation client's
+screenshot is used as a fallback.
 
 A successful release-mode run also creates a `public-report/` copy and a
 versioned ZIP in the same timestamped directory. Resolution-specific runs append

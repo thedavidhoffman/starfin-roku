@@ -4,8 +4,9 @@ import fs from "node:fs";
 import { startHttpFixture } from "./rooibos-http-fixture.mjs";
 
 const require = createRequire(import.meta.url);
-const { RokuDeploy } = require("rooibos-roku/node_modules/roku-deploy");
-const { TelnetAdapter } = require("roku-debug");
+const rooibosRequire = createRequire(require.resolve("rooibos-roku"));
+const { RokuDeploy } = rooibosRequire("roku-deploy");
+const { TelnetAdapter } = rooibosRequire("roku-debug");
 const getOutputZipFilePath = RokuDeploy.prototype.getOutputZipFilePath;
 const publish = RokuDeploy.prototype.publish;
 const addTelnetListener = TelnetAdapter.prototype.on;

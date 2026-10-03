@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import addContext from 'mochawesome/addContext.js';
-import { capture, processImage } from '@danecodes/roku-screenshot';
 import { getAutomationEnvironment } from './environment.mjs';
+import { captureScreenshotPng } from './screenshot.mjs';
 
 function sanitizeName(value) {
   return value
@@ -19,14 +19,7 @@ export async function captureEvidence(context, checkpoint, options = {}) {
   const outputPath = path.join(screenshotsDir, filename);
 
   await fs.mkdir(screenshotsDir, { recursive: true });
-  let buffer;
-  try {
-    buffer = await capture(environment.screenshotClient, { format: 'png' });
-  } catch (error) {
-    const fallback = await environment.device.getScreenshot();
-    if (!fallback.buffer?.length) throw error;
-    buffer = await processImage(fallback.buffer, { format: 'png' });
-  }
+  const buffer = await captureScreenshotPng(environment);
   if (buffer.length === 0) throw new Error(`Screenshot capture returned an empty buffer for ${checkpoint}.`);
   await fs.writeFile(outputPath, buffer);
 
