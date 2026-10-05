@@ -4,13 +4,13 @@ import "pkg:/source/String.bs"
 import "pkg:/source/MaskAssets.bs"
 import "pkg:/source/ResolutionProfile.bs"
 import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/MediaShellLayout.bs"
 
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
     initReferences()
-    m.mediaBackgroundUrl = ""
     m.logoState = {
         url: ""
         title: ""
@@ -27,17 +27,28 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.mediaBackgroundFull = m.top.findNode("mediaBackgroundFull")
-    m.mediaBackgroundPartialGroup = m.top.findNode("mediaBackgroundPartialGroup")
-    MaskAssets.Apply(m.mediaBackgroundPartialGroup, "media-shell-backdrop-mask.png", [1152, 648], [768, 432])
-    m.mediaBackgroundPartial = m.top.findNode("mediaBackgroundPartial")
-    m.contentGradient = m.top.findNode("contentGradient")
+    m.background = {
+        full: m.top.findNode("mediaBackgroundFull")
+        cornerGroup: m.top.findNode("mediaBackgroundPartialGroup")
+        corner: m.top.findNode("mediaBackgroundPartial")
+        shade: m.top.findNode("backgroundShade")
+        gradient: m.top.findNode("contentGradient")
+        url: ""
+    }
+    MaskAssets.Apply(m.background.cornerGroup, "media-shell-backdrop-mask.png", [1152, 648], [768, 432])
     m.contentGroup = m.top.findNode("contentGroup")
     m.titleLogo = m.top.findNode("titleLogo")
     m.logoFallbackTitleLabel = m.top.findNode("logoFallbackTitleLabel")
     m.episodeTitleLabel = m.top.findNode("episodeTitleLabel")
     m.infoGroup = m.top.findNode("infoGroup")
     m.overviewDescription = m.top.findNode("overviewDescription")
+
+    m.moviePoster = {
+        group: m.top.findNode("moviePosterGroup")
+        image: m.top.findNode("moviePoster")
+        url: ""
+    }
+    MaskAssets.Apply(m.moviePoster.group, "movie-poster-mask.png", [600, 900], [400, 600])
 
     m.metadata = {
         primaryRow: m.top.findNode("primaryInfoRow")
@@ -51,6 +62,7 @@ end sub
 sub initHandlers()
     m.overviewDescription.observeField("overlayRequested", "onDescriptionOverlayRequested")
     m.titleLogo.observeField("loadStatus", "onTitleLogoLoadStatusChanged")
+    m.moviePoster.image.observeField("loadStatus", "onMoviePosterLoadStatusChanged")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -64,9 +76,13 @@ end sub
 ' onBackgroundDisplayChanged
 '-------------------------------------------------------------------------------
 sub onBackgroundDisplayChanged()
+    content = m.top.mediaContent
+    if content <> invalid then renderBackdrop(Format.SafeString(content.backdropUrl, ""))
     applyBackgroundDisplay()
+    renderMoviePoster(content)
     applyContentLayout(m.logoState.mediaType)
     applyContentGradientVisibility(m.logoState.mediaType)
+    updateLogoFallbackTitlePosition(m.episodeTitleLabel.visible)
     onTitleLogoLoadStatusChanged()
 end sub
 
@@ -88,11 +104,11 @@ end sub
 ' applyBackgroundDisplay
 '-------------------------------------------------------------------------------
 sub applyBackgroundDisplay()
-    isPartial = LCase(Format.SafeString(m.top.backgroundDisplay, "full-screen")) = "partial-screen"
-    hasBackdrop = m.mediaBackgroundUrl <> ""
+    layout = getContentLayout(m.logoState.mediaType)
+    hasBackdrop = m.background.url <> "" and layout.isArtworkFreePoster <> true
 
-    m.mediaBackgroundFull.visible = hasBackdrop and isPartial <> true
-    m.mediaBackgroundPartialGroup.visible = hasBackdrop and isPartial
+    m.background.full.visible = hasBackdrop and layout.isPartial <> true
+    m.background.cornerGroup.visible = hasBackdrop and layout.isPartial
 end sub
 
 '-------------------------------------------------------------------------------
@@ -103,10 +119,12 @@ sub onMediaContentChanged()
     if content = invalid then return
 
     mediaType = Format.SafeString(content.mediaType, "")
+    m.logoState.mediaType = mediaType
     logoPending = content.logoPending = true
     applyContentLayout(mediaType)
     applyContentGradientVisibility(mediaType)
     renderBackdrop(Format.SafeString(content.backdropUrl, ""))
+    renderMoviePoster(content)
     renderTitle(Format.SafeString(content.title, ""), Format.SafeString(content.logoUrl, ""), Format.SafeString(content.logoTitle, ""), mediaType, logoPending)
     renderMetadata(content, mediaType)
     m.overviewDescription.title = Format.SafeString(content.title, "Description")
@@ -117,10 +135,10 @@ end sub
 ' applyContentGradientVisibility
 '-------------------------------------------------------------------------------
 sub applyContentGradientVisibility(mediaType as string)
-    isCinematic = LCase(Format.SafeString(m.top.backgroundDisplay, "full-screen")) = "cinematic"
-    usesCinematicDetailLayout = mediaType = "movie" or mediaType = "tv-episode" or mediaType = "tv-season"
-    hidesContentGradient = isCinematic and usesCinematicDetailLayout and m.top.castVisible <> true
-    m.contentGradient.visible = hidesContentGradient <> true
+    layout = getContentLayout(mediaType)
+    hidesContentGradient = layout.isCinematicDetails and m.top.castVisible <> true
+    m.background.shade.visible = layout.isArtworkFreePoster <> true
+    m.background.gradient.visible = hidesContentGradient <> true and layout.isArtworkFreePoster <> true and layout.hidesCornerGradient <> true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -128,7 +146,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub applyContentLayout(mediaType as string)
     layout = getContentLayout(mediaType)
-
+    m.metadata.primaryRow.availableWidth = layout.detailsWidth
+    m.metadata.secondaryRow.availableWidth = layout.detailsWidth
+    m.overviewDescription.width = layout.overviewWidth
+    m.episodeTitleLabel.width = layout.detailsWidth
     m.episodeTitleLabel.translation = layout.titleTranslation
     m.episodeTitleLabel.height = layout.titleHeight
     m.episodeTitleLabel.font = layout.titleFont
@@ -136,62 +157,38 @@ sub applyContentLayout(mediaType as string)
     m.logoFallbackTitleLabel.height = layout.logoTextHeight
     m.logoFallbackTitleLabel.font = layout.logoTextFont
     m.infoGroup.translation = layout.infoTranslation
+    m.metadata.secondaryRow.visible = layout.isSeriesPoster <> true
+    m.overviewDescription.visible = layout.isSeriesPoster <> true
+    positionPrimaryMetadata(layout)
 end sub
 
 '-------------------------------------------------------------------------------
 ' getContentLayout
 '-------------------------------------------------------------------------------
 function getContentLayout(mediaType as string) as object
-    isCinematic = LCase(Format.SafeString(m.top.backgroundDisplay, "full-screen")) = "cinematic"
-    if isCinematic and (mediaType = "movie" or mediaType = "tv-episode" or mediaType = "tv-season") then
-        if mediaType = "tv-episode" or mediaType = "tv-season" then
-            return {
-                titleTranslation: [0, 527]
-                titleHeight: 52
-                titleFont: "font:MediumBoldSystemFont"
-                infoTranslation: [0, 603]
-                logoMaxWidth: 520
-                logoMaxHeight: 120
-                logoAnchorTop: 527
-                logoGap: 24
-                logoTextTranslation: [0, 34]
-                logoTextHeight: 112
-                logoTextFont: "font:LargestSystemFont"
-            }
-        end if
-
-        return {
-            titleTranslation: [0, 0]
-            titleHeight: 160
-            titleFont: "font:LargeBoldSystemFont"
-            infoTranslation: [0, 603]
-            logoMaxWidth: 600
-            logoMaxHeight: 220
-            logoAnchorTop: 603
-            logoGap: 40
-            logoTextTranslation: [0, 0]
-            logoTextHeight: 184
-            logoTextFont: "font:LargestSystemFont"
-        }
-    end if
-
-    if mediaType = "tv-episode" then
-        return {
-            titleTranslation: [0, 170]
-            titleHeight: 52
-            titleFont: "font:MediumBoldSystemFont"
-            infoTranslation: [0, 230]
-            logoMaxWidth: 520
-            logoMaxHeight: 120
-            logoAnchorTop: 170
-            logoGap: 24
-            logoTextTranslation: [0, 34]
-            logoTextHeight: 112
-            logoTextFont: "font:LargestSystemFont"
-        }
-    end if
-
-    return {
+    mode = LCase(Format.SafeString(m.top.backgroundDisplay, MediaShellLayout.Mode.FullScreen))
+    isMovie = mediaType = "movie"
+    isSeries = mediaType = "tv-show"
+    isEpisode = mediaType = "tv-episode"
+    isSeason = mediaType = "tv-season"
+    isPoster = mode = MediaShellLayout.Mode.Poster
+    isMoviePoster = isPoster and isMovie
+    isSeriesPoster = isPoster and isSeries
+    isCinematicDetails = mode = MediaShellLayout.Mode.Cinematic and (isMovie or isEpisode or isSeason)
+    isPartial = mode = MediaShellLayout.Mode.PartialScreen
+    layout = {
+        isMoviePoster: isMoviePoster
+        isSeriesPoster: isSeriesPoster
+        isArtworkFreePoster: isMoviePoster or isSeriesPoster
+        isPartial: isPartial
+        isCinematicDetails: isCinematicDetails
+        hidesCornerGradient: isPartial and (isMovie or isSeries or isEpisode)
+        showEpisodeTitle: isEpisode or (isCinematicDetails and isSeason)
+        canvasWidth: 1920
+        detailsWidth: (isMoviePoster ? 1056 : 1220)
+        overviewWidth: (isMoviePoster ? 1056 : 1040)
+        logoTextWidth: (isSeriesPoster ? 1920 : (isMoviePoster ? 1056 : 1220))
+        logoTextAlign: (isSeriesPoster ? "center" : "left")
         titleTranslation: [0, 0]
         titleHeight: 160
         titleFont: "font:LargeBoldSystemFont"
@@ -204,24 +201,54 @@ function getContentLayout(mediaType as string) as object
         logoTextHeight: 184
         logoTextFont: "font:LargestSystemFont"
     }
+    if isSeriesPoster then
+        layout.titleHeight = 0
+        layout.infoTranslation = [0, 247]
+        layout.logoMaxHeight = 150
+        layout.logoAnchorTop = 212
+        layout.logoGap = 0
+        layout.logoTextTranslation = [0, 104]
+        layout.logoTextHeight = 66
+    else if isEpisode or (isCinematicDetails and isSeason) then
+        titleY = (isCinematicDetails ? 527 : 170)
+        layout.titleTranslation = [0, titleY]
+        layout.titleHeight = 52
+        layout.titleFont = "font:MediumBoldSystemFont"
+        layout.infoTranslation = [0, (isCinematicDetails ? 603 : 230)]
+        layout.logoMaxWidth = 520
+        layout.logoMaxHeight = 120
+        layout.logoAnchorTop = titleY
+        layout.logoGap = 24
+        layout.logoTextTranslation = [0, 34]
+        layout.logoTextHeight = 112
+    else if isCinematicDetails then
+        layout.infoTranslation = [0, 603]
+        layout.logoAnchorTop = 603
+    end if
+    return layout
 end function
 
 '-------------------------------------------------------------------------------
 ' renderBackdrop
 '-------------------------------------------------------------------------------
 sub renderBackdrop(backdropUrl as string)
+    layout = getContentLayout(m.logoState.mediaType)
+    if layout.isArtworkFreePoster then
+        clearBackdrop()
+        return
+    end if
     if backdropUrl = "" then
         clearBackdrop()
         return
     end if
 
-    if backdropUrl = m.mediaBackgroundUrl then return
+    if backdropUrl = m.background.url then return
 
-    m.mediaBackgroundFull.opacity = 0.50
-    m.mediaBackgroundPartial.opacity = 0.50
-    m.mediaBackgroundFull.uri = backdropUrl
-    m.mediaBackgroundPartial.uri = backdropUrl
-    m.mediaBackgroundUrl = backdropUrl
+    m.background.full.opacity = 0.50
+    m.background.corner.opacity = 0.50
+    m.background.full.uri = backdropUrl
+    m.background.corner.uri = backdropUrl
+    m.background.url = backdropUrl
     applyBackgroundDisplay()
 end sub
 
@@ -229,13 +256,13 @@ end sub
 ' clearBackdrop
 '-------------------------------------------------------------------------------
 sub clearBackdrop()
-    m.mediaBackgroundFull.visible = false
-    m.mediaBackgroundPartialGroup.visible = false
-    m.mediaBackgroundFull.uri = ""
-    m.mediaBackgroundPartial.uri = ""
-    m.mediaBackgroundFull.opacity = 0.50
-    m.mediaBackgroundPartial.opacity = 0.50
-    m.mediaBackgroundUrl = ""
+    m.background.full.visible = false
+    m.background.cornerGroup.visible = false
+    m.background.full.uri = ""
+    m.background.corner.uri = ""
+    m.background.full.opacity = 0.50
+    m.background.corner.opacity = 0.50
+    m.background.url = ""
 end sub
 
 '-------------------------------------------------------------------------------
@@ -270,10 +297,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub renderTitle(title as string, logoUrl as string, logoTitle as string, mediaType as string, logoPending as boolean)
     hasLogo = logoUrl <> ""
-    isTVEpisode = mediaType = "tv-episode"
-    isCinematicTVSeason = mediaType = "tv-season" and LCase(Format.SafeString(m.top.backgroundDisplay, "full-screen")) = "cinematic"
+    m.logoState.mediaType = mediaType
+    layout = getContentLayout(mediaType)
     fallbackTitle = getLogoFallbackTitle(title, logoTitle, mediaType)
-    showEpisodeTitle = isTVEpisode or isCinematicTVSeason
+    showEpisodeTitle = layout.showEpisodeTitle
     showLogoText = hasLogo = false and logoPending = false and fallbackTitle <> ""
 
     m.episodeTitleLabel.visible = showEpisodeTitle
@@ -293,7 +320,6 @@ sub renderTitle(title as string, logoUrl as string, logoTitle as string, mediaTy
             return
         end if
 
-        layout = getContentLayout(mediaType)
         m.logoState.url = logoUrl
         m.logoState.fittedMediaType = ""
         m.titleLogo.visible = false
@@ -345,6 +371,15 @@ sub onTitleLogoLoadStatusChanged()
 
     mediaType = Format.SafeString(m.logoState.mediaType, "")
     layout = getContentLayout(mediaType)
+    if layout.isSeriesPoster then
+        m.titleLogo.width = layout.logoMaxWidth
+        m.titleLogo.height = layout.logoMaxHeight
+        m.titleLogo.translation = [Number.ToInteger((layout.canvasWidth - layout.logoMaxWidth) / 2), getLogoBottomAlignedY(layout.logoMaxHeight, layout)]
+        m.titleLogo.visible = true
+        m.logoState.fittedMediaType = mediaType
+        return
+    end if
+
     maxWidth = layout.logoMaxWidth
     maxHeight = layout.logoMaxHeight
     ' Reserve the gap before fitting so tall logos never need a clamped top edge.
@@ -375,6 +410,14 @@ end sub
 ' updateLogoFallbackTitlePosition
 '-------------------------------------------------------------------------------
 sub updateLogoFallbackTitlePosition(hasEpisodeTitle as boolean)
+    layout = getContentLayout(m.logoState.mediaType)
+    m.logoFallbackTitleLabel.width = layout.logoTextWidth
+    m.logoFallbackTitleLabel.horizAlign = layout.logoTextAlign
+    if layout.isSeriesPoster then
+        m.logoFallbackTitleLabel.translation = layout.logoTextTranslation
+        return
+    end if
+
     targetTranslation = m.infoGroup.translation
     gap = 24
 
@@ -383,7 +426,7 @@ sub updateLogoFallbackTitlePosition(hasEpisodeTitle as boolean)
         gap = 8
     end if
 
-    y = int(targetTranslation[1] - m.logoFallbackTitleLabel.height - gap)
+    y = Number.ToInteger(targetTranslation[1] - m.logoFallbackTitleLabel.height - gap)
     if y < 0 then y = 0
 
     m.logoFallbackTitleLabel.translation = [targetTranslation[0], y]
@@ -411,4 +454,47 @@ sub renderMetadata(content as object, mediaType as string)
     values.ratings = { communityRating: content.communityRating, criticRating: content.criticRating }
     m.metadata.primaryRow.setFields(primaryValues)
     m.metadata.secondaryRow.setFields(secondaryValues)
+    positionPrimaryMetadata(getContentLayout(mediaType))
+end sub
+
+'-------------------------------------------------------------------------------
+' positionPrimaryMetadata
+'-------------------------------------------------------------------------------
+sub positionPrimaryMetadata(layout as object)
+    x = 0
+    if layout.isSeriesPoster then x = Number.ToInteger((layout.canvasWidth - m.metadata.primaryRow.boundingRect().width) / 2, 0)
+    m.metadata.primaryRow.translation = [x, 0]
+end sub
+
+'-------------------------------------------------------------------------------
+' renderMoviePoster
+'-------------------------------------------------------------------------------
+sub renderMoviePoster(content as dynamic)
+    layout = getContentLayout(m.logoState.mediaType)
+    m.moviePoster.group.visible = layout.isMoviePoster
+    if layout.isMoviePoster <> true then
+        m.moviePoster.image.uri = ""
+        m.moviePoster.url = ""
+        return
+    end if
+
+    posterUrl = ""
+    if content <> invalid then posterUrl = Format.SafeString(content.posterUrl, "")
+    if posterUrl = "" then posterUrl = "pkg:/images/media-card/poster-placeholder-252x378.png"
+    if posterUrl = m.moviePoster.url then return
+    m.moviePoster.url = posterUrl
+    m.moviePoster.image.uri = posterUrl
+end sub
+
+'-------------------------------------------------------------------------------
+' onMoviePosterLoadStatusChanged
+'-------------------------------------------------------------------------------
+sub onMoviePosterLoadStatusChanged()
+    if m.moviePoster.group.visible <> true then return
+    if m.moviePoster.image.loadStatus <> "failed" then return
+    if m.moviePoster.image.uri <> m.moviePoster.url then return
+    placeholderUri = "pkg:/images/media-card/poster-placeholder-252x378.png"
+    if m.moviePoster.url = placeholderUri then return
+    m.moviePoster.url = placeholderUri
+    m.moviePoster.image.uri = placeholderUri
 end sub

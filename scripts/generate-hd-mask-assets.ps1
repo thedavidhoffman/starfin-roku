@@ -26,6 +26,7 @@ $assets = @(
     @{ Source = "images\cast\cast-mask-195x195.png"; Name = "cast-mask.png"; Width = 195; Height = 195 },
     @{ Source = "images\cast\person-mask-399x600.png"; Name = "person-mask.png"; Width = 399; Height = 600 },
     @{ Source = "images\cast\filmography-movie-mask-342x513.png"; Name = "filmography-movie-mask.png"; Width = 342; Height = 513 },
+    @{ Source = "images\movie\movie-poster-mask-600x900.png"; Name = "movie-poster-mask.png"; Width = 600; Height = 900 },
     @{ Source = "images\media-card\detailed-poster-mask-288x432.png"; Name = "detailed-poster-mask.png"; Width = 288; Height = 432 },
     @{ Source = "images\music\album-mask-300x300.png"; Name = "album-mask-300.png"; Width = 300; Height = 300 },
     @{ Source = "images\music\album-mask-342x342.png"; Name = "album-mask-342.png"; Width = 342; Height = 342 },
@@ -34,7 +35,8 @@ $assets = @(
     @{ Source = "images\trickplay\preview-center-mask.png"; Name = "trickplay-center-mask.png"; Width = 384; Height = 216 },
     @{ Source = "images\trickplay\preview-side-mask.png"; Name = "trickplay-side-mask.png"; Width = 225; Height = 126 },
     @{ Source = "images\tv-season\episode-thumbnail-mask-531x300.png"; Name = "episode-thumbnail-mask.png"; Width = 531; Height = 300 },
-    @{ Source = "images\tv-show\season-poster-mask-207x312.png"; Name = "season-poster-mask.png"; Width = 207; Height = 312 }
+    @{ Source = "images\tv-show\season-poster-mask-207x312.png"; Name = "season-poster-mask.png"; Width = 207; Height = 312 },
+    @{ Source = "images\tv-show\season-poster-mask-400x603.png"; Name = "season-poster-large-mask.png"; Width = 400; Height = 603 }
 )
 
 foreach ($asset in $assets) {

@@ -107,6 +107,58 @@ namespace tests
             m.assertFalse(m.top.findNode("watchedIndicator").visible)
         end function
 
+        @it("updates the watched badge on a same-season replacement in Poster mode")
+        function _()
+            original = m.createSeason("Season 1", "2024", 8, "")
+            original.addFields({ posterLayout: false })
+            original.raw = { UserData: { UnplayedItemCount: 2 } }
+            m.top.itemContent = original
+            replacement = m.createSeason("Season 1", "2024", 8, "")
+            replacement.addFields({ posterLayout: true })
+            replacement.raw = { UserData: { UnplayedItemCount: 2 } }
+            m.top.itemContent = replacement
+
+            replacement.raw = { UserData: { UnplayedItemCount: 0 } }
+
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
+
+            replacement.raw = { UserData: { UnplayedItemCount: 1 } }
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+        end function
+
+        @it("updates the watched badge on a same-season replacement in backdrop mode")
+        function _()
+            original = m.createSeason("Season 1", "2024", 8, "")
+            original.addFields({ posterLayout: true })
+            original.raw = { UserData: { UnplayedItemCount: 2 } }
+            m.top.itemContent = original
+            replacement = m.createSeason("Season 1", "2024", 8, "")
+            replacement.addFields({ posterLayout: false })
+            replacement.raw = { UserData: { UnplayedItemCount: 2 } }
+            m.top.itemContent = replacement
+
+            replacement.raw = { UserData: { UnplayedItemCount: 0 } }
+
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
+
+            replacement.raw = { UserData: { UnplayedItemCount: 1 } }
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+        end function
+
+        @it("clears the watched badge when season content is removed")
+        function _()
+            item = m.createSeason("Season 1", "2024", 8, "")
+            item.raw = { UserData: { UnplayedItemCount: 0 } }
+            m.top.itemContent = item
+
+            m.top.itemContent = invalid
+            item.raw = { UserData: { UnplayedItemCount: 1 } }
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+        end function
+
         function createSeason(title as string, year as string, episodeCount as integer, imageUrl as string) as object
             item = CreateObject("roSGNode", "ContentNode")
             item.addFields({ itemId: "season-1", seasonYear: year, episodeCount: episodeCount, raw: {} })
@@ -123,6 +175,53 @@ namespace tests
 
             m.assertEqual(m.top.findNode("watchedIndicator").uri, "pkg:/images/icons/watched-check-high-contrast.png")
             m.global.watchedIndicatorStyle = originalStyle
+        end function
+
+        @describe("Poster presentation")
+
+        @it("renders the large poster with its dedicated mask and metadata positions")
+        function _()
+            item = m.createSeason("Season 1", "2024", 8, "http://server/season.jpg")
+            item.addFields({ posterLayout: true })
+
+            m.top.itemContent = item
+
+            m.assertEqual(m.top.findNode("poster").width, 400.0)
+            m.assertEqual(m.top.findNode("poster").height, 603.0)
+            m.assertTrue(Instr(1, m.top.findNode("seasonPosterMask").maskUri, "/season-poster-large-mask.png") > 0)
+            m.assertEqual(m.top.findNode("title").translation, [0.0, 618.0])
+            m.assertEqual(m.top.findNode("year").translation, [0.0, 648.0])
+            m.assertEqual(m.top.findNode("title").text, "Season 1")
+        end function
+
+        @it("uses a large placeholder when Poster artwork is missing")
+        function _()
+            item = m.createSeason("Season 1", "2024", 8, "")
+            item.addFields({ posterLayout: true })
+
+            m.top.itemContent = item
+
+            m.assertTrue(m.top.findNode("placeholder").visible)
+            m.assertFalse(m.top.findNode("poster").visible)
+            m.assertEqual(m.top.findNode("placeholder").width, 400.0)
+            m.assertEqual(m.top.findNode("placeholder").height, 603.0)
+        end function
+
+        @it("restores standard poster geometry when the card leaves Poster mode")
+        function _()
+            largeItem = m.createSeason("Season 1", "2024", 8, "http://server/season.jpg")
+            largeItem.addFields({ posterLayout: true })
+            m.top.itemContent = largeItem
+            standardItem = m.createSeason("Season 1", "2024", 8, "http://server/season.jpg")
+            standardItem.addFields({ posterLayout: false })
+
+            m.top.itemContent = standardItem
+
+            m.assertEqual(m.top.findNode("poster").width, 207.0)
+            m.assertEqual(m.top.findNode("poster").height, 312.0)
+            m.assertTrue(Instr(1, m.top.findNode("seasonPosterMask").maskUri, "/season-poster-mask.png") > 0)
+            m.assertEqual(m.top.findNode("title").translation, [0.0, 327.0])
+            m.assertEqual(m.top.findNode("year").translation, [0.0, 357.0])
         end function
 
     end class

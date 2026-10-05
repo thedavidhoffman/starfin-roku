@@ -121,7 +121,7 @@ namespace tests
             m.node.state.layout.isCinematic = false
 
             'bs:disable-next-line 1140
-            applyCinematicLayout()
+            applyMovieLayout()
 
             m.assertTrue(m.top.findNode("mediaShell").detailsVisible)
             m.assertTrue(m.top.findNode("mediaToolbar").visible)
@@ -134,7 +134,7 @@ namespace tests
             m.node.state.focusArea = "toolbar"
 
             'bs:disable-next-line 1140
-            applyCinematicLayout()
+            applyMovieLayout()
 
             m.assertTrue(m.top.findNode("mediaShell").detailsVisible)
             m.assertFalse(m.top.findNode("mediaShell").castVisible)
@@ -699,6 +699,112 @@ namespace tests
             m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", subtitleStreamIndex: 5 })
 
             m.assertEqual(m.node.state.selectedStreams.subtitle.streamIndex, 5)
+        end function
+
+        @describe("independent shell layout")
+
+        @it("applies its own committed Cinematic preference")
+        function _()
+            m.top.settings = { "movie-shell-layout": "cinematic", "tv-episode-shell-layout": "partial-screen" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertTrue(m.node.state.layout.isCinematic)
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "cinematic")
+        end function
+
+        @it("ignores another media type layout preference")
+        function _()
+            m.top.settings = { "movie-shell-layout": "partial-screen", "tv-episode-shell-layout": "cinematic" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertFalse(m.node.state.layout.isCinematic)
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "partial-screen")
+        end function
+
+        @it("renders its saved Poster preference")
+        function _()
+            m.top.settings = { "movie-shell-layout": "poster" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertEqual(m.top.settings[SettingsStore.Key.MovieShellLayout], "poster")
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "poster")
+        end function
+
+        @describe("Movie Poster layout")
+
+        @it("moves the details and toolbar beside the poster")
+        function _()
+            m.top.settings = { "movie-shell-layout": "poster" }
+
+            m.assertEqual(m.top.findNode("mediaShell").contentTranslation, [768.0, 90.0])
+            m.assertEqual(m.top.findNode("mediaToolbar").translation, [672.0, 570.0])
+            m.assertTrue(m.top.findNode("mediaToolbar").visible)
+        end function
+
+        @it("centers the poster and right-side controls with equal page margins")
+        function _()
+            m.top.settings = { "movie-shell-layout": "poster" }
+
+            offset = m.top.findNode("mediaLayoutGroup").translation[0]
+            posterLeft = offset + m.top.findNode("moviePosterGroup").translation[0]
+            castRight = offset + m.top.findNode("contentGroup").translation[0] + m.top.findNode("cast").translation[0] + m.top.findNode("cast").viewportWidth
+            m.assertEqual(posterLeft, 48.0)
+            m.assertEqual(1920 - castRight, posterLeft)
+        end function
+
+        @it("narrows the visible cast row beside the poster")
+        function _()
+            m.top.settings = { "movie-shell-layout": "poster" }
+            cast = m.top.findNode("cast")
+
+            m.assertEqual(cast.translation, [672.0, 681.0])
+            m.assertEqual(cast.viewportWidth, 1152)
+            m.assertEqual(cast.findNode("castRows").itemSize, [1152.0, 264.0])
+            m.assertTrue(cast.displayEnabled)
+        end function
+
+        @it("restores full-width geometry when leaving Poster")
+        function _()
+            m.top.settings = { "movie-shell-layout": "poster" }
+
+            m.top.settings = { "movie-shell-layout": "partial-screen" }
+
+            m.assertEqual(m.top.findNode("mediaLayoutGroup").translation, [0.0, 0.0])
+            m.assertEqual(m.top.findNode("mediaShell").contentTranslation, [96.0, 108.0])
+            m.assertEqual(m.top.findNode("mediaToolbar").translation, [0.0, 588.0])
+            m.assertEqual(m.top.findNode("cast").translation, [0.0, 699.0])
+            m.assertEqual(m.top.findNode("cast").viewportWidth, 1848)
+        end function
+
+        @it("keeps the poster details visible when entering cast")
+        function _()
+            m.top.settings = { "movie-shell-layout": "poster" }
+            m.top.findNode("cast").people = [{ Id: "person", Name: "Person" }]
+
+            'bs:disable-next-line 1140
+            focusCast()
+
+            m.assertEqual(m.node.state.focusArea, "cast")
+            m.assertTrue(m.top.findNode("cast").isInFocusChain())
+            m.assertTrue(m.top.findNode("mediaShell").detailsVisible)
+            m.assertTrue(m.top.findNode("mediaToolbar").visible)
+        end function
+
+        @it("passes primary poster artwork separately from the backdrop")
+        function _()
+            item = m.createMovie()
+            item.ImageTags = { Primary: "poster-tag" }
+            item.BackdropImageTags = ["backdrop-tag"]
+
+            'bs:disable-next-line 1140
+            renderMovie(item)
+
+            content = m.top.findNode("mediaShell").mediaContent
+            m.assertTrue(Instr(1, content.posterUrl, "/Images/Primary") > 0)
+            m.assertTrue(Instr(1, content.backdropUrl, "/Images/Backdrop") > 0)
         end function
 
     end class

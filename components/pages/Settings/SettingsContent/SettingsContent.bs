@@ -13,6 +13,8 @@ import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
 import "pkg:/source/VideoCardPresentation.bs"
 import "pkg:/source/SettingsNavigation.bs"
+import "pkg:/source/MediaShellLayout.bs"
+import "pkg:/source/AnimationControl.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -34,7 +36,8 @@ end sub
 sub initCardLayout(parent as object)
     for each child in parent.getChildren(-1, 0)
         if child.subtype() = "SettingsCard" then
-            child.cardWidth = 1160
+            ' Expand default cards; preserve widths declared for side-by-side cards.
+            if child.cardWidth = 1040 then child.cardWidth = 1160
             ' Declarative content children are available after the parent initializes.
             child.callFunc("updateCard")
         else if child.subtype() = "Group" then
@@ -67,7 +70,10 @@ sub initReferences()
     ]
     m.settingsControls = {
         displayAccountBadgeOptions: m.top.findNode("displayAccountBadgeOptions")
-        mediaShellBackgroundOptions: m.top.findNode("mediaShellBackgroundOptions")
+        movieShellLayoutOptions: m.top.findNode("movieShellLayoutOptions")
+        seriesShellLayoutOptions: m.top.findNode("seriesShellLayoutOptions")
+        episodeShellLayoutOptions: m.top.findNode("episodeShellLayoutOptions")
+        musicShellLayoutOptions: m.top.findNode("musicShellLayoutOptions")
         themeOptions: m.top.findNode("themeOptions")
         watchedIndicatorOptions: m.top.findNode("watchedIndicatorOptions")
         themeMusicOptions: m.top.findNode("themeMusicOptions")
@@ -93,7 +99,7 @@ sub initReferences()
     }
     m.categoryControls = [
         [m.settingsControls.librarySettingsGrid]
-        [m.settingsControls.mediaShellBackgroundOptions, m.settingsControls.themeMusicOptions]
+        [m.settingsControls.movieShellLayoutOptions, m.settingsControls.seriesShellLayoutOptions, m.settingsControls.episodeShellLayoutOptions, m.settingsControls.musicShellLayoutOptions, m.settingsControls.themeMusicOptions]
         [m.settingsControls.themeOptions, m.settingsControls.watchedIndicatorOptions]
         [m.settingsControls.nextItemPlaybackOptions]
         []
@@ -119,6 +125,24 @@ sub initReferences()
         activeKeyboardField: invalid
         returnFocus: invalid
     }
+    m.mediaShellState = {
+        layouts: [
+            { control: m.settingsControls.movieShellLayoutOptions, key: SettingsStore.Key.MovieShellLayout, values: [MediaShellLayout.Mode.FullScreen, MediaShellLayout.Mode.PartialScreen, MediaShellLayout.Mode.Cinematic, MediaShellLayout.Mode.Poster] }
+            { control: m.settingsControls.seriesShellLayoutOptions, key: SettingsStore.Key.TvSeriesShellLayout, values: [MediaShellLayout.Mode.FullScreen, MediaShellLayout.Mode.PartialScreen, MediaShellLayout.Mode.Poster] }
+            { control: m.settingsControls.episodeShellLayoutOptions, key: SettingsStore.Key.TvEpisodeShellLayout, values: [MediaShellLayout.Mode.FullScreen, MediaShellLayout.Mode.PartialScreen, MediaShellLayout.Mode.Cinematic] }
+            { control: m.settingsControls.musicShellLayoutOptions, key: SettingsStore.Key.MusicShellLayout, values: [MediaShellLayout.Mode.FullScreen, MediaShellLayout.Mode.PartialScreen] }
+        ]
+        returnTvControl: SettingsNavigation.MediaShellControl.Episode
+        pages: {
+            layouts: m.top.findNode("mediaShellLayoutsPage")
+            themeMusic: m.top.findNode("mediaShellThemeMusicPage")
+            up: m.top.findNode("mediaShellPageUp")
+            down: m.top.findNode("mediaShellPageDown")
+            number: m.top.findNode("mediaShellPageNumber")
+            fade: m.top.findNode("mediaShellPageFade")
+            index: SettingsNavigation.MediaShellPage.Layouts
+        }
+    }
     m.settingsState = {
         values: SettingsStore.Defaults()
     }
@@ -139,7 +163,9 @@ sub initHandlers()
     m.settingsControls.showSeasonSummaryCardOptions.observeField("itemSelected", "onShowSeasonSummaryCardSelected")
     m.settingsControls.homeEpisodeImagesOptions.observeField("itemSelected", "onHomeEpisodeImagesSelected")
     m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
-    m.settingsControls.mediaShellBackgroundOptions.observeField("itemSelected", "onMediaShellBackgroundSelected")
+    for each layout in m.mediaShellState.layouts
+        layout.control.observeField("itemSelected", "onMediaShellLayoutSelected")
+    end for
     m.settingsControls.watchedIndicatorOptions.observeField("itemSelected", "onWatchedIndicatorSelected")
     m.settingsControls.themeOptions.observeField("itemSelected", "onThemeSelected")
     m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
@@ -178,9 +204,23 @@ sub initOptionContent()
     setOptionTitles(m.settingsControls.showSeasonSummaryCardOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.homeEpisodeImagesOptions, ["Series artwork", "Episode thumbnail with logo", "Episode thumbnail without logo"])
     setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
-    setOptionTitles(m.settingsControls.mediaShellBackgroundOptions, ["Full screen", "Partial screen", "Cinematic"])
     setOptionTitles(m.settingsControls.watchedIndicatorOptions, ["Subtle", "High contrast"])
     setOptionTitles(m.settingsControls.themeOptions, ["Blue", "Black", "Grey"])
+    for each layout in m.mediaShellState.layouts
+        titles = []
+        for each value in layout.values
+            if value = MediaShellLayout.Mode.FullScreen then
+                titles.Push("Full backdrop")
+            else if value = MediaShellLayout.Mode.PartialScreen then
+                titles.Push("Corner backdrop")
+            else if value = MediaShellLayout.Mode.Cinematic then
+                titles.Push("Cinematic")
+            else
+                titles.Push("Poster")
+            end if
+        end for
+        setOptionTitles(layout.control, titles)
+    end for
     setOptionTitles(m.settingsControls.themeMusicOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.nextItemPlaybackOptions, ["Show " + Char.DoubleQuote + "Up Next" + Char.DoubleQuote, "Play next immediately"])
     nextEpisodePromptSecondsTitles = []
@@ -216,7 +256,12 @@ sub loadSettingsValues()
     setOnOffOption(m.settingsControls.showSeasonSummaryCardOptions, m.settingsState.values[SettingsStore.Key.ShowSeasonSummaryCard])
     setHomeEpisodeImagesOption(m.settingsState.values[SettingsStore.Key.HomeEpisodeImages])
     setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
-    setMediaShellBackgroundOption(m.settingsState.values[SettingsStore.Key.MediaShellBackground])
+    for each layout in m.mediaShellState.layouts
+        value = SettingsStore.GetSettingValue(m.settingsState.values, layout.key)
+        for index = 0 to layout.values.Count() - 1
+            if layout.values[index] = value then layout.control.checkedItem = index
+        end for
+    end for
     setWatchedIndicatorOption(m.settingsState.values[SettingsStore.Key.WatchedIndicatorStyle])
     setThemeOption(m.settingsState.values[SettingsStore.Key.Theme])
     setOnOffOption(m.settingsControls.themeMusicOptions, m.settingsState.values[SettingsStore.Key.ThemeMusic])
@@ -265,6 +310,10 @@ sub restoreEditorFocus()
     target = m.focusState.returnFocus
     m.focusState.returnFocus = invalid
     if target <> invalid then
+        if m.focusState.categoryIndex = SettingsNavigation.Category.MediaShell then
+            pageIndex = (m.focusState.controlIndex = SettingsNavigation.MediaShellControl.ThemeMusic ? SettingsNavigation.MediaShellPage.ThemeMusic : SettingsNavigation.MediaShellPage.Layouts)
+            showMediaShellPage(pageIndex)
+        end if
         target.setFocus(true)
     else
         focusFirstField()
@@ -335,10 +384,16 @@ sub showCategory(index as integer)
 
     m.focusState.categoryIndex = index
     m.focusState.controlIndex = 0
+    if index < m.categoryState.userCount then
+        m.top.categoryTitle = m.categoryState.userTitles[index]
+    else
+        m.top.categoryTitle = m.categoryState.deviceTitles[index - m.categoryState.deviceOffset]
+    end if
     if index <> m.categoryState.resetIndex and m.resetStarfinState.confirmationVisible then showResetStarfinState()
     for i = 0 to m.categoryPanels.Count() - 1
         m.categoryPanels[i].visible = (i = index)
     end for
+    if index = SettingsNavigation.Category.MediaShell then showMediaShellPage(SettingsNavigation.MediaShellPage.Layouts)
     if index = SettingsNavigation.Category.Subtitles then
         showSubtitlePage(SettingsNavigation.SubtitlePage.Account)
         m.top.accountSubtitleAction = { kind: AccountSubtitles.Action.Load }
@@ -381,6 +436,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if key = Remote.Key.OK or key = Remote.Key.Select then return true
         return false
     end if
+
+    if m.focusState.categoryIndex = SettingsNavigation.Category.MediaShell then return handleMediaShellKey(key)
 
     if m.resetStarfinState.confirmationVisible then
         if key = Remote.Key.Right and m.settingsControls.abortResetButton.isInFocusChain() then return focusCategoryControl(1, invalid)
@@ -460,6 +517,10 @@ function focusCategoryControl(index as integer, itemIndex as dynamic) as boolean
 
     node = controls[index]
     m.focusState.controlIndex = index
+    if m.focusState.categoryIndex = SettingsNavigation.Category.MediaShell then
+        pageIndex = (index = SettingsNavigation.MediaShellControl.ThemeMusic ? SettingsNavigation.MediaShellPage.ThemeMusic : SettingsNavigation.MediaShellPage.Layouts)
+        showMediaShellPage(pageIndex)
+    end if
     if node.subtype() = "LibrarySettingsGrid" then
         if itemIndex = invalid then
             node.callFunc("focusLast")
@@ -617,19 +678,19 @@ sub onTVEpisodeListDisplaySelected()
 end sub
 
 '-------------------------------------------------------------------------------
-' onMediaShellBackgroundSelected
+' onMediaShellLayoutSelected
 '-------------------------------------------------------------------------------
-sub onMediaShellBackgroundSelected()
-    selectedIndex = getSelectedItemIndex(m.settingsControls.mediaShellBackgroundOptions)
+sub onMediaShellLayoutSelected(event as object)
+    control = event.getRoSGNode()
+    selectedIndex = getSelectedItemIndex(control)
     if selectedIndex < 0 then return
-    m.settingsControls.mediaShellBackgroundOptions.checkedItem = selectedIndex
-    if selectedIndex = 2 then
-        m.settingsState.values[SettingsStore.Key.MediaShellBackground] = "cinematic"
-    else if selectedIndex = 1 then
-        m.settingsState.values[SettingsStore.Key.MediaShellBackground] = "partial-screen"
-    else
-        m.settingsState.values[SettingsStore.Key.MediaShellBackground] = "full-screen"
-    end if
+    for each layout in m.mediaShellState.layouts
+        if layout.control.isSameNode(control) then
+            control.checkedItem = selectedIndex
+            m.settingsState.values[layout.key] = layout.values[selectedIndex]
+            return
+        end if
+    end for
 end sub
 
 '-------------------------------------------------------------------------------
@@ -688,22 +749,6 @@ sub setTVEpisodeListDisplayOption(value as dynamic)
         m.settingsControls.tvEpisodeListDisplayOptions.checkedItem = 1
     else
         m.settingsControls.tvEpisodeListDisplayOptions.checkedItem = 0
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' setMediaShellBackgroundOption
-'-------------------------------------------------------------------------------
-sub setMediaShellBackgroundOption(value as dynamic)
-    normalizedValue = ""
-    if value <> invalid then normalizedValue = LCase(value.ToStr())
-
-    if normalizedValue = "cinematic" then
-        m.settingsControls.mediaShellBackgroundOptions.checkedItem = 2
-    else if normalizedValue = "partial-screen" then
-        m.settingsControls.mediaShellBackgroundOptions.checkedItem = 1
-    else
-        m.settingsControls.mediaShellBackgroundOptions.checkedItem = 0
     end if
 end sub
 
@@ -1022,4 +1067,79 @@ sub setWatchedIndicatorOption(value as dynamic)
     if WatchedIndicator.Normalize(value) = WatchedIndicator.Style.HighContrast then selectedIndex = 1
     m.settingsControls.watchedIndicatorOptions.checkedItem = selectedIndex
     m.settingsControls.watchedIndicatorOptions.jumpToItem = selectedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' handleMediaShellKey
+'-------------------------------------------------------------------------------
+function handleMediaShellKey(key as string) as boolean
+    controls = m.categoryControls[SettingsNavigation.Category.MediaShell]
+    focusedIndex = -1
+    for index = 0 to controls.Count() - 1
+        if controls[index].isInFocusChain() then focusedIndex = index
+    end for
+    if focusedIndex < 0 then return false
+    m.focusState.controlIndex = focusedIndex
+    control = controls[focusedIndex]
+    itemIndex = getListIndex(control.itemFocused, getListItemCount(control))
+    if key = Remote.Key.Left then
+        if focusedIndex = SettingsNavigation.MediaShellControl.Movie or focusedIndex = SettingsNavigation.MediaShellControl.Series or focusedIndex = SettingsNavigation.MediaShellControl.ThemeMusic then
+            focusFirstField()
+        else
+            targetIndex = (focusedIndex = SettingsNavigation.MediaShellControl.Music ? SettingsNavigation.MediaShellControl.Movie : SettingsNavigation.MediaShellControl.Series)
+            focusCategoryControl(targetIndex, getListIndex(itemIndex, getListItemCount(controls[targetIndex])))
+        end if
+        return true
+    else if key = Remote.Key.Right then
+        if focusedIndex = SettingsNavigation.MediaShellControl.Movie or focusedIndex = SettingsNavigation.MediaShellControl.Series then
+            targetIndex = (focusedIndex = SettingsNavigation.MediaShellControl.Movie ? SettingsNavigation.MediaShellControl.Music : SettingsNavigation.MediaShellControl.Episode)
+            focusCategoryControl(targetIndex, getListIndex(itemIndex, getListItemCount(controls[targetIndex])))
+        end if
+        return true
+    else if key = Remote.Key.Down and isFocusedAtLastItem(control) then
+        if focusedIndex <> SettingsNavigation.MediaShellControl.ThemeMusic then
+            if focusedIndex = SettingsNavigation.MediaShellControl.Movie then
+                targetIndex = SettingsNavigation.MediaShellControl.Series
+            else if focusedIndex = SettingsNavigation.MediaShellControl.Music then
+                targetIndex = SettingsNavigation.MediaShellControl.Episode
+            else
+                targetIndex = SettingsNavigation.MediaShellControl.ThemeMusic
+                m.mediaShellState.returnTvControl = focusedIndex
+            end if
+            focusCategoryControl(targetIndex, 0)
+        end if
+        return true
+    else if key = Remote.Key.Up and isFocusedAtFirstItem(control) then
+        if focusedIndex = SettingsNavigation.MediaShellControl.Series or focusedIndex = SettingsNavigation.MediaShellControl.Episode or focusedIndex = SettingsNavigation.MediaShellControl.ThemeMusic then
+            if focusedIndex = SettingsNavigation.MediaShellControl.Series then
+                targetIndex = SettingsNavigation.MediaShellControl.Movie
+            else if focusedIndex = SettingsNavigation.MediaShellControl.Episode then
+                targetIndex = SettingsNavigation.MediaShellControl.Music
+            else
+                targetIndex = m.mediaShellState.returnTvControl
+            end if
+            focusCategoryControl(targetIndex, getListItemCount(controls[targetIndex]) - 1)
+        end if
+        return true
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' showMediaShellPage
+'-------------------------------------------------------------------------------
+sub showMediaShellPage(index as integer)
+    pages = m.mediaShellState.pages
+    changed = pages.index <> index
+    pages.index = index
+    pages.layouts.visible = index = SettingsNavigation.MediaShellPage.Layouts
+    pages.themeMusic.visible = index = SettingsNavigation.MediaShellPage.ThemeMusic
+    pages.up.visible = index = SettingsNavigation.MediaShellPage.ThemeMusic
+    pages.down.visible = index = SettingsNavigation.MediaShellPage.Layouts
+    pages.number.text = "1 / 2"
+    if index = SettingsNavigation.MediaShellPage.ThemeMusic then pages.number.text = "2 / 2"
+    if changed then
+        pages.fade.control = AnimationControl.Command.Stop
+        pages.fade.control = AnimationControl.Command.Start
+    end if
 end sub

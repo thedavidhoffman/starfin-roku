@@ -24,6 +24,7 @@ import "pkg:/source/Number.bs"
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/store/RegistryStore.bs"
 import "pkg:/source/store/SettingsStore.bs"
+import "pkg:/source/MediaShellLayout.bs"
 import "pkg:/source/Array.bs"
 
 '-------------------------------------------------------------------------------
@@ -44,11 +45,13 @@ sub init()
         randomPlaybackQueue: invalid
         randomQueueLoading: false
         seriesLoaded: false
+        seasonWindowStart: 0
         focusArea: "videoToolbar"
         themeLookupActive: false
         lifecycle: AsyncLifecycle.Create()
     }
     m.layout = {
+        isPoster: false
         contentDefault: [96, 0]
         contentCastFocused: [96, -397]
         toolbarDefault: [0, 529]
@@ -65,6 +68,8 @@ sub initReferences()
     m.mediaShell = m.top.findNode("mediaShell")
     m.videoToolbar = m.top.findNode("videoToolbar")
     m.seasonsGrid = m.top.findNode("seasonsGrid")
+    m.leftSeasonChevron = m.top.findNode("leftSeasonChevron")
+    m.rightSeasonChevron = m.top.findNode("rightSeasonChevron")
     m.cast = m.top.findNode("cast")
     m.chevronFooter = m.top.findNode("chevronFooter")
     m.tvShowTask = m.top.findNode("tvShowTask")
@@ -87,7 +92,9 @@ sub initHandlers()
     m.videoToolbar.observeField("allEpisodesSelected", "onVideoToolbarAllEpisodesSelected")
     m.videoToolbar.observeField("focusExitUp", "onVideoToolbarFocusExitUp")
     m.videoToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
+    m.videoToolbar.observeField("layoutWidth", "positionContentLayout")
     m.seasonsGrid.observeField("itemSelected", "onSeasonSelected")
+    m.seasonsGrid.observeField("itemFocused", "updateSeasonChevrons")
     m.cast.observeField("hasItems", "onCastAvailabilityChanged")
     m.cast.observeField("focusExitUp", "onCastFocusExitUp")
     m.cast.observeField("selectedPerson", "onCastPersonSelected")
@@ -322,8 +329,9 @@ sub onLoadRequestChanged()
 
     m.pageState.request = request
     m.pageState.playbackRefresh = { needed: false, playPending: false }
+    m.pageState.seasons = []
+    m.pageState.seasonWindowStart = 0
     m.top.settings = request.settings
-    applyMediaShellBackgroundSetting(request.settings)
     m.pageState.series = request.item
     m.pageState.playbackQueue = invalid
     m.pageState.playbackQueueIndex = 0
@@ -334,8 +342,7 @@ sub onLoadRequestChanged()
     m.pageState.themeLookupActive = false
     AsyncLifecycle.Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.focusArea = "videoToolbar"
-    m.contentGroup.translation = m.layout.contentDefault
-    m.videoToolbar.translation = m.layout.toolbarDefault
+    applyMediaShellLayout(request.settings)
     m.videoToolbar.visible = false
     m.videoToolbar.supportsAllEpisodes = false
     setSeasonsVisible(true)
@@ -359,15 +366,63 @@ sub onSettingsChanged()
     settings = m.top.settings
     wasThemeMusicEnabled = SettingsStore.IsThemeMusicEnabled(m.pageState.request.settings)
     if m.pageState <> invalid and m.pageState.request <> invalid then m.pageState.request.settings = settings
-    applyMediaShellBackgroundSetting(settings)
+    applyMediaShellLayout(settings)
     if wasThemeMusicEnabled = false and SettingsStore.IsThemeMusicEnabled(m.top.settings) then loadThemeSong(m.pageState.series)
 end sub
 
 '-------------------------------------------------------------------------------
-' applyMediaShellBackgroundSetting
+' applyMediaShellLayout
 '-------------------------------------------------------------------------------
-sub applyMediaShellBackgroundSetting(settings as dynamic)
-    m.mediaShell.backgroundDisplay = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
+sub applyMediaShellLayout(settings as dynamic)
+    mode = SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvSeriesShellLayout)
+    isPoster = mode = MediaShellLayout.Mode.Poster
+    modeChanged = m.layout.isPoster <> isPoster
+    m.layout.isPoster = isPoster
+    m.layout.toolbarDefault = (isPoster ? [28, 286] : [0, 529])
+
+    m.mediaShell.backgroundDisplay = mode
+    m.mediaShell.contentTranslation = (isPoster ? [0, 0] : [96, 50])
+    m.mediaShell.detailsVisible = true
+    m.videoToolbar.supportsFocusExitUp = isPoster <> true
+    positionContentLayout()
+    m.seasonsGrid.itemSize = (isPoster ? [400, 672] : [207, 381])
+    m.seasonsGrid.itemSpacing = (isPoster ? [24, 0] : [21, 33])
+    m.seasonsGrid.numColumns = (isPoster ? 4 : 8)
+    m.seasonsGrid.focusBitmapUri = (isPoster ? "pkg:/images/tv-show/season-poster-focus-400x672.png" : "pkg:/images/tv-show/season-poster-focus-207x381.png")
+    positionSeasonsGrid()
+    m.cast.displayEnabled = isPoster <> true
+    if isPoster then m.cast.callFunc("deactivate")
+
+    if modeChanged and m.pageState.seasons <> invalid then
+        m.pageState.seasonWindowStart = 0
+        focusedIndex = m.seasonsGrid.itemFocused
+        renderSeasons(m.pageState.seasons)
+        if focusedIndex >= 0 then m.seasonsGrid.jumpToItem = focusedIndex
+    end if
+    if isPoster and m.pageState.focusArea = "cast" then
+        if m.seasonsGrid.visible then
+            focusSeasonsIfActive()
+        else
+            focusVideoToolbar()
+        end if
+    else if isPoster and m.pageState.focusArea = "description" then
+        focusVideoToolbar()
+    end if
+    updateFocusChevron()
+    updateSeasonChevrons()
+end sub
+
+'-------------------------------------------------------------------------------
+' positionContentLayout
+'-------------------------------------------------------------------------------
+sub positionContentLayout()
+    isCastFocused = m.layout.isPoster <> true and m.pageState.focusArea = "cast"
+    m.contentGroup.translation = (isCastFocused ? m.layout.contentCastFocused : m.layout.contentDefault)
+    if m.layout.isPoster and m.videoToolbar.layoutWidth > 0 then
+        centeredX = Number.ToInteger((1920 - m.videoToolbar.layoutWidth) / 2, 0)
+        m.layout.toolbarDefault = [centeredX - m.layout.contentDefault[0], 286]
+    end if
+    m.videoToolbar.translation = (isCastFocused ? m.layout.toolbarCastFocused : m.layout.toolbarDefault)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -575,6 +630,7 @@ sub renderSeries(item as dynamic, logoPending = false as boolean)
     seriesMetadataText = getMetaText(item)
     genreText = getGenreText(item)
     m.mediaShell.mediaContent = {
+        mediaType: "tv-show"
         backdropUrl: getBackdropUrl(item)
         logoUrl: getImageUrl(item, JellyfinImage.Type.Logo, 600, 300)
         logoPending: logoPending
@@ -606,23 +662,49 @@ sub renderSeasons(seasons as object)
             itemType: Format.SafeString(Format.FirstNonEmpty([season.Type], ""), "")
             seasonYear: getSeasonYearText(season)
             episodeCount: Format.FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
+            posterLayout: m.layout.isPoster
             raw: season
         })
     end for
 
     m.seasonsGrid.content = content
     m.seasonsGrid.visible = content.getChildCount() > 0
+    positionSeasonsGrid()
     updateFocusChevron()
+    updateSeasonChevrons()
+end sub
+
+'-------------------------------------------------------------------------------
+' positionSeasonsGrid
+'-------------------------------------------------------------------------------
+sub positionSeasonsGrid()
+    if m.layout.isPoster <> true then
+        m.seasonsGrid.translation = [0, 630]
+        return
+    end if
+
+    gridX = 28
+    content = m.seasonsGrid.content
+    if content <> invalid then
+        seasonCount = content.getChildCount()
+        if seasonCount >= 1 and seasonCount <= 3 then
+            rowWidth = seasonCount * m.seasonsGrid.itemSize[0] + (seasonCount - 1) * m.seasonsGrid.itemSpacing[0]
+            gridX = Number.ToInteger((1920 - rowWidth) / 2, 0) - m.layout.contentDefault[0]
+        end if
+    end if
+    m.seasonsGrid.translation = [gridX, 375]
 end sub
 
 '-------------------------------------------------------------------------------
 ' getSeasonPosterUrl
 '-------------------------------------------------------------------------------
 function getSeasonPosterUrl(season as dynamic) as string
-    posterUrl = getImageUrl(season, JellyfinImage.Type.Primary, 207, 312)
+    posterWidth = (m.layout.isPoster ? 400 : 207)
+    posterHeight = (m.layout.isPoster ? 603 : 312)
+    posterUrl = getImageUrl(season, JellyfinImage.Type.Primary, posterWidth, posterHeight)
     if posterUrl <> "" then return posterUrl
 
-    return getImageUrl(m.pageState.series, JellyfinImage.Type.Primary, 207, 312)
+    return getImageUrl(m.pageState.series, JellyfinImage.Type.Primary, posterWidth, posterHeight)
 end function
 
 '-------------------------------------------------------------------------------
@@ -633,6 +715,7 @@ sub setSeasonsVisible(isVisible as boolean)
     visible = isVisible and hasSeasons
     m.seasonsGrid.visible = visible
     updateFocusChevron()
+    updateSeasonChevrons()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -679,8 +762,7 @@ sub focusSeasonsIfActive()
     if m.seasonsGrid.content.getChildCount() = 0 then return
 
     m.pageState.focusArea = "seasons"
-    m.contentGroup.translation = m.layout.contentDefault
-    m.videoToolbar.translation = m.layout.toolbarDefault
+    positionContentLayout()
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
     m.videoToolbar.callFunc("deactivate")
@@ -694,8 +776,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusVideoToolbar()
     m.pageState.focusArea = "videoToolbar"
-    m.contentGroup.translation = m.layout.contentDefault
-    m.videoToolbar.translation = m.layout.toolbarDefault
+    positionContentLayout()
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
     updateFocusChevron()
@@ -707,11 +788,11 @@ end sub
 ' focusMediaDescription
 '-------------------------------------------------------------------------------
 function focusMediaDescription() as boolean
+    if m.layout.isPoster then return false
     if m.mediaShell.callFunc("canFocusDescription") <> true then return false
 
     m.pageState.focusArea = "description"
-    m.contentGroup.translation = m.layout.contentDefault
-    m.videoToolbar.translation = m.layout.toolbarDefault
+    positionContentLayout()
     setSeasonsVisible(true)
     m.cast.callFunc("deactivate")
     m.videoToolbar.callFunc("deactivate")
@@ -731,11 +812,11 @@ end sub
 ' focusCast
 '-------------------------------------------------------------------------------
 sub focusCast()
+    if m.layout.isPoster then return
     if m.cast.visible <> true or m.cast.hasItems <> true then return
 
     m.pageState.focusArea = "cast"
-    m.contentGroup.translation = m.layout.contentCastFocused
-    m.videoToolbar.translation = m.layout.toolbarCastFocused
+    positionContentLayout()
     setSeasonsVisible(false)
     m.videoToolbar.callFunc("deactivate")
     m.cast.callFunc("activate")
@@ -760,6 +841,11 @@ end sub
 ' updateFocusChevron
 '-------------------------------------------------------------------------------
 sub updateFocusChevron()
+    if m.layout.isPoster then
+        m.chevronFooter.direction = ""
+        return
+    end if
+
     hasSeasons = m.seasonsGrid.content <> invalid and m.seasonsGrid.content.getChildCount() > 0
     hasCast = m.cast.visible = true and m.cast.hasItems = true
 
@@ -773,9 +859,40 @@ sub updateFocusChevron()
 end sub
 
 '-------------------------------------------------------------------------------
+' updateSeasonChevrons
+'-------------------------------------------------------------------------------
+sub updateSeasonChevrons()
+    m.leftSeasonChevron.visible = false
+    m.rightSeasonChevron.visible = false
+    if m.layout.isPoster <> true or m.seasonsGrid.visible <> true then return
+    if m.seasonsGrid.content = invalid then return
+
+    itemCount = m.seasonsGrid.content.getChildCount()
+    visibleCount = 4
+    if itemCount <= visibleCount then return
+
+    windowStart = m.pageState.seasonWindowStart
+    focusedIndex = m.seasonsGrid.itemFocused
+    if focusedIndex < windowStart then
+        windowStart = focusedIndex
+    else if focusedIndex >= windowStart + visibleCount then
+        windowStart = focusedIndex - visibleCount + 1
+    end if
+
+    if windowStart < 0 then windowStart = 0
+    lastWindowStart = itemCount - visibleCount
+    if windowStart > lastWindowStart then windowStart = lastWindowStart
+    m.pageState.seasonWindowStart = windowStart
+
+    m.leftSeasonChevron.visible = windowStart > 0
+    m.rightSeasonChevron.visible = windowStart < lastWindowStart
+end sub
+
+'-------------------------------------------------------------------------------
 ' onCastPersonSelected
 '-------------------------------------------------------------------------------
 sub onCastPersonSelected()
+    if m.layout.isPoster then return
     selection = m.cast.selectedPerson
     if selection = invalid then return
     if selection.itemId = invalid or selection.itemId = "" then return
@@ -953,7 +1070,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = Remote.Key.Down and m.pageState.focusArea = "seasons" and m.cast.visible = true and m.cast.hasItems = true then
+    if key = Remote.Key.Down and m.pageState.focusArea = "seasons" and m.layout.isPoster <> true and m.cast.visible = true and m.cast.hasItems = true then
         focusCast()
         return true
     end if

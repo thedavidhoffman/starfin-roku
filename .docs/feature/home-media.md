@@ -58,3 +58,10 @@ original shelf or item disappears, focus falls back to an available shelf/card.
 Starting playback closes the dialog first; stopping returns to
 the originating shelf or library. Pages own selection and focus handling;
 MainScene only routes the overlay result and existing playback events.
+
+## Library heading placement
+
+The Home Media library heading and Browse By/Sort controls share a top position
+of 132 px, including when the layout is reapplied during folder navigation. This
+moves the row down 12 px while retaining the heading's natural height and the
+existing grid position.

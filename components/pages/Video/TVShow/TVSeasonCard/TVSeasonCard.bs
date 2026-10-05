@@ -9,12 +9,15 @@ import "pkg:/source/MediaMetadata.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    MaskAssets.Apply(m.top.findNode("seasonPosterMask"), "season-poster-mask.png", [207, 312], [138, 208])
+    m.posterMask = m.top.findNode("seasonPosterMask")
+    MaskAssets.Apply(m.posterMask, "season-poster-mask.png", [207, 312], [138, 208])
     m.placeholder = m.top.findNode("placeholder")
     m.poster = m.top.findNode("poster")
     m.watchedIndicator = m.top.findNode("watchedIndicator")
     m.title = m.top.findNode("title")
     m.year = m.top.findNode("year")
+    m.itemContent = invalid
+    m.posterLayout = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -22,18 +25,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub onItemContentChanged()
     item = m.top.itemContent
+    ' Layout changes can replace the content node while keeping the same season ID.
+    if m.itemContent <> invalid then m.itemContent.unobserveField("raw")
+    m.itemContent = item
     if item = invalid then
-        m.itemContent = invalid
-        m.itemContentKey = ""
         m.watchedIndicator.visible = false
         return
     end if
-    itemContentKey = Format.SafeString(item.itemId, "")
-    m.itemContent = item
-    if m.itemContentKey <> itemContentKey then
-        m.itemContentKey = itemContentKey
-        item.observeField("raw", "onItemDataChanged")
-    end if
+
+    applyPosterLayout(item.posterLayout = true)
+    item.observeField("raw", "onItemDataChanged")
 
     m.title.text = Format.SafeString(item.title, "")
     m.year.text = getMetadataText(item)
@@ -43,6 +44,38 @@ sub onItemContentChanged()
     m.placeholder.visible = imageUrl = ""
     m.poster.uri = imageUrl
     m.watchedIndicator.visible = isSeasonFullyWatched(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPosterLayout
+'-------------------------------------------------------------------------------
+sub applyPosterLayout(isPoster as boolean)
+    if m.posterLayout = isPoster then return
+    m.posterLayout = isPoster
+
+    if isPoster then
+        MaskAssets.Apply(m.posterMask, "season-poster-large-mask.png", [400, 603], [267, 402])
+        m.placeholder.width = 400
+        m.placeholder.height = 603
+        m.poster.width = 400
+        m.poster.height = 603
+        m.watchedIndicator.translation = [346, 9]
+        m.title.translation = [0, 618]
+        m.title.width = 400
+        m.year.translation = [0, 648]
+        m.year.width = 400
+    else
+        MaskAssets.Apply(m.posterMask, "season-poster-mask.png", [207, 312], [138, 208])
+        m.placeholder.width = 207
+        m.placeholder.height = 312
+        m.poster.width = 207
+        m.poster.height = 312
+        m.watchedIndicator.translation = [153, 9]
+        m.title.translation = [0, 327]
+        m.title.width = 207
+        m.year.translation = [0, 357]
+        m.year.width = 207
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

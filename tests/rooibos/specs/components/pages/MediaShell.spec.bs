@@ -163,6 +163,66 @@ namespace tests
             m.assertTrue(m.top.findNode("contentGradient").visible)
         end function
 
+        @it("hides the bottom gradient for Corner backdrop movie including cast focus")
+        function _()
+            m.top.backgroundDisplay = "partial-screen"
+            content = m.createContent("movie")
+            content.backdropUrl = "http://server/backdrop.jpg"
+            m.top.mediaContent = content
+
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+            m.assertTrue(m.top.findNode("backgroundShade").visible)
+            m.assertTrue(m.top.findNode("mediaBackgroundPartialGroup").visible)
+
+            m.top.castVisible = true
+
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+
+            m.top.backgroundDisplay = "full-screen"
+
+            m.assertTrue(m.top.findNode("contentGradient").visible)
+        end function
+
+        @it("hides the bottom gradient for Corner backdrop series including cast focus")
+        function _()
+            m.top.backgroundDisplay = "partial-screen"
+            content = m.createContent("tv-show")
+            content.backdropUrl = "http://server/backdrop.jpg"
+            m.top.mediaContent = content
+
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+            m.assertTrue(m.top.findNode("backgroundShade").visible)
+            m.assertTrue(m.top.findNode("mediaBackgroundPartialGroup").visible)
+
+            m.top.castVisible = true
+
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+
+            m.top.backgroundDisplay = "full-screen"
+
+            m.assertTrue(m.top.findNode("contentGradient").visible)
+        end function
+
+        @it("hides the bottom gradient for Corner backdrop episode including cast focus")
+        function _()
+            m.top.backgroundDisplay = "partial-screen"
+            content = m.createContent("tv-episode")
+            content.backdropUrl = "http://server/backdrop.jpg"
+            m.top.mediaContent = content
+
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+            m.assertTrue(m.top.findNode("backgroundShade").visible)
+            m.assertTrue(m.top.findNode("mediaBackgroundPartialGroup").visible)
+
+            m.top.castVisible = true
+
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+
+            m.top.backgroundDisplay = "full-screen"
+
+            m.assertTrue(m.top.findNode("contentGradient").visible)
+        end function
+
         @describe("media details")
 
         @it("renders a movie fallback title")
@@ -854,6 +914,149 @@ namespace tests
             m.assertEqual(loadedLogo.height, 190)
             m.assertEqual(loadedLogo.translation, [0, 0])
             m.assertEqual(m.top.findNode("infoGroup").translation[1] - loadedLogo.translation[1] - loadedLogo.height, 40.0)
+        end function
+
+        @describe("Movie Poster rendering")
+
+        @it("uses the placeholder after primary artwork fails")
+        function _()
+            originalPoster = m.node.moviePoster
+            failedImage = { loadStatus: "failed", uri: "http://server/poster" }
+            m.node.moviePoster = { group: { visible: true }, image: failedImage, url: "http://server/poster" }
+
+            'bs:disable-next-line 1140
+            onMoviePosterLoadStatusChanged()
+
+            m.node.moviePoster = originalPoster
+            m.assertEqual(failedImage.uri, "pkg:/images/media-card/poster-placeholder-252x378.png")
+        end function
+
+        @it("ignores a poster failure after leaving Poster mode")
+        function _()
+            originalPoster = m.node.moviePoster
+            failedImage = { loadStatus: "failed", uri: "http://server/poster" }
+            m.node.moviePoster = { group: { visible: false }, image: failedImage, url: "http://server/poster" }
+
+            'bs:disable-next-line 1140
+            onMoviePosterLoadStatusChanged()
+
+            m.node.moviePoster = originalPoster
+            m.assertEqual(failedImage.uri, "http://server/poster")
+        end function
+
+        @it("ignores an obsolete poster failure")
+        function _()
+            originalPoster = m.node.moviePoster
+            failedImage = { loadStatus: "failed", uri: "http://server/old" }
+            m.node.moviePoster = { group: { visible: true }, image: failedImage, url: "http://server/new" }
+
+            'bs:disable-next-line 1140
+            onMoviePosterLoadStatusChanged()
+
+            m.node.moviePoster = originalPoster
+            m.assertEqual(failedImage.uri, "http://server/old")
+        end function
+
+        @it("uses the dedicated full-size movie poster mask")
+        function _()
+            m.top.backgroundDisplay = "poster"
+            m.top.mediaContent = { mediaType: "movie", title: "Movie" }
+
+            posterGroup = m.top.findNode("moviePosterGroup")
+            m.assertTrue(Instr(1, posterGroup.maskUri, "/movie-poster-mask.png") > 0)
+            m.assertEqual(posterGroup.maskSize, [600.0, 900.0])
+        end function
+
+        @it("shows the left poster on the unchanged Starfin background")
+        function _()
+            m.top.backgroundDisplay = "poster"
+            m.top.mediaContent = { mediaType: "movie", title: "Movie", posterUrl: "pkg:/images/media-card/poster-placeholder-252x378.png", backdropUrl: "http://server/backdrop.jpg" }
+
+            m.assertTrue(m.top.findNode("moviePosterGroup").visible)
+            m.assertEqual(m.top.findNode("moviePosterGroup").translation, [96.0, 90.0])
+            m.assertEqual(m.top.findNode("moviePoster").width, 600.0)
+            m.assertEqual(m.top.findNode("moviePoster").height, 900.0)
+            m.assertFalse(m.top.findNode("mediaBackgroundFull").visible)
+            m.assertFalse(m.top.findNode("mediaBackgroundPartialGroup").visible)
+            m.assertEqual(m.top.findNode("mediaBackgroundFull").uri, "")
+            m.assertFalse(m.top.findNode("backgroundShade").visible)
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+        end function
+
+        @it("uses the standard placeholder when primary artwork is absent")
+        function _()
+            m.top.backgroundDisplay = "poster"
+            m.top.mediaContent = { mediaType: "movie", title: "Movie" }
+
+            m.assertEqual(m.top.findNode("moviePoster").uri, "pkg:/images/media-card/poster-placeholder-252x378.png")
+            m.assertTrue(m.top.findNode("moviePosterGroup").visible)
+        end function
+
+        @it("keeps metadata and description within the right column")
+        function _()
+            m.top.backgroundDisplay = "poster"
+            m.top.mediaContent = { mediaType: "movie", title: "Movie", primaryInfoText: "2026", secondaryInfoText: "Drama", overview: "Description" }
+
+            m.assertEqual(m.top.findNode("primaryInfoRow").availableWidth, 1056.0)
+            m.assertEqual(m.top.findNode("secondaryInfoRow").availableWidth, 1056.0)
+            m.assertEqual(m.top.findNode("overviewDescription").width, 1056.0)
+            m.assertTrue(m.top.findNode("secondaryInfoRow").visible)
+            m.assertTrue(m.top.findNode("overviewDescription").visible)
+            m.assertEqual(m.top.findNode("logoFallbackTitleLabel").width, 1056.0)
+        end function
+
+        @it("restores the cached backdrop and widths when leaving Poster")
+        function _()
+            m.top.backgroundDisplay = "poster"
+            m.top.mediaContent = { mediaType: "movie", title: "Movie", backdropUrl: "http://server/backdrop.jpg" }
+
+            m.top.backgroundDisplay = "full-screen"
+
+            m.assertFalse(m.top.findNode("moviePosterGroup").visible)
+            m.assertTrue(m.top.findNode("mediaBackgroundFull").visible)
+            m.assertEqual(m.top.findNode("mediaBackgroundFull").uri, "http://server/backdrop.jpg")
+            m.assertTrue(m.top.findNode("backgroundShade").visible)
+            m.assertTrue(m.top.findNode("contentGradient").visible)
+            m.assertEqual(m.top.findNode("overviewDescription").width, 1040.0)
+            m.assertEqual(m.top.findNode("primaryInfoRow").availableWidth, 1220.0)
+        end function
+
+        @describe("TV Series Poster background")
+
+        @it("exposes the theme background without artwork or shading")
+        function _()
+            m.top.backgroundDisplay = "poster"
+            m.top.mediaContent = { mediaType: "tv-show", title: "Series", backdropUrl: "http://server/backdrop.jpg" }
+
+            m.assertFalse(m.top.findNode("mediaBackgroundFull").visible)
+            m.assertFalse(m.top.findNode("mediaBackgroundPartialGroup").visible)
+            m.assertFalse(m.top.findNode("backgroundShade").visible)
+            m.assertFalse(m.top.findNode("contentGradient").visible)
+            m.assertFalse(m.top.findNode("moviePosterGroup").visible)
+        end function
+
+        @it("restores artwork and shading when leaving series Poster for full-screen")
+        function _()
+            m.top.backgroundDisplay = "poster"
+            m.top.mediaContent = { mediaType: "tv-show", title: "Series", backdropUrl: "http://server/backdrop.jpg" }
+
+            m.top.backgroundDisplay = "full-screen"
+
+            m.assertTrue(m.top.findNode("mediaBackgroundFull").visible)
+            m.assertTrue(m.top.findNode("backgroundShade").visible)
+            m.assertTrue(m.top.findNode("contentGradient").visible)
+        end function
+
+        @it("restores artwork and shading when leaving series Poster for partial-screen")
+        function _()
+            m.top.backgroundDisplay = "poster"
+            m.top.mediaContent = { mediaType: "tv-show", title: "Series", backdropUrl: "http://server/backdrop.jpg" }
+
+            m.top.backgroundDisplay = "partial-screen"
+
+            m.assertTrue(m.top.findNode("mediaBackgroundPartialGroup").visible)
+            m.assertTrue(m.top.findNode("backgroundShade").visible)
+            m.assertFalse(m.top.findNode("contentGradient").visible)
         end function
 
     end class

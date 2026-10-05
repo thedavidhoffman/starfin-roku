@@ -4,6 +4,7 @@ import "pkg:/source/HomeEpisodeImages.bs"
 import "pkg:/source/SubtitleBurnIn.bs"
 import "pkg:/source/LibraryLayoutSetting.bs"
 import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/MediaShellLayout.bs"
 import "pkg:/source/NextItemPlayback.bs"
 import "pkg:/source/NextEpisodePromptSeconds.bs"
 import "pkg:/source/store/RegistryStore.bs"
@@ -25,7 +26,10 @@ namespace SettingsStore
         TvEpisodeListDisplay = "tv-ep-list-scroll"
         ShowSeasonSummaryCard = "show-season-summary-card"
         HomeEpisodeImages = "home-episode-images"
-        MediaShellBackground = "media-shell-background"
+        MovieShellLayout = "movie-shell-layout"
+        TvSeriesShellLayout = "tv-series-shell-layout"
+        TvEpisodeShellLayout = "tv-episode-shell-layout"
+        MusicShellLayout = "music-shell-layout"
         Theme = "theme"
         WatchedIndicatorStyle = "watched-indicator-style"
         ThemeMusic = "theme-music"
@@ -55,7 +59,10 @@ namespace SettingsStore
         defaultSettings[Key.TvEpisodeListDisplay] = "vertical"
         defaultSettings[Key.ShowSeasonSummaryCard] = "on"
         defaultSettings[Key.HomeEpisodeImages] = HomeEpisodeImages.Mode.Series
-        defaultSettings[Key.MediaShellBackground] = "full-screen"
+        defaultSettings[Key.MovieShellLayout] = MediaShellLayout.Mode.FullScreen
+        defaultSettings[Key.TvSeriesShellLayout] = MediaShellLayout.Mode.PartialScreen
+        defaultSettings[Key.TvEpisodeShellLayout] = MediaShellLayout.Mode.FullScreen
+        defaultSettings[Key.MusicShellLayout] = MediaShellLayout.Mode.FullScreen
         defaultSettings[Key.Theme] = Theme.Mode.Blue
         defaultSettings[Key.WatchedIndicatorStyle] = WatchedIndicator.Style.Subtle
         defaultSettings[Key.ThemeMusic] = "off"
@@ -74,7 +81,7 @@ namespace SettingsStore
     ' SettingsStore.AccountKeys
     '---------------------------------------------------------------------------
     function AccountKeys() as object
-        return [Key.TvLibraryLayout, Key.MovieLibraryLayout, Key.CollectionCardsLayout, Key.CollectionItemsLayout, Key.PlaylistCardsLayout, Key.PlaylistItemsLayout, Key.MusicVideosLayout, Key.HomeVideosLayout, Key.TvEpisodeListDisplay, Key.ShowSeasonSummaryCard, Key.HomeEpisodeImages, Key.MediaShellBackground, Key.Theme, Key.WatchedIndicatorStyle, Key.ThemeMusic, Key.NextItemPlayback, Key.NextEpisodePromptSeconds, Key.ScreensaverType, Key.ScreensaverDelay, Key.SubtitleBurnInMode]
+        return [Key.TvLibraryLayout, Key.MovieLibraryLayout, Key.CollectionCardsLayout, Key.CollectionItemsLayout, Key.PlaylistCardsLayout, Key.PlaylistItemsLayout, Key.MusicVideosLayout, Key.HomeVideosLayout, Key.TvEpisodeListDisplay, Key.ShowSeasonSummaryCard, Key.HomeEpisodeImages, Key.MovieShellLayout, Key.TvSeriesShellLayout, Key.TvEpisodeShellLayout, Key.MusicShellLayout, Key.Theme, Key.WatchedIndicatorStyle, Key.ThemeMusic, Key.NextItemPlayback, Key.NextEpisodePromptSeconds, Key.ScreensaverType, Key.ScreensaverDelay, Key.SubtitleBurnInMode]
     end function
 
     '---------------------------------------------------------------------------
@@ -99,7 +106,9 @@ namespace SettingsStore
         values = {}
         if accountKey <> "" then
             accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
-            values = accountStore.ReadMulti(SettingsStore.AccountKeys())
+            readKeys = SettingsStore.AccountKeys()
+            readKeys.Push("media-shell-background")
+            values = accountStore.ReadMulti(readKeys)
             if values = invalid then values = {}
         end if
 
@@ -122,6 +131,7 @@ namespace SettingsStore
                 value = SettingsStore.GetSettingValue(settings, key)
                 accountStore.Write(key, value)
             end for
+            accountStore.Delete("media-shell-background")
             accountStore.Flush()
         end if
         globalStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
@@ -183,6 +193,24 @@ namespace SettingsStore
         defaultSettings = SettingsStore.Defaults()
         defaultValue = ""
         if defaultSettings[key] <> invalid then defaultValue = defaultSettings[key]
+        if key = Key.MovieShellLayout or key = Key.TvSeriesShellLayout or key = Key.TvEpisodeShellLayout or key = Key.MusicShellLayout then
+            value = invalid
+            if settings <> invalid then
+                value = settings[key]
+                ' Resolve legacy preferences only when this independent key is absent.
+                if value = invalid then
+                    legacy = MediaShellLayout.Normalize(settings["media-shell-background"], "")
+                    if key = Key.TvSeriesShellLayout then
+                        if legacy = MediaShellLayout.Mode.Poster then value = legacy
+                    else if legacy <> MediaShellLayout.Mode.Poster then
+                        value = legacy
+                    end if
+                end if
+            end if
+            if key = Key.TvSeriesShellLayout then return MediaShellLayout.NormalizeSeries(value)
+            if key = Key.MusicShellLayout then return MediaShellLayout.NormalizeMusic(value)
+            return MediaShellLayout.Normalize(value, defaultValue, key <> Key.TvEpisodeShellLayout)
+        end if
         if settings = invalid then return defaultValue
         if settings[key] = invalid or settings[key] = "" then return defaultValue
         if SettingsStore.__IsLibraryKey(key) then return LibraryLayoutSetting.Normalize(settings[key])

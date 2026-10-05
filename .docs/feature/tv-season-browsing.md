@@ -1,5 +1,20 @@
 # TV Season Browsing
 
+The TV show page reads the independent TV Series preference and applies Full
+Backdrop or Corner backdrop as selected, both on load and committed settings changes.
+Cinematic is unavailable for series; existing saved values normalize to Corner
+Backdrop. The Poster value places the series logo,
+first metadata row, and horizontally centered playback toolbar near the top. A
+four-column grid of larger season posters fills the space below, retaining labels, watched status,
+and season actions. These posters use dedicated rounded masks at 1080p and 720p
+instead of stretching the standard season mask. Cast and its chevron are unavailable in Poster layout.
+Left and right chevrons flank the posters and appear only while season cards remain
+offscreen on that side. Settings changes apply the page layout without reopening the series.
+
+TV season pages retain their separate fixed presentation in this stage; future
+season rendering will follow the TV Series preference. See
+[Media Shell Layout Preferences](media-shell-layout.md).
+
 TV season pages expose previous and next controls that update the existing page
 while preserving focus on season navigation.
 

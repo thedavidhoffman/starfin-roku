@@ -94,3 +94,14 @@ Changing Browse By selects the new option's semantic sort key and resets its
 direction to ascending. The committed selection synchronizes both controls and
 the request snapshot so filtered reloads cannot retain a direction from the
 previous browse option.
+
+## Library heading placement
+
+The library name and item count, Browse By, Sort, and the optional music-video
+Random button share a top position of 132 px, moved down 12 px to improve their
+placement between the app header and library grid. The heading retains its
+natural height; the grid and filter row keep their existing positions.
+
+The dedicated Collections browser also positions its centered heading at
+132 px, down 12 px. It has no Browse By/Sort controls and retains its natural
+heading height and existing grid position.

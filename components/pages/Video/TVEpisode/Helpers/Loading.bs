@@ -120,7 +120,7 @@ sub handleEpisodeDetailsResponse(task as dynamic)
         AppMessage.Show(message)
         m.log.activity("Episode load failed: " + Format.SafeString(response.errorMessage, message))
     else
-        applyEpisodeSeriesResponse(response.series, context)
+        applyEpisodeSeriesResponse(response.series, context, true)
         applyPlaybackQueueDetails(response)
         applyPrimaryEpisodeResponse(response, context)
     end if
@@ -152,7 +152,7 @@ sub applyPrimaryEpisodeResponse(response as object, context as object)
         m.state.request.startPositionTicks = invalid
     end if
     applyEpisodeSeriesResponse(response.series, context)
-    applyEpisodeDetails(response.payload, false)
+    applyEpisodeDetails(response.payload, context.seriesResolved <> true)
     m.cast.people = getPeople(response.payload)
     if isPlaybackRefresh <> true then m.log.activity("Viewing episode " + ActivityLog.EpisodeTitle(response.payload))
     if isPlaybackRefresh then notifyRefreshedWatchedState(response.payload)
@@ -162,11 +162,16 @@ end sub
 '-------------------------------------------------------------------------------
 ' applyEpisodeSeriesResponse
 '-------------------------------------------------------------------------------
-sub applyEpisodeSeriesResponse(series as dynamic, context as object)
-    if series = invalid or context.seriesApplied = true then return
-    context.seriesApplied = true
-    applySeriesDetails(series)
-    if m.state.playSelection <> invalid then m.state.playSelection.series = m.state.request.series
+sub applyEpisodeSeriesResponse(series as dynamic, context as object, isComplete = false as boolean)
+    if context.seriesApplied = true then return
+    if series = invalid and isComplete <> true then return
+
+    context.seriesResolved = true
+    if series <> invalid then
+        context.seriesApplied = true
+        applySeriesDetails(series)
+        if m.state.playSelection <> invalid then m.state.playSelection.series = m.state.request.series
+    end if
     if m.state.itemContent = invalid then return
 
     content = m.mediaShell.mediaContent

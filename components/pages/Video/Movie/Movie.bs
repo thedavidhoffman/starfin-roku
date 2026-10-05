@@ -1,3 +1,4 @@
+import "pkg:/source/MediaShellLayout.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/MediaOptionsSession.bs"
 import "pkg:/source/VideoMediaSummary.bs"
@@ -41,6 +42,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initReferences()
     m.log = new Logger("Movie", m.global.logService)
+    m.mediaLayoutGroup = m.top.findNode("mediaLayoutGroup")
     m.mediaShell = m.top.findNode("mediaShell")
     m.mediaToolbar = m.top.findNode("mediaToolbar")
     m.previousNextButton = m.top.findNode("previousNextButton")
@@ -64,6 +66,7 @@ sub initReferences()
         focusArea: "toolbar"
         layout: {
             isCinematic: false
+            isPoster: false
             isFromLibrary: false
         }
         libraryBrowse: {
@@ -117,6 +120,7 @@ sub renderMovie(item as dynamic, logoPending = false as boolean)
     m.mediaShell.mediaContent = {
         mediaType: "movie"
         backdropUrl: getBackdropUrl(item)
+        posterUrl: getImageUrl(item, JellyfinImage.Type.Primary, 600, 900)
         logoUrl: getImageUrl(item, JellyfinImage.Type.Logo, 600, 300)
         logoPending: logoPending
         title: getItemTitle(item)
@@ -200,24 +204,27 @@ end sub
 ' applyMediaShellBackgroundSetting
 '-------------------------------------------------------------------------------
 sub applyMediaShellBackgroundSetting(settings as dynamic)
-    display = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MediaShellBackground)
-    m.state.layout.isCinematic = LCase(display) = "cinematic"
+    display = SettingsStore.GetSettingValue(settings, SettingsStore.Key.MovieShellLayout)
+    m.state.layout.isCinematic = display = MediaShellLayout.Mode.Cinematic
+    m.state.layout.isPoster = display = MediaShellLayout.Mode.Poster
     m.mediaShell.backgroundDisplay = display
-    applyCinematicLayout()
+    applyMovieLayout()
 end sub
 
 '-------------------------------------------------------------------------------
-' applyCinematicLayout
+' applyMovieLayout
 '-------------------------------------------------------------------------------
-sub applyCinematicLayout()
+sub applyMovieLayout()
+    m.mediaLayoutGroup.translation = (m.state.layout.isPoster ? [-48, 0] : [0, 0])
+    m.cast.viewportWidth = (m.state.layout.isPoster ? 1152 : 1848)
     if m.state.layout.isCinematic <> true then
         m.mediaShell.castVisible = false
-        m.mediaShell.contentTranslation = [96, 108]
+        m.mediaShell.contentTranslation = (m.state.layout.isPoster ? [768, 90] : [96, 108])
         m.mediaShell.detailsVisible = true
-        m.mediaToolbar.translation = [0, 588]
+        m.mediaToolbar.translation = (m.state.layout.isPoster ? [672, 570] : [0, 588])
         m.mediaToolbar.visible = true
         m.previousNextButton.displayEnabled = false
-        m.cast.translation = [0, 699]
+        m.cast.translation = (m.state.layout.isPoster ? [672, 681] : [0, 699])
         m.cast.displayEnabled = true
         m.chevronFooter.direction = ""
         return
@@ -251,7 +258,7 @@ sub onCastAvailabilityChanged()
         return
     end if
 
-    applyCinematicLayout()
+    applyMovieLayout()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -279,7 +286,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusVideoToolbar()
     m.state.focusArea = "toolbar"
-    applyCinematicLayout()
+    applyMovieLayout()
     m.cast.callFunc("deactivate")
     m.previousNextButton.callFunc("deactivate")
     m.top.setFocus(true)
@@ -319,7 +326,7 @@ sub focusCast()
     if m.cast.hasItems <> true then return
 
     m.state.focusArea = "cast"
-    applyCinematicLayout()
+    applyMovieLayout()
     m.mediaToolbar.callFunc("deactivate")
     m.previousNextButton.callFunc("deactivate")
     m.cast.callFunc("activate")
@@ -361,7 +368,7 @@ sub applyLibraryBrowseState(state as dynamic)
 
     m.previousNextButton.hasPrevious = m.state.libraryBrowse.previousIndex >= 0
     m.previousNextButton.hasNext = m.state.libraryBrowse.nextIndex >= 0
-    applyCinematicLayout()
+    applyMovieLayout()
 end sub
 
 '-------------------------------------------------------------------------------

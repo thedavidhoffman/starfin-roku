@@ -53,3 +53,15 @@ the selection from the original navigation request. This keeps newer playback
 progress and watched changes authoritative while optional requests finish.
 `SeriesIdentity` owns the single artwork-metadata completeness rule. An explicitly
 loaded response records known absence even if the server omits `ImageTags`.
+
+## Series title artwork
+
+The episode page keeps the series-title fallback hidden while series artwork
+is unresolved, including after primary episode details arrive. A known logo
+is displayed when loaded. The fallback appears only after series metadata
+confirms there is no logo, the lookup completes without series artwork, or the
+logo image fails to load. The episode title itself remains independent.
+
+Unit coverage includes primary details arriving before series artwork, known
+missing logos, optional lookups completing without artwork, and series artwork
+arriving before primary details.

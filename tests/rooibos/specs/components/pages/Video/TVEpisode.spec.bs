@@ -138,7 +138,7 @@ namespace tests
             m.assertTrue(m.node.previousNextButton.visible)
 
             settings = {}
-            settings[SettingsStore.Key.MediaShellBackground] = "full-screen"
+            settings[SettingsStore.Key.TvEpisodeShellLayout] = "full-screen"
             'bs:disable-next-line 1140
             applyMediaShellBackgroundSetting(settings)
             'bs:disable-next-line 1140
@@ -1079,6 +1079,103 @@ namespace tests
             m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", subtitleStreamIndex: 5 })
 
             m.assertEqual(m.node.state.selectedStreams.subtitle.streamIndex, 5)
+        end function
+
+        @describe("independent shell layout")
+
+        @it("applies its own committed Cinematic preference")
+        function _()
+            m.top.settings = { "tv-episode-shell-layout": "cinematic", "movie-shell-layout": "partial-screen" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertTrue(m.node.state.layout.isCinematic)
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "cinematic")
+        end function
+
+        @it("ignores another media type layout preference")
+        function _()
+            m.top.settings = { "tv-episode-shell-layout": "partial-screen", "movie-shell-layout": "cinematic" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertFalse(m.node.state.layout.isCinematic)
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "partial-screen")
+        end function
+
+        @describe("series logo resolution")
+
+        @it("keeps fallback hidden after primary details while series artwork is pending")
+        function _()
+            m.prepareProgressiveEpisode()
+            m.primaryResponse.payload.SeriesName = "Series"
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+
+            m.assertTrue(m.node.mediaShell.mediaContent.logoPending)
+            m.assertFalse(m.node.mediaShell.findNode("logoFallbackTitleLabel").visible)
+            m.assertTrue(m.node.mediaShell.findNode("episodeTitleLabel").visible)
+        end function
+
+        @it("keeps fallback hidden when the late series response supplies a logo")
+        function _()
+            m.prepareProgressiveEpisode()
+            m.primaryResponse.payload.SeriesName = "Series"
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: { ok: true, action: "tvEpisodeSeries", requestId: 1, itemId: "episode-1", series: { Id: "series-1", Name: "Series", logoUrl: "pkg:/images/media-card/poster-placeholder-252x378.png", metadataLoaded: true } } })
+
+            m.assertFalse(m.node.mediaShell.mediaContent.logoPending)
+            m.assertTrue(m.node.mediaShell.mediaContent.logoUrl <> "")
+            m.assertFalse(m.node.mediaShell.findNode("logoFallbackTitleLabel").visible)
+        end function
+
+        @it("shows fallback when series metadata confirms there is no logo")
+        function _()
+            m.prepareProgressiveEpisode()
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: { ok: true, action: "tvEpisodeSeries", requestId: 1, itemId: "episode-1", series: { Id: "series-1", Name: "Series", metadataLoaded: true } } })
+
+            m.assertFalse(m.node.mediaShell.mediaContent.logoPending)
+            m.assertTrue(m.node.mediaShell.findNode("logoFallbackTitleLabel").visible)
+            m.assertEqual(m.node.mediaShell.findNode("logoFallbackTitleLabel").text, "Series")
+        end function
+
+        @it("shows fallback when the optional series lookup finishes without artwork")
+        function _()
+            m.prepareProgressiveEpisode()
+            m.primaryResponse.payload.SeriesName = "Series"
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+            finalResponse = m.primaryResponse
+            finalResponse.action = "tvEpisodeDetails"
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: finalResponse })
+
+            m.assertFalse(m.node.mediaShell.mediaContent.logoPending)
+            m.assertTrue(m.node.mediaShell.findNode("logoFallbackTitleLabel").visible)
+            m.assertEqual(m.node.mediaShell.findNode("logoFallbackTitleLabel").text, "Series")
+        end function
+
+        @it("retains a resolved logo when series metadata arrives before primary details")
+        function _()
+            m.prepareProgressiveEpisode()
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: { ok: true, action: "tvEpisodeSeries", requestId: 1, itemId: "episode-1", series: { Id: "series-1", Name: "Series", logoUrl: "pkg:/images/media-card/poster-placeholder-252x378.png", metadataLoaded: true } } })
+
+            'bs:disable-next-line 1140
+            handleEpisodeDetailsResponse({ response: m.primaryResponse })
+
+            m.assertFalse(m.node.mediaShell.mediaContent.logoPending)
+            m.assertTrue(m.node.mediaShell.mediaContent.logoUrl <> "")
+            m.assertFalse(m.node.mediaShell.findNode("logoFallbackTitleLabel").visible)
         end function
 
     end class

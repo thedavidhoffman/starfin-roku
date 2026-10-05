@@ -248,3 +248,12 @@ startup and settings loading perform no migration or registry cleanup.
 Subtitle navigation uses two fixed pages (Jellyfin preferences, then local
 burn-in) with a non-focusable chevron/page indicator and a short fade. This
 keeps SettingsContent responsible for paging.
+
+SettingsContent owns the media-layout radio cards, edited snapshot, and two-page
+navigation independently of subtitle paging. The first page contains paired
+Movie/Music and TV Series/TV Episode rows; the second contains Theme music.
+SettingsCard owns rendering and radio geometry, preserving explicitly declared
+card widths. SettingsStore retains independent account preferences for movies,
+TV series, TV episodes, and music, with legacy resolution on read and cleanup on
+normal save. Detail pages own applying their preferences; MainScene includes
+MusicArtist in its committed-settings fan-out.

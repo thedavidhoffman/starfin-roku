@@ -65,3 +65,9 @@ invalidates the outstanding query, clears the blocking loading state, reports
 the failure through the shared app status, and returns focus to the page
 controls. A late response is therefore treated as stale instead of reopening
 the completed loading transition.
+
+## Library heading placement
+
+The library heading and Browse By/Sort controls share a top position of 132 px,
+12 px lower than their previous placement. The heading retains its natural
+height, and the grid and filter row keep their existing positions.

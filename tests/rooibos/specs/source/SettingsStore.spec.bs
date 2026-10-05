@@ -150,7 +150,7 @@ namespace tests
 
         @it("provides the persisted registry key values (case 8)")
         function _()
-            m.assertEqual(SettingsStore.Key.MediaShellBackground, "media-shell-background")
+            m.assertEqual(SettingsStore.Key.MovieShellLayout, "movie-shell-layout")
         end function
 
         @it("provides the persisted registry key values (case 9)")
@@ -209,7 +209,7 @@ namespace tests
         function _()
             defaults = SettingsStore.Defaults()
 
-            m.assertEqual(defaults.Count(), 23)
+            m.assertEqual(defaults.Count(), 26)
             m.assertEqual(defaults[SettingsStore.Key.TvLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.MovieLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.CollectionCardsLayout], "poster;6")
@@ -221,7 +221,10 @@ namespace tests
             m.assertEqual(defaults[SettingsStore.Key.TvEpisodeListDisplay], "vertical")
             m.assertEqual(defaults[SettingsStore.Key.ShowSeasonSummaryCard], "on")
             m.assertEqual(defaults[SettingsStore.Key.HomeEpisodeImages], "series")
-            m.assertEqual(defaults[SettingsStore.Key.MediaShellBackground], "full-screen")
+            m.assertEqual(defaults[SettingsStore.Key.MovieShellLayout], "full-screen")
+            m.assertEqual(defaults[SettingsStore.Key.TvSeriesShellLayout], "partial-screen")
+            m.assertEqual(defaults[SettingsStore.Key.TvEpisodeShellLayout], "full-screen")
+            m.assertEqual(defaults[SettingsStore.Key.MusicShellLayout], "full-screen")
             m.assertEqual(defaults[SettingsStore.Key.Theme], "blue")
             m.assertEqual(defaults[SettingsStore.Key.ThemeMusic], "off")
             m.assertEqual(defaults[SettingsStore.Key.NextItemPlayback], NextItemPlayback.Mode.ShowUpNext)
@@ -249,7 +252,10 @@ namespace tests
                 SettingsStore.Key.TvEpisodeListDisplay
                 SettingsStore.Key.ShowSeasonSummaryCard
                 SettingsStore.Key.HomeEpisodeImages
-                SettingsStore.Key.MediaShellBackground
+                SettingsStore.Key.MovieShellLayout
+                SettingsStore.Key.TvSeriesShellLayout
+                SettingsStore.Key.TvEpisodeShellLayout
+                SettingsStore.Key.MusicShellLayout
                 SettingsStore.Key.Theme
                 SettingsStore.Key.WatchedIndicatorStyle
                 SettingsStore.Key.ThemeMusic
@@ -794,6 +800,221 @@ namespace tests
                 section = CreateObject("roRegistrySection", name)
                 m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
             end for
+        end function
+
+        @describe("independent media shell preferences")
+
+        @it("defaults MovieShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.MovieShellLayout), "full-screen")
+        end function
+
+        @it("migrates legacy full-screen for MovieShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "full-screen" }, SettingsStore.Key.MovieShellLayout), "full-screen")
+        end function
+
+        @it("migrates legacy partial-screen for MovieShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "partial-screen" }, SettingsStore.Key.MovieShellLayout), "partial-screen")
+        end function
+
+        @it("migrates legacy cinematic for MovieShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "cinematic" }, SettingsStore.Key.MovieShellLayout), "cinematic")
+        end function
+
+        @it("migrates legacy poster for MovieShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "poster" }, SettingsStore.Key.MovieShellLayout), "full-screen")
+        end function
+
+        @it("defaults TvSeriesShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.TvSeriesShellLayout), "partial-screen")
+        end function
+
+        @it("migrates legacy full-screen for TvSeriesShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "full-screen" }, SettingsStore.Key.TvSeriesShellLayout), "partial-screen")
+        end function
+
+        @it("migrates legacy partial-screen for TvSeriesShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "partial-screen" }, SettingsStore.Key.TvSeriesShellLayout), "partial-screen")
+        end function
+
+        @it("migrates legacy cinematic for TvSeriesShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "cinematic" }, SettingsStore.Key.TvSeriesShellLayout), "partial-screen")
+        end function
+
+        @it("migrates legacy poster for TvSeriesShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "poster" }, SettingsStore.Key.TvSeriesShellLayout), "poster")
+        end function
+
+        @it("defaults TvEpisodeShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.TvEpisodeShellLayout), "full-screen")
+        end function
+
+        @it("migrates legacy full-screen for TvEpisodeShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "full-screen" }, SettingsStore.Key.TvEpisodeShellLayout), "full-screen")
+        end function
+
+        @it("migrates legacy partial-screen for TvEpisodeShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "partial-screen" }, SettingsStore.Key.TvEpisodeShellLayout), "partial-screen")
+        end function
+
+        @it("migrates legacy cinematic for TvEpisodeShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "cinematic" }, SettingsStore.Key.TvEpisodeShellLayout), "cinematic")
+        end function
+
+        @it("migrates legacy poster for TvEpisodeShellLayout")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "poster" }, SettingsStore.Key.TvEpisodeShellLayout), "full-screen")
+        end function
+
+        @it("prefers an independent key during partial migration")
+        function _()
+            settings = { "media-shell-background": "cinematic", "movie-shell-layout": "partial-screen" }
+            m.assertEqual(SettingsStore.GetSettingValue(settings, SettingsStore.Key.MovieShellLayout), "partial-screen")
+            m.assertEqual(SettingsStore.GetSettingValue(settings, SettingsStore.Key.TvEpisodeShellLayout), "cinematic")
+        end function
+
+        @it("defaults invalid new keys without reviving legacy values")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "cinematic", "movie-shell-layout": "unknown" }, SettingsStore.Key.MovieShellLayout), "full-screen")
+        end function
+
+        @it("rejects saved episode Poster")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "tv-episode-shell-layout": "poster" }, SettingsStore.Key.TvEpisodeShellLayout), "full-screen")
+        end function
+
+        @it("compares independent preferences")
+        function _()
+            left = SettingsStore.Defaults()
+            right = SettingsStore.Defaults()
+            right[SettingsStore.Key.TvSeriesShellLayout] = "poster"
+            m.assertFalse(SettingsStore.AreEqual(left, right))
+        end function
+
+        @it("loads legacy layouts without writing registry")
+        function _()
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName("rooibos-shell-a"), RegistryStore.AccountSectionName("rooibos-shell-b")]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
+            section = CreateObject("roRegistrySection", RegistryStore.AccountSectionName("rooibos-shell-a"))
+            section.Delete(SettingsStore.Key.MovieShellLayout)
+            section.Delete(SettingsStore.Key.TvSeriesShellLayout)
+            section.Delete(SettingsStore.Key.TvEpisodeShellLayout)
+            section.Delete(SettingsStore.Key.MusicShellLayout)
+            section.Write("media-shell-background", "cinematic")
+            section.Flush()
+            settings = SettingsStore.Load("rooibos-shell-a")
+            m.assertEqual(settings[SettingsStore.Key.MovieShellLayout], "cinematic")
+            m.assertFalse(section.Exists("movie-shell-layout"))
+            m.assertTrue(section.Exists("media-shell-background"))
+        end function
+
+        @it("saves migrated layouts and removes the legacy key")
+        function _()
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName("rooibos-shell-a"), RegistryStore.AccountSectionName("rooibos-shell-b")]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
+            section = CreateObject("roRegistrySection", RegistryStore.AccountSectionName("rooibos-shell-a"))
+            section.Delete(SettingsStore.Key.MovieShellLayout)
+            section.Delete(SettingsStore.Key.TvSeriesShellLayout)
+            section.Delete(SettingsStore.Key.TvEpisodeShellLayout)
+            section.Delete(SettingsStore.Key.MusicShellLayout)
+            section.Write("media-shell-background", "cinematic")
+            section.Flush()
+            settings = SettingsStore.Load("rooibos-shell-a")
+            SettingsStore.Save("rooibos-shell-a", settings)
+            m.assertEqual(section.Read("movie-shell-layout"), "cinematic")
+            m.assertEqual(section.Read("tv-series-shell-layout"), "partial-screen")
+            m.assertEqual(section.Read("tv-episode-shell-layout"), "cinematic")
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("isolates media layouts between accounts")
+        function _()
+            m.registrySnapshot = {}
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName("rooibos-shell-a"), RegistryStore.AccountSectionName("rooibos-shell-b")]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+            end for
+            section = CreateObject("roRegistrySection", RegistryStore.AccountSectionName("rooibos-shell-a"))
+            section.Delete(SettingsStore.Key.MovieShellLayout)
+            section.Delete(SettingsStore.Key.TvSeriesShellLayout)
+            section.Delete(SettingsStore.Key.TvEpisodeShellLayout)
+            section.Delete(SettingsStore.Key.MusicShellLayout)
+            section.Write("media-shell-background", "cinematic")
+            section.Flush()
+            first = SettingsStore.Defaults()
+            first[SettingsStore.Key.MovieShellLayout] = "poster"
+            SettingsStore.Save("rooibos-shell-a", first)
+            SettingsStore.Save("rooibos-shell-b", SettingsStore.Defaults())
+            m.assertEqual(SettingsStore.Load("rooibos-shell-a")[SettingsStore.Key.MovieShellLayout], "poster")
+            m.assertEqual(SettingsStore.Load("rooibos-shell-b")[SettingsStore.Key.MovieShellLayout], "full-screen")
+        end function
+
+        @describe("Music shell preference")
+
+        @it("defaults Music to Full Backdrop")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.MusicShellLayout), "full-screen")
+        end function
+
+        @it("migrates legacy Music Corner Backdrop")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "partial-screen" }, SettingsStore.Key.MusicShellLayout), "partial-screen")
+        end function
+
+        @it("migrates legacy Music Cinematic to its prior full backdrop")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "cinematic" }, SettingsStore.Key.MusicShellLayout), "full-screen")
+        end function
+
+        @it("migrates legacy Music Poster to its prior full backdrop")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "media-shell-background": "poster" }, SettingsStore.Key.MusicShellLayout), "full-screen")
+        end function
+
+        @it("rejects unsupported independent Music modes")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "music-shell-layout": "cinematic" }, SettingsStore.Key.MusicShellLayout), "full-screen")
+        end function
+
+        @it("prefers the independent Music setting")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "music-shell-layout": "full-screen", "media-shell-background": "partial-screen" }, SettingsStore.Key.MusicShellLayout), "full-screen")
+        end function
+
+        @describe("Unsupported series mode")
+
+        @it("normalizes saved series Cinematic to Corner Backdrop")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "tv-series-shell-layout": "cinematic" }, SettingsStore.Key.TvSeriesShellLayout), "partial-screen")
+        end function
+
+        @it("continues supporting movie Cinematic")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "movie-shell-layout": "cinematic" }, SettingsStore.Key.MovieShellLayout), "cinematic")
+        end function
+
+        @it("continues supporting episode Cinematic")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "tv-episode-shell-layout": "cinematic" }, SettingsStore.Key.TvEpisodeShellLayout), "cinematic")
         end function
 
     end class

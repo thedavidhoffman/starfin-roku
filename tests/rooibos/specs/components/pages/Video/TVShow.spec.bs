@@ -37,6 +37,34 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("mediaShell"))
         end function
 
+        @it("starts with a partial-screen media shell")
+        function _()
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "partial-screen")
+        end function
+
+        @it("uses Full Backdrop when loading a series with that preference")
+        function _()
+            request = m.createRequest()
+            request.item = m.createSeries()
+            request.settings[SettingsStore.Key.TvSeriesShellLayout] = "full-screen"
+            m.top.loadRequest = request
+
+            'bs:disable-next-line 1140
+            onLoadRequestChanged()
+
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "full-screen")
+        end function
+
+        @it("normalizes unsupported series Cinematic to Corner Backdrop")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "cinematic" }
+
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "partial-screen")
+        end function
+
         @it("declares the contentGroup node")
         function _()
             m.assertNotInvalid(m.top.findNode("contentGroup"))
@@ -703,6 +731,172 @@ namespace tests
             content = m.top.findNode("mediaShell").mediaContent
             m.assertEqual(content.officialRating, "TV-14")
             m.assertEqual(Instr(1, content.primaryInfoText, "TV-14"), 0)
+        end function
+
+        @describe("independent series layout")
+
+        @it("renders Full Backdrop after a live independent series setting change")
+        function _()
+            shell = m.top.findNode("mediaShell")
+            shell.mediaContent = { mediaType: "tv-show", title: "Series", backdropUrl: "http://server/backdrop.jpg" }
+
+            m.top.settings = { "tv-series-shell-layout": "full-screen", "movie-shell-layout": "partial-screen" }
+
+            m.assertEqual(shell.backgroundDisplay, "full-screen")
+            m.assertTrue(shell.findNode("mediaBackgroundFull").visible)
+            m.assertFalse(shell.findNode("mediaBackgroundPartialGroup").visible)
+            m.assertTrue(m.top.findNode("cast").displayEnabled)
+        end function
+
+        @it("switches live from Full Backdrop to Corner Backdrop")
+        function _()
+            shell = m.top.findNode("mediaShell")
+            shell.mediaContent = { mediaType: "tv-show", title: "Series", backdropUrl: "http://server/backdrop.jpg" }
+            m.top.settings = { "tv-series-shell-layout": "full-screen" }
+
+            m.top.settings = { "tv-series-shell-layout": "partial-screen" }
+
+            m.assertEqual(shell.backgroundDisplay, "partial-screen")
+            m.assertFalse(shell.findNode("mediaBackgroundFull").visible)
+            m.assertTrue(shell.findNode("mediaBackgroundPartialGroup").visible)
+        end function
+
+        @it("restores the standard season grid when changing Poster to Full Backdrop")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "poster" }
+
+            m.top.settings = { "tv-series-shell-layout": "full-screen" }
+
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "full-screen")
+            m.assertEqual(m.top.findNode("seasonsGrid").numColumns, 8)
+            m.assertEqual(m.top.findNode("seasonsGrid").itemSize, [207.0, 381.0])
+            m.assertTrue(m.top.findNode("cast").displayEnabled)
+            m.assertTrue(m.top.findNode("videoToolbar").supportsFocusExitUp)
+        end function
+
+        @it("uses series Poster independently of the movie choice")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "poster", "movie-shell-layout": "full-screen" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "poster")
+            m.assertFalse(m.top.findNode("cast").displayEnabled)
+        end function
+
+        @it("recovers toolbar focus when Poster removes description focus")
+        function _()
+            m.node.pageState.focusArea = "description"
+            m.top.settings = { "tv-series-shell-layout": "poster" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertEqual(m.node.pageState.focusArea, "videoToolbar")
+        end function
+
+        @describe("layout and focus reconciliation")
+
+        @it("preserves the cast position when an unrelated setting changes")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "partial-screen", "theme": "blue" }
+            m.node.cast.people = [{ Id: "person", Name: "Person" }]
+            'bs:disable-next-line 1140
+            focusCast()
+
+            m.top.settings = { "tv-series-shell-layout": "partial-screen", "theme": "grey" }
+
+            m.assertEqual(m.node.pageState.focusArea, "cast")
+            m.assertEqual(m.top.findNode("contentGroup").translation, [96.0, -397.0])
+            m.assertEqual(m.top.findNode("videoToolbar").translation, [0.0, 926.0])
+            m.assertTrue(m.node.cast.isInFocusChain())
+        end function
+
+        @it("preserves cast focus when changing between backdrop layouts")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "partial-screen" }
+            m.node.cast.people = [{ Id: "person", Name: "Person" }]
+            'bs:disable-next-line 1140
+            focusCast()
+
+            m.top.settings = { "tv-series-shell-layout": "full-screen" }
+
+            m.assertEqual(m.node.pageState.focusArea, "cast")
+            m.assertEqual(m.top.findNode("contentGroup").translation, [96.0, -397.0])
+            m.assertEqual(m.top.findNode("videoToolbar").translation, [0.0, 926.0])
+            m.assertTrue(m.node.cast.isInFocusChain())
+            m.assertEqual(m.top.findNode("mediaShell").backgroundDisplay, "full-screen")
+        end function
+
+        @it("recovers season focus and the default content position when Poster removes cast")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "partial-screen" }
+            m.node.pageState.seasons = [m.createSeason("season-1", "Season 1")]
+            'bs:disable-next-line 1140
+            renderSeasons(m.node.pageState.seasons)
+            m.node.cast.people = [{ Id: "person", Name: "Person" }]
+            'bs:disable-next-line 1140
+            focusCast()
+
+            m.top.settings = { "tv-series-shell-layout": "poster" }
+
+            m.assertEqual(m.node.pageState.focusArea, "seasons")
+            m.assertEqual(m.top.findNode("contentGroup").translation, [96.0, 0.0])
+            m.assertTrue(m.node.seasonsGrid.isInFocusChain())
+            m.assertFalse(m.node.cast.displayEnabled)
+        end function
+
+        @describe("Poster season positioning")
+
+        @it("centers 1 season cards")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "poster" }
+
+            'bs:disable-next-line 1140
+            renderSeasons([m.createSeason("season-1", "Season 1")])
+
+            m.assertEqual(m.node.seasonsGrid.translation, [664.0, 375.0])
+        end function
+
+        @it("centers 2 season cards")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "poster" }
+
+            'bs:disable-next-line 1140
+            renderSeasons([m.createSeason("season-1", "Season 1"), m.createSeason("season-2", "Season 2")])
+
+            m.assertEqual(m.node.seasonsGrid.translation, [452.0, 375.0])
+        end function
+
+        @it("centers 3 season cards")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "poster" }
+
+            'bs:disable-next-line 1140
+            renderSeasons([m.createSeason("season-1", "Season 1"), m.createSeason("season-2", "Season 2"), m.createSeason("season-3", "Season 3")])
+
+            m.assertEqual(m.node.seasonsGrid.translation, [240.0, 375.0])
+        end function
+
+        @it("retains the existing four-season alignment")
+        function _()
+            m.top.settings = { "tv-series-shell-layout": "poster" }
+
+            'bs:disable-next-line 1140
+            renderSeasons([m.createSeason("season-1", "Season 1"), m.createSeason("season-2", "Season 2"), m.createSeason("season-3", "Season 3"), m.createSeason("season-4", "Season 4")])
+
+            m.assertEqual(m.node.seasonsGrid.translation, [28.0, 375.0])
+        end function
+
+        @it("restores standard season positioning when leaving Poster")
+        function _()
+            m.node.pageState.seasons = [m.createSeason("season-1", "Season 1")]
+            m.top.settings = { "tv-series-shell-layout": "poster" }
+
+            m.top.settings = { "tv-series-shell-layout": "partial-screen" }
+
+            m.assertEqual(m.node.seasonsGrid.translation, [0.0, 630.0])
+            m.assertEqual(m.node.seasonsGrid.itemSize, [207.0, 381.0])
+            m.assertFalse(m.node.seasonsGrid.content.getChild(0).posterLayout)
         end function
 
     end class

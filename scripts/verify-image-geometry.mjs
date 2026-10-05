@@ -19,6 +19,8 @@ const assets = {
   "images/masks/fhd/cast-mask.png": [195, 195, [0, 0, 194, 194]],
   "images/masks/fhd/person-mask.png": [399, 600, [0, 0, 398, 599]],
   "images/masks/fhd/filmography-movie-mask.png": [342, 513, [0, 0, 341, 512]],
+  "images/movie/movie-poster-mask-600x900.png": [600, 900, [0, 0, 599, 899]],
+  "images/masks/fhd/movie-poster-mask.png": [600, 900, [0, 0, 599, 899]],
   "images/masks/fhd/detailed-poster-mask.png": [288, 432, [0, 0, 286, 430]],
   "images/masks/fhd/album-mask-300.png": [300, 300, [0, 0, 299, 299]],
   "images/masks/fhd/album-mask-342.png": [342, 342, [0, 0, 341, 341]],
@@ -28,6 +30,7 @@ const assets = {
   "images/masks/fhd/trickplay-side-mask.png": [225, 126, [0, 0, 224, 125]],
   "images/masks/fhd/episode-thumbnail-mask.png": [531, 300, [0, 0, 530, 299]],
   "images/masks/fhd/season-poster-mask.png": [207, 312, [0, 0, 206, 311]],
+  "images/masks/fhd/season-poster-large-mask.png": [400, 603, [0, 0, 399, 602]],
   "images/cast/cast-placeholder-195x195.png": [195, 195, [0, 0, 194, 194]],
   "images/cast/filmography-list-focused-741x99.png": [741, 99, [0, 0, 740, 98]],
   "images/cast/filmography-movie-mask-342x513.png": [342, 513, [0, 0, 341, 512]],
@@ -46,6 +49,7 @@ const assets = {
   "images/trickplay/preview-side-mask.png": [225, 126, [0, 0, 224, 125]],
   "images/tv-season/episode-thumbnail-mask-531x300.png": [531, 300, [0, 0, 530, 299]],
   "images/tv-show/season-poster-mask-207x312.png": [207, 312, [0, 0, 206, 311]],
+  "images/tv-show/season-poster-mask-400x603.png": [400, 603, [0, 0, 399, 602]],
   "images/tv-show/season-placeholder-207x312.png": [207, 312, [0, 0, 206, 311]],
 };
 
@@ -56,6 +60,7 @@ const hdMaskAssets = {
   "images/masks/hd/cast-mask.png": [130, 130, [0, 0, 129, 129], 195, 195],
   "images/masks/hd/person-mask.png": [266, 400, [0, 0, 265, 399], 399, 600],
   "images/masks/hd/filmography-movie-mask.png": [228, 342, [0, 0, 227, 341], 342, 513],
+  "images/masks/hd/movie-poster-mask.png": [400, 600, [0, 0, 399, 599], 600, 900],
   "images/masks/hd/detailed-poster-mask.png": [192, 288, [0, 0, 191, 287], 288, 432],
   "images/masks/hd/album-mask-300.png": [200, 200, [0, 0, 199, 199], 300, 300],
   "images/masks/hd/album-mask-342.png": [228, 228, [0, 0, 227, 227], 342, 342],
@@ -65,6 +70,7 @@ const hdMaskAssets = {
   "images/masks/hd/trickplay-side-mask.png": [150, 84, [0, 0, 149, 83], 225, 126],
   "images/masks/hd/episode-thumbnail-mask.png": [354, 200, [0, 0, 353, 199], 531, 300],
   "images/masks/hd/season-poster-mask.png": [138, 208, [0, 0, 137, 207], 207, 312],
+  "images/masks/hd/season-poster-large-mask.png": [267, 402, [0, 0, 266, 401], 400, 603],
 };
 
 const hdImageAssets = {
@@ -74,6 +80,7 @@ const hdImageAssets = {
 };
 
 const generatedMaskSources = {
+  "movie-poster-mask.png": "images/movie/movie-poster-mask-600x900.png",
   "detailed-card-mask.png": "images/media-card/detailed-card-mask-882x496.png",
   "account-badge-user-mask.png": "images/header/account-badge-user-mask-96x96.png",
   "account-menu-user-mask.png": "images/header/account-menu-user-mask-144x144.png",
@@ -89,6 +96,7 @@ const generatedMaskSources = {
   "trickplay-side-mask.png": "images/trickplay/preview-side-mask.png",
   "episode-thumbnail-mask.png": "images/tv-season/episode-thumbnail-mask-531x300.png",
   "season-poster-mask.png": "images/tv-show/season-poster-mask-207x312.png",
+  "season-poster-large-mask.png": "images/tv-show/season-poster-mask-400x603.png",
 };
 
 const libraryMaskAssets = {
@@ -119,7 +127,7 @@ const geometryChecks = {
   "components/pages/Video/Cards/VideoThumbnailCard/VideoThumbnailCard.bs": ["posterMaskName: \"thumbnail-4-col-mask.png\"", "posterSize: [441, 249]", "hdPosterSize: [294, 166]"],
   "components/controls/Spinner/Spinner.bs": ["m.spinner.uri = ResolutionAssets.GetIconImageUri(\"busy-spinner.png\")"],
   "source/ResolutionAssets.bs": ["function __GetImageUri(category as string, filename as string)", "ResolutionProfile.GetName()"],
-  "components/pages/Video/TVShow/TVSeasonCard/TVSeasonCard.bs": ["MaskAssets.Apply(m.top.findNode(\"seasonPosterMask\"), \"season-poster-mask.png\", [207, 312], [138, 208])"],
+  "components/pages/Video/TVShow/TVSeasonCard/TVSeasonCard.bs": ["MaskAssets.Apply(m.posterMask, \"season-poster-mask.png\", [207, 312], [138, 208])", "MaskAssets.Apply(m.posterMask, \"season-poster-large-mask.png\", [400, 603], [267, 402])"],
   "components/pages/Video/TVSeason/TVEpisodePoster/TVEpisodePoster.bs": ["MaskAssets.Apply(m.posterMask, \"episode-thumbnail-mask.png\", [width, height], [hdWidth, hdHeight])"],
   "components/pages/Video/VideoPlayer/TrickplayPreviewStrip/TrickplayPreviewStrip.bs": ["MaskAssets.Apply(slot.imageMask, maskFilename, [tileWidth, tileHeight], [hdTileWidth, hdTileHeight])"],
   "components/pages/Music/MusicAlbumCard/MusicAlbumCard.bs": ["MaskAssets.Apply(m.albumMask, \"album-mask-300.png\", [300, 300], [200, 200])", "MaskAssets.Apply(m.albumMask, \"album-mask-342.png\", [342, 342], [228, 228])"],
@@ -129,7 +137,7 @@ const geometryChecks = {
   "components/pages/Video/TVSeason/TVSeason.xml": ["rowItemSize=\"[[576,591]]\"", "itemSize=\"[576,591]\""],
   "components/pages/Video/TVShow/TVShow.xml": ["itemSize=\"[207,381]\""],
   "components/pages/Music/MusicLibrary/MusicLibrary.xml": ["itemSize=\"[360,432]\""],
-  "components/pages/MediaShell/MediaShell.bs": ["MaskAssets.Apply(m.mediaBackgroundPartialGroup, \"media-shell-backdrop-mask.png\", [1152, 648], [768, 432])"],
+  "components/pages/MediaShell/MediaShell.bs": ['MaskAssets.Apply(m.moviePoster.group, "movie-poster-mask.png", [600, 900], [400, 600])', "MaskAssets.Apply(m.mediaBackgroundPartialGroup, \"media-shell-backdrop-mask.png\", [1152, 648], [768, 432])"],
   "source/main.bs": ["globalNode.AddFields({ resolutionProfile: ResolutionProfile.Create(), theme: Theme.Mode.Blue, watchedIndicatorStyle: WatchedIndicator.Style.Subtle })"],
   "source/MaskAssets.bs": ["if ResolutionProfile.IsHd() then", "ResolutionAssets.GetMaskImageUri(filename)"],
   "source/ResolutionProfile.bs": ["deviceInfo.GetUIResolution()", "uiResolution.height <= 720", "profile = m.global.resolutionProfile", "return ResolutionProfile.GetName() = \"hd\""],

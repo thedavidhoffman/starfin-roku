@@ -4,6 +4,13 @@ Settings uses a centered 1680px-wide, 900px-high dialog. The category lists and
 vertical divider retain their positions; the right-hand panels start at x=400
 within the dialog content area and contain 1160px-wide glass cards.
 
+The dialog heading identifies the displayed category, such as Settings › Libraries
+or Settings › Media shell. It remains visible when focus moves into settings or
+between pages. SettingsContent publishes categoryTitle through its category-change
+path; SettingsDialog reads its initial value and observes changes to update the
+existing Dialog title. This experimental presentation adds no passive category
+highlight.
+
 ## Categories and cards
 
 Current user contains Libraries, Media shell, Theme, Playback, Subtitles,
@@ -58,7 +65,13 @@ document. Accounts without a saved burn-in value use During transcoding.
 
 Theme offers Blue, Black and Grey. Theme and watched-indicator changes preview
 through the existing dialog events; local persistence still occurs on close.
-Media shell contains background style followed by theme music. Credits uses
+Media shell uses two pages with standard option fonts and original card padding.
+The first contains Movie Layout and Music Layout above TV Series Layout and TV
+Episode Layout; the second contains Theme music. Additional settings, page
+numbers, chevrons, and a short fade follow the subtitle paging presentation.
+Each radio list contains only supported choices;
+saved choices and deferred rendering fallbacks are described in
+[Media Shell Layout Preferences](media-shell-layout.md). Credits uses
 NextEpisodePromptSeconds.Options() for its nine labels and stored values; Off
 remains the default. These presentation changes do not alter playback rules.
 
