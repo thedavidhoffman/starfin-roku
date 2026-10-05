@@ -8,6 +8,7 @@ import "pkg:/source/MediaShellLayout.bs"
 import "pkg:/source/NextItemPlayback.bs"
 import "pkg:/source/NextEpisodePromptSeconds.bs"
 import "pkg:/source/store/RegistryStore.bs"
+import "pkg:/source/store/SettingsMigration.bs"
 
 namespace SettingsStore
 
@@ -102,6 +103,7 @@ namespace SettingsStore
     ' SettingsStore.Load
     '---------------------------------------------------------------------------
     function Load(accountKey as string) as object
+        SettingsMigration.Migrate()
         settings = {}
         values = {}
         if accountKey <> "" then
@@ -131,15 +133,12 @@ namespace SettingsStore
                 value = SettingsStore.GetSettingValue(settings, key)
                 accountStore.Write(key, value)
             end for
-            accountStore.Delete("media-shell-background")
             accountStore.Flush()
         end if
         globalStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
         for each key in GlobalKeys()
             globalStore.Write(key, GetSettingValue(settings, key))
         end for
-        ' Burn-in is account-scoped; retire the obsolete device value during normal saving.
-        globalStore.Delete(Key.SubtitleBurnInMode)
         globalStore.Flush()
     end sub
 

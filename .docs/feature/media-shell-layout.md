@@ -69,10 +69,13 @@ connection between preferences.
 
 New keys override the legacy key. Unsupported values use the row's default;
 series reject Cinematic, episodes reject Poster, and Music accepts only the two
-backdrop values. Loading
-never writes registry data. A normal save writes the four independent account keys
-and removes the legacy key only from that account. Settings equality uses the new
-keys, and no preview event is added.
+backdrop values. Before reading settings, SettingsStore invokes the
+[settings migration helper](settings-migrations.md) on every load. It persists
+missing layout keys across every existing account, then removes the legacy key
+after successful persistence. Read-time compatibility remains available if the
+migration fails. Normal saving writes the four independent account keys without
+performing legacy cleanup. Settings equality uses the new keys, and no preview
+event is added.
 
 ## Focus and ownership
 

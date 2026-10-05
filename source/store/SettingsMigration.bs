@@ -1,0 +1,90 @@
+import "pkg:/source/store/SettingsStore.bs"
+import "pkg:/source/Logger.bs"
+
+namespace SettingsMigration
+
+    '---------------------------------------------------------------------------
+    ' SettingsMigration.Migrate
+    '---------------------------------------------------------------------------
+    function Migrate() as boolean
+        collector = invalid
+        if m.global <> invalid then collector = m.global.logService
+        log = new Logger("SettingsMigration", collector)
+        try
+            registry = CreateObject("roRegistry")
+            sections = registry.GetSectionList()
+            if sections = invalid then
+                log.write("Incomplete: settings loading will continue.")
+                return false
+            end if
+            succeeded = true
+            migratedAccounts = 0
+            for each sectionName in sections
+                if LCase(Left(sectionName, 16)) = "starfin_account_" then
+                    try
+                        section = CreateObject("roRegistrySection", sectionName)
+                        hadLegacyLayout = section.Exists("media-shell-background")
+                        if __MigrateMediaShellSection(section) <> true then
+                            succeeded = false
+                        else if hadLegacyLayout then
+                            migratedAccounts += 1
+                        end if
+                    catch error
+                        succeeded = false
+                        log.error("Account migration interrupted; settings loading will continue. Error=" + error.number.ToStr())
+                    end try
+                end if
+            end for
+            globalStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            hadObsoleteGlobalSetting = globalStore.Exists(SettingsStore.Key.SubtitleBurnInMode)
+            if __DeletePersistedKey(globalStore, SettingsStore.Key.SubtitleBurnInMode) <> true then succeeded = false
+            if succeeded <> true then
+                log.write("Incomplete: settings loading will continue.")
+            else if migratedAccounts = 0 and not hadObsoleteGlobalSetting then
+                log.write("Complete: no obsolete settings found.")
+            else
+                summary = "Complete: migrated " + migratedAccounts.ToStr() + " accounts"
+                if hadObsoleteGlobalSetting then summary += "; removed obsolete global setting"
+                log.write(summary + ".")
+            end if
+            return succeeded
+        catch error
+            log.error("Migration interrupted; settings loading will continue. Error=" + error.number.ToStr())
+            log.write("Incomplete: settings loading will continue.")
+            return false
+        end try
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsMigration.__MigrateMediaShellSection
+    '---------------------------------------------------------------------------
+    function __MigrateMediaShellSection(section as object) as boolean
+        legacyKey = "media-shell-background"
+        if section.Exists(legacyKey) <> true then return true
+        keys = [SettingsStore.Key.MovieShellLayout, SettingsStore.Key.TvSeriesShellLayout, SettingsStore.Key.TvEpisodeShellLayout, SettingsStore.Key.MusicShellLayout]
+        readKeys = []
+        readKeys.Append(keys)
+        readKeys.Push(legacyKey)
+        values = section.ReadMulti(readKeys)
+        if values = invalid then return false
+        for each key in keys
+            if section.Exists(key) <> true then
+                if section.Write(key, SettingsStore.GetSettingValue(values, key)) <> true then return false
+            end if
+        end for
+        ' Keep the old preference until every replacement has reached persistent storage.
+        ' A previous failed attempt may have left replacement keys only in the cache.
+        if section.Flush() <> true then return false
+        return __DeletePersistedKey(section, legacyKey)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' SettingsMigration.__DeletePersistedKey
+    '---------------------------------------------------------------------------
+    function __DeletePersistedKey(section as object, key as string) as boolean
+        if section.Exists(key) <> true then return true
+        if section.Delete(key) <> true then return false
+        return section.Flush()
+    end function
+
+end namespace

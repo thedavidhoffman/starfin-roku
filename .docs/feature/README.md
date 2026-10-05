@@ -37,6 +37,7 @@ individual Starfin features.
 - [Quick Connect](quick-connect.md)
 - [Search](search.md)
 - [Sign In and Unified Server Picker](sign-in.md)
+- [Settings Migrations](settings-migrations.md)
 - [Settings Presentation](settings-presentation.md)
 - [Media Shell Layout Preferences](media-shell-layout.md)
 - [Themes](themes.md)

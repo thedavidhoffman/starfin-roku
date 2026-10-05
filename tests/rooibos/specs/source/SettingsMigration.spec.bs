@@ -1,0 +1,563 @@
+namespace tests
+
+    @suite("Settings migrations")
+    class SettingsMigrationTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.registrySnapshot = {}
+            registry = CreateObject("roRegistry")
+            names = []
+            for each name in registry.GetSectionList()
+                names.Push(name)
+            end for
+            names.Append(["STARFIN_ROKU", "STARFIN_ACCOUNT_rooibos-migration-a", "STARFIN_ACCOUNT_rooibos-migration-b", "rooibos-migration-unrelated"])
+            for each name in names
+                if m.registrySnapshot.DoesExist(name) <> true then
+                    section = CreateObject("roRegistrySection", name)
+                    m.registrySnapshot[name] = section.ReadMulti(section.GetKeyList())
+                end if
+            end for
+        end function
+
+        protected override function afterEach()
+            registry = CreateObject("roRegistry")
+            for each name in m.registrySnapshot
+                registry.Delete(name)
+                values = m.registrySnapshot[name]
+                if values.Count() > 0 then
+                    section = CreateObject("roRegistrySection", name)
+                    section.WriteMulti(values)
+                    section.Flush()
+                end if
+            end for
+            registry.Flush()
+            globalAa = getGlobalAa()
+            globalAa.Delete("migrationVisitedAccounts")
+        end function
+
+        @describe("repeatable account migration")
+
+        @it("processes accounts on every invocation")
+        function _()
+            section = CreateObject("roRegistrySection", "STARFIN_ACCOUNT_rooibos-migration-a")
+            section.Write("rooibos-migration-case", "pass")
+            section.Flush()
+            m.visitedAccounts = []
+            globalAa = getGlobalAa()
+            globalAa.migrationVisitedAccounts = m.visitedAccounts
+            m.stubCall(SettingsMigration.__MigrateMediaShellSection, m.captureAccountMigration)
+
+            m.assertTrue(SettingsMigration.Migrate())
+            m.assertTrue(SettingsMigration.Migrate())
+
+            m.assertEqual(m.visitedAccounts.Count(), 2)
+        end function
+
+        @it("contains account exceptions and continues processing other accounts")
+        function _()
+            first = CreateObject("roRegistrySection", "STARFIN_ACCOUNT_rooibos-migration-a")
+            second = CreateObject("roRegistrySection", "STARFIN_ACCOUNT_rooibos-migration-b")
+            first.Write("rooibos-migration-case", "throw")
+            second.Write("rooibos-migration-case", "pass")
+            first.Flush()
+            second.Flush()
+            m.visitedAccounts = []
+            globalAa = getGlobalAa()
+            globalAa.migrationVisitedAccounts = m.visitedAccounts
+            m.stubCall(SettingsMigration.__MigrateMediaShellSection, m.captureAccountMigration)
+
+            m.assertFalse(SettingsMigration.Migrate())
+
+            m.assertEqual(m.visitedAccounts.Count(), 2)
+        end function
+
+        @it("contains global cleanup exceptions")
+        function _()
+            m.stubCall(SettingsMigration.__MigrateMediaShellSection, true)
+            m.stubCall(SettingsMigration.__DeletePersistedKey, m.throwCleanup)
+
+            m.assertFalse(SettingsMigration.Migrate())
+        end function
+
+        @it("migrates inactive account sections and preserves unrelated sections")
+        function _()
+            first = CreateObject("roRegistrySection", "STARFIN_ACCOUNT_rooibos-migration-a")
+            second = CreateObject("roRegistrySection", "STARFIN_ACCOUNT_rooibos-migration-b")
+            for each section in [first, second]
+                for each key in ["movie-shell-layout", "tv-series-shell-layout", "tv-episode-shell-layout", "music-shell-layout"]
+                    section.Delete(key)
+                end for
+                section.Write("media-shell-background", "poster")
+                section.Write("rooibos-unrelated", "preserve")
+                section.Flush()
+            end for
+            unrelated = CreateObject("roRegistrySection", "rooibos-migration-unrelated")
+            unrelated.Write("media-shell-background", "cinematic")
+            unrelated.Flush()
+
+            m.assertTrue(SettingsMigration.Migrate())
+
+            for each section in [first, second]
+                m.assertEqual(section.Read("movie-shell-layout"), "full-screen")
+                m.assertEqual(section.Read("tv-series-shell-layout"), "poster")
+                m.assertFalse(section.Exists("media-shell-background"))
+                m.assertEqual(section.Read("rooibos-unrelated"), "preserve")
+            end for
+            m.assertEqual(unrelated.Read("media-shell-background"), "cinematic")
+        end function
+
+        @it("continues processing other accounts after one account fails")
+        function _()
+            first = CreateObject("roRegistrySection", "STARFIN_ACCOUNT_rooibos-migration-a")
+            second = CreateObject("roRegistrySection", "STARFIN_ACCOUNT_rooibos-migration-b")
+            first.Write("rooibos-migration-case", "fail")
+            second.Write("rooibos-migration-case", "pass")
+            first.Flush()
+            second.Flush()
+            m.visitedAccounts = []
+            globalAa = getGlobalAa()
+            globalAa.migrationVisitedAccounts = m.visitedAccounts
+            m.stubCall(SettingsMigration.__MigrateMediaShellSection, m.captureAccountMigration)
+
+            m.assertFalse(SettingsMigration.Migrate())
+            m.assertEqual(m.visitedAccounts.Count(), 2)
+        end function
+
+        @it("removes obsolete device burn-in without changing account preferences")
+        function _()
+            globalStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            globalStore.Write("subtitle-burn-in-mode", "always")
+            globalStore.Write("rooibos-unrelated", "preserve")
+            globalStore.Flush()
+            account = CreateObject("roRegistrySection", "STARFIN_ACCOUNT_rooibos-migration-a")
+            account.Write("subtitle-burn-in-mode", "prefer-external")
+            account.Flush()
+
+            m.assertTrue(SettingsMigration.Migrate())
+            m.assertFalse(globalStore.Exists("subtitle-burn-in-mode"))
+            m.assertEqual(account.Read("subtitle-burn-in-mode"), "prefer-external")
+            m.assertEqual(globalStore.Read("rooibos-unrelated"), "preserve")
+        end function
+
+        @describe("media layout persistence and retry")
+
+        @it("persists independent layouts from legacy full-screen")
+        function _()
+            section = m.createSection({ "media-shell-background": "full-screen" })
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.Read("movie-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("tv-series-shell-layout"), "partial-screen")
+            m.assertEqual(section.Read("tv-episode-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("music-shell-layout"), "full-screen")
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("persists independent layouts from legacy partial-screen")
+        function _()
+            section = m.createSection({ "media-shell-background": "partial-screen" })
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.Read("movie-shell-layout"), "partial-screen")
+            m.assertEqual(section.Read("tv-series-shell-layout"), "partial-screen")
+            m.assertEqual(section.Read("tv-episode-shell-layout"), "partial-screen")
+            m.assertEqual(section.Read("music-shell-layout"), "partial-screen")
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("persists independent layouts from legacy cinematic")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.Read("movie-shell-layout"), "cinematic")
+            m.assertEqual(section.Read("tv-series-shell-layout"), "partial-screen")
+            m.assertEqual(section.Read("tv-episode-shell-layout"), "cinematic")
+            m.assertEqual(section.Read("music-shell-layout"), "full-screen")
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("persists independent layouts from legacy poster")
+        function _()
+            section = m.createSection({ "media-shell-background": "poster" })
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.Read("movie-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("tv-series-shell-layout"), "poster")
+            m.assertEqual(section.Read("tv-episode-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("music-shell-layout"), "full-screen")
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("persists independent layouts from legacy unknown")
+        function _()
+            section = m.createSection({ "media-shell-background": "unknown" })
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.Read("movie-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("tv-series-shell-layout"), "partial-screen")
+            m.assertEqual(section.Read("tv-episode-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("music-shell-layout"), "full-screen")
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("persists independent layouts from legacy empty value")
+        function _()
+            section = m.createSection({ "media-shell-background": "" })
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.Read("movie-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("tv-series-shell-layout"), "partial-screen")
+            m.assertEqual(section.Read("tv-episode-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("music-shell-layout"), "full-screen")
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("preserves existing new values exactly during partial migration")
+        function _()
+            section = m.createSection({ "media-shell-background": "poster", "movie-shell-layout": "cinematic", "tv-series-shell-layout": "invalid", "music-shell-layout": "", unrelated: "preserve" })
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.Read("movie-shell-layout"), "cinematic")
+            m.assertEqual(section.Read("tv-series-shell-layout"), "invalid")
+            m.assertEqual(section.Read("music-shell-layout"), "")
+            m.assertEqual(section.Read("tv-episode-shell-layout"), "full-screen")
+            m.assertEqual(section.Read("unrelated"), "preserve")
+        end function
+
+        @it("does not create account settings without a legacy preference")
+        function _()
+            section = m.createSection({})
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+            m.assertEqual(section.values.Count(), 0)
+            m.assertEqual(section.writeCount, 0)
+            m.assertEqual(section.flushCount, 0)
+        end function
+
+        @it("retains the legacy key after a replacement write fails")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.failWriteKey = "tv-series-shell-layout"
+
+            m.assertFalse(SettingsMigration.__MigrateMediaShellSection(section))
+            m.assertEqual(section.Read("media-shell-background"), "cinematic")
+            m.assertEqual(section.deleteCount, 0)
+        end function
+
+        @it("retries a failed replacement write without overwriting existing values")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic", "music-shell-layout": "partial-screen" })
+            section.failWriteKey = "tv-series-shell-layout"
+            m.assertFalse(SettingsMigration.__MigrateMediaShellSection(section))
+            m.assertEqual(section.persistedValues.Count(), 2)
+            section.values["movie-shell-layout"] = "poster"
+            section.failWriteKey = ""
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.persistedValues["movie-shell-layout"], "poster")
+            m.assertEqual(section.persistedValues["tv-series-shell-layout"], "partial-screen")
+            m.assertEqual(section.persistedValues["tv-episode-shell-layout"], "cinematic")
+            m.assertEqual(section.persistedValues["music-shell-layout"], "partial-screen")
+            m.assertFalse(section.persistedValues.DoesExist("media-shell-background"))
+        end function
+
+        @it("retries from legacy data after restart following a replacement flush failure")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.failFlushAt = 1
+            m.assertFalse(SettingsMigration.__MigrateMediaShellSection(section))
+            m.assertEqual(section.persistedValues.Count(), 1)
+            restarted = m.createSection(section.persistedValues)
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(restarted))
+
+            m.assertEqual(restarted.persistedValues["movie-shell-layout"], "cinematic")
+            m.assertEqual(restarted.persistedValues["tv-episode-shell-layout"], "cinematic")
+            m.assertFalse(restarted.persistedValues.DoesExist("media-shell-background"))
+        end function
+
+        @it("retains legacy data without writing when a multi-read returns invalid")
+        function _()
+            section = m.createSection({ "media-shell-background": "poster" })
+            section.failReadMulti = true
+
+            m.assertFalse(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.persistedValues["media-shell-background"], "poster")
+            m.assertEqual(section.writeCount, 0)
+            m.assertEqual(section.flushCount, 0)
+            m.assertEqual(section.deleteCount, 0)
+        end function
+
+        @it("propagates an existence-check exception without altering persisted data")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.throwExists = true
+            caught = false
+
+            try
+                SettingsMigration.__MigrateMediaShellSection(section)
+            catch error
+                caught = true
+            end try
+
+            m.assertTrue(caught)
+            m.assertEqual(section.persistedValues["media-shell-background"], "cinematic")
+            m.assertEqual(section.persistedValues.Count(), 1)
+            m.assertEqual(section.deleteCount, 0)
+        end function
+
+        @it("propagates a multi-read exception without altering persisted data")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.throwReadMulti = true
+            caught = false
+
+            try
+                SettingsMigration.__MigrateMediaShellSection(section)
+            catch error
+                caught = true
+            end try
+
+            m.assertTrue(caught)
+            m.assertEqual(section.persistedValues["media-shell-background"], "cinematic")
+            m.assertEqual(section.persistedValues.Count(), 1)
+            m.assertEqual(section.deleteCount, 0)
+        end function
+
+        @it("propagates a replacement write exception without deleting legacy data")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.throwWriteKey = "tv-series-shell-layout"
+            caught = false
+
+            try
+                SettingsMigration.__MigrateMediaShellSection(section)
+            catch error
+                caught = true
+            end try
+
+            m.assertTrue(caught)
+            m.assertEqual(section.persistedValues["media-shell-background"], "cinematic")
+            m.assertEqual(section.persistedValues.Count(), 1)
+            m.assertEqual(section.deleteCount, 0)
+        end function
+
+        @it("propagates a replacement flush exception without deleting legacy data")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.throwFlushAt = 1
+            caught = false
+
+            try
+                SettingsMigration.__MigrateMediaShellSection(section)
+            catch error
+                caught = true
+            end try
+
+            m.assertTrue(caught)
+            m.assertEqual(section.persistedValues["media-shell-background"], "cinematic")
+            m.assertEqual(section.persistedValues.Count(), 1)
+            m.assertEqual(section.deleteCount, 0)
+        end function
+
+        @it("propagates a deletion exception after replacements are persisted")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.throwDelete = true
+            caught = false
+
+            try
+                SettingsMigration.__MigrateMediaShellSection(section)
+            catch error
+                caught = true
+            end try
+
+            m.assertTrue(caught)
+            m.assertEqual(section.persistedValues["media-shell-background"], "cinematic")
+            m.assertEqual(section.persistedValues.Count(), 5)
+            m.assertEqual(section.persistedValues["movie-shell-layout"], "cinematic")
+            m.assertEqual(section.persistedValues["tv-episode-shell-layout"], "cinematic")
+        end function
+
+        @it("propagates a cleanup flush exception after replacements are persisted")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.throwFlushAt = 2
+            caught = false
+
+            try
+                SettingsMigration.__MigrateMediaShellSection(section)
+            catch error
+                caught = true
+            end try
+
+            m.assertTrue(caught)
+            m.assertEqual(section.persistedValues["media-shell-background"], "cinematic")
+            m.assertEqual(section.persistedValues.Count(), 5)
+            m.assertEqual(section.persistedValues["movie-shell-layout"], "cinematic")
+            m.assertEqual(section.persistedValues["tv-episode-shell-layout"], "cinematic")
+        end function
+
+        @it("flushes cached replacement keys before cleanup on retry")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            section.failFlushAt = 1
+            m.assertFalse(SettingsMigration.__MigrateMediaShellSection(section))
+            m.assertTrue(section.Exists("media-shell-background"))
+            m.assertEqual(section.deleteCount, 0)
+            section.failFlushAt = 0
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+            m.assertEqual(section.flushCount, 3)
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("retains legacy values when deletion fails")
+        function _()
+            section = m.createSection({ "media-shell-background": "poster" })
+            section.failDelete = true
+
+            m.assertFalse(SettingsMigration.__MigrateMediaShellSection(section))
+            m.assertEqual(section.Read("media-shell-background"), "poster")
+        end function
+
+        @it("keeps replacements persisted when legacy cleanup flush fails")
+        function _()
+            section = m.createSection({ "media-shell-background": "poster" })
+            section.failFlushAt = 2
+
+            m.assertFalse(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.persistedValues["media-shell-background"], "poster")
+            m.assertEqual(section.persistedValues["tv-series-shell-layout"], "poster")
+            m.assertFalse(section.Exists("media-shell-background"))
+        end function
+
+        @it("retries legacy cleanup from persisted data after restart")
+        function _()
+            section = m.createSection({ "media-shell-background": "poster" })
+            section.failFlushAt = 2
+            m.assertFalse(SettingsMigration.__MigrateMediaShellSection(section))
+            restarted = m.createSection(section.persistedValues)
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(restarted))
+
+            m.assertFalse(restarted.persistedValues.DoesExist("media-shell-background"))
+            m.assertEqual(restarted.Read("tv-series-shell-layout"), "poster")
+        end function
+
+        @it("performs no writes or flushes after successful migration")
+        function _()
+            section = m.createSection({ "media-shell-background": "cinematic" })
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+            writes = section.writeCount
+            flushes = section.flushCount
+            deletes = section.deleteCount
+
+            m.assertTrue(SettingsMigration.__MigrateMediaShellSection(section))
+
+            m.assertEqual(section.writeCount, writes)
+            m.assertEqual(section.flushCount, flushes)
+            m.assertEqual(section.deleteCount, deletes)
+        end function
+
+        @it("does not flush when obsolete global data is absent")
+        function _()
+            section = m.createSection({})
+
+            m.assertTrue(SettingsMigration.__DeletePersistedKey(section, "subtitle-burn-in-mode"))
+
+            m.assertEqual(section.deleteCount, 0)
+            m.assertEqual(section.flushCount, 0)
+        end function
+
+        function throwCleanup(section as object, key as string) as boolean
+            throw { message: "Simulated global cleanup failure", number: 1 }
+        end function
+
+        function captureAccountMigration(section as object) as boolean
+            if section.Exists("rooibos-migration-case") then
+                value = section.Read("rooibos-migration-case")
+                globalAa = getGlobalAa()
+                globalAa.migrationVisitedAccounts.Push(value)
+                if value = "throw" then throw { message: "Simulated account migration failure", number: 1 }
+                return value <> "fail"
+            end if
+            return true
+        end function
+
+        function createSection(values as object) as object
+            copy = {}
+            copy.Append(values)
+            persisted = {}
+            persisted.Append(values)
+            return {
+                values: copy
+                persistedValues: persisted
+                writeCount: 0
+                throwExists: false
+                throwReadMulti: false
+                failReadMulti: false
+                throwWriteKey: ""
+                throwDelete: false
+                throwFlushAt: 0
+                failWriteKey: ""
+                failFlushAt: 0
+                failDelete: false
+                flushCount: 0
+                deleteCount: 0
+                Exists: function(key as string) as boolean
+                    if m.throwExists then throw { message: "Simulated existence-check failure", number: 1 }
+                    return m.values.DoesExist(key)
+                end function
+                Read: function(key as string) as string
+                    if m.values.DoesExist(key) then return m.values[key]
+                    return ""
+                end function
+                ReadMulti: function(keys as object) as object
+                    if m.throwReadMulti then throw { message: "Simulated read failure", number: 1 }
+                    if m.failReadMulti then return invalid
+                    result = {}
+                    for each key in keys
+                        if m.values.DoesExist(key) then result[key] = m.values[key]
+                    end for
+                    return result
+                end function
+                Write: function(key as string, value as string) as boolean
+                    m.writeCount++
+                    if key = m.throwWriteKey then throw { message: "Simulated write failure", number: 1 }
+                    if key = m.failWriteKey then return false
+                    m.values[key] = value
+                    return true
+                end function
+                Delete: function(key as string) as boolean
+                    m.deleteCount++
+                    if m.throwDelete then throw { message: "Simulated delete failure", number: 1 }
+                    if m.failDelete then return false
+                    m.values.Delete(key)
+                    return true
+                end function
+                Flush: function() as boolean
+                    m.flushCount++
+                    if m.flushCount = m.throwFlushAt then throw { message: "Simulated flush failure", number: 1 }
+                    if m.flushCount = m.failFlushAt then return false
+                    m.persistedValues = {}
+                    m.persistedValues.Append(m.values)
+                    return true
+                end function
+            }
+        end function
+
+    end class
+
+end namespace
