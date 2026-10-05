@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Encode.bs"
@@ -11,6 +12,7 @@ import "pkg:/source/TaskResponse.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = new Logger("HomeLibrariesTask", m.global.logService)
     m.top.functionName = "executeRequest"
 end sub
 
@@ -18,21 +20,31 @@ end sub
 ' executeRequest
 '-------------------------------------------------------------------------------
 sub executeRequest()
-    request = m.top.request
-    validationError = TaskRequest.ValidateRequest(request, "libraries")
-    if validationError <> invalid then
-        m.top.response = validationError
-        return
-    end if
+    try
+        request = m.top.request
+        validationError = TaskRequest.ValidateRequest(request, "libraries")
+        if validationError <> invalid then
+            m.top.response = validationError
+            return
+        end if
 
-    requestUrl = request.server + "/userviews" + Url.BuildQueryString({
-        userId: TaskRequest.GetUserId(request)
-    })
-    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
-    if response.ok <> true then
-        m.top.response = TaskResponse.Failure(response, "libraries")
-        return
-    end if
+        requestUrl = request.server + "/userviews" + Url.BuildQueryString({
+            userId: TaskRequest.GetUserId(request)
+        })
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        if response.ok <> true then
+            m.top.response = TaskResponse.Failure(response, "libraries")
+            return
+        end if
 
-    m.top.response = TaskResponse.Success(request, "libraries", response.data)
+        m.top.response = TaskResponse.Success(request, "libraries", response.data)
+    catch error
+        m.log.error("Unable to load libraries. Error=" + error.number.ToStr())
+        m.top.response = {
+            ok: false
+            action: "libraries"
+            failureKind: RequestFailure.Kind.UnexpectedResponse
+            errorMessage: "Unable to load libraries."
+        }
+    end try
 end sub

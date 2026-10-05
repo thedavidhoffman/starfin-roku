@@ -91,3 +91,81 @@ AppMessage.Show. Home combines current-refresh failures into one acknowledgment.
 Successful background responses do not dismiss it. RequestFailure wording and
 classification remain unchanged. Previous screenshot verification above describes
 the preceding centered-label implementation.
+
+
+## Experimental exception boundaries
+
+The initial try/catch prototype is limited to `HttpClient.Request` and
+`HomeLibrariesTask.executeRequest`. Existing validation and ordinary HTTP
+failures retain their current responses; neither catch automatically retries a
+request.
+
+HttpClient catches unexpected exceptions during transfer setup, request execution,
+and response processing. It logs the exception number through Logger and returns
+`unexpectedResponse` with safe generic wording and the last known HTTP status.
+When a transfer exists, cancellation is attempted. A cancellation exception is
+logged separately and cannot replace the original failure. Raw exception messages,
+request bodies, and credentials are not included in these new logs.
+
+HomeLibrariesTask catches exceptions across request validation, preparation,
+HTTP execution, and response construction. It publishes a failed `libraries`
+response rather than leaving the owner waiting for completion. HomePage remains
+the owner of refresh state: its existing failure path completes the libraries
+branch and clears loading when the refresh branches have finished. No page-level
+catch or new completion interface is introduced.
+
+Focused task tests cover successful completion, ordinary authentication failures,
+exceptions before and during HTTP execution, response-construction exceptions,
+and a later successful invocation. These tests have been authored but not run
+for the prototype. Native transfer cancellation and the HttpClient exception path
+still require targeted device verification before expanding this pattern.
+
+
+### Home shelf task rollout
+
+The single-response Home shelf tasks now use the same task-level boundary:
+`ContinueWatchingTask`, `ContinueListeningTask`, `NextUpTask`, `LatestMediaTask`,
+and `LiveTvOnNowTask`. Each logs only the unexpected exception number through
+Logger and publishes an `unexpectedResponse` failure with its existing action.
+Recently Added also retains its parent library identifier when it is a string;
+malformed identifiers are omitted from caught failures without further conversion. Existing validation, successful payloads, and ordinary HTTP
+failure details remain unchanged, including authentication and On Now HTTP 403
+handling. No automatic retry is added.
+
+Home still owns task identity, stale-response rejection, refresh completion, and
+failure presentation. No loading-state ownership or response interface moves to
+the tasks. Multi-response tasks and tasks that own playback or download resources
+remain outside this batch.
+
+Each affected task suite covers successful payloads, ordinary authentication
+failures, exceptions during preparation, HTTP execution and response construction,
+and a successful invocation following an exception. On Now additionally covers
+preserving HTTP 403 for Home suppression, and Recently Added checks its library
+identifier on success and caught failure.
+
+
+The focused five-suite test build compiled successfully. Function-header and
+whitespace checks passed. Device execution could not start because the Roku debug
+connection was already in use; device tests were then deferred at the user's
+request. No runtime pass result is claimed for this batch.
+
+
+### Exception-boundary review follow-up
+
+Recently Added no longer repeats `Format.SafeString` in its catch. Array and
+associative-array identifiers cannot prevent publication of the failure response;
+separate regression tests cover both cases.
+
+A test-only native Task now exercises HttpClient exceptions after transfer setup
+and during processing of a controlled HTTP 503 response. Both cases execute the
+best-effort cancellation branch. A third case verifies that the same Task can
+complete a subsequent authenticated request after exception cleanup. These tests
+use the real transfer implementation without new production test interfaces.
+The tests exercise cancellation on an allocated or completed transfer; they do
+not directly observe native cancellation internals or inject a cancellation
+exception.
+
+
+The review-follow-up tests passed focused compiler checks. Device execution
+remains deferred because the Roku debug connection is still occupied. The native
+exception tests and malformed-identifier regressions have not yet run on Roku.

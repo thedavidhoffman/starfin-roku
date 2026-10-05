@@ -39,6 +39,124 @@ namespace tests
             getGlobalAa().Delete("nextUpLogoRequest")
         end function
 
+        @describe("exception boundary")
+
+        @it("publishes the successful payload")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", userId: "user", parentId: "library" }
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [{ Id: "item" }] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.node.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.action, "nextUp")
+            m.assertEqual(response.server, "http://server")
+            m.assertEqual(response.payload.Items[0].Id, "item")
+        end function
+
+        @it("preserves ordinary authentication failure details")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", userId: "user", parentId: "library" }
+            m.stubCall(HttpClient.Request, {
+                ok: false
+                status: 401
+                failureKind: "authenticationRequired"
+                authExpired: true
+                errorMessage: "Session expired."
+            })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.node.top.response
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "nextUp")
+            m.assertEqual(response.status, 401)
+            m.assertEqual(response.failureKind, "authenticationRequired")
+            m.assertEqual(response.errorMessage, "Session expired.")
+            m.assertTrue(response.authExpired)
+        end function
+
+        @it("completes with a safe failure when request preparation throws")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", userId: "user", parentId: "library" }
+            m.stubCall(Url.BuildQueryString, function(values)
+                throw { number: 1, message: "private preparation details" }
+            end function)
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.node.top.response
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "nextUp")
+            m.assertEqual(response.failureKind, "unexpectedResponse")
+            m.assertEqual(response.errorMessage, "Unable to load Next Up.")
+            m.assertInvalid(response.authExpired)
+        end function
+
+        @it("completes with a safe failure when HTTP execution throws")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", userId: "user", parentId: "library" }
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                throw { number: 1, message: "private transport details" }
+            end function)
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.node.top.response
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "nextUp")
+            m.assertEqual(response.failureKind, "unexpectedResponse")
+            m.assertEqual(response.errorMessage, "Unable to load Next Up.")
+            m.assertInvalid(response.authExpired)
+        end function
+
+        @it("completes with a safe failure when response construction throws")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", userId: "user", parentId: "library" }
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [] } })
+            m.stubCall(TaskResponse.Success, function(request, action, payload)
+                throw { number: 1, message: "private response details" }
+            end function)
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.node.top.response
+            m.assertFalse(response.ok)
+            m.assertEqual(response.action, "nextUp")
+            m.assertEqual(response.failureKind, "unexpectedResponse")
+            m.assertEqual(response.errorMessage, "Unable to load Next Up.")
+            m.assertInvalid(response.authExpired)
+        end function
+
+        @it("can succeed on a later invocation after an exception")
+        function _()
+            m.node.top.request = { server: "http://server", token: "token", userId: "user", parentId: "library" }
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                throw { number: 1, message: "private transport details" }
+            end function)
+
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertFalse(m.node.top.response.ok)
+
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [{ Id: "item" }] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.node.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.action, "nextUp")
+            m.assertEqual(response.server, "http://server")
+            m.assertEqual(response.payload.Items[0].Id, "item")
+        end function
+
     end class
 
 end namespace

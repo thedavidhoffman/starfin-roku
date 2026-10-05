@@ -60,6 +60,123 @@ namespace tests
             m.assertEqual(HttpClient.__MaskUrl("https://server/stream?ApiKey=secret&x=1"), "https://server/stream?ApiKey=[redacted]&x=1")
         end function
 
+        @describe("request validation")
+
+        @it("preserves the invalid URL response")
+        function _()
+            response = HttpClient.Request("", "GET", invalid, invalid)
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.failureKind, "invalidRequest")
+            m.assertEqual(response.errorMessage, "Invalid http request: url is invalid.")
+        end function
+
+        @it("preserves the invalid method response")
+        function _()
+            response = HttpClient.Request("http://server", "", invalid, invalid)
+
+            m.assertFalse(response.ok)
+            m.assertEqual(response.failureKind, "invalidRequest")
+            m.assertEqual(response.errorMessage, "Invalid http request: method is invalid.")
+        end function
+
+        @describe("native request exception handling")
+
+        @async(15000)
+        @it("returns failure after transfer setup throws and attempts cancellation")
+        function _()
+            m.startNativeRequest("setup")
+        end function
+
+        @async(15000)
+        @it("preserves the HTTP status when response processing throws")
+        function _()
+            m.startNativeRequest("response")
+        end function
+
+        @async(15000)
+        @it("can complete an authenticated request after exception cleanup")
+        function _()
+            m.startNativeRequest("recovery")
+        end function
+
+        private sub startNativeRequest(scenario as string)
+            fixture = ParseJson(ReadAsciiFile("pkg:/test-fixtures/http-fixture.json"))
+            if fixture = invalid then
+                m.fail("Run through the HTTP-fixture test runner.")
+                m.done()
+                return
+            end if
+            m.nativeRequest = {
+                task: CreateObject("roSGNode", "HttpClientRequestTestTask")
+                scenario: scenario
+                fixture: fixture
+                completed: false
+            }
+            globalAa = GetGlobalAA()
+            globalAa.httpClientNativeSuite = m
+            m.nativeRequest.task.request = { scenario: scenario, fixture: fixture }
+            m.nativeRequest.task.observeFieldScoped("state", "tests_OnHttpClientNativeState")
+            m.nativeRequest.task.control = "run"
+        end sub
+
+        private sub checkNativeRequest()
+            if m.nativeRequest = invalid then return
+            if m.nativeRequest.completed then return
+            task = m.nativeRequest.task
+            if task.state = "init" or task.state = "run" then return
+            m.nativeRequest.completed = true
+            task.unobserveFieldScoped("state")
+            try
+                response = task.response
+                m.assertNotInvalid(response, "The native task finished without a response.")
+                if response <> invalid then
+                    m.assertInvalid(response.escapedException, "The exception escaped HttpClient.Request.")
+                    failure = response.failure
+                    m.assertNotInvalid(failure)
+                    if failure <> invalid then
+                        m.assertFalse(failure.ok)
+                        m.assertEqual(failure.failureKind, "unexpectedResponse")
+                        m.assertEqual(failure.errorMessage, "Unexpected error while contacting the server.")
+                        m.assertInvalid(failure.authExpired)
+                        if m.nativeRequest.scenario = "response" then
+                            m.assertEqual(failure.status, 503)
+                        else
+                            m.assertEqual(failure.status, 0)
+                        end if
+                    end if
+                    if m.nativeRequest.scenario = "recovery" then
+                        m.assertNotInvalid(response.recovered)
+                        if response.recovered <> invalid then
+                            m.assertTrue(response.recovered.ok)
+                            m.assertEqual(response.recovered.status, 200)
+                            m.assertTrue(response.recovered.data.accepted)
+                            m.assertEqual(response.recovered.data.itemId, m.nativeRequest.fixture.itemId)
+                        end if
+                    end if
+                end if
+            catch error
+                m.fail("Native HTTP test callback failed: " + error.message)
+            end try
+            m.done()
+        end sub
+
+        protected override function afterEach()
+            if m.nativeRequest <> invalid then
+                m.nativeRequest.task.unobserveFieldScoped("state")
+                m.nativeRequest.task.control = "stop"
+                m.nativeRequest = invalid
+            end if
+            globalAa = GetGlobalAA()
+            globalAa.Delete("httpClientNativeSuite")
+        end function
+
     end class
+
+    sub OnHttpClientNativeState()
+        globalAa = GetGlobalAA()
+        suite = globalAa.httpClientNativeSuite
+        if suite <> invalid then suite.checkNativeRequest()
+    end sub
 
 end namespace

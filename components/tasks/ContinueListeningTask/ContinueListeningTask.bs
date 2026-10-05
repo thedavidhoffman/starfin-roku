@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Encode.bs"
@@ -11,6 +12,7 @@ import "pkg:/source/TaskResponse.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = new Logger("ContinueListeningTask", m.global.logService)
     m.top.functionName = "executeRequest"
 end sub
 
@@ -18,28 +20,39 @@ end sub
 ' executeRequest
 '-------------------------------------------------------------------------------
 sub executeRequest()
-    request = m.top.request
-    validationError = TaskRequest.ValidateRequest(request, "continueListening")
-    if validationError <> invalid then
-        m.top.response = validationError
-        return
-    end if
+    try
+        request = m.top.request
+        validationError = TaskRequest.ValidateRequest(request, "continueListening")
+        if validationError <> invalid then
+            m.top.response = validationError
+            return
+        end if
 
-    params = {
-        recursive: true
-        SortBy: "DatePlayed"
-        SortOrder: "Descending"
-        Filters: "IsResumable"
-        MediaTypes: "Audio"
-        EnableTotalRecordCount: false
-    }
+        params = {
+            recursive: true
+            SortBy: "DatePlayed"
+            SortOrder: "Descending"
+            Filters: "IsResumable"
+            MediaTypes: "Audio"
+            EnableTotalRecordCount: false
+        }
 
-    requestUrl = request.server + "/useritems/resume" + Url.BuildQueryString(params)
-    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
-    if response.ok <> true then
-        m.top.response = TaskResponse.Failure(response, "continueListening")
-        return
-    end if
+        requestUrl = request.server + "/useritems/resume" + Url.BuildQueryString(params)
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        if response.ok <> true then
+            m.top.response = TaskResponse.Failure(response, "continueListening")
+            return
+        end if
 
-    m.top.response = TaskResponse.Success(request, "continueListening", response.data)
+        m.top.response = TaskResponse.Success(request, "continueListening", response.data)
+    catch error
+        m.log.error("Unable to load Continue Listening. Error=" + error.number.ToStr())
+        failure = {
+            ok: false
+            action: "continueListening"
+            failureKind: RequestFailure.Kind.UnexpectedResponse
+            errorMessage: "Unable to load Continue Listening."
+        }
+        m.top.response = failure
+    end try
 end sub

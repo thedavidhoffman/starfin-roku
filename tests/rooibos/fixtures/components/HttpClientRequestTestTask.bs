@@ -1,0 +1,33 @@
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    try
+        request = m.top.request
+        requestUrl = request.fixture.server + request.fixture.tilePath
+        if request.scenario = "response" then
+            result = HttpClient.Request(request.fixture.server + request.fixture.exceptionPath, "GET", invalid, invalid, invalid, false, 5000)
+        else
+            ' An object header value cannot be converted with ToStr. This fails
+            ' after the real transfer and message port have been created.
+            result = HttpClient.Request(requestUrl, "GET", invalid, invalid, { "X-Fixture": {} }, false, 5000)
+        end if
+        response = { failure: result }
+        if request.scenario = "recovery" then
+            response.recovered = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.fixture.token), false, 5000)
+        end if
+        m.top.response = response
+    catch error
+        m.top.response = { escapedException: true, errorNumber: error.number }
+    end try
+end sub

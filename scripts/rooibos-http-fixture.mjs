@@ -17,8 +17,14 @@ export async function startHttpFixture(rokuHost) {
   const itemId = `auth-fixture-${randomUUID()}`;
   const token = `fixture-${randomUUID()}`;
   const tilePath = `/Videos/${itemId}/Trickplay/320/0.jpg`;
+  const exceptionPath = `/http-exception-${randomUUID()}`;
   const requests = [];
   const server = http.createServer((request, response) => {
+    if (request.url === exceptionPath) {
+      response.writeHead(503, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: {} }));
+      return;
+    }
     if (request.url?.split('?')[0] !== tilePath) {
       response.writeHead(404).end();
       return;
@@ -37,7 +43,7 @@ export async function startHttpFixture(rokuHost) {
   server.listen(0, address);
   await once(server, 'listening');
   return {
-    config: { server: `http://${address}:${server.address().port}`, token, itemId, tilePath },
+    config: { server: `http://${address}:${server.address().port}`, token, itemId, tilePath, exceptionPath },
     requests,
     server,
     async close() {

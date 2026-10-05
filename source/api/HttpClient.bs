@@ -1,3 +1,6 @@
+import "pkg:/source/Logger.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
 import "pkg:/source/RequestFailure.bs"
 
 namespace HttpClient
@@ -7,121 +10,142 @@ namespace HttpClient
     '---------------------------------------------------------------------------
     function Request(requestUrl as String, method as String, token as Dynamic, body as Dynamic, headers = invalid as Dynamic, displayRequest = true as Boolean, timeoutMs = 60000 as Integer) as Object
 
-        log = new Logger("HttpClient.Request", m.global.logService)
-
-        if requestUrl = invalid or requestUrl = "" then
-            message = "Invalid http request: url is invalid."
-            log.error(message)
-            return { ok: false, failureKind: RequestFailure.Kind.InvalidRequest, errorMessage: message }
-        end if
-
-        if method = invalid or method = "" then
-            message = "Invalid http request: method is invalid."
-            log.error(message)
-            return { ok: false, failureKind: RequestFailure.Kind.InvalidRequest, errorMessage: message }
-        end if
-
-        normalizedMethod = UCase(method)
-
-        ' IMPORTANT...
-        ' do NOT check for invalid token here login requests don't have
-        ' a token, so it's valid in that scenario for the token to be null
-
-        transfer = CreateObject("roUrlTransfer")
-        port = CreateObject("roMessagePort")
-
-        transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
-        transfer.InitClientCertificates()
-        transfer.EnableEncodings(true)
-        transfer.SetMessagePort(port)
-        transfer.SetUrl(requestUrl)
-        transfer.AddHeader("Accept", "application/json")
-
-        if headers <> invalid then
-            for each headerName in headers
-                headerValue = headers[headerName]
-                if headerValue <> invalid then transfer.AddHeader(headerName, headerValue.ToStr())
-            end for
-        end if
-
-        if token <> invalid and token <> "" and HttpClient.__HeadersInclude(headers, "Authorization") <> true then
-            transfer.AddHeader("Authorization", "Bearer " + token)
-        end if
-
-        responseText = ""
+        collector = invalid
+        if m.global <> invalid then collector = m.global.logService
+        log = new Logger("HttpClient.Request", collector)
+        transfer = invalid
         status = 0
-        logUrl = HttpClient.__MaskUrl(requestUrl)
-        if displayRequest then
-            log.write("[" + normalizedMethod + "] " + logUrl)
-        else
-            log.writeConsoleOnly("[" + normalizedMethod + "] " + logUrl)
-        end if
-        if normalizedMethod = "POST" then
-            transfer.AddHeader("Content-Type", "application/json")
-            requestStarted = transfer.AsyncPostFromString(HttpClient.__InvalidToEmpty(body))
-        else
-            transfer.SetRequest(normalizedMethod)
-            requestStarted = transfer.AsyncGetToString()
-        end if
 
-        if requestStarted <> true then
-            message = "Unable to start the server request."
-            HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
-            return { ok: false, status: 0, failureKind: RequestFailure.Kind.RequestStartFailed, errorMessage: message }
-        end if
-
-        msg = wait(timeoutMs, port)
-        if msg = invalid then
-            transfer.AsyncCancel()
-            message = "The server request timed out."
-            HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
-            return { ok: false, status: 0, failureKind: RequestFailure.Kind.Timeout, errorMessage: message }
-        end if
-
-        if type(msg) <> "roUrlEvent" then
-            message = "Unexpected server response."
-            HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
-            return { ok: false, status: 0, failureKind: RequestFailure.Kind.UnexpectedResponse, errorMessage: message }
-        end if
-
-        status = msg.GetResponseCode()
-        responseText = msg.GetString()
-        responseHeaders = msg.GetResponseHeaders()
-        contentType = HttpClient.__GetResponseHeader(responseHeaders, "content-type")
-
-        if status = 0 then
-            message = "Unable to reach the server."
-            HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
-            return { ok: false, status: status, failureKind: RequestFailure.Kind.ConnectionFailed, errorMessage: message }
-        end if
-
-        hasAuthenticatedRequest = (token <> invalid and token <> "") or HttpClient.__AuthorizationHeaderHasToken(headers)
-        if status = 401 and hasAuthenticatedRequest then
-            message = "Your session has expired. Please sign in again."
-            HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
-            return { ok: false, status: status, failureKind: RequestFailure.Kind.AuthenticationRequired, authExpired: true, errorMessage: message }
-        end if
-
-        data = invalid
-        if HttpClient.__IsJsonContentType(contentType) and responseText <> invalid and responseText <> "" then
-            data = ParseJson(responseText)
-        end if
-
-        if status < 200 or status >= 300 then
-            message = "Request failed."
-            if data <> invalid then
-                if data.error <> invalid then message = Format.SafeString(data.error, message)
-                if data.message <> invalid then message = Format.SafeString(data.message, message)
-            else if responseText <> invalid and Strings.Trim(responseText) <> "" then
-                message = Strings.Trim(responseText)
-            else if msg.GetFailureReason() <> invalid and Strings.Trim(msg.GetFailureReason()) <> "" then
-                message = Strings.Trim(msg.GetFailureReason())
+        try
+            if requestUrl = invalid or requestUrl = "" then
+                message = "Invalid http request: url is invalid."
+                log.error(message)
+                return { ok: false, failureKind: RequestFailure.Kind.InvalidRequest, errorMessage: message }
             end if
-            HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
-            return { ok: false, status: status, failureKind: RequestFailure.FromStatus(status), errorMessage: message, responseText: responseText }
-        end if
 
-        return { ok: true, status: status, data: data, responseText: responseText }
+            if method = invalid or method = "" then
+                message = "Invalid http request: method is invalid."
+                log.error(message)
+                return { ok: false, failureKind: RequestFailure.Kind.InvalidRequest, errorMessage: message }
+            end if
+
+            normalizedMethod = UCase(method)
+
+            ' IMPORTANT...
+            ' do NOT check for invalid token here login requests don't have
+            ' a token, so it's valid in that scenario for the token to be null
+
+            transfer = CreateObject("roUrlTransfer")
+            port = CreateObject("roMessagePort")
+
+            transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+            transfer.InitClientCertificates()
+            transfer.EnableEncodings(true)
+            transfer.SetMessagePort(port)
+            transfer.SetUrl(requestUrl)
+            transfer.AddHeader("Accept", "application/json")
+
+            if headers <> invalid then
+                for each headerName in headers
+                    headerValue = headers[headerName]
+                    if headerValue <> invalid then transfer.AddHeader(headerName, headerValue.ToStr())
+                end for
+            end if
+
+            if token <> invalid and token <> "" and HttpClient.__HeadersInclude(headers, "Authorization") <> true then
+                transfer.AddHeader("Authorization", "Bearer " + token)
+            end if
+
+            responseText = ""
+            logUrl = HttpClient.__MaskUrl(requestUrl)
+            if displayRequest then
+                log.write("[" + normalizedMethod + "] " + logUrl)
+            else
+                log.writeConsoleOnly("[" + normalizedMethod + "] " + logUrl)
+            end if
+            if normalizedMethod = "POST" then
+                transfer.AddHeader("Content-Type", "application/json")
+                requestStarted = transfer.AsyncPostFromString(HttpClient.__InvalidToEmpty(body))
+            else
+                transfer.SetRequest(normalizedMethod)
+                requestStarted = transfer.AsyncGetToString()
+            end if
+
+            if requestStarted <> true then
+                message = "Unable to start the server request."
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+                return { ok: false, status: 0, failureKind: RequestFailure.Kind.RequestStartFailed, errorMessage: message }
+            end if
+
+            msg = wait(timeoutMs, port)
+            if msg = invalid then
+                transfer.AsyncCancel()
+                message = "The server request timed out."
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+                return { ok: false, status: 0, failureKind: RequestFailure.Kind.Timeout, errorMessage: message }
+            end if
+
+            if type(msg) <> "roUrlEvent" then
+                message = "Unexpected server response."
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+                return { ok: false, status: 0, failureKind: RequestFailure.Kind.UnexpectedResponse, errorMessage: message }
+            end if
+
+            status = msg.GetResponseCode()
+            responseText = msg.GetString()
+            responseHeaders = msg.GetResponseHeaders()
+            contentType = HttpClient.__GetResponseHeader(responseHeaders, "content-type")
+
+            if status = 0 then
+                message = "Unable to reach the server."
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+                return { ok: false, status: status, failureKind: RequestFailure.Kind.ConnectionFailed, errorMessage: message }
+            end if
+
+            hasAuthenticatedRequest = (token <> invalid and token <> "") or HttpClient.__AuthorizationHeaderHasToken(headers)
+            if status = 401 and hasAuthenticatedRequest then
+                message = "Your session has expired. Please sign in again."
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+                return { ok: false, status: status, failureKind: RequestFailure.Kind.AuthenticationRequired, authExpired: true, errorMessage: message }
+            end if
+
+            data = invalid
+            if HttpClient.__IsJsonContentType(contentType) and responseText <> invalid and responseText <> "" then
+                data = ParseJson(responseText)
+            end if
+
+            if status < 200 or status >= 300 then
+                message = "Request failed."
+                if data <> invalid then
+                    if data.error <> invalid then message = Format.SafeString(data.error, message)
+                    if data.message <> invalid then message = Format.SafeString(data.message, message)
+                else if responseText <> invalid and Strings.Trim(responseText) <> "" then
+                    message = Strings.Trim(responseText)
+                else if msg.GetFailureReason() <> invalid and Strings.Trim(msg.GetFailureReason()) <> "" then
+                    message = Strings.Trim(msg.GetFailureReason())
+                end if
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+                return { ok: false, status: status, failureKind: RequestFailure.FromStatus(status), errorMessage: message, responseText: responseText }
+            end if
+
+            return { ok: true, status: status, data: data, responseText: responseText }
+        catch error
+            log.error("Unexpected request error. Error=" + error.number.ToStr())
+            if transfer <> invalid then
+                ' Cancellation must not replace the original request failure.
+                try
+                    transfer.AsyncCancel()
+                catch cleanupError
+                    log.error("Request cancellation failed. Error=" + cleanupError.number.ToStr())
+                end try
+            end if
+            return {
+                ok: false
+                status: status
+                failureKind: RequestFailure.Kind.UnexpectedResponse
+                errorMessage: "Unexpected error while contacting the server."
+            }
+        end try
     end function
 
     '---------------------------------------------------------------------------

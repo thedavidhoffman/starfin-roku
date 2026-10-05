@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/Number.bs"
@@ -14,6 +15,7 @@ import "pkg:/source/TaskResponse.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.log = new Logger("NextUpTask", m.global.logService)
     m.top.functionName = "executeRequest"
 end sub
 
@@ -21,39 +23,50 @@ end sub
 ' executeRequest
 '-------------------------------------------------------------------------------
 sub executeRequest()
-    request = m.top.request
-    validationError = TaskRequest.ValidateRequest(request, "nextUp")
-    if validationError <> invalid then
-        m.top.response = validationError
-        return
-    end if
+    try
+        request = m.top.request
+        validationError = TaskRequest.ValidateRequest(request, "nextUp")
+        if validationError <> invalid then
+            m.top.response = validationError
+            return
+        end if
 
-    params = {
-        recursive: true
-        SortBy: "DatePlayed"
-        SortOrder: "Descending"
-        ImageTypeLimit: 1
-        EnableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Backdrop, JellyfinImage.Type.Thumb, JellyfinImage.Type.Logo])
-        UserId: TaskRequest.GetUserId(request)
-        EnableRewatching: getBoolean(request.enableRewatching, false)
-        DisableFirstEpisode: false
-        limit: Number.ToInteger(request.limit, 26)
-        Fields: "SeriesInfo"
-        EnableTotalRecordCount: false
-    }
+        params = {
+            recursive: true
+            SortBy: "DatePlayed"
+            SortOrder: "Descending"
+            ImageTypeLimit: 1
+            EnableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Backdrop, JellyfinImage.Type.Thumb, JellyfinImage.Type.Logo])
+            UserId: TaskRequest.GetUserId(request)
+            EnableRewatching: getBoolean(request.enableRewatching, false)
+            DisableFirstEpisode: false
+            limit: Number.ToInteger(request.limit, 26)
+            Fields: "SeriesInfo"
+            EnableTotalRecordCount: false
+        }
 
-    if request.nextUpDateCutoff <> invalid and request.nextUpDateCutoff <> "" then
-        params.AddReplace("NextUpDateCutoff", request.nextUpDateCutoff)
-    end if
+        if request.nextUpDateCutoff <> invalid and request.nextUpDateCutoff <> "" then
+            params.AddReplace("NextUpDateCutoff", request.nextUpDateCutoff)
+        end if
 
-    requestUrl = request.server + "/shows/nextup" + Url.BuildQueryString(params)
-    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
-    if response.ok <> true then
-        m.top.response = TaskResponse.Failure(response, "nextUp")
-        return
-    end if
+        requestUrl = request.server + "/shows/nextup" + Url.BuildQueryString(params)
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        if response.ok <> true then
+            m.top.response = TaskResponse.Failure(response, "nextUp")
+            return
+        end if
 
-    m.top.response = TaskResponse.Success(request, "nextUp", response.data)
+        m.top.response = TaskResponse.Success(request, "nextUp", response.data)
+    catch error
+        m.log.error("Unable to load Next Up. Error=" + error.number.ToStr())
+        failure = {
+            ok: false
+            action: "nextUp"
+            failureKind: RequestFailure.Kind.UnexpectedResponse
+            errorMessage: "Unable to load Next Up."
+        }
+        m.top.response = failure
+    end try
 end sub
 
 
