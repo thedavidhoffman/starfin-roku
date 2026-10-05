@@ -3,7 +3,16 @@ namespace tests
     @suite("Settings store")
     class SettingsStoreTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.originalMigrationComplete = m.global.settingsMigrationComplete
+            m.global.settingsMigrationComplete = false
+        end function
+
         protected override function afterEach()
+            m.global.settingsMigrationComplete = m.originalMigrationComplete
+            globalAa = getGlobalAa()
+            globalAa.Delete("settingsStoreMigrationCalls")
+            globalAa.Delete("settingsStoreMigrationResults")
             if m.registrySnapshot = invalid then return invalid
 
             registry = CreateObject("roRegistry")
@@ -18,6 +27,92 @@ namespace tests
             end for
             registry.Flush()
             m.registrySnapshot = invalid
+        end function
+
+        @describe("session migration completion")
+
+        @it("marks migration complete after the first successful global load")
+        function _()
+            m.prepareMigrationResults([true])
+
+            SettingsStore.Load("")
+
+            m.assertTrue(m.global.settingsMigrationComplete)
+            m.assertEqual(getGlobalAa().settingsStoreMigrationCalls, 1)
+        end function
+
+        @it("skips migration for account loads after a successful global load")
+        function _()
+            m.prepareMigrationResults([true])
+            SettingsStore.Load("")
+
+            SettingsStore.Load("rooibos-session-a")
+            SettingsStore.Load("rooibos-session-b")
+
+            m.assertTrue(m.global.settingsMigrationComplete)
+            m.assertEqual(getGlobalAa().settingsStoreMigrationCalls, 1)
+        end function
+
+        @it("keeps completion unset and returns settings after a failed migration")
+        function _()
+            m.prepareMigrationResults([false])
+
+            settings = SettingsStore.Load("")
+
+            m.assertFalse(m.global.settingsMigrationComplete)
+            m.assertEqual(settings[SettingsStore.Key.MovieShellLayout], "full-screen")
+            m.assertEqual(getGlobalAa().settingsStoreMigrationCalls, 1)
+        end function
+
+        @it("retries migration until a later load succeeds")
+        function _()
+            m.prepareMigrationResults([false, true])
+            SettingsStore.Load("")
+
+            SettingsStore.Load("rooibos-session-a")
+            SettingsStore.Load("rooibos-session-b")
+
+            m.assertTrue(m.global.settingsMigrationComplete)
+            m.assertEqual(getGlobalAa().settingsStoreMigrationCalls, 2)
+        end function
+
+        @it("continues retrying when successive migrations fail")
+        function _()
+            m.prepareMigrationResults([false, false])
+
+            SettingsStore.Load("")
+            SettingsStore.Load("rooibos-session-a")
+
+            m.assertFalse(m.global.settingsMigrationComplete)
+            m.assertEqual(getGlobalAa().settingsStoreMigrationCalls, 2)
+        end function
+
+        @it("runs migration again when a new session starts with completion unset")
+        function _()
+            m.prepareMigrationResults([true, true])
+            SettingsStore.Load("")
+
+            m.global.settingsMigrationComplete = false
+            SettingsStore.Load("")
+
+            m.assertTrue(m.global.settingsMigrationComplete)
+            m.assertEqual(getGlobalAa().settingsStoreMigrationCalls, 2)
+        end function
+
+        function prepareMigrationResults(results as object)
+            globalAa = getGlobalAa()
+            globalAa.settingsStoreMigrationCalls = 0
+            globalAa.settingsStoreMigrationResults = results
+            m.stubCall(SettingsMigration.Migrate, m.nextMigrationResult)
+        end function
+
+        function nextMigrationResult() as boolean
+            globalAa = getGlobalAa()
+            index = globalAa.settingsStoreMigrationCalls
+            globalAa.settingsStoreMigrationCalls += 1
+            results = globalAa.settingsStoreMigrationResults
+            if index >= results.Count() then return false
+            return results[index]
         end function
 
         @describe("theme preference")

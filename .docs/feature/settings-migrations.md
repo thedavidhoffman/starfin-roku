@@ -1,18 +1,26 @@
 # Settings Migrations
 
 `SettingsStore.Load()` invokes `SettingsMigration.Migrate()` before reading account
-or global settings, including global-only loads during startup. The helper runs
+or global settings until one invocation succeeds in the current app session,
+including the first global-only load during startup. The helper runs
 synchronously without a startup Task or background registry writer. Normal
 saving persists current preferences; migration owns obsolete-key cleanup.
 
 ## Completion and repeated loads
 
-There is no migration version or completion marker. Each migration checks for
-its obsolete data and does nothing when that data is absent. Every settings load
-enumerates existing account sections, but completed migrations perform no writes
-or flushes. Fresh installs have no obsolete data and write no migration keys or
-account defaults. Any marker left by the earlier experimental implementation is
-ignored.
+There is no migration version or persistent completion marker. The SceneGraph
+global node owns a Boolean `settingsMigrationComplete` field, initialized to
+`false` in `source/main.bs`. After migration returns `true`, SettingsStore sets
+this field to `true`; later settings loads across all components skip migration
+but still read current settings normally. Failed attempts leave the field unset
+so the next settings load retries. App restart creates a new global node and
+checks migrations again, including after an app upgrade.
+
+Each migration checks for its obsolete data and does nothing when that data is
+absent. Fresh installs write no migration keys or account defaults. Any registry
+marker left by the earlier experimental implementation is ignored. Explicit
+calls to `SettingsMigration.Migrate()` still execute normally; the session gate
+belongs to SettingsStore.
 
 Future migrations must be safe to repeat, preserve existing destination values,
 and detect whether work is needed from their source data.
@@ -66,7 +74,7 @@ An account is counted only when its legacy layout key existed and migration,
 including cleanup flushing, succeeded. Exception diagnostics retain their error
 numbers. No starting message, account identifiers, or preference values are logged.
 
-Retries are best effort: the next load attempts any obsolete data still visible
+Retries are best effort: after a failed attempt, the next load attempts obsolete data still visible
 in the registry. There is no cache rollback. If a cleanup flush fails after a
 successful deletion, the legacy key may be absent from the current cache but
 remain in persistent storage. Its replacements have already been persisted,
@@ -81,9 +89,12 @@ no-op sections, read/write/delete/flush exceptions, invalid reads, write and
 cleanup failures, flush ordering, and retries after failed writes or restart.
 The test registry double separates cached and persisted values.
 SettingsStore tests cover load-time cleanup, global-only loads, normal saving
-without cleanup, and legacy fallback on failure. Registry-backed settings tests
+without cleanup, legacy fallback on failure, shared session completion, skipped
+repeat scans, retries, and a reset session flag. Settings suites save and restore
+the shared completion flag so tests cannot suppress each other's migrations.
+Registry-backed settings tests
 snapshot all existing sections and their fixture sections before modifications,
 then restore them afterward. SettingsContent and SystemInformationContent tests
 stub migration so ordinary component settings reads cannot migrate other accounts.
-The full Rooibos suite passed on the configured development device: 4,141 tests,
-with no failures, crashes, or ignored tests.
+The full Rooibos suite, including the session gate coverage, passed on the configured
+development device: 4,221 tests, with no failures, crashes, or ignored tests.

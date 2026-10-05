@@ -23,7 +23,7 @@ row. The classification label is capped for unusually long server values.
 `MediaMetadataRow` owns rendering and layout for leading text, the runtime clock,
 classification badge, star score, and tomato score. It clears missing values on
 item changes. Formatting and rating normalization helpers remain in
-`MediaMetadata`.
+`MediaMetadataFormatting`.
 
 Pages pass `CommunityRating` and `CriticRating` from their own item metadata to
 MediaShell. MediaShell supplies values to two `MediaMetadataRow` instances and
@@ -47,7 +47,7 @@ unchanged from `C:\dev\jellyfin-roku\images\fresh.png` and `rotten.png` in the l
 Jellyfin Roku checkout. The yellow star is an original icon stored as `rating-star.png` and used by
 the Roku Poster.
 
-Behavior has test coverage in the MediaMetadata, MediaMetadataRow,
+Behavior has test coverage in the MediaMetadataFormatting, MediaMetadataRow,
 VideoDetailedCard, MediaShell, Movie, TVShow, and TVEpisode
 Rooibos suites, including score boundaries, missing data, item transitions, and
 which metadata row owns the rating icons, runtime clock, and content badge.
@@ -64,12 +64,40 @@ There is no caller-specific text-color override. Star and tomato artwork retain
 their original colors.
 
 MediaMetadataRow's XML defines fonts, icon sizes, badge padding and maximum text
-width, and group spacing. Callers supply the available width and fitting policy.
+width, and internal icon spacing. Callers supply the gap between metadata groups,
+available width, and fitting policy.
 The component measures visible children using the actual font. In MediaShell,
 it reserves space for trailing groups and limits leading text to the remaining
-width. Rendering and layout recalculate when input fields change, including
-long-to-short content updates. MediaShell continues to own logo fitting and
-placement of the primary and secondary rows.
+width. Callers use `row.callFunc("render", input)` with a complete
+`MediaMetadata` snapshot defined in `source/MediaMetadata.bs`:
+
+| Member | Type | Default |
+| --- | --- | --- |
+| `leadingText`, `runtimeText`, `officialRating` | String | Empty |
+| `communityRating`, `criticRating` | Dynamic | `invalid` |
+| `itemSpacing` | Float | 18 |
+| `availableWidth` | Float | 1220 |
+| `truncateLeadingText` | Boolean | true |
+| `scaleToFit` | Boolean | false |
+
+Ratings preserve raw API values for the existing formatting and validation
+helpers; a missing critic rating stays distinct from a valid zero. Other members
+are typed for callers constructing the input. SceneGraph's `callFunc` boundary
+does not enforce the argument's class.
+
+Each call renders once and replaces all previous content. Empty text and missing
+ratings clear the corresponding children. MediaMetadataRow retains neither the
+input nor a duplicate set of input fields, and has no rendering observers. Its
+XML retains static presentation configuration such as fonts and internal icon
+gaps. `init()` only establishes references; the consumer supplies the first render.
+The DTO's `itemSpacing` controls the outer layout gap and the space reserved when
+truncating leading text; no aliased spacing field remains on the component.
+
+MediaShell retains the full media content and constructs both row inputs with
+the current layout width on content changes and layout changes. Its surrounding
+geometry is applied separately without rendering metadata; primary-row centering
+runs after rendering so it measures current bounds. MediaShell continues to own
+logo fitting and placement of the primary and secondary rows.
 
 Detailed library cards opt into uniform scale-to-fit for their 516-pixel metadata
 row. Overflowing rows scale text, icons, badges, and gaps together, retaining all

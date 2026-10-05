@@ -5,6 +5,11 @@ owns the glass nine-patch background, uppercase SmallBoldSystemFont heading,
 optional muted SmallestSystemFont description, and horizontal layout of direct
 RadioButtonList children. It owns no focus, settings state or persistence.
 
+SettingsCard registers rendering and sizing observers after its child references
+exist, then applies current field values. It follows the
+[observer initialization pattern](list-item-initialization.md#shared-control-initialization),
+so fields assigned before registration still display and later changes update normally.
+
 ## Layout contract
 
 Pages supply title, cardHeight, controls and their vertical positions. headingY,

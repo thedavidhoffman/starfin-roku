@@ -1,3 +1,5 @@
+import "pkg:/source/MediaMetadata.bs"
+
 namespace tests
 
     @SGNode("MediaMetadataRow")
@@ -5,34 +7,79 @@ namespace tests
     class MediaMetadataRowTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
-            m.top.setFields({ leadingText: "", runtimeText: "", officialRating: "", ratings: {}, availableWidth: 516, truncateLeadingText: false, scaleToFit: true })
+            m.top.callFunc("render", m.createInput({ leadingText: "", runtimeText: "", officialRating: "", ratings: {}, availableWidth: 516, truncateLeadingText: false, scaleToFit: true }))
         end function
 
         @describe("metadata rendering")
+
+        @it("defers rendering until the consumer supplies metadata")
+        function _()
+            row = CreateObject("roSGNode", "MediaMetadataRow")
+
+            m.assertEqual(row.findNode("layout").getChildCount(), 4)
+            m.assertEqual(row.findNode("leadingLabel").text, "")
+            m.assertFalse(row.findNode("runtimeGroup").visible)
+
+            row.callFunc("render", new MediaMetadata())
+
+            m.assertEqual(row.findNode("layout").getChildCount(), 0)
+            m.assertFalse(row.findNode("ratingsGroup").visible)
+        end function
+
+        @it("renders a complete metadata update on a fresh row")
+        function _()
+            row = CreateObject("roSGNode", "MediaMetadataRow")
+
+            row.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 90 } }))
+
+            m.assertEqual(row.findNode("leadingLabel").text, "2026")
+            m.assertEqual(row.findNode("runtimeLabel").text, "2h 5m")
+            m.assertEqual(row.findNode("contentRatingLabel").text, "PG-13")
+            m.assertTrue(row.findNode("ratingsGroup").visible)
+        end function
+
+        @it("renders metadata removal on a fresh row")
+        function _()
+            row = CreateObject("roSGNode", "MediaMetadataRow")
+            row.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 90 } }))
+
+            row.callFunc("render", m.createInput({ leadingText: "", runtimeText: "", officialRating: "", ratings: {} }))
+
+            m.assertEqual(row.findNode("layout").getChildCount(), 0)
+        end function
+
+        @it("clears previous content with a new default snapshot")
+        function _()
+            row = CreateObject("roSGNode", "MediaMetadataRow")
+            row.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { criticRating: 90 } }))
+
+            row.callFunc("render", new MediaMetadata())
+
+            m.assertEqual(row.findNode("layout").getChildCount(), 0)
+            m.assertEqual(row.findNode("criticRatingIcon").uri, "")
+        end function
 
         @it("keeps the existing icon sizes and gaps")
         function _()
             m.assertEqual(m.top.findNode("runtimeGroup").getChild(0).width, 26.0)
             m.assertEqual(m.top.findNode("communityRatingGroup").getChild(0).width, 26.0)
             m.assertEqual(m.top.findNode("criticRatingIcon").width, 28.0)
-            m.assertEqual(m.top.itemSpacings, [18.0])
+            m.assertEqual(m.top.findNode("layout").itemSpacings, [18.0])
             m.assertEqual(m.top.findNode("runtimeGroup").itemSpacings, [8.0])
         end function
 
         @it("hides missing metadata without leftover gaps")
         function _()
-            m.top.runtimeText = "2h 5m"
-            m.top.ratings = { communityRating: 8.3 }
+            m.top.callFunc("render", m.createInput({ runtimeText: "2h 5m", ratings: { communityRating: 8.3 } }))
 
-            m.top.runtimeText = ""
-            m.top.ratings = {}
+            m.top.callFunc("render", new MediaMetadata())
 
             m.assertEqual(m.top.findNode("layout").getChildCount(), 0)
         end function
 
         @it("rounds the score and uses the fresh icon at sixty percent")
         function _()
-            m.top.ratings = { communityRating: 8.25, criticRating: 59.6 }
+            m.top.callFunc("render", m.createInput({ ratings: { communityRating: 8.25, criticRating: 59.6 } }))
 
             m.assertEqual(m.top.findNode("communityRatingLabel").text, "8.3")
             m.assertEqual(m.top.findNode("criticRatingLabel").text, "60%")
@@ -41,7 +88,7 @@ namespace tests
 
         @it("uses the rotten icon below sixty percent")
         function _()
-            m.top.ratings = { criticRating: 59.4 }
+            m.top.callFunc("render", m.createInput({ ratings: { criticRating: 59.4 } }))
 
             m.assertEqual(m.top.findNode("criticRatingLabel").text, "59%")
             m.assertEqual(m.top.findNode("criticRatingIcon").uri, "pkg:/images/icons/ratings/tomato-rotten.png")
@@ -49,7 +96,7 @@ namespace tests
 
         @it("preserves a valid zero critic score")
         function _()
-            m.top.ratings = { criticRating: 0 }
+            m.top.callFunc("render", m.createInput({ ratings: { criticRating: 0 } }))
 
             m.assertTrue(m.top.findNode("criticRatingGroup").visible)
             m.assertEqual(m.top.findNode("criticRatingLabel").text, "0%")
@@ -57,9 +104,9 @@ namespace tests
 
         @it("clears invalid ratings after a populated row")
         function _()
-            m.top.ratings = { communityRating: 8, criticRating: 90 }
+            m.top.callFunc("render", m.createInput({ ratings: { communityRating: 8, criticRating: 90 } }))
 
-            m.top.ratings = { communityRating: 0, criticRating: "bad" }
+            m.top.callFunc("render", m.createInput({ ratings: { communityRating: 0, criticRating: "bad" } }))
 
             m.assertFalse(m.top.findNode("ratingsGroup").visible)
             m.assertEqual(m.top.findNode("criticRatingIcon").uri, "")
@@ -67,9 +114,9 @@ namespace tests
 
         @it("removes a missing badge without adding a blank gap")
         function _()
-            m.top.setFields({ runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3 } })
+            m.top.callFunc("render", m.createInput({ runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3 } }))
 
-            m.top.officialRating = ""
+            m.top.callFunc("render", m.createInput({ runtimeText: "2h 5m", ratings: { communityRating: 8.3 } }))
             rowWidth = m.top.findNode("layout").boundingRect().width
             runtime = m.top.findNode("runtimeGroup")
             ratings = m.top.findNode("ratingsGroup")
@@ -80,7 +127,7 @@ namespace tests
 
         @it("measures the badge border rather than its unconstrained text box")
         function _()
-            m.top.officialRating = "PG-13"
+            m.top.callFunc("render", m.createInput({ officialRating: "PG-13" }))
 
             'bs:disable-next-line 1140
             width = measureMetadataItem(m.top.findNode("contentRatingGroup"))
@@ -91,7 +138,7 @@ namespace tests
 
         @it("measures ordinary runtime nodes")
         function _()
-            m.top.runtimeText = "2h 5m"
+            m.top.callFunc("render", m.createInput({ runtimeText: "2h 5m" }))
 
             'bs:disable-next-line 1140
             width = measureMetadataItem(m.top.findNode("runtimeGroup"))
@@ -102,7 +149,7 @@ namespace tests
 
         @it("always renders metadata and badge text in white")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 90 } })
+            m.top.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 90 } }))
 
             m.assertEqual(m.top.findNode("leadingLabel").color, &hFFFFFFFF)
             m.assertEqual(m.top.findNode("runtimeLabel").color, &hFFFFFFFF)
@@ -112,71 +159,68 @@ namespace tests
 
         @it("fits 2h 5m PG-13 with both ratings using scale-to-fit")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 95 } })
+            m.top.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 95 } }))
 
             width = m.top.findNode("layout").boundingRect().width
             print "METADATA_FIT 2h 5m PG-13: "; width
 
-            m.assertFalse(m.top.truncateLeadingText)
             m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
             m.assertTrue(width <= 516.01)
         end function
 
         @it("fits 3h 45m PG-13 with both ratings using scale-to-fit")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "3h 45m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 100 } })
+            m.top.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "3h 45m", officialRating: "PG-13", ratings: { communityRating: 8.3, criticRating: 100 } }))
 
             width = m.top.findNode("layout").boundingRect().width
             print "METADATA_FIT 3h 45m PG-13: "; width
 
-            m.assertFalse(m.top.truncateLeadingText)
             m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
             m.assertTrue(width <= 516.01)
         end function
 
         @it("fits 2h 5m TV-MA with both ratings using scale-to-fit")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "TV-MA", ratings: { communityRating: 8.3, criticRating: 95 } })
+            m.top.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "2h 5m", officialRating: "TV-MA", ratings: { communityRating: 8.3, criticRating: 95 } }))
 
             width = m.top.findNode("layout").boundingRect().width
             print "METADATA_FIT 2h 5m TV-MA: "; width
 
-            m.assertFalse(m.top.truncateLeadingText)
             m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
             m.assertTrue(width <= 516.01)
         end function
 
         @it("fits 3h 45m NC-17 with both ratings using scale-to-fit")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "3h 45m", officialRating: "NC-17", ratings: { communityRating: 10, criticRating: 100 } })
+            m.top.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "3h 45m", officialRating: "NC-17", ratings: { communityRating: 10, criticRating: 100 } }))
 
             width = m.top.findNode("layout").boundingRect().width
             print "METADATA_FIT 3h 45m NC-17: "; width
 
-            m.assertFalse(m.top.truncateLeadingText)
             m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
             m.assertTrue(width <= 516.01)
         end function
 
         @it("fits 12h 45m Not Rated with both ratings using scale-to-fit")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+            m.top.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } }))
 
             width = m.top.findNode("layout").boundingRect().width
             print "METADATA_FIT 12h 45m Not Rated: "; width
 
-            m.assertFalse(m.top.truncateLeadingText)
             m.assertEqual(m.top.findNode("leadingLabel").text, "2026")
             m.assertTrue(width <= 516.01)
         end function
 
         @it("scales uniformly and centers the complete row vertically")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 }, availableWidth: 2000 })
+            input = m.createInput({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 }, availableWidth: 2000 })
+            m.top.callFunc("render", input)
             row = m.top.findNode("layout")
             natural = row.boundingRect()
 
-            m.top.availableWidth = 516
+            input.availableWidth = 516
+            m.top.callFunc("render", input)
 
             factor = 516 / natural.width
             m.assertEqual(row.scale, [factor, factor])
@@ -188,10 +232,10 @@ namespace tests
 
         @it("restores natural size when a reused row has shorter content")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+            m.top.callFunc("render", m.createInput({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } }))
             m.assertTrue(m.top.findNode("layout").scale[0] < 1)
 
-            m.top.setFields({ runtimeText: "", officialRating: "", ratings: {} })
+            m.top.callFunc("render", m.createInput({ leadingText: "2026" }))
 
             m.assertEqual(m.top.findNode("layout").scale, [1.0, 1.0])
             m.assertEqual(m.top.findNode("layout").translation, [0.0, 0.0])
@@ -199,32 +243,103 @@ namespace tests
 
         @it("recalculates scale on resizing without compounding it")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+            input = m.createInput({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+            m.top.callFunc("render", input)
             initialScale = m.top.findNode("layout").scale
 
-            m.top.availableWidth = 400
+            input.availableWidth = 400
+            m.top.callFunc("render", input)
             m.assertTrue(m.top.findNode("layout").boundingRect().width <= 400.01)
-            m.top.availableWidth = 516
+            input.availableWidth = 516
+            m.top.callFunc("render", input)
             m.assertEqual(m.top.findNode("layout").scale, initialScale)
-            m.top.availableWidth = 2000
+            input.availableWidth = 2000
+            m.top.callFunc("render", input)
             m.assertEqual(m.top.findNode("layout").scale, [1.0, 1.0])
+            m.assertEqual(m.top.findNode("runtimeLabel").text, "12h 45m")
         end function
 
         @it("leaves rows unscaled when fitting is disabled")
         function _()
-            m.top.setFields({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+            input = m.createInput({ leadingText: "2026", runtimeText: "12h 45m", officialRating: "Not Rated", ratings: { communityRating: 10, criticRating: 100 } })
+            m.top.callFunc("render", input)
 
-            m.top.scaleToFit = false
+            input.scaleToFit = false
+            m.top.callFunc("render", input)
 
             m.assertEqual(m.top.findNode("layout").scale, [1.0, 1.0])
             m.assertEqual(m.top.findNode("layout").translation, [0.0, 0.0])
         end function
 
+        @it("truncates leading text to leave room for trailing metadata")
+        function _()
+            input = m.createInput({ leadingText: String(100, "W"), runtimeText: "2h 5m", availableWidth: 300, truncateLeadingText: true, scaleToFit: false })
+
+            m.top.callFunc("render", input)
+
+            m.assertTrue(m.top.findNode("leadingLabel").width < 300)
+            m.assertTrue(m.top.findNode("layout").boundingRect().width <= 300.01)
+            m.assertEqual(m.top.findNode("runtimeLabel").text, "2h 5m")
+        end function
+
+        @it("uses the configured spacing between metadata groups")
+        function _()
+            input = m.createInput({ leadingText: "2026", runtimeText: "2h 5m", itemSpacing: 30, scaleToFit: false })
+
+            m.top.callFunc("render", input)
+
+            leading = m.top.findNode("leadingLabel")
+            runtime = m.top.findNode("runtimeGroup")
+            m.assertEqual(m.top.findNode("layout").boundingRect().width, leading.boundingRect().width + runtime.boundingRect().width + 30)
+            m.assertEqual(runtime.translation[0] - leading.translation[0] - leading.width, 30.0)
+        end function
+
+        @it("reserves the configured spacing when truncating leading text")
+        function _()
+            input = m.createInput({ leadingText: String(100, "W"), runtimeText: "2h 5m", itemSpacing: 30, availableWidth: 300, truncateLeadingText: true, scaleToFit: false })
+
+            m.top.callFunc("render", input)
+
+            leading = m.top.findNode("leadingLabel")
+            runtime = m.top.findNode("runtimeGroup")
+            m.assertEqual(leading.width, 300 - runtime.boundingRect().width - 30)
+            m.assertTrue(m.top.findNode("layout").boundingRect().width <= 300.01)
+        end function
+
+        @it("restores default spacing with a replacement snapshot")
+        function _()
+            input = m.createInput({ leadingText: "2026", runtimeText: "2h 5m", itemSpacing: 30, scaleToFit: false })
+            m.top.callFunc("render", input)
+
+            input.itemSpacing = 18
+            m.top.callFunc("render", input)
+
+            leading = m.top.findNode("leadingLabel")
+            runtime = m.top.findNode("runtimeGroup")
+            m.assertEqual(m.top.findNode("layout").boundingRect().width, leading.boundingRect().width + runtime.boundingRect().width + 18)
+            m.assertEqual(runtime.translation[0] - leading.translation[0] - leading.width, 18.0)
+        end function
+
         @it("keeps empty rows at natural scale")
         function _()
-            m.top.availableWidth = 0
+            m.top.callFunc("render", m.createInput({ availableWidth: 0 }))
 
             m.assertEqual(m.top.findNode("layout").scale, [1.0, 1.0])
+        end function
+
+        private function createInput(values as object) as MediaMetadata
+            input = new MediaMetadata()
+            input.availableWidth = 516
+            input.truncateLeadingText = false
+            input.scaleToFit = true
+            for each fieldName in values
+                if fieldName <> "ratings" then input[fieldName] = values[fieldName]
+            end for
+            if values.ratings <> invalid then
+                input.communityRating = values.ratings.communityRating
+                input.criticRating = values.ratings.criticRating
+            end if
+            return input
         end function
 
     end class

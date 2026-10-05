@@ -20,6 +20,7 @@ individual Starfin features.
 - [Home Refresh Lifecycle](home-refresh-lifecycle.md)
 - [Header Navigation](header-navigation.md)
 - [Library Genre Browsing](library-genre-browsing.md)
+- [List and Grid Item Initialization](list-item-initialization.md)
 - [Media Authentication](media-authentication.md)
 - [Music Video Playback](music-videos.md)
 - [Next Item Playback and Credits Fallback](next-item-playback.md)

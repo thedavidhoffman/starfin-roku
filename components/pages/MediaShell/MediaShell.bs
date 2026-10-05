@@ -1,3 +1,4 @@
+import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/String.bs"
@@ -81,6 +82,7 @@ sub onBackgroundDisplayChanged()
     applyBackgroundDisplay()
     renderMoviePoster(content)
     applyContentLayout(m.logoState.mediaType)
+    if content <> invalid then renderMetadata(content, m.logoState.mediaType)
     applyContentGradientVisibility(m.logoState.mediaType)
     updateLogoFallbackTitlePosition(m.episodeTitleLabel.visible)
     onTitleLogoLoadStatusChanged()
@@ -146,8 +148,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub applyContentLayout(mediaType as string)
     layout = getContentLayout(mediaType)
-    m.metadata.primaryRow.availableWidth = layout.detailsWidth
-    m.metadata.secondaryRow.availableWidth = layout.detailsWidth
     m.overviewDescription.width = layout.overviewWidth
     m.episodeTitleLabel.width = layout.detailsWidth
     m.episodeTitleLabel.translation = layout.titleTranslation
@@ -159,7 +159,6 @@ sub applyContentLayout(mediaType as string)
     m.infoGroup.translation = layout.infoTranslation
     m.metadata.secondaryRow.visible = layout.isSeriesPoster <> true
     m.overviewDescription.visible = layout.isSeriesPoster <> true
-    positionPrimaryMetadata(layout)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -445,16 +444,22 @@ end function
 ' renderMetadata
 '-------------------------------------------------------------------------------
 sub renderMetadata(content as object, mediaType as string)
-    primaryValues = { leadingText: Format.SafeString(content.primaryInfoText, ""), runtimeText: "", officialRating: "", ratings: {} }
-    secondaryValues = { leadingText: Format.SafeString(content.secondaryInfoText, ""), runtimeText: "", officialRating: "", ratings: {} }
-    values = primaryValues
-    if mediaType = "tv-episode" then values = secondaryValues
-    values.runtimeText = Format.SafeString(content.runtimeText, "")
-    values.officialRating = Format.SafeString(content.officialRating, "")
-    values.ratings = { communityRating: content.communityRating, criticRating: content.criticRating }
-    m.metadata.primaryRow.setFields(primaryValues)
-    m.metadata.secondaryRow.setFields(secondaryValues)
-    positionPrimaryMetadata(getContentLayout(mediaType))
+    layout = getContentLayout(mediaType)
+    primaryInput = new MediaMetadata()
+    primaryInput.leadingText = Format.SafeString(content.primaryInfoText, "")
+    primaryInput.availableWidth = layout.detailsWidth
+    secondaryInput = new MediaMetadata()
+    secondaryInput.leadingText = Format.SafeString(content.secondaryInfoText, "")
+    secondaryInput.availableWidth = layout.detailsWidth
+    input = primaryInput
+    if mediaType = "tv-episode" then input = secondaryInput
+    input.runtimeText = Format.SafeString(content.runtimeText, "")
+    input.officialRating = Format.SafeString(content.officialRating, "")
+    input.communityRating = content.communityRating
+    input.criticRating = content.criticRating
+    m.metadata.primaryRow.callFunc("render", primaryInput)
+    m.metadata.secondaryRow.callFunc("render", secondaryInput)
+    positionPrimaryMetadata(layout)
 end sub
 
 '-------------------------------------------------------------------------------

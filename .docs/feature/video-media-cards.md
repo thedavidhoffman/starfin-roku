@@ -5,6 +5,13 @@ playlist, and Home Media surfaces. Libraries support three presentations:
 `poster`, `thumbnail`, and `detailed`. Unknown or removed presentation names
 fall back to Poster.
 
+The wrapper registers its content observer in init() after creating presentation
+state and the default card. It then processes any already assigned content.
+This avoids an XML onChange callback accessing presentation state before that
+state exists. An App Store crash in the 2.2.0 package points to that state access;
+the early-callback sequence remains a suspected cause rather than a reproduced
+device sequence.
+
 Each of the eight library settings stores its presentation and column count as
 one semicolon-delimited value. Valid values are `poster;3` through `poster;6`,
 `thumbnail;2` through `thumbnail;4`, and `detailed;2`. Every other value,

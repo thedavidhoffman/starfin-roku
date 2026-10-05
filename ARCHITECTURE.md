@@ -59,6 +59,15 @@ Move logic to `source/` when it is reused or is a self-contained calculation.
 Keep it local when it coordinates child nodes, focus, observers, or the owning
 component's state.
 
+For field callbacks that require initialized references or state, establish those
+dependencies before registering observers in script, then explicitly process
+current field values. This avoids early XML callbacks and renders values assigned
+before registration. Handlers do not rerun `init()` to recover state. Controls
+with an explicit consumer-owned render request, such as MediaMetadataRow, wait
+for that request rather than rendering placeholder inputs during initialization.
+See [List and Grid Item Initialization](.docs/feature/list-item-initialization.md)
+for the affected controls and test coverage boundaries.
+
 ## Navigation and overlays
 
 `MainScene` routes between major surfaces. Feature pages emit narrow event-like

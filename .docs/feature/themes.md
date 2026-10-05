@@ -34,6 +34,11 @@ observe global theme state; they do not load or save registry preferences.
 and height fields, defaulting to 1920 by 1080. MainScene uses one instance in place
 of its former background Rectangle and Poster. Both layers resize together.
 
+Width and height observers are registered after child references exist, followed
+by applying the current dimensions. This follows the
+[observer initialization pattern](list-item-initialization.md#shared-control-initialization).
+The existing global theme observer and initial theme application remain separate.
+
 | Theme | Rendering |
 | --- | --- |
 | Blue | Existing `pkg:/images/themes/blue/background.png` with `scaleToFill`, over opaque black |
