@@ -16,7 +16,22 @@ and Chapters, in that order. Audio appears for multiple tracks, Subtitles when
 subtitle tracks exist, and Chapters when chapters exist. Media Info and Video
 always appear. Opening selects Media Info and focuses navigation. Right or OK
 enters the pane; Left returns to navigation. Back closes and applies changes.
-There is no Done button or hint.
+There is no Done button or hint. The dialog title follows Settings' category
+breadcrumb pattern: `Media Options › Media Info` on opening, then
+`Media Options › <category>` as navigation changes categories.
+
+Video, Versions, Audio, Subtitles, and Chapters reuse SettingsCard for the glass
+background, category heading, and radio-list focus spacing. Cards occupy the
+existing right-hand pane at width 1030. Lists use 52-pixel rows starting at Y=68,
+with card height `84 + 52 * visibleRows` and at most ten visible rows. Longer
+lists scroll without dropping choices. Video uses a 660-pixel card; its focused
+mode description appears within the card at Y=300 with height 336. Other choice
+categories clear that description and fit their list. Version-loading status
+remains in the footer beneath the cards. Media Info keeps its existing layout.
+
+Movies with multiple selectable sources add Versions immediately after Video.
+See [Movie Versions](movie-versions.md) for version loading, draft behavior, and
+source-specific resume and playback.
 
 Media Info preserves source and stream details in the scrollable information
 control. During playback it also includes clearly labeled playback diagnostics:
@@ -43,7 +58,13 @@ It includes source data, option lists, initial selection, an opening generation,
 and optional playback diagnostics. The dialog publishes `result` before the
 normal close event, with optional `videoMode`, `audioStreamIndex`,
 `subtitleStreamIndex`, and `chapter` fields. Missing fields mean unchanged;
-subtitle index -1 explicitly means Off and -2 means Jellyfin Account Default. Replacing/removing an overlay does not
+subtitle index -1 explicitly means Off and -2 means Jellyfin Account Default.
+For a version change it also publishes `mediaSourceId` and the retained
+`movieVersions` context, with final source-specific stream indices. Owners
+project the selected item from that context rather than receiving a duplicate
+item payload. A successful load of the initially unavailable selected source
+also publishes this metadata commit, even when the source ID is unchanged.
+Replacing/removing an overlay does not
 invoke its user-close hook and therefore does not commit pending edits.
 
 MainScene and PlaybackController only route. Movie and TVEpisode update their

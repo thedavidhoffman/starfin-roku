@@ -35,6 +35,10 @@ introduce or burn in a subtitle track.
 
 ## Playback Mode Matrix
 
+Movie version selection is separate from the Video playback mode. The Versions
+category uses the same staged commit and combined restart, while retaining the
+chosen mode across versions. See [Movie Versions](movie-versions.md).
+
 | Option | Direct Play | Direct Stream | Transcoding | Video stream copy | Audio stream copy |
 | --- | --- | --- | --- | --- | --- |
 | Automatic | Enabled | Enabled | Enabled | Allowed | Allowed |

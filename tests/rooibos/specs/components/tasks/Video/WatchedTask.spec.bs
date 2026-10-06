@@ -58,6 +58,80 @@ namespace tests
             m.assertEqual(response.errorMessage, "Unknown watched request action.")
         end function
 
+        @describe("optional watched correlation")
+
+        @it("echoes correlation on watched success and retains the API target")
+        function _()
+            m.runWatchedRequest("MarkAsWatched", { ok: true, data: {} })
+
+            response = m.node.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 7)
+            m.assertEqual(response.mediaSourceId, "version-2")
+            m.assertEqual(response.itemId, "movie-1")
+            m.assertTrue(Instr(1, getGlobalAa().watchedHttpRequest.url, "/UserPlayedItems/movie-1?") > 0)
+            m.assertEqual(getGlobalAa().watchedHttpRequest.method, "POST")
+        end function
+
+        @it("echoes correlation on unwatched success")
+        function _()
+            m.runWatchedRequest("MarkAsUnwatched", { ok: true, data: {} })
+
+            m.assertEqual(m.node.top.response.requestId, 7)
+            m.assertEqual(m.node.top.response.mediaSourceId, "version-2")
+            m.assertEqual(m.node.top.response.action, "MarkAsUnwatched")
+            m.assertEqual(getGlobalAa().watchedHttpRequest.method, "DELETE")
+        end function
+
+        @it("echoes correlation on API failure")
+        function _()
+            m.runWatchedRequest("MarkAsWatched", { ok: false, errorMessage: "Unavailable" })
+
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.requestId, 7)
+            m.assertEqual(m.node.top.response.mediaSourceId, "version-2")
+            m.assertEqual(m.node.top.response.itemId, "movie-1")
+        end function
+
+        @it("echoes correlation on request validation failure")
+        function _()
+            m.node.top.request = { action: "MarkAsWatched", server: "server", token: "token", itemId: "movie-1", requestId: 7, mediaSourceId: "version-2" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.requestId, 7)
+            m.assertEqual(m.node.top.response.mediaSourceId, "version-2")
+            m.assertEqual(m.node.top.response.itemId, "movie-1")
+        end function
+
+        @it("leaves optional correlation absent for existing callers")
+        function _()
+            m.runWatchedRequest("MarkAsWatched", { ok: true, data: {} }, false)
+
+            m.assertTrue(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.requestId)
+            m.assertInvalid(m.node.top.response.mediaSourceId)
+            m.assertEqual(m.node.top.response.itemId, "movie-1")
+        end function
+
+        private sub runWatchedRequest(action as string, result as object, correlated = true as boolean)
+            getGlobalAa().watchedHttpResult = result
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().watchedHttpRequest = { url: requestUrl, method: method }
+                return getGlobalAa().watchedHttpResult
+            end function)
+            request = { action: action, server: "http://server", token: "token", userId: "user", itemId: "movie-1" }
+            if correlated then
+                request.requestId = 7
+                request.mediaSourceId = "version-2"
+            end if
+            m.node.top.request = request
+            'bs:disable-next-line 1140
+            executeRequest()
+        end sub
+
     end class
 
 end namespace

@@ -2,6 +2,7 @@ import "pkg:/source/String.bs"
 import "pkg:/source/MediaShellLayout.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/MediaOptionsSession.bs"
+import "pkg:/source/MovieVersions.bs"
 import "pkg:/source/VideoMediaSummary.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
@@ -56,6 +57,8 @@ sub initReferences()
     m.state = {
         request: invalid
         item: invalid
+        movieVersions: invalid
+        watched: { nextRequestId: 0, pending: invalid }
         mediaInfoPending: false
         mediaOptions: { session: invalid, generation: 0 }
         selectedStreams: {
@@ -155,6 +158,7 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    m.state.watched.pending = invalid
     m.state.mediaOptions.session = invalid
     AsyncLifecycle.Deactivate(m.state.lifecycle)
     LatestRequestLifecycle.Deactivate(m.state.detailsLoad)
@@ -423,7 +427,8 @@ end sub
 function buildPlaySelection(startPositionTicks as dynamic) as dynamic
     item = m.state.item
     request = m.state.request
-    if request = invalid or item = invalid then return invalid
+    if request = invalid or item = invalid or m.state.mediaInfoPending then return invalid
+    if m.state.movieVersions <> invalid and MovieVersions.GetSelectedItem(m.state.movieVersions) = invalid then return invalid
 
     itemId = Format.FirstNonEmpty([item.Id, request.itemId], "")
     if itemId = "" then return invalid
@@ -434,6 +439,10 @@ function buildPlaySelection(startPositionTicks as dynamic) as dynamic
         playbackQueue: request.playbackQueue
         playbackQueueIndex: request.playbackQueueIndex
     }
+    if m.state.movieVersions <> invalid then
+        selection.movieVersions = m.state.movieVersions
+        selection.mediaSourceId = m.state.movieVersions.selectedSourceId
+    end if
     if startPositionTicks <> invalid then selection.AddReplace("startPositionTicks", startPositionTicks)
 
     applySelectedStreamsToPlaySelection(selection)
@@ -442,9 +451,9 @@ function buildPlaySelection(startPositionTicks as dynamic) as dynamic
 end function
 
 '-------------------------------------------------------------------------------
-' applyPlaybackSubtitleSelection
+' applyPlaybackSelection
 '-------------------------------------------------------------------------------
-sub applyPlaybackSubtitleSelection(playRequest as dynamic)
+sub applyPlaybackSelection(playRequest as dynamic)
     if playRequest = invalid then return
 
     item = m.state.item
@@ -452,10 +461,22 @@ sub applyPlaybackSubtitleSelection(playRequest as dynamic)
     itemId = Strings.ToString(item.Id)
     if itemId = "" or Strings.ToString(playRequest.itemId) <> itemId then return
 
+    if playRequest.movieVersions <> invalid and playRequest.movieVersions.itemId = itemId then
+        restoredItem = MovieVersions.GetSelectedItem(playRequest.movieVersions)
+        if restoredItem <> invalid then
+            m.state.movieVersions = playRequest.movieVersions
+            m.state.item = restoredItem
+            audioIndex = Number.ToInteger(playRequest.audioStreamIndex, -1)
+            m.state.selectedStreams.audio = invalid
+            if audioIndex >= 0 then m.state.selectedStreams.audio = { streamIndex: audioIndex }
+        end if
+    end if
+
     streamIndex = Number.ToInteger(playRequest.subtitleStreamIndex, SubtitleSelection.NotSet)
     if streamIndex = SubtitleSelection.NotSet then
         m.state.selectedStreams.subtitle = invalid
         m.state.selectedStreams.subtitleOff = false
+        renderMovie(m.state.item)
         return
     end if
     if streamIndex = SubtitleSelection.None then
@@ -465,6 +486,7 @@ sub applyPlaybackSubtitleSelection(playRequest as dynamic)
         m.state.selectedStreams.subtitle = { streamIndex: streamIndex }
         m.state.selectedStreams.subtitleOff = false
     end if
+    renderMovie(m.state.item)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -481,9 +503,19 @@ sub handleStreamOptionsOverlayClosed(closed as object)
     if item = invalid or item.Id <> session.itemId then return
     result = closed.overlay.result
     if result = invalid then return
+    if result.mediaSourceId <> invalid then
+        if result.movieVersions = invalid or result.movieVersions.itemId <> item.Id then return
+        selected = MovieVersions.Select(result.movieVersions, result.mediaSourceId)
+        if selected = invalid then return
+        m.state.movieVersions = selected
+        m.state.item = MovieVersions.GetSelectedItem(selected)
+        item = m.state.item
+        session.context = MediaOptionsSession.ForVersion(session.context, selected, result)
+        m.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+    end if
     if result.videoMode <> invalid then applyPlaybackVideoMode(result.videoMode)
     m.state.selectedStreams = MediaOptionsSession.ApplyStreamChanges(m.state.selectedStreams, session.context, result)
-    refreshMediaInfoText(item)
+    renderMovie(item)
     if result.Count() > 0 then m.log.activity("Updated media options")
     if result.chapter <> invalid then
         playSelection = buildPlaySelection(result.chapter.startPositionTicks)
@@ -511,6 +543,8 @@ end sub
 ' runWatchedTask
 '-------------------------------------------------------------------------------
 sub runWatchedTask(action as string)
+    if m.state.watched.pending <> invalid then return
+    if m.state.movieVersions <> invalid and MovieVersions.GetSelectedItem(m.state.movieVersions) = invalid then return
     item = m.state.item
     request = m.state.request
     if item = invalid or request = invalid then return
@@ -518,7 +552,13 @@ sub runWatchedTask(action as string)
     itemId = Format.FirstNonEmpty([item.Id, request.itemId], "")
     if itemId = "" then return
 
+    sourceId = ""
+    if m.state.movieVersions <> invalid then sourceId = m.state.movieVersions.selectedSourceId
+    m.state.watched.nextRequestId += 1
+    m.state.watched.pending = { itemId: itemId, mediaSourceId: sourceId, requestId: m.state.watched.nextRequestId, action: action }
     m.watchedTask.request = {
+        requestId: m.state.watched.nextRequestId
+        mediaSourceId: sourceId
         action: action
         server: request.server
         token: request.token
@@ -535,6 +575,12 @@ sub onWatchedTaskResponse()
     response = m.watchedTask.response
     if response = invalid then return
     if m.state.lifecycle.isActive <> true then return
+    pending = m.state.watched.pending
+    if pending = invalid then return
+    if Number.ToInteger(response.requestId, -1) <> pending.requestId then return
+    if Strings.ToString(response.itemId) <> pending.itemId or Strings.ToString(response.mediaSourceId) <> pending.mediaSourceId then return
+    if Strings.ToString(response.action) <> pending.action then return
+    m.state.watched.pending = invalid
 
     if response.ok <> true then
         AppMessage.Show((response.failureKind <> invalid ? "Unable to update watched state. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to update watched state."))
@@ -547,11 +593,21 @@ sub onWatchedTaskResponse()
     itemId = Strings.ToString(response.itemId)
     if itemId = "" or itemId <> Format.FirstNonEmpty([item.Id], "") then return
 
+    refreshSelected = true
+    if m.state.movieVersions <> invalid then
+        details = m.state.movieVersions.details[pending.mediaSourceId]
+        if details = invalid then return
+        item = PlaybackRequest.Create({ item: details }).item
+        refreshSelected = pending.mediaSourceId = m.state.movieVersions.selectedSourceId
+    end if
     isWatched = Strings.ToString(response.action) = "MarkAsWatched"
-    updateItemWatchedState(item, isWatched)
-    m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(item))
-    m.mediaToolbar.isWatched = isWatched
-    m.mediaToolbar.callFunc("focusWatchedAction")
+    updateItemWatchedState(item, isWatched, pending.mediaSourceId)
+    if refreshSelected then
+        item = m.state.item
+        m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(item))
+        m.mediaToolbar.isWatched = isWatched
+        m.mediaToolbar.callFunc("focusWatchedAction")
+    end if
     m.top.watchedStateChanged = {
         itemId: itemId
         isWatched: isWatched
@@ -567,9 +623,24 @@ end sub
 sub onVideoToolbarMediaInfoSelected()
     item = m.state.item
     if item = invalid then return
+    if m.state.mediaInfoPending then return
     m.mediaToolbar.callFunc("deactivate")
     m.state.focusArea = "toolbar"
     context = MediaOptionsSession.Context(item, m.state.videoMode, getSelectedAudioStreamIndex(), getSelectedSubtitleStreamIndex(), getAudioStreams(item), getSubtitleStreams(item))
+    if m.state.movieVersions <> invalid then
+        context.movieVersions = m.state.movieVersions
+        context.selection.mediaSourceId = m.state.movieVersions.selectedSourceId
+        context.session = { server: m.state.request.server, token: m.state.request.token, userId: m.state.request.userId }
+        if MovieVersions.GetSelectedItem(m.state.movieVersions) = invalid then
+            ' The catalog is available, but tracks and chapters require the selected source's details.
+            context.selection.audioStreamIndex = -1
+            context.selection.subtitleStreamIndex = SubtitleSelection.NotSet
+            if m.state.selectedStreams.subtitleOff then context.selection.subtitleStreamIndex = SubtitleSelection.None
+            context.audioOptions = []
+            context.subtitleOptions = []
+            context.chapterOptions = []
+        end if
+    end if
     m.state.mediaOptions.generation += 1
     context.generation = m.state.mediaOptions.generation
     m.state.mediaOptions.session = { context: context, itemId: item.Id }
@@ -598,7 +669,21 @@ sub onPlaybackProgressChange()
     if currentItemId = "" and m.state.request <> invalid then currentItemId = Strings.ToString(m.state.request.itemId)
     if itemId = "" or itemId <> currentItemId then return
 
-    updateItemPlaybackProgress(item, change)
+    if m.state.movieVersions <> invalid then
+        sourceId = Strings.ToString(change.mediaSourceId, m.state.movieVersions.selectedSourceId)
+        details = m.state.movieVersions.details[sourceId]
+        if details <> invalid then
+            details = PlaybackRequest.Create({ item: details }).item
+            PlaybackProgress.ApplyChangeToItem(details, change)
+            storeUpdatedMovieItem(details, sourceId)
+        end if
+        if sourceId <> m.state.movieVersions.selectedSourceId then
+            m.top.playbackProgressChanged = change
+            return
+        end if
+    end if
+    if m.state.movieVersions = invalid then updateItemPlaybackProgress(item, change)
+    item = m.state.item
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isItemWatched(item)
     m.top.playbackProgressChanged = change
@@ -697,7 +782,7 @@ end function
 '-------------------------------------------------------------------------------
 ' updateItemWatchedState
 '-------------------------------------------------------------------------------
-sub updateItemWatchedState(item as dynamic, isWatched as boolean)
+sub updateItemWatchedState(item as dynamic, isWatched as boolean, sourceId = "" as string)
     if item = invalid then return
     if item.UserData = invalid then item.UserData = {}
 
@@ -709,7 +794,7 @@ sub updateItemWatchedState(item as dynamic, isWatched as boolean)
         item.UserData.PlayedPercentage = 0
     end if
 
-    m.state.item = item
+    storeUpdatedMovieItem(item, sourceId)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -730,7 +815,20 @@ sub updateItemPlaybackProgress(item as dynamic, change as object)
         item.UserData.PlayedPercentage = PlaybackProgress.GetPercentage(positionTicks, item.RunTimeTicks, change.durationTicks)
     end if
 
-    m.state.item = item
+    storeUpdatedMovieItem(item)
+end sub
+
+'-------------------------------------------------------------------------------
+' storeUpdatedMovieItem
+'-------------------------------------------------------------------------------
+sub storeUpdatedMovieItem(item as object, sourceId = "" as string)
+    if m.state.movieVersions = invalid then
+        m.state.item = item
+        return
+    end if
+    if sourceId = "" then sourceId = m.state.movieVersions.selectedSourceId
+    m.state.movieVersions = MovieVersions.CacheDetails(m.state.movieVersions, sourceId, item)
+    if sourceId = m.state.movieVersions.selectedSourceId then m.state.item = MovieVersions.GetSelectedItem(m.state.movieVersions)
 end sub
 
 '-------------------------------------------------------------------------------

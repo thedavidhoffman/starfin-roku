@@ -25,6 +25,12 @@ classification badge, star score, and tomato score. It clears missing values on
 item changes. Formatting and rating normalization helpers remain in
 `MediaMetadataFormatting`.
 
+TV-show detail metadata displays an episode count only when Jellyfin supplies
+`RecursiveItemCount`. It does not use `ChildCount`, which counts direct children
+and can represent seasons. Initial summaries without a recursive count omit the
+episode text; the count appears when complete series metadata provides it.
+Season cards retain their existing count behavior.
+
 Pages pass `CommunityRating` and `CriticRating` from their own item metadata to
 MediaShell. MediaShell supplies values to two `MediaMetadataRow` instances and
 chooses their placement. Movie and TV-show ratings follow primary metadata; episode ratings

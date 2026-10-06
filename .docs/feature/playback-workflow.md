@@ -1,5 +1,9 @@
 # Playback Workflow and State Ownership
 
+Multi-version movies carry a source catalog separately from negotiated playback
+data. Source selection, metadata, resume, and recovery are described in
+[Movie Versions](movie-versions.md).
+
 Video playback uses three explicit assocarray value contracts. These contracts
 cover every media type routed through `VideoPlayer`; music audio and theme audio
 use separate workflows.
@@ -171,6 +175,12 @@ ActivePlayback      what VideoPlayer accepted as canonical playback state
 
 m.playback          Roku runtime mechanics for that accepted playback
 ```
+
+Movie Resume requests preserve an absent `startPositionTicks` through routing,
+so playback resolution uses the selected version's UserData after metadata
+loading. Explicit positions, including Restart zero and chapter/player restart
+positions, remain authoritative. Movie's `applyPlaybackSelection` restoration
+interface accepts the version context together with audio and subtitle state.
 
 ## Close Restoration
 

@@ -7,6 +7,7 @@ individual Starfin features.
 ## Table of Contents
 
 - [Settings Cards](settings-cards.md)
+- [Movie Versions](movie-versions.md)
 
 - [Account Badge](account-badge.md)
 - [Activity Logging](activity-logging.md)

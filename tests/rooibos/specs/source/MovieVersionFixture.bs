@@ -1,0 +1,26 @@
+import "pkg:/source/MovieVersions.bs"
+import "pkg:/source/MediaOptionsSession.bs"
+
+namespace TestMovieVersions
+
+    function Create() as object
+        first = { Id: "movie-1", Name: "1080p Theatrical", RunTimeTicks: 1200000000&, MediaStreams: [{ Type: "Video", Index: 0, Width: 1920, Codec: "h264" }, { Type: "Audio", Index: 1, Codec: "aac", IsDefault: true }, { Type: "Subtitle", Index: 2, Language: "eng" }] }
+        second = { Id: "version-2", Name: "720p Director's cut", RunTimeTicks: 600000000&, MediaStreams: [{ Type: "Video", Index: 0, Width: 1280, Codec: "hevc" }, { Type: "Audio", Index: 3, Codec: "aac", IsDefault: true }, { Type: "Subtitle", Index: 4, Language: "fra" }] }
+        movie = { Id: "movie-1", Type: "Movie", Name: "Movie", MediaSources: [first, second], MediaStreams: first.MediaStreams, RunTimeTicks: first.RunTimeTicks, Chapters: [{ Name: "Theatrical opening", StartPositionTicks: 0 }], UserData: { PlaybackPositionTicks: 300000000& } }
+        versions = MovieVersions.Create(movie)
+        version = { Id: "version-2", Type: "Movie", Name: "Movie", MediaSources: [second, first], MediaStreams: second.MediaStreams, RunTimeTicks: second.RunTimeTicks, Chapters: [{ Name: "Director opening", StartPositionTicks: 0 }], UserData: { PlaybackPositionTicks: 150000000& }, Trickplay: { "version-2": { "320": { Width: 320, Height: 180, TileWidth: 5, TileHeight: 5, Interval: 10000, ThumbnailCount: 6 } } } }
+        versions = MovieVersions.CacheDetails(versions, "version-2", version)
+        return versions
+    end function
+
+    function Context() as object
+        versions = Create()
+        item = MovieVersions.GetSelectedItem(versions)
+        optionsContext = MediaOptionsSession.Context(item, "automatic", 1, 2, MovieVersions.Streams(item, "Audio"), MovieVersions.Streams(item, "Subtitle"))
+        optionsContext.movieVersions = versions
+        optionsContext.selection.mediaSourceId = "movie-1"
+        optionsContext.session = { server: "http://server", token: "token", userId: "user" }
+        return optionsContext
+    end function
+
+end namespace

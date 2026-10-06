@@ -1,0 +1,166 @@
+import "pkg:/source/tests/source/MovieVersionFixture.bs"
+
+namespace tests
+
+    @suite("Movie version helpers")
+    class MovieVersionsTests extends rooibos.BaseTestSuite
+
+        @describe("catalog and source-specific metadata")
+
+        @it("returns no version choices without a catalog")
+        function _()
+            m.assertEqual(MovieVersions.Options(invalid), [])
+        end function
+
+        @it("returns no streams without an item")
+        function _()
+            m.assertEqual(MovieVersions.Streams(invalid, "Audio"), [])
+        end function
+
+        @it("filters streams and copies their metadata")
+        function _()
+            item = { MediaStreams: [{ Type: "Video", Index: 0 }, { Type: "Audio", Title: "Original" }] }
+
+            streams = MovieVersions.Streams(item, "Audio")
+            streams[0].Title = "Changed"
+
+            m.assertEqual(streams.Count(), 1)
+            m.assertEqual(streams[0].sourceIndex, 1)
+            m.assertEqual(item.MediaStreams[1].Title, "Original")
+        end function
+
+        @it("preserves source order and selects the first source")
+        function _()
+            versions = TestMovieVersions.Create()
+            m.assertEqual(versions.selectedSourceId, "movie-1")
+            m.assertEqual(MovieVersions.Options(versions), [{ key: "movie-1", label: "1080p Theatrical" }, { key: "version-2", label: "720p Director's cut" }])
+        end function
+
+        @it("uses numbered labels when a source has no name")
+        function _()
+            versions = TestMovieVersions.Create()
+            versions.sources[1].Name = " "
+
+            m.assertEqual(MovieVersions.Options(versions)[1].label, "Version 2")
+        end function
+
+        @it("omits duplicate and empty source identities")
+        function _()
+            movie = MovieVersions.GetSelectedItem(TestMovieVersions.Create())
+            movie.MediaSources = [{ Id: "a" }, invalid, { Id: "a" }, { Id: "" }, { Id: "b" }]
+
+            m.assertEqual(MovieVersions.Create(movie).sources.Count(), 2)
+        end function
+
+        @it("keeps catalog labels when refreshed details use a filename")
+        function _()
+            versions = TestMovieVersions.Create()
+            loaded = TestMovieVersions.Create().details["version-2"]
+            loaded.MediaSources[0].Name = "Movie - 720p"
+            loaded.MediaSources[0].RunTimeTicks = 900000000&
+
+            refreshed = MovieVersions.CacheDetails(versions, "version-2", loaded)
+
+            m.assertEqual(MovieVersions.Options(refreshed), MovieVersions.Options(versions))
+            m.assertEqual(MovieVersions.GetSelectedItem(MovieVersions.Select(refreshed, "version-2")).RunTimeTicks, 900000000&)
+            m.assertEqual(refreshed.details["version-2"].MediaSources[0].Name, "Movie - 720p")
+            m.assertEqual(loaded.MediaSources[0].Name, "Movie - 720p")
+            m.assertEqual(MovieVersions.FindSource(versions, "version-2").RunTimeTicks, 600000000&)
+        end function
+
+        @it("keeps numbered catalog labels when loaded details supply a name")
+        function _()
+            versions = TestMovieVersions.Create()
+            versions.sources[1].Name = " "
+            loaded = TestMovieVersions.Create().details["version-2"]
+            loaded.MediaSources[0].Name = "Movie - 720p"
+
+            refreshed = MovieVersions.CacheDetails(versions, "version-2", loaded)
+            returned = MovieVersions.Select(MovieVersions.Select(refreshed, "movie-1"), "version-2")
+
+            m.assertEqual(MovieVersions.Options(returned)[1].label, "Version 2")
+            m.assertEqual(MovieVersions.Options(returned)[0].label, "1080p Theatrical")
+        end function
+
+        @it("does not create a version catalog for a single source")
+        function _()
+            m.assertInvalid(MovieVersions.Create(MovieVersions.GetSelectedItem(TestMovieVersions.Create())))
+        end function
+
+        @it("does not expose movie versions for an episode")
+        function _()
+            item = TestMovieVersions.Create().details["movie-1"]
+            item.Type = "Episode"
+            m.assertInvalid(MovieVersions.Create(item))
+        end function
+
+        @it("retains movie identity while projecting the selected version")
+        function _()
+            versions = TestMovieVersions.Create()
+            selected = MovieVersions.Select(versions, "version-2")
+            item = MovieVersions.GetSelectedItem(selected)
+
+            m.assertEqual(item.Id, "movie-1")
+            m.assertEqual(item.MediaSources[0].Id, "version-2")
+            m.assertEqual(item.MediaStreams[1].Index, 3)
+            m.assertEqual(item.RunTimeTicks, 600000000&)
+            m.assertEqual(item.Chapters[0].Name, "Director opening")
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 150000000&)
+            m.assertEqual(versions.selectedSourceId, "movie-1")
+        end function
+
+        @it("caches another version without changing the selected source")
+        function _()
+            versions = TestMovieVersions.Create()
+            loaded = versions.details["version-2"]
+
+            cached = MovieVersions.CacheDetails(versions, "version-2", loaded)
+
+            m.assertEqual(cached.selectedSourceId, "movie-1")
+            m.assertEqual(cached.details["version-2"].Id, "version-2")
+            m.assertEqual(versions.selectedSourceId, "movie-1")
+        end function
+
+        @it("selects a cached version without rewriting its catalog metadata")
+        function _()
+            versions = TestMovieVersions.Create()
+            versions.sources[1].RunTimeTicks = 900000000&
+
+            selected = MovieVersions.Select(versions, "version-2")
+
+            m.assertEqual(selected.sources[1].RunTimeTicks, 900000000&)
+            m.assertEqual(selected.details["version-2"].RunTimeTicks, 600000000&)
+            m.assertEqual(versions.selectedSourceId, "movie-1")
+        end function
+
+        @it("requires loaded metadata for the chosen version")
+        function _()
+            versions = TestMovieVersions.Create()
+            versions.details.Delete("version-2")
+            m.assertInvalid(MovieVersions.Select(versions, "version-2"))
+        end function
+
+        @it("does not substitute a source when its ID is unavailable")
+        function _()
+            m.assertInvalid(MovieVersions.Select(TestMovieVersions.Create(), "missing"))
+        end function
+
+        @it("isolates progress changes between metadata snapshots")
+        function _()
+            versions = TestMovieVersions.Create()
+            selected = MovieVersions.Select(versions, "version-2")
+            item = MovieVersions.GetSelectedItem(selected)
+            item.UserData.PlaybackPositionTicks = 0
+
+            m.assertEqual(versions.details["version-2"].UserData.PlaybackPositionTicks, 150000000&)
+        end function
+
+        @it("uses the version identity for timeline metadata")
+        function _()
+            versions = MovieVersions.Select(TestMovieVersions.Create(), "version-2")
+            m.assertEqual(MovieVersions.MetadataItemId({ itemId: "movie-1", movieVersions: versions }), "version-2")
+        end function
+
+    end class
+
+end namespace

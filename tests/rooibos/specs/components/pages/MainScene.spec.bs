@@ -1783,6 +1783,52 @@ namespace tests
             m.node.overlayHost = originalHost
         end function
 
+        @describe("movie resume routing")
+
+        @it("defers implicit movie resume to playback resolution")
+        function _()
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "movie-1", item: { Id: "movie-1", Type: "Movie", UserData: { PlaybackPositionTicks: 300000000& } } })
+
+            m.assertInvalid(m.node.playbackController.playRequest.startPositionTicks)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("retains explicit movie Restart during routing")
+        function _()
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "movie-1", item: { Id: "movie-1", Type: "Movie" }, startPositionTicks: 0& })
+
+            m.assertEqual(m.node.playbackController.playRequest.startPositionTicks, 0&)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("retains an explicit movie chapter position during routing")
+        function _()
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "movie-1", item: { Id: "movie-1", Type: "Movie" }, startPositionTicks: 120000000& })
+
+            m.assertEqual(m.node.playbackController.playRequest.startPositionTicks, 120000000&)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("continues resolving episode resume during routing")
+        function _()
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "episode-1", item: { Id: "episode-1", Type: "Episode", UserData: { PlaybackPositionTicks: 300000000& } } })
+
+            m.assertEqual(m.node.playbackController.playRequest.startPositionTicks, 300000000&)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
         @describe("credits fallback request routing")
 
         @it("passes the saved credits fallback to playback")

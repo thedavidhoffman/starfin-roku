@@ -39,9 +39,13 @@ sub playerShow(selection as object)
         subtitleBurnInMode: SettingsStore.GetSettingValue(m.settings, SettingsStore.Key.SubtitleBurnInMode)
     }
     EpisodeQueueIdentity.Apply(playRequest, selection.playbackQueueScope, selection.episodeQueueId)
+    ' Movie resume is resolved after loading the selected source; explicit positions retain their meaning.
+    if itemType = "movie" and selection.startPositionTicks = invalid then playRequest.Delete("startPositionTicks")
     if selection.nextEpisodePromptSeconds <> invalid then playRequest.nextEpisodePromptSeconds = NextEpisodePromptSeconds.Normalize(selection.nextEpisodePromptSeconds)
     if selection.nextItemPlayback <> invalid then playRequest.nextItemPlayback = NextItemPlayback.Normalize(selection.nextItemPlayback)
     if selection.audioStreamIndex <> invalid then playRequest.AddReplace("audioStreamIndex", selection.audioStreamIndex)
+    if selection.mediaSourceId <> invalid then playRequest.mediaSourceId = selection.mediaSourceId
+    if selection.movieVersions <> invalid then playRequest.movieVersions = selection.movieVersions
     if selection.subtitleStreamIndex <> invalid then playRequest.AddReplace("subtitleStreamIndex", selection.subtitleStreamIndex)
     if selection.videoMode <> invalid then playRequest.AddReplace("videoMode", selection.videoMode)
     if selection.subtitleBurnInMode <> invalid then playRequest.subtitleBurnInMode = SubtitleBurnIn.Normalize(selection.subtitleBurnInMode)
@@ -204,7 +208,7 @@ sub playerHandleCloseRequested()
         m.tvEpisodePage.callFunc("refreshPlaybackState")
     end if
     if m.moviePage <> invalid then
-        m.moviePage.callFunc("applyPlaybackSubtitleSelection", closedPlayRequest)
+        m.moviePage.callFunc("applyPlaybackSelection", closedPlayRequest)
         m.moviePage.visible = true
         m.header.visible = false
         m.moviePage.callFunc("activate")

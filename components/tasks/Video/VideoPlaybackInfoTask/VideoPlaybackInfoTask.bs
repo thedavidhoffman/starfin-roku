@@ -5,6 +5,8 @@ import "pkg:/source/PlaybackProgress.bs"
 import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/PlaybackRequest.bs"
 import "pkg:/source/PlaybackResponse.bs"
+import "pkg:/source/MovieVersions.bs"
+import "pkg:/source/api/JellyfinMovie.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/DeviceCapabilities.bs"
@@ -38,6 +40,31 @@ sub executeRequest()
         return
     end if
 
+    request = PlaybackRequest.Create(request)
+    if request.movieVersions = invalid then
+        versions = MovieVersions.Create(request.item)
+        if versions <> invalid then
+            sourceId = Strings.ToString(request.mediaSourceId, versions.selectedSourceId)
+            if MovieVersions.FindSource(versions, sourceId) = invalid then
+                m.top.response = PlaybackResponse.Failure(request, { errorMessage: "The selected media source is no longer available." })
+                return
+            end if
+            versionResult = JellyfinMovie.Load({ server: request.server, token: request.token, userId: request.userId, itemId: sourceId })
+            if versionResult.ok <> true then
+                m.top.response = PlaybackResponse.Failure(request, versionResult)
+                return
+            end if
+            if versionResult.data = invalid or Strings.ToString(versionResult.data.Id) <> sourceId then
+                m.top.response = PlaybackResponse.Failure(request, { errorMessage: "Unable to load this movie version." })
+                return
+            end if
+            versions = MovieVersions.CacheDetails(versions, sourceId, versionResult.data)
+            request.movieVersions = MovieVersions.Select(versions, sourceId)
+            request.mediaSourceId = sourceId
+            request.item = MovieVersions.GetSelectedItem(request.movieVersions)
+        end if
+    end if
+
     negotiation = negotiatePlaybackInfo(request)
     result = negotiation.result
     if result.ok <> true then
@@ -46,7 +73,12 @@ sub executeRequest()
         return
     end if
 
-    mediaSource = PlaybackRequest.FirstMediaSource(result.data)
+    mediaSource = PlaybackRequest.FirstMediaSource(result.data, Strings.ToString(request.mediaSourceId))
+    if mediaSource = invalid then
+        failPlaybackNegotiation(request, { errorMessage: "The selected media source is no longer available." }, PlaybackRequest.FirstMediaSource(result.data))
+        return
+    end if
+    result.data.MediaSources = [mediaSource]
     if negotiation.subtitleIndex = SubtitleSelection.NotSet and mediaSource <> invalid then
         defaultIndex = getExistingSubtitleStreamIndex(mediaSource, Number.ToInteger(mediaSource.DefaultSubtitleStreamIndex, SubtitleSelection.None))
         negotiation.subtitleIndex = defaultIndex
@@ -66,7 +98,7 @@ sub executeRequest()
                 failPlaybackNegotiation(request, result, mediaSource)
                 return
             end if
-            finalSource = PlaybackRequest.FirstMediaSource(result.data)
+            finalSource = PlaybackRequest.FirstMediaSource(result.data, followup.mediaSourceId)
             if finalSource = invalid or Strings.ToString(finalSource.Id) <> followup.mediaSourceId then
                 failPlaybackNegotiation(request, { errorMessage: "Subtitle negotiation changed the selected media source." }, mediaSource)
                 return
@@ -75,6 +107,7 @@ sub executeRequest()
                 failPlaybackNegotiation(request, { errorMessage: "The selected subtitle is no longer available." }, mediaSource)
                 return
             end if
+            result.data.MediaSources = [finalSource]
         end if
     end if
     requestedAudioStreamIndex = negotiation.audioIndex
@@ -116,6 +149,7 @@ sub executeRequest()
         subtitleDeliveryMethod: subtitleDeliveryMethod
     }
     playbackResolution = buildPlaybackResolution(request, streamInfo, PlaybackRequest.FirstMediaSource(result.data))
+    if request.movieVersions <> invalid then responseData.movieVersions = MovieVersions.CacheDetails(request.movieVersions, streamInfo.mediaSourceId, resolvedItem)
     for each key in playbackResolution
         responseData[key] = playbackResolution[key]
     end for

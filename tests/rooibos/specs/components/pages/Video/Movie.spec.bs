@@ -1,3 +1,5 @@
+import "pkg:/source/tests/source/MovieVersionFixture.bs"
+
 namespace tests
 
     @SGNode("Movie")
@@ -7,6 +9,9 @@ namespace tests
         protected override function beforeEach()
             m.node.state.request = m.createRequest()
             m.node.state.item = m.createMovie()
+            m.node.state.movieVersions = invalid
+            m.node.state.watched.pending = invalid
+            m.node.watchedTask = m.top.findNode("watchedTask")
             m.node.state.focusArea = "toolbar"
             m.node.state.layout.isCinematic = false
             m.node.state.layout.isFromLibrary = false
@@ -17,6 +22,7 @@ namespace tests
             m.top.selectedPerson = invalid
             m.top.overlayRequested = invalid
             m.top.closeRequested = false
+            m.top.watchedStateChanged = invalid
         end function
 
         @describe("declarative component contract")
@@ -546,6 +552,7 @@ namespace tests
 
         @it("resolves fallback after a failed current load")
         function _()
+            m.stubCall(AppMessage.Show, invalid)
             m.node.state.request = invalid
             m.node.state.mediaInfoPending = true
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
@@ -674,7 +681,7 @@ namespace tests
             m.node.state.item = { Id: "item" }
             m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
 
-            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", resolvedSubtitleStreamIndex: 4 })
+            m.top.callFunc("applyPlaybackSelection", { itemId: "item", resolvedSubtitleStreamIndex: 4 })
 
             m.assertInvalid(m.node.state.selectedStreams.subtitle)
             m.assertFalse(m.node.state.selectedStreams.subtitleOff)
@@ -685,7 +692,7 @@ namespace tests
             m.node.state.item = { Id: "item" }
             m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
 
-            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", subtitleStreamIndex: -1 })
+            m.top.callFunc("applyPlaybackSelection", { itemId: "item", subtitleStreamIndex: -1 })
 
             m.assertInvalid(m.node.state.selectedStreams.subtitle)
             m.assertTrue(m.node.state.selectedStreams.subtitleOff)
@@ -696,7 +703,7 @@ namespace tests
             m.node.state.item = { Id: "item" }
             m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
 
-            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", subtitleStreamIndex: 5 })
+            m.top.callFunc("applyPlaybackSelection", { itemId: "item", subtitleStreamIndex: 5 })
 
             m.assertEqual(m.node.state.selectedStreams.subtitle.streamIndex, 5)
         end function
@@ -805,6 +812,341 @@ namespace tests
             content = m.top.findNode("mediaShell").mediaContent
             m.assertTrue(Instr(1, content.posterUrl, "/Images/Primary") > 0)
             m.assertTrue(Instr(1, content.backdropUrl, "/Images/Backdrop") > 0)
+        end function
+
+        @describe("watched response version correlation")
+
+        @it("updates only the captured version after switching before completion")
+        function _()
+            request = m.beginVersionWatchedRequest()
+            selected = MovieVersions.Select(m.node.state.movieVersions, "version-2")
+            m.node.state.movieVersions = selected
+            m.node.state.item = MovieVersions.GetSelectedItem(selected)
+            'bs:disable-next-line 1140
+            renderMovie(m.node.state.item)
+            m.node.mediaToolbar.findNode("mediaInfoButton").setFocus(true)
+
+            m.completeWatchedRequest(request)
+
+            m.assertTrue(m.node.state.movieVersions.details["movie-1"].UserData.Played)
+            m.assertEqual(m.node.state.movieVersions.details["movie-1"].UserData.PlaybackPositionTicks, 0)
+            m.assertEqual(m.node.state.item.UserData.PlaybackPositionTicks, 150000000&)
+            m.assertFalse(m.node.state.item.UserData.Played = true)
+            m.assertEqual(m.node.mediaToolbar.resumePositionSeconds, 15)
+            m.assertTrue(m.node.mediaToolbar.findNode("mediaInfoButton").hasFocus())
+            m.assertEqual(m.top.watchedStateChanged, { itemId: "movie-1", isWatched: true })
+        end function
+
+        @it("refreshes the selected version toolbar and focus after completion")
+        function _()
+            request = m.beginVersionWatchedRequest()
+
+            m.completeWatchedRequest(request)
+
+            m.assertTrue(m.node.state.item.UserData.Played)
+            m.assertEqual(m.node.mediaToolbar.resumePositionSeconds, 0)
+            m.assertTrue(m.node.mediaToolbar.isWatched)
+            m.assertTrue(m.node.mediaToolbar.findNode("markUnwatchedButton").isInFocusChain())
+            m.assertInvalid(m.node.state.watched.pending)
+        end function
+
+        @it("rejects an old response after reloading the same movie and starting another operation")
+        function _()
+            oldRequest = m.beginVersionWatchedRequest()
+            originalPool = m.node.state.detailsTaskPool
+            m.node.state.detailsTaskPool = { nodes: [{ request: invalid, control: "" }], nextIndex: 0 }
+            loadRequest = m.createRequest()
+            loadRequest.item = m.createMovie()
+            m.top.loadRequest = loadRequest
+            m.node.state.detailsTaskPool = originalPool
+            m.assertInvalid(m.node.state.watched.pending)
+            'bs:disable-next-line 1140
+            runWatchedTask("MarkAsWatched")
+            newRequest = m.node.watchedTask.request
+
+            m.completeWatchedRequest(oldRequest)
+
+            m.assertEqual(m.node.state.watched.pending.requestId, newRequest.requestId)
+            m.assertTrue(newRequest.requestId > oldRequest.requestId)
+            m.assertFalse(m.node.state.item.UserData.Played)
+            m.assertInvalid(m.top.watchedStateChanged)
+        end function
+
+        @it("ignores a watched response after deactivation and reactivation")
+        function _()
+            request = m.beginVersionWatchedRequest()
+            m.top.callFunc("deactivate")
+            m.top.callFunc("activate")
+
+            m.completeWatchedRequest(request)
+
+            m.assertInvalid(m.node.state.watched.pending)
+            m.assertFalse(m.node.state.item.UserData.Played = true)
+            m.assertEqual(m.node.state.item.UserData.PlaybackPositionTicks, 300000000&)
+            m.assertInvalid(m.top.watchedStateChanged)
+        end function
+
+        @it("rejects a response for another source without releasing the pending operation")
+        function _()
+            request = m.beginVersionWatchedRequest()
+            responseRequest = PlaybackRequest.Create(request)
+            responseRequest.mediaSourceId = "version-2"
+
+            m.completeWatchedRequest(responseRequest)
+
+            m.assertEqual(m.node.state.watched.pending.mediaSourceId, "movie-1")
+            m.assertFalse(m.node.state.item.UserData.Played = true)
+            m.assertInvalid(m.top.watchedStateChanged)
+        end function
+
+        @it("shows a matching failure and releases the pending operation")
+        function _()
+            request = m.beginVersionWatchedRequest()
+            getGlobalAa().watchedMessage = ""
+            m.stubCall(AppMessage.Show, sub(message)
+                getGlobalAa().watchedMessage = message
+            end sub)
+            request.ok = false
+            request.errorMessage = "Unavailable"
+            m.node.watchedTask.response = request
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertEqual(getGlobalAa().watchedMessage, "Unavailable")
+            m.assertInvalid(m.node.state.watched.pending)
+            m.assertEqual(m.node.state.item.UserData.PlaybackPositionTicks, 300000000&)
+        end function
+
+        @it("retains single-version movie watched behavior with correlated requests")
+        function _()
+            m.node.watchedTask = { request: invalid, response: invalid, control: "" }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, "movie-1")
+            'bs:disable-next-line 1140
+            renderMovie(m.node.state.item)
+
+            'bs:disable-next-line 1140
+            runWatchedTask("MarkAsWatched")
+            request = m.node.watchedTask.request
+
+            m.completeWatchedRequest(request)
+
+            m.assertEqual(request.mediaSourceId, "")
+            m.assertTrue(m.node.state.item.UserData.Played)
+            m.assertTrue(m.node.mediaToolbar.isWatched)
+            m.assertEqual(m.top.watchedStateChanged.itemId, "movie-1")
+        end function
+
+        private function beginVersionWatchedRequest() as object
+            versions = TestMovieVersions.Create()
+            m.node.state.movieVersions = versions
+            m.node.state.item = MovieVersions.GetSelectedItem(versions)
+            m.node.watchedTask = { request: invalid, response: invalid, control: "" }
+            AsyncLifecycle.Begin(m.node.state.lifecycle, "movie-1")
+            'bs:disable-next-line 1140
+            renderMovie(m.node.state.item)
+            'bs:disable-next-line 1140
+            runWatchedTask("MarkAsWatched")
+            return PlaybackRequest.Create(m.node.watchedTask.request)
+        end function
+
+        private sub completeWatchedRequest(request as object)
+            response = PlaybackRequest.Create(request)
+            response.ok = true
+            m.node.watchedTask.response = response
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+        end sub
+
+        @describe("movie version selection")
+
+        @it("commits a version with its own resume position and summary")
+        function _()
+            versions = TestMovieVersions.Create()
+            m.node.state.item = MovieVersions.GetSelectedItem(versions)
+            m.node.state.movieVersions = versions
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+            selected = MovieVersions.Select(versions, "version-2")
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: m.top.overlayRequested, overlay: { result: { mediaSourceId: "version-2", movieVersions: selected, audioStreamIndex: -1, subtitleStreamIndex: -2 } } })
+            'bs:disable-next-line 1140
+            onVideoToolbarPlaySelected()
+
+            m.assertEqual(m.top.playSelected.itemId, "movie-1")
+            m.assertEqual(m.top.playSelected.mediaSourceId, "version-2")
+            m.assertEqual(m.top.playSelected.item.UserData.PlaybackPositionTicks, 150000000&)
+            m.assertEqual(m.node.mediaToolbar.resumePositionSeconds, 15)
+            m.assertTrue(Instr(1, m.node.mediaToolbar.mediaInfoText, "720p") > 0)
+        end function
+
+        @it("restarts the selected version at zero")
+        function _()
+            versions = MovieVersions.Select(TestMovieVersions.Create(), "version-2")
+            m.node.state.movieVersions = versions
+            m.node.state.item = MovieVersions.GetSelectedItem(versions)
+            'bs:disable-next-line 1140
+            onVideoToolbarRestartSelected()
+
+            m.assertEqual(m.top.playSelected.mediaSourceId, "version-2")
+            m.assertEqual(m.top.playSelected.startPositionTicks, 0)
+        end function
+
+        @it("does not start playback while initial version details are pending")
+        function _()
+            m.node.state.mediaInfoPending = true
+            'bs:disable-next-line 1140
+            onVideoToolbarPlaySelected()
+            m.assertInvalid(m.top.playSelected)
+        end function
+
+        @it("restores the player version and accepted tracks on return")
+        function _()
+            m.node.state.item = MovieVersions.GetSelectedItem(TestMovieVersions.Create())
+            versions = MovieVersions.Select(TestMovieVersions.Create(), "version-2")
+            m.top.callFunc("applyPlaybackSelection", { itemId: "movie-1", movieVersions: versions, audioStreamIndex: 3, subtitleStreamIndex: -1 })
+
+            m.assertEqual(m.node.state.movieVersions.selectedSourceId, "version-2")
+            m.assertEqual(m.node.state.selectedStreams.audio.streamIndex, 3)
+            m.assertTrue(m.node.state.selectedStreams.subtitleOff)
+            m.assertEqual(m.node.mediaToolbar.resumePositionSeconds, 15)
+        end function
+
+        @it("keeps progress from another version out of the visible resume state")
+        function _()
+            versions = TestMovieVersions.Create()
+            m.node.state.movieVersions = versions
+            m.node.state.item = MovieVersions.GetSelectedItem(versions)
+            m.top.playbackProgressChange = { itemId: "movie-1", mediaSourceId: "version-2", positionTicks: 200000000&, isFinished: false }
+
+            m.assertEqual(m.node.state.item.UserData.PlaybackPositionTicks, 300000000&)
+            m.assertEqual(m.node.state.movieVersions.details["version-2"].UserData.PlaybackPositionTicks, 200000000&)
+            m.assertEqual(m.node.state.movieVersions.selectedSourceId, "movie-1")
+        end function
+
+        @it("retains watched state and cleared progress after switching versions")
+        function _()
+            versions = TestMovieVersions.Create()
+            m.node.state.movieVersions = versions
+            m.node.state.item = MovieVersions.GetSelectedItem(versions)
+
+            'bs:disable-next-line 1140
+            updateItemWatchedState(m.node.state.item, true)
+            selected = MovieVersions.Select(MovieVersions.Select(m.node.state.movieVersions, "version-2"), "movie-1")
+            restored = MovieVersions.GetSelectedItem(selected)
+
+            m.assertTrue(restored.UserData.Played)
+            m.assertEqual(restored.UserData.PlaybackPositionTicks, 0)
+            m.assertEqual(m.node.state.movieVersions.details["version-2"].UserData.PlaybackPositionTicks, 150000000&)
+        end function
+
+        @it("retains an unwatched change in the selected version cache")
+        function _()
+            versions = TestMovieVersions.Create()
+            versions.details["movie-1"].UserData.Played = true
+            m.node.state.movieVersions = versions
+            m.node.state.item = MovieVersions.GetSelectedItem(versions)
+
+            'bs:disable-next-line 1140
+            updateItemWatchedState(m.node.state.item, false)
+
+            m.assertFalse(MovieVersions.GetSelectedItem(m.node.state.movieVersions).UserData.Played)
+            m.assertFalse(m.node.state.movieVersions.details["movie-1"].UserData.Played)
+        end function
+
+        @it("releases loading after initial version failure while guarding Play")
+        function _()
+            entry = m.prepareUnavailableInitialVersion()
+            m.stubCall(AppMessage.Show, invalid)
+
+            'bs:disable-next-line 1140
+            handleMovieResponse({ response: { ok: false, action: "movie", requestId: entry.request.requestId, errorMessage: "Unavailable" } })
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+
+            m.assertFalse(m.node.state.mediaInfoPending)
+            m.assertNotInvalid(m.top.overlayRequested)
+            m.assertEqual(m.top.overlayRequested.optionsContext.selection.mediaSourceId, "version-2")
+            m.assertEqual(m.top.overlayRequested.optionsContext.chapterOptions, [])
+            'bs:disable-next-line 1140
+            m.assertInvalid(buildPlaySelection(invalid))
+        end function
+
+        @it("does not mark unavailable selected-version metadata as watched")
+        function _()
+            m.prepareUnavailableInitialVersion()
+            m.node.watchedTask.control = "stop"
+            m.node.watchedTask.request = invalid
+
+            'bs:disable-next-line 1140
+            runWatchedTask("MarkAsWatched")
+
+            m.assertInvalid(m.node.watchedTask.request)
+            m.assertInvalid(m.node.state.movieVersions.details["version-2"])
+        end function
+
+        @it("releases loading after mismatched initial version metadata")
+        function _()
+            entry = m.prepareUnavailableInitialVersion()
+            originalItem = m.node.state.item
+            m.stubCall(AppMessage.Show, invalid)
+
+            'bs:disable-next-line 1140
+            handleMovieResponse({ response: { ok: true, action: "movie", requestId: entry.request.requestId, payload: { Id: "wrong" } } })
+
+            m.assertFalse(m.node.state.mediaInfoPending)
+            m.assertEqual(m.node.state.item, originalItem)
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+            m.assertNotInvalid(m.top.overlayRequested)
+            'bs:disable-next-line 1140
+            m.assertInvalid(buildPlaySelection(0))
+        end function
+
+        @it("commits newly loaded metadata for the same initially unavailable source")
+        function _()
+            m.prepareUnavailableInitialVersion()
+            m.node.state.mediaInfoPending = false
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+            loaded = TestMovieVersions.Create().details["version-2"]
+            cached = MovieVersions.CacheDetails(m.node.state.movieVersions, "version-2", loaded)
+
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: m.top.overlayRequested, overlay: { result: { mediaSourceId: "version-2", movieVersions: cached, audioStreamIndex: -1, subtitleStreamIndex: -2 } } })
+            'bs:disable-next-line 1140
+            selection = buildPlaySelection(invalid)
+
+            m.assertEqual(selection.mediaSourceId, "version-2")
+            m.assertEqual(selection.item.Chapters[0].Name, "Director opening")
+            m.assertEqual(selection.item.UserData.PlaybackPositionTicks, 150000000&)
+        end function
+
+        private function prepareUnavailableInitialVersion() as object
+            versions = TestMovieVersions.Create()
+            versions.selectedSourceId = "version-2"
+            versions.details.Delete("version-2")
+            m.node.state.movieVersions = versions
+            m.node.state.item = versions.details["movie-1"]
+            m.node.state.mediaInfoPending = true
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, m.node.state.request, { sourceId: "version-2" })
+            return LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+        end function
+
+        @it("loads the first source's metadata when its identity differs from the movie")
+        function _()
+            m.node.state.mediaInfoPending = true
+            item = TestMovieVersions.Create().details["movie-1"]
+            item.MediaSources = [item.MediaSources[1], item.MediaSources[0]]
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, m.node.state.request)
+            entry = LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            m.node.state.detailsTaskPool = { nodes: [{ request: invalid, control: "" }], nextIndex: 0 }
+            'bs:disable-next-line 1140
+            handleMovieResponse({ response: { ok: true, action: "movie", requestId: entry.request.requestId, payload: item } })
+
+            m.assertTrue(m.node.state.mediaInfoPending)
+            m.assertEqual(m.node.state.detailsTaskPool.nodes[0].request.itemId, "version-2")
+            m.assertEqual(m.node.state.movieVersions.selectedSourceId, "version-2")
         end function
 
     end class

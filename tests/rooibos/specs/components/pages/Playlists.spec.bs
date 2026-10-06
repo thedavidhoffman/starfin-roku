@@ -462,7 +462,7 @@ namespace tests
             m.assertEqual(m.top.playbackSelected.playbackQueueScope, "playlist")
         end function
 
-        @it("Resume starts at the first unfinished item position")
+        @it("Resume selects the first unfinished movie and defers its source position")
         function _()
             m.node.pageState.items = [
                 m.createMovie("played", true, 0)
@@ -474,7 +474,7 @@ namespace tests
             m.top.findNode("playlistResumeButton").buttonSelected = true
 
             m.assertEqual(m.top.playbackSelected.itemId, "resume")
-            m.assertEqual(Number.ToInteger(m.top.playbackSelected.startPositionTicks, 0), 900)
+            m.assertInvalid(m.top.playbackSelected.startPositionTicks)
             m.assertEqual(m.top.playbackSelected.playbackQueueIndex, 1)
         end function
 
@@ -587,6 +587,29 @@ namespace tests
 
             m.assertInvalid(m.node.playlistState.pendingAutomaticPlaylist)
             m.assertEqual(m.top.findNode("singlePlaylistOpenTimer").control, "stop")
+        end function
+
+        @describe("movie resume selection")
+
+        @it("defers movie queue resume to selected source metadata")
+        function _()
+            item = { Id: "movie-1", Type: "Movie", UserData: { PlaybackPositionTicks: 300000000& } }
+
+            'bs:disable-next-line 1140
+            queueItem = buildPlaylistPlaybackQueueItem(item, 0)
+
+            m.assertInvalid(queueItem.startPositionTicks)
+            m.assertEqual(item.UserData.PlaybackPositionTicks, 300000000&)
+        end function
+
+        @it("retains episode queue resume positions")
+        function _()
+            item = { Id: "episode-1", Type: "Episode", UserData: { PlaybackPositionTicks: 300000000& } }
+
+            'bs:disable-next-line 1140
+            queueItem = buildPlaylistPlaybackQueueItem(item, 0)
+
+            m.assertEqual(queueItem.startPositionTicks, 300000000&)
         end function
 
         function createRequest(collectionType as string) as object

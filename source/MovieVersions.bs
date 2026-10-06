@@ -1,0 +1,135 @@
+import "pkg:/source/String.bs"
+import "pkg:/source/PlaybackRequest.bs"
+import "pkg:/source/MediaItem.bs"
+
+namespace MovieVersions
+
+    '---------------------------------------------------------------------------
+    ' MovieVersions.Create
+    '---------------------------------------------------------------------------
+    function Create(item as dynamic) as dynamic
+        if item = invalid or item.Type <> MediaItem.Type.Movie or item.MediaSources = invalid then return invalid
+        sources = []
+        seen = {}
+        for each source in item.MediaSources
+            if source = invalid then continue for
+            id = Strings.ToString(source.Id)
+            if id = "" or seen.DoesExist(id) then continue for
+            seen[id] = true
+            sources.Push(source)
+        end for
+        if sources.Count() < 2 then return invalid
+        context = { itemId: Strings.ToString(item.Id), selectedSourceId: Strings.ToString(sources[0].Id), sources: sources, details: {} }
+        for each source in sources
+            if Strings.ToString(source.Id) = context.itemId then context.details[context.itemId] = PlaybackRequest.Create({ item: item }).item
+        end for
+        return context
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MovieVersions.FindSource
+    '---------------------------------------------------------------------------
+    function FindSource(context as dynamic, sourceId as string) as dynamic
+        if context = invalid then return invalid
+        for each source in context.sources
+            if Strings.ToString(source.Id) = sourceId then return source
+        end for
+        return invalid
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MovieVersions.Options
+    '---------------------------------------------------------------------------
+    function Options(context as dynamic) as object
+        versionOptions = []
+        if context = invalid then return versionOptions
+        for i = 0 to context.sources.Count() - 1
+            source = context.sources[i]
+            name = Strings.ToString(source.Name).Trim()
+            if name = "" then name = "Version " + (i + 1).ToStr()
+            versionOptions.Push({ key: Strings.ToString(source.Id), label: name })
+        end for
+        return versionOptions
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MovieVersions.CacheDetails
+    '---------------------------------------------------------------------------
+    function CacheDetails(context as object, sourceId as string, item as object) as object
+        details = {}
+        for each key in context.details
+            details[key] = context.details[key]
+        end for
+        details[sourceId] = PlaybackRequest.Create({ item: item }).item
+        details[sourceId].Id = sourceId
+        sources = []
+        loadedSource = PlaybackRequest.FirstMediaSource(item, sourceId)
+        for each source in context.sources
+            if loadedSource <> invalid and Strings.ToString(source.Id) = sourceId then
+                loadedVersionSource = {}
+                for each key in loadedSource
+                    loadedVersionSource[key] = loadedSource[key]
+                end for
+                ' Individual-version responses can replace the catalog label with a filename.
+                loadedVersionSource.Name = source.Name
+                sources.Push(loadedVersionSource)
+            else
+                sources.Push(source)
+            end if
+        end for
+        return { itemId: context.itemId, selectedSourceId: context.selectedSourceId, sources: sources, details: details }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MovieVersions.Select
+    '---------------------------------------------------------------------------
+    function Select(context as object, sourceId as string) as dynamic
+        if FindSource(context, sourceId) = invalid or context.details[sourceId] = invalid then return invalid
+        return { itemId: context.itemId, selectedSourceId: sourceId, sources: context.sources, details: context.details }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MovieVersions.GetSelectedItem
+    '---------------------------------------------------------------------------
+    function GetSelectedItem(context as dynamic) as dynamic
+        if context = invalid then return invalid
+        source = FindSource(context, context.selectedSourceId)
+        details = context.details[context.selectedSourceId]
+        if source = invalid or details = invalid then return invalid
+        item = PlaybackRequest.Create({ item: details }).item
+        item.Id = context.itemId
+        item.MediaSources = [source]
+        item.MediaStreams = source.MediaStreams
+        if source.RunTimeTicks <> invalid then item.RunTimeTicks = source.RunTimeTicks
+        return item
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MovieVersions.Streams
+    '---------------------------------------------------------------------------
+    function Streams(item as dynamic, streamType as string) as object
+        versionStreams = []
+        if item = invalid or item.MediaStreams = invalid then return versionStreams
+        for i = 0 to item.MediaStreams.Count() - 1
+            stream = item.MediaStreams[i]
+            if stream = invalid or stream.Type <> streamType then continue for
+            copy = {}
+            for each key in stream
+                copy[key] = stream[key]
+            end for
+            if copy.Index = invalid then copy.sourceIndex = i
+            versionStreams.Push(copy)
+        end for
+        return versionStreams
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MovieVersions.MetadataItemId
+    '---------------------------------------------------------------------------
+    function MetadataItemId(request as dynamic) as string
+        if request = invalid then return ""
+        if request.movieVersions <> invalid then return request.movieVersions.selectedSourceId
+        return Strings.ToString(request.itemId)
+    end function
+
+end namespace

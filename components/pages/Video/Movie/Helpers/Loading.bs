@@ -6,11 +6,13 @@ import "pkg:/source/RequestFailure.bs"
 ' onLoadRequestChanged
 '-------------------------------------------------------------------------------
 sub onLoadRequestChanged()
+    m.state.watched.pending = invalid
     m.state.mediaOptions.session = invalid
     request = m.top.loadRequest
     if request = invalid then return
 
     m.state.mediaInfoPending = true
+    m.state.movieVersions = invalid
     refreshMediaInfoText(invalid)
     m.state.request = request
     m.state.layout.isFromLibrary = request.sourcePage = "library" and request.libraryBrowseState <> invalid
@@ -84,8 +86,8 @@ sub handleMovieResponse(task as dynamic)
         return
     end if
 
-    m.state.mediaInfoPending = false
     if response.ok <> true then
+        m.state.mediaInfoPending = false
         renderMovie(m.state.item, false)
         Spinner.Hide()
         message = (response.failureKind <> invalid ? "Unable to load this movie. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this movie.")
@@ -94,11 +96,36 @@ sub handleMovieResponse(task as dynamic)
         return
     end if
 
+    if completion.context <> invalid then
+        sourceId = completion.context.sourceId
+        if response.payload = invalid or Strings.ToString(response.payload.Id) <> sourceId then
+            m.state.mediaInfoPending = false
+            renderMovie(m.state.item, false)
+            Spinner.Hide()
+            AppMessage.Show("Unable to load this movie version.")
+            return
+        end if
+        m.state.movieVersions = MovieVersions.CacheDetails(m.state.movieVersions, sourceId, response.payload)
+    else
+        m.state.movieVersions = MovieVersions.Create(response.payload)
+    end if
     m.state.item = response.payload
-    renderMovie(response.payload, false)
+    if m.state.movieVersions <> invalid then
+        item = MovieVersions.GetSelectedItem(m.state.movieVersions)
+        if item = invalid then
+            sourceId = m.state.movieVersions.selectedSourceId
+            versionRequest = { server: m.state.request.server, token: m.state.request.token, userId: m.state.request.userId, itemId: sourceId }
+            LatestRequestLifecycle.Queue(m.state.detailsLoad, versionRequest, { sourceId: sourceId })
+            startPendingMovieLoad()
+            return
+        end if
+        m.state.item = item
+    end if
+    m.state.mediaInfoPending = false
+    renderMovie(m.state.item, false)
     m.log.activity("Viewing movie " + ActivityLog.ItemTitle(response.payload, "movie"))
     Spinner.Hide()
-    loadThemeSong(response.payload)
+    loadThemeSong(m.state.item)
 end sub
 
 '-------------------------------------------------------------------------------

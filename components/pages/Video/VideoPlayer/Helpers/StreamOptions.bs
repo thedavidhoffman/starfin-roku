@@ -1,5 +1,6 @@
 import "pkg:/source/MediaOptionsSession.bs"
 import "pkg:/source/VideoMediaSummary.bs"
+import "pkg:/source/MovieVersions.bs"
 
 '-------------------------------------------------------------------------------
 ' updatePlaybackControlsOptions
@@ -84,6 +85,11 @@ sub onMediaOptionsPressed()
     subtitleIntent = Number.ToInteger(request.subtitleStreamIndex, SubtitleSelection.NotSet)
     context = MediaOptionsSession.Context(item, getOriginalPlaybackMode(), m.activePlayback.audioStreamIndex, subtitleIntent, m.streamOptions.audioStreams, m.streamOptions.subtitleStreams, m.activePlayback.subtitleStreamIndex)
     context.playbackInfo = buildPlaybackInformation()
+    if request.movieVersions <> invalid then
+        context.movieVersions = request.movieVersions
+        context.selection.mediaSourceId = m.activePlayback.mediaSourceId
+        context.session = { server: request.server, token: request.token, userId: request.userId }
+    end if
     m.mediaOptions.generation += 1
     context.generation = m.mediaOptions.generation
     state = VideoPlayerState.Normalize(m.videoPlayer.state)
@@ -138,12 +144,26 @@ sub onMediaOptionsApplyTimerFire()
     session = commit.session
     if session.requestId <> m.playback.requestId or session.itemId <> m.activePlayback.itemId then return
     changes = commit.changes
+    versionChanged = changes.mediaSourceId <> invalid
+    if versionChanged then
+        if changes.movieVersions = invalid or changes.movieVersions.itemId <> session.itemId then return
+        selectedVersion = MovieVersions.Select(changes.movieVersions, changes.mediaSourceId)
+        if selectedVersion = invalid then return
+        session.context = MediaOptionsSession.ForVersion(session.context, selectedVersion, changes)
+    end if
     requestChanges = {
         videoMode: getOriginalPlaybackMode()
         audioStreamIndex: m.activePlayback.audioStreamIndex
         subtitleStreamIndex: Number.ToInteger(m.activePlayback.request.subtitleStreamIndex, SubtitleSelection.NotSet)
     }
     restart = false
+    if versionChanged then
+        requestChanges.mediaSourceId = changes.mediaSourceId
+        requestChanges.movieVersions = selectedVersion
+        requestChanges.item = MovieVersions.GetSelectedItem(selectedVersion)
+        requestChanges.resolvedSubtitleStreamIndex = invalid
+        restart = true
+    end if
     if changes.videoMode <> invalid then
         requestChanges.videoMode = PlaybackMode.Normalize(changes.videoMode)
         restart = true
@@ -169,7 +189,9 @@ sub onMediaOptionsApplyTimerFire()
     end if
     position = session.position
     if changes.chapter <> invalid then position = changes.chapter.startPositionSeconds
-    if m.playback.duration > 0 then position = VideoPlayerMetadata.ClampSeconds(position, 0, m.playback.duration)
+    duration = m.playback.duration
+    if versionChanged then duration = VideoPlayerMetadata.GetRuntimeSeconds(requestChanges.item)
+    if duration > 0 then position = VideoPlayerMetadata.ClampSeconds(position, 0, duration)
     request = PlaybackRequest.WithChanges(m.activePlayback.request, requestChanges)
     if restart then
         request = PlaybackRequest.WithChanges(request, {

@@ -45,6 +45,29 @@ namespace tests
             m.assertEqual(m.node.top.response.requestId, 7)
         end function
 
+        @describe("version details loading")
+
+        @it("loads version details with source identity and correlated session data")
+        function _()
+            getGlobalAa().movieVersionRequest = invalid
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().movieVersionRequest = { url: requestUrl, method: method, headers: headers }
+                return { ok: true, data: { Id: "version-2", Type: "Movie", UserData: { PlaybackPositionTicks: 0 } } }
+            end function)
+            m.node.top.request = { server: "http://server", token: "token", userId: "user", itemId: "version-2", requestId: 7 }
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            request = getGlobalAa().movieVersionRequest
+            m.assertTrue(Instr(1, request.url, "/Items/version-2?") > 0)
+            m.assertTrue(Instr(1, LCase(request.url), "userdata") > 0)
+            m.assertTrue(Instr(1, LCase(request.url), "chapters") > 0)
+            m.assertEqual(request.method, "GET")
+            m.assertEqual(m.node.top.response.itemId, "version-2")
+            m.assertEqual(m.node.top.response.requestId, 7)
+            m.assertEqual(m.node.top.response.payload.UserData.PlaybackPositionTicks, 0)
+        end function
+
     end class
 
 end namespace

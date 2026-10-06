@@ -1,3 +1,5 @@
+import "pkg:/source/tests/source/MovieVersionFixture.bs"
+
 namespace tests
 
     @SGNode("MediaOptionsContent")
@@ -5,6 +7,8 @@ namespace tests
     class MediaOptionsContentTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.node.controls.versionTasks = [m.top.findNode("versionTask"), m.top.findNode("versionTaskAlternate")]
+            m.node.versions.nextTask = 0
             m.top.optionsContext = {
                 item: { Id: "movie-1", Name: "Example", Chapters: [{ StartPositionTicks: 0 }] }
                 selection: { videoMode: "automatic", audioStreamIndex: 1, subtitleStreamIndex: 3 }
@@ -15,6 +19,20 @@ namespace tests
         end function
 
         @describe("categories and deferred choices")
+
+        @it("publishes the initial Media Info category title")
+        function _()
+            m.assertEqual(m.top.categoryTitle, "Media Info")
+        end function
+
+        @it("retains the Versions category title after loading a cached version")
+        function _()
+            m.top.optionsContext = TestMovieVersions.Context()
+
+            m.choose(2, 1)
+
+            m.assertEqual(m.top.categoryTitle, "Versions")
+        end function
 
         @it("renders all categories in the agreed order")
         function _()
@@ -190,13 +208,372 @@ namespace tests
 
             m.assertEqual(m.top.optionsContext.selection.videoMode, "automatic")
             m.assertEqual(m.top.callFunc("getChanges").videoMode, "transcode-no-remux")
-            m.assertTrue(Len(m.top.findNode("description").text) > 0)
+            m.assertTrue(Len(m.top.findNode("choices").description) > 0)
+            m.assertEqual(m.top.findNode("choices").findNode("descriptionLabel").text, m.top.findNode("choices").description)
         end function
 
         @it("lets Back propagate to the owning dialog")
         function _()
             'bs:disable-next-line 1140
             m.assertFalse(onKeyEvent("back", true))
+        end function
+
+        @describe("settings card presentation")
+
+        @it("renders the selected category heading inside the card")
+        function _()
+            m.top.findNode("categories").itemFocused = 2
+
+            card = m.top.findNode("choices")
+            m.assertEqual(card.subtype(), "SettingsCard")
+            m.assertEqual(card.title, "Audio")
+            m.assertEqual(card.findNode("heading").text, "AUDIO")
+            m.assertTrue(card.visible)
+            m.assertFalse(m.top.findNode("information").visible)
+        end function
+
+        @it("uses card-owned radio insets and Settings row spacing")
+        function _()
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("choices").translation, [360, 0])
+            m.assertEqual(m.top.findNode("choices").cardWidth, 1030.0)
+            m.assertEqual(m.top.findNode("optionList").translation, [56, 68])
+            m.assertEqual(m.top.findNode("optionList").itemSize, [918, 52])
+        end function
+
+        @it("fits a short option list without staging edits")
+        function _()
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("optionList").numRows, 2)
+            m.assertEqual(m.top.findNode("choices").cardHeight, 188.0)
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("fits a single chapter row")
+        function _()
+            context = m.top.optionsContext
+            context.chapterOptions = [context.chapterOptions[0]]
+            m.top.optionsContext = context
+
+            m.top.findNode("categories").itemFocused = 4
+
+            m.assertEqual(m.top.findNode("choices").title, "Chapters")
+            m.assertEqual(m.top.findNode("choices").cardHeight, 136.0)
+            m.assertEqual(m.top.findNode("optionList").numRows, 1)
+        end function
+
+        @it("caps long lists at ten rows while retaining offscreen choices")
+        function _()
+            context = m.top.optionsContext
+            context.audioOptions = []
+            for index = 1 to 12
+                context.audioOptions.Push({ key: index.ToStr(), label: "Track " + index.ToStr(), value: { streamIndex: index } })
+            end for
+            context.selection.audioStreamIndex = 12
+            m.top.optionsContext = context
+
+            m.top.findNode("categories").itemFocused = 2
+
+            options = m.top.findNode("optionList")
+            m.assertEqual(options.numRows, 10)
+            m.assertEqual(options.content.getChildCount(), 12)
+            m.assertEqual(options.checkedItem, 11)
+            m.assertEqual(options.jumpToItem, 11)
+            m.assertEqual(m.top.findNode("choices").cardHeight, 604.0)
+
+            m.choose(2, 10)
+
+            m.assertEqual(m.top.callFunc("getChanges"), { audioStreamIndex: 11 })
+        end function
+
+        @it("reserves Video description space without selecting the focused mode")
+        function _()
+            m.top.findNode("categories").itemFocused = 1
+
+            m.top.findNode("optionList").itemFocused = 2
+
+            card = m.top.findNode("choices")
+            m.assertEqual(card.title, "Video")
+            m.assertEqual(card.cardHeight, 660.0)
+            m.assertEqual(m.top.findNode("optionList").numRows, 4)
+            m.assertEqual(card.findNode("descriptionLabel").translation, [24, 300])
+            m.assertEqual(card.findNode("descriptionLabel").height, 336.0)
+            m.assertEqual(card.description, MediaOptionsSession.VideoOptions()[2].description)
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("clears the Video description and shrinks the card on category changes")
+        function _()
+            m.top.findNode("categories").itemFocused = 1
+
+            m.top.findNode("categories").itemFocused = 3
+
+            card = m.top.findNode("choices")
+            m.assertEqual(card.title, "Subtitles")
+            m.assertEqual(card.cardHeight, 188.0)
+            m.assertEqual(card.description, "")
+            m.assertFalse(card.findNode("descriptionLabel").visible)
+        end function
+
+        @it("moves focus into card choices and back to navigation")
+        function _()
+            m.top.findNode("categories").itemFocused = 2
+            m.top.callFunc("focusFirstField")
+
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+
+            m.assertTrue(m.top.findNode("optionList").hasFocus())
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("left", true)
+
+            m.assertTrue(m.top.findNode("categories").hasFocus())
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("renders version names in a compact Versions card")
+        function _()
+            m.top.optionsContext = TestMovieVersions.Context()
+
+            m.top.findNode("categories").itemFocused = 2
+
+            m.assertEqual(m.top.findNode("choices").title, "Versions")
+            m.assertEqual(m.top.findNode("choices").cardHeight, 188.0)
+            m.assertEqual(m.top.findNode("optionList").numRows, 2)
+            m.assertEqual(m.top.findNode("optionList").content.getChild(0).title, "1080p Theatrical")
+            m.assertEqual(m.top.findNode("optionList").content.getChild(1).title, "720p Director's cut")
+            m.assertEqual(m.top.findNode("versionStatus").translation, [360, 674])
+        end function
+
+        @describe("movie version drafts")
+
+        @it("inserts Versions after Video for multiple movie sources")
+        function _()
+            m.top.optionsContext = TestMovieVersions.Context()
+            labels = []
+            for each child in m.top.findNode("categories").content.getChildren(-1, 0)
+                labels.Push(child.title)
+            end for
+            m.assertEqual(labels, ["Media Info", "Video", "Versions", "Subtitles", "Chapters"])
+        end function
+
+        @it("stages a version with source-specific metadata and reset tracks")
+        function _()
+            m.top.optionsContext = TestMovieVersions.Context()
+            m.choose(2, 1)
+            result = m.top.callFunc("getChanges")
+
+            m.assertEqual(m.top.optionsContext.selection.mediaSourceId, "movie-1")
+            m.assertEqual(result.mediaSourceId, "version-2")
+            m.assertEqual(result.audioStreamIndex, -1)
+            m.assertEqual(result.subtitleStreamIndex, -2)
+            m.assertEqual(MovieVersions.GetSelectedItem(result.movieVersions).Chapters[0].Name, "Director opening")
+            m.assertInvalid(result.item)
+            m.assertEqual(m.top.findNode("information").item.MediaSources[0].Id, "version-2")
+        end function
+
+        @it("restores the initial draft when switching back")
+        function _()
+            m.top.optionsContext = TestMovieVersions.Context()
+            m.choose(2, 1)
+            m.choose(2, 0)
+
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+            m.assertEqual(m.top.findNode("information").item.MediaSources[0].Id, "movie-1")
+        end function
+
+        @it("retains Off when first choosing another version")
+        function _()
+            context = TestMovieVersions.Context()
+            context.selection.subtitleStreamIndex = -1
+            m.top.optionsContext = context
+            m.choose(2, 1)
+
+            m.assertEqual(m.top.callFunc("getChanges").subtitleStreamIndex, -1)
+        end function
+
+        @it("clears a chapter from another version")
+        function _()
+            m.top.optionsContext = TestMovieVersions.Context()
+            m.choose(4, 0)
+            m.choose(2, 1)
+
+            m.assertInvalid(m.top.callFunc("getChanges").chapter)
+        end function
+
+        @it("preserves edits within each visited version")
+        function _()
+            m.top.optionsContext = TestMovieVersions.Context()
+            m.choose(2, 1)
+            m.choose(3, 2)
+            m.choose(2, 0)
+            m.choose(2, 1)
+
+            m.assertEqual(m.top.callFunc("getChanges").subtitleStreamIndex, 4)
+        end function
+
+        @it("fetches an uncached version with explicit session context")
+        function _()
+            context = TestMovieVersions.Context()
+            context.movieVersions.details.Delete("version-2")
+            m.top.optionsContext = context
+            m.node.controls.versionTasks = [{ request: invalid, control: "" }, { request: invalid, control: "" }]
+            m.choose(2, 1)
+
+            request = m.node.controls.versionTasks[0].request
+            m.assertEqual(request.itemId, "version-2")
+            m.assertEqual(request.token, "token")
+            m.assertEqual(request.userId, "user")
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 0)
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("accepts only the current version response")
+        function _()
+            versions = TestMovieVersions.Create()
+            context = TestMovieVersions.Context()
+            context.movieVersions.details.Delete("version-2")
+            m.top.optionsContext = context
+            m.node.controls.versionTasks = [{ request: invalid, control: "" }, { request: invalid, control: "" }]
+            m.choose(2, 1)
+            request = m.node.controls.versionTasks[0].request
+            'bs:disable-next-line 1140
+            handleVersionResponse({ ok: true, action: "movie", requestId: request.requestId, itemId: "version-2", payload: versions.details["version-2"] })
+
+            m.assertEqual(m.top.callFunc("getChanges").mediaSourceId, "version-2")
+        end function
+
+        @it("rejects a response after returning to a cached version")
+        function _()
+            versions = TestMovieVersions.Create()
+            context = TestMovieVersions.Context()
+            context.movieVersions.details.Delete("version-2")
+            m.top.optionsContext = context
+            m.node.controls.versionTasks = [{ request: invalid, control: "" }, { request: invalid, control: "" }]
+            m.choose(2, 1)
+            request = m.node.controls.versionTasks[0].request
+            m.choose(2, 0)
+            'bs:disable-next-line 1140
+            handleVersionResponse({ ok: true, action: "movie", requestId: request.requestId, payload: versions.details["version-2"] })
+
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("keeps version choice text after loading filename-based source details")
+        function _()
+            versions = TestMovieVersions.Create()
+            loaded = versions.details["version-2"]
+            loaded.MediaSources[0].Name = "Movie - 720p"
+            context = TestMovieVersions.Context()
+            context.movieVersions.details.Delete("version-2")
+            m.top.optionsContext = context
+            m.node.controls.versionTasks = [{ request: invalid, control: "" }, { request: invalid, control: "" }]
+            m.choose(2, 1)
+            request = m.node.controls.versionTasks[0].request
+            'bs:disable-next-line 1140
+            handleVersionResponse({ ok: true, action: "movie", requestId: request.requestId, payload: loaded })
+
+            m.assertEqual(m.top.findNode("optionList").content.getChild(1).title, "720p Director's cut")
+            m.assertEqual(m.top.findNode("optionList").checkedItem, 1)
+
+            m.choose(2, 0)
+
+            m.assertEqual(m.top.findNode("optionList").content.getChild(0).title, "1080p Theatrical")
+            m.assertEqual(m.top.findNode("optionList").content.getChild(1).title, "720p Director's cut")
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("refreshes and commits metadata loaded for the initially unavailable source")
+        function _()
+            context = TestMovieVersions.Context()
+            context.movieVersions.details.Delete("movie-1")
+            context.selection.audioStreamIndex = -1
+            context.selection.subtitleStreamIndex = -2
+            context.audioOptions = []
+            context.subtitleOptions = []
+            context.chapterOptions = []
+            m.top.optionsContext = context
+            m.node.controls.versionTasks = [{ request: invalid, control: "" }, { request: invalid, control: "" }]
+            m.choose(2, 0)
+            request = m.node.controls.versionTasks[0].request
+            'bs:disable-next-line 1140
+            focusContent()
+
+            'bs:disable-next-line 1140
+            handleVersionResponse({ ok: true, action: "movie", requestId: request.requestId, payload: TestMovieVersions.Create().details["movie-1"] })
+
+            m.assertEqual(m.node.selection.context.chapterOptions.Count(), 1)
+            m.assertTrue(m.top.findNode("optionList").hasFocus())
+            m.assertEqual(m.top.findNode("information").item.Chapters[0].Name, "Theatrical opening")
+            m.assertInvalid(context.movieVersions.details["movie-1"])
+            result = m.top.callFunc("getChanges")
+            m.assertEqual(result.mediaSourceId, "movie-1")
+            m.assertEqual(result.audioStreamIndex, -1)
+            m.assertEqual(result.subtitleStreamIndex, -2)
+            m.assertNotInvalid(MovieVersions.GetSelectedItem(result.movieVersions))
+            m.assertInvalid(result.item)
+        end function
+
+        @it("does not commit unavailable metadata when closing without a completed load")
+        function _()
+            context = TestMovieVersions.Context()
+            context.movieVersions.details.Delete("movie-1")
+            m.top.optionsContext = context
+            m.node.controls.versionTasks = [{ request: invalid, control: "" }, { request: invalid, control: "" }]
+            m.choose(2, 0)
+
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+        end function
+
+        @it("retains completed edits after a version load fails")
+        function _()
+            context = TestMovieVersions.Context()
+            context.movieVersions.details.Delete("version-2")
+            m.top.optionsContext = context
+            m.node.controls.versionTasks = [{ request: invalid, control: "" }, { request: invalid, control: "" }]
+            m.stubCall(AppMessage.Show, sub(message)
+            end sub)
+            m.choose(1, 3)
+            m.choose(2, 1)
+            request = m.node.controls.versionTasks[0].request
+            'bs:disable-next-line 1140
+            handleVersionResponse({ ok: false, action: "movie", requestId: request.requestId, errorMessage: "Unavailable" })
+
+            m.assertEqual(m.top.callFunc("getChanges"), { videoMode: "transcode-no-remux" })
+            m.assertEqual(m.top.findNode("versionStatus").text, "")
+        end function
+
+        @it("ignores responses after closing during a version load")
+        function _()
+            context = TestMovieVersions.Context()
+            context.movieVersions.details.Delete("version-2")
+            m.top.optionsContext = context
+            m.node.controls.versionTasks = [{ request: invalid, control: "" }, { request: invalid, control: "" }]
+            m.choose(2, 1)
+            request = m.node.controls.versionTasks[0].request
+            m.assertEqual(m.top.callFunc("getChanges"), {})
+            'bs:disable-next-line 1140
+            handleVersionResponse({ ok: true, action: "movie", requestId: request.requestId, payload: TestMovieVersions.Create().details["version-2"] })
+
+            m.assertEqual(m.node.selection.pending.mediaSourceId, "movie-1")
+            m.assertEqual(m.node.controls.versionTasks[0].control, "stop")
+        end function
+
+        @it("keeps pane focus while a cached version refreshes its categories")
+        function _()
+            m.top.optionsContext = TestMovieVersions.Context()
+            m.top.findNode("categories").itemFocused = 2
+            'bs:disable-next-line 1140
+            focusContent()
+            m.top.findNode("optionList").itemSelected = 1
+
+            m.assertTrue(m.top.findNode("optionList").hasFocus())
+            m.assertEqual(m.top.findNode("categories").itemFocused, 2)
         end function
 
         private sub choose(category as integer, option as integer)

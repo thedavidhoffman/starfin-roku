@@ -80,6 +80,11 @@ sub applyPlaybackResponse(response as object, request as object)
     renderStartupArtwork(request, item)
     startPositionSeconds = PlaybackProgress.TicksToSeconds(response.startPositionTicks)
     request = PlaybackRequest.WithChanges(request, { item: item, resolvedSubtitleStreamIndex: response.subtitleStreamIndex })
+    request.mediaSourceId = response.mediaSourceId
+    if response.movieVersions <> invalid then
+        request.movieVersions = response.movieVersions
+        request.audioStreamIndex = response.audioStreamIndex
+    end if
     m.pendingPlaybackRequest = request
 
     applyPlaybackSessionState(response, request, item)
@@ -97,7 +102,7 @@ sub applyPlaybackSessionState(response as object, request as object, item as dyn
     m.activePlayback = ActivePlayback.Create(request, response)
     initializeEpisodeQueue(request, item)
     updatePlaybackSkipAvailability(request, item)
-    m.trickplay = buildTrickplayState(item, m.activePlayback.session.itemId)
+    m.trickplay = buildTrickplayState(item, MovieVersions.MetadataItemId(request))
     startTrickplayPreload()
 end sub
 
@@ -375,6 +380,7 @@ sub emitPlaybackProgress(isFinished as boolean)
 
     change = {
         itemId: m.activePlayback.session.itemId
+        mediaSourceId: m.activePlayback.mediaSourceId
         positionTicks: secondsToTicks(position)
         durationTicks: secondsToTicks(duration)
         isFinished: isFinished
@@ -440,6 +446,9 @@ sub applyPlaybackProgressChangeToPlayRequest(change as object)
     if Strings.ToString(request.itemId) <> Strings.ToString(change.itemId) then return
 
     PlaybackProgress.ApplyChangeToItem(request.item, change)
+    if request.movieVersions <> invalid then
+        request.movieVersions = MovieVersions.CacheDetails(request.movieVersions, request.movieVersions.selectedSourceId, request.item)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------

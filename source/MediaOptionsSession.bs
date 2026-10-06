@@ -4,6 +4,8 @@ import "pkg:/source/PlaybackMode.bs"
 import "pkg:/source/PlaybackProgress.bs"
 import "pkg:/source/DateTime.bs"
 import "pkg:/source/SubtitleSelection.bs"
+import "pkg:/source/MovieVersions.bs"
+import "pkg:/source/MediaStream.bs"
 
 namespace MediaOptionsSession
     enum Overlay
@@ -13,6 +15,7 @@ namespace MediaOptionsSession
     enum Category
         Information = "Media Info"
         Video = "Video"
+        Versions = "Versions"
         Audio = "Audio"
         Subtitles = "Subtitles"
         Chapters = "Chapters"
@@ -22,7 +25,9 @@ namespace MediaOptionsSession
     ' MediaOptionsSession.CopySelection
     '---------------------------------------------------------------------------
     function CopySelection(selection as object) as object
-        return { videoMode: selection.videoMode, audioStreamIndex: selection.audioStreamIndex, subtitleStreamIndex: selection.subtitleStreamIndex }
+        result = { videoMode: selection.videoMode, audioStreamIndex: selection.audioStreamIndex, subtitleStreamIndex: selection.subtitleStreamIndex }
+        if selection.mediaSourceId <> invalid then result.mediaSourceId = selection.mediaSourceId
+        return result
     end function
 
     '---------------------------------------------------------------------------
@@ -30,11 +35,26 @@ namespace MediaOptionsSession
     '---------------------------------------------------------------------------
     function Changes(initial as object, pending as object) as object
         result = {}
-        for each key in ["videoMode", "audioStreamIndex", "subtitleStreamIndex"]
+        for each key in ["videoMode", "audioStreamIndex", "subtitleStreamIndex", "mediaSourceId"]
             if pending[key] <> initial[key] then result[key] = pending[key]
         end for
         if pending.chapter <> invalid then result.chapter = pending.chapter
         return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaOptionsSession.ForVersion
+    '---------------------------------------------------------------------------
+    function ForVersion(original as object, versions as object, selection as object) as object
+        item = MovieVersions.GetSelectedItem(versions)
+        resolvedSubtitleIndex = invalid
+        if selection.mediaSourceId = original.selection.mediaSourceId then resolvedSubtitleIndex = original.resolvedSubtitleStreamIndex
+        versionContext = Context(item, selection.videoMode, selection.audioStreamIndex, selection.subtitleStreamIndex, MovieVersions.Streams(item, MediaStream.Type.Audio), MovieVersions.Streams(item, MediaStream.Type.Subtitle), resolvedSubtitleIndex)
+        versionContext.selection.mediaSourceId = versions.selectedSourceId
+        versionContext.movieVersions = versions
+        versionContext.session = original.session
+        if selection.mediaSourceId = original.selection.mediaSourceId then versionContext.playbackInfo = original.playbackInfo
+        return versionContext
     end function
 
     '---------------------------------------------------------------------------

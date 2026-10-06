@@ -1,0 +1,114 @@
+import "pkg:/source/LatestRequestLifecycle.bs"
+import "pkg:/source/TaskControl.bs"
+import "pkg:/source/AppMessage.bs"
+import "pkg:/source/RequestFailure.bs"
+
+'-------------------------------------------------------------------------------
+' selectVersion
+'-------------------------------------------------------------------------------
+sub selectVersion(sourceId as string)
+    if m.versions.closed or MovieVersions.FindSource(m.versions.context, sourceId) = invalid then return
+    session = m.top.optionsContext.session
+    if session = invalid then return
+    request = { server: session.server, token: session.token, userId: session.userId, itemId: sourceId }
+    LatestRequestLifecycle.Queue(m.versions.load, request)
+    if m.versions.context.details[sourceId] <> invalid then
+        m.controls.versionStatus.text = ""
+        applyPendingVersion(sourceId)
+    else
+        m.controls.versionStatus.text = "Loading version…"
+    end if
+    startPendingVersionLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingVersionLoad
+'-------------------------------------------------------------------------------
+sub startPendingVersionLoad()
+    entry = LatestRequestLifecycle.TakeNext(m.versions.load)
+    if entry = invalid then return
+    sourceId = entry.request.itemId
+    if m.versions.context.details[sourceId] <> invalid then
+        LatestRequestLifecycle.Complete(m.versions.load, { action: "movie", requestId: entry.request.requestId }, "movie")
+        return
+    end if
+    task = m.controls.versionTasks[m.versions.nextTask]
+    m.versions.nextTask = (m.versions.nextTask + 1) mod 2
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onVersionResponse
+'-------------------------------------------------------------------------------
+sub onVersionResponse()
+    handleVersionResponse(m.controls.versionTasks[0].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternateVersionResponse
+'-------------------------------------------------------------------------------
+sub onAlternateVersionResponse()
+    handleVersionResponse(m.controls.versionTasks[1].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleVersionResponse
+'-------------------------------------------------------------------------------
+sub handleVersionResponse(response as dynamic)
+    if m.versions.closed then return
+    active = m.versions.load.active
+    completion = LatestRequestLifecycle.Complete(m.versions.load, response, "movie")
+    if completion.matched <> true then return
+    if completion.isCurrent <> true then
+        startPendingVersionLoad()
+        return
+    end if
+    sourceId = active.request.itemId
+    m.controls.versionStatus.text = ""
+    if response.ok <> true or response.payload = invalid or Strings.ToString(response.payload.Id) <> sourceId then
+        AppMessage.Show(RequestFailure.GetDisplayMessage(response, "Unable to load this movie version."))
+        return
+    end if
+    ' Store the fetched item under its own identity before changing the draft.
+    m.versions.context = MovieVersions.CacheDetails(m.versions.context, sourceId, response.payload)
+    applyPendingVersion(sourceId)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyPendingVersion
+'-------------------------------------------------------------------------------
+sub applyPendingVersion(sourceId as string)
+    selected = MovieVersions.Select(m.versions.context, sourceId)
+    if selected = invalid then return
+    pending = m.selection.pending
+    if sourceId <> pending.mediaSourceId then
+        current = MediaOptionsSession.CopySelection(pending)
+        if pending.chapter <> invalid then current.chapter = pending.chapter
+        m.versions.drafts[pending.mediaSourceId] = current
+        pending = m.versions.drafts[sourceId]
+        if pending = invalid then
+            subtitleIndex = SubtitleSelection.NotSet
+            if current.subtitleStreamIndex = SubtitleSelection.None then subtitleIndex = SubtitleSelection.None
+            pending = { mediaSourceId: sourceId, videoMode: current.videoMode, audioStreamIndex: -1, subtitleStreamIndex: subtitleIndex }
+        else
+            pending.videoMode = current.videoMode
+        end if
+    end if
+    m.versions.context = selected
+    m.selection.pending = pending
+    m.selection.context = MediaOptionsSession.ForVersion(m.top.optionsContext, selected, pending)
+    renderCategories()
+end sub
+
+'-------------------------------------------------------------------------------
+' stopVersionLoading
+'-------------------------------------------------------------------------------
+sub stopVersionLoading()
+    m.versions.closed = true
+    LatestRequestLifecycle.Deactivate(m.versions.load)
+    for each task in m.controls.versionTasks
+        task.control = TaskControl.Command.Stop
+    end for
+    m.controls.versionStatus.text = ""
+end sub

@@ -27,7 +27,7 @@ async function openOptions(environment, playback = false) {
     assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: '#mediaToolbar.#mediaInfoButton' }), true);
   }
   await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
-  await waitFor(async () => await value(environment, '#overlayHost.0.title') === 'Media Options', 'Media Options to open');
+  await waitFor(async () => await value(environment, '#overlayHost.0.title') === 'Media Options › Media Info', 'Media Options to open');
 }
 
 async function closeOptions(environment) {
@@ -155,7 +155,7 @@ describe('Starfin unified media options', function () {
       await closeOptions(environment);
 
     } finally {
-      if (await value(environment, '#overlayHost.0.title') === 'Media Options') await closeOptions(environment);
+      if ((await value(environment, '#overlayHost.0.title'))?.startsWith('Media Options › ')) await closeOptions(environment);
       if (await isPlayerAttached(environment)) await stopPlaybackForCleanup(environment);
       await returnToHome();
     }

@@ -1,3 +1,5 @@
+import "pkg:/source/tests/source/MovieVersionFixture.bs"
+
 namespace tests
 
     @SGNode("VideoPlaybackInfoTask")
@@ -470,6 +472,89 @@ namespace tests
             m.assertInvalid(m.node.top.response.streamUrl)
         end function
 
+        @describe("movie source identity")
+
+        @it("rejects an explicit source missing from playback information")
+        function _()
+            m.runSubtitleNegotiation({ mediaSourceId: "missing" }, -1)
+
+            m.assertFalse(m.node.top.response.ok)
+            m.assertInvalid(m.node.top.response.streamUrl)
+            m.assertEqual(m.node.top.response.errorMessage, "The selected media source is no longer available.")
+        end function
+
+        @it("selects the requested source when it is not first in the response")
+        function _()
+            m.runSubtitleNegotiation({ mediaSourceId: "source", fixtureLeadingSource: true }, 4)
+
+            m.assertTrue(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.mediaSourceId, "source")
+            m.assertEqual(m.node.top.response.payload.MediaSources.Count(), 1)
+            m.assertEqual(m.node.top.response.externalSubtitleTracks[0].index, 4)
+        end function
+
+        @it("preserves the version catalog and selected timeline after negotiation")
+        function _()
+            selected = MovieVersions.Select(TestMovieVersions.Create(), "version-2")
+            m.runSubtitleNegotiation({ mediaSourceId: "version-2", fixtureSourceId: "version-2", movieVersions: selected, item: MovieVersions.GetSelectedItem(selected) }, -1)
+
+            response = m.node.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.movieVersions.sources.Count(), 2)
+            m.assertEqual(response.movieVersions.selectedSourceId, "version-2")
+            m.assertEqual(response.item.Chapters[0].Name, "Director opening")
+            m.assertEqual(response.item.RunTimeTicks, 600000000&)
+        end function
+
+        @it("uses the explicitly selected source for request streams")
+        function _()
+            versions = TestMovieVersions.Create()
+            item = versions.details["movie-1"]
+            'bs:disable-next-line 1140
+            streams = getPlaybackRequestMediaStreams({ item: item, mediaSourceId: "version-2" })
+
+            m.assertEqual(streams[1].Index, 3)
+        end function
+
+        @it("resolves initial movie resume from the selected source metadata")
+        function _()
+            m.runInitialVersionNegotiation({})
+
+            response = m.node.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.mediaSourceId, "version-2")
+            m.assertEqual(response.startPositionTicks, 150000000&)
+            m.assertTrue(Instr(1, LCase(getGlobalAa().subtitleNegotiation.calls[0].url), "starttimeticks=150000000") > 0)
+        end function
+
+        @it("preserves explicit Restart while resolving initial movie metadata")
+        function _()
+            m.runInitialVersionNegotiation({ startPositionTicks: 0& })
+
+            m.assertTrue(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.startPositionTicks, 0&)
+        end function
+
+        @it("preserves an explicit position while resolving initial movie metadata")
+        function _()
+            m.runInitialVersionNegotiation({ startPositionTicks: 120000000& })
+
+            m.assertTrue(m.node.top.response.ok)
+            m.assertEqual(m.node.top.response.startPositionTicks, 120000000&)
+        end function
+
+        private sub runInitialVersionNegotiation(overrides as object)
+            item = TestMovieVersions.Create().details["movie-1"]
+            item.MediaSources = [item.MediaSources[1], item.MediaSources[0]]
+            request = { itemId: "movie-1", item: item, fixtureSourceId: "version-2" }
+            request.Append(overrides)
+            m.stubCall(JellyfinMovie.Load, function(versionRequest)
+                return { ok: true, data: TestMovieVersions.Create().details[versionRequest.itemId] }
+            end function)
+
+            m.runSubtitleNegotiation(request, -1)
+        end sub
+
         function runSubtitleNegotiation(overrides as object, defaultIndex as dynamic)
             request = { server: "http://server", token: "token", userId: "user", itemId: "item", requestId: 42, item: { Id: "item", Type: "Movie" } }
             request.Append(overrides)
@@ -484,7 +569,7 @@ namespace tests
                 followup = capture.calls.Count() > 1
                 if followup and capture.request.fixtureFailFollowup = true then return { ok: false, errorMessage: "Followup failed" }
                 source = {
-                    Id: "source"
+                    Id: Strings.ToString(capture.request.fixtureSourceId, "source")
                     Container: "mp4"
                     SupportsDirectPlay: capture.request.fixtureTranscodeOnly <> true
                     TranscodingUrl: "/discovery.m3u8"
@@ -507,7 +592,9 @@ namespace tests
                 if capture.request.fixtureLiveStream <> invalid then source.LiveStreamId = capture.request.fixtureLiveStream
                 if followup and capture.request.fixtureChangeSource = true then source.Id = "other"
                 if followup and capture.request.fixtureRemoveTrack = true then source.MediaStreams = []
-                return { ok: true, data: { PlaySessionId: sessionId, MediaSources: [source] } }
+                sources = [source]
+                if capture.request.fixtureLeadingSource = true then sources.Unshift({ Id: "wrong", Container: "mp4", SupportsDirectPlay: true, MediaStreams: [] })
+                return { ok: true, data: { PlaySessionId: sessionId, MediaSources: sources } }
             end function)
             m.node.top.request = request
 

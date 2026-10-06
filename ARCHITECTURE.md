@@ -190,6 +190,14 @@ playback state, Jellyfin playback tasks, queue transitions, and Roku runtime
 mechanics. `MainScene` retains page visibility, navigation, focus restoration,
 and routing decisions and does not access the player node directly.
 
+Multi-version movies retain a `MovieVersions` context separately from their
+selected source metadata. Movie owns the detail-page choice; MediaOptionsContent
+owns pending version drafts and correlated MovieTask loads; VideoPlayer owns the
+combined restart and accepted selection. JellyfinMovie supplies the shared
+metadata request used by MovieTask and direct playback resolution. Playback
+requests/restoration retain the complete catalog, while timeline requests and
+resume data use the selected version. MainScene remains a router.
+
 ## Build and test boundaries
 
 `bsconfig.json` builds the production channel. Component-specific pure playback
@@ -222,17 +230,19 @@ Available checks (choose according to the development stage and change scope):
    full runtime suite on a Roku development device.
 4. `npm run automation:test` for the RTA device smoke suite and evidence report.
 
-During active development, use focused checks proportional to the change. Do not
-run the full device suite, broad UI automation, or repeated screenshot verification
-after every incremental adjustment. Documentation-only changes need a scoped diff
-review and whitespace check, not builds or runtime tests.
+The user owns the development-cycle boundary. Follow the development-cycle
+verification gate in AGENTS.md: during an open cycle, implement changes, update
+tests, and review code and diffs without running builds, automated validation,
+tests, UI automation, device checks, or deployments unless explicitly requested.
+Finishing an implementation turn or implementing a plan containing verification
+steps does not authorize those checks. Runtime uncertainty does not create an
+exception; describe it and defer verification.
 
-Reserve comprehensive verification for the end of the development cycle or an
-explicit user request, rather than the end of every conversational turn. Then run
-the full device suite for component, observer, focus, field-type, and Roku runtime
-behavior changes, plus applicable UI automation. Run targeted device checks earlier
-when a specific runtime uncertainty warrants them; compilation alone cannot validate
-those semantics. Report completed checks and deferred end-of-cycle verification.
+When the user declares the cycle complete or explicitly requests comprehensive
+verification, run the full device suite for component, observer, focus, field-type,
+and Roku runtime behavior changes, plus applicable UI automation. Compilation
+alone cannot validate those semantics. Report completed checks and deferred
+verification without treating deferred checks as a blocker during development.
 Keep credentials out of version control and command examples with real values.
 
 ## Generated and local files

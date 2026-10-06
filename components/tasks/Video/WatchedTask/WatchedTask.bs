@@ -23,17 +23,21 @@ sub executeRequest()
 
     validationError = TaskRequest.ValidateRequest(request, action, ["userId", "itemId"])
     if validationError <> invalid then
-        m.top.response = validationError
-        return
-    end if
-
-    if action = "MarkAsWatched" then
-        m.top.response = markAsWatched(request)
+        response = validationError
+    else if action = "MarkAsWatched" then
+        response = markAsWatched(request)
     else if action = "MarkAsUnwatched" then
-        m.top.response = markAsUnwatched(request)
+        response = markAsUnwatched(request)
     else
-        m.top.response = { ok: false, errorMessage: "Unknown watched request action." }
+        response = { ok: false, errorMessage: "Unknown watched request action." }
     end if
+    if request <> invalid then
+        for each fieldName in ["requestId", "mediaSourceId"]
+            if request[fieldName] <> invalid then response[fieldName] = request[fieldName]
+        end for
+        if request.requestId <> invalid and request.itemId <> invalid then response.itemId = request.itemId
+    end if
+    m.top.response = response
 end sub
 
 '-------------------------------------------------------------------------------

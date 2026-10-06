@@ -40,6 +40,16 @@
 - For namespace helpers that are internal to a single file, use a leading `__` prefix, such as `__GetCollapseSeriesQueryValue()`.
 - Component-local functions in `components/` are not namespace members; name them by their local behavior in lower camel case, such as `initStyle`, `onKeyEvent`, or `colorString`.
 
+## Development-cycle verification gate
+
+- The user owns the development-cycle boundary. Treat the cycle as open until the user explicitly declares it complete or explicitly requests verification.
+- Completing an implementation, finishing a conversational turn, or being asked to implement a plan containing verification steps does not close the cycle or authorize running those steps.
+- During an open cycle, implement changes, write or update tests, and review code and diffs. Do not run tests, test builds, production builds, compilation, automated validation, function-header checks, whitespace-check commands, UI automation, screenshot verification, device checks, or deployments without an explicit user request for that action.
+- Do not infer an exception because a check is focused, quick, useful, required by another section or skill, or would resolve runtime uncertainty. Describe the uncertainty and defer the check. Do not repeatedly ask to run deferred checks.
+- An explicit request for one check authorizes only that check; it does not close the cycle or authorize broader verification.
+- When the user declares the cycle complete or requests comprehensive verification, run the applicable checks described below and resolve failures. Until then, report implementation progress and deferred verification without claiming the cycle is complete or treating deferred checks as a blocker.
+- This gate governs verification timing throughout this file, ARCHITECTURE.md, and repository skills, including instructions to validate architectural moves and perform final change-set checks.
+
 ## Unit tests
 
 - Unit tests for behavior-bearing code must provide functional coverage of observable behavior, including relevant rendering, state changes, events, focus, navigation, task requests, response handling, and boundary or error paths. Node-existence assertions are declarative smoke coverage only and must not be the sole coverage for components that contain behavior.
@@ -50,9 +60,9 @@
 - Within a test function, use blank lines intentionally to delineate setup, action, assertion groups, and other distinct test steps. Preserve these meaningful internal blank lines when normalizing suite-level spacing.
 - When changing a file with an existing corresponding unit-test suite, update that suite to cover the changed behavior.
 - Do not modify production source code or expand production interfaces solely to make a unit test possible or pass. Adapt the test to existing production behavior and boundaries. If a new unit test reveals a genuine production bug, stop and report the bug instead of silently changing production code as part of the test work.
-- During active development, use focused checks proportional to the change. Run relevant unit tests when practical, but do not run the full Rooibos suite, broad UI automation, or repeated screenshot verification after every incremental adjustment. Documentation-only changes need a scoped diff review and whitespace check, not builds or runtime tests.
-- Reserve comprehensive verification for the end of the development cycle or an explicit user request; an individual conversational turn or small follow-up is not automatically the end of that cycle. At that point, run the full Rooibos suite on the configured development device for component or Roku behavior changes, plus applicable UI automation, and resolve failures.
-- A successful test build does not verify SceneGraph runtime behavior. Run targeted device checks earlier when a specific runtime uncertainty warrants them. Clearly report what was verified and what remains deferred without treating deferred end-of-cycle checks as a blocker to incremental work.
+- During active development, update functional coverage and review the scoped code and documentation changes. Run checks only when authorized by the development-cycle verification gate.
+- Once the user declares the development cycle complete or explicitly requests comprehensive verification, run the full Rooibos suite on the configured development device for component or Roku behavior changes, plus applicable UI automation, and resolve failures. Documentation-only changes need a scoped diff review and whitespace check, not builds or runtime tests.
+- A successful test build does not verify SceneGraph runtime behavior. Describe runtime uncertainties during development and defer device checks until explicitly authorized. Clearly report what was verified and what remains deferred without treating deferred end-of-cycle checks as a blocker to incremental work.
 - Run device tests with `npm test -- --host <roku-host> --password "<developer-password>"`. Do not commit the developer password or place it in command examples with a real value.
 - If no test change is necessary, verify that the existing tests still cover the behavior and mention that in the final response.
 

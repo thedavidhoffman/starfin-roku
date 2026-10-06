@@ -705,6 +705,51 @@ namespace tests
             return { Id: id, Name: id, Type: "Episode", SeasonId: "season-1", SeasonName: "Season 1", UserData: { Played: false, PlaybackPositionTicks: 0 } }
         end function
 
+        @describe("episode count metadata")
+
+        @it("omits direct child counts while retaining year and status")
+        function _()
+            item = m.createSeries()
+            item.ChildCount = 3
+            item.ProductionYear = 2020
+            item.Status = "Continuing"
+
+            'bs:disable-next-line 1140
+            renderSeries(item, true)
+
+            content = m.top.findNode("mediaShell").mediaContent
+            m.assertEqual(Instr(1, content.primaryInfoText, "episodes"), 0)
+            m.assertTrue(Instr(1, content.primaryInfoText, "2020") > 0)
+            m.assertTrue(Instr(1, content.primaryInfoText, "Continuing") > 0)
+        end function
+
+        @it("uses recursive episode counts instead of direct child counts")
+        function _()
+            item = m.createSeries()
+            item.ChildCount = 3
+            item.RecursiveItemCount = 24
+
+            'bs:disable-next-line 1140
+            renderSeries(item)
+
+            content = m.top.findNode("mediaShell").mediaContent
+            m.assertEqual(content.primaryInfoText, "24 episodes")
+        end function
+
+        @it("adds episode counts when complete series metadata arrives")
+        function _()
+            item = m.createSeries()
+            'bs:disable-next-line 1140
+            renderSeries(item, true)
+            m.assertEqual(m.top.findNode("mediaShell").mediaContent.primaryInfoText, "")
+
+            item.RecursiveItemCount = 24
+            'bs:disable-next-line 1140
+            renderSeries(item, false)
+
+            m.assertEqual(m.top.findNode("mediaShell").mediaContent.primaryInfoText, "24 episodes")
+        end function
+
         @describe("rating metadata")
 
         @it("passes both scores to the shell without the Rating text")

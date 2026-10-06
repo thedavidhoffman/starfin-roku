@@ -1,4 +1,5 @@
 import "pkg:/source/MediaOptionsSession.bs"
+import "pkg:/source/tests/source/MovieVersionFixture.bs"
 
 namespace tests
 
@@ -101,6 +102,69 @@ namespace tests
             m.assertInvalid(result.subtitle)
             m.assertFalse(result.subtitleOff)
             m.assertTrue(current.subtitleOff)
+        end function
+
+        @describe("movie version contexts")
+
+        @it("projects selected-version metadata and retains session context")
+        function _()
+            original = TestMovieVersions.Context()
+            versions = MovieVersions.Select(original.movieVersions, "version-2")
+            selection = { mediaSourceId: "version-2", videoMode: "automatic", audioStreamIndex: -1, subtitleStreamIndex: -2 }
+
+            result = MediaOptionsSession.ForVersion(original, versions, selection)
+
+            m.assertEqual(result.item.Id, "movie-1")
+            m.assertEqual(result.item.MediaSources[0].Id, "version-2")
+            m.assertEqual(result.item.RunTimeTicks, 600000000&)
+            m.assertEqual(result.chapterOptions[0].value.chapter.Name, "Director opening")
+            m.assertEqual(result.audioOptions[0].value.streamIndex, 3)
+            m.assertEqual(result.selection.mediaSourceId, "version-2")
+            m.assertEqual(result.session, original.session)
+            m.assertEqual(result.movieVersions, versions)
+            m.assertEqual(original.selection.mediaSourceId, "movie-1")
+        end function
+
+        @it("clears the previous version's resolved subtitle for account default")
+        function _()
+            original = TestMovieVersions.Context()
+            original.resolvedSubtitleStreamIndex = 2
+            original.playbackInfo = { MediaSources: original.item.MediaSources }
+            versions = MovieVersions.Select(original.movieVersions, "version-2")
+            selection = { mediaSourceId: "version-2", videoMode: "automatic", audioStreamIndex: -1, subtitleStreamIndex: -2 }
+
+            result = MediaOptionsSession.ForVersion(original, versions, selection)
+
+            m.assertInvalid(result.resolvedSubtitleStreamIndex)
+            m.assertInvalid(result.playbackInfo)
+            m.assertEqual(result.selection.subtitleStreamIndex, -2)
+            m.assertEqual(result.subtitleOptions[0].label, "Jellyfin Account Default")
+            m.assertEqual(MediaOptionsSession.DisplaySelection(result, result.selection).subtitleStreamIndex, -2)
+        end function
+
+        @it("retains explicit subtitle Off for the destination version")
+        function _()
+            original = TestMovieVersions.Context()
+            versions = MovieVersions.Select(original.movieVersions, "version-2")
+            selection = { mediaSourceId: "version-2", videoMode: "automatic", audioStreamIndex: -1, subtitleStreamIndex: -1 }
+
+            result = MediaOptionsSession.ForVersion(original, versions, selection)
+
+            m.assertEqual(result.selection.subtitleStreamIndex, -1)
+            m.assertEqual(MediaOptionsSession.DisplaySelection(result, result.selection).subtitleStreamIndex, -1)
+        end function
+
+        @it("restores the original version's resolved subtitle and playback metadata")
+        function _()
+            original = TestMovieVersions.Context()
+            original.resolvedSubtitleStreamIndex = 2
+            original.playbackInfo = { MediaSources: original.item.MediaSources }
+
+            result = MediaOptionsSession.ForVersion(original, original.movieVersions, { mediaSourceId: "movie-1", videoMode: "automatic", audioStreamIndex: 1, subtitleStreamIndex: -2 })
+
+            m.assertEqual(result.resolvedSubtitleStreamIndex, 2)
+            m.assertEqual(result.playbackInfo, original.playbackInfo)
+            m.assertEqual(MediaOptionsSession.DisplaySelection(result, result.selection).subtitleStreamIndex, 2)
         end function
 
     end class

@@ -1,5 +1,6 @@
 import "pkg:/source/tests/source/MediaAuthentication.bs"
 import "pkg:/source/Char.bs"
+import "pkg:/source/tests/source/MovieVersionFixture.bs"
 
 namespace tests
 
@@ -1833,6 +1834,128 @@ namespace tests
 
             m.assertEqual(m.node.videoPlayer.subtitleTrack, "http://server/old.srt")
             m.assertEqual(m.node.streamOptions.pendingExternalSubtitleUrl, "")
+        end function
+
+        @describe("movie version playback")
+
+        @it("restarts a version at the captured elapsed time")
+        function _()
+            m.prepareVersionOptions()
+            previousId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.playback.requestId, previousId + 1)
+            m.assertEqual(m.top.playRequest.mediaSourceId, "version-2")
+            m.assertEqual(m.top.playRequest.item.Id, "movie-1")
+            m.assertEqual(m.top.playRequest.startPositionTicks, 100000000&)
+            m.assertEqual(m.top.playRequest.movieVersions.sources.Count(), 2)
+            m.assertInvalid(m.top.playRequest.resolvedSubtitleStreamIndex)
+        end function
+
+        @it("clamps to the destination version's duration")
+        function _()
+            m.prepareVersionOptions()
+            m.node.mediaOptions.pendingCommit.session.position = 90
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.top.playRequest.startPositionTicks, 600000000&)
+        end function
+
+        @it("uses the destination chapter instead of the captured position")
+        function _()
+            m.prepareVersionOptions()
+            m.node.mediaOptions.pendingCommit.changes.chapter = { startPositionTicks: 0, startPositionSeconds: 0 }
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.top.playRequest.startPositionTicks, 0&)
+        end function
+
+        @it("preserves pause and focus restoration during a version restart")
+        function _()
+            m.prepareVersionOptions(false)
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertTrue(m.top.playRequest.startPaused)
+            m.assertTrue(m.top.playRequest.restoreMediaOptionsFocus)
+        end function
+
+        @it("keeps the full pending version choice during recovery")
+        function _()
+            m.prepareVersionOptions()
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+            'bs:disable-next-line 1140
+            request = buildStreamRestartPlayRequest()
+
+            m.assertEqual(request.mediaSourceId, "version-2")
+            m.assertEqual(request.movieVersions.selectedSourceId, "version-2")
+            m.assertEqual(request.audioStreamIndex, -1)
+            m.assertEqual(request.subtitleStreamIndex, -2)
+            m.assertInvalid(request.resolvedSubtitleStreamIndex)
+        end function
+
+        @it("leaves the accepted version unchanged until resolution completes")
+        function _()
+            m.prepareVersionOptions()
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.activePlayback.mediaSourceId, "movie-1")
+            m.assertEqual(m.node.activePlayback.request.movieVersions.selectedSourceId, "movie-1")
+        end function
+
+        private sub prepareVersionOptions(wasPlaying = true as boolean)
+            context = TestMovieVersions.Context()
+            selected = MovieVersions.Select(context.movieVersions, "version-2")
+            changes = { mediaSourceId: "version-2", movieVersions: selected, audioStreamIndex: -1, subtitleStreamIndex: -2 }
+            m.prepareOptions(changes, wasPlaying)
+            m.node.activePlayback.mediaSourceId = "movie-1"
+            m.node.activePlayback.request.movieVersions = context.movieVersions
+            m.node.activePlayback.request.item = context.item
+            m.node.mediaOptions.pendingCommit.session.context = context
+        end sub
+
+        @it("requests trickplay tiles for the selected version")
+        function _()
+            m.node.activePlayback.request.movieVersions = MovieVersions.Select(TestMovieVersions.Create(), "version-2")
+            m.node.trickplay = { tileWidth: 320, tileCount: 1 }
+            m.node.trickplayPreloadTask = { request: invalid, control: "" }
+            'bs:disable-next-line 1140
+            startTrickplayPreload()
+
+            m.assertEqual(m.node.trickplayPreloadTask.request.itemId, "version-2")
+        end function
+
+        @it("accepts trickplay completion and reads the selected version's cached file")
+        function _()
+            m.node.activePlayback.request.movieVersions = MovieVersions.Select(TestMovieVersions.Create(), "version-2")
+            m.node.trickplay = { tileWidth: 320, loadedTiles: {} }
+            m.node.playback.isSeeking = false
+            m.node.trickplayPreloadTask = { response: { ok: true, itemId: "version-2", tileIndex: 0 } }
+            'bs:disable-next-line 1140
+            onTrickplayPreloadResponse()
+            'bs:disable-next-line 1140
+            uri = getLocalTrickplayUri(0)
+
+            m.assertTrue(m.node.trickplay.loadedTiles["0"])
+            m.assertEqual(uri, "tmp:/starfin-trickplay-version-2-320-0.jpg")
+        end function
+
+        @it("requests media segments for the selected version's timeline")
+        function _()
+            m.node.activePlayback.request.movieVersions = MovieVersions.Select(TestMovieVersions.Create(), "version-2")
+            m.node.mediaSegmentsTask = { request: invalid, control: "" }
+            'bs:disable-next-line 1140
+            initMediaSegments()
+            'bs:disable-next-line 1140
+            loadMediaSegments({ payload: { MediaSources: [{ HasSegments: true }] } })
+
+            m.assertEqual(m.node.mediaSegmentsTask.request.itemId, "version-2")
+            m.assertEqual(m.node.mediaSegments.itemId, "version-2")
         end function
 
         private sub prepareOptions(changes as object, wasPlaying = true as boolean)
