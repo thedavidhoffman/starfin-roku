@@ -1,3 +1,4 @@
+import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/MediaItem.bs"
 import "pkg:/source/JellyfinImage.bs"
@@ -41,24 +42,21 @@ sub renderEpisodeContent(item as dynamic, logoPending = false as boolean)
         return
     end if
 
-    title = getDisplayTitle(item)
-    episodePositionText = getEpisodePositionText(item)
-    episodeMetadataText = getSecondaryMetadataText(item)
     ratingItem = item.raw
     if ratingItem = invalid or isSeasonDetailsItem(item) then ratingItem = {}
     m.mediaShell.mediaContent = {
         mediaType: getMediaShellType(item)
-        backdropUrl: Format.SafeString(item.HDPosterUrl, "")
+        backdropUrl: item.HDPosterUrl
         logoUrl: getMediaShellLogoUrl()
         logoTitle: getMediaShellLogoTitle(item)
         logoPending: logoPending
-        title: title
-        primaryInfoText: episodePositionText
-        secondaryInfoText: episodeMetadataText
+        title: getDisplayTitle(item)
+        primaryInfoText: getEpisodePositionText(item)
+        secondaryInfoText: getSecondaryMetadataText(item)
         runtimeText: MediaMetadataFormatting.FormatRuntime(ratingItem.RunTimeTicks)
         communityRating: ratingItem.CommunityRating
         criticRating: ratingItem.CriticRating
-        overview: Format.SafeString(item.description, "")
+        overview: item.description
     }
 
     if isSeasonDetailsItem(item) then
@@ -133,7 +131,7 @@ function getSecondaryMetadataText(item as dynamic) as string
     if item = invalid then return ""
     if isSeasonDetailsItem(item) then return getSeasonMetadataText(item.raw)
     if item.raw = invalid then return ""
-    return Format.SafeString(item.episodeDate, "")
+    return Strings.ToString(item.episodeDate)
 end function
 
 '-------------------------------------------------------------------------------
@@ -141,7 +139,7 @@ end function
 '-------------------------------------------------------------------------------
 function getDisplayTitle(item as dynamic) as string
     if item = invalid then return ""
-    return Format.SafeString(item.title, "")
+    return item.title
 end function
 
 '-------------------------------------------------------------------------------
@@ -151,8 +149,8 @@ function getEpisodePositionText(item as dynamic) as string
     if item = invalid or item.raw = invalid then return ""
     if isSeasonDetailsItem(item) then return getSeasonPositionText(item.raw)
 
-    seasonNumber = Format.SafeString(item.raw.ParentIndexNumber, "")
-    episodeNumber = Format.SafeString(item.raw.IndexNumber, "")
+    seasonNumber = Strings.ToString(item.raw.ParentIndexNumber)
+    episodeNumber = Strings.ToString(item.raw.IndexNumber)
 
     parts = []
     if seasonNumber <> "" then parts.Push("Season " + seasonNumber)
@@ -170,11 +168,11 @@ function getSeasonMetadataText(item as dynamic) as string
     parts = []
 
     count = Format.FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
-    if count <> "" then parts.Push(Format.SafeString(count, "") + " episodes")
+    if count <> "" then parts.Push(Strings.ToString(count) + " episodes")
 
     year = Format.FirstNonEmpty([item.ProductionYear], "")
     if year = "" then year = DateTime.ToYear(item.PremiereDate)
-    if year <> "" then parts.Push(Format.SafeString(year, ""))
+    if year <> "" then parts.Push(Strings.ToString(year))
 
     return Arrays.JoinStringValues(parts, MediaMetadataFormatting.BulletSeparator())
 end function
@@ -183,10 +181,10 @@ end function
 ' getSeasonPositionText
 '-------------------------------------------------------------------------------
 function getSeasonPositionText(item as dynamic) as string
-    seasonNumber = Format.SafeString(item.IndexNumber, "")
+    seasonNumber = Strings.ToString(item.IndexNumber)
     if seasonNumber <> "" then return "Season " + seasonNumber
 
-    title = Format.SafeString(item.Name, "")
+    title = Strings.ToString(item.Name)
     if isSeasonNumberTitle(title) then return title
 
     return ""
@@ -196,7 +194,7 @@ end function
 ' isSeasonDetailsItem
 '-------------------------------------------------------------------------------
 function isSeasonDetailsItem(item as dynamic) as boolean
-    return item <> invalid and Format.SafeString(item.itemType, "") = MediaItem.Type.Season
+    return item <> invalid and Strings.ToString(item.itemType) = MediaItem.Type.Season
 end function
 
 '-------------------------------------------------------------------------------
@@ -208,8 +206,8 @@ function buildEpisodeContentNode(details as dynamic) as object
     content.description = Format.FirstNonEmpty([details.Overview], "")
     content.HDPosterUrl = getEpisodePosterUrl(details)
     content.AddFields({
-        itemId: Format.SafeString(Format.FirstNonEmpty([details.Id], ""), "")
-        itemType: Format.SafeString(Format.FirstNonEmpty([details.Type], ""), "")
+        itemId: Format.FirstNonEmpty([details.Id], "")
+        itemType: Format.FirstNonEmpty([details.Type], "")
         episodeNumber: getEpisodeNumberText(details)
         episodeDate: DateTime.ToShortDate(getAiredDateText(details))
         progressPercent: getProgressPercent(details)
@@ -228,8 +226,8 @@ function getEpisodePosterUrl(item as dynamic) as string
     request = m.state.request
     if request = invalid then return ""
 
-    if Format.SafeString(item.Type, "") = MediaItem.Type.Season then
-        posterUrl = Format.SafeString(request.posterUrl, "")
+    if Strings.ToString(item.Type) = MediaItem.Type.Season then
+        posterUrl = Strings.ToString(request.posterUrl)
         if posterUrl <> "" then return posterUrl
     end if
 
@@ -254,7 +252,7 @@ end function
 '-------------------------------------------------------------------------------
 function getEpisodeNumberText(item as dynamic) as string
     indexText = Format.FirstNonEmpty([item.IndexNumber], "")
-    if indexText <> "" then return "Episode " + Format.SafeString(indexText, "")
+    if indexText <> "" then return "Episode " + indexText
     return "Episode"
 end function
 

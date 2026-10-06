@@ -1,9 +1,11 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 ' initializeEpisodeQueue
 '-------------------------------------------------------------------------------
 sub initializeEpisodeQueue(request as object, item as dynamic)
     seriesId = episodeQueueGetSeriesId(request, item)
-    scope = Format.SafeString(request.playbackQueueScope, "")
+    scope = Strings.ToString(request.playbackQueueScope)
     if scope = "" and m.activePlayback.queue.mode = "sequential" and VideoPlayerMetadata.IsEpisode(request, item) and seriesId <> "" then scope = "series"
 
     m.activePlayback.queue.scope = scope
@@ -22,7 +24,7 @@ sub initializeEpisodeQueue(request as object, item as dynamic)
     normalizeSeriesPlaybackQueue(request, item)
     episodeQueueSyncRequest()
     if m.episodeQueue.initialized <> true then
-        beginEpisodeQueueRequest("adjacent", Format.SafeString(request.itemId, ""), 0, "maintain", 0)
+        beginEpisodeQueueRequest("adjacent", Strings.ToString(request.itemId), 0, "maintain", 0)
     else
         maintainEpisodeQueueWindow()
     end if
@@ -56,7 +58,7 @@ end sub
 ' normalizeSeriesPlaybackQueue
 '-------------------------------------------------------------------------------
 sub normalizeSeriesPlaybackQueue(request as object, item as dynamic)
-    currentItemId = Format.SafeString(request.itemId, "")
+    currentItemId = Strings.ToString(request.itemId)
     currentQueueItem = buildCurrentPlaybackQueueItem(request, item)
     normalized = []
     seenIds = {}
@@ -64,7 +66,7 @@ sub normalizeSeriesPlaybackQueue(request as object, item as dynamic)
 
     for each queueItem in m.activePlayback.queue.items
         if queueItem = invalid then continue for
-        itemId = Format.SafeString(queueItem.itemId, "")
+        itemId = Strings.ToString(queueItem.itemId)
         if itemId = "" or seenIds.DoesExist(itemId) then continue for
         if itemId = currentItemId then
             normalized.Push(currentQueueItem)
@@ -85,7 +87,7 @@ end sub
 ' ensureCurrentPlaybackQueueItem
 '-------------------------------------------------------------------------------
 sub ensureCurrentPlaybackQueueItem(request as object, item as dynamic)
-    itemId = Format.SafeString(request.itemId, "")
+    itemId = Strings.ToString(request.itemId)
     existingIndex = episodeQueueFindItemIndex(itemId)
     if existingIndex >= 0 then
         m.activePlayback.queue.index = existingIndex
@@ -101,7 +103,7 @@ end sub
 '-------------------------------------------------------------------------------
 function buildCurrentPlaybackQueueItem(request as object, item as dynamic) as object
     return {
-        itemId: Format.SafeString(request.itemId, "")
+        itemId: Strings.ToString(request.itemId)
         item: item
         series: request.series
         season: request.season
@@ -188,7 +190,7 @@ sub onEpisodeQueueResponse()
     if episodeQueueResponseMatches(response, pendingRequest) <> true then return
 
     m.episodeQueue.pendingRequest = invalid
-    errorMessage = Format.SafeString(response.errorMessage, "Unable to resolve the episode queue.")
+    errorMessage = Strings.ToString(response.errorMessage, "Unable to resolve the episode queue.")
     if response.ok = true and response.payload <> invalid then
         if episodeQueueApplySuccessfulResponse(response, pendingRequest) then
             if pendingRequest.continuation = "finish" then
@@ -213,9 +215,9 @@ function episodeQueueResponseMatches(response as dynamic, pendingRequest as dyna
     if pendingRequest.episodeQueueId <> m.episodeQueue.id then return false
     if Number.ToInteger(response.playbackRequestId, -1) <> pendingRequest.playbackRequestId then return false
     if Number.ToInteger(response.taskRequestId, -1) <> pendingRequest.taskRequestId then return false
-    if Format.SafeString(response.operation, "") <> pendingRequest.operation then return false
-    if Format.SafeString(response.anchorItemId, "") <> pendingRequest.anchorItemId then return false
-    return Format.SafeString(response.seriesId, "") = m.episodeQueue.seriesId
+    if Strings.ToString(response.operation) <> pendingRequest.operation then return false
+    if Strings.ToString(response.anchorItemId) <> pendingRequest.anchorItemId then return false
+    return Strings.ToString(response.seriesId) = m.episodeQueue.seriesId
 end function
 
 '-------------------------------------------------------------------------------
@@ -284,12 +286,12 @@ function episodeQueueMergeAtAnchor(anchorItemId as string, predecessors as dynam
     end for
 
     activeItemId = ""
-    if m.activePlayback.queue.index >= 0 and m.activePlayback.queue.index < m.activePlayback.queue.items.Count() then activeItemId = Format.SafeString(m.activePlayback.queue.items[m.activePlayback.queue.index].itemId, "")
+    if m.activePlayback.queue.index >= 0 and m.activePlayback.queue.index < m.activePlayback.queue.items.Count() then activeItemId = Strings.ToString(m.activePlayback.queue.items[m.activePlayback.queue.index].itemId)
     merged = []
     emittedIds = {}
     for each queueItem in m.activePlayback.queue.items
         if queueItem = invalid then continue for
-        itemId = Format.SafeString(queueItem.itemId, "")
+        itemId = Strings.ToString(queueItem.itemId)
         if itemId = "" or emittedIds.DoesExist(itemId) then continue for
         if itemId = anchorItemId then
             episodeQueueAppendUnique(merged, beforeItems, emittedIds)
@@ -316,7 +318,7 @@ function episodeQueueUniqueItems(items as dynamic, excludedItemId as string) as 
     seenIds = {}
     for each queueItem in items
         if queueItem = invalid then continue for
-        itemId = Format.SafeString(queueItem.itemId, "")
+        itemId = Strings.ToString(queueItem.itemId)
         if itemId = "" or itemId = excludedItemId or seenIds.DoesExist(itemId) then continue for
         result.Push(queueItem)
         seenIds[itemId] = true
@@ -329,7 +331,7 @@ end function
 '-------------------------------------------------------------------------------
 sub episodeQueueAppendUnique(target as object, items as object, emittedIds as object)
     for each queueItem in items
-        itemId = Format.SafeString(queueItem.itemId, "")
+        itemId = Strings.ToString(queueItem.itemId)
         if emittedIds.DoesExist(itemId) then continue for
         target.Push(queueItem)
         emittedIds[itemId] = true
@@ -343,7 +345,7 @@ function episodeQueueFindItemIndex(itemId as string) as integer
     if itemId = "" then return -1
     for i = 0 to m.activePlayback.queue.items.Count() - 1
         queueItem = m.activePlayback.queue.items[i]
-        if queueItem <> invalid and Format.SafeString(queueItem.itemId, "") = itemId then return i
+        if queueItem <> invalid and Strings.ToString(queueItem.itemId) = itemId then return i
     end for
     return -1
 end function
@@ -357,7 +359,7 @@ function episodeQueueGetBoundaryItemId(useTail as boolean) as string
     if useTail then index = m.activePlayback.queue.items.Count() - 1
     queueItem = m.activePlayback.queue.items[index]
     if queueItem = invalid then return ""
-    return Format.SafeString(queueItem.itemId, "")
+    return Strings.ToString(queueItem.itemId)
 end function
 
 '-------------------------------------------------------------------------------
@@ -365,10 +367,10 @@ end function
 '-------------------------------------------------------------------------------
 function episodeQueueGetSeriesId(request as object, item as dynamic) as string
     if item <> invalid then
-        seriesId = Format.SafeString(Format.FirstNonEmpty([item.SeriesId], ""), "")
+        seriesId = Format.FirstNonEmpty([item.SeriesId], "")
         if seriesId <> "" then return seriesId
     end if
-    if request.series <> invalid then return Format.SafeString(Format.FirstNonEmpty([request.series.Id], ""), "")
+    if request.series <> invalid then return Format.FirstNonEmpty([request.series.Id], "")
     return ""
 end function
 
@@ -378,10 +380,10 @@ end function
 function episodeQueueGetItemSeriesId(queueItem as dynamic) as string
     if queueItem = invalid then return ""
     if queueItem.item <> invalid then
-        seriesId = Format.SafeString(Format.FirstNonEmpty([queueItem.item.SeriesId], ""), "")
+        seriesId = Format.FirstNonEmpty([queueItem.item.SeriesId], "")
         if seriesId <> "" then return seriesId
     end if
-    if queueItem.series <> invalid then return Format.SafeString(Format.FirstNonEmpty([queueItem.series.Id], ""), "")
+    if queueItem.series <> invalid then return Format.FirstNonEmpty([queueItem.series.Id], "")
     return ""
 end function
 
@@ -390,12 +392,11 @@ end function
 '-------------------------------------------------------------------------------
 sub episodeQueueSyncRequest()
     if m.activePlayback = invalid then return
-    changes = {
+    request = PlaybackRequest.WithChanges(m.activePlayback.request, {
         playbackQueue: m.activePlayback.queue.items
         playbackQueueIndex: m.activePlayback.queue.index
         playbackQueueScope: m.activePlayback.queue.scope
-    }
-    request = PlaybackRequest.WithChanges(m.activePlayback.request, changes)
+    })
     EpisodeQueueIdentity.Apply(request, m.activePlayback.queue.scope, m.episodeQueue.id)
     m.activePlayback.request = request
     m.pendingPlaybackRequest = request

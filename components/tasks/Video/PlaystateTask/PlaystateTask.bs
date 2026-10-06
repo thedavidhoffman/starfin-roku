@@ -1,4 +1,4 @@
-import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/api/HttpClient.bs"
@@ -35,10 +35,10 @@ sub executeRequest()
     body = buildPlaystateBody(request)
     result = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token), false)
     result.AddReplace("action", "playstate")
-    result.AddReplace("statusName", Format.SafeString(request.status, ""))
+    result.AddReplace("statusName", Strings.ToString(request.status))
 
     if result.ok <> true then
-        m.log.error("Playstate " + Format.SafeString(request.status, "") + " failed: " + Format.SafeString(result.errorMessage, ""))
+        m.log.error("Playstate " + Strings.ToString(request.status) + " failed: " + Strings.ToString(result.errorMessage))
     end if
 
     m.top.response = result
@@ -49,7 +49,7 @@ end sub
 ' getPlaystateEndpoint
 '-------------------------------------------------------------------------------
 function getPlaystateEndpoint(status as dynamic) as string
-    normalized = LCase(Format.SafeString(status, ""))
+    normalized = LCase(Strings.ToString(status))
     if normalized = Playstate.Status.Start then return "/Sessions/Playing"
     if normalized = Playstate.Status.Update then return "/Sessions/Playing/Progress"
     if normalized = Playstate.Status.Stop then return "/Sessions/Playing/Stopped"
@@ -62,7 +62,7 @@ end function
 '-------------------------------------------------------------------------------
 function buildPlaystateBody(request as object) as string
     isPaused = request.isPaused = true
-    if LCase(Format.SafeString(request.status, "")) = Playstate.Status.Stop then isPaused = true
+    if LCase(Strings.ToString(request.status)) = Playstate.Status.Stop then isPaused = true
 
     parts = [
         Json.Pair("ItemId", request.itemId)
@@ -70,16 +70,16 @@ function buildPlaystateBody(request as object) as string
         Json.BooleanPair("IsPaused", isPaused)
     ]
 
-    playSessionId = Format.SafeString(request.playSessionId, "")
+    playSessionId = Strings.ToString(request.playSessionId)
     if playSessionId <> "" then parts.Push(Json.Pair("PlaySessionId", playSessionId))
 
-    mediaSourceId = Format.SafeString(request.mediaSourceId, "")
+    mediaSourceId = Strings.ToString(request.mediaSourceId)
     if mediaSourceId <> "" then parts.Push(Json.Pair("MediaSourceId", mediaSourceId))
 
-    liveStreamId = Format.SafeString(request.liveStreamId, "")
+    liveStreamId = Strings.ToString(request.liveStreamId)
     if liveStreamId <> "" then parts.Push(Json.Pair("LiveStreamId", liveStreamId))
 
-    parts.Push(Json.Pair("PlayMethod", Format.SafeString(request.playMethod, "DirectPlay")))
+    parts.Push(Json.Pair("PlayMethod", Strings.ToString(request.playMethod, "DirectPlay")))
     parts.Push(Json.BooleanPair("CanSeek", request.canSeek = true))
 
     return Json.Object(parts)

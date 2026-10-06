@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/DeepLink.bs"
 import "pkg:/source/Encode.bs"
@@ -71,7 +72,7 @@ function resolveDeepLink(request as object) as object
     queueResult = loadDeepLinkEpisodes(request, series.Id, queueSeasonId)
     if queueResult.ok <> true then return queueResult
     queue = buildPlaybackQueue(ApiPayload.GetItems(queueResult.data))
-    queueIndex = findPlaybackQueueIndex(queue, Format.SafeString(selectedItem.Id, ""))
+    queueIndex = findPlaybackQueueIndex(queue, Strings.ToString(selectedItem.Id))
     if queueIndex < 0 then return resolverFailure("The selected episode is unavailable in its playback queue.")
     return { ok: true, payload: buildPlaybackDestination(selectedItem, series, season, queue, queueIndex, "series") }
 end function
@@ -83,7 +84,7 @@ function validateDeepLinkItemResult(itemResult as object, mediaType as string) a
     if itemResult.ok <> true then return itemResult
     requiredType = "Episode"
     if mediaType = DeepLink.MediaType.Movie then requiredType = "Movie"
-    if Format.SafeString(itemResult.data.Type, "") <> requiredType then return resolverFailure("The content type does not match the launch request.")
+    if Strings.ToString(itemResult.data.Type) <> requiredType then return resolverFailure("The content type does not match the launch request.")
     return itemResult
 end function
 
@@ -95,7 +96,7 @@ function loadEpisodeContext(request as object, episode as object) as object
     if identity.ok <> true then return identity
     seriesResult = loadDeepLinkItem(request, identity.seriesId)
     if seriesResult.ok <> true then return seriesResult
-    if Format.SafeString(seriesResult.data.Type, "") <> "Series" then return resolverFailure("The episode series context is invalid.")
+    if Strings.ToString(seriesResult.data.Type) <> "Series" then return resolverFailure("The episode series context is invalid.")
     return { ok: true, series: seriesResult.data, season: identity.season }
 end function
 
@@ -104,11 +105,11 @@ end function
 '-------------------------------------------------------------------------------
 function buildEpisodeIdentity(episode as dynamic) as object
     if episode = invalid or GetInterface(episode, "ifAssociativeArray") = invalid then return resolverFailure("The selected series item is invalid.")
-    if Format.SafeString(episode.Type, "") <> "Episode" then return resolverFailure("The selected series item is not an episode.")
-    seriesId = Format.SafeString(episode.SeriesId, "")
+    if Strings.ToString(episode.Type) <> "Episode" then return resolverFailure("The selected series item is not an episode.")
+    seriesId = Strings.ToString(episode.SeriesId)
     seasonId = Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], "")
     if seriesId = "" or seasonId = "" then return resolverFailure("The episode is missing its series or season context.")
-    return { ok: true, seriesId: seriesId, season: { Id: seasonId, Name: Format.SafeString(episode.SeasonName, "") } }
+    return { ok: true, seriesId: seriesId, season: { Id: seasonId, Name: Strings.ToString(episode.SeasonName) } }
 end function
 
 '-------------------------------------------------------------------------------
@@ -190,7 +191,7 @@ function buildPlaybackQueue(episodes as object) as object
     for each episode in episodes
         identity = buildEpisodeIdentity(episode)
         if identity.ok <> true then continue for
-        queue.Push({ itemId: episode.Id, item: episode, series: { Id: identity.seriesId, Name: Format.SafeString(episode.SeriesName, "") }, season: identity.season, startPositionTicks: DeepLink.GetStartPositionTicks(episode) })
+        queue.Push({ itemId: episode.Id, item: episode, series: { Id: identity.seriesId, Name: Strings.ToString(episode.SeriesName) }, season: identity.season, startPositionTicks: DeepLink.GetStartPositionTicks(episode) })
     end for
     return queue
 end function
@@ -243,7 +244,7 @@ end function
 '-------------------------------------------------------------------------------
 function getResolverAccountKey(request as dynamic) as string
     if request = invalid then return ""
-    return Format.SafeString(request.accountKey, "")
+    return Strings.ToString(request.accountKey)
 end function
 
 '-------------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/LatestRequestLifecycle.bs"
 import "pkg:/source/PlaybackRequest.bs"
@@ -245,7 +246,7 @@ sub playTrack(index as integer, restartPosition = 0.0 as float)
         server: request.server
         token: request.token
         userId: request.userId
-        itemId: Format.SafeString(track.Id, "")
+        itemId: Strings.ToString(track.Id)
         title: Format.FirstNonEmpty([track.Name], "Untitled Track")
     }
     LatestRequestLifecycle.Queue(m.playerState.playbackLoad.lifecycle, taskRequest, taskRequest)
@@ -281,7 +282,7 @@ sub handlePlaybackInfoResponse(response as dynamic)
 
     request = completion.context
     content = JellyfinAuth.CreateContent(request.server, response.streamUrl, request.token, request.userId)
-    content.streamFormat = Format.SafeString(response.streamFormat, "")
+    content.streamFormat = response.streamFormat
     content.title = request.title
     if content.url = "" then
         stopScreensaverSession()
@@ -296,14 +297,14 @@ end sub
 ' onPlayerStateChanged
 '-------------------------------------------------------------------------------
 sub onPlayerStateChanged()
-    state = LCase(Format.SafeString(m.player.state, ""))
+    state = LCase(m.player.state)
     previousPlayerState = m.playerState.lastObservedState
     activityStateChanged = previousPlayerState <> state
     m.playerState.lastObservedState = state
     track = getCurrentTrack()
     itemId = ""
-    if track <> invalid then itemId = Format.SafeString(track.Id, "")
-    m.log.write("Playback state changed state=" + state + " itemId=" + itemId + " position=" + Number.ToFloat(m.player.position, 0.0).ToStr() + " changingTrack=" + m.playerState.changingTrack.ToStr() + " errorCode=" + Number.ToInteger(m.player.errorCode, 0).ToStr() + " errorMessage=" + Format.SafeString(m.player.errorMsg, ""))
+    if track <> invalid then itemId = Strings.ToString(track.Id)
+    m.log.write("Playback state changed state=" + state + " itemId=" + itemId + " position=" + Number.ToFloat(m.player.position, 0.0).ToStr() + " changingTrack=" + m.playerState.changingTrack.ToStr() + " errorCode=" + Number.ToInteger(m.player.errorCode, 0).ToStr() + " errorMessage=" + m.player.errorMsg)
     updatePlayPauseIcon()
     if state = "playing" then
         if m.playerState.changingTrack then m.log.activity("Playing track " + ActivityLog.ItemTitle(track, "Untitled Track"))
@@ -331,7 +332,7 @@ end sub
 ' togglePlayback
 '-------------------------------------------------------------------------------
 sub togglePlayback()
-    state = LCase(Format.SafeString(m.player.state, ""))
+    state = LCase(m.player.state)
     if state = "playing" then
         m.player.control = MediaControl.Command.Pause
     else if state = "paused" then
@@ -352,7 +353,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub updatePlayPauseIcon()
     if m.playPauseButton = invalid then return
-    if LCase(Format.SafeString(m.player.state, "")) = "playing" then
+    if LCase(m.player.state) = "playing" then
         m.playPauseButton.icon = "pkg:/images/icons/playback-controls/pause-unfocused.png"
         m.playPauseButton.focusedIcon = "pkg:/images/icons/playback-controls/pause-focused.png"
     else
@@ -454,7 +455,7 @@ end function
 function getAlbumArtworkUrl(album as dynamic, request as object) as string
     if album = invalid then return "pkg:/images/music/album-placeholder-342x342.png"
     tag = ""
-    if album.ImageTags <> invalid then tag = Format.SafeString(album.ImageTags.Primary, "")
+    if album.ImageTags <> invalid then tag = Strings.ToString(album.ImageTags.Primary)
     if tag = "" then return "pkg:/images/music/album-placeholder-342x342.png"
     return Url.BuildImageUrl(request.server, request.albumId, JellyfinImage.Type.Primary, tag, 650, 650)
 end function
@@ -466,14 +467,14 @@ function getAlbumBackgroundUrl(album as dynamic, request as object, fallbackUrl 
     if album = invalid then return fallbackUrl
 
     if album.BackdropImageTags <> invalid and album.BackdropImageTags.Count() > 0 then
-        tag = Format.SafeString(album.BackdropImageTags[0], "")
+        tag = Strings.ToString(album.BackdropImageTags[0])
         if tag <> "" then return Url.BuildImageUrl(request.server, request.albumId, JellyfinImage.Type.Backdrop, tag, 1920, 1080)
     end if
 
     if album.ParentBackdropImageTags = invalid or album.ParentBackdropImageTags.Count() = 0 then return fallbackUrl
 
-    itemId = Format.SafeString(album.ParentBackdropItemId, "")
-    tag = Format.SafeString(album.ParentBackdropImageTags[0], "")
+    itemId = Strings.ToString(album.ParentBackdropItemId)
+    tag = Strings.ToString(album.ParentBackdropImageTags[0])
     if itemId = "" or tag = "" then return fallbackUrl
 
     return Url.BuildImageUrl(request.server, itemId, JellyfinImage.Type.Backdrop, tag, 1920, 1080)
@@ -484,8 +485,8 @@ end function
 '-------------------------------------------------------------------------------
 function getAlbumArtist(album as dynamic) as string
     if album = invalid then return ""
-    if album.AlbumArtist <> invalid then return Format.SafeString(album.AlbumArtist, "")
-    if album.Artists <> invalid and album.Artists.Count() > 0 then return Format.SafeString(album.Artists[0], "")
+    if album.AlbumArtist <> invalid then return Strings.ToString(album.AlbumArtist)
+    if album.Artists <> invalid and album.Artists.Count() > 0 then return Strings.ToString(album.Artists[0])
     return ""
 end function
 

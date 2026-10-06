@@ -20,6 +20,83 @@ namespace tests
             m.node.top.letterGridRequested = invalid
         end function
 
+        @describe("album artist rendering")
+
+        @it("prefers the primary album artist string")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumArtistName({ AlbumArtist: "Primary", Artist: "Secondary", AlbumArtists: [{ Name: "Fallback" }] }), "Primary")
+        end function
+
+        @it("uses the alternate artist string before album artist objects")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumArtistName({ AlbumArtist: " ", Artist: "Secondary", AlbumArtists: [{ Name: "Fallback" }] }), "Secondary")
+        end function
+
+        @it("joins names from multiple album artist objects")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumArtistName({ AlbumArtists: [{ Name: " First ", Id: "1" }, { Name: "Second", Id: "2" }], Artists: ["Fallback"] }), "First, Second")
+        end function
+
+        @it("retains string entries in an album artist array")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumArtistName({ AlbumArtists: [" First ", { Name: "Second" }] }), "First, Second")
+        end function
+
+        @it("falls back to Artists when album artist names are missing or blank")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumArtistName({ AlbumArtists: [invalid, { Id: "1" }, { Name: " " }], Artists: ["Fallback"] }), "Fallback")
+        end function
+
+        @it("uses the next artist fallback when an album artist name is unsupported")
+        function _()
+            'bs:disable-next-line 1140
+            renderAlbums([{ Id: "album-1", Name: "Album", AlbumArtists: [{ Name: {} }], Artists: ["Fallback"] }])
+
+            m.assertEqual(m.node.musicGrid.content.getChild(0).primaryLabel, "Fallback")
+        end function
+
+        @it("ignores an unsupported album artist collection")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumArtistName({ AlbumArtists: { Name: "Malformed" }, Artists: ["Fallback"] }), "Fallback")
+        end function
+
+        @it("uses Unknown Artist when no usable artist name exists")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertEqual(getAlbumArtistName({ AlbumArtists: [{ Id: "1" }], Artists: [invalid, " "] }), "Unknown Artist")
+        end function
+
+        @it("renders album artist objects on an initial album page")
+        function _()
+            'bs:disable-next-line 1140
+            renderAlbums([{ Id: "album-1", Name: "Album", AlbumArtists: [{ Name: "Artist", Id: "artist-1" }] }])
+
+            m.assertEqual(m.node.musicGrid.content.getChildCount(), 1)
+            m.assertEqual(m.node.musicGrid.content.getChild(0).artistName, "Artist")
+            m.assertEqual(m.node.musicGrid.content.getChild(0).secondaryLabel, "Album")
+        end function
+
+        @it("appends an album with the reported object-shaped artist fallback")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").title = "Existing"
+            m.node.musicGrid.content = content
+
+            'bs:disable-next-line 1140
+            appendAlbumPage([{ Id: "album-2", Name: "Next Album", AlbumArtists: [{ Name: "Artist", Id: "artist-1" }] }])
+
+            m.assertEqual(content.getChildCount(), 2)
+            m.assertEqual(content.getChild(0).title, "Existing")
+            m.assertEqual(content.getChild(1).primaryLabel, "Artist")
+            m.assertEqual(content.getChild(1).secondaryLabel, "Next Album")
+        end function
+
         @describe("pagination")
 
         @it("starts loading five rows from the end")

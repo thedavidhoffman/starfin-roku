@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/MediaOptionsSession.bs"
 import "pkg:/source/HomeVideoPlayback.bs"
 import "pkg:/source/RequestFailure.bs"
@@ -46,7 +47,7 @@ sub navHandleHeaderOverlayRequested()
 
     if request.id = "settings" then
         if m.session <> invalid then
-            request.accountKey = Format.SafeString(m.session.accountKey, "")
+            request.accountKey = Strings.ToString(m.session.accountKey)
             request.server = m.session.server
             request.token = m.session.token
             request.userId = m.session.userId
@@ -84,7 +85,7 @@ sub navHandleOverlayClosed()
         return
     end if
     if request <> invalid and request.id = "letterGrid" then
-        if Format.SafeString(request.sourcePage, "videoLibrary") = "musicLibrary" then
+        if Strings.ToString(request.sourcePage, "videoLibrary") = "musicLibrary" then
             musicLibraryHandleLetterGridOverlayClosed()
         else
             videoLibraryHandleLetterGridOverlayClosed()
@@ -93,9 +94,9 @@ sub navHandleOverlayClosed()
     end if
 
     if request <> invalid and request.id = "sort" then
-        if Format.SafeString(request.sourcePage, "") = "musicLibrary" then
+        if Strings.ToString(request.sourcePage) = "musicLibrary" then
             musicLibraryHandleSortOverlayClosed(closed)
-        else if Format.SafeString(request.sourcePage, "") = "homeMediaLibrary" then
+        else if Strings.ToString(request.sourcePage) = "homeMediaLibrary" then
             homeMediaLibraryHandleBrowseOverlayClosed(closed)
         else
             videoLibraryHandleSortOverlayClosed(closed)
@@ -176,11 +177,11 @@ sub navHandleOverlayEventRaised()
         return
     end if
 
-    if Format.SafeString(raised.request.id, "") = "letterGrid" and Format.SafeString(raised.field, "") = "letterSelected" then
-        if Format.SafeString(raised.request.sourcePage, "videoLibrary") = "musicLibrary" then
-            musicLibraryHandleLetterGridLetterSelected(Format.SafeString(raised.value, ""))
+    if Strings.ToString(raised.request.id) = "letterGrid" and Strings.ToString(raised.field) = "letterSelected" then
+        if Strings.ToString(raised.request.sourcePage, "videoLibrary") = "musicLibrary" then
+            musicLibraryHandleLetterGridLetterSelected(Strings.ToString(raised.value))
         else
-            videoLibraryHandleLetterGridLetterSelected(Format.SafeString(raised.value, ""))
+            videoLibraryHandleLetterGridLetterSelected(Strings.ToString(raised.value))
         end if
     end if
 end sub
@@ -235,10 +236,10 @@ sub navOpenEpisodeSeries(selection as object, request as object)
     item = selection.item
     if item = invalid then return
 
-    seriesId = Format.SafeString(item.SeriesId, "")
+    seriesId = Strings.ToString(item.SeriesId)
     if seriesId = "" then return
 
-    prepareMediaActionNavigation(Format.SafeString(request.sourcePage, ""))
+    prepareMediaActionNavigation(Strings.ToString(request.sourcePage))
     tvShowShow({
         itemId: seriesId
         item: buildEpisodeSeriesIdentity(item)
@@ -252,11 +253,11 @@ sub navOpenEpisodeSeason(selection as object, request as object)
     item = selection.item
     if item = invalid then return
 
-    seriesId = Format.SafeString(item.SeriesId, "")
-    seasonId = Format.SafeString(item.SeasonId, "")
+    seriesId = Strings.ToString(item.SeriesId)
+    seasonId = Strings.ToString(item.SeasonId)
     if seriesId = "" or seasonId = "" then return
 
-    prepareMediaActionNavigation(Format.SafeString(request.sourcePage, ""))
+    prepareMediaActionNavigation(Strings.ToString(request.sourcePage))
     tvSeasonShow({
         seriesId: seriesId
         seasonId: seasonId
@@ -264,7 +265,7 @@ sub navOpenEpisodeSeason(selection as object, request as object)
         seriesMetadataPending: true
         season: {
             Id: seasonId
-            Name: Format.SafeString(item.SeasonName, "")
+            Name: Strings.ToString(item.SeasonName)
         }
         seasons: invalid
         nextSeason: invalid
@@ -276,8 +277,8 @@ end sub
 '-------------------------------------------------------------------------------
 function buildEpisodeSeriesIdentity(item as object) as object
     return {
-        Id: Format.SafeString(item.SeriesId, "")
-        Name: Format.SafeString(item.SeriesName, "")
+        Id: Strings.ToString(item.SeriesId)
+        Name: Strings.ToString(item.SeriesName)
         thumbUrl: ""
         backdropUrl: ""
         detailBackdropUrl: ""
@@ -307,7 +308,7 @@ sub navHandleMediaStateChanged()
     if change = invalid or request = invalid then return
 
     if change.action = "watched" then markHomePlaybackRowsDirty()
-    routeMediaStateChange(Format.SafeString(request.sourcePage, ""), change)
+    routeMediaStateChange(Strings.ToString(request.sourcePage), change)
     activityAction = "Updated"
     if change.action = "watched" and change.value = true then activityAction = "Marked as watched"
     if change.action = "watched" and change.value <> true then activityAction = "Marked as unwatched"
@@ -327,9 +328,9 @@ sub navHandleMediaActionFailed()
 
     message = (failure.failureKind <> invalid ? "Unable to update media state. " : "") + RequestFailure.GetDisplayMessage(failure, "Unable to update media state.")
     AppMessage.Show(message)
-    itemId = Format.SafeString(failure.itemId, "")
-    if itemId = "" and request <> invalid then itemId = Format.SafeString(request.itemId, "")
-    m.log.activity("Media action failed itemId=" + itemId + ": " + Format.SafeString(failure.errorMessage, message))
+    itemId = Strings.ToString(failure.itemId)
+    if itemId = "" and request <> invalid then itemId = Strings.ToString(request.itemId)
+    m.log.activity("Media action failed itemId=" + itemId + ": " + Strings.ToString(failure.errorMessage, message))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -353,7 +354,7 @@ end sub
 ' isStreamOptionsOverlayRequest
 '-------------------------------------------------------------------------------
 function isStreamOptionsOverlayRequest(request as object) as boolean
-    return Format.SafeString(request.id, "") = MediaOptionsSession.Overlay.Options
+    return Strings.ToString(request.id) = MediaOptionsSession.Overlay.Options
 end function
 
 '-------------------------------------------------------------------------------
@@ -363,7 +364,7 @@ sub navHandleDescriptionOverlayClosed(closed as object)
     request = closed.request
     if request = invalid then return
 
-    sourcePage = Format.SafeString(request.sourcePage, "")
+    sourcePage = Strings.ToString(request.sourcePage)
     if sourcePage = "movie" and m.moviePage <> invalid then
         m.moviePage.callFunc("handleDescriptionOverlayClosed")
     else if sourcePage = "musicArtist" and m.musicArtistPage <> invalid then
@@ -382,7 +383,7 @@ sub navHandleStreamOptionsOverlayClosed(closed as object)
     request = closed.request
     if request = invalid then return
 
-    sourcePage = Format.SafeString(request.sourcePage, "")
+    sourcePage = Strings.ToString(request.sourcePage)
     if sourcePage = "videoPlayer" then
         m.playbackController.callFunc("handleStreamOptionsOverlayClosed", closed)
     else if sourcePage = "movie" and m.moviePage <> invalid then
@@ -479,10 +480,9 @@ end sub
 ' navShowApp
 '-------------------------------------------------------------------------------
 sub navShowApp()
-    m.settings = SettingsStore.Load(Format.SafeString(m.session.accountKey, ""))
+    m.settings = SettingsStore.Load(Strings.ToString(m.session.accountKey))
     fanOutSettings()
-    loadRequest = buildSessionLoadRequest()
-    m.homePage.loadRequest = loadRequest
+    m.homePage.loadRequest = buildSessionLoadRequest()
     navShowAppRoute()
 end sub
 
@@ -531,11 +531,11 @@ sub syncHeaderUserIdentity()
         return
     end if
 
-    m.header.username = Format.SafeString(m.session.username, "")
+    m.header.username = Strings.ToString(m.session.username)
     m.header.userIdentityRequest = {
-        server: Format.SafeString(m.session.server, "")
-        userId: Format.SafeString(m.session.userId, "")
-        primaryImageTag: Format.SafeString(m.session.primaryImageTag, "")
+        server: Strings.ToString(m.session.server)
+        userId: Strings.ToString(m.session.userId)
+        primaryImageTag: Strings.ToString(m.session.primaryImageTag)
     }
 end sub
 

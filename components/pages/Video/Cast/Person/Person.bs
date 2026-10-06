@@ -129,7 +129,7 @@ sub onPersonResponse()
         Spinner.Hide()
         message = (response.failureKind <> invalid ? "Unable to load this person. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this person.")
         AppMessage.Show(message)
-        m.log.activity("Person load failed: " + Format.SafeString(response.errorMessage, message))
+        m.log.activity("Person load failed: " + Strings.ToString(response.errorMessage, message))
         return
     end if
 
@@ -224,7 +224,7 @@ end sub
 ' isOverviewLabelTruncated
 '-------------------------------------------------------------------------------
 function isOverviewLabelTruncated() as boolean
-    return isOverviewTextTruncated(Format.SafeString(m.overviewLabel.text, ""))
+    return isOverviewTextTruncated(m.overviewLabel.text)
 end function
 
 '-------------------------------------------------------------------------------
@@ -245,7 +245,7 @@ function isOverviewTextTruncated(text as string) as boolean
         words = Strings.Trim(paragraph).Split(" ")
 
         for each word in words
-            wordLength = Len(Format.SafeString(word, ""))
+            wordLength = Len(word)
             if wordLength = 0 then continue for
 
             separatorLength = 0
@@ -275,7 +275,7 @@ end function
 ' openPersonOverview
 '-------------------------------------------------------------------------------
 sub openPersonOverview()
-    overview = Format.SafeString(m.overviewLabel.text, "")
+    overview = m.overviewLabel.text
     if overview = "" then return
 
     m.top.overlayRequested = {
@@ -330,7 +330,7 @@ function getBirthPlace(person as dynamic) as string
     if person.ProductionLocations = invalid then return ""
     if person.ProductionLocations.Count() = 0 then return ""
 
-    return Format.SafeString(person.ProductionLocations[0], "")
+    return Strings.ToString(person.ProductionLocations[0])
 end function
 
 '-------------------------------------------------------------------------------
@@ -362,9 +362,8 @@ function renderRelatedItems(items as object) as boolean
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
     m.relatedTitleLabel.text = "Movies/Shows with " + getPersonName(m.pageState.person)
-    sortedItems = sortRelatedItems(items)
 
-    for each item in sortedItems
+    for each item in sortRelatedItems(items)
         addRelatedItemNode(row, item, VideoCardPresentation.Type.Poster)
     end for
 
@@ -382,9 +381,8 @@ function renderRelatedEpisodes(items as object) as boolean
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
     m.relatedEpisodesTitleLabel.text = "TV Episodes with " + getPersonName(m.pageState.person)
-    sortedItems = EpisodeSort.BySeriesSeasonEpisode(items)
 
-    for each item in sortedItems
+    for each item in EpisodeSort.BySeriesSeasonEpisode(items)
         addRelatedItemNode(row, item, VideoCardPresentation.Type.Thumbnail)
     end for
 
@@ -401,7 +399,7 @@ end function
 sub addRelatedItemNode(row as object, item as dynamic, imageAspect as string)
     if Arrays.IsAssocArray(item) = false then return
 
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId = "" then return
 
     child = row.createChild("ContentNode")
@@ -458,7 +456,7 @@ end function
 function getRelatedItemDateKey(item as dynamic) as string
     if Arrays.IsAssocArray(item) = false then return ""
 
-    premiereDate = Format.SafeString(Format.FirstNonEmpty([item.PremiereDate], ""), "")
+    premiereDate = Format.FirstNonEmpty([item.PremiereDate], "")
     if Len(premiereDate) >= 10 then return Left(premiereDate, 10)
 
     year = Format.FirstNonEmpty([item.ProductionYear], "")
@@ -474,7 +472,7 @@ end function
 function getRelatedItemTitleKey(item as dynamic) as string
     if Arrays.IsAssocArray(item) = false then return ""
 
-    return LCase(Format.SafeString(Format.FirstNonEmpty([item.SortName, item.Name], ""), ""))
+    return LCase(Format.FirstNonEmpty([item.SortName, item.Name], ""))
 end function
 
 '-------------------------------------------------------------------------------
@@ -663,12 +661,12 @@ sub handleRelatedSelection(rowList as object, selected as dynamic)
 
     item = itemNode.raw
     selection = {
-        itemId: Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+        itemId: Format.FirstNonEmpty([item.Id], "")
         item: item
     }
     if selection.itemId = "" then return
 
-    itemType = LCase(Format.SafeString(Format.FirstNonEmpty([item.Type], ""), ""))
+    itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
     if itemType = "movie" or itemType = "video" then
         m.top.selectedMovie = selection
     else if itemType = "series" then

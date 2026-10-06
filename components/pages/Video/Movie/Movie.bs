@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/MediaShellLayout.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/MediaOptionsSession.bs"
@@ -115,8 +116,6 @@ sub renderMovie(item as dynamic, logoPending = false as boolean)
     refreshMediaInfoText(item)
     if Arrays.IsAssocArray(item) = false then return
 
-    metadataText = getPrimaryMetaText(item)
-    genreText = getSecondaryMetaText(item)
     m.mediaShell.mediaContent = {
         mediaType: "movie"
         backdropUrl: getBackdropUrl(item)
@@ -128,8 +127,8 @@ sub renderMovie(item as dynamic, logoPending = false as boolean)
         officialRating: item.OfficialRating
         communityRating: item.CommunityRating
         criticRating: item.CriticRating
-        primaryInfoText: metadataText
-        secondaryInfoText: genreText
+        primaryInfoText: getPrimaryMetaText(item)
+        secondaryInfoText: getSecondaryMetaText(item)
         overview: Format.FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)
@@ -277,7 +276,7 @@ sub onCastPersonSelected()
     if selection.itemId = invalid or selection.itemId = "" then return
 
     selection.sourceItemType = "movie"
-    selection.sourceItemId = Format.SafeString(m.state.request.itemId, "")
+    selection.sourceItemId = Strings.ToString(m.state.request.itemId)
     m.top.selectedPerson = selection
 end sub
 
@@ -403,7 +402,7 @@ sub onVideoToolbarPlaySelected()
     selection = buildPlaySelection(invalid)
     if selection = invalid then return
 
-    m.log.write("Play selected audioStreamIndex=" + Format.SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(selection.subtitleStreamIndex, ""))
+    m.log.write("Play selected audioStreamIndex=" + Strings.ToString(selection.audioStreamIndex) + " subtitleStreamIndex=" + Strings.ToString(selection.subtitleStreamIndex))
     m.top.playSelected = selection
 end sub
 
@@ -414,7 +413,7 @@ sub onVideoToolbarRestartSelected()
     selection = buildPlaySelection(0)
     if selection = invalid then return
 
-    m.log.write("Restart selected audioStreamIndex=" + Format.SafeString(selection.audioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(selection.subtitleStreamIndex, ""))
+    m.log.write("Restart selected audioStreamIndex=" + Strings.ToString(selection.audioStreamIndex) + " subtitleStreamIndex=" + Strings.ToString(selection.subtitleStreamIndex))
     m.top.playSelected = selection
 end sub
 
@@ -426,7 +425,7 @@ function buildPlaySelection(startPositionTicks as dynamic) as dynamic
     request = m.state.request
     if request = invalid or item = invalid then return invalid
 
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id, request.itemId], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id, request.itemId], "")
     if itemId = "" then return invalid
 
     selection = {
@@ -450,8 +449,8 @@ sub applyPlaybackSubtitleSelection(playRequest as dynamic)
 
     item = m.state.item
     if item = invalid then return
-    itemId = Format.SafeString(item.Id, "")
-    if itemId = "" or Format.SafeString(playRequest.itemId, "") <> itemId then return
+    itemId = Strings.ToString(item.Id)
+    if itemId = "" or Strings.ToString(playRequest.itemId) <> itemId then return
 
     streamIndex = Number.ToInteger(playRequest.subtitleStreamIndex, SubtitleSelection.NotSet)
     if streamIndex = SubtitleSelection.NotSet then
@@ -516,7 +515,7 @@ sub runWatchedTask(action as string)
     request = m.state.request
     if item = invalid or request = invalid then return
 
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id, request.itemId], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id, request.itemId], "")
     if itemId = "" then return
 
     m.watchedTask.request = {
@@ -545,10 +544,10 @@ sub onWatchedTaskResponse()
     item = m.state.item
     if item = invalid then return
 
-    itemId = Format.SafeString(response.itemId, "")
-    if itemId = "" or itemId <> Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "") then return
+    itemId = Strings.ToString(response.itemId)
+    if itemId = "" or itemId <> Format.FirstNonEmpty([item.Id], "") then return
 
-    isWatched = Format.SafeString(response.action, "") = "MarkAsWatched"
+    isWatched = Strings.ToString(response.action) = "MarkAsWatched"
     updateItemWatchedState(item, isWatched)
     m.mediaToolbar.resumePositionSeconds = PlaybackProgress.TicksToSeconds(PlaybackProgress.GetTicksFromItem(item))
     m.mediaToolbar.isWatched = isWatched
@@ -594,9 +593,9 @@ sub onPlaybackProgressChange()
     item = m.state.item
     if item = invalid then return
 
-    itemId = Format.SafeString(change.itemId, "")
-    currentItemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
-    if currentItemId = "" and m.state.request <> invalid then currentItemId = Format.SafeString(m.state.request.itemId, "")
+    itemId = Strings.ToString(change.itemId)
+    currentItemId = Format.FirstNonEmpty([item.Id], "")
+    if currentItemId = "" and m.state.request <> invalid then currentItemId = Strings.ToString(m.state.request.itemId)
     if itemId = "" or itemId <> currentItemId then return
 
     updateItemPlaybackProgress(item, change)
@@ -630,7 +629,7 @@ end function
 function getPrimaryMetaText(item as dynamic) as string
     year = Format.FirstNonEmpty([item.ProductionYear], "")
     if year = "" then year = DateTime.ToYear(item.PremiereDate)
-    return Format.SafeString(year, "")
+    return year
 end function
 
 '-------------------------------------------------------------------------------
@@ -752,7 +751,7 @@ function getSubtitleStreams(item as dynamic) as object
     subtitleStreams = []
     for i = 0 to item.MediaStreams.Count() - 1
         stream = item.MediaStreams[i]
-        if stream <> invalid and LCase(Format.SafeString(stream.Type, "")) = "subtitle" then
+        if stream <> invalid and LCase(Strings.ToString(stream.Type)) = "subtitle" then
             if stream.Index = invalid then stream.AddReplace("sourceIndex", i)
             subtitleStreams.Push(stream)
         end if
@@ -770,7 +769,7 @@ function getAudioStreams(item as dynamic) as object
     audioStreams = []
     for i = 0 to item.MediaStreams.Count() - 1
         stream = item.MediaStreams[i]
-        if stream <> invalid and LCase(Format.SafeString(stream.Type, "")) = "audio" then
+        if stream <> invalid and LCase(Strings.ToString(stream.Type)) = "audio" then
             if stream.Index = invalid then stream.AddReplace("sourceIndex", i)
             audioStreams.Push(stream)
         end if

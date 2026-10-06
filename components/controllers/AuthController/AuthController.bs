@@ -1,7 +1,7 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/Encode.bs"
-import "pkg:/source/Format.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/TimerControl.bs"
@@ -55,7 +55,7 @@ sub onQuickConnectRequestChanged()
     cancelQuickConnect(false)
     state = m.authState.quickConnect
     state.active = true
-    state.server = Format.SafeString(request.server, "")
+    state.server = request.server
     m.authState.isResumingSession = false
     m.authState.pendingSwitch = invalid
     publishQuickConnectState("starting", "", "Starting Quick Connect...")
@@ -307,13 +307,11 @@ sub onResetStarfinRequested()
     cancelQuickConnect(false)
 
     if m.savedSession <> invalid then
-        server = Format.SafeString(m.savedSession.server, "")
-        token = Format.SafeString(m.savedSession.token, "")
-        if server <> "" and token <> "" then
+        if m.savedSession.server <> "" and m.savedSession.token <> "" then
             runLogoutApiRequest({
                 action: "logout"
-                server: server
-                token: token
+                server: m.savedSession.server
+                token: m.savedSession.token
             })
         end if
     end if
@@ -331,17 +329,14 @@ end sub
 '-------------------------------------------------------------------------------
 sub onExpireActiveSessionRequested()
     request = m.top.expireActiveSessionRequested
-    accountKey = Format.SafeString(request.accountKey, "")
-    if accountKey = "" or accountKey <> Format.SafeString(m.savedSession.accountKey, "") then return
-    if Format.SafeString(m.savedSession.token, "") = "" then return
-    server = Format.SafeString(m.savedSession.server, "")
-    username = Format.SafeString(m.savedSession.username, "")
+    if request.accountKey = "" or request.accountKey <> m.savedSession.accountKey then return
+    if m.savedSession.token = "" then return
     clearSavedSession()
     m.top.sessionExpired = {
-        message: Format.SafeString(request.message, "Your session expired. Please sign in again.")
-        server: server
-        username: username
-        accountKey: Format.SafeString(m.savedSession.accountKey, "")
+        message: Strings.ToString(request.message, "Your session expired. Please sign in again.")
+        server: m.savedSession.server
+        username: m.savedSession.username
+        accountKey: m.savedSession.accountKey
         clearRuntimeSession: true
     }
 end sub
@@ -353,8 +348,8 @@ sub onSwitchAccountRequestChanged()
     request = m.top.switchAccountRequest
     if request = invalid then return
 
-    accountKey = Format.SafeString(request.accountKey, "")
-    source = Format.SafeString(request.source, "header")
+    accountKey = Strings.ToString(request.accountKey)
+    source = Strings.ToString(request.source, "header")
     account = AuthStore.LoadAccount(accountKey, true)
     if account = invalid then
         publishLoginFailed("The selected account is no longer available.", { accountKey: accountKey, source: source })
@@ -389,8 +384,7 @@ sub clearSavedSession()
 
     m.log.write("clearSavedSession")
 
-    accountKey = Format.SafeString(m.savedSession.accountKey, "")
-    if accountKey <> "" then AuthStore.RemoveToken(accountKey)
+    if m.savedSession.accountKey <> "" then AuthStore.RemoveToken(m.savedSession.accountKey)
     if m.savedSession <> invalid then m.savedSession.token = ""
     m.top.savedSession = m.savedSession
 end sub
@@ -479,14 +473,12 @@ sub handleAuthError(response as object, action as string)
     else if m.authState.isResumingSession = true then
         m.authState.isResumingSession = false
         if response.authExpired = true then
-            server = Format.SafeString(m.savedSession.server, "")
-            username = Format.SafeString(m.savedSession.username, "")
             clearSavedSession()
             m.top.sessionExpired = {
                 message: "Your saved session expired. Please sign in again."
-                server: server
-                username: username
-                accountKey: Format.SafeString(m.savedSession.accountKey, "")
+                server: m.savedSession.server
+                username: m.savedSession.username
+                accountKey: m.savedSession.accountKey
                 clearRuntimeSession: true
             }
         else
@@ -532,7 +524,7 @@ sub onLogoutApiResponse(event as object)
     task = event.getRoSGNode()
     response = event.getData()
     if response <> invalid and response.ok <> true then
-        m.log.write("Logout revocation failed: " + Format.SafeString(response.errorMessage, "Unknown error."))
+        m.log.write("Logout revocation failed: " + Strings.ToString(response.errorMessage, "Unknown error."))
     end if
     for i = m.authState.logoutTasks.Count() - 1 to 0 step -1
         if m.authState.logoutTasks[i].isSameNode(task) then
@@ -563,9 +555,9 @@ function buildAuthenticatedSession(response as object) as object
     server = response.server
 
     if payload <> invalid and payload.User <> invalid then
-        username = Format.SafeString(payload.User.Name, "")
+        username = Strings.ToString(payload.User.Name)
         userId = payload.User.Id
-        primaryImageTag = Format.SafeString(payload.User.PrimaryImageTag, "")
+        primaryImageTag = Strings.ToString(payload.User.PrimaryImageTag)
         if payload.User.Configuration <> invalid then
             if GetInterface(payload.User.Configuration.LatestItemsExcludes, "ifArray") <> invalid then
                 homePreferences.latestItemsExcludes = payload.User.Configuration.LatestItemsExcludes
@@ -622,8 +614,8 @@ sub publishLoginFailed(message as string, context = invalid as dynamic)
         message: message
     }
     if context <> invalid then
-        result.accountKey = Format.SafeString(context.accountKey, "")
-        result.source = Format.SafeString(context.source, "")
+        result.accountKey = context.accountKey
+        result.source = context.source
     end if
     m.top.loginFailed = result
 end sub

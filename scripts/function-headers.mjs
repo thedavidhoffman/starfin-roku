@@ -22,11 +22,11 @@ export function checkFunctionHeaders(text, file) {
     const expected = [rule, `${indent}' ${headerName}`, rule];
     let headerEnd = index;
     if (!matchesHeader(lines, headerEnd, expected) && lines[index - 1] === rule) {
-      // An optional example section sits between the header and its closing separator.
+      // Optional documentation sits between the header and its closing separator.
       let cursor = index - 2;
       while (cursor >= 0 && lines[cursor] !== rule &&
         (lines[cursor] === `${indent}'` || lines[cursor].startsWith(`${indent}' `))) cursor--;
-      if (cursor < index - 2 && lines[cursor + 1].startsWith(`${indent}' Example:`)) {
+      if (cursor < index - 2) {
         headerEnd = cursor + 1;
       }
     }

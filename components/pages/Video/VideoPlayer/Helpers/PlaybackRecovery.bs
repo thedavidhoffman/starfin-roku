@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 ' initPlaybackRecovery
 '-------------------------------------------------------------------------------
@@ -47,7 +48,7 @@ sub resetPlaybackRecovery(request = invalid as dynamic)
     startPosition = 0
     if request <> invalid then
         mode = getRecoveryRequestMode(request)
-        itemId = Format.SafeString(request.itemId, "")
+        itemId = Strings.ToString(request.itemId)
         startPosition = PlaybackProgress.TicksToSeconds(request.startPositionTicks)
     end if
 
@@ -243,7 +244,7 @@ function handlePrematurePlaybackFinish() as boolean
     m.recovery.lastSafePosition = position
     m.playback.prematureFinish = true
     m.playback.position = position
-    detail = "position=" + Format.SafeString(position, "") + " runtime=" + Format.SafeString(duration, "")
+    detail = "position=" + Strings.ToString(position) + " runtime=" + Strings.ToString(duration)
     m.log.write("Playback ended prematurely " + detail)
     reportPlaystateStop()
     emitPlaybackProgress(false)
@@ -259,7 +260,7 @@ end function
 function handlePlaybackRecoveryFailure(reason as string, detail as string) as boolean
     request = m.pendingPlaybackRequest
     if request = invalid then request = getAcceptedOrPendingPlaybackRequest()
-    if request = invalid or Format.SafeString(request.itemId, "") = "" then return false
+    if request = invalid or Strings.ToString(request.itemId) = "" then return false
 
     nextMode = ""
     attemptKind = ""
@@ -293,7 +294,7 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
 
     failurePhase = "startup"
     if m.recovery.hasEverPlayed then failurePhase = "runtime"
-    m.log.write("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + Format.SafeString(m.recovery.lastSafePosition, ""))
+    m.log.write("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + Strings.ToString(m.recovery.lastSafePosition))
     restartRequest = buildStreamRestartPlayRequest()
     if restartRequest = invalid then return false
 
@@ -317,8 +318,8 @@ end function
 '-------------------------------------------------------------------------------
 function getRecoveryPlayMethod(request as object) as string
     if m.activePlayback = invalid then return ""
-    if Format.SafeString(m.activePlayback.session.itemId, "") <> Format.SafeString(request.itemId, "") then return ""
-    return LCase(Format.SafeString(m.activePlayback.playMethod, ""))
+    if m.activePlayback.session.itemId <> Strings.ToString(request.itemId) then return ""
+    return LCase(m.activePlayback.playMethod)
 end function
 
 '-------------------------------------------------------------------------------

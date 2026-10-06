@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 ' loadSavedVideoLibraryViewState
 '-------------------------------------------------------------------------------
@@ -5,7 +6,7 @@ function loadSavedVideoLibraryViewState(request as object) as dynamic
     if canPersistVideoLibraryViewState(request) <> true then
         return invalid
     end if
-    return LibraryViewStateStore.Load(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""))
+    return LibraryViewStateStore.Load(Strings.ToString(request.accountKey), Strings.ToString(request.libraryId))
 end function
 
 '-------------------------------------------------------------------------------
@@ -15,12 +16,12 @@ function canPersistVideoLibraryViewState(request as dynamic) as boolean
     if request = invalid then
         return false
     end if
-    collectionType = LCase(Format.SafeString(request.collectionType, ""))
+    collectionType = LCase(Strings.ToString(request.collectionType))
     if collectionType = "collection" then return false
     if collectionType = "playlist" or collectionType = "playlists" then return false
     if collectionType = "movies" or collectionType = "tvshows" then return true
 
-    includeItemTypes = LCase(Format.SafeString(request.includeItemTypes, ""))
+    includeItemTypes = LCase(Strings.ToString(request.includeItemTypes))
     return includeItemTypes = "movie" or includeItemTypes = "series"
 end function
 
@@ -36,14 +37,14 @@ sub persistVideoLibraryViewState()
     if selection = invalid then
         return
     end if
-    LibraryViewStateStore.Save(Format.SafeString(request.accountKey, ""), Format.SafeString(request.libraryId, ""), {
+    LibraryViewStateStore.Save(Strings.ToString(request.accountKey), Strings.ToString(request.libraryId), {
         optionKey: LibraryBrowse.NormalizeVideoOption(m.pageState.selectedSortKey)
-        sortKey: Format.SafeString(selection.sortKey, LibraryBrowse.SortKey.Title)
+        sortKey: Strings.ToString(selection.sortKey, LibraryBrowse.SortKey.Title)
         sortOrder: LibraryBrowse.NormalizeSortOrder(selection.sortOrder)
         selectedDecade: m.pageState.filterSelection.decade
         selectedGenre: m.pageState.filterSelection.genre
-        libraryTitle: Format.SafeString(request.title, "")
-        collectionType: Format.SafeString(request.collectionType, "")
+        libraryTitle: Strings.ToString(request.title)
+        collectionType: Strings.ToString(request.collectionType)
     })
 end sub
 
@@ -58,7 +59,7 @@ sub applySavedVideoLibraryViewState(request as object, state as object)
         selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Favorites, LibraryBrowse.SortKey.Title, "Favorites", sortOrder)
     else if optionKey = LibraryBrowse.Option.Decade or optionKey = LibraryBrowse.Option.Genre then
         m.pageState.filterSelection.decade = Number.ToInteger(state.selectedDecade, -1)
-        m.pageState.filterSelection.genre = Format.SafeString(state.selectedGenre, "")
+        m.pageState.filterSelection.genre = Strings.ToString(state.selectedGenre)
         selection = LibraryBrowse.CreateSortSelection(optionKey, LibraryBrowse.SortKey.Title, optionKey, sortOrder)
     else if optionKey = LibraryBrowse.Option.ReleaseDate or optionKey = LibraryBrowse.Option.DateAdded or optionKey = LibraryBrowse.Option.Title then
         selection = buildSortSelection(optionKey, sortOrder)
@@ -67,7 +68,7 @@ sub applySavedVideoLibraryViewState(request as object, state as object)
     end if
 
     commitVideoLibraryBrowseState(selection)
-    request.sortBy = Format.SafeString(selection.sortKey, LibraryBrowse.SortKey.Title)
+    request.sortBy = selection.sortKey
     request.sortOrder = LibraryBrowse.NormalizeSortOrder(selection.sortOrder)
 end sub
 
@@ -121,7 +122,7 @@ sub onFilterButtonRowSelected()
     if selected = invalid then
         return
     end if
-    filterType = Format.SafeString(selected.type, "")
+    filterType = Strings.ToString(selected.type)
     if filterType = LibraryBrowse.Option.Decade then
         selectedDecade = Number.ToInteger(selected.value, -1)
         if selectedDecade = m.pageState.filterSelection.decade then
@@ -131,7 +132,7 @@ sub onFilterButtonRowSelected()
         m.pageState.filterSelection.decade = selectedDecade
         m.filterButtonRow.selectedValue = m.pageState.filterSelection.decade.ToStr()
     else if filterType = LibraryBrowse.Option.Genre then
-        selectedGenre = Format.SafeString(selected.value, "")
+        selectedGenre = Strings.ToString(selected.value)
         if selectedGenre = m.pageState.filterSelection.genre then
             m.filterButtonRow.setFocus(true)
             return
@@ -168,9 +169,9 @@ sub updateTitleLabel(itemCount = invalid as dynamic)
     request = m.pageState.request
     title = "Library"
     if request <> invalid then
-        title = Format.SafeString(request.title, "Library")
+        title = Strings.ToString(request.title, "Library")
     end if
-    startsWith = Format.SafeString(m.pageState.letterFilter.selected, "ALL")
+    startsWith = m.pageState.letterFilter.selected
     if startsWith <> "" and startsWith <> "ALL" then
         title = title + " (" + startsWith + ")"
     end if
@@ -394,10 +395,10 @@ sub applySortSelection(selection as object)
     if selection = invalid then return
 
     selection = resetSortOrder(selection)
-    selectedSortKey = Format.SafeString(selection.optionKey, "")
+    selectedSortKey = Strings.ToString(selection.optionKey)
     if selectedSortKey = "" then return
 
-    browseOptionChanged = selectedSortKey <> Format.SafeString(m.pageState.selectedSortKey, "")
+    browseOptionChanged = selectedSortKey <> m.pageState.selectedSortKey
     if browseOptionChanged then
         closeLetterGrid(false)
         m.pageState.letterFilter.selected = "ALL"
@@ -411,16 +412,16 @@ sub applySortSelection(selection as object)
         selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Favorites, LibraryBrowse.SortKey.Title, "Favorites")
         filterRowAction = "hide"
     else if selectedSortKey = LibraryBrowse.Option.Decade then
-        if Format.SafeString(m.pageState.selectedSortKey, "") = LibraryBrowse.Option.Decade then return
+        if m.pageState.selectedSortKey = LibraryBrowse.Option.Decade then return
 
-        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Decade, LibraryBrowse.SortKey.Title, Format.SafeString(selection.label, "Decade"))
+        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Decade, LibraryBrowse.SortKey.Title, Strings.ToString(selection.label, "Decade"))
         m.pageState.filterSelection.decade = LibraryBrowse.ResolveDecade(m.pageState.filterOptions.decadeOptions, m.pageState.filterSelection.decade)
         filterRowAction = LibraryBrowse.Option.Decade
         reloadTarget = "filter"
     else if selectedSortKey = LibraryBrowse.Option.Genre then
-        if Format.SafeString(m.pageState.selectedSortKey, "") = LibraryBrowse.Option.Genre then return
+        if m.pageState.selectedSortKey = LibraryBrowse.Option.Genre then return
 
-        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Genre, LibraryBrowse.SortKey.Title, Format.SafeString(selection.label, "Genre"))
+        selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Genre, LibraryBrowse.SortKey.Title, Strings.ToString(selection.label, "Genre"))
         m.pageState.filterSelection.genre = LibraryBrowse.ResolveGenre(m.pageState.filterOptions.genreOptions, m.pageState.filterSelection.genre)
         filterRowAction = LibraryBrowse.Option.Genre
         reloadTarget = "filter"
@@ -428,7 +429,7 @@ sub applySortSelection(selection as object)
         if LibraryBrowse.IsDecadeActive(m.pageState.activeFilterType) or LibraryBrowse.IsGenreActive(m.pageState.activeFilterType) then filterRowAction = "hide"
         if selectedSortKey = m.pageState.selectedSortKey then
             if m.pageState.selectedSort = invalid then return
-            if Format.SafeString(m.pageState.selectedSort.sortOrder, LibraryBrowse.SortOrder.Ascending) <> LibraryBrowse.SortOrder.Descending then return
+            if Strings.ToString(m.pageState.selectedSort.sortOrder, LibraryBrowse.SortOrder.Ascending) <> LibraryBrowse.SortOrder.Descending then return
 
             current = m.pageState.selectedSort
             selection = LibraryBrowse.CreateSortSelection(current.optionKey, current.sortKey, current.label)
@@ -568,7 +569,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getVideoLibraryId() as string
     if m.pageState.request = invalid then return ""
-    return Format.SafeString(m.pageState.request.libraryId, "")
+    return Strings.ToString(m.pageState.request.libraryId)
 end function
 
 '-------------------------------------------------------------------------------
@@ -591,7 +592,7 @@ function applySortOrderSelection(selection as object) as boolean
         return false
     end if
     sortOrder = LibraryBrowse.NormalizeSortOrder(selection.sortOrder)
-    if Format.SafeString(m.pageState.selectedSort.sortOrder, LibraryBrowse.SortOrder.Ascending) = sortOrder then
+    if Strings.ToString(m.pageState.selectedSort.sortOrder, LibraryBrowse.SortOrder.Ascending) = sortOrder then
         return false
     end if
     current = m.pageState.selectedSort
@@ -610,11 +611,11 @@ end function
 function resetSortOrder(selection as object) as object
     if selection = invalid then return selection
 
-    sortKey = Format.SafeString(selection.sortKey, "")
+    sortKey = Strings.ToString(selection.sortKey)
     if sortKey = "" then return selection
 
-    optionKey = Format.SafeString(selection.optionKey, "")
-    label = Format.SafeString(selection.label, optionKey)
+    optionKey = Strings.ToString(selection.optionKey)
+    label = Strings.ToString(selection.label, optionKey)
     return LibraryBrowse.CreateSortSelection(optionKey, sortKey, label)
 end function
 
@@ -629,13 +630,13 @@ sub reloadVideoLibraryForSort(refocusTarget = invalid as dynamic)
     if m.pageState.selectedSort = invalid then
         return
     end if
-    if Format.SafeString(m.pageState.selectedSort.sortKey, "") = "" then
+    if Strings.ToString(m.pageState.selectedSort.sortKey) = "" then
         return
     end if
     cancelMusicVideoRandomPlayback()
     m.filterRefreshTimer.control = TimerControl.Command.Stop
     LibraryBrowseRefresh.Cancel(m.pageState.filterRefresh)
-    request.sortBy = Format.SafeString(m.pageState.selectedSort.sortKey, LibraryBrowse.SortKey.Title)
+    request.sortBy = Strings.ToString(m.pageState.selectedSort.sortKey, LibraryBrowse.SortKey.Title)
     request.sortOrder = LibraryBrowse.NormalizeSortOrder(m.pageState.selectedSort.sortOrder)
     m.pageState.request = request
     AsyncLifecycle.Begin(m.pageState.lifecycle, request.libraryId)
@@ -664,14 +665,14 @@ end sub
 function isFavoriteBrowseActive() as boolean
     if m.pageState.selectedSort = invalid then return false
 
-    return Format.SafeString(m.pageState.selectedSort.optionKey, "") = LibraryBrowse.Option.Favorites
+    return Strings.ToString(m.pageState.selectedSort.optionKey) = LibraryBrowse.Option.Favorites
 end function
 
 '-------------------------------------------------------------------------------
 ' buildSortSelection
 '-------------------------------------------------------------------------------
 function buildSortSelection(sortKey as string, sortOrder as string) as object
-    normalizedSortKey = Format.SafeString(sortKey, LibraryBrowse.SortKey.Title)
+    normalizedSortKey = sortKey
     if normalizedSortKey = "Random" then
         normalizedSortKey = LibraryBrowse.SortKey.Title
     end if

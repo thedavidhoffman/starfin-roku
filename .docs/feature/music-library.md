@@ -48,6 +48,22 @@ server-reported item count before every page has loaded. The server may filter o
 sort by fields that are not included in the returned DTO, so decade filtering
 does not require returning the album date fields.
 
+## Album artist labels
+
+Album cards resolve the artist label from `AlbumArtist`, then `Artist`, then
+the joined `Name` fields of `AlbumArtists` artist objects, then the strings in
+`Artists`. Empty names are ignored, and no usable name displays `Unknown Artist`.
+String entries in `AlbumArtists` remain supported. Initial and appended album
+pages share this rendering path.
+
+`Strings.GetJoinedText` trims and joins values that support `ToStr`, omitting
+invalid and blank entries. Unsupported entries use empty fallback text through
+`Strings.ToString`, without conversion logging. Artist-object interpretation
+stays in MusicLibrary.
+Malformed or missing names can use the next fallback without interrupting the page.
+Regression tests cover fallback objects, missing names, precedence, and both
+initial and appended album rendering.
+
 ## Filter refresh and recovery
 
 Decade and genre changes retain the last committed grid while a debounced page

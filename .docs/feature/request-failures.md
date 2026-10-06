@@ -152,7 +152,7 @@ request. No runtime pass result is claimed for this batch.
 
 ### Exception-boundary review follow-up
 
-Recently Added no longer repeats `Format.SafeString` in its catch. Array and
+Recently Added no longer repeats `Strings.ToString` in its catch. Array and
 associative-array identifiers cannot prevent publication of the failure response;
 separate regression tests cover both cases.
 

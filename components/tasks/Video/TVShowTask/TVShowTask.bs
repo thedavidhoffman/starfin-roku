@@ -33,7 +33,7 @@ end sub
 function getResponse(request as dynamic) as object
     validationError = TaskRequest.ValidateRequest(request, "tvShow", ["itemId"])
     if validationError <> invalid then
-        if request <> invalid then validationError.AddReplace("itemId", Format.SafeString(request.itemId, ""))
+        if request <> invalid then validationError.AddReplace("itemId", Strings.ToString(request.itemId))
         return validationError
     end if
 
@@ -43,14 +43,14 @@ function getResponse(request as dynamic) as object
         seriesResult = loadSeries(request)
         if seriesResult.ok <> true then
             seriesResult.AddReplace("action", "tvShow")
-            seriesResult.AddReplace("itemId", Format.SafeString(request.itemId, ""))
+            seriesResult.AddReplace("itemId", Strings.ToString(request.itemId))
             return seriesResult
         end if
 
         seasonsResult = loadSeasons(request)
         if seasonsResult.ok <> true then
             seasonsResult.AddReplace("action", "tvShow")
-            seasonsResult.AddReplace("itemId", Format.SafeString(request.itemId, ""))
+            seasonsResult.AddReplace("itemId", Strings.ToString(request.itemId))
             return seasonsResult
         end if
     end if
@@ -65,7 +65,7 @@ function getResponse(request as dynamic) as object
             resumeResult.itemId = request.itemId
             return resumeResult
         end if
-        m.log.write("Unable to load series resume item: " + Format.SafeString(resumeResult.errorMessage, "unknown error"))
+        m.log.write("Unable to load series resume item: " + Strings.ToString(resumeResult.errorMessage, "unknown error"))
     end if
 
     upNextItem = invalid
@@ -78,7 +78,7 @@ function getResponse(request as dynamic) as object
             upNextResult.itemId = request.itemId
             return upNextResult
         end if
-        m.log.write("Unable to load series up-next item: " + Format.SafeString(upNextResult.errorMessage, "unknown error"))
+        m.log.write("Unable to load series up-next item: " + Strings.ToString(upNextResult.errorMessage, "unknown error"))
     end if
 
     playbackItem = upNextItem
@@ -96,7 +96,7 @@ function getResponse(request as dynamic) as object
     return {
         ok: true
         action: "tvShow"
-        itemId: Format.SafeString(request.itemId, "")
+        itemId: Strings.ToString(request.itemId)
         payload: {
             series: seriesResult.data
             seasons: seasonsResult.data
@@ -113,7 +113,7 @@ end function
 '-------------------------------------------------------------------------------
 function loadSeries(request as object) as object
     params = {
-        userId: Format.SafeString(request.userId, "")
+        userId: Strings.ToString(request.userId)
         fields: "Genres,People,Overview,Studios"
         enableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Backdrop, JellyfinImage.Type.Thumb, JellyfinImage.Type.Logo])
         imageTypeLimit: 1
@@ -129,8 +129,8 @@ end function
 '-------------------------------------------------------------------------------
 function loadUpNextItem(request as object) as object
     params = {
-        UserId: Format.SafeString(request.userId, "")
-        SeriesId: Format.SafeString(request.itemId, "")
+        UserId: Strings.ToString(request.userId)
+        SeriesId: Strings.ToString(request.itemId)
         EnableRewatching: false
         DisableFirstEpisode: false
         Limit: 1
@@ -148,12 +148,12 @@ end function
 ' loadPlaybackQueue
 '-------------------------------------------------------------------------------
 function loadPlaybackQueue(request as object, episode as object) as dynamic
-    seasonId = Format.SafeString(Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], ""), "")
-    itemId = Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
+    seasonId = Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], "")
+    itemId = Format.FirstNonEmpty([episode.Id], "")
     if seasonId = "" or itemId = "" then return invalid
 
     params = {
-        UserId: Format.SafeString(request.userId, "")
+        UserId: Strings.ToString(request.userId)
         SeasonId: seasonId
         Fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData,People"
     }
@@ -182,7 +182,7 @@ end function
 function buildPlaybackQueueItems(episodes as object, season as object) as object
     queue = []
     for each episode in episodes
-        episodeId = Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
+        episodeId = Format.FirstNonEmpty([episode.Id], "")
         if episodeId = "" then continue for
 
         queue.Push({
@@ -201,7 +201,7 @@ end function
 '-------------------------------------------------------------------------------
 function getPlaybackQueueIndex(queue as object, itemId as string) as integer
     for i = 0 to queue.Count() - 1
-        if Format.SafeString(queue[i].itemId, "") = itemId then return i
+        if Strings.ToString(queue[i].itemId) = itemId then return i
     end for
 
     return -1
@@ -212,7 +212,7 @@ end function
 '-------------------------------------------------------------------------------
 function buildSeasonIdentity(episode as object, seasonId as string) as object
     seasonName = Format.FirstNonEmpty([episode.SeasonName], "")
-    if seasonName = "" and episode.ParentIndexNumber <> invalid then seasonName = "Season " + Format.SafeString(episode.ParentIndexNumber, "")
+    if seasonName = "" and episode.ParentIndexNumber <> invalid then seasonName = "Season " + Strings.ToString(episode.ParentIndexNumber)
 
     return {
         Id: seasonId
@@ -225,8 +225,8 @@ end function
 '-------------------------------------------------------------------------------
 function loadResumeItem(request as object) as object
     params = {
-        UserId: Format.SafeString(request.userId, "")
-        ParentId: Format.SafeString(request.itemId, "")
+        UserId: Strings.ToString(request.userId)
+        ParentId: Strings.ToString(request.itemId)
         Recursive: true
         IncludeItemTypes: "Episode"
         Filters: "IsResumable"
@@ -258,7 +258,7 @@ end function
 '-------------------------------------------------------------------------------
 function loadSeasons(request as object) as object
     params = {
-        userId: Format.SafeString(request.userId, "")
+        userId: Strings.ToString(request.userId)
         enableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Backdrop, JellyfinImage.Type.Thumb])
         imageTypeLimit: 1
         enableTotalRecordCount: false

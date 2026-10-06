@@ -1,4 +1,3 @@
-import "pkg:/source/Format.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
@@ -27,8 +26,8 @@ sub executeRequest()
     requestTimer = CreateObject("roTimespan")
     requestTimer.Mark()
     libraryId = ""
-    if request <> invalid then libraryId = Format.SafeString(request.libraryId, "")
-    if request = invalid or Format.SafeString(request.server, "") = "" or Format.SafeString(request.token, "") = "" or Format.SafeString(request.userId, "") = "" or libraryId = "" then
+    if request <> invalid then libraryId = Strings.ToString(request.libraryId)
+    if request = invalid or Strings.ToString(request.server) = "" or Strings.ToString(request.token) = "" or Strings.ToString(request.userId) = "" or libraryId = "" then
         m.log.error("Invalid artist request libraryId=" + libraryId)
         queryId = -1
         if request <> invalid then queryId = Number.ToInteger(request.queryId, -1)
@@ -37,8 +36,8 @@ sub executeRequest()
     end if
 
     params = {
-        userId: Format.SafeString(request.userId, "")
-        parentId: Format.SafeString(request.libraryId, "")
+        userId: Strings.ToString(request.userId)
+        parentId: Strings.ToString(request.libraryId)
         fields: "SortName,ProviderIds"
         enableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Backdrop, JellyfinImage.Type.Logo])
         imageTypeLimit: 1
@@ -46,7 +45,7 @@ sub executeRequest()
         sortBy: LibraryBrowse.ApiSortBy.Title
         sortOrder: LibraryBrowse.NormalizeSortOrder(request.artistSortOrder)
     }
-    startsWith = Format.SafeString(request.startsWith, "ALL")
+    startsWith = Strings.ToString(request.startsWith, "ALL")
     if startsWith <> "" and startsWith <> "ALL" and startsWith <> "#" then params.AddReplace("nameStartsWith", startsWith)
     pageSize = 100
     startIndex = Number.ToInteger(request.pageStartIndex, 0)
@@ -57,11 +56,11 @@ sub executeRequest()
     else
         response = requestAlbumArtists(request, params)
     end if
-    m.log.write("HTTP page completed libraryId=" + Format.SafeString(request.libraryId, "") + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
+    m.log.write("HTTP page completed libraryId=" + Strings.ToString(request.libraryId) + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
     if response.ok <> true then
-        m.log.error("Artist request failed libraryId=" + Format.SafeString(request.libraryId, "") + " message=" + Format.SafeString(response.errorMessage, ""))
+        m.log.error("Artist request failed libraryId=" + Strings.ToString(request.libraryId) + " message=" + Strings.ToString(response.errorMessage))
         response.AddReplace("action", "musicArtists")
-        response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        response.AddReplace("libraryId", Strings.ToString(request.libraryId))
         response.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
         m.top.response = response
         return
@@ -72,7 +71,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "musicArtists"
-        libraryId: Format.SafeString(request.libraryId, "")
+        libraryId: Strings.ToString(request.libraryId)
         queryId: Number.ToInteger(request.queryId, -1)
         payload: response.data
         startIndex: startIndex
@@ -86,7 +85,7 @@ end sub
 ' loadNonAlphabeticArtistPage
 '-------------------------------------------------------------------------------
 function loadNonAlphabeticArtistPage(request as object, params as object, startIndex as integer, pageSize as integer) as object
-    cacheKey = Format.SafeString(request.libraryId, "") + "|" + Format.SafeString(request.artistSortOrder, "")
+    cacheKey = Strings.ToString(request.libraryId) + "|" + Strings.ToString(request.artistSortOrder)
     if startIndex = 0 or m.nonAlphabeticCache = invalid or m.nonAlphabeticCache.key <> cacheKey then
         baseParams = {}
         for each key in params
@@ -104,7 +103,7 @@ function loadNonAlphabeticArtistPage(request as object, params as object, startI
 
         items = getArtistItems(lowerResponse.data)
         for each item in getArtistItems(upperResponse.data)
-            name = UCase(Format.SafeString(item.SortName, Format.SafeString(item.Name, "")))
+            name = UCase(Strings.ToString(item.SortName, Strings.ToString(item.Name)))
             if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
         end for
         items = LetterBrowse.SortItems(items, request.artistSortOrder)

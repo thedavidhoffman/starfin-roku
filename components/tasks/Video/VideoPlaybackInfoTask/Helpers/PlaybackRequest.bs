@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 ' buildPlaybackInfoBody
 '-------------------------------------------------------------------------------
@@ -28,7 +29,7 @@ end function
 function isLiveTvPlaybackRequest(request as dynamic) as boolean
     if request = invalid or request.item = invalid then return false
 
-    itemType = LCase(Format.SafeString(request.item.Type, ""))
+    itemType = LCase(Strings.ToString(request.item.Type))
     return itemType = "tvchannel" or itemType = "livetvchannel"
 end function
 
@@ -37,9 +38,9 @@ end function
 '-------------------------------------------------------------------------------
 function isHttpDirectMediaSource(mediaSource as dynamic) as boolean
     if mediaSource = invalid then return false
-    if LCase(Format.SafeString(mediaSource.Protocol, "")) <> "http" then return false
+    if LCase(Strings.ToString(mediaSource.Protocol)) <> "http" then return false
 
-    return Format.SafeString(mediaSource.Path, "") <> ""
+    return Strings.ToString(mediaSource.Path) <> ""
 end function
 
 '-------------------------------------------------------------------------------
@@ -79,7 +80,7 @@ function negotiatePlaybackInfo(request as object) as object
     end if
     bitrateLimits = DeviceCapabilities.GetBitrateLimits()
     params = {
-        UserId: Format.SafeString(request.userId, "")
+        UserId: Strings.ToString(request.userId)
         StartTimeTicks: getStartPositionTicks(request)
         IsPlayback: true
         AutoOpenLiveStream: true
@@ -94,11 +95,11 @@ function negotiatePlaybackInfo(request as object) as object
 
     if (selectedPlaybackMode = PlaybackMode.Mode.Automatic or selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux) and forceTranscode = true then logForcedTranscodeReason(requestedAudioStream)
     if (selectedPlaybackMode = PlaybackMode.Mode.Automatic or selectedPlaybackMode = PlaybackMode.Mode.AutomaticNoRemux) and forceStreamSelection = true then logForcedStreamSelection(requestedAudioStream)
-    m.log.write("Device profile display cap width=" + Format.SafeString(displaySize.width, "") + " height=" + Format.SafeString(displaySize.height, "") + " source=" + Format.SafeString(displaySize.source, ""))
-    m.log.write("Requested streams audioStreamIndex=" + Format.SafeString(requestedAudioStreamIndex, "") + " subtitleStreamIndex=" + Format.SafeString(requestedSubtitleStreamIndex, ""))
+    m.log.write("Device profile display cap width=" + Strings.ToString(displaySize.width) + " height=" + Strings.ToString(displaySize.height) + " source=" + Strings.ToString(displaySize.source))
+    m.log.write("Requested streams audioStreamIndex=" + Strings.ToString(requestedAudioStreamIndex) + " subtitleStreamIndex=" + Strings.ToString(requestedSubtitleStreamIndex))
     m.log.write("Requested video mode=" + selectedPlaybackMode)
     if requestedMediaSourceId <> "" then params.MediaSourceId = requestedMediaSourceId
-    if Format.SafeString(request.liveStreamId, "") <> "" then
+    if Strings.ToString(request.liveStreamId) <> "" then
         params.LiveStreamId = request.liveStreamId
         params.AutoOpenLiveStream = false
     end if
@@ -137,9 +138,9 @@ end function
 '-------------------------------------------------------------------------------
 sub failPlaybackNegotiation(request as object, failure as object, mediaSource as dynamic)
     liveStreamId = ""
-    if mediaSource <> invalid then liveStreamId = Format.SafeString(mediaSource.LiveStreamId, "")
+    if mediaSource <> invalid then liveStreamId = Strings.ToString(mediaSource.LiveStreamId)
     ' Release only a stream acquired by this negotiation, before recovery can retry.
-    if liveStreamId <> "" and liveStreamId <> Format.SafeString(request.liveStreamId, "") then
+    if liveStreamId <> "" and liveStreamId <> Strings.ToString(request.liveStreamId) then
         closeUrl = request.server + "/LiveStreams/Close" + Url.BuildQueryString({ LiveStreamId: liveStreamId })
         result = HttpClient.Request(closeUrl, "POST", invalid, "", JellyfinAuth.BuildTokenHeaders(request.token), true, 5000)
         if result.ok <> true then m.log.error("Unable to close the live stream after failed playback negotiation.")

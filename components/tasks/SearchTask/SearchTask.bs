@@ -1,4 +1,3 @@
-import "pkg:/source/Format.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
@@ -23,7 +22,7 @@ sub executeRequest()
     request = m.top.request
     validationError = validateRequest(request)
     if validationError <> invalid then
-        if request <> invalid then validationError.AddReplace("query", Strings.Trim(Format.SafeString(request.query, "")))
+        if request <> invalid then validationError.AddReplace("query", Strings.Trim(request.query))
         m.top.response = validationError
         return
     end if
@@ -49,7 +48,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "search"
-        query: Strings.Trim(Format.SafeString(request.query, ""))
+        query: Strings.Trim(request.query)
         payload: {
             moviesAndSeries: getPayloadItems(moviesAndSeriesResult.data)
             episodes: getPayloadItems(episodesResult.data)
@@ -63,8 +62,8 @@ end sub
 '-------------------------------------------------------------------------------
 function searchItems(request as object, includeItemTypes as string, fields as string) as object
     params = {
-        UserId: Format.SafeString(request.userId, "")
-        SearchTerm: Strings.Trim(Format.SafeString(request.query, ""))
+        UserId: Strings.ToString(request.userId)
+        SearchTerm: Strings.Trim(request.query)
         IncludeItemTypes: includeItemTypes
         Recursive: true
         Limit: 40
@@ -74,7 +73,7 @@ function searchItems(request as object, includeItemTypes as string, fields as st
         EnableTotalRecordCount: false
     }
 
-    requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+    requestUrl = request.server + "/Users/" + Strings.ToString(request.userId) + "/Items" + Url.BuildQueryString(params)
     return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
 end function
 
@@ -83,8 +82,8 @@ end function
 '-------------------------------------------------------------------------------
 function searchPeople(request as object) as object
     params = {
-        UserId: Format.SafeString(request.userId, "")
-        SearchTerm: Strings.Trim(Format.SafeString(request.query, ""))
+        UserId: Strings.ToString(request.userId)
+        SearchTerm: Strings.Trim(request.query)
         Limit: 40
         ImageTypeLimit: 1
         EnableTotalRecordCount: false
@@ -101,7 +100,7 @@ function validateRequest(request as dynamic) as dynamic
     validationError = TaskRequest.ValidateRequest(request, "search", ["userId"])
     if validationError <> invalid then return validationError
 
-    if Strings.Trim(Format.SafeString(request.query, "")) = "" then return { ok: false, action: "search", errorMessage: "Enter a search term." }
+    if Strings.Trim(request.query) = "" then return { ok: false, action: "search", errorMessage: "Enter a search term." }
 
     return invalid
 end function
@@ -110,10 +109,10 @@ end function
 ' withAction
 '-------------------------------------------------------------------------------
 function withAction(response as object, request as object) as object
-    if response = invalid then return { ok: false, action: "search", query: Strings.Trim(Format.SafeString(request.query, "")), errorMessage: "Search failed." }
+    if response = invalid then return { ok: false, action: "search", query: Strings.Trim(request.query), errorMessage: "Search failed." }
 
     response.AddReplace("action", "search")
-    response.AddReplace("query", Strings.Trim(Format.SafeString(request.query, "")))
+    response.AddReplace("query", Strings.Trim(request.query))
     return response
 end function
 

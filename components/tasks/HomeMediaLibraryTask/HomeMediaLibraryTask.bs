@@ -2,7 +2,6 @@ import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Encode.bs"
-import "pkg:/source/Format.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/Url.bs"
@@ -24,7 +23,7 @@ sub executeRequest()
     request = m.top.request
     validationError = TaskRequest.ValidateRequest(request, "homeMediaLibrary", ["userId", "parentId"])
     if validationError <> invalid then
-        if request <> invalid then validationError.AddReplace("parentId", Format.SafeString(request.parentId, ""))
+        if request <> invalid then validationError.AddReplace("parentId", Strings.ToString(request.parentId))
         m.top.response = validationError
         return
     end if
@@ -33,11 +32,11 @@ sub executeRequest()
     pageSize = 100
     params = buildHomeMediaParams(request, startIndex, pageSize)
 
-    requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+    requestUrl = request.server + "/Users/" + Strings.ToString(request.userId) + "/Items" + Url.BuildQueryString(params)
     httpResponse = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
     if httpResponse.ok <> true then
         httpResponse.AddReplace("action", "homeMediaLibrary")
-        httpResponse.AddReplace("parentId", Format.SafeString(request.parentId, ""))
+        httpResponse.AddReplace("parentId", Strings.ToString(request.parentId))
         httpResponse.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
         m.top.response = httpResponse
         return
@@ -48,7 +47,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "homeMediaLibrary"
-        parentId: Format.SafeString(request.parentId, "")
+        parentId: Strings.ToString(request.parentId)
         queryId: Number.ToInteger(request.queryId, -1)
         payload: httpResponse.data
         startIndex: startIndex
@@ -63,15 +62,15 @@ end sub
 '-------------------------------------------------------------------------------
 function buildHomeMediaParams(request as object, startIndex as integer, pageSize as integer) as object
     params = {
-        userId: Format.SafeString(request.userId, "")
-        parentId: Format.SafeString(request.parentId, "")
+        userId: Strings.ToString(request.userId)
+        parentId: Strings.ToString(request.parentId)
         recursive: request.recursive = true
-        includeItemTypes: Format.SafeString(request.includeItemTypes, "Folder,PhotoAlbum,Photo,Video")
+        includeItemTypes: Strings.ToString(request.includeItemTypes, "Folder,PhotoAlbum,Photo,Video")
         fields: "SortName,DateCreated,PremiereDate,ProductionYear,Overview,OfficialRating,ChildCount"
         enableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Thumb])
         imageTypeLimit: 1
         enableTotalRecordCount: true
-        sortBy: Format.SafeString(request.sortBy, "SortName")
+        sortBy: Strings.ToString(request.sortBy, "SortName")
         sortOrder: normalizeSortOrder(request.sortOrder)
         startIndex: startIndex
         limit: pageSize
@@ -84,7 +83,7 @@ end function
 ' normalizeSortOrder
 '-------------------------------------------------------------------------------
 function normalizeSortOrder(value as dynamic) as string
-    if Format.SafeString(value, "") = "Descending" then return "Descending"
+    if Strings.ToString(value) = "Descending" then return "Descending"
     return "Ascending"
 end function
 

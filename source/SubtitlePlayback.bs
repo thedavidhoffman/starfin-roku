@@ -1,3 +1,5 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
 import "pkg:/source/Url.bs"
 
 namespace SubtitlePlayback
@@ -6,7 +8,7 @@ namespace SubtitlePlayback
     ' SubtitlePlayback.NormalizeDeliveryMethod
     '---------------------------------------------------------------------------
     function NormalizeDeliveryMethod(value as dynamic) as string
-        method = LCase(Format.SafeString(value, "none"))
+        method = LCase(Strings.ToString(value, "none"))
         if method = "external" then return "external"
         if method = "encode" then return "encode"
         return "none"
@@ -27,17 +29,17 @@ namespace SubtitlePlayback
     function BuildExternalTrack(playbackInfo as dynamic, streamIndex as integer, server as string) as dynamic
         stream = SubtitlePlayback.__GetSelectedStream(playbackInfo, streamIndex)
         if stream = invalid then return invalid
-        if LCase(Format.SafeString(stream.DeliveryMethod, "")) <> "external" then return invalid
+        if LCase(Strings.ToString(stream.DeliveryMethod)) <> "external" then return invalid
 
         deliveryUrl = Url.Resolve(server, stream.DeliveryUrl)
         if deliveryUrl = "" then return invalid
 
         return {
             index: streamIndex
-            codec: Format.SafeString(stream.Codec, "")
+            codec: Strings.ToString(stream.Codec)
             deliveryUrl: deliveryUrl
             track: {
-                Language: Format.SafeString(stream.Language, "")
+                Language: Strings.ToString(stream.Language)
                 Description: Format.FirstNonEmpty([stream.DisplayTitle, stream.Title], "")
                 TrackName: deliveryUrl
             }
@@ -53,7 +55,7 @@ namespace SubtitlePlayback
         mediaSource = playbackInfo.MediaSources[0]
         if mediaSource = invalid or mediaSource.MediaStreams = invalid then return tracks
         for each stream in mediaSource.MediaStreams
-            if stream <> invalid and LCase(Format.SafeString(stream.Type, "")) = "subtitle" then
+            if stream <> invalid and LCase(Strings.ToString(stream.Type)) = "subtitle" then
                 track = SubtitlePlayback.BuildExternalTrack(playbackInfo, Number.ToInteger(stream.Index, SubtitleSelection.None), server)
                 if track <> invalid then tracks.Push(track)
             end if
@@ -78,7 +80,7 @@ namespace SubtitlePlayback
     function GetDeliveryMethod(playbackInfo as dynamic, streamIndex as integer) as string
         stream = SubtitlePlayback.__GetSelectedStream(playbackInfo, streamIndex)
         if stream = invalid then return ""
-        return LCase(Format.SafeString(stream.DeliveryMethod, ""))
+        return LCase(Strings.ToString(stream.DeliveryMethod))
     end function
 
     '---------------------------------------------------------------------------
@@ -89,7 +91,7 @@ namespace SubtitlePlayback
 
         for each availableTrack in availableTracks
             if availableTrack = invalid then continue for
-            trackName = Format.SafeString(availableTrack.TrackName, "")
+            trackName = Strings.ToString(availableTrack.TrackName)
             if Instr(1, trackName, deliveryUrl) > 0 then return trackName
         end for
 
@@ -106,7 +108,7 @@ namespace SubtitlePlayback
 
         for each stream in mediaSource.MediaStreams
             if stream = invalid then continue for
-            if LCase(Format.SafeString(stream.Type, "")) <> "subtitle" then continue for
+            if LCase(Strings.ToString(stream.Type)) <> "subtitle" then continue for
             if Number.ToInteger(stream.Index, -1) = streamIndex then return stream
         end for
 

@@ -1,10 +1,10 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/LatestRequestLifecycle.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/PlaybackRequest.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/MediaControl.bs"
-import "pkg:/source/Format.bs"
 import "pkg:/source/Logger.bs"
 
 '-------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub playTheme(request as object)
     if request = invalid then return
-    if Format.SafeString(request.itemId, "") = "" then return
+    if Strings.ToString(request.itemId) = "" then return
 
     previous = m.themeAudioState.request
     if previous <> invalid then
@@ -68,7 +68,7 @@ sub playTheme(request as object)
     m.audio.content = invalid
     capturedRequest = PlaybackRequest.Create(request)
     m.themeAudioState.request = capturedRequest
-    m.log.write("Resolving theme music playback itemId=" + Format.SafeString(request.itemId, ""))
+    m.log.write("Resolving theme music playback itemId=" + Strings.ToString(request.itemId))
     LatestRequestLifecycle.Queue(m.themeAudioState.lifecycle, capturedRequest, capturedRequest)
     startPendingPlayback()
 end sub
@@ -111,27 +111,27 @@ sub handlePlaybackInfoResponse(response as dynamic)
     if completion.isCurrent <> true then return
 
     if response.ok <> true then
-        m.log.write("Unable to play theme music: " + Format.SafeString(response.errorMessage, "Unknown error."))
+        m.log.write("Unable to play theme music: " + Strings.ToString(response.errorMessage, "Unknown error."))
         return
     end if
 
     request = completion.context
     content = JellyfinAuth.CreateContent(request.server, response.streamUrl, request.token, request.userId)
-    content.streamFormat = Format.SafeString(response.streamFormat, "")
-    content.title = Format.SafeString(response.title, "Theme Music")
+    content.streamFormat = response.streamFormat
+    content.title = response.title
     if content.url = "" then return
 
     m.themeAudioState.isActive = true
     m.audio.content = content
     m.audio.control = MediaControl.Command.Play
-    m.log.write("Playing theme music itemId=" + Format.SafeString(response.itemId, "") + " streamFormat=" + content.streamFormat)
+    m.log.write("Playing theme music itemId=" + response.itemId + " streamFormat=" + content.streamFormat)
 end sub
 
 '-------------------------------------------------------------------------------
 ' onAudioStateChanged
 '-------------------------------------------------------------------------------
 sub onAudioStateChanged()
-    state = Format.SafeString(m.audio.state, "")
+    state = m.audio.state
     m.log.write("Theme music audio state changed state=" + state)
     if state = "finished" and m.themeAudioState.isActive = true then
         stopTheme()

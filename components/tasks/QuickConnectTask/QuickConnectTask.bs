@@ -1,5 +1,5 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/Encode.bs"
-import "pkg:/source/Format.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/api/HttpClient.bs"
@@ -22,7 +22,7 @@ sub executeRequest()
         return
     end if
 
-    action = Format.SafeString(request.action, "")
+    action = Strings.ToString(request.action)
     if action = "initiate" then
         m.top.response = initiateQuickConnect(request)
     else if action = "poll" then
@@ -38,7 +38,7 @@ end sub
 ' initiateQuickConnect
 '-------------------------------------------------------------------------------
 function initiateQuickConnect(request as object) as object
-    if Format.SafeString(request.server, "") = "" then return quickConnectError(request, "Enter a Jellyfin server before using Quick Connect.")
+    if Strings.ToString(request.server) = "" then return quickConnectError(request, "Enter a Jellyfin server before using Quick Connect.")
 
     httpRequest = buildInitiateHttpRequest(request.server)
     result = HttpClient.Request(httpRequest.url, httpRequest.method, invalid, httpRequest.body, httpRequest.headers)
@@ -62,7 +62,7 @@ end function
 '-------------------------------------------------------------------------------
 function buildInitiateResponse(request as object, result as object) as object
     if result.ok <> true then return quickConnectHttpError(request, result)
-    if result.data = invalid or Format.SafeString(result.data.Code, "") = "" or Format.SafeString(result.data.Secret, "") = "" then
+    if result.data = invalid or Strings.ToString(result.data.Code) = "" or Strings.ToString(result.data.Secret) = "" then
         return quickConnectError(request, "The server returned an invalid Quick Connect response.")
     end if
 
@@ -79,7 +79,7 @@ end function
 ' pollQuickConnect
 '-------------------------------------------------------------------------------
 function pollQuickConnect(request as object) as object
-    secret = Format.SafeString(request.secret, "")
+    secret = Strings.ToString(request.secret)
     if secret = "" then return quickConnectError(request, "The Quick Connect request is missing its secret.")
 
     httpRequest = buildPollHttpRequest(request.server, secret)
@@ -119,7 +119,7 @@ end function
 ' authenticateQuickConnect
 '-------------------------------------------------------------------------------
 function authenticateQuickConnect(request as object) as object
-    secret = Format.SafeString(request.secret, "")
+    secret = Strings.ToString(request.secret)
     if secret = "" then return quickConnectError(request, "The Quick Connect request is missing its secret.")
 
     httpRequest = buildAuthenticationHttpRequest(request.server, secret)
@@ -144,7 +144,7 @@ end function
 '-------------------------------------------------------------------------------
 function buildAuthenticationResponse(request as object, result as object) as object
     if result.ok <> true then return quickConnectHttpError(request, result)
-    if result.data = invalid or Format.SafeString(result.data.AccessToken, "") = "" or result.data.User = invalid then
+    if result.data = invalid or Strings.ToString(result.data.AccessToken) = "" or result.data.User = invalid then
         return quickConnectError(request, "The server returned an invalid authentication response.")
     end if
 
@@ -164,9 +164,9 @@ function quickConnectHttpError(request as object, result as object) as object
     response = {}
     response.Append(result)
     response.ok = false
-    response.action = Format.SafeString(request.action, "")
+    response.action = Strings.ToString(request.action)
     response.generation = request.generation
-    response.errorMessage = Format.SafeString(result.errorMessage, "Quick Connect failed.")
+    response.errorMessage = Strings.ToString(result.errorMessage, "Quick Connect failed.")
     return response
 end function
 
@@ -176,7 +176,7 @@ end function
 function quickConnectError(request as object, message as string) as object
     return {
         ok: false
-        action: Format.SafeString(request.action, "")
+        action: Strings.ToString(request.action)
         generation: request.generation
         errorMessage: message
     }

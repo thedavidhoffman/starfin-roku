@@ -1,4 +1,3 @@
-import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Encode.bs"
@@ -23,10 +22,10 @@ sub executeRequest()
         return
     end if
 
-    artistId = Strings.Trim(Format.SafeString(request.artistId, ""))
+    artistId = Strings.Trim(request.artistId)
     musicBrainzResult = loadMusicBrainzArtist(artistId)
     if musicBrainzResult.ok <> true then
-        m.top.response = buildErrorResponse(artistId, Format.SafeString(musicBrainzResult.errorMessage, "Unable to load MusicBrainz artist."), musicBrainzResult)
+        m.top.response = buildErrorResponse(artistId, Strings.ToString(musicBrainzResult.errorMessage, "Unable to load MusicBrainz artist."), musicBrainzResult)
         return
     end if
 
@@ -38,12 +37,12 @@ sub executeRequest()
 
     summaryResult = loadWikipediaSummary(wikipediaTarget)
     if summaryResult.ok <> true then
-        m.top.response = buildErrorResponse(artistId, Format.SafeString(summaryResult.errorMessage, "Unable to load Wikipedia overview."), summaryResult)
+        m.top.response = buildErrorResponse(artistId, Strings.ToString(summaryResult.errorMessage, "Unable to load Wikipedia overview."), summaryResult)
         return
     end if
 
     summary = summaryResult.data
-    extract = Format.SafeString(summary.extract, "")
+    extract = Strings.ToString(summary.extract)
     if extract = "" then
         m.top.response = buildErrorResponse(artistId, "Wikipedia did not return an artist overview.")
         return
@@ -53,7 +52,7 @@ sub executeRequest()
         ok: true
         action: "musicArtist"
         artistId: artistId
-        title: Format.SafeString(summary.title, "")
+        title: Strings.ToString(summary.title)
         extract: extract
         wikipediaUrl: getWikipediaPageUrl(summary, wikipediaTarget)
         thumbnailUrl: getWikipediaThumbnailUrl(summary)
@@ -81,8 +80,8 @@ function getWikipediaTarget(artist as dynamic) as dynamic
     for each relation in artist.relations
         if Arrays.IsAssocArray(relation) = false or relation.url = invalid then continue for
 
-        resource = Format.SafeString(relation.url.resource, "")
-        relationType = LCase(Format.SafeString(relation.type, ""))
+        resource = Strings.ToString(relation.url.resource)
+        relationType = LCase(Strings.ToString(relation.type))
         if relationType = "wikipedia" then
             if isEnglishWikipediaUrl(resource) then
                 englishWikipediaUrl = resource
@@ -119,7 +118,7 @@ function loadEnglishWikipediaTargetFromWikidata(wikidataUrl as string) as dynami
     entity = response.data.entities[entityId]
     if entity = invalid or entity.sitelinks = invalid or entity.sitelinks.enwiki = invalid then return invalid
 
-    title = Format.SafeString(entity.sitelinks.enwiki.title, "")
+    title = Strings.ToString(entity.sitelinks.enwiki.title)
     if title = "" then return invalid
 
     return {
@@ -161,8 +160,8 @@ end function
 ' loadWikipediaSummary
 '-------------------------------------------------------------------------------
 function loadWikipediaSummary(target as object) as object
-    language = Format.SafeString(target.language, "en")
-    summaryPath = Format.SafeString(target.summaryPath, "")
+    language = Strings.ToString(target.language, "en")
+    summaryPath = Strings.ToString(target.summaryPath)
     requestUrl = "https://" + language + ".wikipedia.org/api/rest_v1/page/summary/" + summaryPath
     return HttpClient.Request(requestUrl, "GET", invalid, invalid, getExternalApiHeaders())
 end function
@@ -172,11 +171,11 @@ end function
 '-------------------------------------------------------------------------------
 function getWikipediaPageUrl(summary as object, target as object) as string
     if summary.content_urls <> invalid and summary.content_urls.desktop <> invalid then
-        pageUrl = Format.SafeString(summary.content_urls.desktop.page, "")
+        pageUrl = Strings.ToString(summary.content_urls.desktop.page)
         if pageUrl <> "" then return pageUrl
     end if
 
-    return Format.SafeString(target.pageUrl, "")
+    return Strings.ToString(target.pageUrl)
 end function
 
 '-------------------------------------------------------------------------------
@@ -184,7 +183,7 @@ end function
 '-------------------------------------------------------------------------------
 function getWikipediaThumbnailUrl(summary as object) as string
     if summary.thumbnail = invalid then return ""
-    return Format.SafeString(summary.thumbnail.source, "")
+    return Strings.ToString(summary.thumbnail.source)
 end function
 
 '-------------------------------------------------------------------------------
@@ -246,7 +245,7 @@ end function
 function validateRequest(request as dynamic) as dynamic
     if request = invalid then return buildErrorResponse("", "Invalid music artist request.")
 
-    artistId = Strings.Trim(Format.SafeString(request.artistId, ""))
+    artistId = Strings.Trim(request.artistId)
     if artistId = "" then return buildErrorResponse("", "Invalid MusicBrainz artist ID.")
 
     return invalid

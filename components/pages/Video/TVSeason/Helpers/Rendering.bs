@@ -1,3 +1,5 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
 import "pkg:/source/MediaItem.bs"
 import "pkg:/source/JellyfinImage.bs"
 
@@ -16,7 +18,7 @@ sub onSettingsChanged()
     if m.pageState.episodesLoaded <> true then return
 
     renderEpisodes(m.pageState.episodes)
-    if focusedItem <> invalid then restoreItemFocus(Format.SafeString(focusedItem.itemId, ""), Format.SafeString(focusedItem.itemType, ""))
+    if focusedItem <> invalid then restoreItemFocus(Strings.ToString(focusedItem.itemId), Strings.ToString(focusedItem.itemType))
     updateChevrons()
     ' A settings update may arrive beneath a dialog or an inactive page.
     if hadFocus <> true then return
@@ -65,7 +67,7 @@ function getSeriesLogoUrl() as string
     request = m.pageState.request
     if request = invalid then return ""
 
-    identity = SeriesIdentity.FromItem(Format.SafeString(request.server, ""), request.series)
+    identity = SeriesIdentity.FromItem(Strings.ToString(request.server), request.series)
     return identity.logoUrl
 end function
 
@@ -90,17 +92,17 @@ sub updateAllEpisodesSeasonLabel()
     node = getFocusedItemNode()
     if node = invalid or node.raw = invalid then return
 
-    seasonId = Format.SafeString(node.raw.SeasonId, "")
+    seasonId = Strings.ToString(node.raw.SeasonId)
     for each season in m.pageState.seasons
-        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") = seasonId then
+        if Arrays.IsAssocArray(season) and Strings.ToString(season.Id) = seasonId then
             m.pageState.season = season
             m.seasonLabel.text = getItemTitle(season)
             return
         end if
     end for
 
-    seasonName = Format.SafeString(node.raw.SeasonName, "")
-    if seasonName = "" and node.raw.ParentIndexNumber <> invalid then seasonName = "Season " + Format.SafeString(node.raw.ParentIndexNumber, "")
+    seasonName = Strings.ToString(node.raw.SeasonName)
+    if seasonName = "" and node.raw.ParentIndexNumber <> invalid then seasonName = "Season " + Strings.ToString(node.raw.ParentIndexNumber)
     m.seasonLabel.text = seasonName
 end sub
 
@@ -155,17 +157,16 @@ end sub
 ' getEpisodeSeasonKey
 '-------------------------------------------------------------------------------
 function getEpisodeSeasonKey(episode as object) as string
-    seasonId = Format.SafeString(episode.SeasonId, "")
+    seasonId = Strings.ToString(episode.SeasonId)
     if seasonId <> "" then return seasonId
-    return "season-" + Format.SafeString(episode.ParentIndexNumber, "")
+    return "season-" + Strings.ToString(episode.ParentIndexNumber)
 end function
 
 '-------------------------------------------------------------------------------
 ' appendGridLayoutSpacer
 '-------------------------------------------------------------------------------
 sub appendGridLayoutSpacer(parent as object)
-    child = parent.createChild("ContentNode")
-    child.AddFields({ itemType: "LayoutSpacer" })
+    parent.createChild("ContentNode").AddFields({ itemType: "LayoutSpacer" })
 end sub
 
 '-------------------------------------------------------------------------------
@@ -190,8 +191,8 @@ sub appendEpisodeItem(parent as object, episode as object)
     child.description = Format.FirstNonEmpty([episode.Overview], "")
     child.HDPosterUrl = getImageUrl(episode, JellyfinImage.Type.Primary, 531, 300)
     child.AddFields({
-        itemId: Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
-        itemType: Format.SafeString(Format.FirstNonEmpty([episode.Type], ""), "")
+        itemId: Format.FirstNonEmpty([episode.Id], "")
+        itemType: Format.FirstNonEmpty([episode.Type], "")
         episodeIndexNumber: Format.FirstNonEmpty([episode.IndexNumber], "")
         premiereDate: Format.FirstNonEmpty([episode.PremiereDate], "")
         airDate: Format.FirstNonEmpty([episode.AirDate], "")
@@ -206,12 +207,12 @@ end sub
 ' getEpisodeDetailBackdropUrl
 '-------------------------------------------------------------------------------
 function getEpisodeDetailBackdropUrl(node as dynamic) as string
-    if Format.SafeString(node.itemType, "") = MediaItem.Type.Season then
-        detailBackdropUrl = Format.SafeString(node.detailBackdropUrl, "")
+    if Strings.ToString(node.itemType) = MediaItem.Type.Season then
+        detailBackdropUrl = Strings.ToString(node.detailBackdropUrl)
         if detailBackdropUrl <> "" then return detailBackdropUrl
     end if
 
-    return Format.SafeString(node.HDPosterUrl, "")
+    return node.HDPosterUrl
 end function
 
 '-------------------------------------------------------------------------------
@@ -226,7 +227,7 @@ sub appendSeasonSummaryItem(row as object)
     child.description = getSeasonSummaryDescription(season)
     child.HDPosterUrl = getSeasonBackgroundUrl()
     child.AddFields({
-        itemId: Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
+        itemId: Format.FirstNonEmpty([season.Id], "")
         itemType: MediaItem.Type.Season
         episodeCount: Format.FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
         seasonYear: getSeasonYearText(season)
@@ -248,7 +249,7 @@ sub updateSeasonSummaryArtwork()
 
     for i = 0 to content.getChildCount() - 1
         child = content.getChild(i)
-        if child <> invalid and Format.SafeString(child.itemType, "") = MediaItem.Type.Season then
+        if child <> invalid and Strings.ToString(child.itemType) = MediaItem.Type.Season then
             child.HDPosterUrl = getSeasonBackgroundUrl()
             child.detailBackdropUrl = getSeasonDetailBackdropUrl()
             child.description = getSeasonSummaryDescription(m.pageState.season)
@@ -318,7 +319,7 @@ end function
 '-------------------------------------------------------------------------------
 function getSeasonYearText(season as dynamic) as string
     year = Format.FirstNonEmpty([season.ProductionYear], "")
-    if year <> "" then return Format.SafeString(year, "")
+    if year <> "" then return year
 
     return DateTime.ToYear(season.PremiereDate)
 end function

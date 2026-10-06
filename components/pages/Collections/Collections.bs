@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
@@ -82,7 +83,7 @@ sub onCollectionsResponse()
     if response = invalid then return
     if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "libraryId", "collections") <> true then return
 
-    if Format.SafeString(response.mode, "load") = "drilldown" then
+    if Strings.ToString(response.mode, "load") = "drilldown" then
         handleDrilldownResponse(response)
         return
     end if
@@ -91,7 +92,7 @@ sub onCollectionsResponse()
         Spinner.Hide()
         message = (response.failureKind <> invalid ? "Unable to load collections. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load collections.")
         AppMessage.Show(message)
-        m.log.activity("Collections load failed: " + Format.SafeString(response.errorMessage, message))
+        m.log.activity("Collections load failed: " + Strings.ToString(response.errorMessage, message))
         return
     end if
 
@@ -116,7 +117,7 @@ sub onCollectionSelected()
     if node = invalid then return
 
     item = node.raw
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId = "" then return
 
     loadChildCollections(itemId, item)
@@ -129,14 +130,13 @@ sub loadChildCollections(itemId as string, item as object)
     request = m.pageState.request
     if request = invalid then return
 
-    title = Format.FirstNonEmpty([item.Name], "Collection")
     m.log.activity("Opening collection " + ActivityLog.ItemTitle(item, "Collection"))
     childRequest = {
         server: request.server
         token: request.token
         userId: request.userId
         libraryId: itemId
-        title: title
+        title: Format.FirstNonEmpty([item.Name], "Collection")
         item: item
         mode: "drilldown"
         recursive: false
@@ -196,7 +196,7 @@ sub pushCollectionNavigationState()
     m.pageState.navigationStack.Push({
         request: m.pageState.request
         collections: m.pageState.collections
-        title: Format.SafeString(m.titleLabel.text, "Collections")
+        title: m.titleLabel.text
         usingTopCollections: m.pageState.usingTopCollections
     })
 end sub
@@ -218,7 +218,7 @@ function navigateBackToParentCollection() as boolean
     m.pageState.usingTopCollections = previous.usingTopCollections
     AsyncLifecycle.Begin(m.pageState.lifecycle, previous.request.libraryId)
     m.pageState.collections = previous.collections
-    m.titleLabel.text = Format.SafeString(previous.title, "Collections")
+    m.titleLabel.text = previous.title
     renderCollections(m.pageState.collections)
     AppMessage.Dismiss()
     focusCollectionsIfActive()
@@ -354,7 +354,7 @@ end function
 ' getCollectionTitle
 '-------------------------------------------------------------------------------
 function getCollectionTitle(value as dynamic) as string
-    title = Format.SafeString(value, "Collections")
+    title = Strings.ToString(value, "Collections")
     if Instr(1, LCase(title), "collection") = 0 then return "Collections: " + title
     return title
 end function
@@ -411,7 +411,7 @@ function hasTopTag(item as dynamic) as boolean
     if Type(item.Tags) <> "roArray" then return false
 
     for each tag in item.Tags
-        if LCase(Format.SafeString(tag, "")) = "top" then return true
+        if LCase(Strings.ToString(tag)) = "top" then return true
     end for
 
     return false
@@ -423,7 +423,7 @@ end function
 function isCollectionItem(item as dynamic) as boolean
     if Arrays.IsAssocArray(item) = false then return false
 
-    return LCase(Format.SafeString(item.Type, "")) = "boxset"
+    return LCase(Strings.ToString(item.Type)) = "boxset"
 end function
 
 '-------------------------------------------------------------------------------

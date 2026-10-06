@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
@@ -54,7 +55,7 @@ sub onAlbumSelected()
     if row = invalid then return
     node = row.getChild(selected[1])
     if node = invalid or node.raw = invalid then return
-    m.top.selectedAlbum = { itemId: Format.SafeString(node.raw.Id, ""), item: node.raw }
+    m.top.selectedAlbum = { itemId: Strings.ToString(node.raw.Id), item: node.raw }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -79,7 +80,7 @@ sub onLoadRequestChanged()
     m.state.albumLoad.hasMore = false
     loadAlbumPage(0)
 
-    artistId = Format.SafeString(request.musicBrainzArtistId, "")
+    artistId = Strings.ToString(request.musicBrainzArtistId)
     if artistId = "" then
         m.state.overview = "No Wikipedia overview is available for this artist."
         renderArtist()
@@ -97,7 +98,7 @@ sub onArtistAlbumsResponse()
     response = m.artistAlbumsTask.response
     if m.state.lifecycle.isActive <> true then return
     if response = invalid then return
-    if Format.SafeString(response.libraryId, "") <> Format.SafeString(m.state.request.libraryId, "") then return
+    if Strings.ToString(response.libraryId) <> Strings.ToString(m.state.request.libraryId) then return
     if Number.ToInteger(response.queryId, -1) <> m.state.albumLoad.queryId then return
     if response.ok <> true then
         m.state.albumLoad.requestInFlight = false
@@ -112,7 +113,7 @@ sub onArtistAlbumsResponse()
         m.state.albumLoad.requestInFlight = false
         m.state.albumLoad.status = "failed"
         m.state.albumLoad.hasMore = false
-        m.log.error("Artist album page rejected artistId=" + Format.SafeString(m.state.request.itemId, "") + " expectedStartIndex=" + expectedStartIndex.ToStr() + " receivedStartIndex=" + startIndex.ToStr())
+        m.log.error("Artist album page rejected artistId=" + Strings.ToString(m.state.request.itemId) + " expectedStartIndex=" + expectedStartIndex.ToStr() + " receivedStartIndex=" + startIndex.ToStr())
         return
     end if
     m.state.albumLoad.requestInFlight = false
@@ -196,14 +197,12 @@ sub renderAlbums(albums as dynamic)
 
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
-    request = m.state.request
     for each album in albums
-        addAlbumNode(row, album, request)
+        addAlbumNode(row, album, m.state.request)
     end for
 
-    hasAlbums = row.getChildCount() > 0
     m.albumsRow.content = content
-    m.albumsRow.visible = hasAlbums
+    m.albumsRow.visible = row.getChildCount() > 0
 end sub
 
 '-------------------------------------------------------------------------------
@@ -217,9 +216,8 @@ sub appendAlbums(albums as object)
     end if
 
     row = content.getChild(0)
-    request = m.state.request
     for each album in albums
-        addAlbumNode(row, album, request)
+        addAlbumNode(row, album, m.state.request)
     end for
     m.albumsRow.visible = row.getChildCount() > 0
 end sub
@@ -238,9 +236,9 @@ end sub
 ' getAlbumArtworkUrl
 '-------------------------------------------------------------------------------
 function getAlbumArtworkUrl(album as object, request as object) as string
-    itemId = Format.SafeString(album.Id, "")
+    itemId = Strings.ToString(album.Id)
     tag = ""
-    if album.ImageTags <> invalid then tag = Format.SafeString(album.ImageTags.Primary, "")
+    if album.ImageTags <> invalid then tag = Strings.ToString(album.ImageTags.Primary)
     if itemId = "" or tag = "" then return "pkg:/images/music/album-placeholder-300x300.png"
 
     return Url.BuildImageUrl(request.server, itemId, JellyfinImage.Type.Primary, tag, 300, 300)
@@ -252,7 +250,7 @@ end function
 function getAlbumReleaseYear(album as object) as string
     year = Number.ToInteger(album.ProductionYear, 0)
     if year <= 0 then
-        premiereDate = Format.SafeString(album.PremiereDate, "")
+        premiereDate = Strings.ToString(album.PremiereDate)
         if Len(premiereDate) >= 4 then year = Number.ToInteger(Left(premiereDate, 4), 0)
     end if
     if year <= 0 then return ""
@@ -267,10 +265,10 @@ sub onArtistResponse()
     request = m.state.request
     if response = invalid or request = invalid then return
     if m.state.lifecycle.isActive <> true then return
-    if Format.SafeString(response.artistId, "") <> Format.SafeString(request.musicBrainzArtistId, "") then return
+    if Strings.ToString(response.artistId) <> Strings.ToString(request.musicBrainzArtistId) then return
 
     if response.ok = true then
-        m.state.overview = Format.SafeString(response.extract, "")
+        m.state.overview = Strings.ToString(response.extract)
     else
         m.state.overview = (response.failureKind <> invalid ? "Unable to load the artist overview. " : "") + RequestFailure.GetDisplayMessage(response, "Wikipedia overview unavailable.")
     end if
@@ -290,9 +288,9 @@ sub renderArtist()
     m.mediaShell.mediaContent = {
         mediaType: "artist"
         title: title
-        logoUrl: Format.SafeString(request.logoUrl, "")
+        logoUrl: Strings.ToString(request.logoUrl)
         logoPending: false
-        backdropUrl: Format.SafeString(request.backdropUrl, "")
+        backdropUrl: Strings.ToString(request.backdropUrl)
         primaryInfoText: "Artist"
         secondaryInfoText: ""
         overview: m.state.overview

@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/Char.bs"
 
 namespace tests
@@ -5,7 +6,175 @@ namespace tests
     @suite("String helpers")
     class StringTests extends rooibos.BaseTestSuite
 
+        @describe("Strings.ToString")
+
+        @it("preserves boxed empty strings despite a custom fallback")
+        function _()
+            value = CreateObject("roString")
+            value.SetString("")
+
+            m.assertEqual(Strings.ToString(value, "fallback"), "")
+        end function
+
+        @it("returns the default fallback for unsupported SceneGraph nodes")
+        function _()
+            m.assertEqual(Strings.ToString(CreateObject("roSGNode", "ContentNode")), "")
+        end function
+
+        @it("preserves intrinsic string content")
+        function _()
+            m.assertEqual(Strings.ToString("  Artist  ", "fallback"), "  Artist  ")
+        end function
+
+        @it("preserves valid empty strings")
+        function _()
+            m.assertEqual(Strings.ToString("", "fallback"), "")
+        end function
+
+        @it("returns the default fallback for invalid")
+        function _()
+            m.assertEqual(Strings.ToString(invalid), "")
+        end function
+
+        @it("returns a supplied fallback for invalid")
+        function _()
+            m.assertEqual(Strings.ToString(invalid, "fallback"), "fallback")
+        end function
+
+        @it("converts true to lowercase text")
+        function _()
+            m.assertEqual(Strings.ToString(true), "true")
+        end function
+
+        @it("converts false to lowercase text")
+        function _()
+            m.assertEqual(Strings.ToString(false), "false")
+        end function
+
+        @it("converts integers without a sign placeholder")
+        function _()
+            m.assertEqual(Strings.ToString(42), "42")
+        end function
+
+        @it("preserves negative integer conversion")
+        function _()
+            m.assertEqual(Strings.ToString(-42), "-42")
+        end function
+
+        @it("preserves zero conversion")
+        function _()
+            m.assertEqual(Strings.ToString(0), "0")
+        end function
+
+        @it("converts floats with ToStr")
+        function _()
+            m.assertEqual(Strings.ToString(42.5), "42.5")
+        end function
+
+        @it("converts doubles with ToStr")
+        function _()
+            m.assertEqual(Strings.ToString(42.5#), "42.5")
+        end function
+
+        @it("preserves long integer precision")
+        function _()
+            m.assertEqual(Strings.ToString(2147483648&), "2147483648")
+        end function
+
+        @it("converts boxed true to lowercase text")
+        function _()
+            m.assertEqual(Strings.ToString(Box(true)), "true")
+        end function
+
+        @it("converts boxed false to lowercase text")
+        function _()
+            m.assertEqual(Strings.ToString(Box(false)), "false")
+        end function
+
+        @it("converts boxed integers")
+        function _()
+            m.assertEqual(Strings.ToString(Box(42)), "42")
+        end function
+
+        @it("converts boxed floats")
+        function _()
+            m.assertEqual(Strings.ToString(Box(42.5)), "42.5")
+        end function
+
+        @it("converts boxed doubles")
+        function _()
+            m.assertEqual(Strings.ToString(Box(42.5#)), "42.5")
+        end function
+
+        @it("converts boxed long integers")
+        function _()
+            m.assertEqual(Strings.ToString(Box(2147483648&)), "2147483648")
+        end function
+
+        @it("returns the default fallback for arrays")
+        function _()
+            m.assertEqual(Strings.ToString([]), "")
+        end function
+
+        @it("returns a supplied fallback for arrays")
+        function _()
+            m.assertEqual(Strings.ToString(["Artist"], "fallback"), "fallback")
+        end function
+
+        @it("returns the default fallback for associative arrays")
+        function _()
+            m.assertEqual(Strings.ToString({ Name: "Artist", Id: "1" }), "")
+        end function
+
+        @it("returns a supplied fallback for associative arrays")
+        function _()
+            m.assertEqual(Strings.ToString({ Name: "Artist" }, "Unknown Artist"), "Unknown Artist")
+        end function
+
+        @it("returns fallback for unsupported SceneGraph nodes")
+        function _()
+            m.assertEqual(Strings.ToString(CreateObject("roSGNode", "ContentNode"), "fallback"), "fallback")
+        end function
+
+        @it("preserves boxed string content")
+        function _()
+            value = CreateObject("roString")
+            value.SetString("  Artist  ")
+
+            m.assertEqual(Strings.ToString(value, "fallback"), "  Artist  ")
+        end function
+
         @describe("Strings.Join")
+
+        @it("rejects scalar string input")
+        function _()
+            m.assertEqual(Strings.Join("Artist"), "")
+        end function
+
+        @it("rejects scalar numeric input")
+        function _()
+            m.assertEqual(Strings.Join(42), "")
+        end function
+
+        @it("rejects associative array input")
+        function _()
+            m.assertEqual(Strings.Join({ artist: "Artist" }), "")
+        end function
+
+        @it("rejects SceneGraph node input")
+        function _()
+            m.assertEqual(Strings.Join(CreateObject("roSGNode", "ContentNode")), "")
+        end function
+
+        @it("concatenates entries with an empty delimiter")
+        function _()
+            m.assertEqual(Strings.Join(["First", "Second"], ""), "FirstSecond")
+        end function
+
+        @it("does not add a delimiter to a single entry")
+        function _()
+            m.assertEqual(Strings.Join(["Artist"], "|"), "Artist")
+        end function
 
         @it("joins values with a comma by default")
         function _()
@@ -32,7 +201,32 @@ namespace tests
             m.assertEqual(Strings.Join([]), "")
         end function
 
+        @it("preserves Join positions for missing and unsupported entries")
+        function _()
+            m.assertEqual(Strings.Join([" First ", invalid, {}, [], true, 1], "|"), " First ||||true|1")
+        end function
+
         @describe("Strings.Trim")
+
+        @it("preserves empty text")
+        function _()
+            m.assertEqual(Strings.Trim(""), "")
+        end function
+
+        @it("preserves tabs at the text boundaries")
+        function _()
+            m.assertEqual(Strings.Trim(" " + Char.Tab + "Artist" + Char.Tab + " "), Char.Tab + "Artist" + Char.Tab)
+        end function
+
+        @it("preserves line breaks at the text boundaries")
+        function _()
+            m.assertEqual(Strings.Trim(" " + Char.CarriageReturn + Char.NewLine + "Artist" + Char.NewLine + " "), Char.CarriageReturn + Char.NewLine + "Artist" + Char.NewLine)
+        end function
+
+        @it("preserves whitespace consisting only of tabs and line breaks")
+        function _()
+            m.assertEqual(Strings.Trim(Char.Tab + Char.CarriageReturn + Char.NewLine), Char.Tab + Char.CarriageReturn + Char.NewLine)
+        end function
 
         @it("removes surrounding spaces while preserving inner spaces")
         function _()
@@ -49,7 +243,37 @@ namespace tests
             m.assertEqual(Strings.Trim("   "), "")
         end function
 
+        @it("uses empty fallback for unsupported Trim inputs")
+        function _()
+            m.assertEqual(Strings.Trim({}), "")
+        end function
+
+        @it("retains scalar conversion in Trim")
+        function _()
+            m.assertEqual(Strings.Trim(42), "42")
+        end function
+
         @describe("Strings.Replace")
+
+        @it("replaces adjacent matches")
+        function _()
+            m.assertEqual(Strings.Replace("fishfish", "fish", "movie"), "moviemovie")
+        end function
+
+        @it("consumes overlapping candidates without reusing matched characters")
+        function _()
+            m.assertEqual(Strings.Replace("banana", "ana", "X"), "bXna")
+        end function
+
+        @it("matches case sensitively")
+        function _()
+            m.assertEqual(Strings.Replace("Fish fish FISH", "fish", "movie"), "Fish movie FISH")
+        end function
+
+        @it("does not search newly inserted replacement text")
+        function _()
+            m.assertEqual(Strings.Replace("aa", "a", "aa"), "aaaa")
+        end function
 
         @it("replaces every occurrence")
         function _()
@@ -61,7 +285,37 @@ namespace tests
             m.assertEqual(Strings.Replace("Starfin", "Roku", "TV"), "Starfin")
         end function
 
+        @it("returns the original text for an empty replacement search")
+        function _()
+            m.assertEqual(Strings.Replace("Starfin", "", "replacement"), "Starfin")
+        end function
+
+        @it("handles an empty replacement source and search")
+        function _()
+            m.assertEqual(Strings.Replace("", "", "replacement"), "")
+        end function
+
+        @it("supports deleting matches with an empty replacement")
+        function _()
+            m.assertEqual(Strings.Replace("one fish two fish", " fish", ""), "one two")
+        end function
+
         @describe("Strings.CollapseWhitespace")
+
+        @it("preserves empty text")
+        function _()
+            m.assertEqual(Strings.CollapseWhitespace(""), "")
+        end function
+
+        @it("removes space-only text")
+        function _()
+            m.assertEqual(Strings.CollapseWhitespace("   "), "")
+        end function
+
+        @it("removes whitespace-only text containing tabs and line breaks")
+        function _()
+            m.assertEqual(Strings.CollapseWhitespace(" " + Char.Tab + Char.CarriageReturn + Char.NewLine + " "), "")
+        end function
 
         @it("collapses spaces, tabs, and line breaks")
         function _()
@@ -74,7 +328,57 @@ namespace tests
             m.assertEqual(Strings.CollapseWhitespace(invalid), "")
         end function
 
+        @it("uses empty fallback for unsupported CollapseWhitespace inputs")
+        function _()
+            m.assertEqual(Strings.CollapseWhitespace([]), "")
+        end function
+
+        @it("retains scalar conversion in CollapseWhitespace")
+        function _()
+            m.assertEqual(Strings.CollapseWhitespace(true), "true")
+        end function
+
         @describe("Strings.NaturalCompare")
+
+        @it("orders a shorter text prefix first")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Book", "Books"), -1)
+        end function
+
+        @it("orders a longer text prefix last")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Books", "Book"), 1)
+        end function
+
+        @it("continues to later numeric segments after equal runs")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Season 2 Episode 9", "Season 2 Episode 10"), -1)
+        end function
+
+        @it("compares equal-length digit runs beyond numeric precision")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Item 123456789012345678901234567890", "Item 123456789012345678901234567891"), -1)
+        end function
+
+        @it("orders long digit runs by magnitude before lexical text")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Item 99999999999999999999999999999", "Item 100000000000000000000000000000"), -1)
+        end function
+
+        @it("ignores leading zeroes when comparing numeric magnitude")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Item 0002", "Item 10"), -1)
+        end function
+
+        @it("orders all-zero runs by their original length")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Item 00", "Item 000"), -1)
+        end function
+
+        @it("continues past identical all-zero runs")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Item 00 A", "Item 00 B"), -1)
+        end function
 
         @it("sorts digit runs by numeric value (case 1)")
         function _()
@@ -106,7 +410,42 @@ namespace tests
             m.assertEqual(Strings.NaturalCompare(invalid, invalid), 0)
         end function
 
+        @it("compares an unsupported left input as empty text")
+        function _()
+            m.assertEqual(Strings.NaturalCompare({}, "Title"), -1)
+        end function
+
+        @it("compares an unsupported right input as empty text")
+        function _()
+            m.assertEqual(Strings.NaturalCompare("Title", []), 1)
+        end function
+
+        @it("compares two unsupported inputs as empty text")
+        function _()
+            m.assertEqual(Strings.NaturalCompare({}, []), 0)
+        end function
+
+        @it("retains natural comparison of numeric inputs")
+        function _()
+            m.assertEqual(Strings.NaturalCompare(2, 10), -1)
+        end function
+
         @describe("Strings.IsDigit")
+
+        @it("rejects whitespace")
+        function _()
+            m.assertFalse(Strings.IsDigit(" "))
+        end function
+
+        @it("rejects punctuation")
+        function _()
+            m.assertFalse(Strings.IsDigit("/"))
+        end function
+
+        @it("rejects non-ASCII digits")
+        function _()
+            m.assertFalse(Strings.IsDigit("١"))
+        end function
 
         @it("recognizes only single digit characters (case 1)")
         function _()
@@ -123,7 +462,52 @@ namespace tests
             m.assertFalse(Strings.IsDigit("a"))
         end function
 
+        @it("rejects multiple digits as a single digit")
+        function _()
+            m.assertFalse(Strings.IsDigit("12"))
+        end function
+
+        @it("rejects an empty digit candidate")
+        function _()
+            m.assertFalse(Strings.IsDigit(""))
+        end function
+
+        @it("rejects digit-prefixed text")
+        function _()
+            m.assertFalse(Strings.IsDigit("1a"))
+        end function
+
         @describe("Strings.StripHtmlMarkup")
+
+        @it("preserves empty text")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup(""), "")
+        end function
+
+        @it("preserves plain text without tags")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup("Starfin Roku"), "Starfin Roku")
+        end function
+
+        @it("preserves unsupported HTML entities")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup("A &copy; B"), "A &copy; B")
+        end function
+
+        @it("discards text after an unterminated opening tag")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup("Before <broken after"), "Before")
+        end function
+
+        @it("treats an unmatched closing angle bracket as a separator")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup("Before>After"), "Before After")
+        end function
+
+        @it("decodes apostrophe entities")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup("Artist&apos;s album"), "Artist's album")
+        end function
 
         @it("removes tags and preserves paragraph separation")
         function _()
@@ -136,7 +520,42 @@ namespace tests
             m.assertEqual(Strings.StripHtmlMarkup(value), "A & B " + Char.DoubleQuote + "C" + Char.DoubleQuote + " 'D' <E>")
         end function
 
+        @it("uses empty fallback for unsupported StripHtmlMarkup inputs")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup(CreateObject("roSGNode", "ContentNode")), "")
+        end function
+
+        @it("keeps missing markup empty")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup(invalid), "")
+        end function
+
+        @it("retains scalar conversion in StripHtmlMarkup")
+        function _()
+            m.assertEqual(Strings.StripHtmlMarkup(42), "42")
+        end function
+
         @describe("Strings.GetJoinedText")
+
+        @it("returns empty text for an empty array")
+        function _()
+            m.assertEqual(Strings.GetJoinedText([]), "")
+        end function
+
+        @it("trims boxed scalar strings")
+        function _()
+            m.assertEqual(Strings.GetJoinedText(Box(" Artist ")), "Artist")
+        end function
+
+        @it("converts boxed array entries")
+        function _()
+            m.assertEqual(Strings.GetJoinedText([Box(" Artist "), Box(42), Box(false)]), "Artist, 42, false")
+        end function
+
+        @it("iterates top-level associative array keys rather than values")
+        function _()
+            m.assertEqual(Strings.GetJoinedText({ artist: "Different value" }), "artist")
+        end function
 
         @it("joins non-empty trimmed array values")
         function _()
@@ -151,6 +570,31 @@ namespace tests
         @it("handles invalid and scalar values (case 2)")
         function _()
             m.assertEqual(Strings.GetJoinedText("  Single  "), "Single")
+        end function
+
+        @it("skips invalid array entries")
+        function _()
+            m.assertEqual(Strings.GetJoinedText([invalid, " First ", invalid, "Second"]), "First, Second")
+        end function
+
+        @it("omits unsupported objects and nested arrays")
+        function _()
+            m.assertEqual(Strings.GetJoinedText([{ Name: "Artist", Id: "1" }, [], "Second"]), "Second")
+        end function
+
+        @it("omits unsupported and invalid entries")
+        function _()
+            m.assertEqual(Strings.GetJoinedText([invalid, { Name: "Artist" }, []]), "")
+        end function
+
+        @it("preserves numeric and boolean string conversion")
+        function _()
+            m.assertEqual(Strings.GetJoinedText([1, true]), "1, true")
+        end function
+
+        @it("uses empty fallback for a scalar without string conversion")
+        function _()
+            m.assertEqual(Strings.GetJoinedText(CreateObject("roSGNode", "ContentNode")), "")
         end function
 
     end class

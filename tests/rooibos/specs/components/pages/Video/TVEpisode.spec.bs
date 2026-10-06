@@ -568,9 +568,9 @@ namespace tests
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
             m.node.state.request = invalid
             m.node.state.playSelection = { item: item }
-            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            m.node.state.itemContent = m.createEpisodeContent(item)
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item))
 
             m.assertEqual(m.node.mediaToolbar.mediaInfoText, "1080p H.264 • AC3 5.1")
         end function
@@ -582,9 +582,9 @@ namespace tests
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
             m.node.state.request = invalid
             m.node.state.playSelection = { item: item }
-            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            m.node.state.itemContent = m.createEpisodeContent(item)
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item))
 
             'bs:disable-next-line 1140
             onVideoToolbarMediaInfoSelected()
@@ -600,13 +600,13 @@ namespace tests
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
             m.node.state.request = invalid
             m.node.state.playSelection = { item: item }
-            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            m.node.state.itemContent = m.createEpisodeContent(item)
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item))
             m.node.state.selectedStreams.audio = { streamIndex: 4 }
 
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item))
 
             m.assertEqual(m.node.mediaToolbar.mediaInfoText, "1080p H.264 • AAC 2.0")
         end function
@@ -618,9 +618,9 @@ namespace tests
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
             m.node.state.request = invalid
             m.node.state.playSelection = { item: item }
-            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            m.node.state.itemContent = m.createEpisodeContent(item)
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item))
 
             'bs:disable-next-line 1140
             clearPageState()
@@ -635,9 +635,9 @@ namespace tests
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
             m.node.state.request = invalid
             m.node.state.playSelection = { item: item }
-            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            m.node.state.itemContent = m.createEpisodeContent(item)
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item))
             m.node.mediaToolbar.callFunc("activate")
             button = m.node.mediaToolbar.findNode("mediaInfoButton")
             button.setFocus(true)
@@ -855,7 +855,7 @@ namespace tests
             LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
 
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: { MediaStreams: [{ Type: "Video", Codec: "h264" }] } }, true)
+            renderEpisodeContent(m.createEpisodeContent({ MediaStreams: [{ Type: "Video", Codec: "h264" }] }), true)
 
             m.assertEqual(m.node.mediaToolbar.mediaInfoText, "")
             m.assertFalse(m.node.mediaToolbar.findNode("mediaInfoButton").visible)
@@ -932,7 +932,7 @@ namespace tests
             LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "item-1" })
             LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
             m.node.state.item = {}
-            m.node.state.itemContent = { itemType: "Episode", raw: {} }
+            m.node.state.itemContent = m.createEpisodeContent({})
             task = { response: { ok: false, action: "tvEpisodeDetails", itemId: "item-1", requestId: 1 } }
 
             'bs:disable-next-line 1140
@@ -1004,15 +1004,21 @@ namespace tests
             m.assertEqual(m.top.selectedEpisode.videoMode, "transcode-no-remux")
         end function
 
+        private function createEpisodeContent(item as object, episodeDate = "" as string) as object
+            content = CreateObject("roSGNode", "ContentNode")
+            content.AddFields({ itemType: "Episode", episodeDate: episodeDate, raw: item })
+            return content
+        end function
+
         private sub prepareMediaOptions()
             item = { Id: "options-item", Name: "Options", Type: "Movie", MediaStreams: [{ Type: "Audio", Index: 1, Codec: "aac", Channels: 2 }, { Type: "Audio", Index: 2, Codec: "ac3", Channels: 6 }], Chapters: [{ StartPositionTicks: 600000000 }] }
             m.node.state.mediaInfoPending = false
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
             m.node.state.request = { itemId: "options-item", item: item, server: "http://server", token: "token", userId: "user" }
-            m.node.state.itemContent = { raw: item }
+            m.node.state.itemContent = m.createEpisodeContent(item)
             m.node.state.playSelection = { item: item, itemId: "options-item" }
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item))
             'bs:disable-next-line 1140
             onVideoToolbarMediaInfoSelected()
         end sub
@@ -1025,7 +1031,7 @@ namespace tests
             m.node.state.request = invalid
             m.node.state.playSelection = { item: item }
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item))
 
             content = m.top.findNode("mediaShell").mediaContent
             m.assertEqual(content.communityRating, 8)
@@ -1039,7 +1045,7 @@ namespace tests
             m.node.state.request = invalid
             m.node.state.playSelection = { item: item }
             'bs:disable-next-line 1140
-            renderEpisodeContent({ itemType: "Episode", episodeDate: "2026", raw: item })
+            renderEpisodeContent(m.createEpisodeContent(item, "2026"))
 
             content = m.top.findNode("mediaShell").mediaContent
             m.assertEqual(content.secondaryInfoText, "2026")

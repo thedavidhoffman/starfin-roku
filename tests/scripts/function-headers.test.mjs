@@ -56,8 +56,18 @@ test('rejects a closing example separator with the wrong width', () => {
   assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
 });
 
-test('requires the Example prefix for an extended header', () => {
-  const source = `${exampleHeader('convert', ["' Arbitrary comment."])}function convert()`;
+test('accepts description-only documentation without an Example prefix', () => {
+  const source = `${exampleHeader('convert', ["' Converts supported values.", "'", "' Unsupported values use fallback text."])}function convert()`;
+  assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 0);
+});
+
+test('accepts an indented namespace description before its example', () => {
+  const source = `namespace Strings\n${exampleHeader('Strings.NaturalCompare', ["' Compares numbered text naturally.", "'", "' Example: Book 2 precedes Book 10."], '    ')}    function NaturalCompare()\n    end function\nend namespace`;
+  assert.equal(checkFunctionHeaders(source, 'source/String.bs').diagnostics.length, 0);
+});
+
+test('rejects executable code inside a documentation section', () => {
+  const source = `${exampleHeader('convert', ["' Converts supported values.", 'value = 42'])}function convert()`;
   assert.equal(checkFunctionHeaders(source, 'example.bs').diagnostics.length, 1);
 });
 

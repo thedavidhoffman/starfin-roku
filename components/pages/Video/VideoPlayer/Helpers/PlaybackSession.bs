@@ -1,3 +1,5 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
 import "pkg:/source/RequestFailure.bs"
 
 namespace PlaybackSession
@@ -47,7 +49,7 @@ sub onPlaybackInfoResponse()
     if response = invalid then return
     responseRequestId = Number.ToInteger(response.requestId, -1)
     if responseRequestId <> m.playback.requestId then
-        m.log.write("Ignoring stale playback info response responseRequestId=" + Format.SafeString(responseRequestId, "") + " currentRequestId=" + Format.SafeString(m.playback.requestId, ""))
+        m.log.write("Ignoring stale playback info response responseRequestId=" + Strings.ToString(responseRequestId) + " currentRequestId=" + Strings.ToString(m.playback.requestId))
         return
     end if
 
@@ -57,7 +59,7 @@ sub onPlaybackInfoResponse()
 
     if response.ok <> true then
         m.playback.startupPending = false
-        errorMessage = Format.SafeString(response.errorMessage, "Unable to play this item.")
+        errorMessage = Strings.ToString(response.errorMessage, "Unable to play this item.")
         if handlePlaybackRecoveryFailure("playbackInfo", errorMessage) then return
         Spinner.Hide()
         message = (response.failureKind <> invalid ? "Unable to play this item. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to play this item after recovery attempts.")
@@ -189,7 +191,7 @@ end sub
 function startQueueItemAtOffset(offset as integer) as boolean
     queueItem = getQueueItemAtOffset(offset)
     if queueItem = invalid then return false
-    if Format.SafeString(queueItem.itemId, "") = "" then return false
+    if Strings.ToString(queueItem.itemId) = "" then return false
 
     emitPlaybackProgress(false)
     m.log.activity("Advancing to " + getPlaybackItemActivityTitle(queueItem.item))
@@ -201,17 +203,14 @@ end function
 ' buildQueuePlaybackRequest
 '-------------------------------------------------------------------------------
 function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) as object
-    series = getQueueItemSeries(queueItem)
-    season = getQueueItemSeason(queueItem)
-
     request = {
         server: m.activePlayback.session.server
         token: m.activePlayback.session.token
         userId: m.activePlayback.session.userId
-        itemId: Format.SafeString(queueItem.itemId, "")
+        itemId: Strings.ToString(queueItem.itemId)
         item: queueItem.item
-        series: series
-        season: season
+        series: getQueueItemSeries(queueItem)
+        season: getQueueItemSeason(queueItem)
         startPositionTicks: 0
         playbackQueue: m.activePlayback.queue.items
         playbackQueueIndex: queueIndex
@@ -259,7 +258,7 @@ function buildVideoContent(response as object, request as object, item as dynami
     if response.externalSubtitleTrack <> invalid then
         m.streamOptions.pendingExternalSubtitleUrl = response.externalSubtitleTrack.deliveryUrl
     end if
-    m.log.write("Subtitle content resolvedIndex=" + Format.SafeString(response.subtitleStreamIndex, "") + " externalTrackAttached=" + boolToText(response.externalSubtitleTrack <> invalid))
+    m.log.write("Subtitle content resolvedIndex=" + Strings.ToString(response.subtitleStreamIndex) + " externalTrackAttached=" + boolToText(response.externalSubtitleTrack <> invalid))
 
     return content
 end function
@@ -325,7 +324,7 @@ sub onAvailableSubtitleTracksChanged()
     m.streamOptions.pendingExternalSubtitleUrl = ""
     setSubtitleCaptionMode("On")
     m.videoPlayer.subtitleTrack = trackName
-    m.log.write("External subtitle track selected resolvedIndex=" + Format.SafeString(m.activePlayback.subtitleStreamIndex, ""))
+    m.log.write("External subtitle track selected resolvedIndex=" + Strings.ToString(m.activePlayback.subtitleStreamIndex))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -412,7 +411,7 @@ sub applyPlaybackProgressChangeToCurrentItem(change as object)
     if m.activePlayback = invalid then return
     item = m.activePlayback.context.item
     if item = invalid then return
-    if Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "") <> Format.SafeString(change.itemId, "") then return
+    if Format.FirstNonEmpty([item.Id], "") <> Strings.ToString(change.itemId) then return
 
     PlaybackProgress.ApplyChangeToItem(item, change)
 end sub
@@ -427,7 +426,7 @@ sub applyPlaybackProgressChangeToCurrentQueueItem(change as object)
 
     queueItem = m.activePlayback.queue.items[m.activePlayback.queue.index]
     if queueItem = invalid then return
-    if Format.SafeString(queueItem.itemId, "") <> Format.SafeString(change.itemId, "") then return
+    if Strings.ToString(queueItem.itemId) <> Strings.ToString(change.itemId) then return
 
     PlaybackProgress.ApplyChangeToItem(queueItem.item, change)
 end sub
@@ -438,7 +437,7 @@ end sub
 sub applyPlaybackProgressChangeToPlayRequest(change as object)
     request = getAcceptedOrPendingPlaybackRequest()
     if request = invalid then return
-    if Format.SafeString(request.itemId, "") <> Format.SafeString(change.itemId, "") then return
+    if Strings.ToString(request.itemId) <> Strings.ToString(change.itemId) then return
 
     PlaybackProgress.ApplyChangeToItem(request.item, change)
 end sub
@@ -498,7 +497,7 @@ function requestUpNextAutoPlay() as boolean
 
     nextIndex = m.activePlayback.queue.index + 1
     if nextIndex < 0 or nextIndex >= m.activePlayback.queue.items.Count() then
-        m.log.write("Skipping up-next autoplay: no next item queueIndex=" + Format.SafeString(m.activePlayback.queue.index, "") + " queueCount=" + Format.SafeString(m.activePlayback.queue.items.Count(), ""))
+        m.log.write("Skipping up-next autoplay: no next item queueIndex=" + Strings.ToString(m.activePlayback.queue.index) + " queueCount=" + Strings.ToString(m.activePlayback.queue.items.Count()))
         return false
     end if
 
@@ -506,12 +505,12 @@ function requestUpNextAutoPlay() as boolean
     if m.activePlayback.queue.index >= 0 and m.activePlayback.queue.index < m.activePlayback.queue.items.Count() then currentItem = m.activePlayback.queue.items[m.activePlayback.queue.index]
 
     nextItem = m.activePlayback.queue.items[nextIndex]
-    if nextItem = invalid or Format.SafeString(nextItem.itemId, "") = "" then
-        m.log.write("Skipping up-next autoplay: next item is invalid nextIndex=" + Format.SafeString(nextIndex, ""))
+    if nextItem = invalid or Strings.ToString(nextItem.itemId) = "" then
+        m.log.write("Skipping up-next autoplay: next item is invalid nextIndex=" + Strings.ToString(nextIndex))
         return false
     end if
 
-    m.log.write("Requesting up-next autoplay currentIndex=" + Format.SafeString(m.activePlayback.queue.index, "") + " nextIndex=" + Format.SafeString(nextIndex, "") + " nextItemId=" + Format.SafeString(nextItem.itemId, ""))
+    m.log.write("Requesting up-next autoplay currentIndex=" + Strings.ToString(m.activePlayback.queue.index) + " nextIndex=" + Strings.ToString(nextIndex) + " nextItemId=" + Strings.ToString(nextItem.itemId))
     upNextRequest = {
         finishedItem: currentItem
         nextItem: nextItem
@@ -564,7 +563,7 @@ end function
 sub completeCurrentItemFromPlaybackAction(mode as string)
     if m.activePlayback = invalid then return
 
-    itemId = Format.SafeString(m.activePlayback.session.itemId, "")
+    itemId = m.activePlayback.session.itemId
     if itemId = "" then return
 
     m.playbackAction.pendingCompletion = {
@@ -593,12 +592,12 @@ sub onPlaybackCompletionResponse()
 
     response = m.playbackCompletionTask.response
     if response = invalid then return
-    if Format.SafeString(response.itemId, "") <> pending.itemId then return
+    if Strings.ToString(response.itemId) <> pending.itemId then return
 
     m.playbackAction.pendingCompletion = invalid
     Spinner.Hide()
     if response.ok <> true then
-        m.log.error("Unable to persist completed playback itemId=" + pending.itemId + " error=" + Format.SafeString(response.errorMessage, ""))
+        m.log.error("Unable to persist completed playback itemId=" + pending.itemId + " error=" + Strings.ToString(response.errorMessage))
     end if
     if continueAfterCompletedItem(pending.mode) <> true then finishCompletedPlayback()
 end sub
@@ -628,7 +627,7 @@ end sub
 function getQueueItemSeries(item as dynamic) as dynamic
     if item <> invalid and item.hasPlaybackContext = true then return item.series
     if item <> invalid and item.series <> invalid then
-        seriesId = Format.SafeString(item.series.Id, "")
+        seriesId = Strings.ToString(item.series.Id)
         ' Queue expansion supplies identity-only series data; retain loaded artwork for the same show.
         if not SeriesIdentity.HasDetails(item.series, seriesId) and SeriesIdentity.HasDetails(m.activePlayback.context.series, seriesId) then return m.activePlayback.context.series
         return item.series
@@ -692,7 +691,7 @@ sub reportPlaystate(status as string, positionOverride = invalid as dynamic)
     if positionOverride <> invalid and positionOverride > 0 then position = positionOverride
     if tracksCurrentPlaybackProgress() <> true then position = 0
     isPaused = VideoPlayerState.Normalize(m.videoPlayer.state) = VideoPlayerState.Value.Paused
-    m.log.write("Playstate " + status + " itemId=" + m.activePlayback.session.itemId + " position=" + Format.SafeString(position, "") + " paused=" + boolToText(isPaused))
+    m.log.write("Playstate " + status + " itemId=" + m.activePlayback.session.itemId + " position=" + Strings.ToString(position) + " paused=" + boolToText(isPaused))
 
     m.playstateTask.request = {
         server: m.activePlayback.session.server
@@ -701,7 +700,7 @@ sub reportPlaystate(status as string, positionOverride = invalid as dynamic)
         playSessionId: m.activePlayback.playSessionId
         mediaSourceId: m.activePlayback.mediaSourceId
         liveStreamId: m.activePlayback.liveStreamId
-        playMethod: Format.SafeString(m.activePlayback.playMethod, "DirectPlay")
+        playMethod: m.activePlayback.playMethod
         canSeek: m.activePlayback.canSeek
         status: status
         position: position

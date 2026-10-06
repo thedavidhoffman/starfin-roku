@@ -7,6 +7,12 @@ entries use the existing timestamp and component label followed by the stable
 
 ## Titles and context
 
+Logger uses the pure `Strings.ToString` conversion helper for message text.
+Its existing invalid and scalar message conversion behavior is preserved, while
+unsupported values use empty fallback text. The [String helpers](string-helpers.md)
+have no logging dependency or side effects, so conversion does not recursively
+log through Logger.
+
 - Item events use the API item's `Name`; episode events include series, season,
   episode, and episode name when available.
 - TV-season events include both the show and season names when series metadata

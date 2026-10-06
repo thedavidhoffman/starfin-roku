@@ -1,7 +1,6 @@
 import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/Encode.bs"
-import "pkg:/source/Format.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/PlaybackProgress.bs"
@@ -28,7 +27,7 @@ sub executeRequest()
         libraryId = ""
         queryId = -1
         if request <> invalid then
-            libraryId = Format.SafeString(request.libraryId, "")
+            libraryId = Strings.ToString(request.libraryId)
             queryId = Number.ToInteger(request.queryId, -1)
         end if
         validationError.AddReplace("libraryId", libraryId)
@@ -38,7 +37,7 @@ sub executeRequest()
     end if
 
     params = buildMusicVideoRandomPlaybackParams(request)
-    startsWith = Format.SafeString(request.startsWith, "ALL")
+    startsWith = Strings.ToString(request.startsWith, "ALL")
     if startsWith = "#" then
         result = loadNonAlphabeticMusicVideos(request, params)
     else
@@ -68,8 +67,8 @@ end sub
 '-------------------------------------------------------------------------------
 function buildMusicVideoRandomPlaybackParams(request as object) as object
     params = {
-        userId: Format.SafeString(request.userId, "")
-        parentId: Format.SafeString(request.libraryId, "")
+        userId: Strings.ToString(request.userId)
+        parentId: Strings.ToString(request.libraryId)
         recursive: true
         includeItemTypes: "MusicVideo"
         fields: "SortName,ProductionYear,UserData"
@@ -77,7 +76,7 @@ function buildMusicVideoRandomPlaybackParams(request as object) as object
         imageTypeLimit: 1
     }
     if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
-    if Format.SafeString(request.genre, "") <> "" then params.AddReplace("genres", request.genre)
+    if Strings.ToString(request.genre) <> "" then params.AddReplace("genres", request.genre)
     if Type(request.years) = "roArray" and request.years.Count() > 0 then params.AddReplace("years", request.years.Join(","))
     return params
 end function
@@ -106,7 +105,7 @@ function loadNonAlphabeticMusicVideos(request as object, params as object) as ob
 
     items = ApiPayload.GetItems(lowerResponse.data)
     for each item in ApiPayload.GetItems(upperResponse.data)
-        name = UCase(Format.SafeString(item.Name, ""))
+        name = UCase(Strings.ToString(item.Name))
         if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
     end for
     return { ok: true, data: { Items: items } }
@@ -129,7 +128,7 @@ end function
 function buildMusicVideoPlaybackQueue(items as object) as object
     queue = []
     for each item in items
-        itemId = Format.SafeString(item.Id, "")
+        itemId = Strings.ToString(item.Id)
         if itemId = "" then continue for
         queue.Push({
             itemId: itemId

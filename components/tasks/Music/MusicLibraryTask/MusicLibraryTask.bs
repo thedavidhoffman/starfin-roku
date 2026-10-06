@@ -1,6 +1,6 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/JellyfinImage.bs"
-import "pkg:/source/Format.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/LibraryBrowse.bs"
 import "pkg:/source/Encode.bs"
@@ -30,7 +30,7 @@ sub executeRequest()
     validationError = TaskRequest.ValidateRequest(request, "musicLibrary", ["userId", "libraryId"])
     if validationError <> invalid then
         if request <> invalid then
-            validationError.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+            validationError.AddReplace("libraryId", Strings.ToString(request.libraryId))
             validationError.AddReplace("queryId", Number.ToInteger(request.queryId, 0))
         end if
         m.top.response = validationError
@@ -38,8 +38,8 @@ sub executeRequest()
     end if
 
     params = {
-        userId: Format.SafeString(request.userId, "")
-        parentId: Format.SafeString(request.libraryId, "")
+        userId: Strings.ToString(request.userId)
+        parentId: Strings.ToString(request.libraryId)
         recursive: true
         includeItemTypes: "MusicAlbum"
         fields: getAlbumFields(request)
@@ -50,10 +50,10 @@ sub executeRequest()
         sortOrder: getAlbumSortOrder(request)
     }
     if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
-    if Format.SafeString(request.artistIds, "") <> "" then params.AddReplace("artistIds", request.artistIds)
-    if Format.SafeString(request.genre, "") <> "" then params.AddReplace("genres", request.genre)
+    if Strings.ToString(request.artistIds) <> "" then params.AddReplace("artistIds", request.artistIds)
+    if Strings.ToString(request.genre) <> "" then params.AddReplace("genres", request.genre)
     if Type(request.years) = "roArray" and request.years.Count() > 0 then params.AddReplace("years", request.years.Join(","))
-    startsWith = Format.SafeString(request.startsWith, "ALL")
+    startsWith = Strings.ToString(request.startsWith, "ALL")
     if startsWith <> "" and startsWith <> "ALL" and startsWith <> "#" then params.AddReplace("nameStartsWith", startsWith)
 
     pageSize = getAlbumPageSize(request)
@@ -63,14 +63,14 @@ sub executeRequest()
     if startsWith = "#" then
         response = loadNonAlphabeticAlbumPage(request, params, startIndex, pageSize)
     else
-        requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+        requestUrl = request.server + "/Users/" + Strings.ToString(request.userId) + "/Items" + Url.BuildQueryString(params)
         response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
     end if
-    m.log.write("HTTP page completed libraryId=" + Format.SafeString(request.libraryId, "") + " startIndex=" + startIndex.ToStr() + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
+    m.log.write("HTTP page completed libraryId=" + Strings.ToString(request.libraryId) + " startIndex=" + startIndex.ToStr() + " elapsedMs=" + requestTimer.TotalMilliseconds().ToStr() + " ok=" + (response.ok = true).ToStr())
     if response.ok <> true then
-        m.log.error("Album request failed libraryId=" + Format.SafeString(request.libraryId, "") + " message=" + Format.SafeString(response.errorMessage, ""))
+        m.log.error("Album request failed libraryId=" + Strings.ToString(request.libraryId) + " message=" + Strings.ToString(response.errorMessage))
         response.AddReplace("action", "musicLibrary")
-        response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        response.AddReplace("libraryId", Strings.ToString(request.libraryId))
         response.AddReplace("queryId", Number.ToInteger(request.queryId, 0))
         m.top.response = response
         return
@@ -80,7 +80,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "musicLibrary"
-        libraryId: Format.SafeString(request.libraryId, "")
+        libraryId: Strings.ToString(request.libraryId)
         payload: response.data
         startIndex: startIndex
         nextStartIndex: startIndex + albums.Count()
@@ -94,7 +94,7 @@ end sub
 ' loadNonAlphabeticAlbumPage
 '-------------------------------------------------------------------------------
 function loadNonAlphabeticAlbumPage(request as object, params as object, startIndex as integer, pageSize as integer) as object
-    cacheKey = Format.SafeString(request.libraryId, "") + "|" + Format.SafeString(request.albumSortOrder, "") + "|" + Format.SafeString(request.genre, "") + "|" + (request.favoriteOnly = true).ToStr()
+    cacheKey = Strings.ToString(request.libraryId) + "|" + Strings.ToString(request.albumSortOrder) + "|" + Strings.ToString(request.genre) + "|" + (request.favoriteOnly = true).ToStr()
     if Type(request.years) = "roArray" then cacheKey = cacheKey + "|" + request.years.Join(",")
     if startIndex = 0 or m.nonAlphabeticCache = invalid or m.nonAlphabeticCache.key <> cacheKey then
         baseParams = copyUnpagedAlbumParams(params)
@@ -110,7 +110,7 @@ function loadNonAlphabeticAlbumPage(request as object, params as object, startIn
 
         items = ApiPayload.GetItems(lowerResponse.data)
         for each item in ApiPayload.GetItems(upperResponse.data)
-            name = UCase(Format.SafeString(item.SortName, Format.SafeString(item.Name, "")))
+            name = UCase(Strings.ToString(item.SortName, Strings.ToString(item.Name)))
             if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
         end for
         items = LetterBrowse.SortItems(items, request.albumSortOrder)
@@ -146,7 +146,7 @@ end function
 ' requestAlbumItems
 '-------------------------------------------------------------------------------
 function requestAlbumItems(request as object, params as object) as object
-    requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+    requestUrl = request.server + "/Users/" + Strings.ToString(request.userId) + "/Items" + Url.BuildQueryString(params)
     return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
 end function
 
@@ -163,7 +163,7 @@ end function
 '-------------------------------------------------------------------------------
 function getAlbumFields(request as dynamic) as string
     fields = "SortName,AlbumArtist"
-    if request <> invalid and Format.SafeString(request.artistIds, "") <> "" then fields = fields + ",ProductionYear,PremiereDate"
+    if request <> invalid and Strings.ToString(request.artistIds) <> "" then fields = fields + ",ProductionYear,PremiereDate"
     return fields
 end function
 
@@ -180,7 +180,7 @@ end function
 ' getAlbumSortBy
 '-------------------------------------------------------------------------------
 function getAlbumSortBy(request as object) as string
-    sortBy = Format.SafeString(request.albumSortBy, LibraryBrowse.ApiSortBy.Title)
+    sortBy = Strings.ToString(request.albumSortBy, LibraryBrowse.ApiSortBy.Title)
     if sortBy = LibraryBrowse.ApiSortBy.ReleaseYear then return sortBy
     return LibraryBrowse.ApiSortBy.Title
 end function

@@ -1,5 +1,5 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/TaskControl.bs"
-import "pkg:/source/Format.bs"
 
 ' MediaActionsController consolidates media action handlers so they do not need
 ' to be duplicated across each page that supports media actions.
@@ -26,12 +26,11 @@ sub onActionRequestChanged()
     request = m.top.actionRequest
     if request = invalid then return
 
-    action = Format.SafeString(request.action, "")
-    task = getTaskForAction(action)
+    task = getTaskForAction(Strings.ToString(request.action))
     if task = invalid then
         m.state.activeRequest = invalid
         m.top.actionFailed = {
-            itemId: Format.SafeString(request.itemId, "")
+            itemId: Strings.ToString(request.itemId)
             errorMessage: "Unsupported media action."
         }
         return
@@ -68,30 +67,30 @@ sub onActionTaskResponse(event as object)
     if response = invalid then return
     request = m.state.activeRequest
     if request = invalid then return
-    if Format.SafeString(response.itemId, "") <> Format.SafeString(request.itemId, "") then return
-    if Format.SafeString(response.action, "") <> Format.SafeString(request.action, "") then return
+    if Strings.ToString(response.itemId) <> Strings.ToString(request.itemId) then return
+    if Strings.ToString(response.action) <> Strings.ToString(request.action) then return
     m.state.activeRequest = invalid
 
     if response.ok <> true then
         failure = {}
         failure.Append(response)
-        failure.itemId = Format.SafeString(response.itemId, "")
-        failure.errorMessage = Format.SafeString(response.errorMessage, "Unable to update media state.")
+        failure.itemId = Strings.ToString(response.itemId)
+        failure.errorMessage = Strings.ToString(response.errorMessage, "Unable to update media state.")
         m.top.actionFailed = failure
         return
     end if
 
-    result = getMediaStateResult(Format.SafeString(response.action, ""))
+    result = getMediaStateResult(Strings.ToString(response.action))
     if result = invalid then
         m.top.actionFailed = {
-            itemId: Format.SafeString(response.itemId, "")
+            itemId: Strings.ToString(response.itemId)
             errorMessage: "Unable to resolve media action result."
         }
         return
     end if
 
     m.top.mediaStateChanged = {
-        itemId: Format.SafeString(response.itemId, "")
+        itemId: Strings.ToString(response.itemId)
         action: result.action
         value: result.value
     }

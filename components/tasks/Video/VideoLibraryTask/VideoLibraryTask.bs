@@ -1,7 +1,6 @@
 import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/String.bs"
-import "pkg:/source/Format.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/LibraryBrowse.bs"
@@ -26,16 +25,16 @@ sub executeRequest()
     request = m.top.request
     validationError = TaskRequest.ValidateRequest(request, "videoLibrary", ["userId", "libraryId"])
     if validationError <> invalid then
-        if request <> invalid then validationError.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        if request <> invalid then validationError.AddReplace("libraryId", Strings.ToString(request.libraryId))
         m.top.response = validationError
         return
     end if
 
     params = {
-        userId: Format.SafeString(request.userId, "")
-        parentId: Format.SafeString(request.libraryId, "")
-        recursive: LCase(Format.SafeString(request.collectionType, "")) <> "playlists"
-        includeItemTypes: Format.SafeString(request.includeItemTypes, "")
+        userId: Strings.ToString(request.userId)
+        parentId: Strings.ToString(request.libraryId)
+        recursive: LCase(Strings.ToString(request.collectionType)) <> "playlists"
+        includeItemTypes: Strings.ToString(request.includeItemTypes)
         fields: getVideoLibraryFields(request)
         enableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Backdrop, JellyfinImage.Type.Thumb, JellyfinImage.Type.Logo])
         imageTypeLimit: 1
@@ -44,9 +43,9 @@ sub executeRequest()
         sortOrder: getSortOrder(request)
     }
     if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
-    if Format.SafeString(request.genre, "") <> "" then params.AddReplace("genres", request.genre)
+    if Strings.ToString(request.genre) <> "" then params.AddReplace("genres", request.genre)
     if Type(request.years) = "roArray" and request.years.Count() > 0 then params.AddReplace("years", request.years.Join(","))
-    startsWith = Format.SafeString(request.startsWith, "ALL")
+    startsWith = Strings.ToString(request.startsWith, "ALL")
     if startsWith <> "" and startsWith <> "ALL" and startsWith <> "#" then
         params.AddReplace("nameStartsWith", startsWith)
     end if
@@ -62,7 +61,7 @@ sub executeRequest()
     else
         if requestMode = "playlist" then
             playlistParams = {
-                userId: Format.SafeString(request.userId, "")
+                userId: Strings.ToString(request.userId)
                 fields: getVideoLibraryFields(request)
                 enableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Backdrop, JellyfinImage.Type.Thumb, JellyfinImage.Type.Logo])
                 imageTypeLimit: 1
@@ -70,15 +69,15 @@ sub executeRequest()
                 limit: pageSize
                 enableTotalRecordCount: true
             }
-            requestUrl = request.server + "/Playlists/" + Format.SafeString(request.libraryId, "") + "/Items" + Url.BuildQueryString(playlistParams)
+            requestUrl = request.server + "/Playlists/" + Strings.ToString(request.libraryId) + "/Items" + Url.BuildQueryString(playlistParams)
         else
-            requestUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(params)
+            requestUrl = request.server + "/Users/" + Strings.ToString(request.userId) + "/Items" + Url.BuildQueryString(params)
         end if
         response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), true, getVideoLibraryTimeoutMs(request))
     end if
     if response.ok <> true then
         response.AddReplace("action", "videoLibrary")
-        response.AddReplace("libraryId", Format.SafeString(request.libraryId, ""))
+        response.AddReplace("libraryId", Strings.ToString(request.libraryId))
         response.AddReplace("queryId", Number.ToInteger(request.queryId, -1))
         m.top.response = response
         return
@@ -87,7 +86,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: "videoLibrary"
-        libraryId: Format.SafeString(request.libraryId, "")
+        libraryId: Strings.ToString(request.libraryId)
         payload: response.data
         startIndex: startIndex
         nextStartIndex: startIndex + ApiPayload.GetItems(response.data).Count()
@@ -101,7 +100,7 @@ end sub
 ' getVideoLibraryRequestMode
 '-------------------------------------------------------------------------------
 function getVideoLibraryRequestMode(request as object, startsWith as string) as string
-    collectionType = LCase(Format.SafeString(request.collectionType, ""))
+    collectionType = LCase(Strings.ToString(request.collectionType))
     if startsWith = "#" and collectionType <> "playlist" then return "nonAlphabetic"
     if collectionType = "playlist" then return "playlist"
     return "items"
@@ -111,7 +110,7 @@ end function
 ' getVideoLibraryTimeoutMs
 '-------------------------------------------------------------------------------
 function getVideoLibraryTimeoutMs(request as dynamic) as integer
-    collectionType = LCase(Format.SafeString(request.collectionType, ""))
+    collectionType = LCase(Strings.ToString(request.collectionType))
     if collectionType = "movies" or collectionType = "tvshows" then return 120000
 
     return 60000
@@ -122,7 +121,7 @@ end function
 '-------------------------------------------------------------------------------
 function getVideoLibraryFields(request as dynamic) as string
     fields = "SortName,ProductionYear"
-    if request <> invalid and Format.SafeString(request.sortBy, "") = LibraryBrowse.SortKey.ReleaseDate then fields = fields + ",PremiereDate"
+    if request <> invalid and Strings.ToString(request.sortBy) = LibraryBrowse.SortKey.ReleaseDate then fields = fields + ",PremiereDate"
     if request <> invalid and request.detailed = true then
         fields = fields + ",Overview,OfficialRating"
     end if
@@ -135,7 +134,7 @@ end function
 function loadNonAlphabeticPage(request as object, params as object, startIndex as integer, pageSize as integer) as object
     yearsKey = ""
     if Type(request.years) = "roArray" then yearsKey = request.years.Join(",")
-    cacheKey = Format.SafeString(request.libraryId, "") + "|" + Format.SafeString(request.sortBy, "") + "|" + Format.SafeString(request.sortOrder, "") + "|" + Format.SafeString(request.genre, "") + "|" + yearsKey + "|" + (request.favoriteOnly = true).ToStr() + "|" + (request.detailed = true).ToStr()
+    cacheKey = Strings.ToString(request.libraryId) + "|" + Strings.ToString(request.sortBy) + "|" + Strings.ToString(request.sortOrder) + "|" + Strings.ToString(request.genre) + "|" + yearsKey + "|" + (request.favoriteOnly = true).ToStr() + "|" + (request.detailed = true).ToStr()
     if startIndex = 0 or m.nonAlphabeticCache = invalid or m.nonAlphabeticCache.key <> cacheKey then
         baseParams = {}
         for each key in params
@@ -147,7 +146,7 @@ function loadNonAlphabeticPage(request as object, params as object, startIndex a
             lowerParams[key] = baseParams[key]
         end for
         lowerParams.AddReplace("nameLessThan", "A")
-        lowerUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(lowerParams)
+        lowerUrl = request.server + "/Users/" + Strings.ToString(request.userId) + "/Items" + Url.BuildQueryString(lowerParams)
         lowerResponse = HttpClient.Request(lowerUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), true, getVideoLibraryTimeoutMs(request))
         if lowerResponse.ok <> true then return lowerResponse
 
@@ -156,16 +155,16 @@ function loadNonAlphabeticPage(request as object, params as object, startIndex a
             upperParams[key] = baseParams[key]
         end for
         upperParams.AddReplace("nameStartsWithOrGreater", "Z")
-        upperUrl = request.server + "/Users/" + Format.SafeString(request.userId, "") + "/Items" + Url.BuildQueryString(upperParams)
+        upperUrl = request.server + "/Users/" + Strings.ToString(request.userId) + "/Items" + Url.BuildQueryString(upperParams)
         upperResponse = HttpClient.Request(upperUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), true, getVideoLibraryTimeoutMs(request))
         if upperResponse.ok <> true then return upperResponse
 
         items = ApiPayload.GetItems(lowerResponse.data)
         for each item in ApiPayload.GetItems(upperResponse.data)
-            name = UCase(Format.SafeString(item.Name, ""))
+            name = UCase(Strings.ToString(item.Name))
             if name <> "" and Left(name, 1) <> "Z" then items.Push(item)
         end for
-        items = sortNonAlphabeticItems(items, Format.SafeString(request.sortBy, LibraryBrowse.SortKey.Title), LibraryBrowse.NormalizeSortOrder(request.sortOrder))
+        items = sortNonAlphabeticItems(items, Strings.ToString(request.sortBy, LibraryBrowse.SortKey.Title), LibraryBrowse.NormalizeSortOrder(request.sortOrder))
         m.nonAlphabeticCache = { key: cacheKey, items: items }
     end if
 
@@ -187,10 +186,10 @@ end function
 function sortNonAlphabeticItems(items as object, sortBy as string, sortOrder as string) as object
     entries = []
     for each item in items
-        title = LCase(Format.SafeString(item.SortName, Format.SafeString(item.Name, "")))
+        title = LCase(Strings.ToString(item.SortName, Strings.ToString(item.Name)))
         sortValue = title
-        if sortBy = LibraryBrowse.SortKey.ReleaseDate then sortValue = Format.SafeString(item.PremiereDate, "") + "|" + title
-        if sortBy = LibraryBrowse.SortKey.DateAdded then sortValue = Format.SafeString(item.DateCreated, "") + "|" + title
+        if sortBy = LibraryBrowse.SortKey.ReleaseDate then sortValue = Strings.ToString(item.PremiereDate) + "|" + title
+        if sortBy = LibraryBrowse.SortKey.DateAdded then sortValue = Strings.ToString(item.DateCreated) + "|" + title
         entries.Push({ item: item, sortKey: sortValue })
     end for
     entries.SortBy("sortKey")
@@ -228,7 +227,7 @@ end function
 ' getSortBy
 '-------------------------------------------------------------------------------
 function getSortBy(request as dynamic) as string
-    sortBy = Format.SafeString(request.sortBy, "")
+    sortBy = Strings.ToString(request.sortBy)
     if sortBy = LibraryBrowse.SortKey.ReleaseDate then return "PremiereDate,ProductionYear,SortName"
     if sortBy <> "" then return sortBy
 
@@ -239,7 +238,7 @@ end function
 ' getSortOrder
 '-------------------------------------------------------------------------------
 function getSortOrder(request as dynamic) as string
-    sortOrder = Format.SafeString(request.sortOrder, "")
+    sortOrder = Strings.ToString(request.sortOrder)
     if sortOrder = LibraryBrowse.SortOrder.Descending then return LibraryBrowse.SortOrder.Descending
 
     return LibraryBrowse.SortOrder.Ascending

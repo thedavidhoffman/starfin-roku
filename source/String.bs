@@ -3,6 +3,25 @@ import "pkg:/source/Char.bs"
 namespace Strings
 
     '---------------------------------------------------------------------------
+    ' Strings.ToString
+    '---------------------------------------------------------------------------
+    ' Example: invalid with a "fallback" fallback returns "fallback".
+    '---------------------------------------------------------------------------
+    function ToString(value as dynamic, fallback = "" as string) as string
+        if value = invalid then return fallback
+
+        valueType = Type(value)
+        if valueType = "String" or valueType = "roString" then return value
+        if valueType = "Boolean" or valueType = "roBoolean" then
+            if value then return "true"
+            return "false"
+        end if
+        if FindMemberFunction(value, "ToStr") <> invalid then return value.ToStr()
+
+        return fallback
+    end function
+
+    '---------------------------------------------------------------------------
     ' Strings.Join
     '---------------------------------------------------------------------------
     ' Example: ["Primary", "Backdrop"] returns "Primary,Backdrop".
@@ -13,7 +32,7 @@ namespace Strings
         result = ""
         for i = 0 to values.Count() - 1
             if i > 0 then result = result + delimiter
-            result = result + Format.SafeString(values[i], "")
+            result = result + ToString(values[i])
         end for
 
         return result
@@ -25,9 +44,7 @@ namespace Strings
     ' Example: "  Starfin Roku  " returns "Starfin Roku".
     '---------------------------------------------------------------------------
     function Trim(value as dynamic) as string
-        if value = invalid then return ""
-
-        text = value.ToStr()
+        text = ToString(value)
         startIndex = 0
         endIndex = Len(text) - 1
 
@@ -49,6 +66,8 @@ namespace Strings
     ' Example: ("one fish", "fish", "movie") returns "one movie".
     '---------------------------------------------------------------------------
     function Replace(value as string, oldValue as string, newValue as string) as string
+        if oldValue = "" then return value
+
         result = ""
         remaining = value
         index = Instr(1, remaining, oldValue)
@@ -68,7 +87,7 @@ namespace Strings
     ' Example: "  one  two  " returns "one two".
     '---------------------------------------------------------------------------
     function CollapseWhitespace(value as dynamic) as string
-        text = Format.SafeString(value, "")
+        text = ToString(value)
         result = ""
         previousWasSpace = false
 
@@ -88,16 +107,17 @@ namespace Strings
         return Strings.Trim(result)
     end function
 
-    ' Case-insensitive comparator for natural sorting, so numbered text sorts by
-    ' numeric value ("Book 2" before "Book 10") instead of plain text order.
     '---------------------------------------------------------------------------
     ' Strings.NaturalCompare
     '---------------------------------------------------------------------------
+    ' Case-insensitive comparator for natural sorting, so numbered text sorts by
+    ' numeric value ("Book 2" before "Book 10") instead of plain text order.
+    '
     ' Example: ("Book 2", "Book 10") returns -1.
     '---------------------------------------------------------------------------
     function NaturalCompare(leftValue as dynamic, rightValue as dynamic) as integer
-        left = LCase(Format.SafeString(leftValue, ""))
-        right = LCase(Format.SafeString(rightValue, ""))
+        left = LCase(ToString(leftValue))
+        right = LCase(ToString(rightValue))
         leftIndex = 1
         rightIndex = 1
 
@@ -189,7 +209,7 @@ namespace Strings
     ' Example: "9" returns true; "a" returns false.
     '---------------------------------------------------------------------------
     function IsDigit(value as string) as boolean
-        return value >= "0" and value <= "9"
+        return Len(value) = 1 and value >= "0" and value <= "9"
     end function
 
     '---------------------------------------------------------------------------
@@ -198,7 +218,7 @@ namespace Strings
     ' Example: "<p>First</p><p>Second</p>" returns "First Second".
     '---------------------------------------------------------------------------
     function StripHtmlMarkup(value as dynamic) as string
-        text = Format.SafeString(value, "")
+        text = ToString(value)
         text = Strings.Replace(text, "</p> <p>", Char.NewLine)
         text = Strings.Replace(text, "</p><p>", Char.NewLine)
         result = ""
@@ -236,12 +256,12 @@ namespace Strings
         if values = invalid then return ""
 
         if Type(values) <> "roArray" and Type(values) <> "roAssociativeArray" then
-            return Strings.Trim(values.ToStr())
+            values = [values]
         end if
 
         result = ""
         for each value in values
-            text = Strings.Trim(value.ToStr())
+            text = Strings.Trim(value)
             if text <> "" then
                 if result <> "" then result = result + ", "
                 result = result + text

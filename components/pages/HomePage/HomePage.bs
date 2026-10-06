@@ -85,7 +85,7 @@ sub onHomeShelfSelected(event as object)
 
     item = selection.item
     m.homeState.focusedShelfIndex = Number.ToInteger(selection.rowIndex, m.homeState.focusedShelfIndex)
-    rowKey = Format.SafeString(selection.rowKey, "")
+    rowKey = Strings.ToString(selection.rowKey)
     if isMusicLatestRow(rowKey) then
         selectHomeAlbum(item)
     else if isHomeMediaLatestRow(rowKey) then
@@ -99,20 +99,20 @@ end sub
 ' selectHomeMediaItem
 '-------------------------------------------------------------------------------
 sub selectHomeMediaItem(item as dynamic)
-    itemId = Format.SafeString(item.Id, "")
+    itemId = Strings.ToString(item.Id)
     if itemId = "" then return
-    itemType = LCase(Format.SafeString(item.Type, ""))
+    itemType = LCase(Strings.ToString(item.Type))
     if itemType = "folder" or itemType = "photoalbum" then
         m.top.selectedHomeMediaLibrary = { libraryId: itemId, collectionType: "homevideos", item: item }
     else if itemType = "photo" then
-        m.top.selectedHomeMediaPhoto = { items: [item], index: 0, sourceFolderId: Format.SafeString(item.ParentId, "") }
+        m.top.selectedHomeMediaPhoto = { items: [item], index: 0, sourceFolderId: Strings.ToString(item.ParentId) }
     else if itemType = "video" then
         request = HomeVideoPlayback.CreateOverlayRequest(item, m.homeState.request.server, "home")
         if request <> invalid then
             rowKey = ""
             index = m.homeState.focusedShelfIndex
             if index >= 0 and index < m.homeState.shelfNodes.Count() then
-                rowKey = Format.SafeString(m.homeState.shelfNodes[index].rowContent.rowKey, "")
+                rowKey = Strings.ToString(m.homeState.shelfNodes[index].rowContent.rowKey)
             end if
             m.homeState.playbackOverlay = { open: true, returnTarget: { rowKey: rowKey, itemId: itemId } }
             m.top.overlayRequested = request
@@ -126,7 +126,7 @@ end sub
 ' selectHomeAlbum
 '-------------------------------------------------------------------------------
 sub selectHomeAlbum(item as dynamic)
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId = "" then return
 
     m.top.selectedAlbum = {
@@ -139,7 +139,7 @@ end sub
 ' selectHomeItem
 '-------------------------------------------------------------------------------
 sub selectHomeItem(item as dynamic)
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId = "" then return
 
     if isCollectionsLibrary(item) then
@@ -175,7 +175,7 @@ sub selectHomeItem(item as dynamic)
             itemId: itemId
             item: item
         }
-    else if LCase(Format.SafeString(item.Type, "")) = "video" then
+    else if LCase(Strings.ToString(item.Type)) = "video" then
         selectHomeMediaItem(item)
     else if isPlayableMovie(item) then
         m.top.selectedMovie = {
@@ -383,9 +383,9 @@ end function
 function getHomeSessionKey(request as dynamic) as string
     if request = invalid then return ""
 
-    accountKey = Format.SafeString(request.accountKey, "")
+    accountKey = Strings.ToString(request.accountKey)
     if accountKey <> "" then return accountKey
-    return LCase(Format.SafeString(request.server, "")) + "|" + Format.SafeString(request.userId, "")
+    return LCase(Strings.ToString(request.server)) + "|" + Strings.ToString(request.userId)
 end function
 
 '-------------------------------------------------------------------------------
@@ -398,7 +398,7 @@ function isCurrentHomeTask(task as dynamic, action as string) as boolean
     request = task.request
     if request = invalid then return false
     if Number.ToInteger(request.homeQueryId, -1) <> m.homeState.queryId then return false
-    return Format.SafeString(request.homeSessionKey, "") = m.homeState.sessionKey
+    return Strings.ToString(request.homeSessionKey) = m.homeState.sessionKey
 end function
 
 '-------------------------------------------------------------------------------
@@ -469,7 +469,7 @@ sub onSectionResponse(event as object)
     task = event.getRoSGNode()
     response = event.getData()
     if response = invalid then return
-    action = Format.SafeString(response.action, "")
+    action = Strings.ToString(response.action)
     if isCurrentHomeTask(task, action) <> true then return
     completeHomeTask(task)
     if handleHomeResponseFailure(response) then
@@ -543,10 +543,10 @@ end function
 sub addItemKeys(keys as object, item as dynamic)
     if Arrays.IsAssocArray(item) = false then return
 
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId <> "" then keys["item:" + itemId] = true
 
-    seriesId = Format.SafeString(Format.FirstNonEmpty([item.SeriesId], ""), "")
+    seriesId = Format.FirstNonEmpty([item.SeriesId], "")
     if seriesId <> "" then keys["series:" + seriesId] = true
 end sub
 
@@ -556,10 +556,10 @@ end sub
 function hasAnyItemKey(item as dynamic, keys as object) as boolean
     if Arrays.IsAssocArray(item) = false then return false
 
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId <> "" and keys.DoesExist("item:" + itemId) then return true
 
-    seriesId = Format.SafeString(Format.FirstNonEmpty([item.SeriesId], ""), "")
+    seriesId = Format.FirstNonEmpty([item.SeriesId], "")
     if seriesId <> "" and keys.DoesExist("series:" + seriesId) then return true
 
     return false
@@ -598,7 +598,7 @@ function getHomeErrorMessage(response as object, libraryName = "" as string) as 
         liveTvOnNow: "On Now"
         latestMedia: "Recently Added"
     }
-    section = Format.SafeString(sections[Format.SafeString(response.action, "")], "a Home section")
+    section = Strings.ToString(sections[Strings.ToString(response.action)], "a Home section")
     if response.action = "latestMedia" and libraryName <> "" then section += " in " + libraryName
 
     context = "Unable to load " + section + "."
@@ -620,12 +620,12 @@ sub queueLatestMediaRows(libraries as object)
 
     for each item in libraries
         if Arrays.IsAssocArray(item) = false then continue for
-        if excludedIds.DoesExist(Format.SafeString(item.Id, "")) then continue for
+        if excludedIds.DoesExist(Strings.ToString(item.Id)) then continue for
 
         collectionType = LCase(Format.FirstNonEmpty([item.CollectionType], ""))
         if collectionType <> "boxsets" and collectionType <> "livetv" and collectionType <> "program" then
             library = {
-                id: Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+                id: Format.FirstNonEmpty([item.Id], "")
                 name: Format.FirstNonEmpty([item.Name], "Library")
                 collectionType: collectionType
             }
@@ -671,20 +671,19 @@ sub onDynamicLatestMediaResponse(event as object)
     response = event.getData()
     if isCurrentLatestMediaTask(task) <> true then return
     libraryName = ""
-    library = m.homeState.latestLibraries[Format.SafeString(task.request.parentId, "")]
-    if library <> invalid then libraryName = Format.SafeString(library.name, "")
+    library = m.homeState.latestLibraries[Strings.ToString(task.request.parentId)]
+    if library <> invalid then libraryName = Strings.ToString(library.name)
     cleanupLatestMediaTask(task)
     failed = handleHomeResponseFailure(response, libraryName)
     publishHomeRefreshMessages()
     if failed then return
 
-    parentId = Format.SafeString(response.parentId, "")
+    parentId = Strings.ToString(response.parentId)
     if parentId = "" then return
     if m.homeState.latestLibraries.DoesExist(parentId) = false then return
 
     library = m.homeState.latestLibraries[parentId]
-    key = "latest:" + Format.SafeString(library.id, "")
-    addRow(key, "Recently Added in " + Format.FirstNonEmpty([library.name], "Library"), ApiPayload.GetItems(response.payload))
+    addRow("latest:" + Strings.ToString(library.id), "Recently Added in " + Format.FirstNonEmpty([library.name], "Library"), ApiPayload.GetItems(response.payload))
     renderRows(false)
 end sub
 
@@ -723,8 +722,8 @@ function buildRowContent(key as string, title as string, items as object) as obj
             showMetadata: shouldShowHomeItemMetadata(key)
             raw: item
         }
-        if isHomeMediaRow then fields.tracksPlaybackProgress = LCase(Format.SafeString(item.Type, "")) = "video"
-        if isHomeMediaRow or LCase(Format.SafeString(item.Type, "")) = "video" then fields.showWatchedIndicator = false
+        if isHomeMediaRow then fields.tracksPlaybackProgress = LCase(Strings.ToString(item.Type)) = "video"
+        if isHomeMediaRow or LCase(Strings.ToString(item.Type)) = "video" then fields.showWatchedIndicator = false
         child.AddFields(fields)
     end for
 
@@ -865,7 +864,7 @@ end function
 function isMusicLatestRow(key as string) as boolean
     for each libraryId in m.homeState.latestLibraries
         library = m.homeState.latestLibraries[libraryId]
-        if key = "latest:" + Format.SafeString(library.id, "") then return library.collectionType = "music"
+        if key = "latest:" + Strings.ToString(library.id) then return library.collectionType = "music"
     end for
 
     return false
@@ -1020,8 +1019,8 @@ function getHomeLogoOverlayUrl(key as string, item as dynamic, imageUrl as strin
     ' Match the selected artwork so series fallbacks never receive an overlay.
     if episodeUrl = "" or imageUrl <> episodeUrl then return ""
 
-    logoId = Format.SafeString(item.ParentLogoItemId, "")
-    logoTag = Format.SafeString(item.ParentLogoImageTag, "")
+    logoId = Strings.ToString(item.ParentLogoItemId)
+    logoTag = Strings.ToString(item.ParentLogoImageTag)
     if logoId = "" or logoTag = "" then return ""
     return Url.BuildImageUrl(m.homeState.request.server, logoId, JellyfinImage.Type.Logo, logoTag, 300, 150, { format: "Png" })
 end function
@@ -1160,8 +1159,7 @@ end function
 function isPlayableMovie(item as dynamic) as boolean
     if Arrays.IsAssocArray(item) = false then return false
 
-    itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
-    return itemType = "movie"
+    return LCase(Format.FirstNonEmpty([item.Type], "")) = "movie"
 end function
 
 '-------------------------------------------------------------------------------
@@ -1170,8 +1168,7 @@ end function
 function isTVEpisode(item as dynamic) as boolean
     if Arrays.IsAssocArray(item) = false then return false
 
-    itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
-    return itemType = "episode"
+    return LCase(Format.FirstNonEmpty([item.Type], "")) = "episode"
 end function
 
 '-------------------------------------------------------------------------------
@@ -1180,15 +1177,14 @@ end function
 function isTVSeries(item as dynamic) as boolean
     if Arrays.IsAssocArray(item) = false then return false
 
-    itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
-    return itemType = "series"
+    return LCase(Format.FirstNonEmpty([item.Type], "")) = "series"
 end function
 
 '-------------------------------------------------------------------------------
 ' isMediaLibrary
 '-------------------------------------------------------------------------------
 function isMediaLibrary(item as dynamic) as boolean
-    collectionType = LCase(Format.SafeString(item.CollectionType, ""))
+    collectionType = LCase(Strings.ToString(item.CollectionType))
     return collectionType = "movies" or collectionType = "tvshows" or collectionType = "musicvideos" or collectionType = "playlists"
 end function
 
@@ -1197,7 +1193,7 @@ end function
 '-------------------------------------------------------------------------------
 function isHomeMediaLibrary(item as dynamic) as boolean
     if Arrays.IsAssocArray(item) = false then return false
-    return LCase(Format.SafeString(item.CollectionType, "")) = "homevideos"
+    return LCase(Strings.ToString(item.CollectionType)) = "homevideos"
 end function
 
 '-------------------------------------------------------------------------------
@@ -1208,14 +1204,14 @@ function isHomeMediaLatestRow(rowKey as string) as boolean
     if Left(rowKey, Len(prefix)) <> prefix then return false
     libraryId = Mid(rowKey, Len(prefix) + 1)
     if m.homeState.latestLibraries.DoesExist(libraryId) = false then return false
-    return Format.SafeString(m.homeState.latestLibraries[libraryId].collectionType, "") = "homevideos"
+    return Strings.ToString(m.homeState.latestLibraries[libraryId].collectionType) = "homevideos"
 end function
 
 '-------------------------------------------------------------------------------
 ' isMusicLibrary
 '-------------------------------------------------------------------------------
 function isMusicLibrary(item as dynamic) as boolean
-    return LCase(Format.SafeString(item.CollectionType, "")) = "music"
+    return LCase(Strings.ToString(item.CollectionType)) = "music"
 end function
 
 '-------------------------------------------------------------------------------
@@ -1229,10 +1225,10 @@ end function
 ' isLiveTvLibrary
 '-------------------------------------------------------------------------------
 function isLiveTvLibrary(item as dynamic) as boolean
-    collectionType = LCase(Format.SafeString(item.CollectionType, ""))
+    collectionType = LCase(Strings.ToString(item.CollectionType))
     if collectionType = "livetv" then return true
 
-    return LCase(Format.SafeString(item.Name, "")) = "live tv"
+    return LCase(Strings.ToString(item.Name)) = "live tv"
 end function
 
 '-------------------------------------------------------------------------------
@@ -1244,7 +1240,7 @@ function findCollectionId(items as object, collectionType as string) as string
     for each item in items
         if Arrays.IsAssocArray(item) = false then continue for
         if item.CollectionType <> invalid and LCase(item.CollectionType) = LCase(collectionType) then
-            return Format.SafeString(item.Id, "")
+            return Strings.ToString(item.Id)
         end if
     end for
 
@@ -1298,7 +1294,7 @@ function openFocusedMediaActions() as boolean
 
     shelf = m.homeState.shelfNodes[m.homeState.focusedShelfIndex]
     if shelf = invalid or shelf.isInFocusChain() <> true then return false
-    if Format.SafeString(shelf.rowContent.rowKey, "") = "libraries" then return false
+    if Strings.ToString(shelf.rowContent.rowKey) = "libraries" then return false
 
     item = shelf.callFunc("getFocusedItem")
     if item = invalid then return false
@@ -1353,7 +1349,7 @@ function isCurrentLatestMediaTask(task as dynamic) as boolean
     request = task.request
     if request = invalid then return false
     if Number.ToInteger(request.homeQueryId, -1) <> m.homeState.queryId then return false
-    return Format.SafeString(request.homeSessionKey, "") = m.homeState.sessionKey
+    return Strings.ToString(request.homeSessionKey) = m.homeState.sessionKey
 end function
 
 '-------------------------------------------------------------------------------

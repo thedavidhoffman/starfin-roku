@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/ApiPayload.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/Format.bs"
@@ -28,7 +29,7 @@ sub executeRequest()
     validationError = TaskRequest.ValidateRequest(request, TVEpisodeTaskResponse.Action.Complete, ["itemId"])
     if validationError <> invalid then
         validationError.AddReplace("requestId", getRequestId(request))
-        if request <> invalid then validationError.AddReplace("itemId", Format.SafeString(request.itemId, ""))
+        if request <> invalid then validationError.AddReplace("itemId", Strings.ToString(request.itemId))
         m.top.response = validationError
         return
     end if
@@ -36,14 +37,14 @@ sub executeRequest()
     episodeResult = loadEpisode(request)
     if episodeResult.ok <> true then
         episodeResult.AddReplace("action", TVEpisodeTaskResponse.Action.Complete)
-        episodeResult.AddReplace("itemId", Format.SafeString(request.itemId, ""))
+        episodeResult.AddReplace("itemId", Strings.ToString(request.itemId))
         episodeResult.AddReplace("requestId", getRequestId(request))
         m.top.response = episodeResult
         return
     end if
 
     series = invalid
-    seriesId = Format.SafeString(episodeResult.data.SeriesId, "")
+    seriesId = Strings.ToString(episodeResult.data.SeriesId)
     reuseSeries = SeriesIdentity.HasDetails(request.series, seriesId)
     if reuseSeries then series = request.series
 
@@ -51,7 +52,7 @@ sub executeRequest()
     m.top.response = {
         ok: true
         action: TVEpisodeTaskResponse.Action.Primary
-        itemId: Format.SafeString(request.itemId, "")
+        itemId: Strings.ToString(request.itemId)
         requestId: getRequestId(request)
         payload: episodeResult.data
         series: series
@@ -64,7 +65,7 @@ sub executeRequest()
             m.top.response = {
                 ok: true
                 action: TVEpisodeTaskResponse.Action.Series
-                itemId: Format.SafeString(request.itemId, "")
+                itemId: Strings.ToString(request.itemId)
                 requestId: getRequestId(request)
                 series: series
             }
@@ -74,13 +75,13 @@ sub executeRequest()
     response = {
         ok: true
         action: TVEpisodeTaskResponse.Action.Complete
-        itemId: Format.SafeString(request.itemId, "")
+        itemId: Strings.ToString(request.itemId)
         requestId: getRequestId(request)
         payload: episodeResult.data
         series: series
     }
 
-    if request.loadPlaybackQueue = true and LCase(Format.SafeString(episodeResult.data.Type, "")) = "episode" then
+    if request.loadPlaybackQueue = true and LCase(Strings.ToString(episodeResult.data.Type)) = "episode" then
         queue = loadPlaybackQueue(request, episodeResult.data)
         if queue <> invalid then
             response.AddReplace("playbackQueue", queue.items)
@@ -106,7 +107,7 @@ end function
 '-------------------------------------------------------------------------------
 function loadEpisode(request as object) as object
     params = {
-        userId: Format.SafeString(request.userId, "")
+        userId: Strings.ToString(request.userId)
         fields: "People,Overview,MediaStreams,MediaSources,UserData"
     }
 
@@ -119,7 +120,7 @@ end function
 '-------------------------------------------------------------------------------
 function loadSeries(request as object, seriesId as string) as object
     params = {
-        userId: Format.SafeString(request.userId, "")
+        userId: Strings.ToString(request.userId)
         enableImageTypes: JellyfinImage.Type.Logo
         imageTypeLimit: 1
     }
@@ -132,8 +133,8 @@ end function
 ' loadPlaybackQueue
 '-------------------------------------------------------------------------------
 function loadPlaybackQueue(request as object, episode as dynamic) as dynamic
-    seriesId = Format.SafeString(Format.FirstNonEmpty([episode.SeriesId], ""), "")
-    itemId = Format.SafeString(Format.FirstNonEmpty([episode.Id, request.itemId], ""), "")
+    seriesId = Format.FirstNonEmpty([episode.SeriesId], "")
+    itemId = Format.FirstNonEmpty([episode.Id, request.itemId], "")
     if seriesId = "" or itemId = "" then return invalid
 
     episodesResult = loadEpisodes(request, seriesId)
@@ -147,7 +148,7 @@ function loadPlaybackQueue(request as object, episode as dynamic) as dynamic
 
     queueItems = buildPlaybackQueueItems(episodes)
     queueIndex = getPlaybackQueueIndex(queueItems, itemId)
-    seasonId = Format.SafeString(Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], ""), "")
+    seasonId = Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], "")
 
     return {
         items: queueItems
@@ -161,7 +162,7 @@ end function
 '-------------------------------------------------------------------------------
 function loadEpisodes(request as object, seriesId as string) as object
     params = {
-        userId: Format.SafeString(request.userId, "")
+        userId: Strings.ToString(request.userId)
         fields: "MediaStreams,MediaSources,Overview,Trickplay,UserData"
     }
 
@@ -175,10 +176,10 @@ end function
 function buildPlaybackQueueItems(episodes as object) as object
     queue = []
     for each episode in episodes
-        episodeId = Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "")
+        episodeId = Format.FirstNonEmpty([episode.Id], "")
         if episodeId = "" then continue for
 
-        seasonId = Format.SafeString(Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], ""), "")
+        seasonId = Format.FirstNonEmpty([episode.SeasonId, episode.ParentId], "")
         queue.Push({
             itemId: episodeId
             item: episode
@@ -198,7 +199,7 @@ function getPlaybackQueueIndex(queue as object, itemId as string) as integer
 
     for i = 0 to queue.Count() - 1
         item = queue[i]
-        if item <> invalid and Format.SafeString(item.itemId, "") = itemId then return i
+        if item <> invalid and Strings.ToString(item.itemId) = itemId then return i
     end for
 
     return 0
@@ -209,7 +210,7 @@ end function
 '-------------------------------------------------------------------------------
 function buildSeasonIdentity(episode as dynamic, seasonId as string) as object
     seasonName = Format.FirstNonEmpty([episode.SeasonName], "")
-    if seasonName = "" and episode.ParentIndexNumber <> invalid then seasonName = "Season " + Format.SafeString(episode.ParentIndexNumber, "")
+    if seasonName = "" and episode.ParentIndexNumber <> invalid then seasonName = "Season " + Strings.ToString(episode.ParentIndexNumber)
 
     return {
         Id: seasonId

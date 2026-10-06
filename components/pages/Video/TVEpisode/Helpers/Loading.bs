@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TVEpisodeTaskResponse.bs"
 
@@ -8,7 +9,7 @@ sub loadItemDetails()
     request = m.state.request
     if request = invalid then return
 
-    itemId = Format.SafeString(request.itemId, "")
+    itemId = Strings.ToString(request.itemId)
     if itemId = "" then
         m.state.itemId = ""
         m.cast.people = []
@@ -25,7 +26,7 @@ sub loadItemDetails()
         userId: request.userId
         itemId: itemId
         series: request.series
-        loadPlaybackQueue: Format.SafeString(request.playbackQueueScope, "") <> "series"
+        loadPlaybackQueue: Strings.ToString(request.playbackQueueScope) <> "series"
     }, false)
 end sub
 
@@ -81,7 +82,7 @@ sub handleEpisodeDetailsResponse(task as dynamic)
     response = task.response
     if response = invalid then return
 
-    action = Format.SafeString(response.action, "")
+    action = Strings.ToString(response.action)
     if action = TVEpisodeTaskResponse.Action.Primary or action = TVEpisodeTaskResponse.Action.Series then
         if isCurrentEpisodeStage(response) <> true then return
         if response.ok <> true then return
@@ -104,7 +105,7 @@ sub handleEpisodeDetailsResponse(task as dynamic)
         startPendingEpisodeDetailsLoad()
         return
     end if
-    if Format.SafeString(response.itemId, "") <> m.state.itemId then
+    if Strings.ToString(response.itemId) <> m.state.itemId then
         startPendingEpisodeDetailsLoad()
         return
     end if
@@ -118,7 +119,7 @@ sub handleEpisodeDetailsResponse(task as dynamic)
         Spinner.Hide()
         message = (response.failureKind <> invalid ? "Unable to load this episode. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this episode.")
         AppMessage.Show(message)
-        m.log.activity("Episode load failed: " + Format.SafeString(response.errorMessage, message))
+        m.log.activity("Episode load failed: " + Strings.ToString(response.errorMessage, message))
     else
         applyEpisodeSeriesResponse(response.series, context, true)
         applyPlaybackQueueDetails(response)
@@ -136,7 +137,7 @@ function isCurrentEpisodeStage(response as object) as boolean
     requestId = Number.ToInteger(response.requestId, -1)
     if requestId < 0 or requestId <> state.latestRequestId then return false
     if requestId <> state.active.request.requestId then return false
-    return Format.SafeString(response.itemId, "") = m.state.itemId
+    return Strings.ToString(response.itemId) = m.state.itemId
 end function
 
 '-------------------------------------------------------------------------------
@@ -191,7 +192,7 @@ sub refreshPlaybackState()
     request = m.state.request
     if request = invalid then return
 
-    itemId = Format.SafeString(request.itemId, "")
+    itemId = Strings.ToString(request.itemId)
     if itemId = "" then return
 
     m.state.playbackRefreshPending = true
@@ -215,7 +216,7 @@ sub notifyRefreshedWatchedState(item as dynamic)
     m.state.playbackProgressChange = invalid
     m.top.playbackProgressChanged = invalid
     m.top.watchedStateChanged = {
-        itemId: Format.SafeString(item.Id, "")
+        itemId: Strings.ToString(item.Id)
         isWatched: true
     }
 end sub
@@ -230,7 +231,7 @@ sub applyPlaybackQueueDetails(response as object)
 
     m.state.request.playbackQueue = response.playbackQueue
     m.state.request.playbackQueueIndex = response.playbackQueueIndex
-    m.state.request.playbackQueueScope = Format.SafeString(response.playbackQueueScope, "series")
+    m.state.request.playbackQueueScope = Strings.ToString(response.playbackQueueScope, "series")
     if m.state.request.season = invalid and response.season <> invalid then m.state.request.season = response.season
     selection = m.state.playSelection
     if selection <> invalid then
@@ -242,7 +243,7 @@ sub applyPlaybackQueueDetails(response as object)
         EpisodeQueueIdentity.Apply(selection, selection.playbackQueueScope, m.state.request.episodeQueueId)
         applySelectedStreamsToPlaySelection(selection)
         for each entry in selection.playbackQueue
-            if Format.SafeString(entry.itemId, "") = selection.itemId then
+            if Strings.ToString(entry.itemId) = selection.itemId then
                 entry.item = selection.item
                 entry.startPositionTicks = selection.startPositionTicks
             end if
@@ -268,7 +269,7 @@ sub applySeriesDetails(series as dynamic)
     if series = invalid then return
     if m.state.request = invalid then return
 
-    m.state.request.series = SeriesIdentity.FromItem(Format.SafeString(m.state.request.server, ""), series)
+    m.state.request.series = SeriesIdentity.FromItem(Strings.ToString(m.state.request.server), series)
 end sub
 
 '-------------------------------------------------------------------------------

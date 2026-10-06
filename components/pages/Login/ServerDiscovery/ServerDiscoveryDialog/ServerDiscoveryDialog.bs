@@ -1,6 +1,5 @@
 import "pkg:/source/AsyncLifecycle.bs"
 import "pkg:/source/TaskControl.bs"
-import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Url.bs"
 
@@ -31,8 +30,7 @@ sub startDiscovery()
     if m.discovery.closed or m.discovery.task <> invalid then return
     m.discovery.generation++
     AsyncLifecycle.Begin(m.discovery.lifecycle, m.discovery.generation.ToStr())
-    content = m.top.callFunc("getContentComponent")
-    content.viewState = { searching: true, servers: [], message: "Searching for Jellyfin servers..." }
+    m.top.callFunc("getContentComponent").viewState = { searching: true, servers: [], message: "Searching for Jellyfin servers..." }
     task = CreateObject("roSGNode", "ServerDiscoveryTask")
     m.discovery.task = task
     task.request = { generation: m.discovery.generation }
@@ -53,19 +51,17 @@ sub onDiscoveryTaskState()
     m.top.removeChild(task)
     m.discovery.task = invalid
     if not AsyncLifecycle.IsCurrentResponse(m.discovery.lifecycle, response, "generation") then return
-    content = m.top.callFunc("getContentComponent")
     message = "Select a server..."
     if response.servers.Count() = 0 then message = "No Jellyfin servers found. Try again or enter the server address manually."
     if not response.ok then message = response.message
-    content.viewState = { searching: false, servers: response.servers, message: message }
+    m.top.callFunc("getContentComponent").viewState = { searching: false, servers: response.servers, message: message }
 end sub
 
 '-------------------------------------------------------------------------------
 ' onServerSelected
 '-------------------------------------------------------------------------------
 sub onServerSelected()
-    content = m.top.callFunc("getContentComponent")
-    commitServer(content.serverSelected)
+    commitServer(m.top.callFunc("getContentComponent").serverSelected)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -82,8 +78,7 @@ end sub
 ' onContentHeightChanged
 '-------------------------------------------------------------------------------
 sub onContentHeightChanged()
-    content = m.top.callFunc("getContentComponent")
-    m.top.callFunc("fitContentHeight", content.preferredHeight)
+    m.top.callFunc("fitContentHeight", m.top.callFunc("getContentComponent").preferredHeight)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -100,8 +95,7 @@ sub onManualEntryRequested()
     keyboard.observeField("buttonSelected", "onManualKeyboardButtonSelected")
     keyboard.observeField("wasClosed", "onManualKeyboardClosed")
     m.discovery.keyboard = keyboard
-    content = m.top.callFunc("getContentComponent")
-    content.keyboardActive = true
+    m.top.callFunc("getContentComponent").keyboardActive = true
     scene.dialog = keyboard
 end sub
 
@@ -150,8 +144,7 @@ sub closeOwnedKeyboard()
         if scene.dialog.isSameNode(keyboard) then scene.dialog = invalid
     end if
     keyboard.close = true
-    content = m.top.callFunc("getContentComponent")
-    content.keyboardActive = false
+    m.top.callFunc("getContentComponent").keyboardActive = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -161,8 +154,7 @@ sub restoreManualEntryFocus()
     if not m.discovery.lifecycle.isActive then return
     scene = m.top.getScene()
     if scene <> invalid and scene.dialog <> invalid then return
-    content = m.top.callFunc("getContentComponent")
-    content.callFunc("focusManualEntry")
+    m.top.callFunc("getContentComponent").callFunc("focusManualEntry")
 end sub
 
 '-------------------------------------------------------------------------------

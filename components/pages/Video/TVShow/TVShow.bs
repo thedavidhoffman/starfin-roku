@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/LatestRequestLifecycle.bs"
@@ -109,11 +110,11 @@ sub onVideoToolbarAllEpisodesSelected()
 
     firstSeason = getFirstValidSeason()
     if firstSeason = invalid then return
-    seasonId = Format.SafeString(Format.FirstNonEmpty([firstSeason.Id], ""), "")
+    seasonId = Format.FirstNonEmpty([firstSeason.Id], "")
     if seasonId = "" then return
 
     m.top.selectedAllEpisodes = {
-        seriesId: Format.SafeString(request.itemId, "")
+        seriesId: Strings.ToString(request.itemId)
         seasonId: seasonId
         series: SeriesIdentity.FromItem(request.server, m.pageState.series)
         season: firstSeason
@@ -176,7 +177,7 @@ sub startRandomPlayback()
     m.top.selectedEpisode = {
         itemId: queueItem.itemId
         item: queueItem.item
-        series: SeriesIdentity.FromItem(Format.SafeString(m.pageState.request.server, ""), m.pageState.series)
+        series: SeriesIdentity.FromItem(Strings.ToString(m.pageState.request.server), m.pageState.series)
         season: queueItem.season
         startPositionTicks: 0
         playbackQueue: queue
@@ -232,7 +233,7 @@ end sub
 sub emitEpisodeSelection(item as dynamic, shouldResume as boolean)
     if Arrays.IsAssocArray(item) = false then return
 
-    itemId = Format.SafeString(item.Id, "")
+    itemId = Strings.ToString(item.Id)
     if itemId = "" then return
 
     startPositionTicks = 0
@@ -241,10 +242,10 @@ sub emitEpisodeSelection(item as dynamic, shouldResume as boolean)
     m.top.selectedEpisode = {
         itemId: itemId
         item: item
-        series: SeriesIdentity.FromItem(Format.SafeString(m.pageState.request.server, ""), m.pageState.series)
+        series: SeriesIdentity.FromItem(Strings.ToString(m.pageState.request.server), m.pageState.series)
         season: {
-            Id: Format.SafeString(item.SeasonId, "")
-            Name: Format.SafeString(item.SeasonName, "")
+            Id: Strings.ToString(item.SeasonId)
+            Name: Strings.ToString(item.SeasonName)
         }
         startPositionTicks: startPositionTicks
         playbackQueue: m.pageState.playbackQueue
@@ -290,7 +291,7 @@ sub onSeasonSelected()
     if seasonNode = invalid then return
 
     season = seasonNode.raw
-    seasonId = Format.SafeString(Format.FirstNonEmpty([season.Id, seasonNode.itemId], ""), "")
+    seasonId = Format.FirstNonEmpty([season.Id, seasonNode.itemId], "")
     if seasonId = "" then return
 
     nextSeason = getNextSeason(selected)
@@ -298,7 +299,7 @@ sub onSeasonSelected()
     if request = invalid then return
 
     m.top.selectedSeason = {
-        seriesId: Format.SafeString(Format.FirstNonEmpty([request.itemId], ""), "")
+        seriesId: Format.FirstNonEmpty([request.itemId], "")
         seasonId: seasonId
         series: SeriesIdentity.FromItem(request.server, m.pageState.series)
         season: season
@@ -460,7 +461,7 @@ sub handleTVShowResponse(response as dynamic)
         renderSeries(m.pageState.series, false)
         message = (response.failureKind <> invalid ? "Unable to load this series. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load this series.")
         AppMessage.Show(message)
-        m.log.activity("TV show load failed: " + Format.SafeString(response.errorMessage, message))
+        m.log.activity("TV show load failed: " + Strings.ToString(response.errorMessage, message))
         return
     end if
 
@@ -505,7 +506,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getFirstValidSeason() as dynamic
     for each season in m.pageState.seasons
-        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") <> "" then return season
+        if Arrays.IsAssocArray(season) and Strings.ToString(season.Id) <> "" then return season
     end for
 
     return invalid
@@ -520,9 +521,9 @@ sub preserveRequestedSeriesImages(series as dynamic)
     requestedSeries = m.pageState.series
     if Arrays.IsAssocArray(requestedSeries) = false then return
 
-    if Format.SafeString(series.thumbUrl, "") = "" then series.thumbUrl = Format.SafeString(requestedSeries.thumbUrl, "")
-    if Format.SafeString(series.backdropUrl, "") = "" then series.backdropUrl = Format.SafeString(requestedSeries.backdropUrl, "")
-    if Format.SafeString(series.detailBackdropUrl, "") = "" then series.detailBackdropUrl = Format.SafeString(requestedSeries.detailBackdropUrl, "")
+    if Strings.ToString(series.thumbUrl) = "" then series.thumbUrl = Strings.ToString(requestedSeries.thumbUrl)
+    if Strings.ToString(series.backdropUrl) = "" then series.backdropUrl = Strings.ToString(requestedSeries.backdropUrl)
+    if Strings.ToString(series.detailBackdropUrl) = "" then series.detailBackdropUrl = Strings.ToString(requestedSeries.detailBackdropUrl)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -539,7 +540,7 @@ sub onPlaybackProgressChange()
     if currentIndex < 0 or currentIndex >= queue.Count() then return
 
     currentItem = queue[currentIndex]
-    if Format.SafeString(currentItem.itemId, "") <> Format.SafeString(change.itemId, "") then return
+    if Strings.ToString(currentItem.itemId) <> Strings.ToString(change.itemId) then return
 
     nextIndex = currentIndex + 1
     if nextIndex >= queue.Count() then return
@@ -565,7 +566,7 @@ sub loadThemeSong(item as dynamic)
 
     m.log.write("Theme music playback is enabled")
 
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id, request.itemId], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id, request.itemId], "")
     if itemId = "" then return
 
     m.pageState.themeLookupActive = true
@@ -588,7 +589,7 @@ sub onThemeSongsResponse()
     if m.pageState.lifecycle.isActive <> true then return
     if m.pageState.themeLookupActive <> true then return
     if response.ok <> true then
-        m.log.write("Theme song lookup failed: " + Format.SafeString(response.errorMessage, "Unknown error."))
+        m.log.write("Theme song lookup failed: " + Strings.ToString(response.errorMessage, "Unknown error."))
         return
     end if
 
@@ -601,10 +602,10 @@ sub onThemeSongsResponse()
 
     request = m.pageState.request
     if request = invalid then return
-    if Format.SafeString(response.itemId, "") <> Format.SafeString(request.itemId, "") then return
+    if Strings.ToString(response.itemId) <> Strings.ToString(request.itemId) then return
 
     m.pageState.themeLookupActive = false
-    themeSongId = Format.SafeString(themeSong.Id, "")
+    themeSongId = Strings.ToString(themeSong.Id)
     if themeSongId = "" then
         m.pageState.themeLookupActive = false
         return
@@ -617,7 +618,7 @@ sub onThemeSongsResponse()
         userId: request.userId
         itemId: themeSongId
         title: Format.FirstNonEmpty([themeSong.Name, m.pageState.series.Name], "Theme Music")
-        sourceItemId: Format.SafeString(request.itemId, "")
+        sourceItemId: Strings.ToString(request.itemId)
     }
 end sub
 
@@ -627,8 +628,6 @@ end sub
 sub renderSeries(item as dynamic, logoPending = false as boolean)
     if Arrays.IsAssocArray(item) = false then return
 
-    seriesMetadataText = getMetaText(item)
-    genreText = getGenreText(item)
     m.mediaShell.mediaContent = {
         mediaType: "tv-show"
         backdropUrl: getBackdropUrl(item)
@@ -638,8 +637,8 @@ sub renderSeries(item as dynamic, logoPending = false as boolean)
         officialRating: item.OfficialRating
         communityRating: item.CommunityRating
         criticRating: item.CriticRating
-        primaryInfoText: seriesMetadataText
-        secondaryInfoText: genreText
+        primaryInfoText: getMetaText(item)
+        secondaryInfoText: getGenreText(item)
         overview: Format.FirstNonEmpty([item.Overview], "")
     }
     m.cast.people = getPeople(item)
@@ -658,8 +657,8 @@ sub renderSeasons(seasons as object)
         child.title = getItemTitle(season)
         child.HDPosterUrl = getSeasonPosterUrl(season)
         child.AddFields({
-            itemId: Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
-            itemType: Format.SafeString(Format.FirstNonEmpty([season.Type], ""), "")
+            itemId: Format.FirstNonEmpty([season.Id], "")
+            itemType: Format.FirstNonEmpty([season.Type], "")
             seasonYear: getSeasonYearText(season)
             episodeCount: Format.FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "")
             posterLayout: m.layout.isPoster
@@ -898,7 +897,7 @@ sub onCastPersonSelected()
     if selection.itemId = invalid or selection.itemId = "" then return
 
     selection.sourceItemType = "series"
-    selection.sourceSeriesId = Format.SafeString(m.pageState.request.itemId, "")
+    selection.sourceSeriesId = Strings.ToString(m.pageState.request.itemId)
     m.top.selectedPerson = selection
 end sub
 
@@ -909,7 +908,7 @@ sub onSeasonWatchedStateChange()
     change = m.top.seasonWatchedStateChange
     if change = invalid then return
 
-    seasonId = Format.SafeString(change.seasonId, "")
+    seasonId = Strings.ToString(change.seasonId)
     if seasonId = "" then return
 
     updateSeasonWatchedState(m.pageState.seasons, seasonId, change)
@@ -925,7 +924,7 @@ sub updateSeasonWatchedState(seasons as dynamic, seasonId as string, change as o
 
     for each season in seasons
         if Arrays.IsAssocArray(season) = false then continue for
-        if Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "") <> seasonId then continue for
+        if Format.FirstNonEmpty([season.Id], "") <> seasonId then continue for
 
         applySeasonWatchedState(season, change)
         return
@@ -941,7 +940,7 @@ sub updateSeasonCardWatchedState(seasonId as string, change as object)
     for i = 0 to m.seasonsGrid.content.getChildCount() - 1
         child = m.seasonsGrid.content.getChild(i)
         if child = invalid then continue for
-        if Format.SafeString(child.itemId, "") <> seasonId then continue for
+        if Strings.ToString(child.itemId) <> seasonId then continue for
 
         raw = child.raw
         if Arrays.IsAssocArray(raw) then
@@ -986,7 +985,7 @@ function getMetaText(item as dynamic) as string
     if year <> "" then parts.Push(year)
 
     episodeCount = Format.FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "")
-    if episodeCount <> "" then parts.Push(Format.SafeString(episodeCount, "") + " episodes")
+    if episodeCount <> "" then parts.Push(episodeCount + " episodes")
 
     status = Format.FirstNonEmpty([item.Status], "")
     if status <> "" then parts.Push(status)
@@ -1001,7 +1000,7 @@ function getSeasonYearText(item as dynamic) as string
     year = Format.FirstNonEmpty([item.ProductionYear], "")
     if year = "" then year = DateTime.ToYear(item.PremiereDate)
 
-    return Format.SafeString(year, "")
+    return year
 end function
 
 '-------------------------------------------------------------------------------
@@ -1033,7 +1032,7 @@ function getBackdropUrl(item as dynamic) as string
     imageUrl = getImageUrl(item, JellyfinImage.Type.Primary, imageSize.width, imageSize.height)
     if imageUrl <> "" then return imageUrl
 
-    return Format.SafeString(item.backdropUrl, "")
+    return Strings.ToString(item.backdropUrl)
 end function
 
 '-------------------------------------------------------------------------------
@@ -1087,7 +1086,7 @@ function openSeasonMediaActions() as boolean
     index = m.seasonsGrid.itemFocused
     if index < 0 or index >= m.seasonsGrid.content.getChildCount() then return false
     node = m.seasonsGrid.content.getChild(index)
-    if node.raw = invalid or Format.SafeString(node.raw.Id, "") = "" then return false
+    if node.raw = invalid or Strings.ToString(node.raw.Id) = "" then return false
     request = m.pageState.request
     if request = invalid then return false
 
@@ -1113,7 +1112,7 @@ sub onMediaStateChange()
     change = m.top.mediaStateChange
     if change = invalid or change.action <> "watched" then return
     for each season in m.pageState.seasons
-        if Format.SafeString(season.Id, "") = Format.SafeString(change.itemId, "") then
+        if Strings.ToString(season.Id) = Strings.ToString(change.itemId) then
             unplayedCount = 0
             if change.value <> true then unplayedCount = Number.ToInteger(Format.FirstNonEmpty([season.RecursiveItemCount, season.ChildCount], "1"), 1)
             if change.value <> true and unplayedCount < 1 then unplayedCount = 1

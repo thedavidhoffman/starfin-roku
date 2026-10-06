@@ -104,7 +104,7 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.liveTvState.request = request
-    m.top.findNode("titleLabel").text = Format.SafeString(request.title, "Live TV")
+    m.top.findNode("titleLabel").text = Strings.ToString(request.title, "Live TV")
     loadChannels()
 end sub
 
@@ -143,7 +143,7 @@ sub onChannelsResponse()
         Spinner.Hide()
         message = (response.failureKind <> invalid ? "Unable to load Live TV channels. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to load Live TV channels.")
         AppMessage.Show(message)
-        m.log.activity("Live TV load failed: " + Format.SafeString(response.errorMessage, message))
+        m.log.activity("Live TV load failed: " + Strings.ToString(response.errorMessage, message))
         return
     end if
 
@@ -223,7 +223,7 @@ sub onScheduleResponse()
     response = m.scheduleTask.response
     if response = invalid then return
     scheduleResponse = {
-        action: Format.SafeString(response.action, "")
+        action: Strings.ToString(response.action)
         requestKey: AsyncLifecycle.BuildKey([response.channelIds, response.startTime, response.endTime])
     }
     if AsyncLifecycle.IsCurrentResponse(m.liveTvState.scheduleLifecycle, scheduleResponse, "requestKey", "liveTvSchedule") <> true then return
@@ -293,12 +293,12 @@ sub handleScheduleLoadError(response as object)
         Spinner.Hide()
         m.guideGrid.setFocus(true)
         AppMessage.Show(message)
-        m.log.activity("Live TV guide load failed: " + Format.SafeString(response.errorMessage, message))
+        m.log.activity("Live TV guide load failed: " + Strings.ToString(response.errorMessage, message))
         m.log.write("Live TV initial schedule batch failed; guide shown without schedule data")
         return
     end if
 
-    m.log.write("Live TV background schedule load stopped: " + Format.SafeString(response.errorMessage, message))
+    m.log.write("Live TV background schedule load stopped: " + Strings.ToString(response.errorMessage, message))
 end sub
 
 '-------------------------------------------------------------------------------
@@ -319,7 +319,7 @@ function getChannelIdsForScheduleBatch() as string
         channel = channels[i]
         if channel = invalid then continue for
 
-        channelId = Format.SafeString(channel.Id, "")
+        channelId = Strings.ToString(channel.Id)
         if channelId = "" then continue for
 
         if ids <> "" then ids = ids + ","
@@ -398,7 +398,7 @@ function buildGuideChannels(channels as object) as object
     for each channel in channels
         if Arrays.IsAssocArray(channel) = false then continue for
 
-        channelId = Format.SafeString(channel.Id, "")
+        channelId = Strings.ToString(channel.Id)
         if channelId = "" then continue for
 
         node = content.createChild("ContentNode")
@@ -428,7 +428,7 @@ sub addSchedulePrograms(programs as object)
         logFirstProgramData(program)
         collectProgramGenres(program)
 
-        channelId = Format.SafeString(program.ChannelId, "")
+        channelId = Strings.ToString(program.ChannelId)
         if channelId = "" then continue for
         if m.liveTvState.channelIndex.DoesExist(channelId) = false then continue for
 
@@ -441,7 +441,7 @@ sub addSchedulePrograms(programs as object)
         if startSeconds <= 0 or duration <= 0 then continue for
 
         child = channel.createChild("ContentNode")
-        child.Id = Format.SafeString(program.Id, "")
+        child.Id = Strings.ToString(program.Id)
         child.Title = Format.FirstNonEmpty([program.Name], "Program")
         child.Description = Format.FirstNonEmpty([program.Overview], "")
         child.PlayStart = startSeconds
@@ -450,10 +450,10 @@ sub addSchedulePrograms(programs as object)
             raw: program
             channelId: channelId
             channelName: channel.Title
-            channelImage: Format.SafeString(channel.HDPosterUrl, "")
-            episodeTitle: Format.SafeString(program.EpisodeTitle, "")
-            startDate: Format.SafeString(program.StartDate, "")
-            endDate: Format.SafeString(program.EndDate, "")
+            channelImage: channel.HDPosterUrl
+            episodeTitle: Strings.ToString(program.EpisodeTitle)
+            startDate: Strings.ToString(program.StartDate)
+            endDate: Strings.ToString(program.EndDate)
             isLive: program.IsLive
             isRepeat: program.IsRepeat
         })
@@ -498,7 +498,7 @@ end sub
 ' addGenreName
 '-------------------------------------------------------------------------------
 sub addGenreName(value as dynamic)
-    name = Strings.Trim(Format.SafeString(value, ""))
+    name = Strings.Trim(value)
     if name = "" then return
 
     key = LCase(name)
@@ -564,7 +564,7 @@ function joinCommaTextParts(parts as object) as string
 
     text = ""
     for each part in parts
-        value = Format.SafeString(part, "")
+        value = Strings.ToString(part)
         if value = "" then continue for
 
         if text <> "" then text = text + ", "
@@ -603,7 +603,7 @@ function stringifyDiagnosticValueAtDepth(value as dynamic, depth as integer) as 
         return value.ToStr()
     end if
 
-    return quoteDiagnosticString(Format.SafeString(value, ""))
+    return quoteDiagnosticString(Strings.ToString(value))
 end function
 
 '-------------------------------------------------------------------------------
@@ -618,7 +618,7 @@ function stringifyDiagnosticAssocArray(value as object, depth as integer) as str
     keys.Sort()
 
     for each key in keys
-        parts.Push(Format.SafeString(key, "") + ": " + stringifyDiagnosticValueAtDepth(value[key], depth + 1))
+        parts.Push(Strings.ToString(key) + ": " + stringifyDiagnosticValueAtDepth(value[key], depth + 1))
     end for
 
     return "{ " + joinCommaTextParts(parts) + " }"
@@ -686,7 +686,7 @@ sub renderProgramPreview(program as object)
     m.programTitle.text = Format.FirstNonEmpty([program.Title], "Program")
     m.programTime.text = getProgramTimeText(program)
     m.programDuration.text = DateTime.FormatDurationSeconds(program.PlayDuration)
-    m.programChannel.text = Format.SafeString(program.channelName, "")
+    m.programChannel.text = Strings.ToString(program.channelName)
     m.programEpisode.text = getProgramEpisodeText(program)
     m.programOverview.text = Format.FirstNonEmpty([program.Description], "")
     m.programImage.uri = getProgramImageUrl(program)
@@ -705,7 +705,7 @@ sub renderChannelPreview(channel as object)
     m.programChannel.text = ""
     m.programEpisode.text = ""
     m.programOverview.text = "No schedule information"
-    m.programImage.uri = Format.SafeString(channel.HDPosterUrl, "")
+    m.programImage.uri = channel.HDPosterUrl
 end sub
 
 '-------------------------------------------------------------------------------
@@ -755,14 +755,14 @@ end function
 '-------------------------------------------------------------------------------
 function getProgramEpisodeText(program as object) as string
     raw = program.raw
-    if raw = invalid then return Format.SafeString(program.episodeTitle, "")
+    if raw = invalid then return Strings.ToString(program.episodeTitle)
 
     parts = []
     if raw.ParentIndexNumber <> invalid and raw.IndexNumber <> invalid then
         parts.Push("S" + raw.ParentIndexNumber.ToStr() + " E" + raw.IndexNumber.ToStr())
     end if
 
-    episodeTitle = Format.SafeString(program.episodeTitle, "")
+    episodeTitle = Strings.ToString(program.episodeTitle)
     if episodeTitle <> "" then parts.Push(episodeTitle)
 
     return joinTextParts(parts)
@@ -789,12 +789,12 @@ function getProgramImageUrl(program as object) as string
         end if
     end if
 
-    itemId = Format.SafeString(raw.Id, "")
+    itemId = Strings.ToString(raw.Id)
     if tag = "" and raw.BackdropImageTags <> invalid and raw.BackdropImageTags.Count() > 0 then
-        tag = Format.SafeString(raw.BackdropImageTags[0], "")
+        tag = Strings.ToString(raw.BackdropImageTags[0])
         imageType = JellyfinImage.Type.Backdrop
     end if
-    if itemId = "" or tag = "" then return Format.SafeString(program.channelImage, "")
+    if itemId = "" or tag = "" then return Strings.ToString(program.channelImage)
 
     return Url.BuildImageUrl(request.server, itemId, imageType, tag, 500, 375)
 end function
@@ -807,7 +807,7 @@ function joinTextParts(parts as object) as string
 
     text = ""
     for each part in parts
-        value = Format.SafeString(part, "")
+        value = Strings.ToString(part)
         if value = "" then continue for
 
         if text <> "" then text = text + "  |  "
@@ -828,8 +828,8 @@ sub onProgramSelected()
         return
     end if
 
-    channelId = Format.SafeString(program.channelId, "")
-    if channelId = "" and program.raw <> invalid then channelId = Format.SafeString(program.raw.ChannelId, "")
+    channelId = Strings.ToString(program.channelId)
+    if channelId = "" and program.raw <> invalid then channelId = Strings.ToString(program.raw.ChannelId)
     if channelId = "" then return
 
     m.top.playSelected = {
@@ -845,8 +845,8 @@ sub playFocusedChannel(focused as dynamic)
     channel = getChannelFromFocus(focused)
     if channel = invalid then return
 
-    channelId = Format.SafeString(channel.channelId, "")
-    if channelId = "" then channelId = Format.SafeString(channel.Id, "")
+    channelId = Strings.ToString(channel.channelId)
+    if channelId = "" then channelId = Strings.ToString(channel.Id)
     if channelId = "" then return
 
     m.top.playSelected = {
@@ -914,7 +914,7 @@ function getChannelIds(channels as object) as string
 
     ids = ""
     for each channel in channels
-        channelId = Format.SafeString(channel.Id, "")
+        channelId = Strings.ToString(channel.Id)
         if channelId = "" then continue for
 
         if ids <> "" then ids = ids + ","
@@ -928,7 +928,7 @@ end function
 ' getChannelTitle
 '-------------------------------------------------------------------------------
 function getChannelTitle(channel as dynamic) as string
-    number = Format.SafeString(Format.FirstNonEmpty([channel.Number, channel.ChannelNumber], ""), "")
+    number = Format.FirstNonEmpty([channel.Number, channel.ChannelNumber], "")
     name = Format.FirstNonEmpty([channel.Name], "Channel")
     if number <> "" then return number + " " + name
 

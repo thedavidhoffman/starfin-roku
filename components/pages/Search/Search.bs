@@ -127,7 +127,7 @@ end sub
 ' onKeyboardTextChanged
 '-------------------------------------------------------------------------------
 sub onKeyboardTextChanged()
-    query = Strings.Trim(Format.SafeString(m.keyboard.text, ""))
+    query = Strings.Trim(m.keyboard.text)
     if query = m.searchState.query then return
 
     if m.searchState.loading.inFlight then cancelSearch(false)
@@ -157,7 +157,7 @@ end sub
 sub runSearch()
     if m.searchState.loading.inFlight or m.searchState.loading.stopping then return
 
-    query = Strings.Trim(Format.SafeString(m.keyboard.text, ""))
+    query = Strings.Trim(m.keyboard.text)
     m.searchState.query = query
 
     if Len(query) < m.searchState.minimumQueryLength then
@@ -192,7 +192,7 @@ sub onSearchResponse()
     response = m.searchTask.response
     if response = invalid then return
     if AsyncLifecycle.IsCurrentResponse(m.searchState.lifecycle, response, "query", "search") <> true then return
-    if Format.SafeString(response.query, "") <> m.searchState.submittedQuery then return
+    if Strings.ToString(response.query) <> m.searchState.submittedQuery then return
 
     finishSearchLoading()
 
@@ -200,7 +200,7 @@ sub onSearchResponse()
         clearRows()
         message = (response.failureKind <> invalid ? "Search failed. " : "") + RequestFailure.GetDisplayMessage(response, "Search failed.")
         AppMessage.Show(message)
-        m.log.activity("Search failed for " + ActivityLog.Quote(m.searchState.submittedQuery, "query") + ": " + Format.SafeString(response.errorMessage, message))
+        m.log.activity("Search failed for " + ActivityLog.Quote(m.searchState.submittedQuery, "query") + ": " + Strings.ToString(response.errorMessage, message))
         focusSearchButton()
         return
     end if
@@ -243,7 +243,7 @@ end sub
 sub onSearchTaskStateChanged()
     if m.searchState.loading.stopping <> true then return
 
-    taskState = LCase(Format.SafeString(m.searchTask.state, ""))
+    taskState = LCase(m.searchTask.state)
     if taskState = "stop" or taskState = "done" or taskState = "init" then m.searchState.loading.stopping = false
 end sub
 
@@ -312,7 +312,7 @@ function addPeopleRow(rowIndex as integer, y as integer, people as dynamic) as i
     cast = CreateObject("roSGNode", "Cast")
     cast.translation = [getCastOffsetX(), y]
     cast.viewportWidth = 1452 - getCastOffsetX()
-    cast.server = Format.SafeString(m.searchState.request.server, "")
+    cast.server = Strings.ToString(m.searchState.request.server)
     cast.title = "People"
     cast.showPersonDetails = false
     cast.people = people
@@ -363,10 +363,10 @@ sub onSearchShelfSelected(event as object)
     item = selection.item
     if item = invalid then return
 
-    itemId = Format.SafeString(Format.FirstNonEmpty([item.Id], ""), "")
+    itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId = "" then return
 
-    itemType = LCase(Format.SafeString(Format.FirstNonEmpty([item.Type], ""), ""))
+    itemType = LCase(Format.FirstNonEmpty([item.Type], ""))
     if itemType = "movie" or itemType = "video" then
         m.top.selectedMovie = { itemId: itemId, item: item }
     else if itemType = "series" then
@@ -385,7 +385,7 @@ sub onSearchCastPersonSelected(event as object)
     selection = event.getData()
     if selection = invalid then return
 
-    itemId = Format.SafeString(Format.FirstNonEmpty([selection.itemId], ""), "")
+    itemId = Format.FirstNonEmpty([selection.itemId], "")
     if itemId = "" then return
 
     m.top.selectedPerson = {

@@ -1,3 +1,5 @@
+import "pkg:/source/Format.bs"
+import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 ' onWatchedStateChange
 '-------------------------------------------------------------------------------
@@ -5,7 +7,7 @@ sub onWatchedStateChange()
     change = m.top.watchedStateChange
     if change = invalid then return
 
-    itemId = Format.SafeString(change.itemId, "")
+    itemId = Strings.ToString(change.itemId)
     if itemId = "" then return
 
     isWatched = change.isWatched = true
@@ -24,7 +26,7 @@ sub onPlaybackProgressChange()
     change = m.top.playbackProgressChange
     if change = invalid then return
 
-    itemId = Format.SafeString(change.itemId, "")
+    itemId = Strings.ToString(change.itemId)
     if itemId = "" then return
 
     affectedSeason = updateEpisodePlaybackProgress(itemId, change)
@@ -39,7 +41,7 @@ end sub
 ' updateEpisodeWatchedState
 '-------------------------------------------------------------------------------
 function updateEpisodeWatchedState(itemId as string, isWatched as boolean) as dynamic
-    if Arrays.IsAssocArray(m.pageState.season) and Format.SafeString(Format.FirstNonEmpty([m.pageState.season.Id], ""), "") = itemId then
+    if Arrays.IsAssocArray(m.pageState.season) and Format.FirstNonEmpty([m.pageState.season.Id], "") = itemId then
         updateItemWatchedState(m.pageState.season, isWatched)
         updateSeasonEpisodesWatchedState(isWatched)
         return m.pageState.season
@@ -47,7 +49,7 @@ function updateEpisodeWatchedState(itemId as string, isWatched as boolean) as dy
 
     for each episode in m.pageState.episodes
         if Arrays.IsAssocArray(episode) = false then continue for
-        if Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
+        if Format.FirstNonEmpty([episode.Id], "") <> itemId then continue for
 
         wasWatched = isItemWatched(episode)
         updateItemWatchedState(episode, isWatched)
@@ -85,7 +87,7 @@ function updateSeasonUnplayedCount(episode as object, wasWatched as boolean, isW
 
     current = season.UserData.UnplayedItemCount
     if current = invalid then
-        current = countUnplayedEpisodes(Format.SafeString(season.Id, ""))
+        current = countUnplayedEpisodes(Strings.ToString(season.Id))
     else
         current = Number.ToInteger(current, 0)
         if isWatched then
@@ -104,12 +106,12 @@ end function
 ' getSeasonForEpisode
 '-------------------------------------------------------------------------------
 function getSeasonForEpisode(episode as object) as dynamic
-    seasonId = Format.SafeString(episode.SeasonId, "")
+    seasonId = Strings.ToString(episode.SeasonId)
     currentSeason = m.pageState.season
-    if Arrays.IsAssocArray(currentSeason) and Format.SafeString(currentSeason.Id, "") = seasonId then return currentSeason
+    if Arrays.IsAssocArray(currentSeason) and Strings.ToString(currentSeason.Id) = seasonId then return currentSeason
 
     for each season in m.pageState.seasons
-        if Arrays.IsAssocArray(season) and Format.SafeString(season.Id, "") = seasonId then return season
+        if Arrays.IsAssocArray(season) and Strings.ToString(season.Id) = seasonId then return season
     end for
 
     if m.pageState.allEpisodes <> true and Arrays.IsAssocArray(currentSeason) then return currentSeason
@@ -122,7 +124,7 @@ end function
 sub notifySeasonWatchedStateChanged(season as dynamic)
     if Arrays.IsAssocArray(season) = false then return
 
-    seasonId = Format.SafeString(Format.FirstNonEmpty([season.Id], ""), "")
+    seasonId = Format.FirstNonEmpty([season.Id], "")
     if seasonId = "" then return
 
     unplayedItemCount = 0
@@ -144,7 +146,7 @@ function countUnplayedEpisodes(seasonId = "" as string) as integer
     count = 0
     for each episode in m.pageState.episodes
         if Arrays.IsAssocArray(episode) = false then continue for
-        if seasonId <> "" and Format.SafeString(episode.SeasonId, "") <> seasonId then continue for
+        if seasonId <> "" and Strings.ToString(episode.SeasonId) <> seasonId then continue for
         if isItemWatched(episode) <> true then count = count + 1
     end for
 
@@ -183,7 +185,7 @@ end sub
 function updateEpisodePlaybackProgress(itemId as string, change as object) as dynamic
     for each episode in m.pageState.episodes
         if Arrays.IsAssocArray(episode) = false then continue for
-        if Format.SafeString(Format.FirstNonEmpty([episode.Id], ""), "") <> itemId then continue for
+        if Format.FirstNonEmpty([episode.Id], "") <> itemId then continue for
 
         wasWatched = isItemWatched(episode)
         updateItemPlaybackProgress(episode, change)

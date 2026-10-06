@@ -1,3 +1,4 @@
+import "pkg:/source/String.bs"
 namespace AuthStore
 
     '---------------------------------------------------------------------------
@@ -11,8 +12,7 @@ namespace AuthStore
     ' AuthStore.BuildAccountKey
     '---------------------------------------------------------------------------
     function BuildAccountKey(server as string, userId as dynamic) as string
-        normalizedServer = LCase(Url.NormalizeServer(server))
-        authority = normalizedServer
+        authority = LCase(Url.NormalizeServer(server))
         if Left(authority, 7) = "http://" then
             authority = Mid(authority, 8)
         else if Left(authority, 8) = "https://" then
@@ -28,7 +28,7 @@ namespace AuthStore
         if fragmentStart > 0 and fragmentStart < authorityEnd then authorityEnd = fragmentStart
         authority = Left(authority, authorityEnd - 1)
 
-        return authority + "/" + Format.SafeString(userId, "")
+        return authority + "/" + Strings.ToString(userId)
     end function
 
     '---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ namespace AuthStore
     '---------------------------------------------------------------------------
     function Load() as object
         globalStore = AuthStore.__GetStore()
-        accountKey = Format.SafeString(globalStore.Read("active-account-key"), "")
+        accountKey = globalStore.Read("active-account-key")
         if accountKey = "" then
             return {
                 accountKey: ""
@@ -73,7 +73,7 @@ namespace AuthStore
         accountStore.Write("server", Url.NormalizeServer(server))
         accountStore.Write("username", username)
         accountStore.Write("token", token)
-        accountStore.Write("user-id", Format.SafeString(userId, ""))
+        accountStore.Write("user-id", Strings.ToString(userId))
         accountStore.Write("primary-image-tag", primaryImageTag)
         accountStore.Flush()
 
@@ -86,18 +86,18 @@ namespace AuthStore
     function LoadAccount(accountKey as string, includeToken = false as boolean) as dynamic
         if accountKey = "" then return invalid
         accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
-        server = Format.SafeString(accountStore.Read("server"), "")
-        userId = Format.SafeString(accountStore.Read("user-id"), "")
+        server = accountStore.Read("server")
+        userId = accountStore.Read("user-id")
         if server = "" or userId = "" then return invalid
 
         account = {
             accountKey: accountKey
             server: server
-            username: Format.SafeString(accountStore.Read("username"), "")
+            username: accountStore.Read("username")
             userId: userId
-            primaryImageTag: Format.SafeString(accountStore.Read("primary-image-tag"), "")
+            primaryImageTag: accountStore.Read("primary-image-tag")
         }
-        if includeToken then account.token = Format.SafeString(accountStore.Read("token"), "")
+        if includeToken then account.token = accountStore.Read("token")
         return account
     end function
 
@@ -114,7 +114,7 @@ namespace AuthStore
                 accountKey = Mid(sectionName, 17)
                 account = AuthStore.LoadAccount(accountKey, false)
                 accountStore = CreateObject("roRegistrySection", sectionName)
-                hasToken = Format.SafeString(accountStore.Read("token"), "") <> ""
+                hasToken = accountStore.Read("token") <> ""
                 if account <> invalid and hasToken and LCase(account.server) = normalizedServer then
                     account.isActive = (accountKey = activeAccountKey)
                     activeSort = "1"
@@ -162,14 +162,14 @@ namespace AuthStore
     ' AuthStore.GetActiveAccountKey
     '---------------------------------------------------------------------------
     function GetActiveAccountKey() as string
-        return Format.SafeString(AuthStore.__GetStore().Read("active-account-key"), "")
+        return AuthStore.__GetStore().Read("active-account-key")
     end function
 
     '---------------------------------------------------------------------------
     ' AuthStore.GetLastServer
     '---------------------------------------------------------------------------
     function GetLastServer() as string
-        return Format.SafeString(AuthStore.__GetStore().Read("server"), "")
+        return AuthStore.__GetStore().Read("server")
     end function
 
     '---------------------------------------------------------------------------
