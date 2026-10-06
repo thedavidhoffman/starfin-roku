@@ -8,6 +8,7 @@ const cases = [
   { label: 'blue theme', nodeId: 'themeOptions', index: 0, key: 'theme', value: 'blue' },
   { label: 'black theme', nodeId: 'themeOptions', index: 1, key: 'theme', value: 'black' },
   { label: 'grey theme', nodeId: 'themeOptions', index: 2, key: 'theme', value: 'grey' },
+  { label: 'pure black theme', nodeId: 'themeOptions', index: 3, key: 'theme', value: 'pure-black' },
   { label: 'high contrast watched indicator', nodeId: 'watchedIndicatorOptions', index: 1, key: 'watched-indicator-style', value: 'high-contrast' },
   { label: 'subtle watched indicator', nodeId: 'watchedIndicatorOptions', index: 0, key: 'watched-indicator-style', value: 'subtle' }
 ];

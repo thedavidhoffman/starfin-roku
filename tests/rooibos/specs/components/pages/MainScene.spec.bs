@@ -1995,6 +1995,41 @@ namespace tests
             m.node.musicArtistPage = invalid
         end function
 
+        @describe("Pure Black preview")
+
+        @it("previews Pure Black in the open dialog and background without committing settings")
+        function _()
+            m.node.login.visible = false
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["themePreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("themeOptions").itemSelected = 3
+
+            m.assertEqual(m.global.theme, "pure-black")
+            m.assertEqual(m.top.findNode("bg").findNode("fill").color, &h000000FF)
+            m.assertFalse(m.top.findNode("bg").findNode("gradient").visible)
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "")
+            m.assertEqual(m.node.settings[SettingsStore.Key.Theme], "blue")
+            m.assertFalse(overlay.settingsSaved)
+            m.assertEqual(overlay.findNode("panel").uri, Theme.DialogPanelUri("pure-black"))
+            m.assertTrue(overlay.findNode("dialog").visible)
+            m.node.overlayHost.callFunc("closeOverlay")
+        end function
+
+        @it("restores the committed gradient after cancelling Pure Black preview")
+        function _()
+            m.node.login.visible = false
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["themePreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+            content.findNode("themeOptions").itemSelected = 3
+
+            m.node.overlayHost.callFunc("closeOverlay")
+
+            m.assertEqual(m.global.theme, "blue")
+            m.assertTrue(m.top.findNode("bg").findNode("gradient").visible)
+            m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+        end function
+
     end class
 
 end namespace

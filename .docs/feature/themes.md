@@ -1,11 +1,13 @@
 # Themes
 
-The current release supports Blue, Black, and Grey. Additional colors are deferred
-until a future release.
+The current release supports Blue gradient, Black gradient, Grey gradient, and
+Pure Black.
 
 ## Preference and active state
 
-Settings > Current user > Theme offers Blue, Black, and Grey. The existing
+Settings > Current user > Theme offers Blue gradient, Black gradient, Grey gradient,
+and Pure Black, in that order. Registry values remain `blue`, `black`, and `grey`;
+Pure Black uses `pure-black`. The existing
 account-scoped `theme` registry key remains the persisted source. Selecting an option immediately previews it across the visible UI, including
 the Settings dialog. Moving focus alone does not preview. Closing Settings with
 Back commits the selection as before; there is no separate Cancel button.
@@ -44,8 +46,9 @@ The existing global theme observer and initial theme application remain separate
 | Blue | Existing `pkg:/images/themes/blue/background.png` with `scaleToFill`, over opaque black |
 | Black | `images/themes/black/background.png`: near-black to softly lifted charcoal |
 | Grey | `images/themes/grey/background.png`: darker charcoal to softly lifted dark grey |
+| Pure Black | Opaque `#000000` Rectangle; gradient Poster hidden and its URI cleared |
 
-All three themes show a 1920-by-1080 gradient image using `scaleToFill`.
+The three gradient themes show a 1920-by-1080 image using `scaleToFill`.
 The Rectangle stays opaque beneath the Poster, retaining the theme color
 (Blue: black; Black: `#121212`; Grey: `#343434`) while images load. The
 component reads the active theme immediately and observes subsequent changes, so
@@ -57,6 +60,12 @@ General page labels, the header navigation strip and
 page-specific artwork retain their existing styling; ThemeLabel is future work.
 The legacy Theme.Get palette remains unchanged.
 
+Pure Black reuses Black's square buttons, detailed media cards, and header menus
+so controls retain their contrast. The account badge's surrounding matte is
+`#000000`; its ring and glass retain Black styling. Switching away restores the
+chosen gradient. The Theme settings card has four 52-pixel rows and height 292;
+the Watched indicator card moves down to retain the existing 16-pixel gap.
+
 ## Asset layout and header dropdowns
 
 Each `images/themes/{blue,black,grey}/` directory contains:
@@ -66,6 +75,13 @@ Each `images/themes/{blue,black,grey}/` directory contains:
 - `header-menu-fill.9.png` and `header-menu-glass.9.png`: menu master assets.
 - `dialog-panel.9.png`: dialog master, retaining the original white border.
 - `fhd/` and `hd/`: resolution-specific copies of all three nine-patch assets.
+
+`images/themes/pure-black/` contains only the dialog master and its FHD/HD
+variants. Their interiors are exact `#000000`, with the existing white border,
+alpha mask, rounded corners, and nine-patch stretch markers preserved. Imagegen
+provided the black interior variant; production normalization retains the original
+geometry and border coverage while enforcing the exact black fill. No fullscreen
+image or duplicate Black control assets are needed.
 
 Shared focus graphics, icons, and masks stay in their existing directories.
 Blue assets were moved unchanged. All consumers of moved assets were updated,
@@ -151,6 +167,9 @@ Black prompt:
 Grey prompt:
 
 > Use case: precise-object-edit. Asset type: Roku dialog nine-patch panel. Create a GREY theme equivalent of this existing dialog frame. Change ONLY the navy interior to uniform neutral #383838. Preserve the white border, rounded corners, transparency and original geometry. No new shapes, gradients, textures, shadows, text or highlights. The final production asset will reuse the original exact border/mask and use your interior material. Output PNG.
+
+Pure Black coverage includes preference persistence, live preview and cancellation,
+initial and changed backgrounds, reused control styling, and HD/FHD dialog selection.
 
 Asset tests compare alpha, stretch markers, white border pixels, and center fills
 at every resolution. Dialog tests cover initialization, live changes, and preserving

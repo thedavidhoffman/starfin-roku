@@ -84,3 +84,27 @@ for (const [theme, fill] of [['black', 38], ['grey', 74]]) {
     }
   });
 }
+
+for (const profile of profiles) {
+  test(`pure-black/${profile}dialog retains its mask and border with a black interior`, async () => {
+    const original = await sharp(`images/themes/black/${profile}dialog-panel.9.png`).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const variant = await sharp(`images/themes/pure-black/${profile}dialog-panel.9.png`).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    assert.equal(variant.info.width, original.info.width);
+    assert.equal(variant.info.height, original.info.height);
+    const { width, height } = original.info;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        assert.equal(variant.data[i + 3], original.data[i + 3], `alpha at ${x},${y}`);
+        const pixel = original.data.subarray(i, i + 4);
+        if (x === 0 || y === 0 || x === width - 1 || y === height - 1 || (pixel[0] === 255 && pixel[1] === 255 && pixel[2] === 255)) {
+          assert.deepEqual(variant.data.subarray(i, i + 4), pixel, `border or marker at ${x},${y}`);
+        } else if (pixel[0] === 25 && pixel[1] === 25 && pixel[2] === 25 && pixel[3] === 255) {
+          assert.deepEqual([...variant.data.subarray(i, i + 4)], [0, 0, 0, 255], `interior at ${x},${y}`);
+        }
+      }
+    }
+    const center = (Math.floor(height / 2) * width + Math.floor(width / 2)) * 4;
+    assert.deepEqual([...variant.data.subarray(center, center + 4)], [0, 0, 0, 255]);
+  });
+}
