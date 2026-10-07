@@ -781,17 +781,63 @@ namespace tests
             m.assertTrue(m.node.playbackActionButton.visible)
         end function
 
-        @it("does not enable fallback after a failed response")
+        @it("enables fallback immediately after a failed response")
         function _()
-            item = m.prepareEpisodeFallback()
+            m.prepareEpisodeFallback()
             m.node.mediaSegments.resolved = false
-
             m.node.mediaSegments.pending = true
+
             m.node.mediaSegmentsTask.response = { requestId: m.node.mediaSegments.requestId, ok: false, itemId: "episode-1", errorMessage: "Unavailable" }
-            'bs:disable-next-line 1140
-            updatePlaybackActionButton(540)
+
+            m.assertTrue(m.node.mediaSegments.resolved)
+            m.assertFalse(m.node.mediaSegments.pending)
+            m.assertEqual(m.node.mediaSegments.intros.Count(), 0)
+            m.assertEqual(m.node.mediaSegments.outros.Count(), 0)
+            m.assertTrue(m.node.playbackActionButton.visible)
+            m.assertEqual(m.node.playbackActionButton.text, "Skip Credits")
+            m.assertEqual(m.node.playbackAction.displayedSource, "next-episode-setting")
+        end function
+
+        @it("keeps the fallback disabled after failure when its setting is Off")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.activePlayback.request.nextEpisodePromptSeconds = "0"
+            m.node.mediaSegments.resolved = false
+            m.node.mediaSegments.pending = true
+
+            m.node.mediaSegmentsTask.response = { requestId: m.node.mediaSegments.requestId, ok: false, itemId: "episode-1", errorMessage: "Unavailable" }
+
+            m.assertTrue(m.node.mediaSegments.resolved)
+            m.assertFalse(m.node.mediaSegments.pending)
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("ignores a failed response from an older request")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.mediaSegments.resolved = false
+            m.node.mediaSegments.pending = true
+            m.node.mediaSegments.requestId = 2
+
+            m.node.mediaSegmentsTask.response = { requestId: 1, ok: false, itemId: "episode-1", errorMessage: "Unavailable" }
 
             m.assertFalse(m.node.mediaSegments.resolved)
+            m.assertTrue(m.node.mediaSegments.pending)
+            m.assertFalse(m.node.playbackActionButton.visible)
+        end function
+
+        @it("ignores a failed response after cancellation")
+        function _()
+            m.prepareEpisodeFallback()
+            m.node.mediaSegments.resolved = false
+            m.node.mediaSegments.pending = true
+            'bs:disable-next-line 1140
+            cancelMediaSegmentsLoad()
+
+            m.node.mediaSegmentsTask.response = { requestId: m.node.mediaSegments.requestId, ok: false, itemId: "episode-1", errorMessage: "Unavailable" }
+
+            m.assertFalse(m.node.mediaSegments.resolved)
+            m.assertFalse(m.node.mediaSegments.pending)
             m.assertFalse(m.node.playbackActionButton.visible)
         end function
 

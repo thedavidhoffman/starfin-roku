@@ -59,8 +59,10 @@ Outro range, the selected interval supplies a derived outro from duration minus
 the interval to the end. The duration must exceed the interval. Movies and
 other media do not receive this fallback. Official outros always take precedence,
 even outside their actionable range. Fallback waits until playback information
-reports no segments or segment loading succeeds without a usable outro. Pending
-or failed segment requests do not enable it; stale item responses are ignored.
+reports no segments or segment loading completes without a usable outro. A failed
+lookup is logged and resolved with no segments, allowing the configured fallback
+without retrying. Pending requests still block fallback; stale or cancelled
+responses are ignored.
 
 The derived range uses the existing action path: Show Up Next displays
 **Skip Credits**, and immediate continuation displays **Play Next**. The action
@@ -80,9 +82,9 @@ values directly; selection overrides are normalized separately because they do n
 come through the settings store.
 
 MediaSegments owns availability through `resolved`: false while availability is
-unresolved or a request has failed, true after either a no-segments result or a
-successful segment response. Both results use one resolution path to build ranges
-and refresh the action. Official and fallback evaluation have separate local
+unresolved, true after a no-segments result, a successful segment response, or an
+accepted failed response. All completed results use one resolution path to build
+ranges and refresh the action. Official and fallback evaluation have separate local
 helpers and dismissal rules; the dispatcher always chooses official ranges first.
 
 ## Prompt diagnostics
