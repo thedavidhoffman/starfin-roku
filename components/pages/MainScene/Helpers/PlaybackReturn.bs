@@ -1,0 +1,134 @@
+import "pkg:/source/PlaybackReturn.bs"
+
+'-------------------------------------------------------------------------------
+' capturePlaybackReturn
+'-------------------------------------------------------------------------------
+sub capturePlaybackReturn(origin as object, behavior as string)
+    if origin.subtype() = "Playlists" then behavior = PlaybackReturn.Behavior.Playlist
+    m.playbackReturn.sessionId++
+    m.pendingUpNextAutoPlayRequest = invalid
+    m.playbackReturn.context = {
+        page: origin
+        behavior: behavior
+        headerVisible: m.header.visible
+    }
+    if origin.isSameNode(m.homePage) then
+        hideHome()
+    else
+        if behavior = PlaybackReturn.Behavior.Episode then
+            origin.callFunc("suspendForPlayback")
+        else
+            origin.callFunc("deactivate")
+        end if
+        origin.visible = false
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' restorePlaybackReturn
+'-------------------------------------------------------------------------------
+sub restorePlaybackReturn(playRequest as dynamic)
+    returnContext = m.playbackReturn.context
+    m.playbackReturn.context = invalid
+    if returnContext = invalid then
+        showHome()
+        return
+    end if
+
+    page = returnContext.page
+    if returnContext.behavior = PlaybackReturn.Behavior.Episode then
+        prepareTVEpisodePageForClosedPlayer(playRequest)
+        page = m.tvEpisodePage
+    end if
+    if page = invalid then
+        showHome()
+        return
+    end if
+    if page.isSameNode(m.homePage) or page.getParent() = invalid then
+        showHome()
+        return
+    end if
+
+    restorePlaybackPageReference(page)
+    if returnContext.behavior = PlaybackReturn.Behavior.Episode then
+        page.callFunc("applyPlaybackSubtitleSelection", playRequest)
+        page.callFunc("refreshPlaybackState")
+    else if returnContext.behavior = PlaybackReturn.Behavior.Movie then
+        page.callFunc("applyPlaybackSelection", playRequest)
+    else if returnContext.behavior = PlaybackReturn.Behavior.Playlist then
+        playlistItemIndex = getPlaylistPlayRequestItemIndex(playRequest)
+        if playlistItemIndex >= 0 then page.callFunc("restorePlaylistPlaybackFocus", playlistItemIndex)
+    end if
+    page.visible = true
+    m.header.visible = returnContext.headerVisible
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' restorePlaybackPageReference
+'-------------------------------------------------------------------------------
+sub restorePlaybackPageReference(page as object)
+    ' Person navigation can replace these references while retaining the original page.
+    if page.isSubtype("Movie") then
+        m.moviePage = page
+    else if page.isSubtype("TVEpisode") then
+        m.tvEpisodePage = page
+    else if page.isSubtype("TVShow") then
+        m.tvShowPage = page
+    else if page.isSubtype("TVSeason") then
+        m.tvSeasonPage = page
+    else if page.isSubtype("Person") then
+        m.personPage = page
+    else if page.isSubtype("Search") then
+        m.searchPage = page
+    else if page.isSubtype("VideoLibrary") then
+        m.videoLibraryPage = page
+    else if page.isSubtype("HomeMediaLibrary") then
+        m.homeMediaLibraryPage = page
+    else if page.isSubtype("MusicLibrary") then
+        m.musicLibraryPage = page
+    else if page.isSubtype("MusicArtist") then
+        m.musicArtistPage = page
+    else if page.isSubtype("LiveTV") then
+        m.liveTvPage = page
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' captureDeepLinkPlaybackReturn
+'-------------------------------------------------------------------------------
+sub captureDeepLinkPlaybackReturn(selection as object)
+    ' Preserve deep-link return precedence, resolving it once at launch rather than on close.
+    page = m.homePage
+    behavior = PlaybackReturn.Behavior.Page
+    headerVisible = true
+    if m.moviePage <> invalid then
+        page = m.moviePage
+        behavior = PlaybackReturn.Behavior.Movie
+        headerVisible = false
+    else if isTVEpisodePlayRequest(selection) and (m.tvShowPage = invalid or m.tvSeasonPage <> invalid or m.tvEpisodePage <> invalid) then
+        page = m.tvEpisodePage
+        behavior = PlaybackReturn.Behavior.Episode
+        headerVisible = false
+    else if m.tvEpisodePage <> invalid then
+        page = m.tvEpisodePage
+        behavior = PlaybackReturn.Behavior.Episode
+        headerVisible = false
+    else if m.tvSeasonPage <> invalid then
+        page = m.tvSeasonPage
+        headerVisible = false
+    else if m.tvShowPage <> invalid then
+        page = m.tvShowPage
+        headerVisible = false
+    else if m.liveTvPage <> invalid then
+        page = m.liveTvPage
+    else if m.videoLibraryPage <> invalid then
+        page = m.videoLibraryPage
+    else if m.homeMediaLibraryPage <> invalid then
+        page = m.homeMediaLibraryPage
+    end if
+    m.playbackReturn.sessionId++
+    m.pendingUpNextAutoPlayRequest = invalid
+    m.playbackReturn.context = { page: page, behavior: behavior, headerVisible: headerVisible }
+end sub
+

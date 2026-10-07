@@ -198,6 +198,19 @@ metadata request used by MovieTask and direct playback resolution. Playback
 requests/restoration retain the complete catalog, while timeline requests and
 resume data use the selected version. MainScene remains a router.
 
+Remote Play remains page-owned input handling: browsing pages emit a focused
+playback selection, while detail pages reuse their existing Play/Resume builders.
+MainScene owns one shared playback return context and player routing for ordinary
+video, remote Play, and albums. Launch callers provide an explicit origin before
+it is hidden; player closure and next-episode cancellation share restoration.
+Pages retain metadata reconciliation and focus ownership. Person retains the
+suspended launch's context/snapshot for its temporary detour; new launches replace
+the active destination. PlaybackController exposes the owned player restoration
+snapshot without owning navigation destinations.
+VideoPlaybackInfoTask owns direct-launch item hydration before negotiation;
+VideoPlayer retains accepted metadata through its normal recovery lifecycle.
+AudioPlayer continues to own ordered album playback and pause/resume behavior.
+
 ## Build and test boundaries
 
 `bsconfig.json` builds the production channel. Component-specific pure playback

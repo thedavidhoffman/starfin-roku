@@ -1,3 +1,4 @@
+import "pkg:/source/RemotePlayback.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/HomeVideoPlayback.bs"
 import "pkg:/source/HomeEpisodeImages.bs"
@@ -1265,6 +1266,7 @@ end function
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press and key = Remote.Key.Play then return playFocusedMedia()
     if press = false then return false
     if key = Remote.Key.Options then return openFocusedMediaActions()
 
@@ -1378,3 +1380,17 @@ sub handlePlaybackOverlayClosed(selection as dynamic)
         focusHome()
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' playFocusedMedia
+'-------------------------------------------------------------------------------
+function playFocusedMedia() as boolean
+    if m.homeState.refresh.blocking or m.homeState.shelfNodes.Count() = 0 then return false
+    shelf = m.homeState.shelfNodes[m.homeState.focusedShelfIndex]
+    if shelf.isInFocusChain() <> true or Strings.ToString(shelf.rowContent.rowKey) = "libraries" then return false
+    selection = RemotePlayback.BuildSelection(shelf.callFunc("getFocusedItem"))
+    if selection = invalid then return false
+    m.homeState.playbackOverlay.returnTarget = { rowKey: Strings.ToString(shelf.rowContent.rowKey), itemId: selection.itemId }
+    m.top.playbackSelected = selection
+    return true
+end function

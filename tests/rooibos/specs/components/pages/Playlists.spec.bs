@@ -633,6 +633,65 @@ namespace tests
             }
         end function
 
+        @describe("remote Play")
+
+        @it("keeps the playlist queue and resolves movie version resume independently")
+        function _()
+            first = m.createMovie("first", false, 0)
+            second = m.createMovie("second", false, 500)
+            m.node.pageState.items = [first, second]
+
+            'bs:disable-next-line 1140
+            m.assertTrue(specializationHandleItemSelected(1, second, true))
+
+            m.assertTrue(m.top.playbackSelected.remotePlay)
+            m.assertTrue(m.top.playbackSelected.loadItemDetails)
+            m.assertEqual(m.top.playbackSelected.playbackQueueIndex, 1)
+            m.assertInvalid(m.top.playbackSelected.startPositionTicks)
+        end function
+
+        @it("routes Play through the inherited playlist key handler with the focused queue item")
+        function _()
+            first = m.createMovie("first", false, 0)
+            second = m.createMovie("second", false, 500)
+            m.node.pageState.items = [first, second]
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: first })
+            content.createChild("ContentNode").addFields({ raw: second })
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+
+            m.assertEqual(m.top.playbackSelected.itemId, "second")
+            m.assertEqual(m.top.playbackSelected.playbackQueue.Count(), 2)
+            m.assertEqual(m.top.playbackSelected.playbackQueueIndex, 1)
+            m.assertTrue(m.top.playbackSelected.remotePlay)
+            m.assertTrue(m.top.playbackSelected.loadItemDetails)
+            m.assertInvalid(m.top.playbackSelected.startPositionTicks)
+        end function
+
+        @it("ignores Play release through the inherited playlist handler")
+        function _()
+            first = m.createMovie("first", false, 0)
+            second = m.createMovie("second", false, 500)
+            m.node.pageState.items = [first, second]
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: first })
+            content.createChild("ContentNode").addFields({ raw: second })
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
     end class
 
 end namespace

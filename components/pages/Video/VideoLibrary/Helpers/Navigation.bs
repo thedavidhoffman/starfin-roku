@@ -304,6 +304,7 @@ end function
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press and key = Remote.Key.Play then return playFocusedMedia()
     if press = false then
         return false
     end if
@@ -390,4 +391,20 @@ function canUseLetterNavigation() as boolean
         return false
     end if
     return m.letterGutterButton <> invalid and m.letterGutterButton.visible = true
+end function
+
+'-------------------------------------------------------------------------------
+' playFocusedMedia
+'-------------------------------------------------------------------------------
+function playFocusedMedia() as boolean
+    if m.itemsGrid.isInFocusChain() <> true or m.pageState.isLoading then return false
+    if m.itemsGrid.content = invalid then return false
+    index = Number.ToInteger(m.itemsGrid.itemFocused, -1)
+    if index < 0 or index >= m.itemsGrid.content.getChildCount() then return false
+    item = m.itemsGrid.content.getChild(index).raw
+    selection = RemotePlayback.BuildSelection(item)
+    if selection = invalid then return false
+    if isPlaylistsView() then return m.top.callFunc("specializationHandleItemSelected", index, item, true)
+    m.top.playbackSelected = selection
+    return true
 end function

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { ensureAuthenticated } from '../support/authentication.mjs';
+import { ensureAuthenticated, relaunchAuthenticatedStarfin } from '../support/authentication.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
-import { stopPlaybackForCleanup, returnToHome } from '../support/tv-series.mjs';
+import { stopPlaybackForCleanup } from '../support/tv-series.mjs';
 
 async function value(environment, keyPath) {
   return (await environment.odc.getValue({ base: 'scene', keyPath })).value;
@@ -74,9 +74,16 @@ describe('Starfin movie versions', function () {
   });
 
   afterEach(async function () {
-    const environment = await ensureAuthenticated();
-    await stopPlaybackForCleanup(environment);
-    await returnToHome();
+    try {
+      if (this.currentTest?.state === 'failed') {
+        await captureEvidence(this, `before cleanup ${this.currentTest.fullTitle()}`, { failure: true });
+      }
+    } catch (error) {
+      console.warn(`Unable to capture failure evidence before cleanup: ${error.message}`);
+    } finally {
+      // A failed assertion can leave Movie, playback, or an overlay open with Home hidden.
+      await relaunchAuthenticatedStarfin();
+    }
   });
 
   it('stages detail versions, commits their summary, and reopens the selection', async function () {
@@ -94,9 +101,9 @@ describe('Starfin movie versions', function () {
     await closeOptions(environment);
     await openOptions(environment);
     assert.equal(await value(environment, '#overlayHost.0.optionsContext.selection.mediaSourceId'), movie.MediaSources[1].Id);
-    const item = await value(environment, '#overlayHost.0.optionsContext.item');
-    assert.equal(item.MediaSources[0].Id, movie.MediaSources[1].Id);
-    assert.equal(item.RunTimeTicks, movie.MediaSources[1].RunTimeTicks);
+    // Resolve fields on Roku, where associative-array keys are case-insensitive.
+    assert.equal(await value(environment, '#overlayHost.0.optionsContext.item.MediaSources.0.Id'), movie.MediaSources[1].Id);
+    assert.equal(await value(environment, '#overlayHost.0.optionsContext.item.RunTimeTicks'), movie.MediaSources[1].RunTimeTicks);
     await captureEvidence(this, 'movie-versions-selected-information');
     await closeOptions(environment);
   });
@@ -112,21 +119,37 @@ describe('Starfin movie versions', function () {
         await environment.ecp.sendKeypress(environment.ecp.Key.Play);
         await waitFor(async () => await value(environment, '#videoPlayer.state') === 'paused', 'movie pause');
       }
-      const firstRequest = await value(environment, '#playbackInfoTask.response.requestId');
+      const taskPath = '#playbackController.0.#playbackInfoTask';
+      const firstRequest = await value(environment, `${taskPath}.response.requestId`);
+      assert.ok(Number.isInteger(firstRequest), 'Initial playback negotiation must have a request ID.');
       await openOptions(environment, true);
       const capturedPosition = await value(environment, '#videoPlayer.position');
       await chooseVersion(environment, 1);
       await captureEvidence(this, `movie-versions-player-${paused ? 'paused' : 'playing'}-pending`);
       await closeOptions(environment);
-      await waitFor(async () => await value(environment, '#playbackInfoTask.response.requestId') > firstRequest
-        && await value(environment, '#playbackInfoTask.response.mediaSourceId') === movie.MediaSources[1].Id
-        && await value(environment, '#videoPlayer.state') === (paused ? 'paused' : 'playing'), 'version restart and state restoration', 60000);
-      const request = await value(environment, '#playbackController.0.playRequest');
-      assert.equal(request.mediaSourceId, movie.MediaSources[1].Id);
-      assert.equal(request.startPaused, paused);
-      assert.ok(Math.abs(request.startPositionTicks / 10000000 - capturedPosition) <= 4);
-      assert.equal(request.movieVersions.sources.length, movie.MediaSources.length);
-      assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: '#playbackControls.#mediaInfoButton' }), true);
+      await waitFor(async () => {
+        const state = {
+          requestId: await value(environment, `${taskPath}.response.requestId`),
+          ok: await value(environment, `${taskPath}.response.ok`),
+          errorMessage: await value(environment, `${taskPath}.response.errorMessage`),
+          mediaSourceId: await value(environment, `${taskPath}.response.mediaSourceId`),
+          requestedSourceId: await value(environment, '#playbackController.0.playRequest.mediaSourceId'),
+          videoState: await value(environment, '#videoPlayer.state')
+        };
+        if (state.requestId > firstRequest && state.ok === true
+          && state.mediaSourceId === movie.MediaSources[1].Id
+          && state.videoState === (paused ? 'paused' : 'playing')) return true;
+        throw new Error(`Version restart expected source ${movie.MediaSources[1].Id}, request ID > ${firstRequest}, state ${paused ? 'paused' : 'playing'}; observed ${JSON.stringify(state)}`);
+      }, 'version restart and state restoration', 60000);
+      const requestPath = '#playbackController.0.playRequest';
+      assert.equal(await value(environment, `${requestPath}.mediaSourceId`), movie.MediaSources[1].Id);
+      assert.equal(await value(environment, `${requestPath}.startPaused`), paused);
+      const positionTicks = await value(environment, `${requestPath}.startPositionTicks`);
+      assert.ok(Math.abs(positionTicks / 10000000 - capturedPosition) <= 4);
+      const sources = await value(environment, `${requestPath}.movieVersions.sources`);
+      assert.ok(Array.isArray(sources), 'Playback must retain the complete version catalog.');
+      assert.equal(sources.length, movie.MediaSources.length);
+      assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: '#playbackControls.#mediaOptionsButton' }), true);
       await captureEvidence(this, `movie-versions-player-${paused ? 'paused' : 'playing'}-restored`);
       await stopPlaybackForCleanup(environment);
       await openOptions(environment);

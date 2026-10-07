@@ -551,6 +551,83 @@ namespace tests
         function createRelated(id as string, name as string, itemType as string) as object
             return { Id: id, Name: name, Type: itemType, ImageTags: {}, BackdropImageTags: [], SeriesName: "Series", ParentIndexNumber: 1, IndexNumber: 1 }
         end function
+
+        @describe("remote Play")
+
+        @it("plays the focused related media item")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            row = content.createChild("ContentNode")
+            child = row.createChild("ContentNode")
+            child.addFields({ raw: { Id: "media-remote", Type: "Movie" } })
+            m.node.relatedRows.content = content
+            m.node.relatedRows.visible = true
+            m.node.relatedRows.jumpToRowItem = [0, 0]
+            m.node.relatedRows.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+
+            m.assertEqual(m.top.playbackSelected.itemId, "media-remote")
+        end function
+
+        @it("plays the focused item from the separate related episode row")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            row = content.createChild("ContentNode")
+            row.createChild("ContentNode").addFields({ raw: { Id: "episode-first", Type: "Episode" } })
+            row.createChild("ContentNode").addFields({ raw: { Id: "episode-second", Type: "Episode" } })
+            m.node.relatedEpisodeRows.content = content
+            m.node.relatedEpisodeRows.visible = true
+            m.node.relatedEpisodeRows.jumpToRowItem = [0, 1]
+            m.node.relatedEpisodeRows.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+
+            m.assertEqual(m.top.playbackSelected.itemId, "episode-second")
+            m.assertTrue(m.top.playbackSelected.loadItemDetails)
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("ignores Play release on a related episode")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            row = content.createChild("ContentNode")
+            row.createChild("ContentNode").addFields({ raw: { Id: "episode-first", Type: "Episode" } })
+            row.createChild("ContentNode").addFields({ raw: { Id: "episode-second", Type: "Episode" } })
+            m.node.relatedEpisodeRows.content = content
+            m.node.relatedEpisodeRows.visible = true
+            m.node.relatedEpisodeRows.jumpToRowItem = [0, 1]
+            m.node.relatedEpisodeRows.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("does not play while filmography owns focus")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            row = content.createChild("ContentNode")
+            row.createChild("ContentNode").addFields({ raw: { Id: "episode-first", Type: "Episode" } })
+            row.createChild("ContentNode").addFields({ raw: { Id: "episode-second", Type: "Episode" } })
+            m.node.relatedEpisodeRows.content = content
+            m.node.relatedEpisodeRows.visible = true
+            m.node.relatedEpisodeRows.jumpToRowItem = [0, 1]
+            m.node.relatedEpisodeRows.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            m.node.filmographyButton.visible = true
+            m.node.filmographyButton.setFocus(true)
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
     end class
 
 end namespace

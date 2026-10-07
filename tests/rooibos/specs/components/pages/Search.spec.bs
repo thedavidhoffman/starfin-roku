@@ -441,6 +441,83 @@ namespace tests
             getGlobalAa().requestFailureMessage = message
         end sub
 
+        @describe("remote Play")
+
+        @it("plays the focused shelf media")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("play", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.playbackSelected.itemId, "second")
+            m.top.removeChild(shelf)
+            m.node.searchState.rowNodes = []
+        end function
+
+        @it("ignores Play release on a focused playable shelf")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.playbackSelected)
+            m.top.removeChild(shelf)
+            m.node.searchState.rowNodes = []
+        end function
+
+        @it("does not play while Search is loading")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            m.node.searchState.loading.inFlight = true
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+            m.top.removeChild(shelf)
+            m.node.searchState.rowNodes = []
+        end function
+
+        @it("does not play while Search is stopping")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            m.node.searchState.loading.stopping = true
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+            m.top.removeChild(shelf)
+            m.node.searchState.rowNodes = []
+        end function
+
+        @it("does not play when the Search keyboard owns focus")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            m.top.findNode("keyboard").setFocus(true)
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+            m.top.removeChild(shelf)
+            m.node.searchState.rowNodes = []
+        end function
+
+        private function createRemotePlayShelf() as object
+            shelf = CreateObject("roSGNode", "HomeShelf")
+            row = CreateObject("roSGNode", "ContentNode")
+            row.addFields({ rowKey: "movies" })
+            row.createChild("ContentNode").addFields({ raw: { Id: "first", Type: "Movie" } })
+            row.createChild("ContentNode").addFields({ raw: { Id: "second", Type: "Movie" } })
+            shelf.rowContent = row
+            m.top.appendChild(shelf)
+            m.node.searchState.rowNodes = [shelf]
+            m.node.searchState.focusedRowIndex = 0
+            shelf.callFunc("activate", "second")
+            m.top.playbackSelected = invalid
+            return shelf
+        end function
+
     end class
 
 end namespace

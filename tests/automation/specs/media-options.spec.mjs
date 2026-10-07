@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
-import { ensureAuthenticated } from '../support/authentication.mjs';
+import { ensureAuthenticated, relaunchAuthenticatedStarfin } from '../support/authentication.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 import {
   findSeries, openConfiguredTVLibrary, openSeries, readSeasonCards,
-  openSeasonOne, selectConfiguredEpisode, startEpisodePlayback,
-  isPlayerAttached, stopPlaybackForCleanup, returnToHome
+  openSeasonOne, selectConfiguredEpisode, startEpisodePlayback
 } from '../support/tv-series.mjs';
 
 async function value(environment, keyPath) {
@@ -99,12 +98,18 @@ describe('Starfin unified media options', function () {
       await openOptions(environment, true);
       await waitFor(async () => await value(environment, '#videoPlayer.state') === 'paused', 'playback to pause for options');
       await captureEvidence(this, 'media-options-playing-information');
-      const initialResponse = await value(environment, '#playbackController.0.#playbackInfoTask.response');
-      const source = initialResponse.payload.MediaSources[0];
-      const serverIndex = source.DefaultSubtitleStreamIndex;
-      const expectedIndex = Number.isInteger(serverIndex) && serverIndex >= 0
-        && source.MediaStreams.some(stream => stream.Type === 'Subtitle' && stream.Index === serverIndex)
-        ? serverIndex : -1;
+      const sourcePath = '#playbackController.0.#playbackInfoTask.response.payload.MediaSources.0';
+      const serverIndex = await value(environment, `${sourcePath}.DefaultSubtitleStreamIndex`);
+      const streams = await value(environment, `${sourcePath}.MediaStreams`);
+      assert.ok(Array.isArray(streams), 'Negotiated source streams must be available.');
+      let expectedIndex = -1;
+      if (Number.isInteger(serverIndex) && serverIndex >= 0) {
+        for (let index = 0; index < streams.length; index++) {
+          const type = await value(environment, `${sourcePath}.MediaStreams.${index}.Type`);
+          const streamIndex = await value(environment, `${sourcePath}.MediaStreams.${index}.Index`);
+          if (type === 'Subtitle' && streamIndex === serverIndex) expectedIndex = serverIndex;
+        }
+      }
       assert.equal(await value(environment, '#playbackController.0.#playbackInfoTask.response.subtitleStreamIndex'), expectedIndex);
       assert.equal(await value(environment, '#overlayHost.0.optionsContext.selection.subtitleStreamIndex'), -2);
       assert.equal(await value(environment, '#overlayHost.0.optionsContext.resolvedSubtitleStreamIndex'), expectedIndex);
@@ -155,9 +160,7 @@ describe('Starfin unified media options', function () {
       await closeOptions(environment);
 
     } finally {
-      if ((await value(environment, '#overlayHost.0.title'))?.startsWith('Media Options › ')) await closeOptions(environment);
-      if (await isPlayerAttached(environment)) await stopPlaybackForCleanup(environment);
-      await returnToHome();
+      await relaunchAuthenticatedStarfin();
     }
   });
 });

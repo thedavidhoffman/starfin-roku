@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { getAutomationEnvironment } from './environment.mjs';
+import { relaunchAuthenticatedStarfin } from './authentication.mjs';
 import { waitFor } from './lifecycle.mjs';
 
 async function findConfiguredTVLibrary(environment) {
@@ -311,16 +311,21 @@ async function selectConfiguredEpisode(environment) {
         childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
         pageType: { base: 'scene', keyPath: '#dynamicPageHost.3.subtype()' },
         pageVisible: { base: 'scene', keyPath: '#dynamicPageHost.3.visible' },
-        playItem: { base: 'scene', keyPath: '#mediaToolbar.playItem' }
+        itemId: { base: 'scene', keyPath: '#mediaToolbar.playItem.Id' },
+        season: { base: 'scene', keyPath: '#mediaToolbar.playItem.ParentIndexNumber' },
+        episode: { base: 'scene', keyPath: '#mediaToolbar.playItem.IndexNumber' }
       }
     });
-    const playItem = values.results.playItem?.value;
+    const itemId = values.results.itemId?.value;
+    const season = values.results.season?.value;
+    const episode = values.results.episode?.value;
     return values.results.childCount?.value === 4
       && values.results.pageType?.value === 'TVEpisode'
       && values.results.pageVisible?.value === true
-      && Number(playItem?.ParentIndexNumber) === expected.season
-      && Number(playItem?.IndexNumber) === expected.episode
-      ? playItem
+      && Boolean(itemId)
+      && Number(season) === expected.season
+      && Number(episode) === expected.episode
+      ? { Id: itemId, ParentIndexNumber: season, IndexNumber: episode }
       : false;
   }, `the Season ${expected.season} Episode ${expected.episode} detail page to load`, 120000);
 }
@@ -493,45 +498,8 @@ async function requestPlayerClose(environment) {
 }
 
 async function returnToHome() {
-  const environment = await getAutomationEnvironment();
-
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const state = await environment.odc.getValues({
-      requests: {
-        childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
-        homeVisible: { base: 'scene', keyPath: '#homePage.visible' }
-      }
-    });
-    if (state.results.childCount?.value === 0 && state.results.homeVisible?.value === true) return;
-
-    const previousChildCount = Number(state.results.childCount?.value ?? 0);
-    await environment.ecp.sendKeypress(environment.ecp.Key.Back);
-    const navigationState = await waitFor(async () => {
-      const updated = await environment.odc.getValues({
-        requests: {
-          childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
-          homeVisible: { base: 'scene', keyPath: '#homePage.visible' }
-        }
-      });
-      const childCount = Number(updated.results.childCount?.value ?? 0);
-      const homeVisible = updated.results.homeVisible?.value === true;
-      return childCount < previousChildCount || (childCount === 0 && homeVisible)
-        ? { childCount, homeVisible }
-        : false;
-    }, 'a TV series page to close after Back', 5000);
-
-    if (navigationState.childCount === 0 && navigationState.homeVisible) return;
-  }
-
-  await waitFor(async () => {
-    const state = await environment.odc.getValues({
-      requests: {
-        childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
-        homeVisible: { base: 'scene', keyPath: '#homePage.visible' }
-      }
-    });
-    return state.results.childCount?.value === 0 && state.results.homeVisible?.value === true;
-  }, 'the TV series pages to return to Home');
+  // Reset independently of overlays, focus, suspended players, or the current page chain.
+  await relaunchAuthenticatedStarfin();
 }
 
 export {

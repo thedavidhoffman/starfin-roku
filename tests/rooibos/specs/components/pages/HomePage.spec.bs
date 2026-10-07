@@ -1348,6 +1348,106 @@ namespace tests
             m.assertInvalid(m.node.homeState.playbackOverlay.returnTarget)
         end function
 
+        @describe("remote Play")
+
+        @it("plays the focused shelf media")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("play", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.playbackSelected.itemId, "second")
+            m.top.removeChild(shelf)
+            m.node.homeState.shelfNodes = []
+        end function
+
+        @it("ignores Play release on a focused playable shelf")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.playbackSelected)
+            m.top.removeChild(shelf)
+            m.node.homeState.shelfNodes = []
+        end function
+
+        @it("does not play during a blocking Home refresh")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            m.node.homeState.refresh.blocking = true
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+            m.top.removeChild(shelf)
+            m.node.homeState.shelfNodes = []
+        end function
+
+        @it("does not play a library shelf")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            shelf.rowContent.rowKey = "libraries"
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+            m.top.removeChild(shelf)
+            m.node.homeState.shelfNodes = []
+        end function
+
+        @it("does not play when Home shelf focus has moved away")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            shelf.findNode("items").setFocus(false)
+            m.top.setFocus(true)
+            m.assertFalse(shelf.isInFocusChain())
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+            m.top.removeChild(shelf)
+            m.node.homeState.shelfNodes = []
+        end function
+
+        @it("restores the exact Home shelf item after Play")
+        function _()
+            shelf = m.createRemotePlayShelf()
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+            m.assertEqual(m.top.playbackSelected.itemId, "second")
+            m.assertEqual(m.node.homeState.playbackOverlay.returnTarget, { rowKey: "movies", itemId: "second" })
+            shelf.findNode("items").jumpToRowItem = [0, 0]
+            m.top.setFocus(true)
+
+            m.top.callFunc("focusHome")
+
+            m.assertEqual(shelf.findNode("items").rowItemFocused, [0, 1])
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "second")
+            m.assertTrue(shelf.isInFocusChain())
+            m.top.removeChild(shelf)
+            m.node.homeState.shelfNodes = []
+        end function
+
+        private function createRemotePlayShelf() as object
+            shelf = CreateObject("roSGNode", "HomeShelf")
+            row = CreateObject("roSGNode", "ContentNode")
+            row.addFields({ rowKey: "movies" })
+            row.createChild("ContentNode").addFields({ raw: { Id: "first", Type: "Movie" } })
+            row.createChild("ContentNode").addFields({ raw: { Id: "second", Type: "Movie" } })
+            shelf.rowContent = row
+            m.top.appendChild(shelf)
+            m.node.homeState.shelfNodes = [shelf]
+            m.node.homeState.focusedShelfIndex = 0
+            m.node.homeState.shelfPositions = []
+            shelf.callFunc("activate", "second")
+            m.top.playbackSelected = invalid
+            return shelf
+        end function
+
     end class
 
 end namespace

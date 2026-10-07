@@ -907,6 +907,82 @@ namespace tests
             m.node.state.content.albums.load.nextStartIndex = 0
         end sub
 
+        @describe("remote Play")
+
+        @it("launches the focused album")
+        function _()
+            m.node.state.browse.selection.optionKey = LibraryBrowse.Option.Album
+            content = CreateObject("roSGNode", "ContentNode")
+            child = content.createChild("ContentNode")
+            child.addFields({ raw: { Id: "album-1", Type: "MusicAlbum" } })
+            m.node.musicGrid.content = content
+            m.node.musicGrid.jumpToItem = 0
+            m.node.musicGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+            m.assertEqual(m.top.playbackSelected.itemId, "album-1")
+        end function
+
+        @it("does not launch an artist entry")
+        function _()
+            m.node.state.browse.selection.optionKey = LibraryBrowse.Option.Artist
+            m.node.musicGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("ignores Play release on a focused album")
+        function _()
+            m.node.state.browse.selection.optionKey = LibraryBrowse.Option.Album
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: { Id: "album", Type: "MusicAlbum" } })
+            m.node.musicGrid.content = content
+            m.node.musicGrid.jumpToItem = 0
+            m.node.musicGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("does not play an album during foreground loading")
+        function _()
+            m.node.state.browse.selection.optionKey = LibraryBrowse.Option.Album
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: { Id: "album", Type: "MusicAlbum" } })
+            m.node.musicGrid.content = content
+            m.node.musicGrid.jumpToItem = 0
+            m.node.musicGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            m.node.state.loadingUi.foreground.kind = "albums"
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("does not play while the music browse control owns focus")
+        function _()
+            m.node.state.browse.selection.optionKey = LibraryBrowse.Option.Album
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: { Id: "album", Type: "MusicAlbum" } })
+            m.node.musicGrid.content = content
+            m.node.musicGrid.jumpToItem = 0
+            m.node.musicGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            m.node.browseByButton.setFocus(true)
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
     end class
 
 end namespace

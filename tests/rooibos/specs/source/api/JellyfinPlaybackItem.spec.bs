@@ -1,0 +1,27 @@
+import "pkg:/source/api/JellyfinPlaybackItem.bs"
+
+namespace tests
+
+    @suite("JellyfinPlaybackItem")
+    class JellyfinPlaybackItemTests extends rooibos.BaseTestSuite
+
+        @describe("direct playback metadata")
+
+        @it("requests cast metadata from the selected item endpoint")
+        function _()
+            getGlobalAa().playbackItemRequestUrl = ""
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().playbackItemRequestUrl = requestUrl
+                return { ok: true, data: { Id: "episode-1", People: [{ Id: "actor-1" }] } }
+            end function)
+
+            result = JellyfinPlaybackItem.Load({ server: "http://server", token: "token", userId: "user", itemId: "episode-1" })
+
+            m.assertTrue(result.ok)
+            m.assertTrue(Instr(1, getGlobalAa().playbackItemRequestUrl, "http://server/Items/episode-1?") = 1)
+            m.assertTrue(Instr(1, getGlobalAa().playbackItemRequestUrl, "People") > 0)
+        end function
+
+    end class
+
+end namespace

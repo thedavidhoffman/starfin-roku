@@ -185,7 +185,8 @@ interface accepts the version context together with audio and subtitle state.
 ## Close Restoration
 
 The `playRequest` SceneGraph field is input-only. When playback closes,
-`MainScene` calls `getRestorePlaybackRequest()` through the component interface.
+`PlaybackController` captures `getRestorePlaybackRequest()` through the player
+interface and publishes the snapshot in its `closed` event to MainScene.
 The function returns a copy of the accepted active request, including current
 queue reconciliation. If startup never succeeded, it returns the pending
 request so navigation can still restore the originating surface.
@@ -205,3 +206,60 @@ Library/detail page updates its own item.UserData
 
 VideoPlayer -- getRestorePlaybackRequest() --> MainScene navigation restore
 ```
+
+## Shared playback return context
+
+MainScene owns one grouped playback return state for ordinary video, remote Play,
+and album playback. Launch callers supply their origin before it is hidden or
+deactivated. The context records the page, header visibility, and a
+`PlaybackReturn.Behavior`: Page, Movie, Episode, or Playlist. A launch identity
+changes for an explicit new title, while next-episode continuation preserves it.
+Navigation state remains separate from the accepted playback snapshot.
+
+Player closure and next-episode prompt cancellation use the same restoration
+path. Movie restores accepted version/audio/subtitle choices. Episode detail
+playback reconciles the final queued episode, restores subtitle intent, and
+refreshes playback data. Playlists focus the latest queue item's index. Browsing
+pages use their existing activation/focus behavior; Home retains its existing
+refresh and focus handling. Before applying metadata or activating a retained
+page, restoration rebinds MainScene's corresponding page reference. This keeps
+page events routed to the displayed Movie or TVShow after Person navigation
+replaces and closes another detail page. Removed destinations fall back to Home.
+Restoration consumes the context, and dynamic-page/session teardown clears it.
+
+Person is a temporary detour from playback. It saves the launch identity, return
+context, and accepted snapshot through PlaybackController's
+`getRestorePlaybackRequest` interface. Closing Person resumes the suspended player
+only if its launch identity still matches. An explicit title launch from Person
+replaces the playback destination with Person; closing Person after that player
+has closed restores the saved original destination. An existing return context
+does not block another title launch. Remote input still requires a visible,
+focused origin and rejects blocking overlays/loading; hiding the origin prevents
+repeat launches.
+
+Deep links resolve their existing retained-page return precedence at launch.
+Cold movie playback returns Home; cold episode playback retains episode-detail
+reconciliation. Pending deep-link cancellation and failures continue through the
+existing fallback lifecycle. Ordinary playback failures remain on the stopped
+player until Back. Album completion also continues leaving AudioPlayer displayed.
+PlaybackController rejects notifications from replaced video players; MainScene
+matches audio-close notifications to its current AudioPlayer. Explicit replacement
+launches deactivate and detach the previous audio player before opening new media.
+
+## Remote Play from browsing
+
+Pages emit `playbackSelected` for the focused playable item. MainScene routes the
+selection to the existing player. Direct episode playback returns to the browsing
+page without creating an episode detail page. Playback errors retain the existing
+recovery and acknowledgment behavior; Back returns to the originating page.
+
+Direct video requests set `loadItemDetails`. VideoPlaybackInfoTask loads complete
+metadata, including `People` for the player's Cast option, with explicit session
+context before negotiation, rejecting missing, changed, or unavailable items.
+Videos resume from their loaded UserData; movies
+use the first source and its version-specific resume data. Detail-page playback
+retains the selected version and stream choices. Accepted metadata stays with the
+playback request and the loading flag is cleared for recovery and stream changes.
+Available season and playlist queue context is retained; other direct launches
+play only the highlighted video without discovering a new queue. Home videos
+bypass the choice dialog when launched by remote Play.

@@ -2161,6 +2161,105 @@ namespace tests
             getGlobalAa().requestFailureMessage = message
         end sub
 
+        @describe("remote Play")
+
+        @it("plays the focused item without opening its details")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            first = content.createChild("ContentNode")
+            first.addFields({ raw: { Id: "first", Type: "Movie" } })
+            second = content.createChild("ContentNode")
+            second.addFields({ raw: { Id: "second", Type: "Movie" } })
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.node.pageState.isLoading = false
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+
+            m.assertEqual(m.top.playbackSelected.itemId, "second")
+            m.assertTrue(m.top.playbackSelected.loadItemDetails)
+        end function
+
+        @it("ignores Play release")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            first = content.createChild("ContentNode")
+            first.addFields({ raw: { Id: "first", Type: "Movie" } })
+            second = content.createChild("ContentNode")
+            second.addFields({ raw: { Id: "second", Type: "Movie" } })
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.node.pageState.isLoading = false
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("does not play while library loading is pending")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            first = content.createChild("ContentNode")
+            first.addFields({ raw: { Id: "first", Type: "Movie" } })
+            second = content.createChild("ContentNode")
+            second.addFields({ raw: { Id: "second", Type: "Movie" } })
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.node.pageState.isLoading = false
+            m.top.playbackSelected = invalid
+            m.node.pageState.isLoading = true
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("does not play while the video-library browse control owns focus")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: { Id: "first", Type: "Movie" } })
+            content.createChild("ContentNode").addFields({ raw: { Id: "second", Type: "Movie" } })
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.node.pageState.isLoading = false
+            m.top.playbackSelected = invalid
+
+            m.node.browseByButton.setFocus(true)
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("retains the exact library item through Play deactivation and activation")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: { Id: "first", Type: "Movie" } })
+            content.createChild("ContentNode").addFields({ raw: { Id: "second", Type: "Movie" } })
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.node.pageState.isLoading = false
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+            m.assertEqual(m.top.playbackSelected.itemId, "second")
+            m.top.callFunc("deactivate")
+            m.top.setFocus(true)
+
+            m.top.callFunc("activate")
+
+            m.assertEqual(m.node.itemsGrid.itemFocused, 1)
+            m.assertTrue(m.node.itemsGrid.isInFocusChain())
+        end function
+
     end class
 
 end namespace

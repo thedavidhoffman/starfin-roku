@@ -3,14 +3,10 @@ import { categories, openSettings, openSettingsFromSystemMenu, selectRadioOption
 import { openConfiguredLibrary } from '../support/library-navigation.mjs';
 import { returnToHome } from '../support/tv-series.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
-import { getAutomationEnvironment } from '../support/environment.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
 
 describe('Starfin movie shell layout', function () {
   afterEach(async function () {
-    const environment = await getAutomationEnvironment();
-    const page = await environment.odc.getValue({ base: 'scene', keyPath: '#dynamicPageHost.1.subtype()' });
-    if (page.value === 'Movie') await environment.odc.focusNode({ base: 'scene', keyPath: '#dynamicPageHost.1' });
     await returnToHome();
   });
 

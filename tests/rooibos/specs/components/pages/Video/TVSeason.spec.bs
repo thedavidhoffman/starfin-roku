@@ -1250,6 +1250,60 @@ namespace tests
             m.assertTrue(m.top.closeRequested)
         end function
 
+        @describe("remote Play")
+
+        @it("plays a focused episode with its season queue")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "off" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.node.episodesGrid.jumpToItem = 1
+            m.node.episodesGrid.setFocus(true)
+            m.node.pageState.focusArea = "episodes"
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+
+            m.assertEqual(m.top.playbackSelected.itemId, "episode-2")
+            m.assertEqual(m.top.playbackSelected.playbackQueue.Count(), 2)
+            m.assertEqual(m.top.playbackSelected.playbackQueueIndex, 1)
+            m.assertEqual(m.top.playbackSelected.playbackQueueScope, "series")
+        end function
+
+        @it("does not play the focused season summary")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "on" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.node.episodesGrid.jumpToItem = 0
+            m.node.episodesGrid.setFocus(true)
+            m.node.pageState.focusArea = "episodes"
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("ignores Play release on a season episode")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "off" }
+            m.node.pageState.episodes = [m.createEpisode("episode")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.node.episodesGrid.jumpToItem = 0
+            m.node.episodesGrid.setFocus(true)
+            m.node.pageState.focusArea = "episodes"
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
     end class
 
 end namespace

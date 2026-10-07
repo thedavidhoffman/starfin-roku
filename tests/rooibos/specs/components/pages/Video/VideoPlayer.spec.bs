@@ -2089,6 +2089,29 @@ namespace tests
             m.assertEqual(request.resolvedSubtitleStreamIndex, 2)
         end function
 
+        @describe("direct playback metadata")
+
+        @it("retains loaded metadata and resolved resume without reloading on restart")
+        function _()
+            m.prepareOptions({})
+            request = PlaybackRequest.WithChanges(m.node.activePlayback.request, { requestId: m.node.playback.requestId, server: "http://server", token: "token", userId: "user", loadItemDetails: true, item: { Id: "movie-1", Type: "Movie" }, videoMode: "automatic", startPositionTicks: 0 })
+            loadedItem = { Id: "movie-1", Type: "Movie", Overview: "Loaded", RunTimeTicks: 1200000000&, Chapters: [{ Name: "Opening", StartPositionTicks: 0 }] }
+            response = { requestId: request.requestId, item: loadedItem, startPositionTicks: 120000000&, streamUrl: "http://server/video.mp4", streamFormat: "mp4", audioStreamIndex: 3, subtitleStreamIndex: -1, subtitleDeliveryMethod: "none" }
+            m.node.pendingPlaybackRequest = request
+
+            'bs:disable-next-line 1140
+            applyPlaybackResponse(response, request)
+            'bs:disable-next-line 1140
+            restart = buildStreamRestartPlayRequest()
+
+            m.assertInvalid(m.node.activePlayback.request.loadItemDetails)
+            m.assertEqual(m.node.activePlayback.request.startPositionTicks, 120000000&)
+            m.assertEqual(m.node.activePlayback.context.item.Overview, "Loaded")
+            m.assertEqual(m.node.activePlayback.context.item.Chapters[0].Name, "Opening")
+            m.assertInvalid(restart.loadItemDetails)
+            m.assertEqual(restart.item.RunTimeTicks, 1200000000&)
+        end function
+
     end class
 
 end namespace

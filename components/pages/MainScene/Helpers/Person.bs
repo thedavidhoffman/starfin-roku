@@ -24,6 +24,9 @@ sub personShow(selection as object)
     if m.tvShowPage <> invalid and m.tvShowPage.visible = true then m.tvShowPage.callFunc("deactivate")
     if m.playbackController.callFunc("isPlayerVisible") then
         m.personSource.playback = true
+        m.personSource.playbackSessionId = m.playbackReturn.sessionId
+        m.personSource.playbackReturnContext = m.playbackReturn.context
+        m.personSource.playbackRestoreRequest = m.playbackController.callFunc("getRestorePlaybackRequest")
     else if m.tvEpisodePage <> invalid and m.tvEpisodePage.visible = true then
         m.personSource.tvEpisodePage = m.tvEpisodePage
     else if m.tvSeasonPage <> invalid and m.tvSeasonPage.visible = true then
@@ -37,6 +40,7 @@ sub personShow(selection as object)
     page = CreateObject("roSGNode", "Person")
     page.observeField("closeRequested", "personHandleCloseRequested")
     page.observeField("selectedFilmography", "filmographyHandlePersonFilmographySelected")
+    page.observeField("playbackSelected", "remotePlaybackHandleSelected")
     page.observeField("selectedMovie", "personHandleMovieSelected")
     page.observeField("selectedSeries", "personHandleSeriesSelected")
     page.observeField("selectedEpisode", "personHandleEpisodeSelected")
@@ -154,11 +158,17 @@ sub personHandleCloseRequested()
     if m.tvSeasonPage = invalid and m.personSource.tvSeasonPage <> invalid then m.tvSeasonPage = m.personSource.tvSeasonPage
     if m.tvEpisodePage = invalid and m.personSource.tvEpisodePage <> invalid then m.tvEpisodePage = m.personSource.tvEpisodePage
     restorePlayback = m.personSource.playback
+    playbackSessionId = m.personSource.playbackSessionId
+    returnContext = m.personSource.playbackReturnContext
+    restoreRequest = m.personSource.playbackRestoreRequest
     resetPersonSource()
 
-    if restorePlayback and m.playbackController.callFunc("hasPlayer") then
+    if restorePlayback and playbackSessionId = m.playbackReturn.sessionId and m.playbackController.callFunc("hasPlayer") then
         m.header.visible = false
         m.playbackController.callFunc("restoreAfterNavigation")
+    else if restorePlayback and returnContext <> invalid then
+        m.playbackReturn.context = returnContext
+        restorePlaybackReturn(restoreRequest)
     else if m.tvEpisodePage <> invalid then
         m.tvEpisodePage.visible = true
         m.header.visible = false

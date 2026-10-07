@@ -25,7 +25,7 @@ sub musicLibraryHandleHomeAlbumSelected()
     selection = m.homePage.selectedAlbum
     if selection = invalid then return
 
-    musicAudioPlayerShow(selection, "home")
+    musicAudioPlayerShow(selection, m.homePage)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -40,6 +40,7 @@ sub musicLibraryShow(selection as object)
     page.observeField("focusExitUp", "musicLibraryHandleFocusExitUp")
     page.observeField("overlayRequested", "musicLibraryHandleOverlayRequested")
     page.observeField("letterGridRequested", "musicLibraryHandleLetterGridRequested")
+    page.observeField("playbackSelected", "remotePlaybackHandleSelected")
     page.observeField("selectedAlbum", "musicLibraryHandleAlbumSelected")
     page.observeField("selectedArtist", "musicLibraryHandleArtistSelected")
     loadRequest = {
@@ -142,7 +143,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub musicLibraryHandleAlbumSelected()
     if m.musicLibraryPage = invalid then return
-    musicAudioPlayerShow(m.musicLibraryPage.selectedAlbum, "library")
+    musicAudioPlayerShow(m.musicLibraryPage.selectedAlbum, m.musicLibraryPage)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -158,6 +159,7 @@ sub musicLibraryHandleArtistSelected()
     page = CreateObject("roSGNode", "MusicArtist")
     page.observeField("closeRequested", "musicArtistHandleCloseRequested")
     page.observeField("overlayRequested", "musicArtistHandleOverlayRequested")
+    page.observeField("playbackSelected", "remotePlaybackHandleSelected")
     page.observeField("selectedAlbum", "musicArtistHandleAlbumSelected")
     page.loadRequest = {
         itemId: selection.itemId
@@ -185,14 +187,17 @@ end sub
 '-------------------------------------------------------------------------------
 sub musicArtistHandleAlbumSelected()
     if m.musicArtistPage = invalid then return
-    musicAudioPlayerShow(m.musicArtistPage.selectedAlbum, "artist")
+    musicAudioPlayerShow(m.musicArtistPage.selectedAlbum, m.musicArtistPage)
 end sub
 
 '-------------------------------------------------------------------------------
 ' musicAudioPlayerShow
 '-------------------------------------------------------------------------------
-sub musicAudioPlayerShow(selection as dynamic, sourcePage as string)
+sub musicAudioPlayerShow(selection as dynamic, origin as object)
     if selection = invalid or Strings.ToString(selection.itemId) = "" then return
+    capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+    removeAudioPlayer()
+    m.playbackController.callFunc("removePlayer", "replacement")
     m.log.activity("Opening album " + ActivityLog.ItemTitle(selection.item, "album"))
     themeAudioStop()
     page = CreateObject("roSGNode", "AudioPlayer")
@@ -203,17 +208,8 @@ sub musicAudioPlayerShow(selection as dynamic, sourcePage as string)
         userId: m.session.userId
         albumId: selection.itemId
         item: selection.item
-        sourcePage: sourcePage
         settings: m.settings
     }
-    if sourcePage = "library" and m.musicLibraryPage <> invalid then
-        m.musicLibraryPage.callFunc("deactivate")
-        m.musicLibraryPage.visible = false
-    else if sourcePage = "artist" and m.musicArtistPage <> invalid then
-        m.musicArtistPage.callFunc("deactivate")
-        m.musicArtistPage.visible = false
-    end if
-    if sourcePage = "home" then hideHome()
     m.header.visible = false
     m.audioPlayerPage = page
     authAppendDynamicPage(page)
@@ -223,24 +219,22 @@ end sub
 '-------------------------------------------------------------------------------
 ' musicAudioPlayerHandleCloseRequested
 '-------------------------------------------------------------------------------
-sub musicAudioPlayerHandleCloseRequested()
+sub musicAudioPlayerHandleCloseRequested(event as object)
     if m.audioPlayerPage = invalid then return
-    request = m.audioPlayerPage.loadRequest
-    m.audioPlayerPage.callFunc("deactivate")
-    m.dynamicPageHost.removeChild(m.audioPlayerPage)
+    if event.getRoSGNode().isSameNode(m.audioPlayerPage) <> true then return
+    removeAudioPlayer()
+    restorePlaybackReturn(invalid)
+end sub
+
+'-------------------------------------------------------------------------------
+' removeAudioPlayer
+'-------------------------------------------------------------------------------
+sub removeAudioPlayer()
+    if m.audioPlayerPage = invalid then return
+    page = m.audioPlayerPage
     m.audioPlayerPage = invalid
-    if request <> invalid and request.sourcePage = "artist" and m.musicArtistPage <> invalid then
-        m.musicArtistPage.visible = true
-        m.musicArtistPage.callFunc("activate")
-        m.musicArtistPage.focusRequested = true
-    else if m.musicLibraryPage <> invalid then
-        m.musicLibraryPage.visible = true
-        m.header.visible = true
-        m.musicLibraryPage.callFunc("activate")
-        m.musicLibraryPage.focusRequested = true
-    else
-        showHome()
-    end if
+    page.callFunc("deactivate")
+    m.dynamicPageHost.removeChild(page)
 end sub
 
 '-------------------------------------------------------------------------------

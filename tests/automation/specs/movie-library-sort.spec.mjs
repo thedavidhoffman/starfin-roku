@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import { ensureAuthenticated } from '../support/authentication.mjs';
+import { ensureAuthenticated, relaunchAuthenticatedStarfin } from '../support/authentication.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
-import { getAutomationEnvironment } from '../support/environment.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 
 const sortCases = [
@@ -223,30 +222,9 @@ function assertSorted(items, sortCase) {
   }
 }
 
-async function returnToHome() {
-  const environment = await getAutomationEnvironment();
-  const page = await environment.odc.getValue({
-    base: 'scene',
-    keyPath: '#dynamicPageHost.0.visible'
-  });
-  if (!page.found || page.value !== true) return;
-
-  await environment.ecp.sendKeypress(environment.ecp.Key.Back);
-  await waitFor(async () => {
-    const values = await environment.odc.getValues({
-      requests: {
-        childCount: { base: 'scene', keyPath: '#dynamicPageHost.getChildCount()' },
-        homeVisible: { base: 'scene', keyPath: '#homePage.visible' }
-      }
-    });
-    return values.results.childCount?.value === 0
-      && values.results.homeVisible?.value === true;
-  }, 'the movie library to return to Home');
-}
-
 describe('Starfin movie library sorting', function () {
   afterEach(async function () {
-    await returnToHome();
+    await relaunchAuthenticatedStarfin();
   });
 
   for (const sortCase of sortCases) {

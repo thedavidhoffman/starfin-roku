@@ -767,6 +767,103 @@ namespace tests
             m.assertEqual(m.node.itemsGrid.jumpToItem, 1)
         end function
 
+        @describe("remote Play")
+
+        @it("plays a home video directly without the resume dialog")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "video-1", Type: "Video" }]
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode")
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 0
+            m.node.itemsGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+
+            m.assertEqual(m.top.playbackSelected.itemId, "video-1")
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("does not play a folder")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "folder-1", Type: "Folder" }]
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode")
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 0
+            m.node.itemsGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+            m.assertEqual(m.node.state.stack.Count(), 1)
+        end function
+
+        @it("ignores Play release on a home video")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "first", Type: "Video" }, { Id: "second", Type: "Video" }]
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode")
+            content.createChild("ContentNode")
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("does not play while the home-video choice overlay is open")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "first", Type: "Video" }, { Id: "second", Type: "Video" }]
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode")
+            content.createChild("ContentNode")
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            m.node.state.playbackOverlayOpen = true
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @it("restores the exact home-video item after Play")
+        function _()
+            level = m.node.state.stack[0]
+            level.items = [{ Id: "first", Type: "Video" }, { Id: "second", Type: "Video" }]
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode")
+            content.createChild("ContentNode")
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 1
+            m.node.itemsGrid.setFocus(true)
+            m.top.playbackSelected = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+            m.assertEqual(m.top.playbackSelected.itemId, "second")
+            m.top.callFunc("deactivate")
+            m.top.setFocus(true)
+
+            m.top.callFunc("activate")
+
+            m.assertEqual(m.node.itemsGrid.itemFocused, 1)
+            m.assertTrue(m.node.itemsGrid.isInFocusChain())
+            m.assertEqual(level.focusedIndex, 1)
+        end function
+
     end class
 
 end namespace

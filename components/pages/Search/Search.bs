@@ -1,3 +1,4 @@
+import "pkg:/source/RemotePlayback.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
@@ -607,6 +608,7 @@ end function
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press and key = Remote.Key.Play then return playFocusedMedia()
     if press = false then return false
     if key = Remote.Key.Options then return openFocusedMediaActions()
 
@@ -690,3 +692,17 @@ sub applyMediaStateChange(change as object)
         if row.subtype() = "HomeShelf" then row.callFunc("applyMediaStateChange", change)
     end for
 end sub
+
+'-------------------------------------------------------------------------------
+' playFocusedMedia
+'-------------------------------------------------------------------------------
+function playFocusedMedia() as boolean
+    if m.searchState.loading.inFlight or m.searchState.loading.stopping then return false
+    if hasRows() <> true or m.searchState.focusedRowIndex < 0 then return false
+    row = m.searchState.rowNodes[m.searchState.focusedRowIndex]
+    if row.subtype() <> "HomeShelf" or row.isInFocusChain() <> true then return false
+    selection = RemotePlayback.BuildSelection(row.callFunc("getFocusedItem"))
+    if selection = invalid then return false
+    m.top.playbackSelected = selection
+    return true
+end function

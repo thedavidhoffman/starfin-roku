@@ -1,3 +1,4 @@
+import "pkg:/source/RemotePlayback.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/HomeVideoPlayback.bs"
@@ -415,6 +416,7 @@ end function
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press and key = Remote.Key.Play then return playFocusedMedia()
     if press = false then return false
     if key = Remote.Key.Up and (m.browseByButton.isInFocusChain() or m.sortButton.isInFocusChain()) then
         m.top.focusExitUp = true
@@ -464,3 +466,19 @@ sub handlePlaybackOverlayClosed(selection as dynamic)
         restoreLevelFocus()
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' playFocusedMedia
+'-------------------------------------------------------------------------------
+function playFocusedMedia() as boolean
+    if m.itemsGrid.isInFocusChain() <> true or m.state.playbackOverlayOpen then return false
+    level = getCurrentLevel()
+    if level = invalid then return false
+    index = Number.ToInteger(m.itemsGrid.itemFocused, -1)
+    if index < 0 or index >= level.items.Count() then return false
+    selection = RemotePlayback.BuildSelection(level.items[index])
+    if selection = invalid then return false
+    level.focusedIndex = index
+    m.top.playbackSelected = selection
+    return true
+end function

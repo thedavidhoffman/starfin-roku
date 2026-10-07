@@ -641,6 +641,7 @@ namespace tests
             playlistPage.visible = false
             m.node.dynamicPageHost.appendChild(playlistPage)
             m.node.videoLibraryPage = playlistPage
+            m.node.playbackReturn.context = { page: playlistPage, behavior: "playlist", headerVisible: true }
 
             restoreRequest = {
                 playbackQueue: [{ hasPlaybackContext: true, playlistItemIndex: 2 }]
@@ -2028,6 +2029,657 @@ namespace tests
             m.assertEqual(m.global.theme, "blue")
             m.assertTrue(m.top.findNode("bg").findNode("gradient").visible)
             m.assertEqual(m.top.findNode("bg").findNode("gradient").uri, "pkg:/images/themes/blue/background.png")
+        end function
+
+        @describe("shared playback return context")
+
+        @it("captures an ordinary video origin before hiding it")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            m.node.header.visible = true
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "video", item: { Id: "video", Type: "Video" } }, origin)
+
+            m.assertFalse(origin.visible)
+            m.assertTrue(m.node.playbackReturn.context.page.isSameNode(origin))
+            m.assertTrue(m.node.playbackReturn.context.headerVisible)
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "video")
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("restores the captured page instead of an unrelated retained detail page")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            m.node.moviePage = m.createPlaybackReturnRecorder()
+            m.node.header.visible = true
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+
+            'bs:disable-next-line 1140
+            restorePlaybackReturn({ itemId: "episode", item: { Id: "episode", Type: "Episode" } })
+
+            m.assertTrue(origin.visible)
+            m.assertTrue(origin.isInFocusChain())
+            m.assertTrue(m.node.header.visible)
+            m.assertEqual(m.node.moviePage.calls.Count(), 0)
+            m.assertInvalid(m.node.tvEpisodePage)
+            m.assertInvalid(m.node.playbackReturn.context)
+            m.node.moviePage = invalid
+        end function
+
+        @it("forwards accepted movie versions and streams before activation")
+        function _()
+            page = m.createPlaybackReturnRecorder()
+            request = { itemId: "movie", movieVersions: { selectedSourceId: "720p" }, audioStreamIndex: 2, subtitleStreamIndex: -1 }
+            m.node.playbackReturn.context = { page: page, behavior: "movie", headerVisible: false }
+
+            'bs:disable-next-line 1140
+            restorePlaybackReturn(request)
+
+            m.assertEqual(page.calls[0], { name: "applyPlaybackSelection", payload: request })
+            m.assertEqual(page.calls[1].name, "activate")
+            m.assertTrue(page.visible)
+            m.assertFalse(m.node.header.visible)
+        end function
+
+        @it("reconciles the final queued episode before activation")
+        function _()
+            original = m.createPlaybackReturnRecorder()
+            destination = m.createPlaybackReturnRecorder()
+            m.node.tvEpisodePage = destination
+            m.node.playbackReturn.context = { page: original, behavior: "episode", headerVisible: false }
+            getGlobalAa().preparedReturnRequest = invalid
+            'bs:disable-next-line 1001
+            m.stubCall(prepareTVEpisodePageForClosedPlayer, sub(request)
+                getGlobalAa().preparedReturnRequest = request
+            end sub)
+            request = { itemId: "episode-2", subtitleStreamIndex: -1 }
+
+            'bs:disable-next-line 1140
+            restorePlaybackReturn(request)
+
+            m.assertEqual(getGlobalAa().preparedReturnRequest, request)
+            m.assertEqual(destination.calls[0], { name: "applyPlaybackSubtitleSelection", payload: request })
+            m.assertEqual(destination.calls[1].name, "refreshPlaybackState")
+            m.assertEqual(destination.calls[2].name, "activate")
+            m.assertFalse(original.visible)
+            m.assertTrue(destination.visible)
+            m.node.tvEpisodePage = invalid
+        end function
+
+        @it("falls back to Home when the captured page was removed")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+            m.node.dynamicPageHost.removeChild(origin)
+
+            'bs:disable-next-line 1140
+            restorePlaybackReturn(invalid)
+
+            m.assertTrue(m.node.homePage.visible)
+            m.assertTrue(m.node.header.visible)
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("preserves the destination across next-episode continuation")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+            sessionId = m.node.playbackReturn.sessionId
+            m.node.pendingUpNextAutoPlayRequest = { nextItem: { itemId: "episode-2", item: { Id: "episode-2", Type: "Episode" } } }
+            'bs:disable-next-line 1140
+            showTVEpisodeUpNextAutoPlayPage({ itemId: "episode-1" })
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            tvEpisodeUpNextHandlePlaySelected()
+
+            m.assertEqual(m.node.playbackReturn.sessionId, sessionId)
+            m.assertTrue(m.node.playbackReturn.context.page.isSameNode(origin))
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "episode-2")
+            m.assertInvalid(m.node.tvEpisodeUpNextAutoPlayPage)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("returns to the same browsing page when the next-episode prompt is cancelled")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+            m.node.pendingUpNextAutoPlayRequest = { nextItem: { itemId: "episode-2" } }
+            'bs:disable-next-line 1140
+            showTVEpisodeUpNextAutoPlayPage({ itemId: "episode-1", item: { Id: "episode-1", Type: "Episode" } })
+
+            'bs:disable-next-line 1140
+            tvEpisodeUpNextHandleCancelSelected()
+
+            m.assertTrue(origin.visible)
+            m.assertTrue(origin.isInFocusChain())
+            m.assertInvalid(m.node.tvEpisodePage)
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("restores completed choices when the next-episode request is unavailable")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+            m.node.pendingUpNextAutoPlayRequest = { nextItem: invalid }
+            'bs:disable-next-line 1140
+            showTVEpisodeUpNextAutoPlayPage({ itemId: "episode-1" })
+
+            'bs:disable-next-line 1140
+            tvEpisodeUpNextHandlePlaySelected()
+
+            m.assertTrue(origin.visible)
+            m.assertInvalid(m.node.tvEpisodeUpNextAutoPlayPage)
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("allows a new remote launch from Person while a previous return context exists")
+        function _()
+            previous = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(previous)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(previous, PlaybackReturn.Behavior.Page)
+            sessionId = m.node.playbackReturn.sessionId
+            origin = CreateObject("roSGNode", "Person")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = true
+            origin.setFocus(true)
+            m.node.loadingSpinner.visible = false
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, RemotePlayback.BuildSelection({ Id: "new-title", Type: "Movie" }))
+
+            m.assertTrue(m.node.playbackReturn.context.page.isSameNode(origin))
+            m.assertTrue(m.node.playbackReturn.sessionId > sessionId)
+            m.assertFalse(origin.visible)
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "new-title")
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("returns through Person to the original browser after replacement playback")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+            m.openPlayback("movie-1")
+            m.node.playbackController.selectedPerson = { itemId: "person", item: { Id: "person", Name: "Person" } }
+            person = m.node.personPage
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "movie-2", item: { Id: "movie-2", Type: "Movie" } }, person)
+            m.node.playbackController.callFunc("removePlayer")
+            m.node.playbackController.closed = { restorePlayRequest: { itemId: "movie-2" }, upNextRequest: invalid }
+
+            m.assertTrue(person.visible)
+            m.assertFalse(origin.visible)
+            person.closeRequested = true
+
+            m.assertInvalid(m.node.personPage)
+            m.assertTrue(origin.visible)
+            m.assertTrue(origin.isInFocusChain())
+            m.assertFalse(m.node.playbackController.callFunc("hasPlayer"))
+        end function
+
+        @it("keeps the return context when playback reports failure")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+            m.openPlayback("movie-1")
+
+            m.node.playbackController.playbackFailed = "Failed"
+
+            m.assertFalse(origin.visible)
+            m.assertTrue(m.node.playbackReturn.context.page.isSameNode(origin))
+            m.assertTrue(m.node.playbackController.callFunc("hasPlayer"))
+        end function
+
+        @it("captures the cold episode deep-link detail return behavior")
+        function _()
+            selection = { itemId: "episode", item: { Id: "episode", Type: "Episode" } }
+
+            'bs:disable-next-line 1140
+            captureDeepLinkPlaybackReturn(selection)
+
+            m.assertEqual(m.node.playbackReturn.context.behavior, "episode")
+            m.assertInvalid(m.node.playbackReturn.context.page)
+            m.assertFalse(m.node.playbackReturn.context.headerVisible)
+        end function
+
+        @it("captures Home for a cold movie deep link")
+        function _()
+            selection = { itemId: "movie", item: { Id: "movie", Type: "Movie" } }
+
+            'bs:disable-next-line 1140
+            captureDeepLinkPlaybackReturn(selection)
+
+            m.assertEqual(m.node.playbackReturn.context.behavior, "page")
+            m.assertTrue(m.node.playbackReturn.context.page.isSameNode(m.node.homePage))
+        end function
+
+        @it("resolves the retained movie deep-link destination at launch")
+        function _()
+            page = m.createPlaybackReturnRecorder()
+            m.node.moviePage = page
+            'bs:disable-next-line 1140
+            captureDeepLinkPlaybackReturn({ itemId: "movie", item: { Id: "movie", Type: "Movie" } })
+            m.node.moviePage = invalid
+
+            'bs:disable-next-line 1140
+            restorePlaybackReturn({ itemId: "movie" })
+
+            m.assertTrue(page.visible)
+            m.assertEqual(page.calls[0].name, "applyPlaybackSelection")
+            m.assertEqual(page.calls[1].name, "activate")
+        end function
+
+        @it("restores an album to Home even when a music library is retained")
+        function _()
+            m.node.musicLibraryPage = CreateObject("roSGNode", "MusicLibrary")
+            m.node.dynamicPageHost.appendChild(m.node.musicLibraryPage)
+            m.node.musicLibraryPage.visible = false
+            m.node.homePage.visible = true
+            m.node.header.visible = true
+            'bs:disable-next-line 1140
+            musicAudioPlayerShow({ itemId: "album", item: { Id: "album", Type: "MusicAlbum" } }, m.node.homePage)
+
+            m.node.audioPlayerPage.closeRequested = true
+
+            m.assertInvalid(m.node.audioPlayerPage)
+            m.assertTrue(m.node.homePage.visible)
+            m.assertFalse(m.node.musicLibraryPage.visible)
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("ignores a stale close from a removed audio player")
+        function _()
+            origin = CreateObject("roSGNode", "MusicLibrary")
+            m.node.dynamicPageHost.appendChild(origin)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+            current = CreateObject("roSGNode", "AudioPlayer")
+            m.node.dynamicPageHost.appendChild(current)
+            m.node.audioPlayerPage = current
+            event = { source: CreateObject("roSGNode", "AudioPlayer"), getRoSGNode: function() as object
+                return m.source
+            end function }
+
+            'bs:disable-next-line 1140
+            musicAudioPlayerHandleCloseRequested(event)
+
+            m.assertTrue(m.node.audioPlayerPage.isSameNode(current))
+            m.assertFalse(origin.visible)
+            m.assertNotInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("retains series-page return without creating episode details")
+        function _()
+            page = m.createPlaybackReturnRecorder()
+            m.node.tvShowPage = page
+            m.node.playbackReturn.context = { page: page, behavior: "page", headerVisible: false }
+
+            'bs:disable-next-line 1140
+            restorePlaybackReturn({ itemId: "episode", item: { Id: "episode", Type: "Episode" } })
+
+            m.assertTrue(page.visible)
+            m.assertEqual(page.calls.Count(), 1)
+            m.assertEqual(page.calls[0].name, "activate")
+            m.assertInvalid(m.node.tvEpisodePage)
+            m.node.tvShowPage = invalid
+        end function
+
+        @it("stops the previous audio player when another album replaces it")
+        function _()
+            origin = CreateObject("roSGNode", "MusicLibrary")
+            m.node.dynamicPageHost.appendChild(origin)
+            'bs:disable-next-line 1140
+            musicAudioPlayerShow({ itemId: "album-1", item: { Id: "album-1" } }, origin)
+            previous = m.node.audioPlayerPage
+            origin.visible = true
+
+            'bs:disable-next-line 1140
+            musicAudioPlayerShow({ itemId: "album-2", item: { Id: "album-2" } }, origin)
+            previous.closeRequested = true
+
+            m.assertInvalid(previous.getParent())
+            m.assertEqual(previous.findNode("player").control, "stop")
+            m.assertEqual(m.node.audioPlayerPage.loadRequest.albumId, "album-2")
+            m.assertFalse(origin.visible)
+            m.assertNotInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("restores artist focus and header visibility after album playback")
+        function _()
+            origin = CreateObject("roSGNode", "MusicArtist")
+            m.node.dynamicPageHost.appendChild(origin)
+            m.node.header.visible = false
+            'bs:disable-next-line 1140
+            musicAudioPlayerShow({ itemId: "album", item: { Id: "album" } }, origin)
+
+            m.node.audioPlayerPage.closeRequested = true
+
+            m.assertTrue(origin.visible)
+            m.assertTrue(origin.isInFocusChain())
+            m.assertFalse(m.node.header.visible)
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("replaces episode details with the final queued episode on return")
+        function _()
+            original = CreateObject("roSGNode", "TVEpisode")
+            original.loadRequest = { itemId: "episode-1", item: { Id: "episode-1", Type: "Episode" }, settings: m.node.settings }
+            original.visible = false
+            m.node.dynamicPageHost.appendChild(original)
+            m.node.tvEpisodePage = original
+            m.node.playbackReturn.context = { page: original, behavior: "episode", headerVisible: false }
+            request = { server: "http://server", token: "token", userId: "user", itemId: "episode-2", item: { Id: "episode-2", Type: "Episode", SeriesId: "series", SeasonId: "season" }, subtitleStreamIndex: -1 }
+
+            'bs:disable-next-line 1140
+            restorePlaybackReturn(request)
+
+            m.assertInvalid(original.getParent())
+            m.assertEqual(m.node.tvEpisodePage.loadRequest.itemId, "episode-2")
+            m.assertEqual(m.node.tvEpisodePage.loadRequest.subtitleStreamIndex, -1)
+            m.assertTrue(m.node.tvEpisodePage.visible)
+            m.assertFalse(m.node.header.visible)
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("rebinds the original movie page after related-title replacement through Person")
+        function _()
+            'bs:disable-next-line 1140
+            movieShow({ itemId: "movie-a", item: { Id: "movie-a", Type: "Movie" } }, false)
+            original = m.node.moviePage
+            original.playSelected = { itemId: "movie-a", item: { Id: "movie-a", Type: "Movie" } }
+            m.node.playbackController.selectedPerson = { itemId: "person", item: { Id: "person", Name: "Person" } }
+            person = m.node.personPage
+            person.selectedMovie = { itemId: "movie-b", item: { Id: "movie-b", Type: "Movie" } }
+            replacement = m.node.moviePage
+            replacement.playSelected = { itemId: "movie-b", item: { Id: "movie-b", Type: "Movie" } }
+            m.node.playbackController.callFunc("removePlayer")
+            m.node.playbackController.closed = { restorePlayRequest: { itemId: "movie-b" }, upNextRequest: invalid }
+            replacement.closeRequested = true
+
+            m.assertInvalid(m.node.moviePage)
+            person.closeRequested = true
+
+            m.assertTrue(m.node.moviePage.isSameNode(original))
+            m.assertTrue(original.visible)
+            m.assertInvalid(m.node.personPage)
+            original.playSelected = { itemId: "movie-a", item: { Id: "movie-a", Type: "Movie" } }
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "movie-a")
+            m.assertTrue(m.node.playbackReturn.context.page.isSameNode(original))
+        end function
+
+        @it("rebinds the original series page after related-title replacement through Person")
+        function _()
+            'bs:disable-next-line 1140
+            tvShowShow({ itemId: "series-a", item: { Id: "series-a", Type: "Series" } }, false)
+            original = m.node.tvShowPage
+            original.selectedEpisode = { itemId: "episode-a", item: { Id: "episode-a", Type: "Episode" } }
+            m.node.playbackController.selectedPerson = { itemId: "person", item: { Id: "person", Name: "Person" } }
+            person = m.node.personPage
+            person.selectedSeries = { itemId: "series-b", item: { Id: "series-b", Type: "Series" } }
+            replacement = m.node.tvShowPage
+            replacement.selectedEpisode = { itemId: "episode-b", item: { Id: "episode-b", Type: "Episode" } }
+            m.node.playbackController.callFunc("removePlayer")
+            m.node.playbackController.closed = { restorePlayRequest: { itemId: "episode-b" }, upNextRequest: invalid }
+            replacement.closeRequested = true
+
+            m.assertInvalid(m.node.tvShowPage)
+            person.closeRequested = true
+
+            m.assertTrue(m.node.tvShowPage.isSameNode(original))
+            m.assertTrue(original.visible)
+            m.assertInvalid(m.node.personPage)
+            original.selectedEpisode = { itemId: "episode-a", item: { Id: "episode-a", Type: "Episode" } }
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "episode-a")
+            m.assertTrue(m.node.playbackReturn.context.page.isSameNode(original))
+        end function
+
+        function createPlaybackReturnRecorder() as object
+            return {
+                visible: false
+                calls: []
+                isSameNode: function(other as object) as boolean
+                    return false
+                end function
+                isSubtype: function(componentName as string) as boolean
+                    return false
+                end function
+                getParent: function() as object
+                    return {}
+                end function
+                callFunc: function(name as string, payload = invalid as dynamic) as dynamic
+                    m.calls.Push({ name: name, payload: payload })
+                    return invalid
+                end function
+            }
+        end function
+
+        @describe("remote Play")
+
+        @it("retains and hides the originating browsing page")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = true
+            origin.setFocus(true)
+            m.node.loadingSpinner.blockInteraction = false
+            m.node.playbackController = { playRequest: invalid }
+            selection = RemotePlayback.BuildSelection({ Id: "movie-remote", Type: "Movie" })
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, selection)
+
+            m.assertFalse(origin.visible)
+            m.assertTrue(m.node.playbackReturn.context.page.isSameNode(origin))
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "movie-remote")
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("restores search after direct episode playback without opening details")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = false
+            m.node.searchPage = origin
+            m.node.playbackReturn.context = { page: origin, behavior: "page", headerVisible: true }
+            m.node.pendingUpNextAutoPlayRequest = invalid
+            m.node.playbackController.closed = { restorePlayRequest: { itemId: "episode-remote", item: { Id: "episode-remote", Type: "Episode", SeriesId: "series", SeasonId: "season" } }, upNextRequest: invalid }
+
+            m.assertTrue(origin.visible)
+            m.assertTrue(origin.isInFocusChain())
+            m.assertInvalid(m.node.tvEpisodePage)
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("routes an album to the existing ordered album player")
+        function _()
+            origin = CreateObject("roSGNode", "MusicLibrary")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = true
+            origin.setFocus(true)
+            m.node.loadingSpinner.blockInteraction = false
+            getGlobalAa().remoteAlbumCapture = invalid
+            'bs:disable-next-line 1001
+            m.stubCall(musicAudioPlayerShow, sub(selection, origin)
+                getGlobalAa().remoteAlbumCapture = { selection: selection, origin: origin }
+            end sub)
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, RemotePlayback.BuildSelection({ Id: "album-remote", Type: "MusicAlbum" }))
+
+            m.assertEqual(getGlobalAa().remoteAlbumCapture.selection.itemId, "album-remote")
+            m.assertTrue(getGlobalAa().remoteAlbumCapture.origin.isSameNode(origin))
+        end function
+
+        @it("rejects a repeated launch after the originating page is hidden")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = true
+            origin.setFocus(true)
+            'bs:disable-next-line 1140
+            capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
+            getGlobalAa().remotePlayCapture = invalid
+            'bs:disable-next-line 1001
+            m.stubCall(playerShow, sub(selection, origin)
+                getGlobalAa().remotePlayCapture = selection
+            end sub)
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, RemotePlayback.BuildSelection({ Id: "movie-remote", Type: "Movie" }))
+
+            m.assertInvalid(getGlobalAa().remotePlayCapture)
+            m.assertFalse(origin.visible)
+        end function
+
+        @it("clears the origin when navigation resets the pages")
+        function _()
+            m.node.playbackReturn.context = { page: CreateObject("roSGNode", "Search"), behavior: "page", headerVisible: true }
+
+            'bs:disable-next-line 1140
+            resetDynamicPages()
+
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("does not launch underneath a blocking spinner")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = true
+            origin.setFocus(true)
+            m.node.loadingSpinner.visible = true
+            m.node.loadingSpinner.blockInteraction = true
+            getGlobalAa().remotePlayCapture = invalid
+            'bs:disable-next-line 1001
+            m.stubCall(playerShow, sub(selection, origin)
+                getGlobalAa().remotePlayCapture = selection
+            end sub)
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, RemotePlayback.BuildSelection({ Id: "movie-remote", Type: "Movie" }))
+            m.node.loadingSpinner.visible = false
+            m.node.loadingSpinner.blockInteraction = false
+
+            m.assertInvalid(getGlobalAa().remotePlayCapture)
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("returns to the exact library grid item after a remote Play close")
+        function _()
+            origin = CreateObject("roSGNode", "VideoLibrary")
+            m.node.dynamicPageHost.appendChild(origin)
+            m.node.videoLibraryPage = origin
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: { Id: "first", Type: "Movie" } })
+            content.createChild("ContentNode").addFields({ raw: { Id: "second", Type: "Movie" } })
+            grid = origin.findNode("itemsGrid")
+            grid.content = content
+            grid.jumpToItem = 1
+            grid.setFocus(true)
+            m.node.header.visible = true
+            m.node.loadingSpinner.visible = false
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, RemotePlayback.BuildSelection({ Id: "second", Type: "Movie" }))
+            m.assertFalse(origin.visible)
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "second")
+            m.node.playbackController = m.top.findNode("playbackController")
+            m.node.playbackController.closed = { restorePlayRequest: { itemId: "second" }, upNextRequest: invalid }
+
+            m.assertTrue(origin.visible)
+            m.assertTrue(m.node.header.visible)
+            m.assertEqual(grid.itemFocused, 1)
+            m.assertTrue(grid.isInFocusChain())
+            m.assertInvalid(m.node.playbackReturn.context)
+        end function
+
+        @it("does not launch remote Play underneath a feature dialog")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = true
+            origin.setFocus(true)
+            m.node.loadingSpinner.visible = false
+            m.node.playbackController = { playRequest: invalid }
+            host = m.node.overlayHost
+            overlay = host.callFunc("openOverlay", { id: "play-guard", componentName: "MessageDialog", openFunction: "openMessage", closeField: "closeRequested", message: "Blocked" })
+            overlay.callFunc("focusAcknowledgment")
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, RemotePlayback.BuildSelection({ Id: "movie", Type: "Movie" }))
+
+            m.assertTrue(host.isInFocusChain())
+            m.assertTrue(origin.visible)
+            m.assertInvalid(m.node.playbackController.playRequest)
+            m.assertInvalid(m.node.playbackReturn.context)
+            host.callFunc("closeOverlay", false)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("does not launch remote Play underneath an acknowledgment")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = true
+            origin.setFocus(true)
+            m.node.loadingSpinner.visible = false
+            m.node.playbackController = { playRequest: invalid }
+            host = m.node.messageOverlayHost
+            overlay = host.callFunc("openOverlay", { id: "play-guard", componentName: "MessageDialog", openFunction: "openMessage", closeField: "closeRequested", message: "Blocked" })
+            overlay.callFunc("focusAcknowledgment")
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, RemotePlayback.BuildSelection({ Id: "movie", Type: "Movie" }))
+
+            m.assertTrue(host.isInFocusChain())
+            m.assertTrue(origin.visible)
+            m.assertInvalid(m.node.playbackController.playRequest)
+            m.assertInvalid(m.node.playbackReturn.context)
+            host.callFunc("closeOverlay", false)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("does not launch remote Play underneath a confirmation")
+        function _()
+            origin = CreateObject("roSGNode", "Search")
+            m.node.dynamicPageHost.appendChild(origin)
+            origin.visible = true
+            origin.setFocus(true)
+            m.node.loadingSpinner.visible = false
+            m.node.playbackController = { playRequest: invalid }
+            host = m.node.confirmationOverlayHost
+            overlay = host.callFunc("openOverlay", { id: "play-guard", componentName: "MessageDialog", openFunction: "openMessage", closeField: "closeRequested", message: "Blocked" })
+            overlay.callFunc("focusAcknowledgment")
+
+            'bs:disable-next-line 1140
+            remotePlaybackStart(origin, RemotePlayback.BuildSelection({ Id: "movie", Type: "Movie" }))
+
+            m.assertTrue(host.isInFocusChain())
+            m.assertTrue(origin.visible)
+            m.assertInvalid(m.node.playbackController.playRequest)
+            m.assertInvalid(m.node.playbackReturn.context)
+            host.callFunc("closeOverlay", false)
+            m.node.playbackController = m.top.findNode("playbackController")
         end function
 
     end class

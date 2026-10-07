@@ -1,3 +1,4 @@
+import "pkg:/source/RemotePlayback.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/RequestFailure.bs"
@@ -374,6 +375,7 @@ end sub
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press and key = Remote.Key.Play then return playFocusedMedia()
     if press = false then return false
     if key = Remote.Key.Up and m.albumsRow.isInFocusChain() then return m.mediaShell.callFunc("focusDescription")
     if key = Remote.Key.Down and m.mediaShell.isInFocusChain() and m.albumsRow.visible = true then
@@ -383,5 +385,22 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key <> Remote.Key.Back then return false
 
     m.top.closeRequested = true
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' playFocusedMedia
+'-------------------------------------------------------------------------------
+function playFocusedMedia() as boolean
+    if m.albumsRow.isInFocusChain() <> true or m.albumsRow.content = invalid then return false
+    focused = m.albumsRow.rowItemFocused
+    if focused = invalid or focused.Count() < 2 then return false
+    row = m.albumsRow.content.getChild(focused[0])
+    if row = invalid then return false
+    node = row.getChild(focused[1])
+    if node = invalid then return false
+    selection = RemotePlayback.BuildSelection(node.raw)
+    if selection = invalid then return false
+    m.top.playbackSelected = selection
     return true
 end function

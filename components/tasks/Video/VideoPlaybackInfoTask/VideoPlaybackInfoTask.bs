@@ -1,3 +1,6 @@
+import "pkg:/source/api/JellyfinPlaybackItem.bs"
+import "pkg:/source/RemotePlayback.bs"
+import "pkg:/source/MediaItem.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Number.bs"
@@ -41,6 +44,21 @@ sub executeRequest()
     end if
 
     request = PlaybackRequest.Create(request)
+    if request.loadItemDetails = true then
+        itemResult = JellyfinPlaybackItem.Load(request)
+        if itemResult.ok <> true then
+            m.top.response = PlaybackResponse.Failure(request, itemResult)
+            return
+        end if
+        loadedItem = itemResult.data
+        if RemotePlayback.BuildSelection(loadedItem) = invalid or Strings.ToString(loadedItem.Id) <> Strings.ToString(request.itemId) or loadedItem.Type <> request.item.Type then
+            m.top.response = PlaybackResponse.Failure(request, { errorMessage: "The selected media item is no longer available." })
+            return
+        end if
+        request.item = loadedItem
+        request.Delete("loadItemDetails")
+        if loadedItem.Type <> MediaItem.Type.Movie then request.startPositionTicks = PlaybackProgress.GetTicksFromItem(loadedItem)
+    end if
     if request.movieVersions = invalid then
         versions = MovieVersions.Create(request.item)
         if versions <> invalid then

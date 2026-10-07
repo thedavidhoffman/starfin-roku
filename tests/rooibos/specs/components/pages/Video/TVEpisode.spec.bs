@@ -1184,6 +1184,48 @@ namespace tests
             m.assertFalse(m.node.mediaShell.findNode("logoFallbackTitleLabel").visible)
         end function
 
+        @describe("remote Play")
+
+        @it("plays loaded episode from description focus")
+        function _()
+            item = { Id: "episode-remote", Type: "Episode", UserData: {} }
+            m.node.state.itemContent = { itemType: "Episode", raw: item }
+            m.node.state.playSelection = { itemId: item.Id, item: item, startPositionTicks: 120000000& }
+            m.node.state.focusArea = "description"
+            m.node.state.mediaInfoPending = false
+            m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.top.selectedEpisode = invalid
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "episode-remote")
+            m.assertEqual(m.top.selectedEpisode.startPositionTicks, 120000000&)
+        end function
+
+        @it("does not play a season summary")
+        function _()
+            m.node.state.itemContent = { itemType: "Season" }
+            m.node.state.mediaInfoPending = false
+            m.top.selectedEpisode = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", true))
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("ignores Play release on loaded episode details")
+        function _()
+            m.node.state.itemContent = { itemType: "Episode", raw: { Id: "episode", Type: "Episode" } }
+            m.node.state.playSelection = { itemId: "episode", item: { Id: "episode", Type: "Episode" } }
+            m.node.state.mediaInfoPending = false
+            m.top.selectedEpisode = invalid
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("play", false))
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
     end class
 
 end namespace

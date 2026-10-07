@@ -40,3 +40,21 @@ Audio state logs include the current track ID, position, track-change status, an
 Roku error details. Stream URLs and credentials are not logged by the player.
 
 Playback requests follow the shared [media authentication](media-authentication.md) rules.
+
+## Remote album launch
+
+Remote Play on an album in Home, MusicLibrary, or an artist's album list launches
+the existing ordered album queue at its first track. MainScene retains and restores
+the originating page and its browsing focus when AudioPlayer closes. Artist and
+music-library entries themselves do not play. No standalone track browsing or
+playback mode is added: tracks remain in AudioPlayer, where OK selects a track
+and continues the album, and remote Play retains pause/resume behavior.
+
+## Shared return navigation
+
+Ordinary album selection and remote Play both pass their originating page to
+MainScene's shared playback return context. AudioPlayer requests no longer carry
+navigation source labels. Closing restores that exact page and its captured
+header visibility through the page's existing activation/focus path; a retained
+music library cannot override a Home launch. Stale close events from a replaced
+AudioPlayer are ignored. Completing the final album track keeps AudioPlayer open.

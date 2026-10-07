@@ -2,15 +2,10 @@ import assert from 'node:assert/strict';
 import { categories, openSettings, openSettingsFromSystemMenu, selectRadioOption, closeAndSaveSettings } from '../support/settings.mjs';
 import { openConfiguredTVLibrary, findSeries, openSeries, returnToHome } from '../support/tv-series.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
-import { getAutomationEnvironment } from '../support/environment.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
 
 describe('Starfin TV series shell layout', function () {
   afterEach(async function () {
-    const environment = await getAutomationEnvironment();
-    const page = await environment.odc.getValue({ base: 'scene', keyPath: '#dynamicPageHost.1.subtype()' });
-    // Closing Settings opened from the header restores header focus.
-    if (page.value === 'TVShow') await environment.odc.focusNode({ base: 'scene', keyPath: '#dynamicPageHost.1' });
     await returnToHome();
   });
 

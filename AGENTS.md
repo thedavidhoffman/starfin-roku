@@ -115,6 +115,10 @@
 - Run `npm run validate:function-headers` to check this rule. `npm run validate` also runs it before compilation, so build, package, and deploy fail on header violations.
 - The checker audits all production functions. Fix invalid headers rather than weakening the check to make validation pass.
 
+## Code reviews
+
+When the user requests “code review,” review pending changes for correctness, regressions, cohesiveness, responsibility boundaries, fragmented state, duplicated logic, orphaned code, and proportionate refactoring opportunities. Focus on the current feature. Report actionable findings with severity and file/line references; distinguish introduced issues from preexisting ones. Avoid speculative redesigns and unrelated rabbit holes. Review source and diffs only; do not run builds, tests, automated validation, or UI checks unless explicitly authorized. Do not fix findings unless requested.
+
 ## Final change-set review
 
 - Before declaring work complete, review the entire task change set against every applicable rule in this file, including newly created and untracked files. Do not limit this review to the last edited file or assume passing compilation covers coding conventions.
