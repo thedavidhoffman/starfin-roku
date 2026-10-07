@@ -38,6 +38,21 @@ prompts. A new title launched from Person replaces the destination rather than
 being blocked by the earlier shortcut; closing Person after replacement playback
 returns through its saved original navigation context.
 
+## Instant Replay
+
+The remote's Replay button seeks video backward by ten seconds, clamped to the
+beginning. It preserves playing or paused state and shows the existing playback
+controls. There is no interval setting, and subtitle selection is unchanged.
+
+Replay works with controls visible or hidden during active, seekable playback.
+Seek preview, cast browsing, startup/recovery, buffering, stopped playback, and
+nonseekable video consume the press without seeking. Key releases do not seek.
+Audio playback and voice commands are outside this behavior.
+
+Functional tests cover the key contract, seek target, state preservation, controls,
+and rejection paths. The TV playback automation includes one Replay case using
+the configured episode, with tolerance for sync-frame seeking and sampling delay.
+
 ## Automated workflow coverage
 
 `tests/automation/specs/remote-keys.spec.mjs` sends ECP OK and PLAY keypresses to

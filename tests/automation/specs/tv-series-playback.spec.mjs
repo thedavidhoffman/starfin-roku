@@ -179,6 +179,40 @@ describe('Starfin TV episode playback', function () {
     });
   });
 
+  it('replays ten seconds of the configured episode while playing', async function () {
+    this.timeout(150000);
+    const environment = await ensureAuthenticated();
+    const episode = await openConfiguredEpisode(environment);
+
+    await runWithPlaybackCleanup(environment, async markStopped => {
+      const initial = await startEpisodePlayback(environment, episode);
+      assert.ok(initial.duration > 90, 'The configured episode must allow a replay away from either endpoint.');
+      await environment.odc.setValue({ base: 'scene', keyPath: '#videoPlayer.seek', value: 60 });
+      const before = await waitFor(async () => {
+        const snapshot = await readPlaybackSnapshot(environment, undefined);
+        return snapshot.state === 'playing' && snapshot.position >= 55 && snapshot.position <= 65 ? snapshot : false;
+      }, 'episode playback to settle near the replay setup position', 30000);
+
+      await environment.ecp.sendKeypress(environment.ecp.Key.Replay);
+      const expectedPosition = before.position - 10;
+      // Capture the first backward landing so an excessive rewind cannot play forward into the expected window.
+      const after = await waitFor(async () => {
+        const snapshot = await readPlaybackSnapshot(environment, undefined);
+        return snapshot.playerCount === 1 && snapshot.state === 'playing'
+          && snapshot.position < before.position - 3 ? snapshot : false;
+      }, 'Instant Replay to move playing video backward', 30000);
+      addEvidenceMetadata(this, { instantReplay: { before, expectedPosition, after } });
+      // Allow sync-frame seeking and playback advancement while sampling.
+      assert.ok(Math.abs(after.position - expectedPosition) <= 5,
+        `Replay must land near ${expectedPosition} seconds; first backward position was ${after.position}.`);
+      const itemId = await environment.odc.getValue({ base: 'scene', keyPath: '#playbackController.0.playRequest.itemId' });
+      assert.equal(itemId.value, episode.Id, 'Replay must retain the selected episode.');
+
+      await stopPlayback(environment, episode);
+      markStopped();
+    });
+  });
+
   it('pauses and resumes the configured episode', async function () {
     const environment = await ensureAuthenticated();
     const episode = await openConfiguredEpisode(environment);

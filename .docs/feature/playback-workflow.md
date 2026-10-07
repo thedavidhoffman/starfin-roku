@@ -45,6 +45,20 @@ DateTime helpers own timestamp conversion and local time formatting.
 The label is non-focusable and does not alter timeline or button navigation.
 No server requests, registry settings, or localization migration are introduced.
 
+## Instant Replay
+
+VideoPlayer handles the remote `replay` press with the existing
+`skipPlayback(-10)` path. The target is clamped to zero; playing/paused state is
+preserved, progress and preview fields update together, and the normal controls
+presentation and hide timer are used. Subtitle selection and the accepted
+playback request remain unchanged.
+
+The same `requestPlaybackSeek` path records the destination for recovery and seek
+diagnostics. Replay does not restart playback or change its return destination.
+Only active, seekable, playing/paused video accepts the seek; seek preview, cast
+browsing, startup/recovery, buffering, and stopped playback ignore it. The interval
+is fixed at ten seconds with no registry preference.
+
 ## Workflow at a Glance
 
 Selecting an item moves snapshots between owners; it does not turn the library

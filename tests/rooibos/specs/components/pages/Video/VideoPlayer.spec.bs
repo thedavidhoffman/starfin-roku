@@ -271,6 +271,225 @@ namespace tests
             m.assertEqual(request.itemId, "active-item")
         end function
 
+        @describe("Instant Replay")
+
+        @it("seeks back ten seconds while playing and retains playback")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.videoPlayer.seek, 30)
+            m.assertEqual(m.node.videoPlayer.control, "resume")
+            m.assertEqual(m.node.recovery.pendingSeekTarget, 30)
+            m.assertEqual(m.node.playbackDiagnostics.expectedReason, "skipPlayback:-10")
+            m.assertEqual(m.node.playbackControls.position, 30)
+            m.assertEqual(m.node.playbackControls.previewPosition, 30)
+            m.assertTrue(m.node.playbackControls.isInFocusChain())
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("seeks back while paused and remains paused")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.videoPlayer.state = "paused"
+            m.node.playback.isPlaying = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.videoPlayer.seek, 30)
+            m.assertEqual(m.node.videoPlayer.control, "pause")
+            m.assertFalse(m.node.playback.isPlaying)
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("clamps replay near the beginning to zero")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.videoPlayer.position = 4
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.videoPlayer.seek, 0)
+            m.assertEqual(m.node.playback.position, 0)
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("opens hidden controls with the existing hide timer")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.playbackControls.visible)
+            m.assertEqual(m.node.controlsHideTimer.control, "start")
+            m.assertFalse(m.node.playbackControls.isSeeking)
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("replays with controls already visible")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.playbackControls.visible = true
+            m.node.overlay.area = "controls"
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.videoPlayer.seek, 30)
+            m.assertTrue(m.node.playbackControls.visible)
+            m.assertEqual(m.node.controlsHideTimer.control, "start")
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("ignores Replay release")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", false)
+
+            m.assertFalse(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.assertEqual(m.node.videoPlayer.control, "")
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("does not alter an active seek preview")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.playback.isSeeking = true
+            m.node.playback.previewPosition = 70
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.assertTrue(m.node.playback.isSeeking)
+            m.assertEqual(m.node.playback.previewPosition, 70)
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("does not replay while browsing cast")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.overlay.area = "cast"
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.assertEqual(m.node.overlay.area, "cast")
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("does not replay during startup or recovery resolution")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.playback.phase = "resolving"
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.assertEqual(m.node.videoPlayer.control, "")
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("does not replay buffering video")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.videoPlayer.state = "buffering"
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.assertEqual(m.node.videoPlayer.control, "")
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("does not replay stopped playback")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.playback.phase = "stopped"
+            m.node.videoPlayer.state = "stopped"
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("does not replay without accepted playback")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.activePlayback = invalid
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("does not replay nonseekable video")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.activePlayback.canSeek = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.assertEqual(m.node.videoPlayer.control, "")
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        @it("does not replay when duration is unknown")
+        function _()
+            originalPlayer = m.prepareInstantReplay()
+            m.node.playback.duration = 0
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("replay", true)
+
+            m.assertTrue(handled)
+            m.assertInvalid(m.node.videoPlayer.seek)
+            m.node.videoPlayer = originalPlayer
+        end function
+
+        private function prepareInstantReplay() as object
+            originalPlayer = m.node.videoPlayer
+            m.node.videoPlayer = { state: "playing", position: 40, control: "", seek: invalid }
+            m.node.playback.phase = "active"
+            m.node.playback.isPlaying = true
+            m.node.playback.isSeeking = false
+            m.node.playback.duration = 120
+            m.node.playback.position = 40
+            m.node.playback.previewPosition = 40
+            m.node.overlay.area = "none"
+            m.node.playbackControls.duration = 120
+            return originalPlayer
+        end function
+
         @describe("Back navigation")
 
         @it("stops for controller removal without requesting navigation")
