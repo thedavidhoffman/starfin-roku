@@ -5,6 +5,7 @@ import "pkg:/source/RequestFailure.bs"
 ' onLoadRequestChanged
 '-------------------------------------------------------------------------------
 sub onLoadRequestChanged()
+    m.episodeCountRefresh.callFunc("cancel")
     request = m.top.loadRequest
     if request = invalid then return
 
@@ -107,6 +108,7 @@ sub handleTVSeasonSeasonsResponse(response as object)
     if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "seasonId", TVSeasonTaskResponse.Action.Seasons) <> true then return
     if response.ok = true and response.payload <> invalid then
         m.pageState.seasons = ApiPayload.GetItems(response.payload)
+        refreshEpisodeCounts()
         updateAdjacentSeasons()
         renderSeason(m.pageState.season)
     end if
@@ -150,6 +152,7 @@ sub handleTVSeasonPrimaryResponse(response as object)
     updateAdjacentSeasons()
     m.pageState.episodes = ApiPayload.GetItems(payload.episodes)
     m.pageState.episodesLoaded = true
+    refreshEpisodeCounts()
     renderSeason(payload.season)
     renderEpisodes(m.pageState.episodes)
     Spinner.Hide()
@@ -197,6 +200,7 @@ end function
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    m.episodeCountRefresh.callFunc("cancel")
     AsyncLifecycle.Deactivate(m.pageState.lifecycle)
     LatestRequestLifecycle.Deactivate(m.pageState.detailsLoad)
     m.tvSeasonTask.control = TaskControl.Command.Stop

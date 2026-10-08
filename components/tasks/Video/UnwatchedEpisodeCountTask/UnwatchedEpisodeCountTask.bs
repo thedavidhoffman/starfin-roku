@@ -1,0 +1,57 @@
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/ApiPayload.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    result = { ok: false, action: "unwatchedEpisodeCounts", requestId: -1, payload: [], errorMessage: "" }
+    if request <> invalid then result.requestId = Number.ToInteger(request.requestId, -1)
+    failure = TaskRequest.ValidateRequest(request, result.action, ["userId"])
+    if failure <> invalid then
+        result.errorMessage = failure.errorMessage
+        m.top.response = result
+        return
+    end if
+    if GetInterface(request.itemIds, "ifArray") = invalid then
+        result.errorMessage = "Invalid aggregate item IDs."
+        m.top.response = result
+        return
+    end if
+
+    ' Bound query size while fetching aggregate user data, never child episode lists.
+    for startIndex = 0 to request.itemIds.Count() - 1 step 50
+        ids = []
+        lastIndex = startIndex + 49
+        if lastIndex >= request.itemIds.Count() then lastIndex = request.itemIds.Count() - 1
+        for index = startIndex to lastIndex
+            ids.Push(request.itemIds[index])
+        end for
+        params = { userId: request.userId, ids: ids.Join(","), fields: "UserData", recursive: true, enableUserData: true, enableImages: false, enableTotalRecordCount: false }
+        requestUrl = request.server + "/Items" + Url.BuildQueryString(params)
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        if response.ok <> true then
+            result.errorMessage = Strings.ToString(response.errorMessage, "Unable to refresh episode counts.")
+            m.top.response = result
+            return
+        end if
+        for each item in ApiPayload.GetItems(response.data)
+            result.payload.Push(item)
+        end for
+    end for
+    result.ok = true
+    m.top.response = result
+end sub

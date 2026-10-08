@@ -1,0 +1,139 @@
+import "pkg:/source/UnwatchedEpisodeCount.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/WatchedIndicator.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    initHandlers()
+    updateWatchedStyle()
+    renderStatus()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.badge = {
+        check: m.top.findNode("watchedCheck")
+        countGroup: m.top.findNode("countGroup")
+        background: m.top.findNode("countBackground")
+        label: m.top.findNode("countLabel")
+        measurementLabel: invalid
+        layout: invalid
+        measurement: invalid
+    }
+    m.badge.label.font = "font:MediumBoldSystemFont"
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("data", "renderStatus")
+    m.global.observeField("showUnwatchedEpisodeCount", "renderStatus")
+    m.global.observeField("watchedIndicatorStyle", "updateWatchedStyle")
+end sub
+
+'-------------------------------------------------------------------------------
+' updateWatchedStyle
+'-------------------------------------------------------------------------------
+sub updateWatchedStyle()
+    m.badge.check.uri = WatchedIndicator.GetImageUri(m.global.watchedIndicatorStyle)
+end sub
+
+'-------------------------------------------------------------------------------
+' renderStatus
+'-------------------------------------------------------------------------------
+sub renderStatus()
+    countMode = UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount)
+    countEnabled = countMode <> UnwatchedEpisodeCount.Mode.Off
+    data = m.top.data
+    eligible = false
+    isWatched = false
+    count = -1
+    width = 0.0
+    height = 0.0
+    if GetInterface(data, "ifAssociativeArray") <> invalid then
+        eligible = data.eligible = true
+        isWatched = data.isWatched = true
+        count = Number.ToInteger(data.unplayedCount, -1)
+        width = Number.ToFloat(data.width, 0)
+        height = Number.ToFloat(data.height, 0)
+    end if
+    eligible = eligible and width > 0 and height > 0
+    showCount = eligible and countEnabled and count > 0
+    showCheck = eligible and (isWatched or (countEnabled and count = 0))
+    if showCount then showCheck = false
+    m.top.visible = showCount or showCheck
+    m.badge.check.visible = showCheck
+    m.badge.countGroup.visible = showCount
+    if width > 0 and height > 0 then
+        m.badge.check.width = width
+        m.badge.check.height = height
+    end if
+    if showCount <> true then return
+
+    if countMode = UnwatchedEpisodeCount.Mode.HighContrast then
+        m.badge.background.uri = "pkg:/images/icons/unwatched-count-background-high-contrast.9.png"
+        m.badge.label.color = &h000000FF
+    else
+        m.badge.background.uri = "pkg:/images/icons/unwatched-count-background.9.png"
+        m.badge.label.color = &hFFFFFFFF
+    end if
+    layout = m.badge.layout
+    if layout <> invalid then
+        if layout.count = count and layout.width = width and layout.height = height then return
+    end if
+    layoutCount(count, width, height)
+    m.badge.layout = { count: count, width: width, height: height }
+end sub
+
+'-------------------------------------------------------------------------------
+' layoutCount
+'-------------------------------------------------------------------------------
+sub layoutCount(count as integer, width as float, height as float)
+    m.badge.label.text = count.ToStr()
+    ' Retain the original square's right edge while widening only the count layer.
+    countWidth = width
+    textBounds = getCountTextBounds(count, height)
+    requiredWidth = textBounds.width + height * 0.40
+    if requiredWidth > countWidth then countWidth = requiredWidth
+    m.badge.countGroup.translation = [width - countWidth, 0]
+    ' Scale the native 58px corner mask uniformly; only its straight middle stretches.
+    backgroundScale = height / 58.0
+    m.badge.background.scale = [backgroundScale, backgroundScale]
+    m.badge.background.width = countWidth / backgroundScale
+    m.badge.background.height = 58
+    m.badge.label.width = countWidth
+    m.badge.label.height = textBounds.height
+    ' Offset the system font numerals for visually balanced top and bottom margins.
+    m.badge.label.translation = [0, (height - textBounds.height) / 2 - textBounds.y + 2]
+end sub
+
+'-------------------------------------------------------------------------------
+' getCountTextBounds
+'-------------------------------------------------------------------------------
+function getCountTextBounds(count as integer, height as float) as object
+    measurement = m.badge.measurement
+    if measurement <> invalid then
+        if measurement.count = count and measurement.height = height then return measurement.bounds
+    end if
+    bounds = measureCountText(count, height)
+    m.badge.measurement = { count: count, height: height, bounds: bounds }
+    return bounds
+end function
+
+'-------------------------------------------------------------------------------
+' measureCountText
+'-------------------------------------------------------------------------------
+function measureCountText(count as integer, height as float) as object
+    if m.badge.measurementLabel = invalid then m.badge.measurementLabel = CreateObject("roSGNode", "Label")
+    m.badge.label.font.size = Number.ToInteger(height * 0.60, 25)
+    ' Measure outside the rendered label so its previous position cannot affect layout.
+    m.badge.measurementLabel.font = m.badge.label.font
+    m.badge.measurementLabel.text = count.ToStr()
+    return m.badge.measurementLabel.boundingRect()
+end function

@@ -7,10 +7,15 @@ namespace tests
     class VideoThumbnailCardTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
             m.node.cardNodes.logoOverlay = m.top.findNode("logoOverlay")
             m.node.cardNodes.logoOverlay.loadSync = true
             'bs:disable-next-line 1140
             applyThumbnailLayout([441, 249], 4)
+        end function
+
+        protected override function afterEach()
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
         end function
 
         @describe("thumbnail presentation")
@@ -176,6 +181,78 @@ namespace tests
             content = CreateObject("roSGNode", "ContentNode")
             content.addFields({ raw: raw, showMetadata: true, fitArtwork: false, showArtworkBackground: false, tracksPlaybackProgress: true })
             return content
+        end function
+
+        @describe("remaining episode count rendering")
+
+        @it("renders a remaining count on a fresh production presentation")
+        function _()
+            originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            card = CreateObject("roSGNode", "VideoThumbnailCard")
+            content = CreateObject("roSGNode", "ContentNode")
+            content.addFields({ raw: { Type: "Series", Name: "Series", UserData: { UnplayedItemCount: 200 } }, showMetadata: true, fitArtwork: false, showArtworkBackground: false })
+
+            card.itemContent = content
+
+            badge = card.findNode("watchedIndicator")
+            m.assertEqual(badge.findNode("countLabel").text, "200")
+            m.assertEqual(badge.data.width, 57.0)
+            m.assertEqual(badge.data.height, 57.0)
+            m.assertEqual(badge.translation, [375.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 57.0)
+            m.global.showUnwatchedEpisodeCount = originalCountMode
+        end function
+
+        @it("publishes the final thumbnail badge size with its count")
+        function _()
+            originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            card = CreateObject("roSGNode", "VideoThumbnailCard")
+            content = m.createContent({ Type: "Series", UserData: { UnplayedItemCount: 200 } })
+            content.addFields({ cardLayout: { artworkSize: [600, 338], numColumns: 3 } })
+
+            card.itemContent = content
+
+            badge = card.findNode("watchedIndicator")
+            m.assertEqual(badge.data, { eligible: true, isWatched: false, unplayedCount: 200, width: 78, height: 78 })
+            m.assertEqual(badge.translation, [513.0, 9.0])
+            background = badge.findNode("countBackground")
+            m.assertEqual(background.height * background.scale[1], 78.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + background.width * background.scale[0], 78.0)
+            m.global.showUnwatchedEpisodeCount = originalCountMode
+        end function
+
+        @it("raw updates retain the configured thumbnail badge size")
+        function _()
+            originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            card = CreateObject("roSGNode", "VideoThumbnailCard")
+            content = m.createContent({ Type: "Series", UserData: { UnplayedItemCount: 200 } })
+            content.addFields({ cardLayout: { artworkSize: [600, 338], numColumns: 3 } })
+            card.itemContent = content
+
+            content.raw = { Type: "Series", UserData: { UnplayedItemCount: 1 } }
+
+            badge = card.findNode("watchedIndicator")
+            m.assertEqual(badge.data.width, 78.0)
+            m.assertEqual(badge.data.height, 78.0)
+            m.assertEqual(badge.findNode("countLabel").text, "1")
+            m.global.showUnwatchedEpisodeCount = originalCountMode
+        end function
+
+        @it("clearing content retains size while publishing an ineligible thumbnail badge")
+        function _()
+            card = CreateObject("roSGNode", "VideoThumbnailCard")
+            content = m.createContent({ Type: "Series", UserData: { UnplayedItemCount: 200 } })
+            content.addFields({ cardLayout: { artworkSize: [600, 338], numColumns: 3 } })
+            card.itemContent = content
+
+            card.itemContent = invalid
+
+            badge = card.findNode("watchedIndicator")
+            m.assertEqual(badge.data, { eligible: false, isWatched: false, unplayedCount: -1, width: 78, height: 78 })
+            m.assertFalse(badge.visible)
         end function
 
     end class

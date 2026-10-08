@@ -51,7 +51,7 @@ namespace tests
             m.assertEqual(options.numRows, 4)
             m.assertEqual(m.top.findNode("themeCard").cardHeight, 292.0)
             m.assertEqual(m.top.findNode("watchedIndicatorCard").translation, [0.0, 308.0])
-            m.assertEqual(m.node.categoryControls[2], [options, m.node.settingsControls.watchedIndicatorOptions])
+            m.assertEqual(m.node.categoryControls[2], [options, m.node.settingsControls.watchedIndicatorOptions, m.node.settingsControls.showUnwatchedEpisodeCountOptions])
             m.assertEqual(options.getParent(), m.top.findNode("themeCard"))
         end function
 
@@ -1810,6 +1810,212 @@ namespace tests
 
             m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 3)
             m.assertEqual(m.node.settingsControls.themeOptions.jumpToItem, 3)
+        end function
+
+        @describe("unwatched count styles and settings layout")
+
+        @it("loads off by default without sending a preview")
+        function _()
+            m.top.accountKey = ""
+            m.top.unwatchedEpisodeCountPreviewRequested = ""
+
+            m.top.callFunc("loadSettingsValues")
+
+            m.assertEqual(m.top.findNode("showUnwatchedEpisodeCountOptions").checkedItem, 0)
+            m.assertEqual(m.top.unwatchedEpisodeCountPreviewRequested, "")
+        end function
+
+        @it("saves and previews the enabled selection")
+        function _()
+            m.top.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 1
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.ShowUnwatchedEpisodeCount], "subtle")
+            m.assertEqual(m.top.unwatchedEpisodeCountPreviewRequested, "subtle")
+        end function
+
+        @it("saves and previews the disabled selection")
+        function _()
+            m.top.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 1
+
+            m.top.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 0
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.ShowUnwatchedEpisodeCount], "off")
+            m.assertEqual(m.top.unwatchedEpisodeCountPreviewRequested, "off")
+        end function
+
+        @it("places the original three TV controls on one page")
+        function _()
+            controls = m.node.categoryControls[6]
+
+            m.assertEqual(controls, [m.top.findNode("tvEpisodeListDisplayOptions"), m.top.findNode("showSeasonSummaryCardOptions"), m.top.findNode("homeEpisodeImagesOptions")])
+            m.assertEqual(m.top.findNode("tvScrollCard").translation, [0.0, 0.0])
+            m.assertEqual(m.top.findNode("tvSummaryCard").translation, [0.0, 204.0])
+            m.assertEqual(m.top.findNode("tvArtworkCard").translation, [0.0, 408.0])
+            m.assertInvalid(m.top.findNode("tvPageNumber"))
+        end function
+
+        @it("places the two badge cards side by side in Theme")
+        function _()
+            watched = m.top.findNode("watchedIndicatorCard")
+            count = m.top.findNode("unwatchedEpisodeCountCard")
+            options = m.top.findNode("showUnwatchedEpisodeCountOptions")
+
+            m.assertTrue(watched.cardWidth < count.cardWidth)
+            m.assertEqual(watched.cardWidth + count.cardWidth + 16, 1160.0)
+            m.assertEqual(count.translation, [watched.cardWidth + 16, 308.0])
+            m.assertEqual(count.getParent(), m.top.findNode("themePanel"))
+            m.assertEqual(options.content.getChildCount(), 3)
+            m.assertEqual(options.content.getChild(0).title, "Off")
+            m.assertEqual(options.content.getChild(1).title, "Subtle")
+            m.assertEqual(options.content.getChild(2).title, "High contrast")
+        end function
+
+        @it("previews and saves the high contrast count style")
+        function _()
+            m.top.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 2
+
+            m.assertEqual(m.top.unwatchedEpisodeCountPreviewRequested, "high-contrast")
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.ShowUnwatchedEpisodeCount], "high-contrast")
+        end function
+
+        @it("restores the high contrast count selection without previewing")
+        function _()
+            m.top.unwatchedEpisodeCountPreviewRequested = ""
+
+            'bs:disable-next-line 1140
+            setUnwatchedEpisodeCountOption("high-contrast")
+
+            m.assertEqual(m.top.findNode("showUnwatchedEpisodeCountOptions").checkedItem, 2)
+            m.assertEqual(m.top.findNode("showUnwatchedEpisodeCountOptions").jumpToItem, 2)
+            m.assertEqual(m.top.unwatchedEpisodeCountPreviewRequested, "")
+        end function
+
+        @it("moves right from watched style to count style")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+            'bs:disable-next-line 1140
+            focusCategoryControl(1, 1)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+
+            m.assertTrue(m.top.findNode("showUnwatchedEpisodeCountOptions").isInFocusChain())
+            m.assertEqual(m.node.focusState.controlIndex, 2)
+        end function
+
+        @it("moves left from count style to watched style")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+            'bs:disable-next-line 1140
+            focusCategoryControl(2, 2)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("left", true)
+
+            m.assertTrue(m.top.findNode("watchedIndicatorOptions").isInFocusChain())
+            m.assertEqual(m.node.focusState.controlIndex, 1)
+            m.assertEqual(m.top.findNode("watchedIndicatorOptions").jumpToItem, 1)
+        end function
+
+        @it("moves up from count options to the Theme choices")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+            'bs:disable-next-line 1140
+            focusCategoryControl(2, 0)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+
+            m.assertTrue(m.top.findNode("themeOptions").isInFocusChain())
+        end function
+
+        @it("moves down from Theme choices to the watched options")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+            'bs:disable-next-line 1140
+            focusCategoryControl(0, 3)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+
+            m.assertTrue(m.top.findNode("watchedIndicatorOptions").isInFocusChain())
+        end function
+
+        @it("restores captured count control focus in Theme")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+            'bs:disable-next-line 1140
+            focusCategoryControl(2, 2)
+            m.top.callFunc("captureEditorFocus")
+            m.top.findNode("userCategoryList").setFocus(true)
+
+            m.top.callFunc("restoreEditorFocus")
+
+            m.assertTrue(m.top.findNode("showUnwatchedEpisodeCountOptions").isInFocusChain())
+            m.assertTrue(m.top.findNode("themePanel").visible)
+        end function
+
+        @it("returns left from TV settings to the category list")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+            'bs:disable-next-line 1140
+            focusCategoryControl(0, 0)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("left", true)
+
+            m.assertTrue(m.top.findNode("userCategoryList").isInFocusChain())
+        end function
+
+        @it("moves down from TV scroll to season summary without paging")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+            'bs:disable-next-line 1140
+            focusCategoryControl(0, 1)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+
+            m.assertTrue(m.top.findNode("showSeasonSummaryCardOptions").isInFocusChain())
+            m.assertTrue(m.top.findNode("tvPanel").visible)
+        end function
+
+        @it("moves up from TV season summary to episode scroll")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+            'bs:disable-next-line 1140
+            focusCategoryControl(1, 0)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+
+            m.assertTrue(m.top.findNode("tvEpisodeListDisplayOptions").isInFocusChain())
+        end function
+
+        @it("leaves equal space after the headings in the two badge cards")
+        function _()
+            watched = m.top.findNode("watchedIndicatorCard")
+            count = m.top.findNode("unwatchedEpisodeCountCard")
+            measurement = CreateObject("roSGNode", "Label")
+            heading = watched.findNode("heading")
+            measurement.font = heading.font
+            measurement.text = heading.text
+            watchedMargin = watched.cardWidth - heading.translation[0] - measurement.boundingRect().width
+            heading = count.findNode("heading")
+            measurement.font = heading.font
+            measurement.text = heading.text
+            countMargin = count.cardWidth - heading.translation[0] - measurement.boundingRect().width
+
+            m.assertEqual(watchedMargin, countMargin)
+            m.assertTrue(watchedMargin >= 24)
         end function
 
     end class

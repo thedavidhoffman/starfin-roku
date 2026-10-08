@@ -4,6 +4,15 @@ namespace tests
     @suite("TVSeasonCard component")
     class TVSeasonCardTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "off"
+        end function
+
+        protected override function afterEach()
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
+        end function
+
         @describe("fresh component observers")
 
         @it("renders content on a fresh component")
@@ -185,6 +194,7 @@ namespace tests
             item.raw = { UserData: { UnplayedItemCount: 1 } }
 
             m.assertFalse(m.top.findNode("watchedIndicator").visible)
+            m.assertEqual(m.top.findNode("watchedIndicator").data, { eligible: false, isWatched: false, unplayedCount: -1, width: 42, height: 42 })
         end function
 
         function createSeason(title as string, year as string, episodeCount as integer, imageUrl as string) as object
@@ -201,7 +211,7 @@ namespace tests
 
             m.global.watchedIndicatorStyle = "high-contrast"
 
-            m.assertEqual(m.top.findNode("watchedIndicator").uri, "pkg:/images/icons/watched-check-high-contrast.png")
+            m.assertEqual(m.top.findNode("watchedIndicator").findNode("watchedCheck").uri, "pkg:/images/icons/watched-check-high-contrast.png")
             m.global.watchedIndicatorStyle = originalStyle
         end function
 
@@ -250,6 +260,41 @@ namespace tests
             m.assertTrue(Instr(1, m.top.findNode("seasonPosterMask").maskUri, "/season-poster-mask.png") > 0)
             m.assertEqual(m.top.findNode("title").translation, [0.0, 327.0])
             m.assertEqual(m.top.findNode("year").translation, [0.0, 357.0])
+        end function
+
+        @describe("remaining season counts")
+
+        @it("shows the remaining season count and updates at zero")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            component = CreateObject("roSGNode", "TVSeasonCard")
+            item = m.createSeason("Season 1", "2024", 8, "")
+            item.raw = { Type: "Season", UserData: { UnplayedItemCount: 8 } }
+
+            component.itemContent = item
+
+            m.assertEqual(component.findNode("watchedIndicator").findNode("countLabel").text, "8")
+            m.assertEqual(component.findNode("watchedIndicator").data, { eligible: true, isWatched: false, unplayedCount: 8, width: 42, height: 42 })
+
+            item.raw = { Type: "Season", UserData: { UnplayedItemCount: 0 } }
+
+            m.assertTrue(component.findNode("watchedIndicator").findNode("watchedCheck").visible)
+            m.assertFalse(component.findNode("watchedIndicator").findNode("countGroup").visible)
+            m.assertEqual(component.findNode("watchedIndicator").data, { eligible: true, isWatched: true, unplayedCount: 0, width: 42, height: 42 })
+        end function
+
+        @it("retains the right inset in the large season layout")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            item = m.createSeason("Season 1", "2024", 200, "")
+            item.raw = { Type: "Season", UserData: { UnplayedItemCount: 200 } }
+            item.addFields({ posterLayout: true })
+
+            m.top.itemContent = item
+
+            badge = m.top.findNode("watchedIndicator")
+            m.assertEqual(badge.translation, [346.0, 9.0])
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
         end function
 
     end class

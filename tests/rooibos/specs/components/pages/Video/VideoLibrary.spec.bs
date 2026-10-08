@@ -7,6 +7,8 @@ namespace tests
     class VideoLibraryTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "off"
             m.node.itemsGrid = m.node.top.findNode("itemsGrid")
             m.node.filterButtonRow = m.node.top.findNode("filterButtonRow")
             m.node.videoLibraryTask = m.node.top.findNode("videoLibraryTask")
@@ -28,6 +30,8 @@ namespace tests
         end function
 
         protected override function afterEach()
+            m.node.episodeCountRefresh.callFunc("cancel")
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
             m.cleanupRestoreRegistry()
         end function
 
@@ -2260,6 +2264,424 @@ namespace tests
             m.assertTrue(m.node.itemsGrid.isInFocusChain())
         end function
 
+        @describe("aggregate count responses")
+
+        @it("updates matching canonical and displayed library items only")
+        function _()
+            series = { Id: "series", Type: "Series", UserData: { UnplayedItemCount: 200 } }
+            other = { Id: "other", Type: "Series", UserData: { UnplayedItemCount: 9 } }
+            node = CreateObject("roSGNode", "ContentNode")
+            node.addFields({ raw: series })
+            m.node.pageState.allItems = [series, other]
+            m.node.pageState.items = [series, other]
+            'bs:disable-next-line 1001
+            m.stubCall(getVideoLibraryItemCacheKey, "series")
+            m.node.pageState.itemNodeCache = { series: node }
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }] }
+
+            m.assertEqual(m.node.pageState.allItems[0].UserData.UnplayedItemCount, 2)
+            m.assertEqual(m.node.pageState.items[0].UserData.UnplayedItemCount, 2)
+            m.assertEqual(m.node.pageState.allItems[1].UserData.UnplayedItemCount, 9)
+            m.assertEqual(node.raw.UserData.UnplayedItemCount, 2)
+        end function
+
+        @it("publishes changed aggregate data in one raw notification")
+        function _()
+            series = { Id: "series", Type: "Series", UserData: { UnplayedItemCount: 200 } }
+            node = CreateObject("roSGNode", "ContentNode")
+            node.addFields({ raw: series })
+            m.node.pageState.allItems = [series]
+            m.node.pageState.items = m.node.pageState.allItems
+            'bs:disable-next-line 1001
+            m.stubCall(getVideoLibraryItemCacheKey, "series")
+            m.node.pageState.itemNodeCache = { series: node }
+            getGlobalAa().libraryRawUpdates = []
+            node.observeFieldScoped("raw", "tests_OnLibraryRawUpdate")
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }] }
+
+            m.assertEqual(getGlobalAa().libraryRawUpdates.Count(), 1)
+            m.assertEqual(getGlobalAa().libraryRawUpdates[0].UserData.UnplayedItemCount, 2)
+            node.unobserveFieldScoped("raw")
+        end function
+
+        @it("in-place mutations retain forced raw notification")
+        function _()
+            series = { Id: "series", Type: "Series", UserData: { Played: false } }
+            node = CreateObject("roSGNode", "ContentNode")
+            node.addFields({ raw: series })
+            'bs:disable-next-line 1001
+            m.stubCall(getVideoLibraryItemCacheKey, "series")
+            m.node.pageState.itemNodeCache = { series: node }
+            getGlobalAa().libraryRawUpdates = []
+            node.observeFieldScoped("raw", "tests_OnLibraryRawUpdate")
+            series.UserData.Played = true
+
+            'bs:disable-next-line 1140
+            notifyVideoLibraryItemChanged(series, 0)
+
+            m.assertEqual(getGlobalAa().libraryRawUpdates.Count(), 2)
+            m.assertInvalid(getGlobalAa().libraryRawUpdates[0])
+            m.assertTrue(getGlobalAa().libraryRawUpdates[1].UserData.Played)
+            node.unobserveFieldScoped("raw")
+        end function
+
+        @it("does not notify content nodes for identical aggregate results")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2, Played: false } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2, Played: false } }] }
+
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 0)
+        end function
+
+        @it("notifies only once across repeated identical responses")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 200 } }])
+            response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }] }
+
+            m.node.episodeCountRefresh.response = response
+            m.node.episodeCountRefresh.response = response
+
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 1)
+            m.assertEqual(m.node.pageState.allItems[0].UserData.UnplayedItemCount, 2)
+        end function
+
+        @it("applies a zero count without replacing grid content or focus")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2, Played: false } }])
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChild("ContentNode").addFields({ raw: m.node.pageState.allItems[0] })
+            m.node.itemsGrid.content = content
+            m.node.itemsGrid.jumpToItem = 0
+            focus = m.node.itemsGrid.itemFocused
+            selection = m.node.itemsGrid.itemSelected
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 0, Played: true } }] }
+
+            m.assertEqual(m.node.pageState.allItems[0].UserData.UnplayedItemCount, 0)
+            m.assertTrue(m.node.pageState.allItems[0].UserData.Played)
+            m.assertTrue(m.node.itemsGrid.content.isSameNode(content))
+            m.assertEqual(m.node.itemsGrid.itemFocused, focus)
+            m.assertEqual(m.node.itemsGrid.itemSelected, selection)
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 1)
+        end function
+
+        @it("applies watched-only changes when the count is unchanged")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2, Played: false } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2, Played: true } }] }
+
+            m.assertTrue(m.node.pageState.allItems[0].UserData.Played)
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 1)
+        end function
+
+        @it("preserves favorite progress and metadata while merging")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", Name: "Original", UserData: { UnplayedItemCount: 2, IsFavorite: true, PlaybackPositionTicks: 100 } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", Name: "Server", UserData: { UnplayedItemCount: 1, IsFavorite: false, PlaybackPositionTicks: 0 } }] }
+
+            updated = m.node.pageState.allItems[0]
+            m.assertEqual(updated.Name, "Original")
+            m.assertTrue(updated.UserData.IsFavorite)
+            m.assertEqual(updated.UserData.PlaybackPositionTicks, 100)
+        end function
+
+        @it("ignores a missing aggregate count")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { Played: true } }] }
+
+            m.assertEqual(m.node.pageState.allItems[0].UserData.UnplayedItemCount, 2)
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 0)
+        end function
+
+        @it("ignores a malformed aggregate count")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: "1" } }] }
+
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 0)
+        end function
+
+        @it("ignores a mismatched aggregate type")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Season", UserData: { UnplayedItemCount: 1 } }] }
+
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 0)
+        end function
+
+        @it("ignores a negative aggregate count")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: -1 } }] }
+
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 0)
+        end function
+
+        @it("ignores invalid watched data when the count is unchanged")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2, Played: false } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2, Played: "true" } }] }
+
+            m.assertFalse(m.node.pageState.allItems[0].UserData.Played)
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 0)
+        end function
+
+        @it("ignores an unknown aggregate identity")
+        function _()
+            m.prepareCountResponse([{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "unknown", Type: "Series", UserData: { UnplayedItemCount: 1 } }] }
+
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 0)
+        end function
+
+        @it("updates duplicate occurrences but notifies their shared cache key once")
+        function _()
+            first = { Id: "series", Type: "Series", Name: "First", UserData: { UnplayedItemCount: 2 } }
+            second = { Id: "series", Type: "Series", Name: "Second", UserData: { UnplayedItemCount: 2 } }
+            m.prepareCountResponse([first, second])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 1 } }] }
+
+            m.assertEqual(m.node.pageState.allItems[0].UserData.UnplayedItemCount, 1)
+            m.assertEqual(m.node.pageState.allItems[1].UserData.UnplayedItemCount, 1)
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 1)
+        end function
+
+        @it("updates multiple aggregates in shared canonical and displayed arrays")
+        function _()
+            m.prepareCountResponse([{ Id: "a", Type: "Series", UserData: { UnplayedItemCount: 2 } }, { Id: "b", Type: "Season", UserData: { UnplayedItemCount: 9 } }])
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "b", Type: "Season", UserData: { UnplayedItemCount: 8 } }, { Id: "a", Type: "Series", UserData: { UnplayedItemCount: 1 } }] }
+
+            m.assertEqual(m.node.pageState.items[0].UserData.UnplayedItemCount, 1)
+            m.assertEqual(m.node.pageState.items[1].UserData.UnplayedItemCount, 8)
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 2)
+        end function
+
+        @it("notifies distinct occurrence cache keys once each")
+        function _()
+            item = { Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }
+            m.prepareCountResponse([item, item])
+            'bs:disable-next-line 1001
+            m.stubCall(getVideoLibraryItemCacheKey, m.occurrenceCountCacheKey)
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 1 } }] }
+
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 2)
+        end function
+
+        @it("preserves displayed metadata in a separate filtered array")
+        function _()
+            m.prepareCountResponse([{ Id: "a", Type: "Series", Name: "Canonical", UserData: { UnplayedItemCount: 2 } }])
+            m.node.pageState.items = [{ Id: "a", Type: "Series", Name: "Displayed", UserData: { UnplayedItemCount: 2 } }]
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "a", Type: "Series", UserData: { UnplayedItemCount: 1 } }] }
+
+            m.assertEqual(m.node.pageState.allItems[0].Name, "Canonical")
+            m.assertEqual(m.node.pageState.items[0].Name, "Displayed")
+            m.assertEqual(m.node.pageState.items[0].UserData.UnplayedItemCount, 1)
+            m.assertEqual(getGlobalAa().countNotifications.Count(), 1)
+        end function
+
+        @describe("targeted library count requests")
+
+        @it("targets a watched series without refreshing unrelated aggregates")
+        function _()
+            m.prepareCountRequest()
+
+            m.top.mediaStateChange = { itemId: "series", action: "watched", value: true }
+
+            m.assertEqual(m.node.episodeCountRefresh.request.itemIds, ["series"])
+            m.assertEqual(m.node.episodeCountRefresh.request.items.Count(), 4)
+        end function
+
+        @it("targets a season and its loaded parent series")
+        function _()
+            m.prepareCountRequest()
+
+            m.top.mediaStateChange = { itemId: "season", action: "watched", value: true }
+
+            m.assertEqual(m.node.episodeCountRefresh.request.itemIds, ["series", "season"])
+        end function
+
+        @it("targets loaded parent aggregates after an episode watched change")
+        function _()
+            m.prepareCountRequest()
+
+            m.top.mediaStateChange = { itemId: "episode", action: "watched", value: true }
+
+            m.assertEqual(m.node.episodeCountRefresh.request.itemIds, ["series", "season"])
+        end function
+
+        @it("does not refresh aggregates for favorites")
+        function _()
+            m.prepareCountRequest()
+
+            m.top.mediaStateChange = { itemId: "series", action: "favorite", value: true }
+
+            m.assertInvalid(m.node.episodeCountRefresh.request)
+            m.assertTrue(m.node.pageState.allItems[0].UserData.IsFavorite)
+        end function
+
+        @it("removing a favorite updates the snapshot without requesting counts")
+        function _()
+            m.prepareCountRequest(true)
+
+            m.top.mediaStateChange = { itemId: "series", action: "favorite", value: false }
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.itemsGrid.content.getChildCount(), 3)
+            m.assertTrue(m.node.episodeCountRefresh.request.snapshotOnly)
+            m.assertEqual(m.node.episodeCountRefresh.request.items.Count(), 3)
+        end function
+
+        @it("does not refresh aggregates for ordinary playback position changes")
+        function _()
+            m.prepareCountRequest()
+
+            m.top.playbackProgressChange = { itemId: "episode", positionTicks: 100, durationTicks: 1000, isFinished: false }
+
+            m.assertInvalid(m.node.episodeCountRefresh.request)
+            m.assertEqual(m.node.pageState.allItems[2].UserData.PlaybackPositionTicks, 100)
+        end function
+
+        @it("targets parent aggregates when playback finishes an episode")
+        function _()
+            m.prepareCountRequest()
+
+            m.top.playbackProgressChange = { itemId: "episode", isFinished: true }
+
+            m.assertEqual(m.node.episodeCountRefresh.request.itemIds, ["series", "season"])
+            m.assertTrue(m.node.pageState.allItems[2].UserData.Played)
+        end function
+
+        @it("targets parent aggregates when playback changes a played episode to unplayed")
+        function _()
+            m.prepareCountRequest()
+            m.node.pageState.allItems[2].UserData.Played = true
+
+            m.top.playbackProgressChange = { itemId: "episode", positionTicks: 100, durationTicks: 1000, isFinished: false }
+
+            m.assertEqual(m.node.episodeCountRefresh.request.itemIds, ["series", "season"])
+            m.assertFalse(m.node.pageState.allItems[2].UserData.Played)
+        end function
+
+        @it("does not request unknown parent aggregates")
+        function _()
+            m.prepareCountRequest()
+            m.node.pageState.allItems[2].Delete("SeriesId")
+            m.node.pageState.allItems[2].Delete("SeasonId")
+
+            m.top.mediaStateChange = { itemId: "episode", action: "watched", value: true }
+
+            m.assertInvalid(m.node.episodeCountRefresh.request)
+        end function
+
+        @it("does not refresh aggregate counts for a movie watched change")
+        function _()
+            m.prepareCountRequest()
+            m.node.pageState.allItems.Push({ Id: "movie", Type: "Movie", UserData: { Played: false } })
+
+            m.top.mediaStateChange = { itemId: "movie", action: "watched", value: true }
+
+            m.assertInvalid(m.node.episodeCountRefresh.request)
+        end function
+
+        @it("deduplicates parent IDs across repeated episode occurrences")
+        function _()
+            m.prepareCountRequest()
+            m.node.pageState.allItems.Push(m.node.pageState.allItems[2])
+
+            m.top.mediaStateChange = { itemId: "episode", action: "watched", value: true }
+
+            m.assertEqual(m.node.episodeCountRefresh.request.itemIds, ["series", "season"])
+        end function
+
+        @it("activation retains a full loaded snapshot")
+        function _()
+            m.prepareCountRequest()
+
+            m.top.callFunc("activate")
+
+            m.assertInvalid(m.node.episodeCountRefresh.request.itemIds)
+            m.assertEqual(m.node.episodeCountRefresh.request.items.Count(), 4)
+        end function
+
+        @it("initial rendering retains a full loaded snapshot")
+        function _()
+            m.prepareCountRequest()
+
+            'bs:disable-next-line 1140
+            renderItems(m.node.pageState.allItems)
+
+            m.assertInvalid(m.node.episodeCountRefresh.request.itemIds)
+            m.assertEqual(m.node.episodeCountRefresh.request.items.Count(), 4)
+        end function
+
+        @it("appended pages update the retained snapshot without fetching counts")
+        function _()
+            m.prepareCountRequest()
+            m.node.itemsGrid.content = CreateObject("roSGNode", "ContentNode")
+            item = { Id: "new-series", Type: "Series", UserData: { UnplayedItemCount: 5 } }
+            m.node.pageState.allItems.Push(item)
+
+            'bs:disable-next-line 1140
+            appendVideoLibraryPage([item], 4)
+
+            m.assertEqual(m.node.episodeCountRefresh.request.items.Count(), 5)
+            m.assertTrue(m.node.episodeCountRefresh.request.snapshotOnly)
+            m.assertEqual(m.node.itemsGrid.content.getChildCount(), 1)
+        end function
+
+        private sub prepareCountResponse(items as object)
+            m.node.pageState.allItems = items
+            m.node.pageState.items = items
+            m.node.pageState.request = { collectionType: "tvshows" }
+            getGlobalAa().countNotifications = []
+            'bs:disable-next-line 1001
+            m.stubCall(notifyVideoLibraryItemChanged, m.captureCountNotification)
+        end sub
+
+        private sub captureCountNotification(item as object, occurrenceIndex as dynamic, dataReplaced = false as boolean)
+            getGlobalAa().countNotifications.Push({ item: item, index: occurrenceIndex, dataReplaced: dataReplaced })
+        end sub
+
+        private function occurrenceCountCacheKey(item as object, occurrenceIndex as dynamic) as string
+            return item.Id + ":" + occurrenceIndex.ToStr()
+        end function
+
+        private sub prepareCountRequest(favoriteBrowse = false as boolean)
+            m.node.episodeCountRefresh.callFunc("cancel")
+            m.node.pageState.request = { server: "server", token: "token", userId: "user", libraryId: "library", collectionType: "tvshows" }
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "library")
+            m.node.pageState.allItems = [
+                { Id: "series", Type: "Series", UserData: { Played: false, UnplayedItemCount: 2 } }
+                { Id: "season", Type: "Season", SeriesId: "series", UserData: { Played: false, UnplayedItemCount: 2 } }
+                { Id: "episode", Type: "Episode", SeriesId: "series", SeasonId: "season", UserData: { Played: false } }
+                { Id: "other", Type: "Series", UserData: { Played: false, UnplayedItemCount: 9 } }
+            ]
+            m.node.pageState.items = m.node.pageState.allItems
+            m.node.pageState.itemNodeCache = {}
+            'bs:disable-next-line 1001
+            m.stubCall(isFavoriteBrowseActive, favoriteBrowse)
+        end sub
+
     end class
+
+    sub OnLibraryRawUpdate(event as object)
+        getGlobalAa().libraryRawUpdates.Push(event.getData())
+    end sub
 
 end namespace

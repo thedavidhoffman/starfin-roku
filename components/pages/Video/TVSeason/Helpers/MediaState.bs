@@ -17,6 +17,7 @@ sub onWatchedStateChange()
     renderEpisodes(m.pageState.episodes)
     restoreItemFocus(itemId)
     notifySeasonWatchedStateChanged(affectedSeason)
+    refreshEpisodeCounts()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -35,6 +36,7 @@ sub onPlaybackProgressChange()
     renderEpisodes(m.pageState.episodes)
     restoreItemFocus(itemId)
     notifySeasonWatchedStateChanged(affectedSeason)
+    refreshEpisodeCounts()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -68,6 +70,7 @@ sub updateSeasonEpisodesWatchedState(isWatched as boolean)
     end for
 
     if Arrays.IsAssocArray(m.pageState.season) = false then return
+    if UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) <> UnwatchedEpisodeCount.Mode.Off then return
     if m.pageState.season.UserData = invalid then m.pageState.season.UserData = {}
 
     if isWatched then
@@ -83,6 +86,7 @@ end sub
 function updateSeasonUnplayedCount(episode as object, wasWatched as boolean, isWatched as boolean) as dynamic
     season = getSeasonForEpisode(episode)
     if Arrays.IsAssocArray(season) = false then return invalid
+    if UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) <> UnwatchedEpisodeCount.Mode.Off then return season
     if season.UserData = invalid then season.UserData = {}
 
     current = season.UserData.UnplayedItemCount
@@ -128,8 +132,12 @@ sub notifySeasonWatchedStateChanged(season as dynamic)
     if seasonId = "" then return
 
     unplayedItemCount = 0
-    if season.UserData <> invalid and season.UserData.UnplayedItemCount <> invalid then
-        unplayedItemCount = int(season.UserData.UnplayedItemCount)
+    if UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) <> UnwatchedEpisodeCount.Mode.Off then
+        unplayedItemCount = UnwatchedEpisodeCount.GetCount(season)
+        ' Unknown server totals must not become a fully watched aggregate in the parent page.
+        if unplayedItemCount < 0 then return
+    else if season.UserData <> invalid and season.UserData.UnplayedItemCount <> invalid then
+        unplayedItemCount = Number.ToInteger(season.UserData.UnplayedItemCount, 0)
     end if
 
     m.top.seasonWatchedStateChanged = {
@@ -223,3 +231,44 @@ function getPlaybackProgressTicks(value as dynamic) as longinteger
     return value
 end function
 
+'-------------------------------------------------------------------------------
+' refreshEpisodeCounts
+'-------------------------------------------------------------------------------
+sub refreshEpisodeCounts()
+    request = m.pageState.request
+    if request = invalid or m.pageState.lifecycle.isActive <> true then return
+    items = []
+    if m.pageState.season <> invalid then items.Push(m.pageState.season)
+    for each season in m.pageState.seasons
+        items.Push(season)
+    end for
+    m.episodeCountRefresh.request = { server: request.server, token: request.token, userId: request.userId, items: items }
+end sub
+
+'-------------------------------------------------------------------------------
+' onEpisodeCountsRefreshed
+'-------------------------------------------------------------------------------
+sub onEpisodeCountsRefreshed()
+    response = m.episodeCountRefresh.response
+    for each refreshed in response.payload
+        updated = UnwatchedEpisodeCount.WithRefreshedCount(m.pageState.season, refreshed)
+        if updated <> invalid then
+            m.pageState.season = updated
+            notifySeasonWatchedStateChanged(updated)
+        end if
+        for index = 0 to m.pageState.seasons.Count() - 1
+            updated = UnwatchedEpisodeCount.WithRefreshedCount(m.pageState.seasons[index], refreshed)
+            if updated <> invalid then m.pageState.seasons[index] = updated
+        end for
+    end for
+    ' Refresh existing summary content, without rebuilding the episode list or moving focus.
+    content = m.episodesGrid.content
+    if isVerticalEpisodeList() <> true then
+        content = invalid
+        if m.episodesList.content <> invalid and m.episodesList.content.getChildCount() > 0 then content = m.episodesList.content.getChild(0)
+    end if
+    if content = invalid then return
+    for each child in content.getChildren(-1, 0)
+        if Strings.ToString(child.itemType) = MediaItem.Type.Season then child.raw = m.pageState.season
+    end for
+end sub

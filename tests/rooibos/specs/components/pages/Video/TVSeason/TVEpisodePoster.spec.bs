@@ -6,6 +6,15 @@ namespace tests
     @suite("TVEpisodePoster component")
     class TVEpisodePosterTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "off"
+        end function
+
+        protected override function afterEach()
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
+        end function
+
         @describe("declarative component contract")
 
         @it("declares the posterMask node")
@@ -30,33 +39,106 @@ namespace tests
 
         @describe("poster rendering")
 
-        @it("renders a supplied image URL")
+        @it("renders artwork from content")
         function _()
-            m.top.imageUrl = "http://server/episode.jpg"
+            item = m.createEpisode({ Played: false })
+            item.HDPosterUrl = "http://server/episode.jpg"
+
+            m.top.itemContent = item
 
             m.assertEqual(m.top.findNode("poster").uri, "http://server/episode.jpg")
         end function
 
-        @it("uses placeholder artwork for an empty image URL")
+        @it("uses placeholder artwork when content has no artwork")
         function _()
-            m.top.imageUrl = ""
+            m.top.itemContent = m.createEpisode({ Played: false })
 
             m.assertEqual(m.top.findNode("poster").uri, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
         end function
 
-        @it("applies custom poster dimensions")
+        @it("keeps the fixed poster and overlay geometry")
         function _()
-            m.top.posterWidth = 300
-            m.top.posterHeight = 180
+            poster = CreateObject("roSGNode", "TVEpisodePoster")
+            poster.itemContent = m.createEpisode({ Played: true })
 
-            m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 300)
-            m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 180)
+            m.assertEqual(Number.ToInteger(poster.findNode("poster").width, -1), 531)
+            m.assertEqual(Number.ToInteger(poster.findNode("poster").height, -1), 300)
+            m.assertEqual(poster.findNode("progressBar").translation, [9.0, 276.0])
+            m.assertEqual(Number.ToInteger(poster.findNode("progressBar").barWidth, -1), 513)
+            m.assertEqual(Number.ToInteger(poster.findNode("progressBar").barHeight, -1), 15)
+            m.assertEqual(poster.findNode("watchedIndicator").translation, [462.0, 9.0])
+            m.assertEqual(Number.ToInteger(poster.findNode("watchedIndicator").data.width, -1), 57)
+            m.assertEqual(Number.ToInteger(poster.findNode("watchedIndicator").data.height, -1), 57)
+            m.assertEqual(poster.findNode("watchedIndicator").findNode("watchedCheck").width, 57.0)
+            m.assertEqual(poster.findNode("watchedIndicator").findNode("watchedCheck").height, 57.0)
+        end function
+
+        @it("leaves artwork unset until content is supplied")
+        function _()
+            poster = CreateObject("roSGNode", "TVEpisodePoster")
+
+            m.assertEqual(poster.findNode("poster").uri, "")
+            m.assertFalse(poster.findNode("progressBar").visible)
+            m.assertFalse(poster.findNode("watchedIndicator").visible)
+        end function
+
+        @it("replaces artwork when content is reused")
+        function _()
+            first = m.createEpisode({ Played: false })
+            first.HDPosterUrl = "http://server/first.jpg"
+            second = m.createEpisode({ Played: false })
+            second.HDPosterUrl = "http://server/second.jpg"
+            m.top.itemContent = first
+
+            m.top.itemContent = second
+
+            m.assertEqual(m.top.findNode("poster").uri, "http://server/second.jpg")
+        end function
+
+        @it("clears episode artwork and progress when content is removed")
+        function _()
+            item = m.createEpisode({ Played: false })
+            item.HDPosterUrl = "http://server/episode.jpg"
+            item.progressPercent = 50
+            m.top.itemContent = item
+
+            m.top.itemContent = invalid
+
+            m.assertEqual(m.top.findNode("poster").uri, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
+            m.assertFalse(m.top.findNode("progressBar").visible)
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").progressWidth, -1), 0)
+        end function
+
+        @it("clears a season count and detaches its raw observer when content is removed")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            item = m.createEpisode({ UnplayedItemCount: 200 })
+            item.itemType = "Season"
+            item.raw = { Type: "Season", UserData: { UnplayedItemCount: 200 } }
+            m.top.itemContent = item
+
+            m.top.itemContent = invalid
+            item.raw = { Type: "Season", UserData: { UnplayedItemCount: 1 } }
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+            m.assertEqual(m.top.findNode("watchedIndicator").data, { eligible: false, isWatched: false, unplayedCount: -1, width: 57, height: 57 })
+        end function
+
+        @it("updates the watched check and progress from live raw data")
+        function _()
+            item = m.createEpisode({ Played: false })
+            item.progressPercent = 50
+            m.top.itemContent = item
+
+            item.raw = { Type: "Episode", UserData: { Played: true } }
+
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
+            m.assertFalse(m.top.findNode("progressBar").visible)
+            m.assertEqual(Number.ToInteger(m.top.findNode("progressBar").progressWidth, -1), 0)
         end function
 
         @it("calculates progress from percentage")
         function _()
-            m.top.posterWidth = 531
-            m.top.posterHeight = 300
             item = m.createEpisode({ Played: false })
             item.progressPercent = 50
 
@@ -68,8 +150,6 @@ namespace tests
 
         @it("clamps progress to the track width")
         function _()
-            m.top.posterWidth = 531
-            m.top.posterHeight = 300
             item = m.createEpisode({ Played: false })
             item.progressWidth = 9999
 
@@ -120,8 +200,67 @@ namespace tests
 
             m.global.watchedIndicatorStyle = "high-contrast"
 
-            m.assertEqual(m.top.findNode("watchedIndicator").uri, "pkg:/images/icons/watched-check-high-contrast.png")
+            m.assertEqual(m.top.findNode("watchedIndicator").findNode("watchedCheck").uri, "pkg:/images/icons/watched-check-high-contrast.png")
             m.global.watchedIndicatorStyle = originalStyle
+        end function
+
+        @describe("summary count rendering")
+
+        @it("renders the aggregate on season summary artwork")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            item = CreateObject("roSGNode", "ContentNode")
+            item.addFields({ itemType: "Season", raw: { Type: "Season", UserData: { UnplayedItemCount: 200 } } })
+
+            m.top.itemContent = item
+
+            badge = m.top.findNode("watchedIndicator")
+            m.assertEqual(badge.data, { eligible: true, isWatched: false, unplayedCount: 200, width: 57, height: 57 })
+            m.assertEqual(badge.findNode("countLabel").text, "200")
+            m.assertEqual(badge.translation, [462.0, 9.0])
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 57.0)
+        end function
+
+        @it("does not render a parent count on an episode thumbnail")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            item = m.createEpisode({ Played: false, UnplayedItemCount: 200 })
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+        end function
+
+        @it("rebinds raw updates to the replacement season summary")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            first = CreateObject("roSGNode", "ContentNode")
+            first.addFields({ itemType: "Season", raw: { Type: "Season", UserData: { UnplayedItemCount: 200 } } })
+            second = CreateObject("roSGNode", "ContentNode")
+            second.addFields({ itemType: "Season", raw: { Type: "Season", UserData: { UnplayedItemCount: 2 } } })
+            m.top.itemContent = first
+            m.top.itemContent = second
+
+            second.raw = { Type: "Season", UserData: { UnplayedItemCount: 1 } }
+
+            m.assertEqual(m.top.findNode("watchedIndicator").findNode("countLabel").text, "1")
+        end function
+
+        @it("ignores raw updates from replaced content")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            first = m.createEpisode({ UnplayedItemCount: 200 })
+            first.itemType = "Season"
+            first.raw = { Type: "Season", UserData: { UnplayedItemCount: 200 } }
+            second = m.createEpisode({ UnplayedItemCount: 2 })
+            second.itemType = "Season"
+            second.raw = { Type: "Season", UserData: { UnplayedItemCount: 2 } }
+            m.top.itemContent = first
+            m.top.itemContent = second
+
+            first.raw = { Type: "Season", UserData: { UnplayedItemCount: 99 } }
+
+            m.assertEqual(m.top.findNode("watchedIndicator").findNode("countLabel").text, "2")
         end function
 
     end class

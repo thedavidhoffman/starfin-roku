@@ -52,7 +52,7 @@ sub navHandleHeaderOverlayRequested()
             request.token = m.session.token
             request.userId = m.session.userId
         end if
-        request.eventFields = ["themePreviewRequested", "watchedIndicatorPreviewRequested", "subtitleSaveFailureRequested"]
+        request.eventFields = ["themePreviewRequested", "watchedIndicatorPreviewRequested", "unwatchedEpisodeCountPreviewRequested", "subtitleSaveFailureRequested"]
     end if
 
     m.overlayHost.callFunc("openOverlay", request)
@@ -135,9 +135,11 @@ sub navHandleOverlayClosed()
         if m.login.visible then
             syncTheme(invalid)
             syncWatchedIndicatorStyle(invalid)
+            syncUnwatchedEpisodeCount(invalid)
         else
             syncTheme(m.settings)
             syncWatchedIndicatorStyle(m.settings)
+            syncUnwatchedEpisodeCount(m.settings)
         end if
         if closed.cancelled <> true and m.header <> invalid and m.header.visible then m.header.callFunc("focusSystemMenuButton")
         return
@@ -160,6 +162,14 @@ sub navHandleOverlayEventRaised()
 
     if raised.request.id = "settings" and raised.field = "subtitleSaveFailureRequested" then
         routeSettingsSaveFailure(raised.value)
+        return
+    end if
+
+    if raised.request.id = "settings" and raised.field = "unwatchedEpisodeCountPreviewRequested" then
+        if m.login.visible then return
+        settings = {}
+        settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = raised.value
+        syncUnwatchedEpisodeCount(settings)
         return
     end if
 
@@ -545,6 +555,7 @@ end sub
 sub fanOutSettings()
     syncTheme(m.settings)
     syncWatchedIndicatorStyle(m.settings)
+    syncUnwatchedEpisodeCount(m.settings)
     applySettingsToPage(m.homePage)
     applySettingsToPage(m.header)
     applySettingsToPage(m.collectionsPage)
@@ -579,6 +590,7 @@ sub navShowLoginRoute()
     m.overlayHost.callFunc("closeOverlay")
     syncTheme(invalid)
     syncWatchedIndicatorStyle(invalid)
+    syncUnwatchedEpisodeCount(invalid)
     hideHome()
     resetDynamicPages()
     m.login.callFunc("activate")
@@ -672,4 +684,11 @@ end sub
 '-------------------------------------------------------------------------------
 sub syncWatchedIndicatorStyle(settings as dynamic)
     m.global.watchedIndicatorStyle = SettingsStore.GetSettingValue(settings, SettingsStore.Key.WatchedIndicatorStyle)
+end sub
+
+'-------------------------------------------------------------------------------
+' syncUnwatchedEpisodeCount
+'-------------------------------------------------------------------------------
+sub syncUnwatchedEpisodeCount(settings as dynamic)
+    m.global.showUnwatchedEpisodeCount = SettingsStore.GetSettingValue(settings, SettingsStore.Key.ShowUnwatchedEpisodeCount)
 end sub

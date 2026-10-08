@@ -60,3 +60,12 @@ repeated rendering for a multi-field metadata update. Its tests cover
 deferred rendering, complete replacement, clearing metadata, width changes, and
 configured spacing. See
 [Detail Metadata Ratings](detail-metadata-ratings.md).
+
+TVEpisodePoster registers its sole input observer, `itemContent`, after its
+references and content state exist. It processes content already assigned during
+initialization, but leaves artwork unset when no content exists. Subsequent
+replacement or clearing renders automatically; its raw-data subscription is
+rebound to the current content for progress and badge updates. Its fixed layout
+is declared in XML, with resolution-aware mask selection applied during init.
+Tests use fresh instances for empty initialization and fixed geometry; native
+assignments before initialization remain a deferred runtime coverage boundary.

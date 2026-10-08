@@ -1,4 +1,5 @@
 import "pkg:/source/String.bs"
+import "pkg:/source/UnwatchedEpisodeCount.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/MaskAssets.bs"
 import "pkg:/source/ResolutionProfile.bs"
@@ -9,6 +10,15 @@ import "pkg:/source/MediaMetadataFormatting.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    initHandlers()
+    onItemContentChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.posterMask = m.top.findNode("seasonPosterMask")
     MaskAssets.Apply(m.posterMask, "season-poster-mask.png", [207, 312], [138, 208])
     m.placeholder = m.top.findNode("placeholder")
@@ -18,10 +28,13 @@ sub init()
     m.year = m.top.findNode("year")
     m.itemContent = invalid
     m.posterLayout = false
+end sub
 
-    ' Observe only after initialization, then render any already assigned fields.
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.top.observeField("itemContent", "onItemContentChanged")
-    onItemContentChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -33,7 +46,7 @@ sub onItemContentChanged()
     if m.itemContent <> invalid then m.itemContent.unobserveField("raw")
     m.itemContent = item
     if item = invalid then
-        m.watchedIndicator.visible = false
+        updateSeasonBadge(invalid)
         return
     end if
 
@@ -47,7 +60,7 @@ sub onItemContentChanged()
     m.poster.visible = imageUrl <> ""
     m.placeholder.visible = imageUrl = ""
     m.poster.uri = imageUrl
-    m.watchedIndicator.visible = isSeasonFullyWatched(item)
+    updateSeasonBadge(item)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -88,7 +101,7 @@ end sub
 sub onItemDataChanged()
     if m.itemContent = invalid then return
 
-    m.watchedIndicator.visible = isSeasonFullyWatched(m.itemContent)
+    updateSeasonBadge(m.itemContent)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -126,3 +139,18 @@ function getEpisodeCountText(count as dynamic) as string
 
     return countText + " eps."
 end function
+
+'-------------------------------------------------------------------------------
+' updateSeasonBadge
+'-------------------------------------------------------------------------------
+sub updateSeasonBadge(item as dynamic)
+    raw = invalid
+    if item <> invalid then raw = item.raw
+    m.watchedIndicator.data = {
+        eligible: item <> invalid
+        isWatched: item <> invalid and isSeasonFullyWatched(item)
+        unplayedCount: UnwatchedEpisodeCount.GetCount(raw)
+        width: 42
+        height: 42
+    }
+end sub

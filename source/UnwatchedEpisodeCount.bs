@@ -1,0 +1,71 @@
+import "pkg:/source/Number.bs"
+import "pkg:/source/MediaItem.bs"
+import "pkg:/source/String.bs"
+
+namespace UnwatchedEpisodeCount
+
+    enum Mode
+        Off = "off"
+        Subtle = "subtle"
+        HighContrast = "high-contrast"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' UnwatchedEpisodeCount.Normalize
+    '---------------------------------------------------------------------------
+    function Normalize(value as dynamic) as string
+        if GetInterface(value, "ifString") <> invalid then
+            normalized = LCase(value.Trim())
+            if normalized = Mode.HighContrast then return Mode.HighContrast
+            if normalized = Mode.Subtle then return Mode.Subtle
+            ' Preserve the earlier enabled preference as the subtle count style.
+            if normalized = "on" then return Mode.Subtle
+        end if
+        return Mode.Off
+    end function
+
+    '---------------------------------------------------------------------------
+    ' UnwatchedEpisodeCount.GetCount
+    '---------------------------------------------------------------------------
+    function GetCount(item as dynamic) as integer
+        if GetInterface(item, "ifAssociativeArray") = invalid then return -1
+        itemType = Strings.ToString(item.Type)
+        if itemType <> MediaItem.Type.Series and itemType <> MediaItem.Type.Season then return -1
+        if GetInterface(item.UserData, "ifAssociativeArray") = invalid then return -1
+        value = item.UserData.UnplayedItemCount
+        ' Counts are API integers; malformed values must not become a watched zero.
+        if GetInterface(value, "ifInt") = invalid and GetInterface(value, "ifLongInt") = invalid then return -1
+        count = Number.ToInteger(value, -1)
+        if count < 0 then return -1
+        return count
+    end function
+
+    '---------------------------------------------------------------------------
+    ' UnwatchedEpisodeCount.WithRefreshedCount
+    '---------------------------------------------------------------------------
+    function WithRefreshedCount(item as dynamic, refreshed as dynamic) as dynamic
+        if GetInterface(item, "ifAssociativeArray") = invalid then return invalid
+        if GetInterface(refreshed, "ifAssociativeArray") = invalid then return invalid
+        if Strings.ToString(item.Id) <> Strings.ToString(refreshed.Id) then return invalid
+        itemType = Strings.ToString(item.Type)
+        if itemType <> MediaItem.Type.Series and itemType <> MediaItem.Type.Season then return invalid
+        if itemType <> Strings.ToString(refreshed.Type) then return invalid
+        if GetCount(refreshed) < 0 then return invalid
+
+        updated = {}
+        for each key in item
+            updated[key] = item[key]
+        end for
+        userData = {}
+        if GetInterface(item.UserData, "ifAssociativeArray") <> invalid then
+            for each key in item.UserData
+                userData[key] = item.UserData[key]
+            end for
+        end if
+        userData.UnplayedItemCount = GetCount(refreshed)
+        if GetInterface(refreshed.UserData.Played, "ifBoolean") <> invalid then userData.Played = refreshed.UserData.Played
+        updated.UserData = userData
+        return updated
+    end function
+
+end namespace

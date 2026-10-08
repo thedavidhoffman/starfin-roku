@@ -1,5 +1,6 @@
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
+import "pkg:/source/MediaItem.bs"
 '-------------------------------------------------------------------------------
 ' onItemSelected
 '-------------------------------------------------------------------------------
@@ -153,7 +154,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' renderItems
 '-------------------------------------------------------------------------------
-sub renderItems(items as object)
+sub renderItems(items as object, refreshCounts = true as boolean)
     if items = invalid then
         items = []
     end if
@@ -164,6 +165,7 @@ sub renderItems(items as object)
     m.itemsGrid.visible = content.getChildCount() > 0
     m.emptyFavoritesLabel.visible = isFavoriteBrowseActive() and m.pageState.isLoading <> true and content.getChildCount() = 0
     updateVideoLibraryProgressItemCount(content.getChildCount())
+    refreshEpisodeCounts(invalid, refreshCounts <> true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -179,16 +181,19 @@ sub onMediaStateChange()
         return
     end if
     action = Strings.ToString(change.action)
+    affectedIds = []
+    if action = "watched" then affectedIds = getAffectedEpisodeCountIds(change, false)
     if applyMediaStateChangeToMatchingItems(itemId, change) <> true then
         return
     end if
     if isFavoriteBrowseActive() and action = "favorite" and change.value <> true then
         m.pageState.allItems = getItemsExcludingId(m.pageState.allItems, itemId)
-        renderItems(m.pageState.allItems)
+        renderItems(m.pageState.allItems, false)
         updateTitleLabel(m.pageState.allItems.Count())
         return
     end if
     notifyVideoLibraryItemsChanged(itemId)
+    if affectedIds.Count() > 0 then refreshEpisodeCounts(affectedIds)
     if isPlaylistsView() then
         m.top.callFunc("specializationSyncState")
     end if
@@ -234,10 +239,12 @@ sub onPlaybackProgressChange()
     if itemId = "" then
         return
     end if
+    affectedIds = getAffectedEpisodeCountIds(change, true)
     if applyPlaybackProgressChangeToMatchingItems(itemId, change) <> true then
         return
     end if
     notifyVideoLibraryItemsChanged(itemId)
+    if affectedIds.Count() > 0 then refreshEpisodeCounts(affectedIds)
     if isPlaylistsView() then
         m.top.callFunc("specializationSyncState")
     end if
@@ -273,7 +280,7 @@ end sub
 '-------------------------------------------------------------------------------
 ' notifyVideoLibraryItemChanged
 '-------------------------------------------------------------------------------
-sub notifyVideoLibraryItemChanged(item as object, occurrenceIndex = invalid as dynamic)
+sub notifyVideoLibraryItemChanged(item as object, occurrenceIndex = invalid as dynamic, dataReplaced = false as boolean)
     cacheKey = getVideoLibraryItemCacheKey(item, occurrenceIndex)
     if cacheKey = "" then
         return
@@ -282,7 +289,8 @@ sub notifyVideoLibraryItemChanged(item as object, occurrenceIndex = invalid as d
     if node = invalid then
         return
     end if
-    node.raw = invalid
+    ' In-place mutations need forced notification; replacement data can publish once.
+    if dataReplaced <> true then node.raw = invalid
     node.raw = item
 end sub
 
@@ -555,4 +563,96 @@ function openMediaActions() as boolean
         userId: m.pageState.request.userId
     }
     return true
+end function
+
+'-------------------------------------------------------------------------------
+' refreshEpisodeCounts
+'-------------------------------------------------------------------------------
+sub refreshEpisodeCounts(itemIds = invalid as dynamic, snapshotOnly = false as boolean)
+    request = m.pageState.request
+    if request = invalid or m.pageState.lifecycle.isActive <> true then return
+    countRequest = { server: request.server, token: request.token, userId: request.userId, items: m.pageState.allItems }
+    if GetInterface(itemIds, "ifArray") <> invalid then countRequest.itemIds = itemIds
+    if snapshotOnly then countRequest.snapshotOnly = true
+    m.episodeCountRefresh.request = countRequest
+end sub
+
+'-------------------------------------------------------------------------------
+' getAffectedEpisodeCountIds
+'-------------------------------------------------------------------------------
+function getAffectedEpisodeCountIds(change as object, onlyPlayedTransition as boolean) as object
+    candidates = {}
+    itemId = Strings.ToString(change.itemId)
+    for each item in m.pageState.allItems
+        if Strings.ToString(item.Id) <> itemId then continue for
+        if item.Type <> MediaItem.Type.Series and item.Type <> MediaItem.Type.Season and item.Type <> MediaItem.Type.Episode then continue for
+        if onlyPlayedTransition then
+            wasPlayed = item.UserData <> invalid and item.UserData.Played = true
+            if wasPlayed = (change.isFinished = true) then continue for
+        end if
+        for each parentId in [item.Id, item.SeriesId, item.SeasonId]
+            id = Strings.ToString(parentId)
+            if id <> "" then candidates[id] = true
+        end for
+    end for
+    if candidates.Count() = 0 then return []
+    ids = []
+    seen = {}
+    for each item in m.pageState.allItems
+        if item.Type <> MediaItem.Type.Series and item.Type <> MediaItem.Type.Season then continue for
+        id = Strings.ToString(item.Id)
+        if candidates.DoesExist(id) and seen.DoesExist(id) <> true then
+            ids.Push(id)
+            seen[id] = true
+        end if
+    end for
+    return ids
+end function
+
+'-------------------------------------------------------------------------------
+' onEpisodeCountsRefreshed
+'-------------------------------------------------------------------------------
+sub onEpisodeCountsRefreshed()
+    response = m.episodeCountRefresh.response
+    refreshedById = {}
+    for each refreshed in response.payload
+        if UnwatchedEpisodeCount.GetCount(refreshed) < 0 then continue for
+        id = Strings.ToString(refreshed.Id)
+        if id <> "" then refreshedById[id] = refreshed
+    end for
+    notifications = {}
+    itemCollections = [m.pageState.allItems, m.pageState.items]
+    for arrayIndex = 0 to 1
+        items = itemCollections[arrayIndex]
+        for index = 0 to items.Count() - 1
+            item = items[index]
+            refreshed = refreshedById[Strings.ToString(item.Id)]
+            updated = getChangedEpisodeCountItem(item, refreshed)
+            if updated <> invalid then
+                items[index] = updated
+                if arrayIndex = 0 then
+                    cacheKey = getVideoLibraryItemCacheKey(updated, index)
+                    if cacheKey <> "" then notifications[cacheKey] = { item: updated, index: index }
+                end if
+            end if
+        end for
+    end for
+    for each cacheKey in notifications
+        notification = notifications[cacheKey]
+        notifyVideoLibraryItemChanged(notification.item, notification.index, true)
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' getChangedEpisodeCountItem
+'-------------------------------------------------------------------------------
+function getChangedEpisodeCountItem(item as object, refreshed as dynamic) as dynamic
+    count = UnwatchedEpisodeCount.GetCount(refreshed)
+    if count < 0 then return invalid
+    if item.Type <> refreshed.Type then return invalid
+    sameCount = UnwatchedEpisodeCount.GetCount(item) = count
+    hasPlayed = GetInterface(refreshed.UserData.Played, "ifBoolean") <> invalid
+    samePlayed = hasPlayed <> true or (item.UserData <> invalid and item.UserData.Played = refreshed.UserData.Played)
+    if sameCount and samePlayed then return invalid
+    return UnwatchedEpisodeCount.WithRefreshedCount(item, refreshed)
 end function

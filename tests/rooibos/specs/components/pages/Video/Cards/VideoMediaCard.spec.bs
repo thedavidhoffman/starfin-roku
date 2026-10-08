@@ -10,6 +10,15 @@ namespace tests
     @suite("VideoMediaCard component")
     class VideoMediaCardTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "off"
+        end function
+
+        protected override function afterEach()
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
+        end function
+
         @describe("declarative component contract")
 
         @it("declares the contentGroup node")
@@ -535,8 +544,77 @@ namespace tests
 
             m.global.watchedIndicatorStyle = "high-contrast"
 
-            m.assertEqual(m.top.findNode("watchedIndicator").uri, "pkg:/images/icons/watched-check-high-contrast.png")
+            m.assertEqual(m.top.findNode("watchedIndicator").findNode("watchedCheck").uri, "pkg:/images/icons/watched-check-high-contrast.png")
             m.global.watchedIndicatorStyle = originalStyle
+        end function
+
+        @describe("series count rendering")
+
+        @it("renders remaining episodes on a series card")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.top.itemContent = m.createItem({ Type: "Series", Name: "Series", UserData: { Played: false, UnplayedItemCount: 200 } })
+
+            m.assertTrue(m.top.findNode("watchedIndicator").visible)
+            m.assertEqual(m.top.findNode("watchedIndicator").findNode("countLabel").text, "200")
+            m.assertEqual(m.top.findNode("watchedIndicator").data, { eligible: true, isWatched: false, unplayedCount: 200, width: 42, height: 42 })
+        end function
+
+        @it("updates an existing card when raw user data is replaced")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            item = m.createItem({ Type: "Series", UserData: { UnplayedItemCount: 200 } })
+            m.top.itemContent = item
+
+            item.raw = { Type: "Series", UserData: { UnplayedItemCount: 2 } }
+
+            m.assertEqual(m.top.findNode("watchedIndicator").findNode("countLabel").text, "2")
+        end function
+
+        @it("keeps individual episodes as watched checks")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.top.itemContent = m.createItem({ Type: "Episode", UserData: { Played: true, UnplayedItemCount: 200 } })
+
+            m.assertTrue(m.top.findNode("watchedIndicator").findNode("watchedCheck").visible)
+            m.assertFalse(m.top.findNode("watchedIndicator").findNode("countGroup").visible)
+        end function
+
+        @it("suppresses count badges when the content policy hides indicators")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            item = m.createItem({ Type: "Series", UserData: { UnplayedItemCount: 200 } })
+            item.AddFields({ showWatchedIndicator: false })
+
+            m.top.itemContent = item
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+        end function
+
+        @it("detaches the old content observer when a card is recycled")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            original = m.createItem({ Type: "Series", UserData: { UnplayedItemCount: 200 } })
+            replacement = m.createItem({ Type: "Series", UserData: { UnplayedItemCount: 2 } })
+            m.top.itemContent = original
+            m.top.itemContent = replacement
+
+            original.raw = { Type: "Series", UserData: { UnplayedItemCount: 99 } }
+
+            m.assertEqual(m.top.findNode("watchedIndicator").findNode("countLabel").text, "2")
+        end function
+
+        @it("clears an old count when content is removed")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.itemContent = m.createItem({ Type: "Series", UserData: { UnplayedItemCount: 200 } })
+
+            m.top.itemContent = invalid
+
+            m.assertFalse(m.top.findNode("watchedIndicator").visible)
+            m.assertEqual(m.top.findNode("watchedIndicator").data, { eligible: false, isWatched: false, unplayedCount: -1, width: 42, height: 42 })
         end function
 
     end class

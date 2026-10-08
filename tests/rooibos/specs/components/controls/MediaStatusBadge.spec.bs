@@ -1,0 +1,730 @@
+namespace tests
+
+    @SGNode("MediaStatusBadge")
+    @suite("MediaStatusBadge component")
+    class MediaStatusBadgeTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.originalStyle = m.global.watchedIndicatorStyle
+            m.global.showUnwatchedEpisodeCount = "subtle"
+        end function
+
+        protected override function afterEach()
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
+            m.global.watchedIndicatorStyle = m.originalStyle
+        end function
+
+        @describe("watched artwork")
+
+        @it("initializes watched artwork from the current style")
+        function _()
+            m.global.watchedIndicatorStyle = "high-contrast"
+
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+
+            m.assertEqual(badge.findNode("watchedCheck").uri, "pkg:/images/icons/watched-check-high-contrast.png")
+        end function
+
+        @it("updates an existing watched check to high contrast")
+        function _()
+            m.global.watchedIndicatorStyle = "subtle"
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(-1, true)
+
+            m.global.watchedIndicatorStyle = "high-contrast"
+
+            m.assertTrue(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("watchedCheck").uri, "pkg:/images/icons/watched-check-high-contrast.png")
+        end function
+
+        @it("returns an existing watched check to subtle")
+        function _()
+            m.global.watchedIndicatorStyle = "high-contrast"
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(-1, true)
+
+            m.global.watchedIndicatorStyle = "subtle"
+
+            m.assertTrue(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("watchedCheck").uri, "pkg:/images/icons/watched-check.png")
+        end function
+
+        @it("falls back to subtle for an invalid watched style")
+        function _()
+            m.global.watchedIndicatorStyle = "high-contrast"
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+
+            m.global.watchedIndicatorStyle = "unknown"
+
+            m.assertEqual(badge.findNode("watchedCheck").uri, "pkg:/images/icons/watched-check.png")
+        end function
+
+        @it("watched style changes do not measure an active count")
+        function _()
+            m.prepareMeasurementTracking()
+            m.top.data = m.badgeData(200)
+
+            m.global.watchedIndicatorStyle = "high-contrast"
+
+            m.assertEqual(getGlobalAa().badgeMeasurementCalls, [200])
+            m.assertTrue(m.top.findNode("countGroup").visible)
+            m.assertEqual(m.top.findNode("countLabel").color, &hFFFFFFFF)
+            m.assertEqual(m.top.findNode("watchedCheck").uri, "pkg:/images/icons/watched-check-high-contrast.png")
+        end function
+
+        @describe("count rendering")
+
+        @it("displays the exact count 1 with a fixed right edge")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.translation = [153, 9]
+
+            badge.data = m.badgeData(1)
+
+            m.assertTrue(badge.visible)
+            m.assertTrue(badge.findNode("countGroup").visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("countLabel").text, "1")
+            m.assertEqual(badge.translation, [153.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
+            m.assertTrue((badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]) >= 42)
+        end function
+
+        @it("displays the exact count 9 with a fixed right edge")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.translation = [153, 9]
+
+            badge.data = m.badgeData(9)
+
+            m.assertTrue(badge.visible)
+            m.assertTrue(badge.findNode("countGroup").visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("countLabel").text, "9")
+            m.assertEqual(badge.translation, [153.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
+            m.assertTrue((badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]) >= 42)
+        end function
+
+        @it("displays the exact count 10 with a fixed right edge")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.translation = [153, 9]
+
+            badge.data = m.badgeData(10)
+
+            m.assertTrue(badge.visible)
+            m.assertTrue(badge.findNode("countGroup").visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("countLabel").text, "10")
+            m.assertEqual(badge.translation, [153.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
+            m.assertTrue((badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]) >= 42)
+        end function
+
+        @it("displays the exact count 99 with a fixed right edge")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.translation = [153, 9]
+
+            badge.data = m.badgeData(99)
+
+            m.assertTrue(badge.visible)
+            m.assertTrue(badge.findNode("countGroup").visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("countLabel").text, "99")
+            m.assertEqual(badge.translation, [153.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
+            m.assertTrue((badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]) >= 42)
+        end function
+
+        @it("displays the exact count 100 with a fixed right edge")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.translation = [153, 9]
+
+            badge.data = m.badgeData(100)
+
+            m.assertTrue(badge.visible)
+            m.assertTrue(badge.findNode("countGroup").visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("countLabel").text, "100")
+            m.assertEqual(badge.translation, [153.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
+            m.assertTrue((badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]) >= 42)
+        end function
+
+        @it("displays the exact count 200 with a fixed right edge")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.translation = [153, 9]
+
+            badge.data = m.badgeData(200)
+
+            m.assertTrue(badge.visible)
+            m.assertTrue(badge.findNode("countGroup").visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("countLabel").text, "200")
+            m.assertEqual(badge.translation, [153.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
+            m.assertTrue((badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]) >= 42)
+        end function
+
+        @it("displays the exact count 1245 with a fixed right edge")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.translation = [153, 9]
+
+            badge.data = m.badgeData(1245)
+
+            m.assertTrue(badge.visible)
+            m.assertTrue(badge.findNode("countGroup").visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("countLabel").text, "1245")
+            m.assertEqual(badge.translation, [153.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
+            m.assertTrue((badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]) >= 42)
+        end function
+
+        @it("shows the existing high contrast check at zero")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            m.global.watchedIndicatorStyle = "high-contrast"
+
+            badge.data = m.badgeData(0)
+
+            m.assertTrue(badge.findNode("watchedCheck").visible)
+            m.assertFalse(badge.findNode("countGroup").visible)
+            m.assertEqual(badge.findNode("watchedCheck").uri, "pkg:/images/icons/watched-check-high-contrast.png")
+        end function
+
+        @it("keeps the count black when the watched style changes")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+
+            m.global.watchedIndicatorStyle = "high-contrast"
+
+            m.assertEqual(badge.findNode("countBackground").uri, "pkg:/images/icons/unwatched-count-background.9.png")
+            m.assertEqual(badge.findNode("countLabel").color, &hFFFFFFFF)
+            m.assertTrue(badge.findNode("countGroup").visible)
+        end function
+
+        @it("updates an existing count badge when the preference changes")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(2)
+
+            m.global.showUnwatchedEpisodeCount = "off"
+
+            m.assertFalse(badge.visible)
+
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.assertTrue(badge.visible)
+            m.assertEqual(badge.findNode("countLabel").text, "2")
+        end function
+
+        @it("retains watched state when the setting is off")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "off"
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(5)
+
+            badge.data = m.badgeData(5, true)
+
+            m.assertTrue(badge.findNode("watchedCheck").visible)
+            m.assertFalse(badge.findNode("countGroup").visible)
+        end function
+
+        @it("falls back to watched state when no aggregate exists")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+
+            badge.data = m.badgeData(-1, true)
+
+            m.assertTrue(badge.findNode("watchedCheck").visible)
+            m.assertFalse(badge.findNode("countGroup").visible)
+        end function
+
+        @it("respects explicit suppression for positive counts")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+
+            badge.data = m.badgeData(200, false, false)
+
+            m.assertFalse(badge.visible)
+            m.assertFalse(badge.findNode("countGroup").visible)
+        end function
+
+        @it("shrinks after a three digit count becomes one digit")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+            largeWidth = (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0])
+
+            badge.data = m.badgeData(2)
+
+            m.assertTrue(largeWidth > (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]))
+            m.assertEqual((badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 42.0)
+        end function
+
+        @it("resizes the numeric badge with the artwork layout")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+
+            badge.data = m.badgeData(200, false, true, 57, 57)
+
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 57.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 57.0)
+        end function
+
+        @it("positions numeric text two pixels below its measured center")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+            label = badge.findNode("countLabel")
+            measurement = CreateObject("roSGNode", "Label")
+            measurement.font = label.font
+            measurement.text = "200"
+            bounds = measurement.boundingRect()
+
+            m.assertEqual(label.height, bounds.height)
+            m.assertEqual(label.translation[1] + bounds.y + bounds.height / 2, badge.data.height / 2 + 2)
+        end function
+
+        @it("scales native corners uniformly when the badge height changes")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+
+            badge.data = m.badgeData(200, false, true, 57, 57)
+
+            background = badge.findNode("countBackground")
+            m.assertEqual(background.height, 58.0)
+            m.assertEqual(background.scale, [57.0 / 58.0, 57.0 / 58.0])
+            m.assertTrue(background.width > 58)
+        end function
+
+        @it("keeps vertical placement stable after successive aggregate updates")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+            initialY = badge.findNode("countLabel").translation[1]
+
+            badge.data = m.badgeData(199)
+
+            m.assertEqual(badge.findNode("countLabel").text, "199")
+            m.assertEqual(badge.findNode("countLabel").translation[1], initialY)
+
+            badge.data = m.badgeData(200)
+
+            m.assertEqual(badge.findNode("countLabel").text, "200")
+            m.assertEqual(badge.findNode("countLabel").translation[1], initialY)
+        end function
+
+        @it("retains vertical placement across a check transition and count restoration")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(1)
+            initialY = badge.findNode("countLabel").translation[1]
+
+            badge.data = m.badgeData(0)
+
+            m.assertTrue(badge.findNode("watchedCheck").visible)
+
+            badge.data = m.badgeData(1)
+
+            m.assertEqual(badge.findNode("countLabel").translation[1], initialY)
+            m.assertTrue(badge.findNode("countGroup").visible)
+        end function
+
+        @it("keeps layout stable when watched state changes before the aggregate count")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(10)
+            initialY = badge.findNode("countLabel").translation[1]
+
+            badge.data = m.badgeData(10, true)
+            badge.data = m.badgeData(9, true)
+
+            m.assertEqual(badge.findNode("countLabel").translation[1], initialY)
+            m.assertEqual(badge.findNode("countLabel").text, "9")
+        end function
+
+        @it("switches an existing count to gold with black numbers")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+            initialY = badge.findNode("countLabel").translation[1]
+
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+
+            m.assertEqual(badge.findNode("countBackground").uri, "pkg:/images/icons/unwatched-count-background-high-contrast.9.png")
+            m.assertEqual(badge.findNode("countLabel").color, &h000000FF)
+            m.assertEqual(badge.findNode("countLabel").translation[1], initialY)
+            m.assertTrue(badge.findNode("countGroup").visible)
+        end function
+
+        @it("restores white numerals and black background when switching back to subtle")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.assertEqual(badge.findNode("countBackground").uri, "pkg:/images/icons/unwatched-count-background.9.png")
+            m.assertEqual(badge.findNode("countLabel").color, &hFFFFFFFF)
+        end function
+
+        @it("keeps the selected watched check style at zero with high contrast counts")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+            m.global.watchedIndicatorStyle = "subtle"
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+
+            badge.data = m.badgeData(0)
+
+            m.assertTrue(badge.findNode("watchedCheck").visible)
+            m.assertEqual(badge.findNode("watchedCheck").uri, "pkg:/images/icons/watched-check.png")
+            m.assertFalse(badge.findNode("countGroup").visible)
+        end function
+
+        @describe("batched inputs and layout reuse")
+
+        @it("a fresh control hides the badge until complete data is supplied")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+
+            m.assertFalse(badge.visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+            m.assertFalse(badge.findNode("countGroup").visible)
+        end function
+
+        @it("clearing data hides both presentations")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+
+            badge.data = invalid
+
+            m.assertFalse(badge.visible)
+            m.assertFalse(badge.findNode("countGroup").visible)
+            m.assertFalse(badge.findNode("watchedCheck").visible)
+        end function
+
+        @it("applies one numeric layout for a complete data assignment")
+        function _()
+            m.prepareLayoutTracking()
+
+            m.top.data = m.badgeData(200, true)
+
+            m.assertEqual(getGlobalAa().badgeLayoutCalls, [200])
+            m.assertTrue(m.top.findNode("countGroup").visible)
+            m.assertFalse(m.top.findNode("watchedCheck").visible)
+        end function
+
+        @it("skips numeric layout for equivalent repeated data")
+        function _()
+            m.prepareLayoutTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(200)
+
+            m.assertEqual(getGlobalAa().badgeLayoutCalls, [200])
+        end function
+
+        @it("a watched-state change does not recalculate a positive count layout")
+        function _()
+            m.prepareLayoutTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(200, true)
+
+            m.assertEqual(getGlobalAa().badgeLayoutCalls, [200])
+            m.assertTrue(m.top.findNode("countGroup").visible)
+            m.assertFalse(m.top.findNode("watchedCheck").visible)
+        end function
+
+        @it("suppression and restoration reuse the same numeric layout")
+        function _()
+            m.prepareLayoutTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(200, false, false)
+
+            m.assertFalse(m.top.visible)
+
+            m.top.data = m.badgeData(200)
+
+            m.assertTrue(m.top.visible)
+            m.assertEqual(getGlobalAa().badgeLayoutCalls, [200])
+        end function
+
+        @it("off and on preserve the numeric layout")
+        function _()
+            m.prepareLayoutTracking()
+            m.top.data = m.badgeData(200)
+
+            m.global.showUnwatchedEpisodeCount = "off"
+
+            m.assertFalse(m.top.visible)
+
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.assertTrue(m.top.visible)
+            m.assertEqual(getGlobalAa().badgeLayoutCalls, [200])
+        end function
+
+        @it("a count check count transition reuses retained numeric layout")
+        function _()
+            m.prepareLayoutTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(0)
+
+            m.assertTrue(m.top.findNode("watchedCheck").visible)
+
+            m.top.data = m.badgeData(200)
+
+            m.assertTrue(m.top.findNode("countGroup").visible)
+            m.assertEqual(getGlobalAa().badgeLayoutCalls, [200])
+        end function
+
+        @it("a style change updates color and graphic without numeric layout")
+        function _()
+            m.prepareLayoutTracking()
+            m.top.data = m.badgeData(200)
+
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+
+            m.assertEqual(m.top.findNode("countBackground").uri, "pkg:/images/icons/unwatched-count-background-high-contrast.9.png")
+            m.assertEqual(m.top.findNode("countLabel").color, &h000000FF)
+            m.assertEqual(getGlobalAa().badgeLayoutCalls, [200])
+        end function
+
+        @it("a width-only change reuses measured text bounds")
+        function _()
+            m.prepareMeasurementTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(200, false, true, 57, 42)
+
+            m.assertEqual(getGlobalAa().badgeMeasurementCalls, [200])
+            group = m.top.findNode("countGroup")
+            background = m.top.findNode("countBackground")
+            m.assertEqual(group.translation[0] + background.width * background.scale[0], 57.0)
+        end function
+
+        @it("a height change remeasures text")
+        function _()
+            m.prepareMeasurementTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(200, false, true, 42, 57)
+
+            m.assertEqual(getGlobalAa().badgeMeasurementCalls, [200, 200])
+            background = m.top.findNode("countBackground")
+            m.assertEqual(background.height * background.scale[1], 57.0)
+        end function
+
+        @it("a count change remeasures text")
+        function _()
+            m.prepareMeasurementTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(199)
+
+            m.assertEqual(getGlobalAa().badgeMeasurementCalls, [200, 199])
+            m.assertEqual(m.top.findNode("countLabel").text, "199")
+        end function
+
+        @it("a style change does not remeasure text")
+        function _()
+            m.prepareMeasurementTracking()
+            m.top.data = m.badgeData(200)
+
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+
+            m.assertEqual(getGlobalAa().badgeMeasurementCalls, [200])
+        end function
+
+        @it("a size change while hidden applies when the count returns")
+        function _()
+            badge = CreateObject("roSGNode", "MediaStatusBadge")
+            badge.data = m.badgeData(200)
+            badge.data = invalid
+
+            badge.data = m.badgeData(200, false, false, 57, 57)
+            badge.data = m.badgeData(200, false, true, 57, 57)
+
+            background = badge.findNode("countBackground")
+            m.assertEqual(background.height * background.scale[1], 57.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + background.width * background.scale[0], 57.0)
+            m.assertEqual(badge.findNode("countLabel").text, "200")
+        end function
+
+        @it("a combined count and size change performs one final layout")
+        function _()
+            m.prepareLayoutTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(199, false, true, 57, 57)
+
+            m.assertEqual(getGlobalAa().badgeLayoutCalls, [200, 199])
+            m.assertEqual(getGlobalAa().badgeLayoutSize, [57.0, 57.0])
+        end function
+
+        @it("a combined count and size change measures only the final height")
+        function _()
+            m.prepareMeasurementTracking()
+            m.top.data = m.badgeData(200)
+
+            m.top.data = m.badgeData(199, false, true, 57, 57)
+
+            m.assertEqual(getGlobalAa().badgeMeasurementCalls, [200, 199])
+            m.assertEqual(getGlobalAa().badgeMeasurementHeight, 57.0)
+            background = m.top.findNode("countBackground")
+            m.assertEqual(background.height * background.scale[1], 57.0)
+            m.assertEqual(m.top.findNode("countGroup").translation[0] + background.width * background.scale[0], 57.0)
+        end function
+
+        @it("missing dimensions hide the badge without numeric layout")
+        function _()
+            m.prepareLayoutTracking()
+
+            m.top.data = { eligible: true, isWatched: true, unplayedCount: 200 }
+
+            m.assertFalse(m.top.visible)
+            m.assertFalse(m.top.findNode("watchedCheck").visible)
+            m.assertEqual(getGlobalAa().badgeLayoutCalls.Count(), 0)
+        end function
+
+        @it("zero width hides the badge without numeric layout")
+        function _()
+            m.prepareLayoutTracking()
+
+            m.top.data = m.badgeData(200, false, true, 0, 42)
+
+            m.assertFalse(m.top.visible)
+            m.assertEqual(getGlobalAa().badgeLayoutCalls.Count(), 0)
+        end function
+
+        @it("negative height hides the badge without numeric layout")
+        function _()
+            m.prepareLayoutTracking()
+
+            m.top.data = m.badgeData(200, false, true, 42, -1)
+
+            m.assertFalse(m.top.visible)
+            m.assertEqual(getGlobalAa().badgeLayoutCalls.Count(), 0)
+        end function
+
+        @it("disabled counts do not allocate a measurement label")
+        function _()
+            m.prepareLazyMeasurement()
+            m.global.showUnwatchedEpisodeCount = "off"
+
+            m.top.data = m.badgeData(200)
+
+            m.assertInvalid(m.node.badge.measurementLabel)
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("suppressed counts do not allocate a measurement label")
+        function _()
+            m.prepareLazyMeasurement()
+
+            m.top.data = m.badgeData(200, false, false)
+
+            m.assertInvalid(m.node.badge.measurementLabel)
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("watched-only data does not allocate a measurement label")
+        function _()
+            m.prepareLazyMeasurement()
+
+            m.top.data = m.badgeData(-1, true)
+
+            m.assertInvalid(m.node.badge.measurementLabel)
+            m.assertTrue(m.top.findNode("watchedCheck").visible)
+        end function
+
+        @it("the first positive count allocates and uses a measurement label")
+        function _()
+            m.prepareLazyMeasurement()
+
+            m.top.data = m.badgeData(200)
+
+            m.assertNotInvalid(m.node.badge.measurementLabel)
+            m.assertEqual(m.node.badge.measurementLabel.text, "200")
+            m.assertEqual(m.top.findNode("countLabel").text, "200")
+            m.assertTrue(m.top.findNode("countGroup").visible)
+        end function
+
+        @it("later counts reuse the allocated measurement label")
+        function _()
+            m.prepareLazyMeasurement()
+            m.top.data = m.badgeData(200)
+            measurement = m.node.badge.measurementLabel
+
+            m.top.data = m.badgeData(199)
+
+            m.assertTrue(m.node.badge.measurementLabel.isSameNode(measurement))
+            m.assertEqual(measurement.text, "199")
+            m.assertEqual(m.top.findNode("countLabel").text, "199")
+        end function
+
+        private sub prepareLazyMeasurement()
+            m.top.data = invalid
+            m.node.badge.measurementLabel = invalid
+            m.node.badge.measurement = invalid
+            m.node.badge.layout = invalid
+        end sub
+
+        private function badgeData(count = -1 as integer, isWatched = false as boolean, eligible = true as boolean, width = 42 as float, height = 42 as float) as object
+            return { eligible: eligible, isWatched: isWatched, unplayedCount: count, width: width, height: height }
+        end function
+
+        private sub prepareLayoutTracking()
+            m.top.data = m.badgeData(123456)
+            m.top.data = invalid
+            getGlobalAa().badgeLayoutCalls = []
+            'bs:disable-next-line 1001
+            m.stubCall(layoutCount, m.captureLayout)
+        end sub
+
+        private sub captureLayout(count as integer, width as float, height as float)
+            getGlobalAa().badgeLayoutCalls.Push(count)
+            getGlobalAa().badgeLayoutSize = [width, height]
+        end sub
+
+        private sub prepareMeasurementTracking()
+            m.top.data = m.badgeData(123456)
+            m.top.data = invalid
+            getGlobalAa().badgeMeasurementCalls = []
+            'bs:disable-next-line 1001
+            m.stubCall(measureCountText, m.captureMeasurement)
+        end sub
+
+        private function captureMeasurement(count as integer, height as float) as object
+            getGlobalAa().badgeMeasurementCalls.Push(count)
+            getGlobalAa().badgeMeasurementHeight = height
+            return { x: 0, y: 0, width: 70, height: 25 }
+        end function
+
+    end class
+
+end namespace

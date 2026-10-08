@@ -7,6 +7,9 @@ namespace tests
     class TVSeasonTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.node.episodeCountRefresh.callFunc("cancel")
+            m.global.showUnwatchedEpisodeCount = "off"
             m.collector = CreateObject("roSGNode", "LogService")
             m.node.log = new Logger("TVSeason", m.collector)
             m.top.settings = { "tv-ep-list-scroll": "horizontal", "show-season-summary-card": "off" }
@@ -34,6 +37,12 @@ namespace tests
             end if
             scene.findNode("loadingSpinner").control = "stop"
         end function
+
+        protected override function afterEach()
+            m.node.episodeCountRefresh.callFunc("cancel")
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
+        end function
+
         @describe("vertical summary targeting")
 
         @it("targets an episode by ID and type with the summary visible")
@@ -1302,6 +1311,133 @@ namespace tests
             'bs:disable-next-line 1140
             m.assertFalse(onKeyEvent("play", false))
             m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @describe("aggregate count responses")
+
+        @it("updates the summary count without replacing episode content")
+        function _()
+            m.node.pageState.showSeasonSummaryCard = true
+            'bs:disable-next-line 1140
+            renderEpisodes([])
+            content = m.top.findNode("episodesList").content
+            row = content.getChild(0)
+            oldEpisodeContent = content
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "season-1", Type: "Season", UserData: { UnplayedItemCount: 2 } }] }
+
+            m.assertEqual(m.node.pageState.season.UserData.UnplayedItemCount, 2)
+            m.assertEqual(row.getChild(0).raw.UserData.UnplayedItemCount, 2)
+            m.assertTrue(m.top.findNode("episodesList").content.isSameNode(oldEpisodeContent))
+            m.assertEqual(m.top.seasonWatchedStateChanged.unplayedItemCount, 2)
+        end function
+
+        @describe("server-owned numeric totals")
+
+        @it("waits for a server count across repeated watched updates when enabled")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            season = m.node.pageState.season
+            season.UserData.UnplayedItemCount = 200
+            episode = m.createEpisode("episode-1")
+            episode.UserData.Played = false
+            m.node.pageState.episodes = [episode]
+
+            'bs:disable-next-line 1140
+            updateEpisodeWatchedState("episode-1", true)
+            'bs:disable-next-line 1140
+            updateEpisodeWatchedState("episode-1", true)
+
+            m.assertEqual(season.UserData.UnplayedItemCount, 200)
+            m.assertTrue(episode.UserData.Played)
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "season-1", Type: "Season", UserData: { UnplayedItemCount: 199 } }] }
+
+            m.assertEqual(m.node.pageState.season.UserData.UnplayedItemCount, 199)
+        end function
+
+        @it("waits for a server count when marking a whole season unwatched")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            season = m.node.pageState.season
+            season.UserData.UnplayedItemCount = 0
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+
+            'bs:disable-next-line 1140
+            updateEpisodeWatchedState("season-1", false)
+
+            m.assertEqual(season.UserData.UnplayedItemCount, 0)
+        end function
+
+        @describe("unknown aggregate notifications")
+
+        @it("keeps a missing season count unknown when an episode is marked watched")
+        function _()
+            m.node.pageState.lifecycle = AsyncLifecycle.Create()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.node.pageState.season.UserData.Delete("UnplayedItemCount")
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+
+            m.top.watchedStateChange = { itemId: "episode-1", isWatched: true }
+
+            m.assertTrue(m.node.pageState.episodes[0].UserData.Played)
+            m.assertFalse(m.node.pageState.episodes[1].UserData.Played)
+            m.assertFalse(m.node.pageState.season.UserData.DoesExist("UnplayedItemCount"))
+            m.assertInvalid(m.top.seasonWatchedStateChanged)
+        end function
+
+        @it("does not publish a malformed count when an episode is marked unwatched")
+        function _()
+            m.node.pageState.lifecycle = AsyncLifecycle.Create()
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+            m.node.pageState.season.UserData.UnplayedItemCount = "invalid-count"
+            episode = m.createEpisode("episode-1")
+            episode.UserData.Played = true
+            m.node.pageState.episodes = [episode]
+
+            m.top.watchedStateChange = { itemId: "episode-1", isWatched: false }
+
+            m.assertFalse(m.node.pageState.episodes[0].UserData.Played)
+            m.assertEqual(m.node.pageState.season.UserData.UnplayedItemCount, "invalid-count")
+            m.assertInvalid(m.top.seasonWatchedStateChanged)
+        end function
+
+        @it("does not publish an unknown count after playback completion")
+        function _()
+            m.node.pageState.lifecycle = AsyncLifecycle.Create()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.node.pageState.season.UserData.Delete("UnplayedItemCount")
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+
+            m.top.playbackProgressChange = { itemId: "episode-1", isFinished: true, positionTicks: 0, durationTicks: 10000000& }
+
+            m.assertTrue(m.node.pageState.episodes[0].UserData.Played)
+            m.assertInvalid(m.top.seasonWatchedStateChanged)
+        end function
+
+        @it("publishes a valid zero returned after an unknown count")
+        function _()
+            m.node.pageState.lifecycle = AsyncLifecycle.Create()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.node.pageState.season.UserData.Delete("UnplayedItemCount")
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "season-1", Type: "Season", UserData: { UnplayedItemCount: 0, Played: true } }] }
+
+            m.assertEqual(m.top.seasonWatchedStateChanged.unplayedItemCount, 0)
+            m.assertTrue(m.top.seasonWatchedStateChanged.isWatched)
+            m.assertEqual(m.node.pageState.season.UserData.UnplayedItemCount, 0)
+        end function
+
+        @it("does not publish a negative aggregate count")
+        function _()
+            m.node.pageState.lifecycle = AsyncLifecycle.Create()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.node.pageState.season.UserData.UnplayedItemCount = -1
+
+            'bs:disable-next-line 1140
+            notifySeasonWatchedStateChanged(m.node.pageState.season)
+
+            m.assertInvalid(m.top.seasonWatchedStateChanged)
         end function
 
     end class

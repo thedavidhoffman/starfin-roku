@@ -1,4 +1,5 @@
 import "pkg:/source/MaskAssets.bs"
+import "pkg:/source/UnwatchedEpisodeCount.bs"
 import "pkg:/source/MediaPlaybackPolicy.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/PlaybackProgress.bs"
@@ -10,12 +11,15 @@ import "pkg:/source/ResolutionProfile.bs"
 '-------------------------------------------------------------------------------
 sub init()
     initBase()
+    initHandlers()
+    onItemContentChanged()
 end sub
 
 '-------------------------------------------------------------------------------
 ' initBase
 '-------------------------------------------------------------------------------
 sub initBase()
+    m.cardState = { content: invalid, badgeSize: 42 }
     m.cardNodes = {
         contentGroup: m.top.findNode("contentGroup")
         cardMask: m.top.findNode("cardMask")
@@ -44,7 +48,14 @@ end sub
 '-------------------------------------------------------------------------------
 sub onItemContentChanged()
     content = m.top.itemContent
-    if content = invalid then return
+    if m.cardState.content <> invalid then m.cardState.content.unobserveField("raw")
+    m.cardState.content = content
+    if content = invalid then
+        updateWatchedIndicator(invalid, invalid, invalid)
+        updateProgress(invalid, invalid)
+        return
+    end if
+    content.observeField("raw", "onItemDataChanged")
 
     item = content.raw
     m.cardNodes.artworkBackground.visible = content.showArtworkBackground = true
@@ -52,8 +63,8 @@ sub onItemContentChanged()
     if content.fitArtwork = true then m.cardNodes.poster.loadDisplayMode = "scaleToFit"
     m.cardNodes.poster.uri = getImageUrl(content)
     updateProgress(item, content.tracksPlaybackProgress)
-    updateWatchedIndicator(item, content.tracksPlaybackProgress, content.showWatchedIndicator)
     m.top.callFunc("renderPresentation", content)
+    updateWatchedIndicator(item, content.tracksPlaybackProgress, content.showWatchedIndicator)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -69,7 +80,13 @@ end function
 ' updateWatchedIndicator
 '-------------------------------------------------------------------------------
 sub updateWatchedIndicator(item as dynamic, explicitPolicy as dynamic, showIndicator as dynamic)
-    m.cardNodes.watchedIndicator.visible = showIndicator <> false and item <> invalid and MediaPlaybackPolicy.TracksProgress(item, explicitPolicy) and item.UserData <> invalid and item.UserData.Played = true
+    m.cardNodes.watchedIndicator.data = {
+        eligible: showIndicator <> false and item <> invalid and MediaPlaybackPolicy.TracksProgress(item, explicitPolicy)
+        isWatched: item <> invalid and item.UserData <> invalid and item.UserData.Played = true
+        unplayedCount: UnwatchedEpisodeCount.GetCount(item)
+        width: m.cardState.badgeSize
+        height: m.cardState.badgeSize
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -117,7 +134,7 @@ sub applyCardLayout(layout as object)
     m.cardNodes.progressBar.barWidth = layout.progressWidth
     m.cardNodes.progressBar.barHeight = layout.progressHeight
     m.cardNodes.watchedIndicator.translation = layout.watchedTranslation
-    setNodeSize(m.cardNodes.watchedIndicator, [layout.watchedSize, layout.watchedSize])
+    m.cardState.badgeSize = layout.watchedSize
     applyLabelLayout(m.cardNodes.title, layout.title)
     applyLabelLayout(m.cardNodes.metadataLabel, layout.metadata)
 end sub
@@ -138,4 +155,21 @@ sub applyLabelLayout(label as object, layout as object)
     label.width = layout.width
     label.height = layout.height
     label.numLines = layout.numLines
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemDataChanged
+'-------------------------------------------------------------------------------
+sub onItemDataChanged()
+    content = m.cardState.content
+    if content = invalid then return
+    updateWatchedIndicator(content.raw, content.tracksPlaybackProgress, content.showWatchedIndicator)
+    updateProgress(content.raw, content.tracksPlaybackProgress)
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("itemContent", "onItemContentChanged")
 end sub

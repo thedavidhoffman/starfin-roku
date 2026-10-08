@@ -58,4 +58,4 @@ individual Starfin features.
 
 - [Message Dialog](message-dialog.md)
 
-- [Watched Indicator Style](watched-indicator.md)
+- [Watched Indicators and Unwatched Episode Counts](watched-indicator.md)

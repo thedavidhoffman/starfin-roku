@@ -1,0 +1,152 @@
+import "pkg:/source/UnwatchedEpisodeCount.bs"
+import "pkg:/source/MediaItem.bs"
+import "pkg:/source/LatestRequestLifecycle.bs"
+import "pkg:/source/TaskControl.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    initHandlers()
+    onRequestChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.refresh = {
+        lifecycle: LatestRequestLifecycle.Create()
+        tasks: [m.top.findNode("countTask"), m.top.findNode("countTaskAlternate")]
+        nextIndex: 0
+        countEnabled: UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) <> UnwatchedEpisodeCount.Mode.Off
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.refresh.tasks[0].observeField("response", "onResponse")
+    m.refresh.tasks[1].observeField("response", "onAlternateResponse")
+    m.top.observeField("request", "onRequestChanged")
+    m.global.observeField("showUnwatchedEpisodeCount", "onPreferenceChanged")
+end sub
+
+'-------------------------------------------------------------------------------
+' onRequestChanged
+'-------------------------------------------------------------------------------
+sub onRequestChanged()
+    queueRefresh(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' onPreferenceChanged
+'-------------------------------------------------------------------------------
+sub onPreferenceChanged()
+    enabled = UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) <> UnwatchedEpisodeCount.Mode.Off
+    wasEnabled = m.refresh.countEnabled
+    m.refresh.countEnabled = enabled
+    if enabled <> true or wasEnabled <> true then queueRefresh(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' queueRefresh
+'-------------------------------------------------------------------------------
+sub queueRefresh(forceFull as boolean)
+    if UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) = UnwatchedEpisodeCount.Mode.Off then
+        LatestRequestLifecycle.Deactivate(m.refresh.lifecycle)
+        for each task in m.refresh.tasks
+            task.control = TaskControl.Command.Stop
+        end for
+        return
+    end if
+    request = m.top.request
+    if request = invalid or request.items = invalid then return
+    if forceFull <> true and request.snapshotOnly = true then return
+    isFull = forceFull or GetInterface(request.itemIds, "ifArray") = invalid
+    requested = {}
+    if isFull <> true then
+        for each id in request.itemIds
+            requested[Strings.ToString(id)] = true
+        end for
+        ' Superseded results cannot commit, so retain their work in the next snapshot.
+        for each entry in [m.refresh.lifecycle.active, m.refresh.lifecycle.pending]
+            if entry = invalid then continue for
+            previous = entry.request
+            if previous.server <> request.server or previous.token <> request.token or previous.userId <> request.userId then continue for
+            if previous.isFull = true then isFull = true
+            for each id in previous.itemIds
+                requested[id] = true
+            end for
+        end for
+    end if
+    ids = []
+    seen = {}
+    for each item in request.items
+        if GetInterface(item, "ifAssociativeArray") = invalid then continue for
+        if item.Type <> MediaItem.Type.Series and item.Type <> MediaItem.Type.Season then continue for
+        id = Strings.ToString(item.Id)
+        if id = "" or seen.DoesExist(id) then continue for
+        if isFull <> true and requested.DoesExist(id) <> true then continue for
+        ids.Push(id)
+        seen[id] = true
+    end for
+    ' Even empty or changed destinations supersede an older in-flight snapshot.
+    nextRequest = { server: request.server, token: request.token, userId: request.userId, itemIds: ids, isFull: isFull }
+    LatestRequestLifecycle.Queue(m.refresh.lifecycle, nextRequest)
+    startPendingRefresh()
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingRefresh
+'-------------------------------------------------------------------------------
+sub startPendingRefresh()
+    entry = LatestRequestLifecycle.TakeNext(m.refresh.lifecycle)
+    if entry = invalid then return
+    if entry.request.itemIds.Count() = 0 then
+        LatestRequestLifecycle.Complete(m.refresh.lifecycle, { requestId: entry.request.requestId })
+        return
+    end if
+    task = m.refresh.tasks[m.refresh.nextIndex]
+    m.refresh.nextIndex = (m.refresh.nextIndex + 1) mod m.refresh.tasks.Count()
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onResponse
+'-------------------------------------------------------------------------------
+sub onResponse()
+    handleResponse(m.refresh.tasks[0].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternateResponse
+'-------------------------------------------------------------------------------
+sub onAlternateResponse()
+    handleResponse(m.refresh.tasks[1].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleResponse
+'-------------------------------------------------------------------------------
+sub handleResponse(response as dynamic)
+    completed = LatestRequestLifecycle.Complete(m.refresh.lifecycle, response)
+    if completed.matched <> true then return
+    if completed.isCurrent and response.ok = true then m.top.response = response
+    startPendingRefresh()
+end sub
+
+'-------------------------------------------------------------------------------
+' cancel
+'-------------------------------------------------------------------------------
+sub cancel()
+    LatestRequestLifecycle.Deactivate(m.refresh.lifecycle)
+    m.top.request = invalid
+    for each task in m.refresh.tasks
+        task.control = TaskControl.Command.Stop
+    end for
+end sub

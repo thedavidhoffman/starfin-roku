@@ -1,4 +1,5 @@
 import "pkg:/source/Remote.bs"
+import "pkg:/source/UnwatchedEpisodeCount.bs"
 import "pkg:/source/Theme.bs"
 import "pkg:/source/Char.bs"
 import "pkg:/source/HomeEpisodeImages.bs"
@@ -20,6 +21,7 @@ import "pkg:/source/AnimationControl.bs"
 sub init()
     initReferences()
     initCardLayout(m.top)
+    initBadgeCardLayout()
     initAccountSubtitleReferences()
     initCategoryList()
     initOptionContent()
@@ -42,6 +44,21 @@ sub initCardLayout(parent as object)
             initCardLayout(child)
         end if
     end for
+end sub
+
+'-------------------------------------------------------------------------------
+' initBadgeCardLayout
+'-------------------------------------------------------------------------------
+sub initBadgeCardLayout()
+    watched = m.top.findNode("watchedIndicatorCard")
+    count = m.top.findNode("unwatchedEpisodeCountCard")
+    watchedHeadingWidth = watched.callFunc("getHeadingWidth")
+    countHeadingWidth = count.callFunc("getHeadingWidth")
+    ' Both cards share the same left inset; split spare width equally after headings.
+    availableWidth = m.top.findNode("themeCard").cardWidth - 16
+    watched.cardWidth = (availableWidth + watchedHeadingWidth - countHeadingWidth) / 2
+    count.cardWidth = availableWidth - watched.cardWidth
+    count.translation = [watched.cardWidth + 16, watched.translation[1]]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -73,6 +90,7 @@ sub initReferences()
         episodeShellLayoutOptions: m.top.findNode("episodeShellLayoutOptions")
         musicShellLayoutOptions: m.top.findNode("musicShellLayoutOptions")
         themeOptions: m.top.findNode("themeOptions")
+        showUnwatchedEpisodeCountOptions: m.top.findNode("showUnwatchedEpisodeCountOptions")
         watchedIndicatorOptions: m.top.findNode("watchedIndicatorOptions")
         themeMusicOptions: m.top.findNode("themeMusicOptions")
         nextItemPlaybackOptions: m.top.findNode("nextItemPlaybackOptions")
@@ -98,7 +116,7 @@ sub initReferences()
     m.categoryControls = [
         [m.settingsControls.librarySettingsGrid]
         [m.settingsControls.movieShellLayoutOptions, m.settingsControls.seriesShellLayoutOptions, m.settingsControls.episodeShellLayoutOptions, m.settingsControls.musicShellLayoutOptions, m.settingsControls.themeMusicOptions]
-        [m.settingsControls.themeOptions, m.settingsControls.watchedIndicatorOptions]
+        [m.settingsControls.themeOptions, m.settingsControls.watchedIndicatorOptions, m.settingsControls.showUnwatchedEpisodeCountOptions]
         [m.settingsControls.nextItemPlaybackOptions]
         []
         [m.settingsControls.nextEpisodePromptSecondsOptions]
@@ -151,6 +169,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     initAccountSubtitleHandlers()
+    m.settingsControls.showUnwatchedEpisodeCountOptions.observeField("itemSelected", "onUnwatchedEpisodeCountSelected")
     m.deviceCategoryList.observeField("itemFocused", "onDeviceCategoryFocused")
     m.deviceCategoryList.observeField("itemSelected", "onDeviceCategorySelected")
     m.userCategoryList.observeField("itemFocused", "onUserCategoryFocused")
@@ -199,6 +218,7 @@ sub initOptionContent()
     end for
     setOptionTitles(m.accountUi.modes, subtitleModeTitles)
     setOptionTitles(m.settingsControls.displayAccountBadgeOptions, ["Off", "On"])
+    setOptionTitles(m.settingsControls.showUnwatchedEpisodeCountOptions, ["Off", "Subtle", "High contrast"])
     setOptionTitles(m.settingsControls.showSeasonSummaryCardOptions, ["Off", "On"])
     setOptionTitles(m.settingsControls.homeEpisodeImagesOptions, ["Series artwork", "Episode thumbnail with logo", "Episode thumbnail without logo"])
     setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
@@ -250,6 +270,7 @@ sub loadSettingsValues()
     m.settingsState.values = SettingsStore.Load(m.top.accountKey)
 
     m.settingsControls.librarySettingsGrid.selections = getLibrarySettingsValues()
+    setUnwatchedEpisodeCountOption(m.settingsState.values[SettingsStore.Key.ShowUnwatchedEpisodeCount])
     setOnOffOption(m.settingsControls.showSeasonSummaryCardOptions, m.settingsState.values[SettingsStore.Key.ShowSeasonSummaryCard])
     setHomeEpisodeImagesOption(m.settingsState.values[SettingsStore.Key.HomeEpisodeImages])
     setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
@@ -435,6 +456,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if m.focusState.categoryIndex = SettingsNavigation.Category.MediaShell then return handleMediaShellKey(key)
+    if m.focusState.categoryIndex = SettingsNavigation.Category.Theme then return handleThemeKey(key)
 
     if m.resetStarfinState.confirmationVisible then
         if key = Remote.Key.Right and m.settingsControls.abortResetButton.isInFocusChain() then return focusCategoryControl(1, invalid)
@@ -1140,3 +1162,61 @@ sub showMediaShellPage(index as integer)
         pages.fade.control = AnimationControl.Command.Start
     end if
 end sub
+
+'-------------------------------------------------------------------------------
+' onUnwatchedEpisodeCountSelected
+'-------------------------------------------------------------------------------
+sub onUnwatchedEpisodeCountSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.showUnwatchedEpisodeCountOptions)
+    if selectedIndex < 0 then return
+    values = [UnwatchedEpisodeCount.Mode.Off, UnwatchedEpisodeCount.Mode.Subtle, UnwatchedEpisodeCount.Mode.HighContrast]
+    value = values[selectedIndex]
+    m.settingsControls.showUnwatchedEpisodeCountOptions.checkedItem = selectedIndex
+    m.settingsState.values[SettingsStore.Key.ShowUnwatchedEpisodeCount] = value
+    m.top.unwatchedEpisodeCountPreviewRequested = value
+end sub
+
+'-------------------------------------------------------------------------------
+' setUnwatchedEpisodeCountOption
+'-------------------------------------------------------------------------------
+sub setUnwatchedEpisodeCountOption(value as dynamic)
+    normalized = UnwatchedEpisodeCount.Normalize(value)
+    values = [UnwatchedEpisodeCount.Mode.Off, UnwatchedEpisodeCount.Mode.Subtle, UnwatchedEpisodeCount.Mode.HighContrast]
+    selectedIndex = 0
+    for index = 0 to values.Count() - 1
+        if values[index] = normalized then selectedIndex = index
+    end for
+    m.settingsControls.showUnwatchedEpisodeCountOptions.checkedItem = selectedIndex
+    m.settingsControls.showUnwatchedEpisodeCountOptions.jumpToItem = selectedIndex
+end sub
+
+'-------------------------------------------------------------------------------
+' handleThemeKey
+'-------------------------------------------------------------------------------
+function handleThemeKey(key as string) as boolean
+    controls = m.categoryControls[SettingsNavigation.Category.Theme]
+    focusedIndex = -1
+    for index = 0 to controls.Count() - 1
+        if controls[index].isInFocusChain() then focusedIndex = index
+    end for
+    if focusedIndex < 0 then return false
+    m.focusState.controlIndex = focusedIndex
+    control = controls[focusedIndex]
+    itemIndex = getListIndex(control.itemFocused, getListItemCount(control))
+
+    if key = Remote.Key.Left then
+        if focusedIndex = SettingsNavigation.ThemeControl.UnwatchedCount then
+            return focusCategoryControl(SettingsNavigation.ThemeControl.WatchedIndicator, getListIndex(itemIndex, getListItemCount(controls[SettingsNavigation.ThemeControl.WatchedIndicator])))
+        end if
+        focusFirstField()
+        return true
+    else if key = Remote.Key.Right then
+        if focusedIndex = SettingsNavigation.ThemeControl.WatchedIndicator then return focusCategoryControl(SettingsNavigation.ThemeControl.UnwatchedCount, itemIndex)
+        return true
+    else if key = Remote.Key.Down and isFocusedAtLastItem(control) then
+        if focusedIndex = SettingsNavigation.ThemeControl.Theme then return focusCategoryControl(SettingsNavigation.ThemeControl.WatchedIndicator, 0)
+    else if key = Remote.Key.Up and isFocusedAtFirstItem(control) then
+        if focusedIndex <> SettingsNavigation.ThemeControl.Theme then return focusCategoryControl(SettingsNavigation.ThemeControl.Theme, getListItemCount(controls[SettingsNavigation.ThemeControl.Theme]) - 1)
+    end if
+    return false
+end function

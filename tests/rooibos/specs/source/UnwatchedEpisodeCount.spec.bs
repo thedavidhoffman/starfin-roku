@@ -1,0 +1,123 @@
+namespace tests
+
+    @suite("Unwatched episode count")
+    class UnwatchedepisodecountTests extends rooibos.BaseTestSuite
+
+        @describe("server count policy")
+
+        @it("reads the server count for Series")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Series", UserData: { UnplayedItemCount: 200 } }), 200)
+        end function
+
+        @it("reads the server count for Season")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Season", UserData: { UnplayedItemCount: 200 } }), 200)
+        end function
+
+        @it("does not treat Episode as an aggregate")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Episode", UserData: { UnplayedItemCount: 200 } }), -1)
+        end function
+
+        @it("does not treat Movie as an aggregate")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Movie", UserData: { UnplayedItemCount: 200 } }), -1)
+        end function
+
+        @it("does not treat MusicVideo as an aggregate")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "MusicVideo", UserData: { UnplayedItemCount: 200 } }), -1)
+        end function
+
+        @it("rejects missing counts")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Series", UserData: { UnplayedItemCount: invalid } }), -1)
+        end function
+
+        @it("rejects negative counts")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Series", UserData: { UnplayedItemCount: -1 } }), -1)
+        end function
+
+        @it("rejects string counts")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Series", UserData: { UnplayedItemCount: "abc" } }), -1)
+        end function
+
+        @it("rejects numeric string counts")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Series", UserData: { UnplayedItemCount: "2" } }), -1)
+        end function
+
+        @it("rejects fractional counts")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Series", UserData: { UnplayedItemCount: 1.5 } }), -1)
+        end function
+
+        @it("rejects boolean counts")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Series", UserData: { UnplayedItemCount: true } }), -1)
+        end function
+
+        @it("accepts a fully watched aggregate")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.GetCount({ Type: "Series", UserData: { UnplayedItemCount: 0 } }), 0)
+        end function
+
+        @it("defaults unknown preference values to off")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.Normalize("unknown"), "off")
+        end function
+
+        @it("reads the previous enabled preference as subtle")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.Normalize(" ON "), "subtle")
+        end function
+
+        @it("merges only aggregate count without mutating the old snapshot")
+        function _()
+            original = { Id: "series", Type: "Series", UserData: { UnplayedItemCount: 200, IsFavorite: true, PlaybackPositionTicks: 100 } }
+            refreshed = { Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2, IsFavorite: false } }
+
+            updated = UnwatchedEpisodeCount.WithRefreshedCount(original, refreshed)
+
+            m.assertEqual(updated.UserData.UnplayedItemCount, 2)
+            m.assertEqual(original.UserData.UnplayedItemCount, 200)
+            m.assertTrue(updated.UserData.IsFavorite)
+            m.assertEqual(updated.UserData.PlaybackPositionTicks, 100)
+        end function
+
+        @it("rejects a mismatched server item")
+        function _()
+            m.assertInvalid(UnwatchedEpisodeCount.WithRefreshedCount({ Id: "a", Type: "Series" }, { Id: "b", Type: "Series", UserData: { UnplayedItemCount: 2 } }))
+        end function
+
+        @describe("aggregate watched state")
+
+        @it("merges server watched state while retaining favorite and progress data")
+        function _()
+            item = { Id: "series", Type: "Series", UserData: { Played: false, IsFavorite: true, PlaybackPositionTicks: 100 } }
+            refreshed = { Id: "series", Type: "Series", UserData: { Played: true, UnplayedItemCount: 0 } }
+
+            updated = UnwatchedEpisodeCount.WithRefreshedCount(item, refreshed)
+
+            m.assertTrue(updated.UserData.Played)
+            m.assertTrue(updated.UserData.IsFavorite)
+            m.assertEqual(updated.UserData.PlaybackPositionTicks, 100)
+            m.assertFalse(item.UserData.Played)
+        end function
+
+        @it("normalizes the high contrast count style")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.Normalize(" HIGH-CONTRAST "), "high-contrast")
+        end function
+
+        @it("normalizes the subtle count style")
+        function _()
+            m.assertEqual(UnwatchedEpisodeCount.Normalize(" SUBTLE "), "subtle")
+        end function
+
+    end class
+
+end namespace

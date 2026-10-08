@@ -1448,6 +1448,23 @@ namespace tests
             return shelf
         end function
 
+        @describe("aggregate count responses")
+
+        @it("updates a shelf count without rebuilding the shelf")
+        function _()
+            row = CreateObject("roSGNode", "ContentNode")
+            child = row.createChild("ContentNode")
+            child.addFields({ raw: { Id: "series", Type: "Series", UserData: { UnplayedItemCount: 200 } } })
+            shelf = CreateObject("roSGNode", "HomeShelf")
+            shelf.rowContent = row
+            m.node.homeState.shelfNodes = [shelf]
+
+            m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 2 } }] }
+
+            m.assertEqual(child.raw.UserData.UnplayedItemCount, 2)
+            m.assertTrue(m.node.homeState.shelfNodes[0].isSameNode(shelf))
+        end function
+
     end class
 
 end namespace

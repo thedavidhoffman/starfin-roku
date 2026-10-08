@@ -6,6 +6,15 @@ namespace tests
     @suite("VideoPosterCard component")
     class VideoPosterCardTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "off"
+        end function
+
+        protected override function afterEach()
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
+        end function
+
         @describe("poster presentation")
 
         @it("renders poster artwork and playback state")
@@ -30,8 +39,10 @@ namespace tests
             m.assertTrue(badge.visible)
             m.assertEqual(m.top.findNode("contentGroup").translation, [21.0, 6.0])
             m.assertEqual(badge.translation, [201.0, 9.0])
-            m.assertEqual(badge.width, 42.0)
-            m.assertEqual(badge.height, 42.0)
+            m.assertEqual(badge.data.width, 42.0)
+            m.assertEqual(badge.data.height, 42.0)
+            m.assertEqual(badge.findNode("watchedCheck").width, 42.0)
+            m.assertEqual(badge.findNode("watchedCheck").height, 42.0)
         end function
 
         @it("pads configured posters for focus while keeping equal badge insets")
@@ -45,14 +56,33 @@ namespace tests
             m.assertTrue(badge.visible)
             m.assertEqual(m.top.findNode("contentGroup").translation, [21.0, 6.0])
             m.assertEqual(badge.translation, [319.0, 9.0])
-            m.assertEqual(badge.width, 65.0)
-            m.assertEqual(badge.height, 65.0)
+            m.assertEqual(badge.data.width, 65.0)
+            m.assertEqual(badge.data.height, 65.0)
+            m.assertEqual(badge.findNode("watchedCheck").width, 65.0)
+            m.assertEqual(badge.findNode("watchedCheck").height, 65.0)
         end function
 
         function createContent(raw as object) as object
             content = CreateObject("roSGNode", "ContentNode")
             content.addFields({ raw: raw, showMetadata: true, fitArtwork: false, showArtworkBackground: false, tracksPlaybackProgress: true })
             return content
+        end function
+
+        @describe("remaining episode badge layout")
+
+        @it("keeps configured poster insets when three digits widen the badge")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            content = m.createContent({ Type: "Series", UserData: { UnplayedItemCount: 200 } })
+            content.addFields({ cardLayout: { artworkSize: [393, 590], numColumns: 4 } })
+
+            m.top.itemContent = content
+
+            badge = m.top.findNode("watchedIndicator")
+            m.assertEqual(badge.data, { eligible: true, isWatched: false, unplayedCount: 200, width: 65, height: 65 })
+            m.assertEqual(badge.translation, [319.0, 9.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 65.0)
+            m.assertEqual(badge.findNode("countGroup").translation[0] + (badge.findNode("countBackground").width * badge.findNode("countBackground").scale[0]), 65.0)
         end function
 
     end class

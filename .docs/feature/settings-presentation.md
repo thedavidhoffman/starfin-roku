@@ -92,3 +92,21 @@ and subtitle indicator position, and the unframed Libraries table. Earlier
 subtitle functionality and the card redesign must remain intact.
 
 Full runtime suites and UI automation remain deferred during active iteration.
+
+## Badge preferences and TV layout
+
+The Theme category places **Watched indicator** and **Show unwatched episode
+count** side by side beneath the full-width Theme choices. SettingsCard measures
+its full heading using an unconstrained label; SettingsContent uses those widths
+to share spare space equally after both headings. The cards span 1160px with
+a 16px gap and remain 240px tall. Count choices are **Off** (default),
+**Subtle**, and **High contrast**. Left/Right moves between badge cards; Up from
+the first option returns to Theme, and Left from the watched card returns to
+categories. Editor focus restoration retains the selected card.
+
+The TV category uses its original full-width single-page layout: **TV episode
+list scroll**, **Show season summary card in TV episode list**, then **TV artwork
+in "Next Up" and "Continue Watching"**. Paging controls and fades are removed.
+
+Count selections preview through the Settings overlay and persist per account
+on close. See [Watched Indicators and Unwatched Episode Counts](watched-indicator.md).

@@ -5,12 +5,14 @@ namespace tests
     class VideoDetailedCardTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
             m.originalTheme = m.global.theme
             m.originalProfile = m.global.resolutionProfile
             if not m.global.hasField("resolutionProfile") then m.global.addField("resolutionProfile", "assocarray", false)
         end function
 
         protected override function afterEach()
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
             m.global.theme = m.originalTheme
             m.global.resolutionProfile = m.originalProfile
         end function
@@ -396,6 +398,25 @@ namespace tests
 
             m.assertFalse(m.top.findNode("watchedIndicator").visible)
             m.assertFalse(m.top.findNode("progressBar").visible)
+        end function
+
+        @describe("remaining episode count rendering")
+
+        @it("renders a remaining count on a fresh production presentation")
+        function _()
+            originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            card = CreateObject("roSGNode", "VideoDetailedCard")
+            content = CreateObject("roSGNode", "ContentNode")
+            content.addFields({ raw: { Type: "Series", Name: "Series", UserData: { UnplayedItemCount: 200 } }, showMetadata: true, fitArtwork: false, showArtworkBackground: false })
+
+            card.itemContent = content
+
+            badge = card.findNode("watchedIndicator")
+            m.assertEqual(badge.findNode("countLabel").text, "200")
+            m.assertEqual(badge.translation, [258.0, 44.0])
+            m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
+            m.global.showUnwatchedEpisodeCount = originalCountMode
         end function
 
     end class

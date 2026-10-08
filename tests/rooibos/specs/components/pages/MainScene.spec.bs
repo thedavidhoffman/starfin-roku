@@ -9,6 +9,7 @@ namespace tests
         protected override function beforeEach()
             m.originalTheme = m.global.theme
             m.originalWatchedStyle = m.global.watchedIndicatorStyle
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
             m.node.homePage = m.top.findNode("homePage")
             m.node.authController = m.top.findNode("authController")
             'bs:disable-next-line 1140
@@ -40,6 +41,7 @@ namespace tests
         protected override function afterEach()
             m.global.theme = m.originalTheme
             m.global.watchedIndicatorStyle = m.originalWatchedStyle
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
         end function
 
         @describe("Settings failure confirmation routing")
@@ -2680,6 +2682,127 @@ namespace tests
             m.assertInvalid(m.node.playbackReturn.context)
             host.callFunc("closeOverlay", false)
             m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @describe("unwatched episode count lifecycle")
+
+        @it("applies count preview without changing the theme")
+        function _()
+            m.node.login.visible = false
+            m.global.theme = "grey"
+
+            m.node.overlayHost.eventRaised = { request: { id: "settings" }, field: "unwatchedEpisodeCountPreviewRequested", value: "subtle" }
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "subtle")
+            m.assertEqual(m.global.theme, "grey")
+        end function
+
+        @it("ignores count previews on login")
+        function _()
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+
+            m.node.overlayHost.eventRaised = { request: { id: "settings" }, field: "unwatchedEpisodeCountPreviewRequested", value: "subtle" }
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "off")
+        end function
+
+        @it("applies committed count preference")
+        function _()
+            savedSettings = SettingsStore.Defaults()
+            savedSettings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "subtle"
+
+            'bs:disable-next-line 1140
+            applySettingsFromOverlay({ settingsSaved: true, savedSettings: savedSettings })
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "subtle")
+        end function
+
+        @it("resets count preference when returning to login")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            'bs:disable-next-line 1140
+            navShowLoginRoute()
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "off")
+        end function
+
+        @it("previews count preference through the settings overlay")
+        function _()
+            m.node.login.visible = false
+            m.node.settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "off"
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["unwatchedEpisodeCountPreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 1
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "subtle")
+            m.assertEqual(m.node.settings[SettingsStore.Key.ShowUnwatchedEpisodeCount], "off")
+            m.assertFalse(overlay.settingsSaved)
+            m.node.overlayHost.callFunc("closeOverlay")
+        end function
+
+        @it("restores count preference after cancellation")
+        function _()
+            m.node.login.visible = false
+            m.node.settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "off"
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["unwatchedEpisodeCountPreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 1
+            m.node.overlayHost.callFunc("closeOverlay")
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "off")
+        end function
+
+        @it("restores current account count preference after cancellation")
+        function _()
+            m.node.login.visible = false
+            m.node.settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "off"
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["unwatchedEpisodeCountPreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 0
+            m.node.settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "subtle"
+            m.node.overlayHost.callFunc("closeOverlay")
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "subtle")
+        end function
+
+        @it("loads the new account count preference")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.node.session.accountKey = "account-2"
+            m.stubCall(SettingsStore.Load, function(accountKey as string) as object
+                return { "show-unwatched-episode-count": "off" }
+            end function)
+            m.node.homePage = {}
+            'bs:disable-next-line 1001
+            m.stubCall(navShowAppRoute, function() as dynamic
+                return invalid
+            end function)
+
+            'bs:disable-next-line 1140
+            navShowApp()
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "off")
+        end function
+
+        @it("cancels a high contrast count preview back to the committed subtle style")
+        function _()
+            m.node.login.visible = false
+            m.node.settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "subtle"
+            overlay = m.node.overlayHost.callFunc("openOverlay", { id: "settings", componentName: "SettingsDialog", openFunction: "openSettings", closeField: "closeRequested", eventFields: ["unwatchedEpisodeCountPreviewRequested"], accountKey: "" })
+            content = overlay.callFunc("getContentComponent")
+
+            content.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 2
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "high-contrast")
+
+            m.node.overlayHost.callFunc("closeOverlay")
+
+            m.assertEqual(m.global.showUnwatchedEpisodeCount, "subtle")
         end function
 
     end class

@@ -1,4 +1,5 @@
 import "pkg:/source/String.bs"
+import "pkg:/source/UnwatchedEpisodeCount.bs"
 import "pkg:/source/MediaItem.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/MaskAssets.bs"
@@ -9,90 +10,38 @@ import "pkg:/source/ResolutionAssets.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    initHandlers()
+    MaskAssets.Apply(m.posterMask, "episode-thumbnail-mask.png", [531, 300], [354, 200])
+    if m.top.itemContent <> invalid then onItemContentChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.posterMask = m.top.findNode("posterMask")
     m.poster = m.top.findNode("poster")
     m.progressBar = m.top.findNode("progressBar")
     m.watchedIndicator = m.top.findNode("watchedIndicator")
-    m.layout = {
-        defaultWidth: 531
-        defaultHeight: 300
-        progressMarginX: 9
-        progressBottom: 9
-        progressHeight: 15
-        watchedSize: 57
-        watchedTop: 9
-        watchedRight: 12
-    }
-    applyPosterLayout()
+    m.contentState = { item: invalid }
 end sub
 
 '-------------------------------------------------------------------------------
-' onPosterSizeChanged
+' initHandlers
 '-------------------------------------------------------------------------------
-sub onPosterSizeChanged()
-    applyPosterLayout()
-    refresh()
+sub initHandlers()
+    m.top.observeField("itemContent", "onItemContentChanged")
 end sub
-
-'-------------------------------------------------------------------------------
-' applyPosterLayout
-'-------------------------------------------------------------------------------
-sub applyPosterLayout()
-    width = getPosterWidth()
-    height = getPosterHeight()
-    progressWidth = getProgressTrackWidth(width)
-    progressY = height - m.layout.progressBottom - m.layout.progressHeight
-
-    hdWidth = Number.ToInteger((width * 2) / 3, width)
-    hdHeight = Number.ToInteger((height * 2) / 3, height)
-    MaskAssets.Apply(m.posterMask, "episode-thumbnail-mask.png", [width, height], [hdWidth, hdHeight])
-    m.poster.width = width
-    m.poster.height = height
-
-    m.progressBar.translation = [m.layout.progressMarginX, progressY]
-    m.progressBar.barWidth = progressWidth
-    m.progressBar.barHeight = m.layout.progressHeight
-
-    m.watchedIndicator.width = m.layout.watchedSize
-    m.watchedIndicator.height = m.layout.watchedSize
-    m.watchedIndicator.translation = [width - m.layout.watchedRight - m.layout.watchedSize, m.layout.watchedTop]
-end sub
-
-'-------------------------------------------------------------------------------
-' getPosterWidth
-'-------------------------------------------------------------------------------
-function getPosterWidth() as integer
-    width = m.top.posterWidth
-    if width = invalid or width <= 0 then return m.layout.defaultWidth
-
-    return width
-end function
-
-'-------------------------------------------------------------------------------
-' getPosterHeight
-'-------------------------------------------------------------------------------
-function getPosterHeight() as integer
-    height = m.top.posterHeight
-    if height = invalid or height <= 0 then return m.layout.defaultHeight
-
-    return height
-end function
-
-'-------------------------------------------------------------------------------
-' getProgressTrackWidth
-'-------------------------------------------------------------------------------
-function getProgressTrackWidth(posterWidth as integer) as integer
-    width = posterWidth - (m.layout.progressMarginX * 2)
-    if width < 0 then return 0
-
-    return width
-end function
 
 '-------------------------------------------------------------------------------
 ' onItemContentChanged
 '-------------------------------------------------------------------------------
 sub onItemContentChanged()
     item = m.top.itemContent
+    if m.contentState.item <> invalid then m.contentState.item.unobserveField("raw")
+    m.contentState.item = item
+    if item <> invalid then item.observeField("raw", "onItemDataChanged")
     if item = invalid then
         renderImage("")
         updateProgress(invalid)
@@ -103,20 +52,6 @@ sub onItemContentChanged()
     renderImage(item.HDPosterUrl)
     updateProgress(item)
     updateWatchedIndicator(item)
-end sub
-
-'-------------------------------------------------------------------------------
-' onImageUrlChanged
-'-------------------------------------------------------------------------------
-sub onImageUrlChanged()
-    renderImage(m.top.imageUrl)
-end sub
-
-'-------------------------------------------------------------------------------
-' refresh
-'-------------------------------------------------------------------------------
-sub refresh()
-    onItemContentChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -140,7 +75,7 @@ end function
 ' updateProgress
 '-------------------------------------------------------------------------------
 sub updateProgress(item as dynamic)
-    trackWidth = getProgressTrackWidth(getPosterWidth())
+    trackWidth = Number.ToInteger(m.progressBar.barWidth, 513)
     if isItemPlayed(item) or (item <> invalid and Strings.ToString(item.itemType) = MediaItem.Type.Season) then
         m.progressBar.visible = false
         m.progressBar.progressWidth = 0
@@ -172,12 +107,15 @@ end sub
 ' updateWatchedIndicator
 '-------------------------------------------------------------------------------
 sub updateWatchedIndicator(item as dynamic)
-    if item = invalid then
-        m.watchedIndicator.visible = false
-        return
-    end if
-
-    m.watchedIndicator.visible = isItemPlayed(item)
+    raw = invalid
+    if item <> invalid then raw = item.raw
+    m.watchedIndicator.data = {
+        eligible: item <> invalid
+        isWatched: isItemPlayed(item)
+        unplayedCount: UnwatchedEpisodeCount.GetCount(raw)
+        width: 57
+        height: 57
+    }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -193,3 +131,12 @@ function isItemPlayed(item as dynamic) as boolean
 
     return raw <> invalid and raw.UserData <> invalid and raw.UserData.Played = true
 end function
+
+'-------------------------------------------------------------------------------
+' onItemDataChanged
+'-------------------------------------------------------------------------------
+sub onItemDataChanged()
+    item = m.contentState.item
+    updateProgress(item)
+    updateWatchedIndicator(item)
+end sub

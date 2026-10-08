@@ -290,6 +290,17 @@ TV series, TV episodes, and music, with legacy compatibility on read and cleanup
 through the settings migration helper. Detail pages own applying their preferences; MainScene includes
 MusicArtist in its committed-settings fan-out.
 
+SettingsContent owns paired badge-style cards in Theme and the original
+single-page TV settings layout. MainScene publishes
+the per-account count preference through the same preview/commit boundary as
+watched style. MediaStatusBadge observes both badge preferences and owns numeric
+and watched-check presentation; owning cards retain placement and eligibility.
+Library, Home, Search, TVShow and TVSeason own aggregate count refreshes through
+local UnwatchedEpisodeCountRefresh children with explicit session data. The
+refresher only coordinates correlated Task requests; pages merge returned server
+counts into canonical data and existing ContentNodes without changing focus.
+See [Watched Indicators and Unwatched Episode Counts](.docs/feature/watched-indicator.md).
+
 ## Settings registry migrations
 
 `SettingsStore.Load()` synchronously invokes `SettingsMigration.Migrate()` before

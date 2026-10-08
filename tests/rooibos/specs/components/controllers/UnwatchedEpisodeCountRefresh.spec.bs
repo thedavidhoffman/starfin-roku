@@ -1,0 +1,370 @@
+namespace tests
+
+    @SGNode("UnwatchedEpisodeCountRefresh")
+    @suite("UnwatchedEpisodeCountRefresh component")
+    class UnwatchedEpisodeCountRefreshTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.originalCountMode = m.global.showUnwatchedEpisodeCount
+            m.global.showUnwatchedEpisodeCount = "off"
+            first = CreateObject("roSGNode", "Node")
+            first.addFields({ request: {}, response: {}, control: "stop" })
+            second = CreateObject("roSGNode", "Node")
+            second.addFields({ request: {}, response: {}, control: "stop" })
+            m.node.refresh.tasks = [first, second]
+            m.node.refresh.lifecycle = LatestRequestLifecycle.Create()
+            m.node.refresh.nextIndex = 0
+            m.node.refresh.countEnabled = false
+            m.top.request = invalid
+            m.top.response = invalid
+        end function
+
+        protected override function afterEach()
+            m.top.callFunc("cancel")
+            m.global.showUnwatchedEpisodeCount = m.originalCountMode
+        end function
+
+        @describe("request lifecycle")
+
+        @it("does no work while disabled")
+        function _()
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+
+            m.assertInvalid(m.node.refresh.lifecycle.active)
+            m.assertEqual(m.node.refresh.tasks[0].control, "stop")
+        end function
+
+        @it("filters and deduplicates aggregate requests on enable")
+        function _()
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }, { Id: "a", Type: "Series" }, { Id: "b", Type: "Season" }, { Id: "e", Type: "Episode" }] }
+
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.assertEqual(m.node.refresh.tasks[0].request.itemIds, ["a", "b"])
+            m.assertEqual(m.node.refresh.tasks[0].request.userId, "user")
+            m.assertEqual(m.node.refresh.tasks[0].control, "run")
+        end function
+
+        @it("discards stale results and starts the latest request on the other task")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+            firstId = m.node.refresh.tasks[0].request.requestId
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "b", Type: "Series" }] }
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [{ Id: "a" }] })
+
+            m.assertInvalid(m.top.response)
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["b"])
+            m.assertEqual(m.node.refresh.tasks[1].control, "run")
+        end function
+
+        @it("publishes the current successful result")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+            id = m.node.refresh.tasks[0].request.requestId
+            payload = [{ Id: "a", Type: "Series", UserData: { UnplayedItemCount: 2 } }]
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: id, ok: true, payload: payload })
+
+            m.assertEqual(m.top.response.payload, payload)
+        end function
+
+        @it("leaves the display unchanged on refresh failure")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+            id = m.node.refresh.tasks[0].request.requestId
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: id, ok: false, payload: [] })
+
+            m.assertInvalid(m.top.response)
+            m.assertInvalid(m.node.refresh.lifecycle.active)
+        end function
+
+        @it("cancellation rejects a late response")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+            id = m.node.refresh.tasks[0].request.requestId
+
+            m.top.callFunc("cancel")
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: id, ok: true, payload: [{ Id: "a" }] })
+
+            m.assertInvalid(m.top.response)
+            m.assertInvalid(m.top.request)
+            m.assertEqual(m.node.refresh.tasks[0].control, "stop")
+        end function
+
+        @it("repeated requests for the same item cannot commit an older generation")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+            m.top.request = request
+            firstId = m.node.refresh.tasks[0].request.requestId
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [{ Id: "a", Type: "Series", UserData: { UnplayedItemCount: 200 } }] })
+
+            m.assertInvalid(m.top.response)
+            m.assertTrue(m.node.refresh.tasks[1].request.requestId > firstId)
+        end function
+
+        @describe("destination and preference transitions")
+
+        @it("an empty destination supersedes an in-flight aggregate request")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+            firstId = m.node.refresh.tasks[0].request.requestId
+
+            m.top.request = { server: "server", token: "token", userId: "user", items: [] }
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [{ Id: "a" }] })
+
+            m.assertInvalid(m.top.response)
+            m.assertInvalid(m.node.refresh.lifecycle.active)
+            m.assertEqual(m.node.refresh.tasks[1].control, "stop")
+        end function
+
+        @it("disabling the setting rejects in-flight results")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+            firstId = m.node.refresh.tasks[0].request.requestId
+
+            m.global.showUnwatchedEpisodeCount = "off"
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [{ Id: "a" }] })
+
+            m.assertInvalid(m.top.response)
+            m.assertInvalid(m.node.refresh.lifecycle.active)
+            m.assertEqual(m.node.refresh.tasks[0].control, "stop")
+        end function
+
+        @it("refreshes aggregate counts with high contrast enabled")
+        function _()
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }] }
+
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+
+            m.assertEqual(m.node.refresh.tasks[0].request.itemIds, ["a"])
+            m.assertEqual(m.node.refresh.tasks[0].control, "run")
+        end function
+
+        @it("switching to high contrast preserves an in-flight refresh")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = m.targetedRequest(["a"])
+            id = m.node.refresh.tasks[0].request.requestId
+
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: id, ok: true, payload: [{ Id: "a" }] })
+
+            m.assertEqual(m.top.response.payload, [{ Id: "a" }])
+            m.assertInvalid(m.node.refresh.lifecycle.pending)
+            m.assertEqual(m.node.refresh.tasks[1].control, "stop")
+        end function
+
+        @it("switching to subtle after completion does not start another refresh")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+            m.top.request = m.targetedRequest(["a"])
+            id = m.node.refresh.tasks[0].request.requestId
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: id, ok: true, payload: [] })
+
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.assertEqual(m.node.refresh.lifecycle.latestRequestId, id)
+            m.assertInvalid(m.node.refresh.lifecycle.active)
+            m.assertInvalid(m.node.refresh.lifecycle.pending)
+            m.assertEqual(m.node.refresh.tasks[1].control, "stop")
+        end function
+
+        @it("a style change preserves queued targeted work")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = m.targetedRequest(["a"])
+            activeId = m.node.refresh.tasks[0].request.requestId
+            m.top.request = m.targetedRequest(["b"])
+            pendingId = m.node.refresh.lifecycle.pending.request.requestId
+
+            m.global.showUnwatchedEpisodeCount = "high-contrast"
+
+            m.assertEqual(m.node.refresh.lifecycle.pending.request.requestId, pendingId)
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: activeId, ok: true, payload: [] })
+
+            m.assertEqual(m.node.refresh.tasks[1].request.requestId, pendingId)
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["a", "b"])
+            m.assertFalse(m.node.refresh.tasks[1].request.isFull)
+        end function
+
+        @describe("targeted aggregate requests")
+
+        @it("requests only eligible targeted IDs from the complete snapshot")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.top.request = m.targetedRequest(["b", "b", "episode", "unknown"])
+
+            m.assertEqual(m.node.refresh.tasks[0].request.itemIds, ["b"])
+        end function
+
+        @it("carries active and pending targeted IDs into the latest request")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = m.targetedRequest(["a"])
+            firstId = m.node.refresh.tasks[0].request.requestId
+            m.top.request = m.targetedRequest(["b"])
+            m.top.request = m.targetedRequest(["c"])
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [] })
+
+            m.assertInvalid(m.top.response)
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["a", "b", "c"])
+        end function
+
+        @it("a full refresh covers outstanding targeted requests")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = m.targetedRequest(["a"])
+            firstId = m.node.refresh.tasks[0].request.requestId
+            request = m.targetedRequest(["b"])
+            request.Delete("itemIds")
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [] })
+
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["a", "b", "c"])
+            m.assertTrue(m.node.refresh.tasks[1].request.isFull)
+        end function
+
+        @it("a targeted request retains an outstanding full refresh")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            request = m.targetedRequest(["a"])
+            request.Delete("itemIds")
+            m.top.request = request
+            firstId = m.node.refresh.tasks[0].request.requestId
+            m.top.request = m.targetedRequest(["b"])
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [] })
+
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["a", "b", "c"])
+        end function
+
+        @it("enabling after a targeted request uses the complete snapshot")
+        function _()
+            m.top.request = m.targetedRequest(["b"])
+
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.assertEqual(m.node.refresh.tasks[0].request.itemIds, ["a", "b", "c"])
+        end function
+
+        @it("does not carry targeted IDs across account changes")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = m.targetedRequest(["a"])
+            firstId = m.node.refresh.tasks[0].request.requestId
+            request = m.targetedRequest(["b"])
+            request.userId = "other-user"
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [] })
+
+            m.assertInvalid(m.top.response)
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["b"])
+            m.assertEqual(m.node.refresh.tasks[1].request.userId, "other-user")
+        end function
+
+        @it("reenabling after an active targeted refresh starts a full snapshot")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = m.targetedRequest(["a"])
+            oldId = m.node.refresh.tasks[0].request.requestId
+
+            m.global.showUnwatchedEpisodeCount = "off"
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: oldId, ok: true, payload: [] })
+
+            m.assertInvalid(m.top.response)
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["a", "b", "c"])
+            m.assertTrue(m.node.refresh.tasks[1].request.requestId > oldId)
+        end function
+
+        @it("drops outstanding IDs no longer present in the current snapshot")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = m.targetedRequest(["a"])
+            firstId = m.node.refresh.tasks[0].request.requestId
+            request = m.targetedRequest(["b"])
+            request.items = [{ Id: "b", Type: "Season" }]
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [] })
+
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["b"])
+            m.assertInvalid(m.top.response)
+        end function
+
+        @it("cancellation clears outstanding targeted work")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = m.targetedRequest(["a"])
+            m.top.request = m.targetedRequest(["b"])
+
+            m.top.callFunc("cancel")
+            m.top.request = m.targetedRequest(["c"])
+
+            m.assertEqual(m.node.refresh.tasks[1].request.itemIds, ["c"])
+            m.assertInvalid(m.node.refresh.lifecycle.pending)
+        end function
+
+        @it("snapshot-only updates retain current items without starting work")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            request = m.targetedRequest(["a"])
+            request.items = [{ Id: "c", Type: "Series" }]
+            request.snapshotOnly = true
+
+            m.top.request = request
+
+            m.assertInvalid(m.node.refresh.lifecycle.active)
+            m.assertEqual(m.node.refresh.tasks[0].control, "stop")
+        end function
+
+        @it("enabling after a snapshot-only update refreshes current items")
+        function _()
+            request = m.targetedRequest(["a"])
+            request.items = [{ Id: "c", Type: "Series" }]
+            request.snapshotOnly = true
+            m.top.request = request
+
+            m.global.showUnwatchedEpisodeCount = "subtle"
+
+            m.assertEqual(m.node.refresh.tasks[0].request.itemIds, ["c"])
+        end function
+
+        private function targetedRequest(ids as object) as object
+            return { server: "server", token: "token", userId: "user", itemIds: ids, items: [{ Id: "a", Type: "Series" }, { Id: "b", Type: "Season" }, { Id: "c", Type: "Series" }, { Id: "episode", Type: "Episode" }] }
+        end function
+
+    end class
+
+end namespace

@@ -1149,6 +1149,43 @@ namespace tests
             m.assertEqual(SettingsStore.Load("rooibos-theme-a")[SettingsStore.Key.Theme], "pure-black")
         end function
 
+        @describe("remaining episode count preference")
+
+        @it("defaults remaining episode count to off")
+        function _()
+            m.assertEqual(SettingsStore.Key.ShowUnwatchedEpisodeCount, "show-unwatched-episode-count")
+            m.assertEqual(SettingsStore.GetSettingValue(invalid, SettingsStore.Key.ShowUnwatchedEpisodeCount), "off")
+        end function
+
+        @it("normalizes invalid remaining count preferences to off")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "show-unwatched-episode-count": "unknown" }, SettingsStore.Key.ShowUnwatchedEpisodeCount), "off")
+        end function
+
+        @it("persists count visibility independently for each account")
+        function _()
+            m.snapshotMigrationRegistry([RegistryStore.AccountSectionName("rooibos-count-a"), RegistryStore.AccountSectionName("rooibos-count-b")])
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "subtle"
+            SettingsStore.Save("rooibos-count-a", settings)
+            settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "off"
+            SettingsStore.Save("rooibos-count-b", settings)
+
+            m.assertEqual(SettingsStore.Load("rooibos-count-a")[SettingsStore.Key.ShowUnwatchedEpisodeCount], "subtle")
+            m.assertEqual(SettingsStore.Load("rooibos-count-b")[SettingsStore.Key.ShowUnwatchedEpisodeCount], "off")
+        end function
+
+        @it("persists the high contrast count style for the account")
+        function _()
+            m.snapshotMigrationRegistry([RegistryStore.AccountSectionName("rooibos-count-contrast")])
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.ShowUnwatchedEpisodeCount] = "high-contrast"
+
+            SettingsStore.Save("rooibos-count-contrast", settings)
+
+            m.assertEqual(SettingsStore.Load("rooibos-count-contrast")[SettingsStore.Key.ShowUnwatchedEpisodeCount], "high-contrast")
+        end function
+
     end class
 
 end namespace

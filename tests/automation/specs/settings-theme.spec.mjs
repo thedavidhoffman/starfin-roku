@@ -10,7 +10,10 @@ const cases = [
   { label: 'grey theme', nodeId: 'themeOptions', index: 2, key: 'theme', value: 'grey' },
   { label: 'pure black theme', nodeId: 'themeOptions', index: 3, key: 'theme', value: 'pure-black' },
   { label: 'high contrast watched indicator', nodeId: 'watchedIndicatorOptions', index: 1, key: 'watched-indicator-style', value: 'high-contrast' },
-  { label: 'subtle watched indicator', nodeId: 'watchedIndicatorOptions', index: 0, key: 'watched-indicator-style', value: 'subtle' }
+  { label: 'subtle watched indicator', nodeId: 'watchedIndicatorOptions', index: 0, key: 'watched-indicator-style', value: 'subtle' },
+  { label: 'subtle unwatched episode counts', nodeId: 'showUnwatchedEpisodeCountOptions', index: 1, key: 'show-unwatched-episode-count', value: 'subtle' },
+  { label: 'high contrast unwatched episode counts', nodeId: 'showUnwatchedEpisodeCountOptions', index: 2, key: 'show-unwatched-episode-count', value: 'high-contrast' },
+  { label: 'disabled unwatched episode counts', nodeId: 'showUnwatchedEpisodeCountOptions', index: 0, key: 'show-unwatched-episode-count', value: 'off' }
 ];
 
 describe('Starfin Theme settings persistence', function () {
@@ -45,6 +48,7 @@ async function exerciseWatchedPreview(context, from, to, verifyCancellation = fa
   let environment;
   let badgePath;
   let originalVisibility;
+  let originalCheckVisibility;
   let referencesStored = false;
   try {
     const initial = await openSettings(categories.theme);
@@ -80,11 +84,13 @@ async function exerciseWatchedPreview(context, from, to, verifyCancellation = fa
       badgePath = nodeRefs[0] + '.#watchedIndicator';
       return true;
     }, 'an existing movie poster badge');
-    const badgeValue = field => environment.odc.getValue({ base: 'nodeRef', nodeRefKey, keyPath: badgePath + '.' + field });
+    const badgeValue = field => environment.odc.getValue({ base: 'nodeRef', nodeRefKey, keyPath: badgePath + (field === 'visible' ? '.' : '.#watchedCheck.') + field });
     originalVisibility = (await badgeValue('visible')).value;
+    originalCheckVisibility = (await environment.odc.getValue({ base: 'nodeRef', nodeRefKey, keyPath: badgePath + '.#watchedCheck.visible' })).value;
     assert.equal(typeof originalVisibility, 'boolean');
     // Only the local visual is changed; never mark the server item watched.
     await environment.odc.setValue({ base: 'nodeRef', nodeRefKey, keyPath: badgePath + '.visible', value: true });
+    await environment.odc.setValue({ base: 'nodeRef', nodeRefKey, keyPath: badgePath + '.#watchedCheck.visible', value: true });
     await waitFor(async () => (await badgeValue('uri')).value === watchedUris[from] && (await badgeValue('loadStatus')).value === 'ready', 'the saved badge style');
     await captureEvidence(context, 'watched-preview-' + from + '-before-' + (verifyCancellation ? 'cancel' : 'switch'));
 
@@ -111,6 +117,9 @@ async function exerciseWatchedPreview(context, from, to, verifyCancellation = fa
         try {
           if (badgePath && typeof originalVisibility === 'boolean') {
             await environment.odc.setValue({ base: 'nodeRef', nodeRefKey, keyPath: badgePath + '.visible', value: originalVisibility });
+          }
+          if (badgePath && typeof originalCheckVisibility === 'boolean') {
+            await environment.odc.setValue({ base: 'nodeRef', nodeRefKey, keyPath: badgePath + '.#watchedCheck.visible', value: originalCheckVisibility });
           }
         } finally {
           try {

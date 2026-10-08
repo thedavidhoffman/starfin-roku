@@ -1,0 +1,99 @@
+import "pkg:/source/api/HttpClient.bs"
+
+namespace tests
+
+    @SGNode("UnwatchedEpisodeCountTask")
+    @suite("UnwatchedEpisodeCountTask component")
+    class UnwatchedEpisodeCountTaskTests extends rooibos.BaseTestSuite
+
+        @describe("aggregate requests")
+
+        @it("rejects an incomplete session while echoing correlation")
+        function _()
+            m.top.request = { requestId: 7, server: "server", token: "token", itemIds: ["a"] }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 7)
+        end function
+
+        @it("returns server aggregate user data")
+        function _()
+            m.top.request = { requestId: 7, server: "http://server", token: "token", userId: "user", itemIds: ["a"] }
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [{ Id: "a", Type: "Series", UserData: { UnplayedItemCount: 200 } }] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 7)
+            m.assertEqual(m.top.response.payload[0].UserData.UnplayedItemCount, 200)
+        end function
+
+        @it("does not publish partial counts after an HTTP failure")
+        function _()
+            m.top.request = { requestId: 7, server: "http://server", token: "token", userId: "user", itemIds: ["a"] }
+            m.stubCall(HttpClient.Request, { ok: false })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+        end function
+
+        @it("splits a large request into bounded batches")
+        function _()
+            ids = []
+            for index = 1 to 51
+                ids.Push(index.ToStr())
+            end for
+            m.top.request = { requestId: 7, server: "http://server", token: "token", userId: "user", itemIds: ids }
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [{ Id: "a", Type: "Series", UserData: { UnplayedItemCount: 2 } }] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.payload.Count(), 2)
+        end function
+
+        @describe("missing input")
+
+        @it("rejects a missing request")
+        function _()
+            m.top.request = invalid
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, -1)
+            m.assertEqual(m.top.response.errorMessage, "Invalid request.")
+        end function
+
+        @describe("API query")
+
+        @it("requests aggregate user data for explicit IDs without downloading episodes")
+        function _()
+            m.top.request = { requestId: 7, server: "http://server", token: "token", userId: "user", itemIds: ["a", "b"] }
+            m.stubCall(HttpClient.Request, function(requestUrl as string, method as string, token as dynamic, body as dynamic, headers as dynamic) as object
+                getGlobalAa().countRefreshQuery = requestUrl
+                return { ok: true, data: { Items: [] } }
+            end function)
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            requestUrl = LCase(getGlobalAa().countRefreshQuery)
+            m.assertTrue(Instr(1, requestUrl, "http://server/items?") = 1)
+            m.assertTrue(Instr(1, requestUrl, "userid=user") > 0)
+            m.assertTrue(Instr(1, requestUrl, "enableuserdata=true") > 0)
+            m.assertTrue(Instr(1, requestUrl, "ids=a%2cb") > 0)
+            getGlobalAa().Delete("countRefreshQuery")
+        end function
+
+    end class
+
+end namespace
