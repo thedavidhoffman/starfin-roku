@@ -6,16 +6,16 @@ import "pkg:/source/SettingsNavigation.bs"
 '-------------------------------------------------------------------------------
 ' initAccountSubtitleReferences
 '-------------------------------------------------------------------------------
-sub initAccountSubtitleReferences()
+sub initAccountSubtitleReferences(panel as object)
     m.accountUi = {
-        modes: m.top.findNode("accountSubtitleModes"), modeCard: m.top.findNode("accountSubtitleModeCard")
-        currentLanguage: m.top.findNode("accountSubtitleCurrentLanguage")
-        language: m.top.findNode("accountSubtitleLanguage")
-        retry: m.top.findNode("accountSubtitleRetry"), languages: m.top.findNode("accountSubtitleLanguages")
-        picker: m.top.findNode("accountSubtitlePicker"), editor: m.top.findNode("accountSubtitleEditor")
-        fields: m.top.findNode("accountSubtitleFields"), failure: m.top.findNode("accountSubtitleFailure")
-        spinner: m.top.findNode("accountSubtitleSpinner"), state: invalid
-        pages: { localPage: m.top.findNode("subtitleLocalPage"), accountPage: m.top.findNode("subtitleAccountPage"), up: m.top.findNode("subtitlePageUp"), down: m.top.findNode("subtitlePageDown"), number: m.top.findNode("subtitlePageNumber"), fade: m.top.findNode("subtitlePageFade"), index: SettingsNavigation.SubtitlePage.Account }
+        modes: panel.findNode("accountSubtitleModes"), modeCard: panel.findNode("accountSubtitleModeCard")
+        currentLanguage: panel.findNode("accountSubtitleCurrentLanguage")
+        language: panel.findNode("accountSubtitleLanguage")
+        retry: panel.findNode("accountSubtitleRetry"), languages: panel.findNode("accountSubtitleLanguages")
+        picker: panel.findNode("accountSubtitlePicker"), editor: panel.findNode("accountSubtitleEditor")
+        fields: panel.findNode("accountSubtitleFields"), failure: panel.findNode("accountSubtitleFailure")
+        spinner: panel.findNode("accountSubtitleSpinner"), state: invalid
+        pages: { localPage: panel.findNode("subtitleLocalPage"), accountPage: panel.findNode("subtitleAccountPage"), up: panel.findNode("subtitlePageUp"), down: panel.findNode("subtitlePageDown"), number: panel.findNode("subtitlePageNumber"), fade: panel.findNode("subtitlePageFade"), index: SettingsNavigation.SubtitlePage.Account }
     }
 end sub
 
@@ -35,9 +35,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub onAccountSubtitleState()
     state = m.top.accountSubtitleState
+    m.accountUi.state = state
+    if m.categoryPanels[SettingsNavigation.Category.Subtitles] = invalid then return
     if state = invalid then return
     ownedLoadingFocus = m.accountUi.spinner.hasFocus()
-    m.accountUi.state = state
     updateSubtitleBusyIndicator()
     m.accountUi.fields.visible = state.pending <> invalid
     m.accountUi.failure.visible = state.status = AccountSubtitles.Status.Failed
@@ -57,8 +58,11 @@ end sub
 ' onAccountLanguageOptionsChanged
 '-------------------------------------------------------------------------------
 sub onAccountLanguageOptionsChanged()
+    if m.categoryPanels[SettingsNavigation.Category.Subtitles] = invalid then return
     titles = []
-    for each language in m.top.accountSubtitleLanguageOptions
+    options = m.top.accountSubtitleLanguageOptions
+    if options = invalid then options = []
+    for each language in options
         titles.Push(language.title)
     end for
     setOptionTitles(m.accountUi.languages, titles)
@@ -78,6 +82,7 @@ sub updateAccountSelections()
     end for
     m.accountUi.modes.checkedItem = checked
     languages = m.top.accountSubtitleLanguageOptions
+    if languages = invalid then languages = []
     for i = 0 to languages.Count() - 1
         if languages[i].value = state.pending.language then
             m.accountUi.currentLanguage.text = languages[i].title
@@ -127,6 +132,7 @@ end function
 ' handleAccountSubtitleKey
 '-------------------------------------------------------------------------------
 function handleAccountSubtitleKey(key as string) as boolean
+    if m.categoryPanels[SettingsNavigation.Category.Subtitles] = invalid then return false
     state = m.accountUi.state
     if state = invalid then return false
     if state.status = AccountSubtitles.Status.Saving then return true
@@ -179,6 +185,7 @@ end sub
 ' updateAccountModeDescription
 '-------------------------------------------------------------------------------
 sub updateAccountModeDescription()
+    if m.categoryPanels[SettingsNavigation.Category.Subtitles] = invalid then return
     state = m.accountUi.state
     if state = invalid or state.pending = invalid then return
     index = m.accountUi.modes.checkedItem

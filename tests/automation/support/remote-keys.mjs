@@ -55,8 +55,17 @@ export async function focusItem(environment, control, id, row = false) {
   const index = await waitFor(async () => {
     const count = await value(environment, `${content}.getChildCount()`);
     // A response can replace content without changing its count; rescan the current nodes.
-    for (let index = 0; index < count; index++) {
-      if (await value(environment, `${content}.${index}.raw.Id`) === id) return { index };
+    // Batch reads so large libraries do not exhaust the timeout on network round trips.
+    for (let start = 0; start < count; start += 100) {
+      const end = Math.min(start + 100, count);
+      const requests = {};
+      for (let index = start; index < end; index++) {
+        requests[index] = { base: 'scene', keyPath: `${content}.${index}.raw.Id` };
+      }
+      const response = await environment.odc.getValues({ requests });
+      for (let index = start; index < end; index++) {
+        if (response.results[index]?.value === id) return { index };
+      }
     }
     // Moving to the loaded end requests the next page on paginated surfaces.
     if (count > 0) {

@@ -271,7 +271,13 @@ SettingsDialog owns its fixed dimensions, SettingsContent owns the card width,
 and SettingsCard owns its content inset and native radio focus overhang. SettingsCard
 derives radio geometry and owns reusable card rendering. SettingsNavigation names
 subtitle category, control and page indices. SettingsContent owns controls, focus
-and the two-page subtitle editor. Local burn-in is an account setting,
+and the two-page subtitle editor. Category panel components contain layout only;
+SettingsContent creates Libraries initially and retains other panels on first visit.
+It owns their references, observers, option content and rendering, plus the complete
+edited snapshot independently of which panels exist. SettingsDialog supplies the
+account key before the single explicit settings load. Subtitle state and language
+catalog fields retain data received before their panel is created.
+Local burn-in is an account setting,
 while mode/language retain SettingsDialog-owned Jellyfin writes. SettingsStore
 ignores the legacy device burn-in value; the settings migration helper removes
 that obsolete key during settings loading. Accounts without a saved value use

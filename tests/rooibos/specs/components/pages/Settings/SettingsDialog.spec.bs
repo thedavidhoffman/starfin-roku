@@ -6,11 +6,102 @@ namespace tests
     class SettingsDialogTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.lazyNodes = []
             m.stubCall(Spinner.ShowBlocking, invalid)
             m.stubCall(Spinner.HideBlocking, invalid)
         end function
 
+        protected override function afterEach()
+            for each node in m.lazyNodes
+                node.callFunc("deactivateAccountSession")
+                m.top.removeChild(node)
+            end for
+        end function
+
+        function createFreshDialog(settings = invalid as dynamic) as object
+            if settings = invalid then settings = SettingsStore.Defaults()
+            capture = CreateObject("roSGNode", "Node")
+            capture.addFields({ loadAccounts: [], saveAccountKey: "", savedSettings: {}, saveCount: 0 })
+            dialog = CreateObject("roSGNode", "SettingsDialogTestHarness")
+            dialog.fixtureSettings = settings
+            dialog.fixtureCapture = capture
+            dialog.callFunc("installSettingsFixture", settings, capture)
+            m.top.appendChild(dialog)
+            m.lazyNodes.Push(dialog)
+            return dialog
+        end function
+
         @describe("dialog behavior")
+
+        @it("loads the supplied account exactly once when opening")
+        function _()
+            ' Register compiler instrumentation; each harness owns its executing stub.
+            m.stubCall(SettingsStore.Load, invalid)
+            m.stubCall(SettingsStore.Save, invalid)
+            dialog = m.createFreshDialog()
+            dialog.accountKey = "rooibos-lazy-dialog-account"
+
+            dialog.callFunc("openSettings")
+
+            m.assertEqual(dialog.fixtureCapture.loadAccounts, ["rooibos-lazy-dialog-account"])
+            content = dialog.callFunc("getContentComponent")
+            m.assertInvalid(content.findNode("themePanel"))
+            m.assertTrue(content.findNode("userCategoryList").isInFocusChain())
+        end function
+
+        @it("closing an unchanged dialog does not save unvisited categories")
+        function _()
+            dialog = m.createFreshDialog()
+            dialog.callFunc("openSettings")
+            content = dialog.callFunc("getContentComponent")
+
+            dialog.callFunc("closeDialog")
+
+            m.assertTrue(dialog.closeRequested)
+            m.assertFalse(dialog.settingsSaved)
+            m.assertEqual(dialog.fixtureCapture.saveCount, 0)
+            m.assertInvalid(content.findNode("themePanel"))
+        end function
+
+        @it("closing after a Libraries edit saves the full snapshot")
+        function _()
+            expected = SettingsStore.Defaults()
+            expected[SettingsStore.Key.Theme] = "grey"
+            dialog = m.createFreshDialog(expected)
+            dialog.accountKey = "rooibos-lazy-save-account"
+            dialog.callFunc("openSettings")
+            content = dialog.callFunc("getContentComponent")
+            content.findNode("librarySettingsGrid").selectionChanged = { settingKey: SettingsStore.Key.TvLibraryLayout, value: "thumbnail;4" }
+
+            dialog.callFunc("closeDialog")
+
+            m.assertTrue(dialog.settingsSaved)
+            m.assertEqual(dialog.fixtureCapture.savedSettings[SettingsStore.Key.Theme], "grey")
+            m.assertEqual(dialog.fixtureCapture.savedSettings[SettingsStore.Key.TvLibraryLayout], "thumbnail;4")
+            m.assertInvalid(content.findNode("themePanel"))
+            m.assertEqual(dialog.fixtureCapture.saveCount, 1)
+            m.assertEqual(dialog.fixtureCapture.saveAccountKey, "rooibos-lazy-save-account")
+        end function
+
+        @it("reopening uses fresh panels and the current saved snapshot")
+        function _()
+            first = m.createFreshDialog()
+            first.callFunc("openSettings")
+            previous = first.callFunc("getContentComponent")
+            previous.findNode("userCategoryList").itemSelected = 2
+            first.callFunc("closeDialog")
+            expected = SettingsStore.Defaults()
+            expected[SettingsStore.Key.Theme] = "grey"
+            nextDialog = m.createFreshDialog(expected)
+
+            nextDialog.callFunc("openSettings")
+            content = nextDialog.callFunc("getContentComponent")
+
+            m.assertFalse(content.isSameNode(previous))
+            m.assertFalse(content.findNode("libraryPanel").isSameNode(previous.findNode("libraryPanel")))
+            m.assertInvalid(content.findNode("themePanel"))
+            m.assertEqual(content.callFunc("getSettingsValues")[SettingsStore.Key.Theme], "grey")
+        end function
 
         @it("forwards a selected theme without committing settings")
         function _()
@@ -18,6 +109,7 @@ namespace tests
             m.top.callFunc("openSettings")
             content = m.top.callFunc("getContentComponent")
 
+            content.findNode("userCategoryList").itemSelected = 2
             content.findNode("themeOptions").itemSelected = 2
 
             m.assertEqual(m.top.themePreviewRequested, "grey")
@@ -28,14 +120,17 @@ namespace tests
 
         @it("configures settings content")
         function _()
-            m.top.accountKey = "rooibos-settings-dialog-read-only"
+            dialog = CreateObject("roSGNode", "SettingsDialog")
+            dialog.accountKey = "rooibos-settings-dialog-read-only"
+            m.top.appendChild(dialog)
+            m.lazyNodes.Push(dialog)
 
-            m.top.callFunc("openSettings")
+            dialog.callFunc("openSettings")
 
-            m.assertEqual(m.top.title, "Settings › Libraries")
-            m.assertTrue(m.top.dialogWidth = 1680)
-            m.assertTrue(m.top.dialogHeight = 900)
-            m.assertEqual(m.top.contentComponentName, "SettingsContent")
+            m.assertEqual(dialog.title, "Settings › Libraries")
+            m.assertTrue(dialog.dialogWidth = 1680)
+            m.assertTrue(dialog.dialogHeight = 900)
+            m.assertEqual(dialog.contentComponentName, "SettingsContent")
         end function
 
         @it("keeps content selection from closing settings")
@@ -199,6 +294,7 @@ namespace tests
                 themeIndex = 2
                 expectedTheme = "grey"
             end if
+            content.findNode("userCategoryList").itemSelected = 2
             content.findNode("themeOptions").itemSelected = themeIndex
             m.top.callFunc("closeDialog")
 
@@ -365,6 +461,7 @@ namespace tests
             m.stubCall(SettingsStore.Save, invalid)
             m.node.originalSettings = {}
             m.node.originalSettings[SettingsStore.Key.Theme] = "unknown"
+            content.findNode("userCategoryList").itemSelected = 2
             content.findNode("themeOptions").itemSelected = 1
 
             m.top.callFunc("resolveSubtitleSaveFailure", { requestId: m.node.closeState.requestId, decision: "discard" })
@@ -448,6 +545,7 @@ namespace tests
         @it("retains an unknown loaded language so an edit can be reversed without saving")
         function _()
             content = m.readyAccount()
+            content.findNode("userCategoryList").itemSelected = 4
             'bs:disable-next-line 1140
             onAccountLoadCompleted({ ok: true, configuration: { SubtitleMode: "Smart", SubtitleLanguagePreference: "custom-code" }, cultures: [] })
             options = content.findNode("accountSubtitleLanguages").content

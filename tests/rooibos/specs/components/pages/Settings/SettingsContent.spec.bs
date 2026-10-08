@@ -6,19 +6,131 @@ namespace tests
     class SettingsContentTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.lazyNodes = []
             m.originalMigrationComplete = m.global.settingsMigrationComplete
             m.global.settingsMigrationComplete = false
             m.stubCall(SettingsMigration.Migrate, true)
+            m.top.callFunc("loadSettingsValues")
         end function
 
         protected override function afterEach()
+            for each node in m.lazyNodes
+                m.top.removeChild(node)
+            end for
             m.global.settingsMigrationComplete = m.originalMigrationComplete
+        end function
+
+        function createFreshContent(settings = invalid as dynamic) as object
+            if settings = invalid then settings = SettingsStore.Defaults()
+            capture = CreateObject("roSGNode", "Node")
+            capture.addFields({ loadAccounts: [], saveAccountKey: "", savedSettings: {}, saveCount: 0 })
+            content = CreateObject("roSGNode", "SettingsContentTestHarness")
+            content.callFunc("installSettingsFixture", settings, capture)
+            m.top.appendChild(content)
+            m.lazyNodes.Push(content)
+            return content
+        end function
+
+        @describe("lazy category lifecycle")
+
+        @it("initializes Libraries without loading account settings")
+        function _()
+            expected = SettingsStore.Defaults()
+            expected[SettingsStore.Key.Theme] = "grey"
+            ' Register compiler instrumentation; the harness installs the executing stub.
+            m.stubCall(SettingsStore.Load, expected)
+
+            content = m.createFreshContent(expected)
+
+            m.assertFalse(content.callFunc("getSettingsLoaded"))
+            m.assertEqual(content.categoryTitle, "Libraries")
+            m.assertTrue(content.findNode("libraryPanel").visible)
+            m.assertInvalid(content.findNode("themePanel"))
+            m.assertInvalid(content.findNode("accountSubtitlesPanel"))
+            m.assertEqual(content.callFunc("getSettingsValues")[SettingsStore.Key.Theme], "blue")
+            for index = 1 to m.node.categoryState.panelIds.Count() - 1
+                m.assertInvalid(content.findNode(m.node.categoryState.panelIds[index]))
+            end for
+        end function
+
+        @it("creates and initializes a category when its list row receives focus")
+        function _()
+            expected = SettingsStore.Defaults()
+            expected[SettingsStore.Key.Theme] = "grey"
+            content = m.createFreshContent(expected)
+            content.accountKey = "rooibos-lazy-account"
+            content.callFunc("loadSettingsValues")
+
+            content.findNode("userCategoryList").itemFocused = 2
+
+            m.assertEqual(content.categoryTitle, "Theme")
+            m.assertTrue(content.findNode("themePanel").visible)
+            m.assertFalse(content.findNode("libraryPanel").visible)
+            m.assertEqual(content.findNode("themeOptions").checkedItem, 2)
+            m.assertEqual(content.findNode("themeOptions").content.getChildCount(), 4)
+            m.assertEqual(content.themePreviewRequested, "")
+            m.assertInvalid(content.findNode("tvPanel"))
+        end function
+
+        @it("retains the panel and edited selection when revisiting a category")
+        function _()
+            content = m.createFreshContent()
+            content.callFunc("loadSettingsValues")
+            content.findNode("userCategoryList").itemSelected = 2
+            panel = content.findNode("themePanel")
+            options = content.findNode("themeOptions").content
+            content.findNode("themeOptions").itemSelected = 1
+
+            content.findNode("userCategoryList").itemSelected = 0
+            content.findNode("userCategoryList").itemSelected = 2
+
+            m.assertTrue(content.findNode("themePanel").isSameNode(panel))
+            m.assertTrue(content.findNode("themeOptions").content.isSameNode(options))
+            m.assertEqual(content.findNode("themeOptions").checkedItem, 1)
+            m.assertEqual(content.callFunc("getSettingsValues")[SettingsStore.Key.Theme], "black")
+        end function
+
+        @it("preserves values for categories that have never been created")
+        function _()
+            expected = SettingsStore.Defaults()
+            expected[SettingsStore.Key.Theme] = "grey"
+            expected[SettingsStore.Key.NextEpisodePromptSeconds] = "75"
+            content = m.createFreshContent(expected)
+
+            content.callFunc("loadSettingsValues")
+            content.findNode("librarySettingsGrid").selectionChanged = { settingKey: SettingsStore.Key.TvLibraryLayout, value: "thumbnail;4" }
+
+            values = content.callFunc("getSettingsValues")
+            m.assertEqual(values[SettingsStore.Key.TvLibraryLayout], "thumbnail;4")
+            m.assertEqual(values[SettingsStore.Key.Theme], "grey")
+            m.assertEqual(values[SettingsStore.Key.NextEpisodePromptSeconds], "75")
+            m.assertInvalid(content.findNode("themePanel"))
+            m.assertInvalid(content.findNode("creditsPanel"))
+        end function
+
+        @it("applies subtitle data received before the panel is created")
+        function _()
+            content = m.createFreshContent()
+            content.callFunc("loadSettingsValues")
+            content.accountSubtitleLanguageOptions = [{ title: "English", value: "eng" }]
+            content.accountSubtitleState = { status: "ready", pending: { mode: "Smart", language: "eng" } }
+            m.assertInvalid(content.findNode("accountSubtitlesPanel"))
+
+            content.findNode("userCategoryList").itemSelected = 4
+
+            m.assertEqual(content.findNode("accountSubtitleModes").checkedItem, 1)
+            m.assertEqual(content.findNode("accountSubtitleCurrentLanguage").text, "English")
+            m.assertEqual(content.findNode("accountSubtitleLanguages").content.getChildCount(), 1)
+            m.assertTrue(content.findNode("accountSubtitleModes").isInFocusChain())
         end function
 
         @describe("theme preference")
 
         @it("does not preview while moving focus")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.themePreviewRequested = ""
 
             m.node.settingsControls.themeOptions.itemFocused = 2
@@ -38,6 +150,9 @@ namespace tests
 
         @it("places all four themes in the Theme category with Blue selected by default")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.accountKey = ""
             m.top.callFunc("loadSettingsValues")
             options = m.node.settingsControls.themeOptions
@@ -57,6 +172,9 @@ namespace tests
 
         @it("includes selected blue in save values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.node.settingsControls.themeOptions.itemSelected = 0
             'bs:disable-next-line 1140
             onThemeSelected()
@@ -69,6 +187,9 @@ namespace tests
         @it("restores the blue selection")
         function _()
             'bs:disable-next-line 1140
+            showCategory(2)
+
+            'bs:disable-next-line 1140
             setThemeOption("blue")
 
             m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 0)
@@ -77,6 +198,9 @@ namespace tests
 
         @it("includes selected black in save values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.node.settingsControls.themeOptions.itemSelected = 1
             'bs:disable-next-line 1140
             onThemeSelected()
@@ -89,6 +213,9 @@ namespace tests
         @it("restores the black selection")
         function _()
             'bs:disable-next-line 1140
+            showCategory(2)
+
+            'bs:disable-next-line 1140
             setThemeOption("black")
 
             m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 1)
@@ -97,6 +224,9 @@ namespace tests
 
         @it("includes selected grey in save values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.node.settingsControls.themeOptions.itemSelected = 2
             'bs:disable-next-line 1140
             onThemeSelected()
@@ -109,6 +239,9 @@ namespace tests
         @it("restores the grey selection")
         function _()
             'bs:disable-next-line 1140
+            showCategory(2)
+
+            'bs:disable-next-line 1140
             setThemeOption("grey")
 
             m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 2)
@@ -117,6 +250,9 @@ namespace tests
 
         @it("discards an unsaved theme on reload")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.accountKey = ""
             m.node.settingsControls.themeOptions.itemSelected = 2
             'bs:disable-next-line 1140
@@ -208,7 +344,8 @@ namespace tests
             onUserCategorySelected()
 
             m.assertTrue(m.top.findNode("themePanel").visible)
-            m.assertFalse(m.top.findNode("mediaShellPanel").visible)
+            panel = m.top.findNode("mediaShellPanel")
+            if panel <> invalid then m.assertFalse(panel.visible)
             m.assertTrue(m.node.settingsControls.themeOptions.isInFocusChain())
         end function
 
@@ -216,6 +353,9 @@ namespace tests
 
         @it("loads enabled by default between scroll and episode images")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             m.top.accountKey = "rooibos-summary-default"
             m.top.callFunc("loadSettingsValues")
             m.assertEqual(m.node.settingsControls.showSeasonSummaryCardOptions.checkedItem, 1)
@@ -225,6 +365,9 @@ namespace tests
 
         @it("includes an edited Off preference in save values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             m.node.settingsControls.showSeasonSummaryCardOptions.itemSelected = 0
             'bs:disable-next-line 1140
             onShowSeasonSummaryCardSelected()
@@ -234,6 +377,9 @@ namespace tests
 
         @it("includes an edited On preference in save values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             m.node.settingsControls.showSeasonSummaryCardOptions.itemSelected = 1
             'bs:disable-next-line 1140
             onShowSeasonSummaryCardSelected()
@@ -243,6 +389,9 @@ namespace tests
 
         @it("discards an unsaved preference when settings reload")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             m.top.accountKey = "rooibos-summary-cancel"
             m.top.callFunc("loadSettingsValues")
             m.node.settingsControls.showSeasonSummaryCardOptions.itemSelected = 0
@@ -258,6 +407,9 @@ namespace tests
 
         @it("loads disabled by default and includes the control in TV navigation")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             m.top.accountKey = "rooibos-episode-images-default"
             m.top.callFunc("loadSettingsValues")
             m.assertEqual(m.node.settingsControls.homeEpisodeImagesOptions.checkedItem, 0)
@@ -270,6 +422,9 @@ namespace tests
 
         @it("stores an edited off selection in dialog values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             m.node.settingsControls.homeEpisodeImagesOptions.itemSelected = 0
             'bs:disable-next-line 1140
             onHomeEpisodeImagesSelected()
@@ -280,6 +435,9 @@ namespace tests
 
         @it("stores an edited on selection in dialog values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             m.node.settingsControls.homeEpisodeImagesOptions.itemSelected = 1
             'bs:disable-next-line 1140
             onHomeEpisodeImagesSelected()
@@ -308,6 +466,9 @@ namespace tests
 
         @it("builds subtitle burn-in options in display order")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(4)
+
             options = m.node.settingsControls.subtitleBurnInOptions.content
             m.assertEqual(options.getChildCount(), 3)
             m.assertEqual(options.getChild(0).title, "During transcoding")
@@ -328,6 +489,9 @@ namespace tests
 
         @it("describes the focused Next item playback option")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(3)
+
             m.node.settingsControls.nextItemPlaybackOptions.itemFocused = 1
             'bs:disable-next-line 1140
             onNextItemPlaybackFocused()
@@ -345,6 +509,9 @@ namespace tests
 
         @it("builds and stores Next item playback options")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(3)
+
             options = m.node.settingsControls.nextItemPlaybackOptions.content
             m.assertEqual(options.getChild(0).title, "Show " + Char.DoubleQuote + "Up Next" + Char.DoubleQuote)
             m.assertEqual(options.getChild(1).title, "Play next immediately")
@@ -372,6 +539,9 @@ namespace tests
         @it("maps and stores subtitle burn-in modes")
         function _()
             'bs:disable-next-line 1140
+            showCategory(4)
+
+            'bs:disable-next-line 1140
             setSubtitleBurnInOption(SubtitleBurnIn.Mode.Always)
             m.assertEqual(m.node.settingsControls.subtitleBurnInOptions.checkedItem, 2)
 
@@ -383,6 +553,9 @@ namespace tests
 
         @it("updates the subtitle description for the focused option")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(4)
+
             m.node.settingsControls.subtitleBurnInOptions.itemFocused = 2
             'bs:disable-next-line 1140
             onSubtitleBurnInFocused()
@@ -398,7 +571,7 @@ namespace tests
 
             m.assertEqual(m.node.focusState.categoryIndex, resetIndex)
             for i = 0 to m.node.categoryPanels.Count() - 1
-                m.assertEqual(m.node.categoryPanels[i].visible, i = resetIndex)
+                if m.node.categoryPanels[i] <> invalid then m.assertEqual(m.node.categoryPanels[i].visible, i = resetIndex)
             end for
         end function
 
@@ -442,6 +615,9 @@ namespace tests
 
         @it("Down from the last device category wraps to the first user category")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(10)
+
             m.node.deviceCategoryList.jumpToItem = m.node.categoryState.deviceCount - 1
             m.node.deviceCategoryList.setFocus(true)
 
@@ -460,6 +636,9 @@ namespace tests
 
         @it("builds screensaver type and delay options in display order")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(7)
+
             typeOptions = m.node.settingsControls.screensaverTypeOptions.content
             delayOptions = m.node.settingsControls.screensaverDelayOptions.content
 
@@ -476,6 +655,9 @@ namespace tests
 
         @it("maps stored screensaver types to their checked options")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(7)
+
             'bs:disable-next-line 1140
             setScreensaverTypeOption("roku")
             m.assertEqual(m.node.settingsControls.screensaverTypeOptions.checkedItem, 0)
@@ -495,6 +677,9 @@ namespace tests
 
         @it("maps stored delays to their checked options with a one-minute fallback")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(7)
+
             values = ["1", "5", "15", "30"]
             for i = 0 to values.Count() - 1
                 'bs:disable-next-line 1140
@@ -509,6 +694,9 @@ namespace tests
 
         @it("stores selected screensaver type and delay values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(7)
+
             m.node.settingsControls.screensaverTypeOptions.itemSelected = 1
             'bs:disable-next-line 1140
             onScreensaverTypeSelected()
@@ -550,6 +738,9 @@ namespace tests
 
         @it("switches between reset confirmation and normal reset controls")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(10)
+
             resetIndex = m.node.categoryState.resetIndex
             m.node.focusState.categoryIndex = resetIndex
 
@@ -575,6 +766,9 @@ namespace tests
 
         @it("includes the no-logo preference in save values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             m.node.settingsControls.homeEpisodeImagesOptions.itemSelected = 2
 
             'bs:disable-next-line 1140
@@ -588,6 +782,9 @@ namespace tests
         @it("selects the saved series option")
         function _()
             'bs:disable-next-line 1140
+            showCategory(6)
+
+            'bs:disable-next-line 1140
             setHomeEpisodeImagesOption("series")
 
             m.assertEqual(m.node.settingsControls.homeEpisodeImagesOptions.checkedItem, 0)
@@ -596,6 +793,9 @@ namespace tests
 
         @it("selects the saved episode-with-logo option")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             'bs:disable-next-line 1140
             setHomeEpisodeImagesOption("episode-with-logo")
 
@@ -606,6 +806,9 @@ namespace tests
         @it("selects the saved episode-without-logo option")
         function _()
             'bs:disable-next-line 1140
+            showCategory(6)
+
+            'bs:disable-next-line 1140
             setHomeEpisodeImagesOption("episode-without-logo")
 
             m.assertEqual(m.node.settingsControls.homeEpisodeImagesOptions.checkedItem, 2)
@@ -614,6 +817,9 @@ namespace tests
 
         @it("falls back to series for an unsupported value")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             'bs:disable-next-line 1140
             setHomeEpisodeImagesOption("unknown")
 
@@ -625,6 +831,9 @@ namespace tests
 
         @it("shows every preset with Off selected by default")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.top.accountKey = ""
             m.top.callFunc("loadSettingsValues")
             options = m.node.settingsControls.nextEpisodePromptSecondsOptions
@@ -644,6 +853,9 @@ namespace tests
 
         @it("saves the 0 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 0
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -654,6 +866,9 @@ namespace tests
 
         @it("saves the 15 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 1
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -664,6 +879,9 @@ namespace tests
 
         @it("saves the 30 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 2
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -674,6 +892,9 @@ namespace tests
 
         @it("saves the 45 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 3
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -684,6 +905,9 @@ namespace tests
 
         @it("saves the 60 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 4
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -694,6 +918,9 @@ namespace tests
 
         @it("saves the 75 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 5
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -704,6 +931,9 @@ namespace tests
 
         @it("saves the 90 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 6
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -714,6 +944,9 @@ namespace tests
 
         @it("saves the 105 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 7
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -724,6 +957,9 @@ namespace tests
 
         @it("saves the 120 second preset")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.node.settingsControls.nextEpisodePromptSecondsOptions.itemSelected = 8
             'bs:disable-next-line 1140
             onNextEpisodePromptSecondsSelected()
@@ -735,6 +971,9 @@ namespace tests
         @it("restores the selected preset")
         function _()
             'bs:disable-next-line 1140
+            showCategory(5)
+
+            'bs:disable-next-line 1140
             setNextEpisodePromptSecondsOption("75")
 
             m.assertEqual(m.node.settingsControls.nextEpisodePromptSecondsOptions.checkedItem, 5)
@@ -743,6 +982,9 @@ namespace tests
 
         @it("reload discards pending credits edits")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+
             m.top.accountKey = ""
             m.node.settingsState.values[SettingsStore.Key.NextEpisodePromptSeconds] = "120"
 
@@ -772,6 +1014,9 @@ namespace tests
 
         @it("selects and previews high contrast")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.node.settingsControls.watchedIndicatorOptions.itemSelected = 1
             'bs:disable-next-line 1140
             onWatchedIndicatorSelected()
@@ -782,6 +1027,9 @@ namespace tests
 
         @it("selects and previews subtle")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.node.settingsControls.watchedIndicatorOptions.itemSelected = 0
             'bs:disable-next-line 1140
             onWatchedIndicatorSelected()
@@ -792,6 +1040,9 @@ namespace tests
 
         @it("loads watched style without previewing")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.watchedIndicatorPreviewRequested = ""
             'bs:disable-next-line 1140
             setWatchedIndicatorOption("high-contrast")
@@ -839,6 +1090,9 @@ namespace tests
 
         @it("sizes layout cards and full-width Theme music independently")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(1)
+
             m.assertTrue(m.top.findNode("movieShellLayoutOptions").getParent().isSameNode(m.top.findNode("movieShellLayoutCard")))
             m.assertEqual(m.top.findNode("movieShellLayoutCard").cardWidth, 572.0)
             m.assertEqual(m.top.findNode("movieShellLayoutOptions").itemSize, [460.0, 52.0])
@@ -847,6 +1101,9 @@ namespace tests
 
         @it("updates the playback card description when focus changes")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(3)
+
             m.top.findNode("nextItemPlaybackOptions").itemFocused = 1
             'bs:disable-next-line 1140
             onNextItemPlaybackFocused()
@@ -964,6 +1221,9 @@ namespace tests
 
         @it("shows Retry after loading fails")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(4)
+
             m.top.accountSubtitleState = { status: "failed", pending: invalid }
             m.assertTrue(m.top.findNode("accountSubtitleFailure").visible)
             'bs:disable-next-line 1140
@@ -1313,6 +1573,9 @@ namespace tests
 
         @it("updates only the selected media preference")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(1)
+
             m.top.accountKey = ""
             m.top.callFunc("loadSettingsValues")
             m.top.findNode("movieShellLayoutOptions").itemSelected = 2
@@ -1326,6 +1589,9 @@ namespace tests
 
         @it("shows only supported series options")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(1)
+
             content = m.top.findNode("seriesShellLayoutOptions").content
             m.assertEqual(content.getChildCount(), 3)
             m.assertEqual(content.getChild(2).title, "Poster")
@@ -1333,6 +1599,9 @@ namespace tests
 
         @it("shows only supported Music options")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(1)
+
             content = m.top.findNode("musicShellLayoutOptions").content
             m.assertEqual(content.getChildCount(), 2)
             m.assertEqual(content.getChild(1).title, "Corner backdrop")
@@ -1340,6 +1609,9 @@ namespace tests
 
         @it("saves series Poster from its third radio option")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(1)
+
             m.top.findNode("seriesShellLayoutOptions").itemSelected = 2
             m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.TvSeriesShellLayout], "poster")
         end function
@@ -1442,6 +1714,9 @@ namespace tests
 
         @it("uses matching card heights and original spacing on separate pages")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(1)
+
             movie = m.top.findNode("movieShellLayoutCard")
             music = m.top.findNode("musicShellLayoutCard")
             series = m.top.findNode("seriesShellLayoutCard")
@@ -1794,6 +2069,9 @@ namespace tests
 
         @it("previews and includes Pure Black in save values")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.node.settingsControls.themeOptions.itemSelected = 3
             'bs:disable-next-line 1140
             onThemeSelected()
@@ -1806,6 +2084,9 @@ namespace tests
         @it("restores the Pure Black selection")
         function _()
             'bs:disable-next-line 1140
+            showCategory(2)
+
+            'bs:disable-next-line 1140
             setThemeOption("pure-black")
 
             m.assertEqual(m.node.settingsControls.themeOptions.checkedItem, 3)
@@ -1816,6 +2097,9 @@ namespace tests
 
         @it("loads off by default without sending a preview")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.accountKey = ""
             m.top.unwatchedEpisodeCountPreviewRequested = ""
 
@@ -1827,6 +2111,9 @@ namespace tests
 
         @it("saves and previews the enabled selection")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 1
 
             m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.ShowUnwatchedEpisodeCount], "subtle")
@@ -1835,6 +2122,9 @@ namespace tests
 
         @it("saves and previews the disabled selection")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 1
 
             m.top.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 0
@@ -1845,6 +2135,9 @@ namespace tests
 
         @it("places the original three TV controls on one page")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(6)
+
             controls = m.node.categoryControls[6]
 
             m.assertEqual(controls, [m.top.findNode("tvEpisodeListDisplayOptions"), m.top.findNode("showSeasonSummaryCardOptions"), m.top.findNode("homeEpisodeImagesOptions")])
@@ -1856,6 +2149,9 @@ namespace tests
 
         @it("places the two badge cards side by side in Theme")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             watched = m.top.findNode("watchedIndicatorCard")
             count = m.top.findNode("unwatchedEpisodeCountCard")
             options = m.top.findNode("showUnwatchedEpisodeCountOptions")
@@ -1872,6 +2168,9 @@ namespace tests
 
         @it("previews and saves the high contrast count style")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.findNode("showUnwatchedEpisodeCountOptions").itemSelected = 2
 
             m.assertEqual(m.top.unwatchedEpisodeCountPreviewRequested, "high-contrast")
@@ -1880,6 +2179,9 @@ namespace tests
 
         @it("restores the high contrast count selection without previewing")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             m.top.unwatchedEpisodeCountPreviewRequested = ""
 
             'bs:disable-next-line 1140
@@ -1947,8 +2249,7 @@ namespace tests
 
         @it("restores captured count control focus in Theme")
         function _()
-            'bs:disable-next-line 1140
-            showCategory(2)
+            m.top.findNode("userCategoryList").jumpToItem = 2
             'bs:disable-next-line 1140
             focusCategoryControl(2, 2)
             m.top.callFunc("captureEditorFocus")
@@ -2002,6 +2303,9 @@ namespace tests
 
         @it("leaves equal space after the headings in the two badge cards")
         function _()
+            'bs:disable-next-line 1140
+            showCategory(2)
+
             watched = m.top.findNode("watchedIndicatorCard")
             count = m.top.findNode("unwatchedEpisodeCountCard")
             measurement = CreateObject("roSGNode", "Label")

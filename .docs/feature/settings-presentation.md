@@ -4,6 +4,31 @@ Settings uses a centered 1680px-wide, 900px-high dialog. The category lists and
 vertical divider retain their positions; the right-hand panels start at x=400
 within the dialog content area and contain 1160px-wide glass cards.
 
+## Launch and category lifecycle
+
+SettingsContent initially constructs category navigation and the Libraries panel.
+SettingsDialog assigns the account key, then explicitly loads and applies the full
+local settings snapshot once before opening. Content initialization does not read
+settings from the registry.
+
+Other panels are layout-only components created when their category first becomes
+displayed, including through category-list focus. SettingsContent owns one creation
+path for references, card layout, option content, saved values and control observers.
+Visited panels remain attached until the dialog closes; switching categories does
+not recreate controls or discard edits. There is no background preloading or cache
+across dialog sessions.
+
+The full edited snapshot remains independent of panel creation, so closing without
+visiting every category preserves unvisited preferences. Subtitle state and language
+options received before first visiting Subtitles are retained on SettingsContent and
+applied when its panel is created. SettingsDialog retains subtitle requests and the
+existing save/failure workflow.
+
+This removes hidden category construction and duplicate settings loading from the
+launch path. The first visit to another category incurs its construction cost;
+request-to-visible-and-focused timing and category responsiveness require device
+measurement before claiming a measured performance improvement.
+
 The dialog heading identifies the displayed category, such as Settings › Libraries
 or Settings › Media shell. It remains visible when focus moves into settings or
 between pages. SettingsContent publishes categoryTitle through its category-change

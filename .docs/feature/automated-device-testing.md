@@ -50,6 +50,12 @@ During development, a focused test can be selected by title without running the
 complete suite, for example `npm run automation:test -- --grep "TV series library"`.
 Release-report mode rejects focused runs and always executes every test.
 
+Remote-key tests locate configured items using batches of up to 100 ID reads.
+They rescan current content on each attempt, including same-count replacements,
+and request another page from the loaded end when the item is not yet present.
+This keeps large-library setup within the existing timeout without changing the
+navigation or playback assertions.
+
 This normal command produces the complete private report and does not redact or
 package it. For release-readiness evidence, run:
 

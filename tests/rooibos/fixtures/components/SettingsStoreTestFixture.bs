@@ -1,0 +1,42 @@
+'-------------------------------------------------------------------------------
+' installSettingsFixture
+'-------------------------------------------------------------------------------
+sub installSettingsFixture(settings as object, capture as object)
+    ' Rooibos resolves global-function stubs in the executing component's context.
+    context = getGlobalAa()
+    context.settingsFixture = { settings: settings, capture: capture }
+    if context.__globalStubs = invalid then context.__globalStubs = {}
+    context.__globalStubs.settingsstore_load = fixtureLoadSettings
+    context.__globalStubs.settingsstore_save = fixtureSaveSettings
+end sub
+
+'-------------------------------------------------------------------------------
+' fixtureLoadSettings
+'-------------------------------------------------------------------------------
+function fixtureLoadSettings(accountKey as string) as object
+    fixture = getGlobalAa().settingsFixture
+    accounts = fixture.capture.loadAccounts
+    accounts.Push(accountKey)
+    fixture.capture.loadAccounts = accounts
+    ' Return a new snapshot so editor writes cannot change the fixture's saved data.
+    settings = {}
+    settings.Append(fixture.settings)
+    return settings
+end function
+
+'-------------------------------------------------------------------------------
+' fixtureSaveSettings
+'-------------------------------------------------------------------------------
+sub fixtureSaveSettings(accountKey as string, settings as object)
+    capture = getGlobalAa().settingsFixture.capture
+    capture.saveAccountKey = accountKey
+    capture.savedSettings = settings
+    capture.saveCount = capture.saveCount + 1
+end sub
+
+'-------------------------------------------------------------------------------
+' getSettingsLoaded
+'-------------------------------------------------------------------------------
+function getSettingsLoaded() as boolean
+    return m.settingsState.loaded
+end function
