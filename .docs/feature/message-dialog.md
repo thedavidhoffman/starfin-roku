@@ -1,6 +1,12 @@
 # Message dialog
 
-AppMessage.Show(message) queues a nonblank acknowledgment message through MainScene.
+`AppMessage.Show(message, title = "Message")` queues a nonblank acknowledgment
+message through MainScene. Existing callers keep the default title. Blank titles
+also use "Message". A batch of messages with the same title retains it; mixed
+titles fall back to "Message", including when another message arrives after the
+dialog opens. Body deduplication is unchanged. Dismissal resets the title with the
+rest of the message state. OverlayHost forwards titles through opening and updates,
+and MessageDialog preserves the supplied title using Dialog's inherited title field.
 AppMessage.Dismiss() cancels deferred/visible messages without restoring outgoing
 page focus. User OK and Back share the dialog close path. On acknowledgment, an
 active Settings failure confirmation takes precedence, followed by a blocking
@@ -12,7 +18,7 @@ The originating page continues to own request errors and recovery; no new reques
 or persistence are introduced.
 
 MessageDialog extends Dialog and mounts MessageContent. It uses the common frame,
-backdrop, and Message title at 800 x 420 in 1080-coordinate space. The left-aligned
+backdrop, and supplied title (default "Message") at 800 x 420 in 1080-coordinate space. The left-aligned
 multiline label grows the panel up to 720 pixels high. Overflow scrolls with Up/Down
 without moving focus off OK. The button sits 60 pixels from the bottom/right edges
 and uses PrimaryButton.getPreferredWidth(30). Text is never ellipsized or shortened.

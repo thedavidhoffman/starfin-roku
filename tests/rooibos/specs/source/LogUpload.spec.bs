@@ -1,0 +1,130 @@
+import "pkg:/source/LogUpload.bs"
+
+namespace tests
+
+    @suite("LogUpload helpers")
+    class LogUploadhelpersTests extends rooibos.BaseTestSuite
+
+        @describe("observable behavior")
+
+        @it("preserves the original entries and newline boundaries")
+        function _()
+            result = LogUpload.BuildDocument(["[Network] https://server/path", "line one" + Chr(10) + "line two"])
+            m.assertTrue(result.ok)
+            m.assertEqual(result.body, "[Network] https://server/path" + Chr(10) + "line one" + Chr(10) + "line two")
+        end function
+
+        @it("rejects empty snapshots")
+        function _()
+            m.assertFalse(LogUpload.BuildDocument([]).ok)
+        end function
+
+        @it("rejects whitespace-only snapshots")
+        function _()
+            m.assertFalse(LogUpload.BuildDocument(["  ", Chr(10)]).ok)
+        end function
+
+        @it("rejects invalid snapshots")
+        function _()
+            m.assertFalse(LogUpload.BuildDocument(invalid).ok)
+        end function
+
+        @it("accepts exactly one million bytes")
+        function _()
+            m.assertTrue(LogUpload.BuildDocument([String(1000000, "a")]).ok)
+        end function
+
+        @it("rejects more than one million bytes")
+        function _()
+            m.assertFalse(LogUpload.BuildDocument([String(1000001, "a")]).ok)
+        end function
+
+        @it("measures multibyte text in bytes")
+        function _()
+            text = String(999999, "a") + Chr(233)
+            m.assertFalse(LogUpload.BuildDocument([text]).ok)
+        end function
+
+        @it("explains HTTP 401")
+        function _()
+            m.assertTrue(Instr(1, LogUpload.FailureMessage({ status: 401 }), "sign in again") > 0)
+        end function
+
+        @it("explains HTTP 403")
+        function _()
+            m.assertTrue(Instr(1, LogUpload.FailureMessage({ status: 403 }), "administrator") > 0)
+        end function
+
+        @it("explains HTTP 404")
+        function _()
+            m.assertTrue(Instr(1, LogUpload.FailureMessage({ status: 404 }), "does not support") > 0)
+        end function
+
+        @it("explains HTTP 405")
+        function _()
+            m.assertTrue(Instr(1, LogUpload.FailureMessage({ status: 405 }), "does not support") > 0)
+        end function
+
+        @it("explains HTTP 413")
+        function _()
+            m.assertTrue(Instr(1, LogUpload.FailureMessage({ status: 413 }), "upload limit") > 0)
+        end function
+
+        @it("reports uncertain delivery on timeout")
+        function _()
+            m.assertTrue(Instr(1, LogUpload.FailureMessage({ status: 0, failureKind: "timeout" }), "may already have been received") > 0)
+        end function
+
+        @it("explains a connection failure")
+        function _()
+            m.assertTrue(Instr(1, LogUpload.FailureMessage({ status: 0 }), "Check your connection") > 0)
+        end function
+
+        @it("titles HTTP 401")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle({ status: 401 }), "Sign In Required")
+        end function
+
+        @it("titles HTTP 403")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle({ status: 403 }), "Log Uploads Disabled")
+        end function
+
+        @it("titles HTTP 404")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle({ status: 404 }), "Log Upload Not Supported")
+        end function
+
+        @it("titles HTTP 405")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle({ status: 405 }), "Log Upload Not Supported")
+        end function
+
+        @it("titles HTTP 413")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle({ status: 413 }), "Log Too Large to Send")
+        end function
+
+        @it("titles HTTP 500")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle({ status: 500 }), "Unable to Send Log")
+        end function
+
+        @it("titles uncertain timeout delivery")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle({ status: 0, failureKind: "timeout" }), "Log Upload Status Unknown")
+        end function
+
+        @it("titles an empty document")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle(LogUpload.BuildDocument([])), "No Log Entries to Send")
+        end function
+
+        @it("titles an oversized document")
+        function _()
+            m.assertEqual(LogUpload.FailureTitle(LogUpload.BuildDocument([String(1000001, "a")])), "Log Too Large to Send")
+        end function
+
+    end class
+
+end namespace

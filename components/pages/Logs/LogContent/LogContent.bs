@@ -7,34 +7,58 @@ import "pkg:/source/TimerControl.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    initState()
+    createRows()
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
     m.nodes = {
         sheet: m.top.findNode("logSheet")
         track: m.top.findNode("scrollTrack")
         thumb: m.top.findNode("scrollThumb")
         holdTimer: m.top.findNode("scrollHoldDelayTimer")
         repeatTimer: m.top.findNode("scrollRepeatTimer")
+        send: m.top.findNode("sendLog")
     }
+end sub
+
+'-------------------------------------------------------------------------------
+' initState
+'-------------------------------------------------------------------------------
+sub initState()
     m.logViewState = {
         lines: []
         rows: []
         firstLine: 0
-        visibleCount: 19
+        visibleCount: 17
         rowHeight: 42
         wrapLength: 76
         maximumDetailLines: 4
         heldKey: ""
     }
     m.layoutState = {
-        viewportHeight: 800
+        viewportHeight: 714
         contentWidth: 1688
         timestampWidth: 260
         entryX: 280
         entryWidth: 1390
         minimumThumbHeight: 60
     }
-    createRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
     m.nodes.holdTimer.observeField("fire", "onScrollHoldDelayTimerFire")
     m.nodes.repeatTimer.observeField("fire", "onScrollRepeatTimerFire")
+    m.nodes.send.observeField("buttonSelected", "onSendSelected")
+    m.top.observeField("focusedChild", "onFocusChanged")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -294,7 +318,32 @@ end sub
 ' focusLog
 '-------------------------------------------------------------------------------
 sub focusLog()
+    m.nodes.send.hasFocusVisual = false
     m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusSend
+'-------------------------------------------------------------------------------
+sub focusSend()
+    stopScrollHold()
+    m.nodes.send.hasFocusVisual = true
+    m.nodes.send.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onSendSelected
+'-------------------------------------------------------------------------------
+sub onSendSelected()
+    stopScrollHold()
+    m.top.sendRequested = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusChanged
+'-------------------------------------------------------------------------------
+sub onFocusChanged()
+    if not m.top.hasFocus() then stopScrollHold()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -350,6 +399,19 @@ end sub
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
+    if m.nodes.send.hasFocus() then
+        if press and (key = Remote.Key.Left or key = Remote.Key.Up) then focusLog()
+        if key = Remote.Key.Left or key = Remote.Key.Up or key = Remote.Key.Down or key = Remote.Key.Right then return true
+        return false
+    end if
+    if press and key = Remote.Key.Right then
+        focusSend()
+        return true
+    end if
+    if press and key = Remote.Key.Down and m.logViewState.firstLine >= getMaximumFirstLine() then
+        focusSend()
+        return true
+    end if
     if key = Remote.Key.Down or key = Remote.Key.Up then
         if press = false then
             if m.logViewState.heldKey = key then stopScrollHold()

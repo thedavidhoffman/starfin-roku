@@ -1,3 +1,6 @@
+import "pkg:/source/AppMessage.bs"
+import "pkg:/source/Spinner.bs"
+
 namespace tests
 
     @SGNode("LogDialog")
@@ -36,6 +39,307 @@ namespace tests
             content = m.top.callFunc("getContentComponent")
 
             m.assertTrue(content.isInFocusChain())
+        end function
+
+        @it("requires confirmation before starting an upload")
+        function _()
+            m.prepareUpload()
+
+            'bs:disable-next-line 1140
+            onSendRequested()
+
+            m.assertEqual(m.node.uploadState.phase, "confirming")
+            m.assertEqual(m.top.confirmationRequested.requestId, m.node.uploadState.requestId)
+            m.assertInvalid(m.node.uploadTasks.send.request)
+        end function
+
+        @it("ignores a repeated send while confirmation is open")
+        function _()
+            m.prepareUpload()
+            'bs:disable-next-line 1140
+            onSendRequested()
+            requestId = m.node.uploadState.requestId
+            'bs:disable-next-line 1140
+            onSendRequested()
+
+            m.assertEqual(m.node.uploadState.requestId, requestId)
+        end function
+
+        @it("cancels confirmation and restores Send focus")
+        function _()
+            m.prepareUpload()
+            'bs:disable-next-line 1140
+            onSendRequested()
+            m.top.callFunc("resolveUploadConfirmation", { requestId: m.node.uploadState.requestId, sendConfirmed: false })
+
+            m.assertEqual(m.node.uploadState.phase, "open")
+            m.assertTrue(m.top.callFunc("getContentComponent").findNode("sendLog").hasFocus())
+            m.assertInvalid(m.node.uploadTasks.send.request)
+        end function
+
+        @it("blocks interaction and uploads the captured snapshot on confirmation")
+        function _()
+            m.prepareUpload()
+            'bs:disable-next-line 1140
+            onSendRequested()
+            m.top.callFunc("resolveUploadConfirmation", { requestId: m.node.uploadState.requestId, sendConfirmed: true })
+
+            m.assertEqual(m.node.uploadState.phase, "uploading")
+            m.assertEqual(m.node.uploadTasks.send.control, "run")
+            m.assertEqual(m.node.uploadTasks.send.request.entries, ["synthetic snapshot"])
+            m.assertEqual(getGlobalAa().logDialogCapture.shown, 1)
+        end function
+
+        @it("ignores an obsolete confirmation")
+        function _()
+            m.prepareUpload()
+            'bs:disable-next-line 1140
+            onSendRequested()
+            m.top.callFunc("resolveUploadConfirmation", { requestId: -1, sendConfirmed: true })
+
+            m.assertEqual(m.node.uploadState.phase, "confirming")
+            m.assertInvalid(m.node.uploadTasks.send.request)
+        end function
+
+        @it("explains checking availability without confirming")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.availability = "checking"
+            'bs:disable-next-line 1140
+            onSendRequested()
+
+            m.assertEqual(m.node.uploadState.phase, "open")
+            m.assertTrue(Instr(1, getGlobalAa().logDialogCapture.message, "Checking whether") > 0)
+            m.assertEqual(getGlobalAa().logDialogCapture.title, "Checking Log Upload Availability")
+        end function
+
+        @it("explains disabled availability without confirming")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.availability = "disabled"
+            'bs:disable-next-line 1140
+            onSendRequested()
+
+            m.assertEqual(m.node.uploadState.phase, "open")
+            m.assertTrue(Instr(1, getGlobalAa().logDialogCapture.message, "disabled") > 0)
+            m.assertEqual(getGlobalAa().logDialogCapture.title, "Log Uploads Disabled")
+        end function
+
+        @it("refuses an empty snapshot")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.entries = []
+            'bs:disable-next-line 1140
+            onSendRequested()
+
+            m.assertEqual(m.node.uploadState.phase, "open")
+            m.assertInvalid(m.node.uploadTasks.send.request)
+            m.assertEqual(getGlobalAa().logDialogCapture.title, "No Log Entries to Send")
+        end function
+
+        @it("shows the saved filename")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.phase = "uploading"
+            response = { ok: true, filename: "saved.log" }
+            response.requestId = m.node.uploadState.requestId
+            response.server = m.top.server
+            response.userId = m.top.userId
+            m.node.uploadTasks.send.response = response
+            'bs:disable-next-line 1140
+            onUploadResponse()
+
+            m.assertEqual(m.node.uploadState.phase, "open")
+            m.assertEqual(getGlobalAa().logDialogCapture.hidden, 1)
+            m.assertTrue(Instr(1, getGlobalAa().logDialogCapture.message, "saved.log") > 0)
+            m.assertEqual(getGlobalAa().logDialogCapture.title, "Log Sent to Jellyfin")
+            m.assertTrue(m.top.callFunc("getContentComponent").findNode("sendLog").hasFocus())
+        end function
+
+        @it("distinguishes accepted without filename")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.phase = "uploading"
+            response = { ok: true, filename: "" }
+            response.requestId = m.node.uploadState.requestId
+            response.server = m.top.server
+            response.userId = m.top.userId
+            m.node.uploadTasks.send.response = response
+            'bs:disable-next-line 1140
+            onUploadResponse()
+
+            m.assertEqual(m.node.uploadState.phase, "open")
+            m.assertEqual(getGlobalAa().logDialogCapture.hidden, 1)
+            m.assertTrue(Instr(1, getGlobalAa().logDialogCapture.message, "did not return a filename") > 0)
+            m.assertEqual(getGlobalAa().logDialogCapture.title, "Log Sent to Jellyfin")
+            m.assertTrue(m.top.callFunc("getContentComponent").findNode("sendLog").hasFocus())
+        end function
+
+        @it("reports an upload failure")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.phase = "uploading"
+            response = { ok: false, status: 500, errorMessage: "Fixture error" }
+            response.requestId = m.node.uploadState.requestId
+            response.server = m.top.server
+            response.userId = m.top.userId
+            m.node.uploadTasks.send.response = response
+            'bs:disable-next-line 1140
+            onUploadResponse()
+
+            m.assertEqual(m.node.uploadState.phase, "open")
+            m.assertEqual(getGlobalAa().logDialogCapture.hidden, 1)
+            m.assertTrue(Instr(1, getGlobalAa().logDialogCapture.message, "Fixture error") > 0)
+            m.assertEqual(getGlobalAa().logDialogCapture.title, "Unable to Send Log")
+            m.assertTrue(m.top.callFunc("getContentComponent").findNode("sendLog").hasFocus())
+        end function
+
+        @it("ignores stale upload responses")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.phase = "uploading"
+            m.node.uploadTasks.send.response = { ok: true, requestId: -1, server: m.top.server, userId: m.top.userId }
+            'bs:disable-next-line 1140
+            onUploadResponse()
+
+            m.assertEqual(m.node.uploadState.phase, "uploading")
+            m.assertEqual(getGlobalAa().logDialogCapture.hidden, 0)
+        end function
+
+        @it("stops tasks and clears retained entries on close")
+        function _()
+            m.prepareUpload()
+            m.top.callFunc("deactivateUpload")
+
+            m.assertEqual(m.node.uploadState.phase, "closed")
+            m.assertEqual(m.node.uploadState.entries, [])
+            m.assertEqual(m.node.uploadTasks.send.control, "stop")
+            m.assertEqual(m.node.uploadTasks.check.control, "stop")
+        end function
+
+        @it("applies the correlated availability response")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.availability = "checking"
+            m.node.uploadTasks.check.response = { requestId: m.node.uploadState.requestId, server: m.top.server, userId: m.top.userId, availability: "disabled" }
+            'bs:disable-next-line 1140
+            onAvailabilityResponse()
+
+            m.assertEqual(m.node.uploadState.availability, "disabled")
+            m.assertInvalid(m.node.uploadTasks.check.request)
+        end function
+
+        @it("ignores availability from another session")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.availability = "checking"
+            m.node.uploadTasks.check.response = { requestId: m.node.uploadState.requestId, server: "https://old", userId: m.top.userId, availability: "enabled" }
+            'bs:disable-next-line 1140
+            onAvailabilityResponse()
+
+            m.assertEqual(m.node.uploadState.availability, "checking")
+        end function
+
+        @it("allows confirmation after an unreadable capability result")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.availability = "checking"
+            m.node.uploadTasks.check.response = { requestId: m.node.uploadState.requestId, server: m.top.server, userId: m.top.userId, ok: false }
+            'bs:disable-next-line 1140
+            onAvailabilityResponse()
+            'bs:disable-next-line 1140
+            onSendRequested()
+
+            m.assertEqual(m.node.uploadState.availability, "unknown")
+            m.assertEqual(m.node.uploadState.phase, "confirming")
+        end function
+
+        @it("ignores repeated confirmation while uploading")
+        function _()
+            m.prepareUpload()
+            'bs:disable-next-line 1140
+            onSendRequested()
+            result = { requestId: m.node.uploadState.requestId, sendConfirmed: true }
+            m.top.callFunc("resolveUploadConfirmation", result)
+            m.top.callFunc("resolveUploadConfirmation", result)
+
+            m.assertEqual(getGlobalAa().logDialogCapture.shown, 1)
+        end function
+
+        @it("ignores a response after closing the dialog")
+        function _()
+            m.prepareUpload()
+            response = { requestId: m.node.uploadState.requestId, server: m.top.server, userId: m.top.userId, ok: true }
+            m.top.callFunc("deactivateUpload")
+            m.node.uploadTasks.send.response = response
+            'bs:disable-next-line 1140
+            onUploadResponse()
+
+            m.assertEqual(m.node.uploadState.phase, "closed")
+            m.assertEqual(getGlobalAa().logDialogCapture.message, "")
+        end function
+
+        function prepareUpload()
+            m.top.server = ""
+            m.top.token = ""
+            m.top.callFunc("openLogs")
+            m.top.server = "https://fixture"
+            m.top.token = "fixture-token"
+            m.top.userId = "fixture-user"
+            m.node.uploadState.entries = ["synthetic snapshot"]
+            m.node.uploadTasks = { check: m.fakeTask(), send: m.fakeTask() }
+            getGlobalAa().logDialogCapture = { message: "", shown: 0, hidden: 0 }
+            m.stubCall(AppMessage.Dismiss, sub()
+            end sub)
+            m.stubCall(AppMessage.Show, sub(message, title)
+                getGlobalAa().logDialogCapture.message = message
+                getGlobalAa().logDialogCapture.title = title
+            end sub)
+            m.stubCall(Spinner.ShowBlocking, sub(delay)
+                getGlobalAa().logDialogCapture.shown += 1
+            end sub)
+            m.stubCall(Spinner.HideBlocking, sub()
+                getGlobalAa().logDialogCapture.hidden += 1
+            end sub)
+        end function
+
+        function fakeTask() as object
+            task = CreateObject("roSGNode", "Node")
+            task.addFields({ request: {}, response: {}, control: "" })
+            task.request = invalid
+            task.response = invalid
+            return task
+        end function
+
+        protected override function beforeEach()
+            m.top.server = ""
+            m.top.token = ""
+        end function
+
+        protected override function afterEach()
+            m.top.callFunc("deactivateUpload")
+            getGlobalAa().Delete("logDialogCapture")
+        end function
+
+        @it("titles a missing-session message")
+        function _()
+            m.prepareUpload()
+            m.top.token = ""
+            'bs:disable-next-line 1140
+            onSendRequested()
+
+            m.assertEqual(getGlobalAa().logDialogCapture.title, "Sign In Required")
+        end function
+
+        @it("titles an uncertain upload result")
+        function _()
+            m.prepareUpload()
+            m.node.uploadState.phase = "uploading"
+            m.node.uploadTasks.send.response = { requestId: m.node.uploadState.requestId, server: m.top.server, userId: m.top.userId, ok: false, status: 0, failureKind: "timeout", errorMessage: "Uncertain delivery" }
+            'bs:disable-next-line 1140
+            onUploadResponse()
+
+            m.assertEqual(getGlobalAa().logDialogCapture.title, "Log Upload Status Unknown")
         end function
 
     end class

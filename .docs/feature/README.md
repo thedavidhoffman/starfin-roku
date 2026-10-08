@@ -11,6 +11,7 @@ individual Starfin features.
 
 - [Account Badge](account-badge.md)
 - [Activity Logging](activity-logging.md)
+- [Sending Logs to Jellyfin](log-upload.md)
 - [Audio Playback](audio-playback.md)
 - [Automated Device Testing](automated-device-testing.md)
 - [Character Constants](character-constants.md)

@@ -1,0 +1,62 @@
+import "pkg:/source/String.bs"
+import "pkg:/source/Char.bs"
+import "pkg:/source/RequestFailure.bs"
+
+namespace LogUpload
+    enum Command
+        Check = "check"
+        Upload = "upload"
+    end enum
+
+    enum Availability
+        Checking = "checking"
+        Enabled = "enabled"
+        Disabled = "disabled"
+        Unknown = "unknown"
+    end enum
+
+    enum Phase
+        Open = "open"
+        Confirming = "confirming"
+        Uploading = "uploading"
+        Closed = "closed"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' LogUpload.BuildDocument
+    '---------------------------------------------------------------------------
+    function BuildDocument(entries as dynamic) as object
+        if GetInterface(entries, "ifArray") = invalid then return { ok: false, errorTitle: "No Log Entries to Send", errorMessage: "There are no application log entries to send." }
+        body = Strings.Join(entries, Char.NewLine)
+        if Strings.Trim(body) = "" then return { ok: false, errorTitle: "No Log Entries to Send", errorMessage: "There are no application log entries to send." }
+        bytes = CreateObject("roByteArray")
+        bytes.FromAsciiString(body)
+        if bytes.Count() > 1000000 then return { ok: false, errorTitle: "Log Too Large to Send", errorMessage: "This application log exceeds Jellyfin's 1 MB upload limit." }
+        return { ok: true, body: body }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LogUpload.FailureMessage
+    '---------------------------------------------------------------------------
+    function FailureMessage(result as object) as string
+        if result.status = 401 then return "Your Jellyfin session has expired. Please sign in again before sending the log."
+        if result.status = 403 then return "Your Jellyfin server does not allow client log uploads. Contact your server administrator."
+        if result.status = 404 or result.status = 405 then return "This Jellyfin server does not support client log uploads."
+        if result.status = 413 then return "This application log exceeds Jellyfin's upload limit."
+        if result.failureKind = RequestFailure.Kind.Timeout then return "Jellyfin did not respond in time. The log may already have been received. Check the server logs before sending again."
+        return "Unable to send the application log to Jellyfin. Check your connection and try again."
+    end function
+
+    '---------------------------------------------------------------------------
+    ' LogUpload.FailureTitle
+    '---------------------------------------------------------------------------
+    function FailureTitle(result as object) as string
+        if Strings.Trim(result.errorTitle) <> "" then return result.errorTitle
+        if result.status = 401 then return "Sign In Required"
+        if result.status = 403 then return "Log Uploads Disabled"
+        if result.status = 404 or result.status = 405 then return "Log Upload Not Supported"
+        if result.status = 413 then return "Log Too Large to Send"
+        if result.failureKind = RequestFailure.Kind.Timeout then return "Log Upload Status Unknown"
+        return "Unable to Send Log"
+    end function
+end namespace

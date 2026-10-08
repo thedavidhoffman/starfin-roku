@@ -4,15 +4,28 @@ import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 ' showMessage
 '-------------------------------------------------------------------------------
-sub showMessage(message as string)
+sub showMessage(message as string, title = "Message" as string)
     if Strings.Trim(message) = "" then return
+    previousTitle = m.messageState.title
+    title = Strings.Trim(title)
+    if title = "" then title = "Message"
+    if m.messageState.messages.Count() = 0 then
+        m.messageState.title = title
+    else if m.messageState.title <> title then
+        m.messageState.title = "Message"
+    end if
+    isDuplicate = false
     for each existing in m.messageState.messages
-        if existing = message then return
+        if existing = message then
+            isDuplicate = true
+            exit for
+        end if
     end for
+    if isDuplicate and previousTitle = m.messageState.title then return
     if m.messageState.messages.Count() = 0 then m.messageState.returnFocus = getMessageReturnFocus()
-    m.messageState.messages.Push(message)
+    if not isDuplicate then m.messageState.messages.Push(message)
     if m.messageState.overlay <> invalid then
-        m.messageOverlayHost.callFunc("updateOverlay", { id: "message", message: Strings.Join(m.messageState.messages, Chr(10) + Chr(10)) })
+        m.messageOverlayHost.callFunc("updateOverlay", { id: "message", title: m.messageState.title, message: Strings.Join(m.messageState.messages, Chr(10) + Chr(10)) })
     else
         m.messageOpenTimer.control = TimerControl.Command.Start
     end if
@@ -33,6 +46,7 @@ sub onMessageOpenTimer()
         componentName: "MessageDialog"
         openFunction: "openMessage"
         closeField: "closeRequested"
+        title: m.messageState.title
         message: Strings.Join(m.messageState.messages, Chr(10) + Chr(10))
     })
 end sub
@@ -43,7 +57,7 @@ end sub
 sub dismissMessage(restoreFocus = false as boolean)
     m.messageOpenTimer.control = TimerControl.Command.Stop
     target = m.messageState.returnFocus
-    m.messageState = { messages: [], returnFocus: invalid, overlay: invalid }
+    m.messageState = { messages: [], title: "Message", returnFocus: invalid, overlay: invalid }
     m.messageOverlayHost.callFunc("closeOverlay")
     m.messageOverlayHost.closed = invalid
     m.messageOverlayHost.visible = false

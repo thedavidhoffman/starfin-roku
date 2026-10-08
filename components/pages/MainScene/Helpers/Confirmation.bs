@@ -1,0 +1,54 @@
+import "pkg:/source/SettingsClose.bs"
+
+'-------------------------------------------------------------------------------
+' routeSettingsSaveFailure
+'-------------------------------------------------------------------------------
+sub routeSettingsSaveFailure(request as object)
+    if request.kind = SettingsClose.Request.Dismiss then
+        if request.requestId = m.confirmationState.requestId then clearConfirmation()
+        return
+    end if
+    if request.kind <> SettingsClose.Request.Open or m.overlayHost.getChildCount() = 0 then return
+    clearConfirmation()
+    m.confirmationState = { owner: m.overlayHost.getChild(0), requestId: request.requestId }
+    m.confirmationOverlayHost.callFunc("openOverlay", { id: "settingsSaveFailure", componentName: "SettingsSaveFailureDialog", openFunction: "openFailure", closeField: "closeRequested", requestId: request.requestId, message: request.message })
+end sub
+
+'-------------------------------------------------------------------------------
+' clearConfirmation
+'-------------------------------------------------------------------------------
+sub clearConfirmation()
+    m.confirmationOverlayHost.callFunc("closeOverlay", false)
+    m.confirmationState = { owner: invalid, requestId: -1 }
+end sub
+
+'-------------------------------------------------------------------------------
+' onConfirmationClosed
+'-------------------------------------------------------------------------------
+sub onConfirmationClosed()
+    closed = m.confirmationOverlayHost.closed
+    if closed = invalid or closed.overlay = invalid then return
+    if closed.request.requestId <> m.confirmationState.requestId then return
+    owner = m.confirmationState.owner
+    requestId = m.confirmationState.requestId
+    m.confirmationState = { owner: invalid, requestId: -1 }
+    if owner = invalid or m.overlayHost.getChildCount() = 0 then return
+    if not owner.isSameNode(m.overlayHost.getChild(0)) then return
+    if closed.request.id = "settingsSaveFailure" then
+        owner.callFunc("resolveSubtitleSaveFailure", { requestId: requestId, decision: closed.overlay.decision })
+    else if closed.request.id = "logUploadConfirmation" then
+        owner.callFunc("resolveUploadConfirmation", { requestId: requestId, sendConfirmed: closed.overlay.sendConfirmed })
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' routeLogUploadConfirmation
+'-------------------------------------------------------------------------------
+sub routeLogUploadConfirmation(request as object)
+    if m.overlayHost.getChildCount() = 0 then return
+    owner = m.overlayHost.getChild(0)
+    if owner.subtype() <> "LogDialog" then return
+    clearConfirmation()
+    m.confirmationState = { owner: owner, requestId: request.requestId }
+    m.confirmationOverlayHost.callFunc("openOverlay", { id: "logUploadConfirmation", componentName: "LogUploadConfirmationDialog", openFunction: "openConfirmation", closeField: "closeRequested", requestId: request.requestId })
+end sub

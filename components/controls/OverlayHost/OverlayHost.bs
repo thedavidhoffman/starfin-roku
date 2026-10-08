@@ -71,7 +71,14 @@ sub applyOverlayRequestFields(overlay as object, request as object)
         return
     end if
 
-    if requestId = "message" or requestId = "settingsSaveFailure" then
+    if requestId = "message" then
+        overlay.title = Strings.Trim(request.title)
+        if overlay.title = "" then overlay.title = "Message"
+        overlay.message = request.message
+        return
+    end if
+
+    if requestId = "settingsSaveFailure" then
         overlay.message = request.message
         return
     end if
@@ -86,6 +93,13 @@ sub applyOverlayRequestFields(overlay as object, request as object)
 
     if requestId = "accountPicker" then
         overlay.accounts = request.accounts
+        return
+    end if
+
+    if requestId = "logs" then
+        overlay.server = Strings.ToString(request.server)
+        overlay.token = Strings.ToString(request.token)
+        overlay.userId = Strings.ToString(request.userId)
         return
     end if
 
@@ -161,12 +175,13 @@ sub closeOverlay(notifyCancellation = true as boolean)
         m.activeOverlay.callFunc("cancelDiscovery")
     end if
     if m.activeRequest <> invalid and m.activeRequest.id = "settings" then m.activeOverlay.callFunc("deactivateAccountSession")
+    if m.activeRequest <> invalid and m.activeRequest.id = "logs" then m.activeOverlay.callFunc("deactivateUpload")
     if m.activeRequest <> invalid and m.activeRequest.id = MediaOptionsSession.Overlay.Options then m.activeOverlay.callFunc("deactivateVersionSession")
     cancelledRequest = m.activeRequest
     m.top.removeChild(m.activeOverlay)
     m.activeOverlay = invalid
     m.activeRequest = invalid
-    if notifyCancellation and cancelledRequest <> invalid and (cancelledRequest.id = MediaOptionsSession.Overlay.Options or cancelledRequest.id = "settings") then
+    if notifyCancellation and cancelledRequest <> invalid and (cancelledRequest.id = MediaOptionsSession.Overlay.Options or cancelledRequest.id = "settings" or cancelledRequest.id = "logs") then
         m.top.closed = { request: cancelledRequest, overlay: invalid, cancelled: true }
     end if
 end sub

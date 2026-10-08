@@ -1,7 +1,21 @@
+import "pkg:/source/LogUpload.bs"
+import "pkg:/source/AppMessage.bs"
+import "pkg:/source/Spinner.bs"
+import "pkg:/source/TaskControl.bs"
+
 '-------------------------------------------------------------------------------
 ' openLogs
 '-------------------------------------------------------------------------------
 sub openLogs()
+    nextId = 1
+    if m.uploadState <> invalid then
+        deactivateUpload()
+        nextId = m.uploadState.requestId + 1
+    end if
+    m.uploadState = { phase: LogUpload.Phase.Open, availability: LogUpload.Availability.Unknown, requestId: nextId, entries: [] }
+    m.uploadTasks = { check: m.top.findNode("availabilityTask"), send: m.top.findNode("uploadTask") }
+    m.uploadTasks.check.observeFieldScoped("response", "onAvailabilityResponse")
+    m.uploadTasks.send.observeFieldScoped("response", "onUploadResponse")
     m.top.title = "Application Log"
     m.top.dialogWidth = 1840
     m.top.dialogHeight = 1020
@@ -11,9 +25,142 @@ sub openLogs()
     m.top.closeOnContentSelected = false
 
     content = m.top.callFunc("getContentComponent")
-    entries = []
-    if m.global.logService <> invalid then entries = m.global.logService.callFunc("getSnapshot")
-    content.callFunc("loadEntries", entries)
+    if m.global.logService <> invalid then m.uploadState.entries = m.global.logService.callFunc("getSnapshot")
+    content.callFunc("loadEntries", m.uploadState.entries)
+    content.observeFieldScoped("sendRequested", "onSendRequested")
     m.top.callFunc("openDialog")
     content.callFunc("focusLog")
+    if Strings.Trim(m.top.server) <> "" and Strings.Trim(m.top.token) <> "" then
+        m.uploadState.availability = LogUpload.Availability.Checking
+        m.uploadTasks.check.request = buildUploadRequest(LogUpload.Command.Check)
+        m.uploadTasks.check.control = TaskControl.Command.Run
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' buildUploadRequest
+'-------------------------------------------------------------------------------
+function buildUploadRequest(command as string) as object
+    return { command: command, requestId: m.uploadState.requestId, server: m.top.server, token: m.top.token, userId: m.top.userId }
+end function
+
+'-------------------------------------------------------------------------------
+' isCurrentUploadResponse
+'-------------------------------------------------------------------------------
+function isCurrentUploadResponse(response as dynamic) as boolean
+    if response = invalid or m.uploadState = invalid then return false
+    if m.uploadState.phase = LogUpload.Phase.Closed then return false
+    return response.requestId = m.uploadState.requestId and response.server = m.top.server and response.userId = m.top.userId
+end function
+
+'-------------------------------------------------------------------------------
+' onAvailabilityResponse
+'-------------------------------------------------------------------------------
+sub onAvailabilityResponse()
+    response = m.uploadTasks.check.response
+    if not isCurrentUploadResponse(response) then return
+    if m.uploadState.availability <> LogUpload.Availability.Checking then return
+    m.uploadState.availability = LogUpload.Availability.Unknown
+    if response.availability = LogUpload.Availability.Enabled or response.availability = LogUpload.Availability.Disabled then
+        m.uploadState.availability = response.availability
+    end if
+    m.uploadTasks.check.request = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' onSendRequested
+'-------------------------------------------------------------------------------
+sub onSendRequested()
+    if m.uploadState.phase <> LogUpload.Phase.Open then return
+    AppMessage.Dismiss()
+    if Strings.Trim(m.top.server) = "" or Strings.Trim(m.top.token) = "" then
+        AppMessage.Show("Sign in to Jellyfin before sending the application log.", "Sign In Required")
+        return
+    end if
+    if m.uploadState.availability = LogUpload.Availability.Checking then
+        AppMessage.Show("Checking whether your Jellyfin server accepts client logs. Please try again shortly.", "Checking Log Upload Availability")
+        return
+    end if
+    if m.uploadState.availability = LogUpload.Availability.Disabled then
+        AppMessage.Show("Your Jellyfin server administrator has disabled client log uploads.", "Log Uploads Disabled")
+        return
+    end if
+    document = LogUpload.BuildDocument(m.uploadState.entries)
+    if document.ok <> true then
+        AppMessage.Show(document.errorMessage, LogUpload.FailureTitle(document))
+        return
+    end if
+    m.uploadState.phase = LogUpload.Phase.Confirming
+    m.uploadState.requestId += 1
+    m.top.confirmationRequested = { requestId: m.uploadState.requestId }
+end sub
+
+'-------------------------------------------------------------------------------
+' resolveUploadConfirmation
+'-------------------------------------------------------------------------------
+sub resolveUploadConfirmation(result as object)
+    if m.uploadState.phase <> LogUpload.Phase.Confirming then return
+    if result.requestId <> m.uploadState.requestId then return
+    if result.sendConfirmed <> true then
+        m.uploadState.phase = LogUpload.Phase.Open
+        m.top.callFunc("getContentComponent").callFunc("focusSend")
+        return
+    end if
+    m.uploadState.phase = LogUpload.Phase.Uploading
+    request = buildUploadRequest(LogUpload.Command.Upload)
+    request.entries = m.uploadState.entries
+    Spinner.ShowBlocking(2)
+    m.uploadTasks.send.request = request
+    m.uploadTasks.send.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onUploadResponse
+'-------------------------------------------------------------------------------
+sub onUploadResponse()
+    response = m.uploadTasks.send.response
+    if not isCurrentUploadResponse(response) then return
+    if m.uploadState.phase <> LogUpload.Phase.Uploading then return
+    m.uploadState.phase = LogUpload.Phase.Open
+    m.uploadTasks.send.request = invalid
+    Spinner.HideBlocking()
+    m.top.callFunc("getContentComponent").callFunc("focusSend")
+    if response.ok = true then
+        if Strings.Trim(response.filename) <> "" then
+            AppMessage.Show("The application log was sent to Jellyfin." + Chr(10) + Chr(10) + "Filename: " + response.filename, "Log Sent to Jellyfin")
+        else
+            AppMessage.Show("Jellyfin accepted the application log but did not return a filename.", "Log Sent to Jellyfin")
+        end if
+    else
+        if response.status = 403 then m.uploadState.availability = LogUpload.Availability.Disabled
+        AppMessage.Show(Strings.ToString(response.errorMessage, "Unable to send the application log to Jellyfin."), LogUpload.FailureTitle(response))
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onCloseRequested
+'-------------------------------------------------------------------------------
+sub onCloseRequested()
+    deactivateUpload()
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivateUpload
+'-------------------------------------------------------------------------------
+sub deactivateUpload()
+    if m.uploadState = invalid then return
+    if m.uploadState.phase = LogUpload.Phase.Closed then return
+    if m.uploadState.phase = LogUpload.Phase.Uploading then Spinner.HideBlocking()
+    m.uploadState.phase = LogUpload.Phase.Closed
+    m.uploadState.requestId += 1
+    m.uploadState.entries = []
+    for each task in [m.uploadTasks.check, m.uploadTasks.send]
+        task.unobserveFieldScoped("response")
+        task.control = TaskControl.Command.Stop
+        task.request = invalid
+        task.response = invalid
+    end for
+    content = m.top.callFunc("getContentComponent")
+    content.unobserveFieldScoped("sendRequested")
+    content.callFunc("stopScrollHold")
 end sub

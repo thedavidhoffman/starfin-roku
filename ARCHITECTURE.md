@@ -97,6 +97,13 @@ before restoring older focus. MainScene chooses the active layer; the Settings
 failure dialog owns its default Keep editing focus through the Dialog focusContent
 interface. Message dismissal does not restart save progress or make save decisions.
 
+The same confirmation host also preserves the Application Log dialog while its
+feature-owned upload confirmation is open. MainScene routes the result to the
+correlated active owner; LogDialog owns availability, the captured snapshot,
+upload state, task cleanup, and acknowledgment messages. ClientLogUploadTask owns
+configuration reads and plain-text uploads with explicit session data. LogContent
+owns scrolling and Send navigation. See [.docs/feature/log-upload.md](.docs/feature/log-upload.md).
+
 ## Requests, responses, and state
 
 SettingsDialog owns account subtitle configuration loading, serialized

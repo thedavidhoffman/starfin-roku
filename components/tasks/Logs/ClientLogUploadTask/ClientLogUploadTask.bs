@@ -1,0 +1,75 @@
+import "pkg:/source/LogUpload.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    result = { ok: false, errorMessage: "Unable to prepare the application log request." }
+    try
+        if request <> invalid then
+            if Strings.Trim(request.server) = "" or Strings.Trim(request.token) = "" then
+                result.errorTitle = "Sign In Required"
+                result.errorMessage = "Sign in to Jellyfin before sending the application log."
+            else if request.command = LogUpload.Command.Check then
+                result = checkUploadAvailability(request)
+            else if request.command = LogUpload.Command.Upload then
+                result = uploadLog(request)
+            end if
+        end if
+    catch error
+        result = { ok: false, errorMessage: "Unexpected error while contacting Jellyfin." }
+    end try
+    if request <> invalid then
+        result.requestId = request.requestId
+        result.command = request.command
+        result.server = request.server
+        result.userId = request.userId
+    end if
+    m.top.response = result
+end sub
+
+'-------------------------------------------------------------------------------
+' checkUploadAvailability
+'-------------------------------------------------------------------------------
+function checkUploadAvailability(request as object) as object
+    response = HttpClient.Request(Url.NormalizeServer(request.server) + "/System/Configuration", "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), false, 15000)
+    result = { ok: response.ok, availability: LogUpload.Availability.Unknown }
+    if response.ok and GetInterface(response.data, "ifAssociativeArray") <> invalid then
+        if GetInterface(response.data.AllowClientLogUpload, "ifBoolean") <> invalid then
+            result.availability = LogUpload.Availability.Disabled
+            if response.data.AllowClientLogUpload then result.availability = LogUpload.Availability.Enabled
+        end if
+    end if
+    ' Publish only the capability; server configuration must not escape this task.
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' uploadLog
+'-------------------------------------------------------------------------------
+function uploadLog(request as object) as object
+    document = LogUpload.BuildDocument(request.entries)
+    if document.ok <> true then return document
+    headers = JellyfinAuth.BuildTokenHeaders(request.token)
+    headers["Content-Type"] = "text/plain; charset=utf-8"
+    response = HttpClient.Request(Url.NormalizeServer(request.server) + "/ClientLog/Document", "POST", invalid, document.body, headers, false, 30000)
+    if response.ok <> true then
+        return { ok: false, status: response.status, failureKind: response.failureKind, errorMessage: LogUpload.FailureMessage(response) }
+    end if
+    filename = ""
+    if GetInterface(response.data, "ifAssociativeArray") <> invalid then
+        if GetInterface(response.data.FileName, "ifString") <> invalid then filename = Strings.Trim(response.data.FileName)
+    end if
+    return { ok: true, filename: filename }
+end function

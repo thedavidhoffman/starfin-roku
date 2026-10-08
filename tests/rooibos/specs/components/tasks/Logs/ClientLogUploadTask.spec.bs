@@ -1,0 +1,175 @@
+import "pkg:/source/api/HttpClient.bs"
+
+namespace tests
+
+    @SGNode("ClientLogUploadTask")
+    @suite("ClientLogUploadTask component")
+    class ClientLogUploadTaskcomponentTests extends rooibos.BaseTestSuite
+
+        @describe("observable behavior")
+
+        @it("reports enabled availability")
+        function _()
+            m.captureResponse({ ok: true, data: { AllowClientLogUpload: true } })
+            result = m.execute(m.request("check"))
+            m.assertEqual(result.availability, "enabled")
+            m.assertInvalid(result.data)
+        end function
+
+        @it("reports disabled availability")
+        function _()
+            m.captureResponse({ ok: true, data: { AllowClientLogUpload: false } })
+            result = m.execute(m.request("check"))
+            m.assertEqual(result.availability, "disabled")
+            m.assertInvalid(result.data)
+        end function
+
+        @it("reports missing availability")
+        function _()
+            m.captureResponse({ ok: true, data: {} })
+            result = m.execute(m.request("check"))
+            m.assertEqual(result.availability, "unknown")
+            m.assertInvalid(result.data)
+        end function
+
+        @it("reports nonboolean availability")
+        function _()
+            m.captureResponse({ ok: true, data: { AllowClientLogUpload: "true" } })
+            result = m.execute(m.request("check"))
+            m.assertEqual(result.availability, "unknown")
+            m.assertInvalid(result.data)
+        end function
+
+        @it("reports unreadable availability")
+        function _()
+            m.captureResponse({ ok: false, status: 403 })
+            result = m.execute(m.request("check"))
+            m.assertEqual(result.availability, "unknown")
+            m.assertInvalid(result.data)
+        end function
+
+        @it("checks configuration with authentication and correlation")
+        function _()
+            m.captureResponse({ ok: true, data: { AllowClientLogUpload: true, Secret: "private" } })
+            result = m.execute(m.request("check"))
+            call = getGlobalAa().clientLogHttp.calls[0]
+
+            m.assertEqual(call.url, "https://server/base/System/Configuration")
+            m.assertEqual(call.method, "GET")
+            m.assertTrue(Instr(1, call.headers.Authorization, "test-token") > 0)
+            m.assertEqual(result.requestId, 12)
+            m.assertEqual(result.userId, "user")
+            m.assertEqual(result.server, "https://server/base/")
+            m.assertInvalid(result.Secret)
+        end function
+
+        @it("uploads the original plain text and returns the server filename")
+        function _()
+            m.captureResponse({ ok: true, status: 200, data: { FileName: "client-log.log" } })
+            request = m.request("upload")
+            request.entries = ["https://server/full/path", "second line"]
+            result = m.execute(request)
+            call = getGlobalAa().clientLogHttp.calls[0]
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.filename, "client-log.log")
+            m.assertEqual(call.url, "https://server/base/ClientLog/Document")
+            m.assertEqual(call.method, "POST")
+            m.assertEqual(call.body, "https://server/full/path" + Chr(10) + "second line")
+            m.assertEqual(call.headers["Content-Type"], "text/plain; charset=utf-8")
+            m.assertTrue(Instr(1, call.headers.Authorization, "test-token") > 0)
+            m.assertEqual(call.timeoutMs, 30000)
+        end function
+
+        @it("accepts a successful response without a filename")
+        function _()
+            m.captureResponse({ ok: true, status: 204, data: invalid })
+            result = m.execute(m.request("upload"))
+            m.assertTrue(result.ok)
+            m.assertEqual(result.filename, "")
+        end function
+
+        @it("reports rejected uploads without exposing the response body")
+        function _()
+            m.captureResponse({ ok: false, status: 403, data: "private details" })
+            result = m.execute(m.request("upload"))
+            m.assertFalse(result.ok)
+            m.assertEqual(result.status, 403)
+            m.assertTrue(Instr(1, result.errorMessage, "administrator") > 0)
+            m.assertInvalid(result.data)
+        end function
+
+        @it("rejects empty snapshots before HTTP")
+        function _()
+            m.captureResponse(invalid)
+            request = m.request("upload")
+            request.entries = []
+            result = m.execute(request)
+            m.assertFalse(result.ok)
+            m.assertEqual(getGlobalAa().clientLogHttp.calls.Count(), 0)
+        end function
+
+        @it("rejects a missing session before HTTP")
+        function _()
+            m.captureResponse(invalid)
+            request = m.request("upload")
+            request.token = ""
+            result = m.execute(request)
+            m.assertFalse(result.ok)
+            m.assertEqual(getGlobalAa().clientLogHttp.calls.Count(), 0)
+        end function
+
+        @it("rejects unknown commands before HTTP")
+        function _()
+            m.captureResponse(invalid)
+            result = m.execute(m.request("other"))
+            m.assertFalse(result.ok)
+            m.assertEqual(getGlobalAa().clientLogHttp.calls.Count(), 0)
+        end function
+
+        function request(command as string) as object
+            return { server: "https://server/base/", token: "test-token", userId: "user", command: command, requestId: 12, entries: ["synthetic log"] }
+        end function
+
+        function execute(request as object) as object
+            m.node.top.request = request
+            'bs:disable-next-line 1140
+            executeRequest()
+            return m.node.top.response
+        end function
+
+        function captureResponse(response as dynamic)
+            getGlobalAa().clientLogHttp = { response: response, calls: [] }
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                capture = getGlobalAa().clientLogHttp
+                capture.calls.Push({ url: requestUrl, method: method, body: body, headers: headers, timeoutMs: timeoutMs })
+                return capture.response
+            end function)
+        end function
+
+        protected override function tearDown()
+            getGlobalAa().Delete("clientLogHttp")
+        end function
+
+        @it("preserves timeout classification for the result title")
+        function _()
+            m.captureResponse({ ok: false, status: 0, failureKind: "timeout" })
+            result = m.execute(m.request("upload"))
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.failureKind, "timeout")
+        end function
+
+        @it("titles missing-session rejection")
+        function _()
+            m.captureResponse(invalid)
+            request = m.request("upload")
+            request.token = ""
+            result = m.execute(request)
+
+            m.assertEqual(result.errorTitle, "Sign In Required")
+        end function
+
+    end class
+
+end namespace

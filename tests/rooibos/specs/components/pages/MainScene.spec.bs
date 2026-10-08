@@ -55,30 +55,59 @@ namespace tests
             m.assertTrue(owner.isSameNode(m.node.overlayHost.getChild(0)))
             confirmation = m.node.confirmationOverlayHost.getChild(0)
             m.assertEqual(confirmation.message, "Rejected")
-            m.assertEqual(m.node.settingsConfirmation.requestId, 17)
+            m.assertEqual(m.node.confirmationState.requestId, 17)
             m.assertTrue(confirmation.callFunc("getContentComponent").findNode("keepEditing").isInFocusChain())
 
             'bs:disable-next-line 1140
-            clearSettingsConfirmation()
+            clearConfirmation()
             m.node.overlayHost.callFunc("closeOverlay", false)
         end function
 
         @it("ignores a dismissal from an obsolete confirmation request")
         function _()
-            m.node.settingsConfirmation = { owner: invalid, requestId: 18 }
+            m.node.confirmationState = { owner: invalid, requestId: 18 }
             'bs:disable-next-line 1140
             routeSettingsSaveFailure({ kind: "dismiss", requestId: 17 })
-            m.assertEqual(m.node.settingsConfirmation.requestId, 18)
+            m.assertEqual(m.node.confirmationState.requestId, 18)
         end function
 
         @it("matching dismissal clears confirmation ownership")
         function _()
-            m.node.settingsConfirmation = { owner: invalid, requestId: 18 }
+            m.node.confirmationState = { owner: invalid, requestId: 18 }
             'bs:disable-next-line 1140
             routeSettingsSaveFailure({ kind: "dismiss", requestId: 18 })
-            m.assertInvalid(m.node.settingsConfirmation.owner)
-            m.assertEqual(m.node.settingsConfirmation.requestId, -1)
+            m.assertInvalid(m.node.confirmationState.owner)
+            m.assertEqual(m.node.confirmationState.requestId, -1)
             m.assertEqual(m.node.confirmationOverlayHost.getChildCount(), 0)
+        end function
+
+        @describe("log upload confirmation routing")
+
+        @it("opens the confirmation above the preserved log dialog")
+        function _()
+            owner = m.node.overlayHost.callFunc("openOverlay", { id: "logs", componentName: "LogDialog", openFunction: "openLogs", closeField: "closeRequested" })
+            'bs:disable-next-line 1140
+            routeLogUploadConfirmation({ requestId: 7 })
+
+            m.assertTrue(owner.isSameNode(m.node.overlayHost.getChild(0)))
+            confirmation = m.node.confirmationOverlayHost.getChild(0)
+            m.assertEqual(confirmation.subtype(), "LogUploadConfirmationDialog")
+            m.assertTrue(confirmation.callFunc("getContentComponent").findNode("cancel").isInFocusChain())
+            m.assertEqual(m.node.confirmationState.requestId, 7)
+
+            m.node.overlayHost.callFunc("closeOverlay")
+            m.assertEqual(m.node.confirmationOverlayHost.getChildCount(), 0)
+            m.assertInvalid(m.node.confirmationState.owner)
+        end function
+
+        @it("ignores a log confirmation request after its owner is replaced")
+        function _()
+            m.node.overlayHost.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog" })
+            'bs:disable-next-line 1140
+            routeLogUploadConfirmation({ requestId: 7 })
+
+            m.assertEqual(m.node.confirmationOverlayHost.getChildCount(), 0)
+            m.node.overlayHost.callFunc("closeOverlay")
         end function
 
         @describe("media options routing")
@@ -1516,7 +1545,7 @@ namespace tests
             routeSettingsSaveFailure({ kind: "open", requestId: 34, message: "Save failed" })
             m.openOverlapMessage()
             'bs:disable-next-line 1140
-            clearSettingsConfirmation()
+            clearConfirmation()
 
             m.node.messageState.overlay.callFunc("closeDialog")
 
@@ -1548,7 +1577,7 @@ namespace tests
             m.node.loadingSpinner.blockInteraction = false
             m.node.loadingSpinner.control = "stop"
             'bs:disable-next-line 1140
-            clearSettingsConfirmation()
+            clearConfirmation()
             m.node.overlayHost.callFunc("closeOverlay")
         end function
 
@@ -2818,6 +2847,103 @@ namespace tests
             m.node.overlayHost.callFunc("closeOverlay")
 
             m.assertEqual(m.global.showUnwatchedEpisodeCount, "subtle")
+        end function
+
+        @it("uses the supplied title through the scene interface")
+        function _()
+            m.top.callFunc("dismissMessage")
+            m.top.callFunc("showMessage", "Saved", "Log Sent to Jellyfin")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertEqual(m.node.messageState.overlay.title, "Log Sent to Jellyfin")
+            m.top.callFunc("dismissMessage")
+        end function
+
+        @it("retains the default title for existing callers")
+        function _()
+            m.top.callFunc("dismissMessage")
+            m.top.callFunc("showMessage", "Failure")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertEqual(m.node.messageState.overlay.title, "Message")
+            m.top.callFunc("dismissMessage")
+        end function
+
+        @it("keeps matching titles when messages are combined")
+        function _()
+            m.top.callFunc("dismissMessage")
+            m.top.callFunc("showMessage", "First", "Unable to Send Log")
+            m.top.callFunc("showMessage", "Second", "Unable to Send Log")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertEqual(m.node.messageState.overlay.title, "Unable to Send Log")
+            m.top.callFunc("dismissMessage")
+        end function
+
+        @it("defaults mixed titles to Message")
+        function _()
+            m.top.callFunc("dismissMessage")
+            m.top.callFunc("showMessage", "First", "Log Sent to Jellyfin")
+            m.top.callFunc("showMessage", "Second", "Unable to Send Log")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertEqual(m.node.messageState.overlay.title, "Message")
+            m.top.callFunc("dismissMessage")
+        end function
+
+        @it("updates the visible title when a different message is merged")
+        function _()
+            m.top.callFunc("dismissMessage")
+            m.top.callFunc("showMessage", "Saved", "Log Sent to Jellyfin")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+            overlay = m.node.messageState.overlay
+            m.top.callFunc("showMessage", "Failure")
+
+            m.assertTrue(m.node.messageState.overlay.isSameNode(overlay))
+            m.assertEqual(overlay.title, "Message")
+            m.top.callFunc("dismissMessage")
+        end function
+
+        @it("resets the title after dismissal")
+        function _()
+            m.top.callFunc("showMessage", "Saved", "Log Sent to Jellyfin")
+            m.top.callFunc("dismissMessage")
+            m.top.callFunc("showMessage", "Failure")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertEqual(m.node.messageState.overlay.title, "Message")
+            m.top.callFunc("dismissMessage")
+        end function
+
+        @it("updates a mixed title without duplicating identical message text")
+        function _()
+            m.top.callFunc("dismissMessage")
+            m.top.callFunc("showMessage", "Same body", "Log Sent to Jellyfin")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+            m.top.callFunc("showMessage", "Same body", "Unable to Send Log")
+
+            m.assertEqual(m.node.messageState.overlay.title, "Message")
+            m.assertEqual(m.node.messageState.overlay.message, "Same body")
+            m.assertEqual(m.node.messageState.messages.Count(), 1)
+            m.top.callFunc("dismissMessage")
+        end function
+
+        @it("normalizes a blank message title")
+        function _()
+            m.top.callFunc("dismissMessage")
+            m.top.callFunc("showMessage", "Body", "   ")
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+
+            m.assertEqual(m.node.messageState.overlay.title, "Message")
+            m.top.callFunc("dismissMessage")
         end function
 
     end class

@@ -55,3 +55,9 @@ log through Logger.
   image, not merely when loading begins.
 - Activity entries flow through `Logger.activity()` and the shared `LogService`;
   they remain available anywhere the normal application log is displayed.
+
+## Sending logs to Jellyfin
+
+The Application Log dialog can send its captured stored snapshot to the connected
+server after explicit confirmation. See [Sending Logs to Jellyfin](log-upload.md)
+for availability checks, consent, upload limits, result messages, and ownership.

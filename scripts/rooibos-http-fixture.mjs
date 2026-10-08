@@ -18,8 +18,23 @@ export async function startHttpFixture(rokuHost) {
   const token = `fixture-${randomUUID()}`;
   const tilePath = `/Videos/${itemId}/Trickplay/320/0.jpg`;
   const exceptionPath = `/http-exception-${randomUUID()}`;
+  const postPath = `/http-post-${randomUUID()}`;
   const requests = [];
   const server = http.createServer((request, response) => {
+    if (request.url === postPath && request.method === 'POST') {
+      const chunks = [];
+      request.on('data', chunk => chunks.push(chunk));
+      request.on('end', () => {
+        const authorization = request.headers.authorization ?? '';
+        const accepted = authorization.startsWith('MediaBrowser ')
+          && authorization.split(/,\s*/).some(part => part === `Token="${token}"`);
+        const record = { accepted, method: request.method, contentType: request.headers['content-type'], body: Buffer.concat(chunks).toString('utf8') };
+        requests.push(record);
+        response.writeHead(accepted ? 200 : 401, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify(record));
+      });
+      return;
+    }
     if (request.url === exceptionPath) {
       response.writeHead(503, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ error: {} }));
@@ -43,7 +58,7 @@ export async function startHttpFixture(rokuHost) {
   server.listen(0, address);
   await once(server, 'listening');
   return {
-    config: { server: `http://${address}:${server.address().port}`, token, itemId, tilePath, exceptionPath },
+    config: { server: `http://${address}:${server.address().port}`, token, itemId, tilePath, exceptionPath, postPath },
     requests,
     server,
     async close() {

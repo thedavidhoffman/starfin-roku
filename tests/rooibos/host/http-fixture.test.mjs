@@ -43,3 +43,20 @@ test('rejects query authentication even with a valid header', async () => {
     await fixture.close();
   }
 });
+
+
+test('echoes an authenticated synthetic text post', async () => {
+  const fixture = await startHttpFixture('127.0.0.1');
+  try {
+    const body = 'synthetic log ?\nsecond line';
+    const response = await fetch(fixture.config.server + fixture.config.postPath, {
+      method: 'POST',
+      headers: { Authorization: `MediaBrowser Client="Fixture", Token="${fixture.config.token}"`, 'Content-Type': 'text/plain; charset=utf-8' },
+      body
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, method: 'POST', contentType: 'text/plain; charset=utf-8', body });
+  } finally {
+    await fixture.close();
+  }
+});

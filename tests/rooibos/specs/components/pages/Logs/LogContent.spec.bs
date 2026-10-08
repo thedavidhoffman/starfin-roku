@@ -40,7 +40,7 @@ namespace tests
 
         @it("creates the visible row pool")
         function _()
-            m.assertEqual(m.top.findNode("logSheet").getChildCount(), 19)
+            m.assertEqual(m.top.findNode("logSheet").getChildCount(), 17)
         end function
 
         @it("renders an empty-state message")
@@ -115,7 +115,7 @@ namespace tests
             m.top.callFunc("loadEntries", m.createEntries(20))
 
             'bs:disable-next-line 1140
-            handled = onKeyEvent("down", true)
+            handled = onKeyEvent("up", true)
 
             m.assertTrue(handled)
             m.assertEqual(m.top.findNode("scrollHoldDelayTimer").control, "start")
@@ -169,6 +169,50 @@ namespace tests
                 entries.Push("[Source] entry " + i.ToStr())
             end for
             return entries
+        end function
+
+        protected override function beforeEach()
+            m.top.callFunc("focusLog")
+            m.top.callFunc("stopScrollHold")
+        end function
+
+        @it("moves right to Send without changing the scroll position")
+        function _()
+            m.top.callFunc("loadEntries", m.createEntries(20))
+            offset = m.node.logViewState.firstLine
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+
+            m.assertTrue(m.top.findNode("sendLog").hasFocus())
+            m.assertEqual(m.node.logViewState.firstLine, offset)
+            m.assertEqual(m.top.findNode("scrollHoldDelayTimer").control, "stop")
+        end function
+
+        @it("moves down from the end of the log to Send")
+        function _()
+            m.top.callFunc("loadEntries", m.createEntries(20))
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+
+            m.assertTrue(m.top.findNode("sendLog").hasFocus())
+        end function
+
+        @it("returns left from Send to the log")
+        function _()
+            m.top.callFunc("focusSend")
+            'bs:disable-next-line 1140
+            onKeyEvent("left", true)
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertFalse(m.top.findNode("sendLog").hasFocusVisual)
+        end function
+
+        @it("emits a send request from the button")
+        function _()
+            m.top.sendRequested = false
+            m.top.findNode("sendLog").buttonSelected = true
+
+            m.assertTrue(m.top.sendRequested)
         end function
 
     end class

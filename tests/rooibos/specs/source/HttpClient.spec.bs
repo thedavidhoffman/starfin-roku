@@ -106,6 +106,18 @@ namespace tests
             m.startNativeRequest("recovery")
         end function
 
+        @async(15000)
+        @it("sends an explicit lowercase plain text content type and UTF-8 body")
+        function _()
+            m.startNativeRequest("postPlain")
+        end function
+
+        @async(15000)
+        @it("retains the default JSON content type for existing posts")
+        function _()
+            m.startNativeRequest("postJson")
+        end function
+
         private sub startNativeRequest(scenario as string)
             fixture = ParseJson(ReadAsciiFile("pkg:/test-fixtures/http-fixture.json"))
             if fixture = invalid then
@@ -138,6 +150,20 @@ namespace tests
                 m.assertNotInvalid(response, "The native task finished without a response.")
                 if response <> invalid then
                     m.assertInvalid(response.escapedException, "The exception escaped HttpClient.Request.")
+                    if m.nativeRequest.scenario = "postPlain" or m.nativeRequest.scenario = "postJson" then
+                        m.assertTrue(response.posted.ok)
+                        m.assertTrue(response.posted.data.accepted)
+                        m.assertEqual(response.posted.data.method, "POST")
+                        if m.nativeRequest.scenario = "postPlain" then
+                            m.assertEqual(response.posted.data.contentType, "text/plain; charset=utf-8")
+                            m.assertEqual(response.posted.data.body, "synthetic log " + Chr(233) + Chr(10) + "second line")
+                        else
+                            m.assertEqual(response.posted.data.contentType, "application/json")
+                            m.assertEqual(response.posted.data.body, "{}")
+                        end if
+                        m.done()
+                        return
+                    end if
                     failure = response.failure
                     m.assertNotInvalid(failure)
                     if failure <> invalid then

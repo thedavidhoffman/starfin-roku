@@ -252,6 +252,41 @@ namespace tests
             m.assertEqual(m.top.closed.overlay.selectedVideo.startPositionTicks, 20000000&)
         end function
 
+        @it("passes the explicit session to the log dialog")
+        function _()
+            m.top.callFunc("closeOverlay", false)
+            overlay = m.top.callFunc("openOverlay", { id: "logs", componentName: "LogDialog", server: "https://fixture", token: "fixture-token", userId: "fixture-user" })
+
+            m.assertEqual(overlay.server, "https://fixture")
+            m.assertEqual(overlay.token, "fixture-token")
+            m.assertEqual(overlay.userId, "fixture-user")
+            m.top.callFunc("closeOverlay", false)
+        end function
+
+        @it("notifies cancellation when a log dialog is replaced")
+        function _()
+            m.top.callFunc("closeOverlay", false)
+            overlay = m.top.callFunc("openOverlay", { id: "logs", componentName: "LogDialog", openFunction: "openLogs" })
+            m.top.closed = invalid
+            m.top.callFunc("closeOverlay")
+
+            m.assertTrue(m.top.closed.cancelled)
+            m.assertEqual(m.top.closed.request.id, "logs")
+            m.assertInvalid(overlay.findNode("uploadTask").request)
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+        @it("passes a message title through opening and updates")
+        function _()
+            m.top.callFunc("closeOverlay", false)
+            overlay = m.top.callFunc("openOverlay", { id: "message", componentName: "MessageDialog", openFunction: "openMessage", message: "Saved", title: "Log Sent to Jellyfin" })
+            m.assertEqual(overlay.title, "Log Sent to Jellyfin")
+
+            m.top.callFunc("updateOverlay", { id: "message", message: "More information", title: "Message" })
+            m.assertEqual(overlay.findNode("titleLabel").text, "Message")
+            m.top.callFunc("closeOverlay", false)
+        end function
+
     end class
 
 end namespace

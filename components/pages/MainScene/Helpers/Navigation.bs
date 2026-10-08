@@ -54,6 +54,14 @@ sub navHandleHeaderOverlayRequested()
         end if
         request.eventFields = ["themePreviewRequested", "watchedIndicatorPreviewRequested", "unwatchedEpisodeCountPreviewRequested", "subtitleSaveFailureRequested"]
     end if
+    if request.id = "logs" then
+        if m.session <> invalid then
+            request.server = m.session.server
+            request.token = m.session.token
+            request.userId = m.session.userId
+        end if
+        request.eventFields = ["confirmationRequested"]
+    end if
 
     m.overlayHost.callFunc("openOverlay", request)
 end sub
@@ -66,6 +74,7 @@ sub navHandleOverlayClosed()
     if closed = invalid then return
 
     request = closed.request
+    if request <> invalid and request.id = "logs" then clearConfirmation()
     if request <> invalid and request.id = HomeVideoPlayback.Overlay.Playback then
         selection = invalid
         if closed.overlay <> invalid then selection = closed.overlay.selectedVideo
@@ -125,7 +134,7 @@ sub navHandleOverlayClosed()
     end if
 
     if request <> invalid and request.id = "settings" then
-        clearSettingsConfirmation()
+        clearConfirmation()
         if closed.overlay <> invalid and closed.overlay.resetStarfinConfirmed = true then
             authHandleResetStarfinConfirmed()
             return
@@ -159,6 +168,11 @@ end sub
 sub navHandleOverlayEventRaised()
     raised = m.overlayHost.eventRaised
     if raised = invalid or raised.request = invalid then return
+
+    if raised.request.id = "logs" and raised.field = "confirmationRequested" then
+        routeLogUploadConfirmation(raised.value)
+        return
+    end if
 
     if raised.request.id = "settings" and raised.field = "subtitleSaveFailureRequested" then
         routeSettingsSaveFailure(raised.value)
