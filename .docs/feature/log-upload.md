@@ -5,6 +5,11 @@ Right moves from the log to Send; Down at the end of the log also moves to Send.
 Left or Up returns to the log. Moving focus stops held scrolling. The dialog
 retains its scroll position while confirmation and acknowledgment dialogs appear.
 
+Returning to the log explicitly releases the Send button's actual focus before
+focusing the content root. Focusing an ancestor alone can retain the focused
+button while removing its highlight. Left/Up must restore scrolling, remove Send
+from the focus chain, and leave OK unable to activate Send until it is focused again.
+
 ## Snapshot and availability
 
 Opening the dialog captures `LogService.getSnapshot()` once. Uploads contain all
@@ -31,8 +36,11 @@ Cancel is initially focused. Cancel and Back return to Send without uploading.
 Send Log closes confirmation and starts a blocking, noncancelable spinner, with a
 two-second visual delay. The dialog owns one upload at a time. The task sends an
 authenticated `POST /ClientLog/Document` with Jellyfin client metadata and
-`Content-Type: text/plain; charset=utf-8`. Empty documents and documents exceeding
-1,000,000 UTF-8 bytes are rejected without trimming or sending. There are no
+`Content-Type: text/plain; charset=utf-8`. Invalid snapshots and snapshots with zero
+entries are rejected before joining. `Arrays.IsArray()` checks for Roku's `ifArray`
+interface without validating element types. Entry contents are preserved without whitespace
+validation. Documents exceeding 1,000,000 UTF-8 bytes are rejected without trimming
+or sending. There are no
 automatic retries. The request timeout is 30 seconds; capability checks use 15 seconds.
 
 Success opens an acknowledgment containing Jellyfin's `FileName`. A successful

@@ -1,22 +1,49 @@
+import "pkg:/source/Number.bs"
+import "pkg:/source/String.bs"
+
 namespace DeviceCapabilities
+
+    enum Comparison
+        LessThanEqual = "LessThanEqual"
+        EqualsAny = "EqualsAny"
+        NotEquals = "NotEquals"
+        GreaterThanEqual = "GreaterThanEqual"
+    end enum
+
+    enum CodecProfileType
+        Video = "Video"
+        VideoAudio = "VideoAudio"
+    end enum
 
     '---------------------------------------------------------------------------
     ' DeviceCapabilities.BuildDeviceProfileJson
     '---------------------------------------------------------------------------
-    function BuildDeviceProfileJson(includeSubtitleProfiles = true as boolean) as string
-        displaySize = DeviceCapabilities.GetDisplaySize()
+    function BuildDeviceProfileJson(includeSubtitleProfiles = true as boolean, diagnostics = invalid as dynamic) as string
+        displaySize = GetVideoPlaybackSize()
+        if diagnostics <> invalid then diagnostics.Push(__DeviceDiagnosticLine(CreateObject("roDeviceInfo")))
         bitrateLimits = DeviceCapabilities.GetBitrateLimits()
         return Json.Object([
             Json.Pair("Name", "Starfin Roku")
             Json.NumberPair("MaxStreamingBitrate", bitrateLimits.maxStreaming)
             Json.NumberPair("MaxStaticBitrate", bitrateLimits.maxStatic)
             Json.NumberPair("MusicStreamingTranscodingBitrate", bitrateLimits.musicTranscoding)
-            Json.String("DirectPlayProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__DirectPlayProfiles()) + "]"
-            Json.String("TranscodingProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__TranscodingProfiles()) + "]"
+            Json.String("DirectPlayProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__DirectPlayProfiles(diagnostics)) + "]"
+            Json.String("TranscodingProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__TranscodingProfiles(diagnostics)) + "]"
             Json.String("ContainerProfiles") + ":[]"
             Json.String("CodecProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__CodecProfiles(displaySize)) + "]"
             Json.String("SubtitleProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__GetSubtitleProfiles(includeSubtitleProfiles)) + "]"
         ])
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__DeviceDiagnosticLine
+    '---------------------------------------------------------------------------
+    function __DeviceDiagnosticLine(deviceInfo as object) as string
+        osVersion = deviceInfo.GetOSVersion()
+        if osVersion = invalid then osVersion = {}
+        version = Strings.ToString(osVersion.major, "unknown") + "." + Strings.ToString(osVersion.minor, "unknown") + "." + Strings.ToString(osVersion.revision, "unknown") + " build " + Strings.ToString(osVersion.build, "unknown")
+        ' Quote device strings so raw mode/name values remain on one log line.
+        return "Capabilities device model=" + Json.String(deviceInfo.GetModel()) + " name=" + Json.String(deviceInfo.GetModelDisplayName()) + " os=" + Json.String(version) + " videoMode=" + Json.String(deviceInfo.GetVideoMode()) + " displayMode=" + Json.String(deviceInfo.GetDisplayMode()) + " audioOutput=" + Json.String(deviceInfo.GetAudioOutputChannel())
     end function
 
     '---------------------------------------------------------------------------
@@ -57,6 +84,21 @@ namespace DeviceCapabilities
     end function
 
     '---------------------------------------------------------------------------
+    ' DeviceCapabilities.GetVideoPlaybackSize
+    '---------------------------------------------------------------------------
+    function GetVideoPlaybackSize() as object
+        deviceInfo = CreateObject("roDeviceInfo")
+        if deviceInfo <> invalid then
+            videoSize = __DisplaySizeFromText(deviceInfo.GetVideoMode())
+            if __IsValidDisplaySize(videoSize) then
+                videoSize.source = "videoMode"
+                return videoSize
+            end if
+        end if
+        return { width: 1920, height: 1080, source: "fallback" }
+    end function
+
+    '---------------------------------------------------------------------------
     ' DeviceCapabilities.GetMaxScreenImageSize
     '---------------------------------------------------------------------------
     function GetMaxScreenImageSize() as object
@@ -66,18 +108,22 @@ namespace DeviceCapabilities
     '---------------------------------------------------------------------------
     ' DeviceCapabilities.__DirectPlayProfiles
     '---------------------------------------------------------------------------
-    function __DirectPlayProfiles() as object
+    function __DirectPlayProfiles(diagnostics = invalid as dynamic) as object
         deviceInfo = CreateObject("roDeviceInfo")
         profiles = []
         containers = ["mp4", "hls", "mkv", "ts"]
-        videoCodecs = ["h264", "mpeg4 avc", "hevc", "vp9", "mpeg2", "av1"]
-        audioCodecs = ["aac", "mp3", "ac3", "eac3", "dts", "flac", "alac", "vorbis", "wma", "pcm"]
-        passthroughCodecs = ["ac3", "eac3", "dts"]
+        videoCodecs = ["h264", "mpeg4 avc", "hevc", "vp9", "mpeg2"]
+        ' Roku can falsely reject AV1 when a container is included in the probe.
+        supportsAv1 = DeviceCapabilities.__CanDecodeVideo(deviceInfo, "av1", "")
+        if diagnostics <> invalid then diagnostics.Push("Capabilities AV1 codecOnly=" + Strings.ToString(supportsAv1))
+        audioCodecs = ["aac", "mp3", "ac3", "eac3", "dts", "flac", "alac", "vorbis", "wma", "pcm", "opus"]
         isSurround = deviceInfo.GetAudioOutputChannel() = "5.1 surround"
 
         for each container in containers
             supportedVideoCodecs = []
             supportedAudioCodecs = []
+            audioProbeResults = []
+            assumedAc3 = false
 
             for each videoCodec in videoCodecs
                 if DeviceCapabilities.__CanDecodeVideo(deviceInfo, videoCodec, container) then
@@ -85,13 +131,23 @@ namespace DeviceCapabilities
                 end if
             end for
 
+            if supportsAv1 then DeviceCapabilities.__AddVideoCodec(supportedVideoCodecs, "av1")
+
             for each audioCodec in audioCodecs
-                if DeviceCapabilities.__CanDecodeAudio(deviceInfo, audioCodec, container) or (isSurround and DeviceCapabilities.__Contains(passthroughCodecs, audioCodec)) then
+                ' Match the official client's narrow AC3 surround false-negative workaround.
+                audioSupported = DeviceCapabilities.__CanDecodeAudio(deviceInfo, audioCodec, container)
+                if diagnostics <> invalid then audioProbeResults.Push(audioCodec + "=" + Strings.ToString(audioSupported))
+                useSurroundFallback = not audioSupported and isSurround and audioCodec = "ac3" and container <> "mp4"
+                if useSurroundFallback then assumedAc3 = true
+                if audioSupported or useSurroundFallback then
                     DeviceCapabilities.__AddUnique(supportedAudioCodecs, audioCodec)
                 end if
             end for
 
-            if supportedVideoCodecs.Count() > 0 then
+            if diagnostics <> invalid then diagnostics.Push("Capabilities audio container=" + container + " probes=" + audioProbeResults.Join(",") + " assumedAc3=" + Strings.ToString(assumedAc3) + " directPlayProfile=" + Strings.ToString(supportedVideoCodecs.Count() > 0 and supportedAudioCodecs.Count() > 0))
+
+            ' Jellyfin interprets an empty audio list as allowing every codec.
+            if supportedVideoCodecs.Count() > 0 and supportedAudioCodecs.Count() > 0 then
                 profiles.Push(DeviceCapabilities.__ProfileJson(DeviceCapabilities.__ContainerAliases(container), supportedVideoCodecs.Join(","), supportedAudioCodecs.Join(",")))
             end if
         end for
@@ -102,15 +158,15 @@ namespace DeviceCapabilities
     '---------------------------------------------------------------------------
     ' DeviceCapabilities.__TranscodingProfiles
     '---------------------------------------------------------------------------
-    function __TranscodingProfiles() as object
+    function __TranscodingProfiles(diagnostics = invalid as dynamic) as object
         deviceInfo = CreateObject("roDeviceInfo")
         maxAudioChannels = "2"
         if deviceInfo.GetAudioOutputChannel() = "5.1 surround" then maxAudioChannels = "6"
 
-        tsAudioCodecs = DeviceCapabilities.__TranscodingAudioCodecs(deviceInfo)
-        tsVideoCodecs = DeviceCapabilities.__TranscodingVideoCodecs(deviceInfo, "ts")
-        mp4AudioCodecs = DeviceCapabilities.__TranscodingAudioCodecs(deviceInfo)
-        mp4VideoCodecs = DeviceCapabilities.__TranscodingVideoCodecs(deviceInfo, "mp4")
+        tsAudioCodecs = DeviceCapabilities.__TranscodingAudioCodecs(deviceInfo, "ts")
+        tsVideoCodecs = DeviceCapabilities.__TranscodingVideoCodecs(deviceInfo, "ts", diagnostics)
+        mp4AudioCodecs = DeviceCapabilities.__TranscodingAudioCodecs(deviceInfo, "mp4")
+        mp4VideoCodecs = DeviceCapabilities.__TranscodingVideoCodecs(deviceInfo, "mp4", diagnostics)
 
         return [
             Json.Object([
@@ -146,27 +202,231 @@ namespace DeviceCapabilities
     function __CodecProfiles(displaySize as object) as object
         if displaySize = invalid then displaySize = { width: 1920, height: 1080 }
 
-        return [
+        profiles = [
             Json.Object([
-                Json.Pair("Type", "Video")
+                Json.Pair("Type", CodecProfileType.Video)
                 Json.String("Conditions") + ":[" + Json.JoinParts([
-                    DeviceCapabilities.__ProfileConditionJson("LessThanEqual", "Width", displaySize.width.ToStr())
-                    DeviceCapabilities.__ProfileConditionJson("LessThanEqual", "Height", displaySize.height.ToStr())
+                    __ProfileConditionJson(Comparison.LessThanEqual, "Width", displaySize.width.ToStr())
+                    __ProfileConditionJson(Comparison.LessThanEqual, "Height", displaySize.height.ToStr())
                 ]) + "]"
                 Json.String("ApplyConditions") + ":[]"
             ])
         ]
+        deviceInfo = CreateObject("roDeviceInfo")
+        profiles.Append(__AudioCodecProfiles(deviceInfo))
+        profiles.Append(__VideoCodecProfiles(deviceInfo))
+        return profiles
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__AudioCodecProfiles
+    '---------------------------------------------------------------------------
+    function __AudioCodecProfiles(deviceInfo as object) as object
+        profiles = []
+        for each codec in ["aac", "mp3", "ac3", "eac3", "dts", "flac", "alac", "vorbis", "wma", "pcm", "opus"]
+            channelLimit = 0
+            for each channels in [8, 6, 2]
+                result = deviceInfo.CanDecodeAudio({ Codec: codec, ChCnt: channels })
+                if result <> invalid and result.Result = true then
+                    channelLimit = channels
+                    exit for
+                end if
+            end for
+            ' AC3 passthrough can be available even when the decoder probe fails.
+            if channelLimit = 0 and codec = "ac3" and deviceInfo.GetAudioOutputChannel() = "5.1 surround" then channelLimit = 6
+            conditions = []
+            if channelLimit > 0 then conditions.Push(__ProfileConditionJson(Comparison.LessThanEqual, "AudioChannels", channelLimit.ToStr()))
+            if codec = "aac" then conditions.Push(__ProfileConditionJson(Comparison.NotEquals, "AudioProfile", "Main"))
+            if conditions.Count() > 0 then
+                profiles.Push(Json.Object([
+                    Json.Pair("Type", CodecProfileType.VideoAudio)
+                    Json.Pair("Codec", codec)
+                    Json.String("Conditions") + ":[" + Json.JoinParts(conditions) + "]"
+                ]))
+            end if
+        end for
+        return profiles
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__VideoCodecProfiles
+    '---------------------------------------------------------------------------
+    function __VideoCodecProfiles(deviceInfo as object) as object
+        profiles = []
+        display = deviceInfo.GetDisplayProperties()
+        formats = [
+            { codec: "h264", aliases: "h264,mpeg4 avc", profiles: ["baseline", "main", "high"], levels: ["3", "3.1", "3.2", "4", "4.1", "4.2", "5", "5.1", "5.2", "6", "6.1", "6.2"] }
+            { codec: "hevc", aliases: "hevc,h265", profiles: ["main", "main 10"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2"] }
+            { codec: "vp9", aliases: "vp9", profiles: ["profile 0", "profile 2"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2"] }
+            { codec: "av1", aliases: "av1", profiles: ["main", "main 10"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "5.3", "6.0", "6.1", "6.2", "6.3"] }
+        ]
+        for each codecSpec in formats
+            supportedProfiles = []
+            capabilities = []
+            maxBitDepth = 8
+            for each profile in codecSpec.profiles
+                maxLevel = -1
+                for each level in codecSpec.levels
+                    ' Keep containers out of detailed probes, including AV1.
+                    result = deviceInfo.CanDecodeVideo({ Codec: codecSpec.codec, Profile: profile, Level: level })
+                    if codecSpec.codec = "h264" and (result = invalid or result.Result <> true) then
+                        result = deviceInfo.CanDecodeVideo({ Codec: "mpeg4 avc", Profile: profile, Level: level })
+                    end if
+                    if result <> invalid and result.Result = true then
+                        apiLevel = __VideoLevelValue(codecSpec.codec, level)
+                        if apiLevel > maxLevel then maxLevel = apiLevel
+                    end if
+                end for
+                if maxLevel >= 0 then
+                    names = [profile]
+                    ' FFprobe describes both 8-bit and 10-bit AV1 as Main.
+                    if codecSpec.codec = "av1" then names = ["main"]
+                    if codecSpec.codec = "h264" and profile = "baseline" then names.Append(["constrained baseline", "constrainedbaseline"])
+                    bitDepth = 8
+                    if profile = "main 10" or profile = "profile 2" then bitDepth = 10
+                    if bitDepth > maxBitDepth then maxBitDepth = bitDepth
+                    capabilities.Push({ names: names, level: maxLevel, bitDepth: bitDepth })
+                    for each name in names
+                        __AddUnique(supportedProfiles, name)
+                    end for
+                end if
+            end for
+            if codecSpec.codec = "h264" and capabilities.Count() > 0 and not __Contains(supportedProfiles, "baseline") then
+                ' Match Jellyfin Roku's Baseline compatibility fallback when only
+                ' Main/High probes succeed, without pooling their level limits.
+                baselineLevel = capabilities[0].level
+                for each capability in capabilities
+                    if capability.level < baselineLevel then baselineLevel = capability.level
+                end for
+                baselineNames = ["baseline", "constrained baseline", "constrainedbaseline"]
+                capabilities.Push({ names: baselineNames, level: baselineLevel, bitDepth: 8 })
+                supportedProfiles.Append(baselineNames)
+            end if
+            conditions = []
+            ' Unknown probe results must not produce an empty allow-list or level zero.
+            if supportedProfiles.Count() > 0 then
+                conditions.Push(__ProfileConditionJson(Comparison.EqualsAny, "VideoProfile", supportedProfiles.Join("|"), false))
+                if capabilities.Count() = 1 then conditions.Push(__ProfileConditionJson(Comparison.LessThanEqual, "VideoLevel", capabilities[0].level.ToStr(), false))
+            end if
+            if supportedProfiles.Count() > 0 or codecSpec.codec = "h264" then
+                conditions.Push(__ProfileConditionJson(Comparison.LessThanEqual, "VideoBitDepth", maxBitDepth.ToStr(), false))
+            end if
+            if display <> invalid then conditions.Push(__ProfileConditionJson(Comparison.EqualsAny, "VideoRangeType", __VideoRangeTypes(display, codecSpec.codec), false))
+            if conditions.Count() > 0 then
+                profiles.Push(Json.Object([
+                    Json.Pair("Type", CodecProfileType.Video)
+                    Json.Pair("Codec", codecSpec.aliases)
+                    Json.String("Conditions") + ":[" + Json.JoinParts(conditions) + "]"
+                ]))
+            end if
+            if capabilities.Count() > 1 then profiles.Append(__ScopedVideoProfiles(codecSpec.aliases, codecSpec.codec, capabilities))
+        end for
+        return profiles
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__ScopedVideoProfiles
+    '---------------------------------------------------------------------------
+    function __ScopedVideoProfiles(aliases as string, codec as string, capabilities as object) as object
+        profiles = []
+        fallbackLevel = capabilities[0].level
+        fallbackDepth = capabilities[0].bitDepth
+        unknownProfile = []
+        for each capability in capabilities
+            if capability.level < fallbackLevel then fallbackLevel = capability.level
+            if capability.bitDepth < fallbackDepth then fallbackDepth = capability.bitDepth
+            applies = [__ProfileConditionJson(Comparison.EqualsAny, "VideoProfile", capability.names.Join("|"))]
+            if codec = "av1" then
+                ' Main covers both depths in Jellyfin. Missing depth applies both
+                ' limits, conservatively intersecting them rather than guessing.
+                if capability.bitDepth = 8 then
+                    applies.Push(__ProfileConditionJson(Comparison.LessThanEqual, "VideoBitDepth", "8", false))
+                else
+                    applies.Push(__ProfileConditionJson(Comparison.GreaterThanEqual, "VideoBitDepth", "9", false))
+                end if
+            end if
+            conditions = [
+                __ProfileConditionJson(Comparison.EqualsAny, "VideoProfile", capability.names.Join("|"), false)
+                __ProfileConditionJson(Comparison.LessThanEqual, "VideoLevel", capability.level.ToStr(), false)
+                __ProfileConditionJson(Comparison.LessThanEqual, "VideoBitDepth", capability.bitDepth.ToStr(), false)
+            ]
+            profiles.Push(__ConditionalVideoProfileJson(aliases, conditions, applies))
+            for each name in capability.names
+                unknownProfile.Push(__ProfileConditionJson(Comparison.NotEquals, "VideoProfile", name, false))
+            end for
+        end for
+        ' Jellyfin also uses these constraints for transcoding. An unknown or
+        ' unsupported input profile must give every offered output a safe limit.
+        profiles.Push(__ConditionalVideoProfileJson(aliases, [
+            __ProfileConditionJson(Comparison.LessThanEqual, "VideoLevel", fallbackLevel.ToStr(), false)
+            __ProfileConditionJson(Comparison.LessThanEqual, "VideoBitDepth", fallbackDepth.ToStr(), false)
+        ], unknownProfile))
+        return profiles
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__ConditionalVideoProfileJson
+    '---------------------------------------------------------------------------
+    function __ConditionalVideoProfileJson(aliases as string, conditions as object, applies as object) as string
+        return Json.Object([
+            Json.Pair("Type", CodecProfileType.Video)
+            Json.Pair("Codec", aliases)
+            Json.String("Conditions") + ":[" + Json.JoinParts(conditions) + "]"
+            Json.String("ApplyConditions") + ":[" + Json.JoinParts(applies) + "]"
+        ])
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__VideoLevelValue
+    '---------------------------------------------------------------------------
+    function __VideoLevelValue(codec as string, level as string) as integer
+        parts = level.Split(".")
+        major = Number.ToInteger(parts[0], 0)
+        minor = 0
+        if parts.Count() > 1 then minor = Number.ToInteger(parts[1], 0)
+        ' Jellyfin retains FFprobe levels: HEVC level_idc, AV1 seq_level_idx,
+        ' and decimal level times ten for H.264 and VP9.
+        if codec = "hevc" then return major * 30 + minor * 3
+        if codec = "av1" then return (major - 2) * 4 + minor
+        return major * 10 + minor
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DeviceCapabilities.__VideoRangeTypes
+    '---------------------------------------------------------------------------
+    function __VideoRangeTypes(display as object, codec as string) as string
+        ranges = ["SDR", "DOVIWithSDR"]
+        if codec <> "h264" then
+            if display.Hdr10 = true then
+                __AddUnique(ranges, "HDR10")
+                __AddUnique(ranges, "DOVIWithHDR10")
+            end if
+            if display.Hdr10Plus = true then
+                __AddUnique(ranges, "HDR10Plus")
+                __AddUnique(ranges, "DOVIWithHDR10Plus")
+            end if
+            if display.HLG = true then
+                __AddUnique(ranges, "HLG")
+                __AddUnique(ranges, "DOVIWithHLG")
+            end if
+        end if
+        if display.DolbyVision = true and codec <> "vp9" then
+            for each range in ["DOVI", "DOVIWithHDR10", "DOVIWithHDR10Plus", "DOVIWithHLG"]
+                __AddUnique(ranges, range)
+            end for
+        end if
+        return ranges.Join("|")
     end function
 
     '---------------------------------------------------------------------------
     ' DeviceCapabilities.__ProfileConditionJson
     '---------------------------------------------------------------------------
-    function __ProfileConditionJson(conditionType as string, condition as string, value as string) as string
+    function __ProfileConditionJson(conditionType as string, condition as string, value as string, isRequired = true as boolean) as string
         return Json.Object([
             Json.Pair("Condition", conditionType)
             Json.Pair("Property", condition)
             Json.Pair("Value", value)
-            Json.BooleanPair("IsRequired", true)
+            Json.BooleanPair("IsRequired", isRequired)
         ])
     end function
 
@@ -199,12 +459,12 @@ namespace DeviceCapabilities
     '---------------------------------------------------------------------------
     ' DeviceCapabilities.__TranscodingAudioCodecs
     '---------------------------------------------------------------------------
-    function __TranscodingAudioCodecs(deviceInfo as object) as string
+    function __TranscodingAudioCodecs(deviceInfo as object, container as string) as string
         codecs = []
         candidates = ["ac3", "eac3", "aac", "mp3", "vorbis", "opus", "flac", "alac", "dts"]
 
         for each codec in candidates
-            if DeviceCapabilities.__CanDecodeAudio(deviceInfo, codec, "ts") or DeviceCapabilities.__CanDecodeAudio(deviceInfo, codec, "mp4") then
+            if DeviceCapabilities.__CanDecodeAudio(deviceInfo, codec, container) then
                 DeviceCapabilities.__AddUnique(codecs, codec)
             end if
         end for
@@ -217,12 +477,14 @@ namespace DeviceCapabilities
     '---------------------------------------------------------------------------
     ' DeviceCapabilities.__TranscodingVideoCodecs
     '---------------------------------------------------------------------------
-    function __TranscodingVideoCodecs(deviceInfo as object, container as string) as string
+    function __TranscodingVideoCodecs(deviceInfo as object, container as string, diagnostics = invalid as dynamic) as string
         codecs = ["h264"]
         candidates = ["mpeg4 avc", "hevc", "vp9", "mpeg2", "av1"]
 
         for each codec in candidates
-            if DeviceCapabilities.__CanDecodeVideo(deviceInfo, codec, container) then
+            supported = DeviceCapabilities.__CanDecodeVideo(deviceInfo, codec, container)
+            if diagnostics <> invalid and codec = "av1" then diagnostics.Push("Capabilities AV1 container=" + container + " supported=" + Strings.ToString(supported))
+            if supported then
                 DeviceCapabilities.__AddVideoCodec(codecs, codec)
             end if
         end for
@@ -255,7 +517,9 @@ namespace DeviceCapabilities
     ' DeviceCapabilities.__CanDecodeVideo
     '---------------------------------------------------------------------------
     function __CanDecodeVideo(deviceInfo as object, codec as string, container as string) as boolean
-        result = deviceInfo.CanDecodeVideo({ Codec: codec, Container: container })
+        decodeInfo = { Codec: codec }
+        if container <> "" then decodeInfo.Container = container
+        result = deviceInfo.CanDecodeVideo(decodeInfo)
         return result <> invalid and result.Result = true
     end function
 
@@ -274,9 +538,11 @@ namespace DeviceCapabilities
         text = LCase(value)
         if text = "" then return invalid
 
+        if Instr(1, text, "4320") > 0 or Instr(1, text, "8k") > 0 then return { width: 7680, height: 4320 }
         if Instr(1, text, "2160") > 0 or Instr(1, text, "4k") > 0 or Instr(1, text, "uhd") > 0 then return { width: 3840, height: 2160 }
         if Instr(1, text, "1080") > 0 or Instr(1, text, "fhd") > 0 then return { width: 1920, height: 1080 }
         if Instr(1, text, "720") > 0 or Instr(1, text, "hd") > 0 then return { width: 1280, height: 720 }
+        if Instr(1, text, "576") > 0 then return { width: 720, height: 576 }
         if Instr(1, text, "480") > 0 or Instr(1, text, "sd") > 0 then return { width: 720, height: 480 }
 
         return invalid

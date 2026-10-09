@@ -33,6 +33,19 @@ Restarting a title with subtitles Off, including a switch to either Force
 Transcode mode, preserves the Off selection and does not allow the server to
 introduce or burn in a subtitle track.
 
+## AV1 Capability Detection
+
+Direct-play profiles probe AV1 with `CanDecodeVideo({ Codec: "av1" })`, without
+a container. Some Roku devices falsely reject container-qualified AV1 probes;
+the official Jellyfin Roku client uses the same codec-only workaround. A positive
+result advertises AV1 in the existing MP4, HLS, MKV/WebM, and TS direct-play
+profiles. A negative result does not advertise AV1. Audio support and the other
+profile constraints still apply. Transcoding profiles retain their container-specific
+probes; this workaround does not claim AV1 support in additional HLS output formats.
+
+Container-specific audio, channel limits, and video profile/HDR constraints are
+documented in [Playback Device Capabilities](device-capabilities.md).
+
 ## Playback Mode Matrix
 
 Movie version selection is separate from the Video playback mode. The Versions

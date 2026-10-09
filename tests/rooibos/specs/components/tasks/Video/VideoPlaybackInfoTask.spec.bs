@@ -8,6 +8,28 @@ namespace tests
 
         @describe("playback logging")
 
+        @it("logs capability diagnostics without adding them to the playback request body")
+        function _()
+            originalLog = m.node.log
+            capture = { lines: [], write: sub(message)
+                m.lines.Push(message)
+            end sub }
+            m.node.log = capture
+            m.stubCall(DeviceCapabilities.BuildDeviceProfileJson, m.profileWithDiagnostics)
+
+            'bs:disable-next-line 1140
+            body = ParseJson(buildPlaybackInfoBody(false, true))
+            m.node.log = originalLog
+
+            m.assertEqual(capture.lines, ["Capabilities device test", "Capabilities AV1 codecOnly=true"])
+            m.assertEqual(body, { DeviceProfile: { Name: "diagnostic-test" }, AlwaysBurnInSubtitleWhenTranscoding: false })
+        end function
+
+        private function profileWithDiagnostics(includeSubtitles as boolean, diagnostics as object) as string
+            diagnostics.Append(["Capabilities device test", "Capabilities AV1 codecOnly=true"])
+            return Json.Object([Json.Pair("Name", "diagnostic-test")])
+        end function
+
         @it("logs a transcode reason without stream metadata")
         function _()
             originalLog = m.node.log

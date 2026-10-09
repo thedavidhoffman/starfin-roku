@@ -200,11 +200,89 @@ namespace tests
         @it("returns left from Send to the log")
         function _()
             m.top.callFunc("focusSend")
+            m.assertTrue(m.top.findNode("sendLog").hasFocus())
+
             'bs:disable-next-line 1140
             onKeyEvent("left", true)
 
             m.assertTrue(m.top.hasFocus())
+            m.assertFalse(m.top.findNode("sendLog").hasFocus())
             m.assertFalse(m.top.findNode("sendLog").hasFocusVisual)
+        end function
+
+        @it("returns up from Send without moving the log")
+        function _()
+            m.top.callFunc("loadEntries", m.createEntries(20))
+            offset = m.node.logViewState.firstLine
+            m.top.callFunc("focusSend")
+
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertFalse(m.top.findNode("sendLog").hasFocus())
+            m.assertFalse(m.top.findNode("sendLog").hasFocusVisual)
+            m.assertEqual(m.node.logViewState.firstLine, offset)
+        end function
+
+        @it("scrolls and releases the hold timer after returning left from Send")
+        function _()
+            m.top.callFunc("loadEntries", m.createEntries(20))
+            offset = m.node.logViewState.firstLine
+            m.top.callFunc("focusSend")
+            'bs:disable-next-line 1140
+            onKeyEvent("left", true)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.node.logViewState.firstLine, offset - 3)
+            m.assertEqual(m.top.findNode("scrollHoldDelayTimer").control, "start")
+
+            'bs:disable-next-line 1140
+            onKeyEvent("up", false)
+
+            m.assertEqual(m.top.findNode("scrollHoldDelayTimer").control, "stop")
+            m.assertEqual(m.top.findNode("scrollRepeatTimer").control, "stop")
+        end function
+
+        @it("preserves focus and scroll position across repeated Send round trips")
+        function _()
+            m.top.callFunc("loadEntries", m.createEntries(20))
+            offset = m.node.logViewState.firstLine
+
+            for cycle = 1 to 3
+                'bs:disable-next-line 1140
+                onKeyEvent("right", true)
+                m.assertTrue(m.top.findNode("sendLog").hasFocus())
+                m.assertTrue(m.top.findNode("sendLog").hasFocusVisual)
+
+                'bs:disable-next-line 1140
+                onKeyEvent("left", true)
+                m.assertTrue(m.top.hasFocus())
+                m.assertFalse(m.top.findNode("sendLog").hasFocus())
+                m.assertFalse(m.top.findNode("sendLog").hasFocusVisual)
+            end for
+
+            m.assertEqual(m.node.logViewState.firstLine, offset)
+        end function
+
+        @it("leaves OK unhandled by the log after returning from Send")
+        function _()
+            m.top.sendRequested = false
+            m.top.callFunc("focusSend")
+            'bs:disable-next-line 1140
+            onKeyEvent("left", true)
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertFalse(m.top.findNode("sendLog").isInFocusChain())
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("OK", true)
+
+            m.assertFalse(handled)
+            m.assertFalse(m.top.sendRequested)
         end function
 
         @it("emits a send request from the button")

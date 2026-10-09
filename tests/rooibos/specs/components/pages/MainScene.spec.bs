@@ -640,6 +640,33 @@ namespace tests
             m.assertInvalid(m.node.pendingUpNextAutoPlayRequest)
         end function
 
+        @it("retains the playback failure message after restoring the underlying surface")
+        function _()
+            ' MainScene is a Group inside Rooibos; route scene messages to its harness.
+            getGlobalAa().playbackFailureMessageScene = m.top
+            m.stubCall(AppMessage.Show, sub(message, title)
+                target = getGlobalAa().playbackFailureMessageScene
+                target.callFunc("showMessage", message, title)
+            end sub)
+            m.stubCall(AppMessage.Dismiss, sub()
+                target = getGlobalAa().playbackFailureMessageScene
+                target.callFunc("dismissMessage")
+            end sub)
+            m.node.homePage.visible = false
+
+            m.node.playbackController.closed = {
+                restorePlayRequest: { itemId: "failed-item" }
+                upNextRequest: invalid
+                failureMessage: "No playable stream."
+            }
+            getGlobalAa().Delete("playbackFailureMessageScene")
+
+            m.assertTrue(m.node.homePage.visible)
+            m.assertTrue(m.node.header.visible)
+            m.assertEqual(m.node.messageState.messages, ["No playable stream."])
+            m.assertInvalid(m.node.pendingUpNextAutoPlayRequest)
+        end function
+
         @it("opens up-next autoplay from a player close payload")
         function _()
             request = {

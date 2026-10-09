@@ -158,6 +158,22 @@ namespace tests
             m.assertEqual(m.countPlayers(), 0)
             m.assertEqual(m.top.closed.restorePlayRequest.itemId, "item-1")
             m.assertEqual(m.top.closed.upNextRequest, upNextRequest)
+            m.assertEqual(m.top.closed.failureMessage, "")
+        end function
+
+        @it("preserves terminal failure while removing the player without advancing the queue")
+        function _()
+            m.top.playRequest = { itemId: "failed-item", item: { Id: "failed-item" } }
+            m.node.player.playbackFailed = "No playable stream."
+            m.node.player.upNextRequested = { nextItem: { itemId: "next-item" } }
+
+            m.node.player.closeRequested = true
+
+            m.assertInvalid(m.node.player)
+            m.assertEqual(m.countPlayers(), 0)
+            m.assertEqual(m.top.closed.restorePlayRequest.itemId, "failed-item")
+            m.assertEqual(m.top.closed.failureMessage, "No playable stream.")
+            m.assertInvalid(m.top.closed.upNextRequest)
         end function
 
         @it("ignores events from a detached player after replacement")

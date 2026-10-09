@@ -708,6 +708,9 @@ namespace tests
             activities = m.getActivityEntries(collector)
             m.assertEqual(activities.Count(), 1)
             m.assertTrue(Instr(1, activities[0], "Playback failed for " + Char.DoubleQuote + "Alien" + Char.DoubleQuote + ": Unable to recover playback.") > 0)
+            m.assertTrue(m.top.closeRequested)
+            m.assertEqual(m.node.playback.phase, "stopped")
+            m.assertFalse(m.top.playbackProgressChanged.isFinished)
         end function
 
         @it("logs queue advancement with the destination title")
@@ -1754,8 +1757,10 @@ namespace tests
             m.assertEqual(second.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("replacement", "user")])
         end function
 
-        @it("displays the request failure after playback recovery is exhausted")
+        @it("closes with the request failure after playback recovery is exhausted")
         function _()
+            m.node.activePlayback = invalid
+            m.node.playback.hasReportedStart = false
             m.node.playback.phase = "resolving"
             getGlobalAa().requestFailureMessage = ""
             m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
@@ -1770,10 +1775,12 @@ namespace tests
             onPlaybackInfoResponse()
 
             m.assertEqual(m.top.playbackFailed, "Unable to play this item. The server denied access.")
-            m.assertEqual(getGlobalAa().requestFailureMessage, m.top.playbackFailed)
+            m.assertTrue(m.top.closeRequested)
+            m.assertEqual(m.node.playback.phase, "stopped")
+            m.assertEqual(getGlobalAa().requestFailureMessage, "")
         end function
 
-        private sub captureRequestFailureMessage(message as string)
+        private sub captureRequestFailureMessage(message as string, title = "Message" as string)
             getGlobalAa().requestFailureMessage = message
         end sub
 

@@ -1,4 +1,5 @@
 import "pkg:/source/String.bs"
+import "pkg:/source/Array.bs"
 import "pkg:/source/Char.bs"
 import "pkg:/source/RequestFailure.bs"
 
@@ -26,12 +27,14 @@ namespace LogUpload
     ' LogUpload.BuildDocument
     '---------------------------------------------------------------------------
     function BuildDocument(entries as dynamic) as object
-        if GetInterface(entries, "ifArray") = invalid then return { ok: false, errorTitle: "No Log Entries to Send", errorMessage: "There are no application log entries to send." }
+        if not Arrays.IsArray(entries) then return { ok: false, errorTitle: "No Log Entries to Send", errorMessage: "There are no application log entries to send." }
+        if entries.Count() = 0 then return { ok: false, errorTitle: "No Log Entries to Send", errorMessage: "There are no application log entries to send." }
+
         body = Strings.Join(entries, Char.NewLine)
-        if Strings.Trim(body) = "" then return { ok: false, errorTitle: "No Log Entries to Send", errorMessage: "There are no application log entries to send." }
         bytes = CreateObject("roByteArray")
         bytes.FromAsciiString(body)
         if bytes.Count() > 1000000 then return { ok: false, errorTitle: "Log Too Large to Send", errorMessage: "This application log exceeds Jellyfin's 1 MB upload limit." }
+
         return { ok: true, body: body }
     end function
 

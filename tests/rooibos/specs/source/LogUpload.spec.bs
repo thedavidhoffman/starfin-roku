@@ -19,11 +19,6 @@ namespace tests
             m.assertFalse(LogUpload.BuildDocument([]).ok)
         end function
 
-        @it("rejects whitespace-only snapshots")
-        function _()
-            m.assertFalse(LogUpload.BuildDocument(["  ", Chr(10)]).ok)
-        end function
-
         @it("rejects invalid snapshots")
         function _()
             m.assertFalse(LogUpload.BuildDocument(invalid).ok)
@@ -31,17 +26,25 @@ namespace tests
 
         @it("accepts exactly one million bytes")
         function _()
-            m.assertTrue(LogUpload.BuildDocument([String(1000000, "a")]).ok)
+            text = m.createAsciiText(1000000)
+            m.assertEqual(Len(text), 1000000)
+
+            m.assertTrue(LogUpload.BuildDocument([text]).ok)
         end function
 
         @it("rejects more than one million bytes")
         function _()
-            m.assertFalse(LogUpload.BuildDocument([String(1000001, "a")]).ok)
+            text = m.createAsciiText(1000001)
+            m.assertEqual(Len(text), 1000001)
+
+            m.assertFalse(LogUpload.BuildDocument([text]).ok)
         end function
 
         @it("measures multibyte text in bytes")
         function _()
-            text = String(999999, "a") + Chr(233)
+            text = m.createAsciiText(999999) + Chr(233)
+            m.assertEqual(Len(text), 1000000)
+
             m.assertFalse(LogUpload.BuildDocument([text]).ok)
         end function
 
@@ -122,7 +125,19 @@ namespace tests
 
         @it("titles an oversized document")
         function _()
-            m.assertEqual(LogUpload.FailureTitle(LogUpload.BuildDocument([String(1000001, "a")])), "Log Too Large to Send")
+            text = m.createAsciiText(1000001)
+            m.assertEqual(Len(text), 1000001)
+
+            m.assertEqual(LogUpload.FailureTitle(LogUpload.BuildDocument([text])), "Log Too Large to Send")
+        end function
+
+        function createAsciiText(length as integer) as string
+            ' Large repeat counts passed to String() return empty text on the test Roku.
+            text = "a"
+            while Len(text) < length
+                text += text
+            end while
+            return Left(text, length)
         end function
 
     end class

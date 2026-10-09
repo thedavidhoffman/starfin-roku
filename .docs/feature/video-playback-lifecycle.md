@@ -16,6 +16,17 @@ The stop response has no UI or navigation side effects. This prevents server
 response time, including the extra time Jellyfin may need to terminate an HLS
 transcode, from delaying the local player close.
 
+## Exhausted Playback Recovery
+
+When startup negotiation or runtime recovery exhausts its attempts, VideoPlayer
+publishes the failure, preserves final progress where an accepted session exists,
+stops playback, and requests closure. PlaybackController captures the failure
+message with the restoration snapshot and removes the player without advancing
+to Up Next. MainScene restores the originating surface before displaying the
+failure through AppMessage, so navigation cleanup cannot dismiss the new message
+or leave an empty player behind. Existing deep-link failure routing continues to
+own its Home fallback and acknowledgment.
+
 ## Rapid Replay
 
 A user may start playback again from the detail page while the prior stop report

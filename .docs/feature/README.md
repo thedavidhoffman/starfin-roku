@@ -30,6 +30,7 @@ individual Starfin features.
 - [Music Library](music-library.md)
 - [Movie Detail Browsing](movie-detail-browsing.md)
 - [Playback Safeguards and Diagnostics](playback-safeguards.md)
+- [Playback Device Capabilities](device-capabilities.md)
 - [Playback Workflow and State Ownership](playback-workflow.md)
 - [Playback Skip Controls](playback-skip-controls.md)
 - [Playlist Artwork](playlist-artwork.md)

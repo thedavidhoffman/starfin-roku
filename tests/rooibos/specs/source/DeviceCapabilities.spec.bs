@@ -7,6 +7,130 @@ namespace tests
 
         @describe("DeviceCapabilities pure helpers")
 
+        @it("summarizes device identity OS and raw output modes")
+        function _()
+            device = m.diagnosticDevice()
+
+            line = DeviceCapabilities.__DeviceDiagnosticLine(device)
+
+            m.assertEqual(line, "Capabilities device model=" + Json.String("4800X") + " name=" + Json.String("Roku Ultra") + " os=" + Json.String("14.1.0 build 7709") + " videoMode=" + Json.String("2160p60 DV") + " displayMode=" + Json.String("1080p") + " audioOutput=" + Json.String("Stereo"))
+        end function
+
+        @it("reports unknown OS fields when the version response is unavailable")
+        function _()
+            device = m.diagnosticDevice()
+            device.GetOSVersion = function() as dynamic
+                return invalid
+            end function
+
+            line = DeviceCapabilities.__DeviceDiagnosticLine(device)
+
+            m.assertTrue(Instr(1, line, "unknown.unknown.unknown build unknown") > 0)
+        end function
+
+        @it("records codec-only AV1 support and container audio failures independently")
+        function _()
+            m.stubCall(DeviceCapabilities.__CanDecodeVideo, m.decodeAv1WithoutContainer)
+            m.stubCall(DeviceCapabilities.__CanDecodeAudio, m.decodeAacOnly)
+            diagnostics = []
+
+            profiles = DeviceCapabilities.__DirectPlayProfiles(diagnostics)
+
+            m.assertEqual(diagnostics.Count(), 5)
+            m.assertEqual(diagnostics[0], "Capabilities AV1 codecOnly=true")
+            m.assertEqual(diagnostics[1], "Capabilities audio container=mp4 probes=aac=true,mp3=false,ac3=false,eac3=false,dts=false,flac=false,alac=false,vorbis=false,wma=false,pcm=false,opus=false assumedAc3=false directPlayProfile=true")
+            m.assertEqual(profiles.Count(), 4)
+        end function
+
+        @it("records omitted MP4 direct play after all audio probes fail")
+        function _()
+            m.stubCall(DeviceCapabilities.__CanDecodeVideo, m.decodeH264Only)
+            m.stubCall(DeviceCapabilities.__CanDecodeAudio, m.decodeNoAudio)
+            diagnostics = []
+
+            DeviceCapabilities.__DirectPlayProfiles(diagnostics)
+
+            m.assertEqual(diagnostics[0], "Capabilities AV1 codecOnly=false")
+            m.assertTrue(Instr(1, diagnostics[1], "assumedAc3=false directPlayProfile=false") > 0)
+        end function
+
+        @it("records container-qualified AV1 rejection without changing transcoding codecs")
+        function _()
+            device = {
+                CanDecodeVideo: function(info as object) as object
+                    return { Result: info.Codec = "av1" and info.Container = invalid }
+                end function
+            }
+            diagnostics = []
+
+            codecs = DeviceCapabilities.__TranscodingVideoCodecs(device, "ts", diagnostics)
+
+            m.assertEqual(codecs, "h264")
+            m.assertEqual(diagnostics, ["Capabilities AV1 container=ts supported=false"])
+        end function
+
+        @it("probes AV1 without a container for direct playback")
+        function _()
+            device = {
+                CanDecodeVideo: function(info as object) as object
+                    return { Result: info.Codec = "av1" and info.Container = invalid }
+                end function
+            }
+
+            m.assertTrue(DeviceCapabilities.__CanDecodeVideo(device, "av1", ""))
+        end function
+
+        @it("keeps container restrictions when probing AV1 for transcoding")
+        function _()
+            device = {
+                CanDecodeVideo: function(info as object) as object
+                    return { Result: info.Container = invalid }
+                end function
+            }
+
+            m.assertEqual(DeviceCapabilities.__TranscodingVideoCodecs(device, "ts"), "h264")
+        end function
+
+        @it("advertises AV1 direct play despite container-specific false negatives")
+        function _()
+            m.stubCall(DeviceCapabilities.__CanDecodeVideo, m.decodeAv1WithoutContainer)
+            m.stubCall(DeviceCapabilities.__CanDecodeAudio, m.decodeAacOnly)
+
+            profiles = DeviceCapabilities.__DirectPlayProfiles()
+
+            m.assertEqual(profiles.Count(), 4)
+            for each profileJson in profiles
+                profile = ParseJson(profileJson)
+                m.assertEqual(profile.VideoCodec, "av1")
+            end for
+        end function
+
+        @it("does not advertise AV1 when the codec-only probe fails")
+        function _()
+            m.stubCall(DeviceCapabilities.__CanDecodeVideo, m.decodeH264Only)
+            m.stubCall(DeviceCapabilities.__CanDecodeAudio, m.decodeAacOnly)
+
+            profiles = DeviceCapabilities.__DirectPlayProfiles()
+
+            m.assertEqual(profiles.Count(), 4)
+            for each profileJson in profiles
+                profile = ParseJson(profileJson)
+                m.assertEqual(profile.VideoCodec, "h264")
+            end for
+        end function
+
+        private function decodeAv1WithoutContainer(device as object, codec as string, container as string) as boolean
+            return codec = "av1" and container = ""
+        end function
+
+        private function decodeH264Only(device as object, codec as string, container as string) as boolean
+            return codec = "h264" and container <> ""
+        end function
+
+        private function decodeAacOnly(device as object, codec as string, container as string) as boolean
+            return codec = "aac"
+        end function
+
         @it("advertises SRT externally without a conflicting SubRip profile")
         function _()
             profiles = DeviceCapabilities.__SubtitleProfiles()
@@ -28,6 +152,40 @@ namespace tests
         @it("parses common display-size descriptions (case 1)")
         function _()
             m.assertEqual(DeviceCapabilities.__DisplaySizeFromText("4K UHD"), { width: 3840, height: 2160 })
+        end function
+
+        @it("uses 4K video dimensions even with a 1080p UI")
+        function _()
+            m.stubCall(DeviceCapabilities.GetVideoPlaybackSize, { width: 3840, height: 2160, source: "videoMode" })
+            m.stubCall(DeviceCapabilities.GetDisplaySize, { width: 1920, height: 1080, source: "displayMode" })
+
+            profile = ParseJson(DeviceCapabilities.BuildDeviceProfileJson())
+
+            m.assertEqual(m.findCondition(profile.CodecProfiles[0], "Width").Value, "3840")
+            m.assertEqual(m.findCondition(profile.CodecProfiles[0], "Height").Value, "2160")
+        end function
+
+        @it("keeps image dimensions tied to the UI on a 4K video output")
+        function _()
+            m.stubCall(DeviceCapabilities.GetVideoPlaybackSize, { width: 3840, height: 2160, source: "videoMode" })
+            m.stubCall(DeviceCapabilities.GetDisplaySize, { width: 1920, height: 1080, source: "displayMode" })
+
+            m.assertEqual(DeviceCapabilities.GetMaxScreenImageSize(), { width: 1920, height: 1080, source: "displayMode" })
+        end function
+
+        @it("parses a 4K Dolby Vision video mode")
+        function _()
+            m.assertEqual(DeviceCapabilities.__DisplaySizeFromText("2160p60 DV"), { width: 3840, height: 2160 })
+        end function
+
+        @it("parses an 8K video mode")
+        function _()
+            m.assertEqual(DeviceCapabilities.__DisplaySizeFromText("4320p60"), { width: 7680, height: 4320 })
+        end function
+
+        @it("parses a PAL video mode")
+        function _()
+            m.assertEqual(DeviceCapabilities.__DisplaySizeFromText("576p50"), { width: 720, height: 576 })
         end function
 
         @it("parses common display-size descriptions (case 2)")
@@ -81,6 +239,599 @@ namespace tests
             DeviceCapabilities.__AddVideoCodec(codecs, "hevc")
             DeviceCapabilities.__AddVideoCodec(codecs, "mpeg2")
             m.assertEqual(codecs, ["hevc", "h265", "mpeg2video"])
+        end function
+
+        @describe("negotiated codec constraints")
+
+        @it("keeps MP4-only audio out of the TS transcoding profile")
+        function _()
+            m.assertEqual(DeviceCapabilities.__TranscodingAudioCodecs(m.capabilityDevice(), "ts"), "ac3")
+        end function
+
+        @it("keeps TS-only audio out of the MP4 transcoding profile")
+        function _()
+            m.assertEqual(DeviceCapabilities.__TranscodingAudioCodecs(m.capabilityDevice(), "mp4"), "aac,opus")
+        end function
+
+        @it("retains the AAC fallback when container probes provide no codecs")
+        function _()
+            device = m.capabilityDevice()
+            device.containerAudio.ts = []
+
+            m.assertEqual(DeviceCapabilities.__TranscodingAudioCodecs(device, "ts"), "aac")
+        end function
+
+        @it("advertises Opus for video only in a container that reports support")
+        function _()
+            m.stubCall(DeviceCapabilities.__CanDecodeVideo, m.decodeH264Only)
+            m.stubCall(DeviceCapabilities.__CanDecodeAudio, m.decodeMkvOpus)
+
+            profiles = DeviceCapabilities.__DirectPlayProfiles()
+
+            m.assertEqual(profiles.Count(), 4)
+            for each profileJson in profiles
+                profile = ParseJson(profileJson)
+                m.assertEqual(profile.Type, "Video")
+                m.assertEqual(Instr(1, profile.AudioCodec, "opus") > 0, profile.Container = "mkv,webm")
+            end for
+        end function
+
+        @it("omits empty audio allow-lists instead of granting unrestricted direct play")
+        function _()
+            m.stubCall(DeviceCapabilities.__CanDecodeVideo, m.decodeH264Only)
+            m.stubCall(DeviceCapabilities.__CanDecodeAudio, m.decodeNoAudio)
+
+            profiles = DeviceCapabilities.__DirectPlayProfiles()
+
+            for each profileJson in profiles
+                profile = ParseJson(profileJson)
+                ' The surround workaround may still offer AC3 outside MP4.
+                m.assertNotEqual(profile.AudioCodec, "")
+                m.assertNotEqual(profile.Container, "mp4,mov,m4v")
+                m.assertEqual(Instr(1, profile.AudioCodec, "opus"), 0)
+            end for
+        end function
+
+        @it("limits AAC to the device's stereo capability")
+        function _()
+            profile = m.findCodecProfile(DeviceCapabilities.__AudioCodecProfiles(m.capabilityDevice()), "aac")
+
+            m.assertEqual(profile.Type, "VideoAudio")
+            m.assertEqual(m.findCondition(profile, "AudioChannels").Value, "2")
+            m.assertTrue(m.findCondition(profile, "AudioChannels").IsRequired)
+            m.assertEqual(m.findCondition(profile, "AudioProfile").Value, "Main")
+            m.assertEqual(m.findCondition(profile, "AudioProfile").Condition, "NotEquals")
+        end function
+
+        @it("advertises six channels for EAC3 independently of other codecs")
+        function _()
+            profile = m.findCodecProfile(DeviceCapabilities.__AudioCodecProfiles(m.capabilityDevice()), "eac3")
+
+            m.assertEqual(m.findCondition(profile, "AudioChannels").Value, "6")
+        end function
+
+        @it("advertises eight channels when the Opus channel probe succeeds")
+        function _()
+            profile = m.findCodecProfile(DeviceCapabilities.__AudioCodecProfiles(m.capabilityDevice()), "opus")
+
+            m.assertEqual(m.findCondition(profile, "AudioChannels").Value, "8")
+        end function
+
+        @it("does not invent a channel limit when all detailed probes fail")
+        function _()
+            device = m.capabilityDevice()
+            device.audioChannels = {}
+
+            profiles = DeviceCapabilities.__AudioCodecProfiles(device)
+
+            m.assertInvalid(m.findCodecProfile(profiles, "eac3"))
+            m.assertInvalid(m.findCondition(m.findCodecProfile(profiles, "aac"), "AudioChannels"))
+        end function
+
+        @it("retains the six-channel AC3 surround workaround after false-negative probes")
+        function _()
+            device = m.capabilityDevice()
+            device.audioOutput = "5.1 surround"
+            device.audioChannels = {}
+
+            profiles = DeviceCapabilities.__AudioCodecProfiles(device)
+
+            m.assertEqual(m.findCondition(m.findCodecProfile(profiles, "ac3"), "AudioChannels").Value, "6")
+            m.assertInvalid(m.findCodecProfile(profiles, "eac3"))
+            m.assertInvalid(m.findCodecProfile(profiles, "dts"))
+        end function
+
+        @it("advertises H264 profile level and eight-bit limits")
+        function _()
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice()), "h264,mpeg4 avc", "high")
+
+            m.assertEqual(m.findCondition(profile, "VideoProfile").Value, "high")
+            m.assertEqual(m.findCondition(profile, "VideoLevel").Value, "41")
+            m.assertEqual(m.findCondition(profile, "VideoBitDepth").Value, "8")
+            m.assertFalse(m.findCondition(profile, "VideoLevel").IsRequired)
+        end function
+
+        @it("accepts the Roku MPEG4 AVC spelling when H264 profile probes fail")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats = { "mpeg4 avc": { profile: "high", level: "4.1" } }
+
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(device), "h264,mpeg4 avc", "high")
+
+            m.assertEqual(m.findCondition(profile, "VideoProfile").Value, "high")
+            m.assertEqual(m.findCondition(profile, "VideoLevel").Value, "41")
+        end function
+
+        @it("includes constrained baseline spellings when baseline decoding succeeds")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = { profile: "baseline", level: "3" }
+
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(device), "h264,mpeg4 avc")
+
+            m.assertEqual(m.findCondition(profile, "VideoProfile").Value, "baseline|constrained baseline|constrainedbaseline")
+            m.assertEqual(m.findCondition(profile, "VideoLevel").Value, "30")
+        end function
+
+        @it("permits Baseline when only H264 Main probes succeed")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = { profile: "main", level: "4.1" }
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("permits constrained Baseline when only H264 High probes succeed")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "Constrained Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("permits the compact constrained Baseline spelling through the MPEG4 AVC alias")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats = { "mpeg4 avc": { profile: "high", level: "4.1" } }
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertTrue(m.allowsVideo(profiles, "mpeg4 avc", { VideoProfile: "constrainedbaseline", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("caps fallback Baseline at the lower Main maximum when High supports more")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = [{ profile: "main", level: "3.1" }, { profile: "high", level: "4.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("caps fallback Baseline at the lower High maximum when Main supports more")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = [{ profile: "main", level: "4.1" }, { profile: "high", level: "3.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("permits fallback Baseline at the conservative boundary")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = [{ profile: "main", level: "3.1" }, { profile: "high", level: "4.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 31, VideoBitDepth: 8 }))
+        end function
+
+        @it("retains the higher High level after adding a conservative Baseline fallback")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = [{ profile: "main", level: "3.1" }, { profile: "high", level: "4.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("retains the lower Main level after adding a Baseline fallback")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = [{ profile: "main", level: "3.1" }, { profile: "high", level: "4.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Main", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("does not grant ten-bit H264 through the Baseline fallback")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 10 }))
+        end function
+
+        @it("preserves an explicit Baseline level above the inferred fallback limit")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = [{ profile: "baseline", level: "4.1" }, { profile: "main", level: "3.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("does not synthesize Baseline support when all H264 profile probes fail")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats = {}
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+            profile = m.findCodecProfile(profiles, "h264,mpeg4 avc")
+
+            m.assertInvalid(m.findCondition(profile, "VideoProfile"))
+            m.assertInvalid(m.findCondition(profile, "VideoLevel"))
+            m.assertInvalid(m.findCodecProfile(profiles, "h264,mpeg4 avc", "baseline|constrained baseline|constrainedbaseline"))
+            m.assertEqual(m.findCondition(profile, "VideoBitDepth").Value, "8")
+        end function
+
+        @it("limits HEVC to eight bits when only Main decoding succeeds")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.hevc = { profile: "main", level: "4.1" }
+
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(device), "hevc,h265")
+
+            m.assertEqual(m.findCondition(profile, "VideoBitDepth").Value, "8")
+            m.assertEqual(m.findCondition(profile, "VideoLevel").Value, "123")
+        end function
+
+        @it("advertises HEVC Main 10 with the FFprobe level_idc")
+        function _()
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice()), "hevc,h265")
+
+            m.assertEqual(m.findCondition(profile, "VideoProfile").Value, "main 10")
+            m.assertEqual(m.findCondition(profile, "VideoLevel").Value, "153")
+            m.assertEqual(m.findCondition(profile, "VideoBitDepth").Value, "10")
+        end function
+
+        @it("uses VP9 level numbering rather than HEVC numbering")
+        function _()
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice()), "vp9")
+
+            m.assertEqual(m.findCondition(profile, "VideoProfile").Value, "profile 2")
+            m.assertEqual(m.findCondition(profile, "VideoLevel").Value, "51")
+            m.assertEqual(m.findCondition(profile, "VideoBitDepth").Value, "10")
+        end function
+
+        @it("maps AV1 Main 10 and level 5.1 to Jellyfin Main and sequence level index 13")
+        function _()
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice()), "av1")
+
+            m.assertEqual(m.findCondition(profile, "VideoProfile").Value, "main")
+            m.assertEqual(m.findCondition(profile, "VideoLevel").Value, "13")
+            m.assertEqual(m.findCondition(profile, "VideoBitDepth").Value, "10")
+        end function
+
+        @it("does not block AV1 with empty profile or zero level after failed detailed probes")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats = {}
+
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(device), "av1")
+
+            m.assertInvalid(m.findCondition(profile, "VideoProfile"))
+            m.assertInvalid(m.findCondition(profile, "VideoLevel"))
+            m.assertInvalid(m.findCondition(profile, "VideoBitDepth"))
+        end function
+
+        @it("preserves the higher HEVC Main level without borrowing Main 10 bit depth")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main", VideoLevel: 153, VideoBitDepth: 8 }))
+        end function
+
+        @it("keeps constrained H264 baseline aliases within the baseline level")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = [{ profile: "baseline", level: "3.1" }, { profile: "high", level: "4.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Constrained Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("preserves the higher H264 High level beside a lower baseline limit")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.h264 = [{ profile: "baseline", level: "3.1" }, { profile: "high", level: "4.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("does not borrow the VP9 Profile 0 level for Profile 2")
+        function _()
+            device = m.capabilityDevice()
+            device.videoFormats.vp9 = [{ profile: "profile 0", level: "5.1" }, { profile: "profile 2", level: "4.1" }]
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertFalse(m.allowsVideo(profiles, "vp9", { VideoProfile: "Profile 2", VideoLevel: 51, VideoBitDepth: 10 }))
+        end function
+
+        @it("rejects HEVC Main 10 above its own supported level")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main 10", VideoLevel: 153, VideoBitDepth: 10 }))
+        end function
+
+        @it("accepts HEVC Main 10 at its own supported level")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main 10", VideoLevel: 123, VideoBitDepth: 10 }))
+        end function
+
+        @it("does not grant HEVC Main the bit depth of Main 10")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main", VideoLevel: 123, VideoBitDepth: 10 }))
+        end function
+
+        @it("preserves the higher AV1 eight-bit level despite the shared Main name")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "av1", { VideoProfile: "Main", VideoLevel: 13, VideoBitDepth: 8 }))
+        end function
+
+        @it("rejects ten-bit AV1 above its own supported level")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "av1", { VideoProfile: "Main", VideoLevel: 13, VideoBitDepth: 10 }))
+        end function
+
+        @it("accepts ten-bit AV1 at its own supported level")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "av1", { VideoProfile: "Main", VideoLevel: 9, VideoBitDepth: 10 }))
+        end function
+
+        @it("uses the conservative AV1 level when bit-depth metadata is missing")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "av1", { VideoProfile: "Main", VideoLevel: 13 }))
+        end function
+
+        @it("uses the conservative level when video-profile metadata is missing")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoLevel: 153, VideoBitDepth: 8 }))
+        end function
+
+        @it("permits missing video metadata within the conservative fallback limits")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoLevel: 123, VideoBitDepth: 8 }))
+        end function
+
+        @it("rejects a known unsupported video profile")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main 12", VideoLevel: 123, VideoBitDepth: 8 }))
+        end function
+
+        @it("advertises only SDR and the SDR Dolby Vision base layer without HDR display support")
+        function _()
+            m.assertEqual(DeviceCapabilities.__VideoRangeTypes({}, "hevc"), "SDR|DOVIWithSDR")
+        end function
+
+        @it("advertises HDR10 and its Dolby Vision base layer when supported")
+        function _()
+            m.assertEqual(DeviceCapabilities.__VideoRangeTypes({ Hdr10: true }, "av1"), "SDR|DOVIWithSDR|HDR10|DOVIWithHDR10")
+        end function
+
+        @it("advertises HDR10Plus and HLG only from their display flags")
+        function _()
+            m.assertEqual(DeviceCapabilities.__VideoRangeTypes({ Hdr10Plus: true, HLG: true }, "hevc"), "SDR|DOVIWithSDR|HDR10Plus|DOVIWithHDR10Plus|HLG|DOVIWithHLG")
+        end function
+
+        @it("does not grant H264 HDR10 or HLG from display support alone")
+        function _()
+            m.assertEqual(DeviceCapabilities.__VideoRangeTypes({ Hdr10: true, HLG: true }, "h264"), "SDR|DOVIWithSDR")
+        end function
+
+        @it("does not advertise Dolby Vision decoding for VP9")
+        function _()
+            m.assertEqual(DeviceCapabilities.__VideoRangeTypes({ DolbyVision: true }, "vp9"), "SDR|DOVIWithSDR")
+        end function
+
+        @it("advertises Dolby Vision decoding for HEVC when the display supports it")
+        function _()
+            m.assertEqual(DeviceCapabilities.__VideoRangeTypes({ DolbyVision: true }, "hevc"), "SDR|DOVIWithSDR|DOVI|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithHLG")
+        end function
+
+        @it("places the display range constraint into the serialized video codec profile")
+        function _()
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice()), "hevc,h265")
+
+            m.assertEqual(m.findCondition(profile, "VideoRangeType").Value, "SDR|DOVIWithSDR|HDR10|DOVIWithHDR10")
+            m.assertFalse(m.findCondition(profile, "VideoRangeType").IsRequired)
+        end function
+
+        @it("omits HDR constraints when display properties are unavailable")
+        function _()
+            device = m.capabilityDevice()
+            device.display = invalid
+
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(device), "hevc,h265")
+
+            m.assertInvalid(m.findCondition(profile, "VideoRangeType"))
+        end function
+
+        @it("tolerates unavailable detailed video capability responses")
+        function _()
+            device = m.capabilityDevice()
+            device.CanDecodeVideo = function(info as object) as dynamic
+                return invalid
+            end function
+
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(device), "av1")
+
+            m.assertInvalid(m.findCondition(profile, "VideoProfile"))
+            m.assertInvalid(m.findCondition(profile, "VideoLevel"))
+        end function
+
+        private function decodeNoAudio(device as object, codec as string, container as string) as boolean
+            return false
+        end function
+
+        private function decodeMkvOpus(device as object, codec as string, container as string) as boolean
+            return codec = "aac" or (codec = "opus" and container = "mkv")
+        end function
+
+        private function findCodecProfile(profiles as object, codec as string, scopedProfile = "" as string) as dynamic
+            for each profileJson in profiles
+                profile = ParseJson(profileJson)
+                if profile.Codec = codec then
+                    if scopedProfile = "" then return profile
+                    if profile.ApplyConditions <> invalid then
+                        for each condition in profile.ApplyConditions
+                            if condition.Property = "VideoProfile" and condition.Condition = "EqualsAny" and condition.Value = scopedProfile then return profile
+                        end for
+                    end if
+                end if
+            end for
+            return invalid
+        end function
+
+        private function findCondition(profile as object, property as string) as dynamic
+            for each condition in profile.Conditions
+                if condition.Property = property then return condition
+            end for
+            return invalid
+        end function
+
+        private function mixedProfileDevice() as object
+            device = m.capabilityDevice()
+            device.videoFormats.hevc = [{ profile: "main", level: "5.1" }, { profile: "main 10", level: "4.1" }]
+            device.videoFormats.av1 = [{ profile: "main", level: "5.1" }, { profile: "main 10", level: "4.1" }]
+            return device
+        end function
+
+        private function allowsVideo(profiles as object, codec as string, metadata as object) as boolean
+            ' Jellyfin requires ALL matching CodecProfiles to pass; they are not alternatives.
+            for each profileJson in profiles
+                profile = ParseJson(profileJson)
+                if profile.Type = "Video" and DeviceCapabilities.__Contains(profile.Codec.Split(","), codec) then
+                    if m.matchesConditions(profile.ApplyConditions, metadata) then
+                        if not m.matchesConditions(profile.Conditions, metadata) then return false
+                    end if
+                end if
+            end for
+            return true
+        end function
+
+        private function matchesConditions(conditions as dynamic, metadata as object) as boolean
+            if conditions = invalid then return true
+            for each condition in conditions
+                value = metadata[condition.Property]
+                if value = invalid then
+                    if condition.IsRequired then return false
+                else if condition.Condition = "EqualsAny" then
+                    if not DeviceCapabilities.__Contains(LCase(condition.Value).Split("|"), LCase(value)) then return false
+                else if condition.Condition = "NotEquals" then
+                    if LCase(value) = LCase(condition.Value) then return false
+                else if condition.Condition = "LessThanEqual" then
+                    if value > Number.ToFloat(condition.Value, 0) then return false
+                else if condition.Condition = "GreaterThanEqual" then
+                    if value < Number.ToFloat(condition.Value, 0) then return false
+                else
+                    return false
+                end if
+            end for
+            return true
+        end function
+
+        private function diagnosticDevice() as object
+            return {
+                GetModel: function() as string
+                    return "4800X"
+                end function
+                GetModelDisplayName: function() as string
+                    return "Roku Ultra"
+                end function
+                GetOSVersion: function() as object
+                    return { major: "14", minor: "1", revision: "0", build: "7709" }
+                end function
+                GetVideoMode: function() as string
+                    return "2160p60 DV"
+                end function
+                GetDisplayMode: function() as string
+                    return "1080p"
+                end function
+                GetAudioOutputChannel: function() as string
+                    return "Stereo"
+                end function
+            }
+        end function
+
+        private function capabilityDevice() as object
+            return {
+                audioOutput: "Stereo"
+                containerAudio: { ts: ["ac3"], mp4: ["aac", "opus"] }
+                audioChannels: { aac: 2, eac3: 6, opus: 8 }
+                videoFormats: {
+                    h264: { profile: "high", level: "4.1" }
+                    hevc: { profile: "main 10", level: "5.1" }
+                    vp9: { profile: "profile 2", level: "5.1" }
+                    av1: { profile: "main 10", level: "5.1" }
+                }
+                display: { Hdr10: true }
+                GetAudioOutputChannel: function() as string
+                    return m.audioOutput
+                end function
+                GetDisplayProperties: function() as dynamic
+                    return m.display
+                end function
+                CanDecodeAudio: function(info as object) as object
+                    if info.ChCnt <> invalid then
+                        limit = m.audioChannels[info.Codec]
+                        if limit = invalid then return { Result: false }
+                        return { Result: info.ChCnt <= limit }
+                    end if
+                    for each codec in m.containerAudio[info.Container]
+                        if codec = info.Codec then return { Result: true }
+                    end for
+                    return { Result: false }
+                end function
+                CanDecodeVideo: function(info as object) as object
+                    codecSpec = m.videoFormats[info.Codec]
+                    if codecSpec = invalid then return { Result: false }
+                    if GetInterface(codecSpec, "ifArray") = invalid then codecSpec = [codecSpec]
+                    for each variant in codecSpec
+                        if info.Profile = variant.profile and info.Level = variant.level and info.Container = invalid then return { Result: true }
+                    end for
+                    return { Result: false }
+                end function
+            }
         end function
 
     end class
