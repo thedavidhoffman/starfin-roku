@@ -55,24 +55,17 @@ describe('Starfin TV toggle settings persistence', function () {
 
 
 async function assertRenderedOverlays(environment, rows, withLogo) {
-  const nodeRefKey = 'episode-overlays';
-  await environment.odc.storeNodeReferences({ nodeRefKey, includeArrayGridChildren: true });
   for (const row of rows) {
-    const { nodeRefs } = await environment.odc.getNodesWithProperties({ nodeRefKey, properties: [
-      { field: 'id', value: 'presentation' },
-      { keyPath: 'itemContent.raw.Id', value: row.id }
-    ] });
-    assert.ok(nodeRefs.length, `${row.key} episode card must be rendered`);
-    for (const ref of nodeRefs) {
-      for (const id of ['logoOverlay', 'logoGradient']) {
-        await waitFor(async () => {
-          const response = await environment.odc.getValue({ base: 'nodeRef', nodeRefKey, keyPath: `${ref}.#${id}.visible` });
-          return response.value === withLogo;
-        }, `${row.key} ${id} visibility after image loading`);
-      }
+    // Resolve the live row's content node, not every card showing the same episode.
+    const card = await environment.odc.getValue({ base: 'scene', keyPath: `${row.cardPath}.itemContent.raw.Id` });
+    assert.equal(card.value, row.id, `${row.key} episode card must be rendered`);
+    for (const id of ['logoOverlay', 'logoGradient']) {
+      await waitFor(async () => {
+        const response = await environment.odc.getValue({ base: 'scene', keyPath: `${row.cardPath}.#${id}.visible` });
+        return response.value === withLogo;
+      }, `${row.key} ${id} visibility after image loading`);
     }
   }
-  await environment.odc.deleteNodeReferences({ nodeRefKey });
 }
 
 describe('Starfin Home episode images', function () {
@@ -105,7 +98,7 @@ describe('Starfin Home episode images', function () {
             const seriesId = raw.ParentThumbItemId || raw.ParentThumbImageItemId;
             const seriesTag = raw.ParentThumbImageTag;
             if (!seriesId || !seriesTag || !raw.ParentLogoItemId || !raw.ParentLogoImageTag) continue;
-            rows.push({ key, path: `${path}.${item}`, id: raw.Id, seriesId, logoId: raw.ParentLogoItemId, logoTag: raw.ParentLogoImageTag });
+            rows.push({ key, path: `${path}.${item}`, cardPath: `#shelvesGroup.${shelf}.#items.0.items.${item}.#presentation`, id: raw.Id, seriesId, logoId: raw.ParentLogoItemId, logoTag: raw.ParentLogoImageTag });
             break;
           }
         }

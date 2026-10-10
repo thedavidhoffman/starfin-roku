@@ -15,6 +15,10 @@ describe('Starfin log upload confirmation', function () {
   });
 
   beforeEach(async function () {
+    // Initial Home loading restores shelf focus before publishing ready.
+    if (await value('#homePage.visible') === true) {
+      await waitFor(async () => await value('#homePage.ready') === true, 'Home loading to finish before opening Logs', 45000);
+    }
     // Open without credentials so the capability task does not contact a server.
     await call('#overlayHost', 'openOverlay', {
       id: 'logs', componentName: 'LogDialog', openFunction: 'openLogs',
@@ -34,10 +38,10 @@ describe('Starfin log upload confirmation', function () {
 
   async function openConfirmation() {
     await environment.ecp.sendKeypress(environment.ecp.Key.Right);
-    await waitFor(async () => await value(`${content}.#sendLog.hasFocus()`) === true, 'Send Log focused');
+    await waitFor(() => environment.odc.hasFocus({ base: 'scene', keyPath: `${content}.#sendLog` }), 'Send Log focused');
     await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
     await waitFor(async () => await value('#confirmationOverlayHost.getChildCount()') === 1, 'log confirmation opened');
-    assert.equal(await value(`${confirmation}.#cancel.hasFocus()`), true);
+    assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: `${confirmation}.#cancel` }), true);
     assert.equal(await value('#overlayHost.0.title'), 'Application Log');
   }
 
@@ -46,10 +50,13 @@ describe('Starfin log upload confirmation', function () {
     await openConfirmation();
     await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
     await waitFor(async () => await value('#confirmationOverlayHost.getChildCount()') === 0, 'confirmation cancelled');
-    assert.equal(await value(`${content}.#sendLog.hasFocus()`), true);
+    assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: `${content}.#sendLog` }), true);
     assert.deepEqual(await value(`${content}.#scrollThumb.translation`), offset);
     assert.equal(await value('#loadingSpinner.blockInteraction'), false);
-    assert.equal(await value('#overlayHost.0.#uploadTask.request'), null);
+    assert.equal(await value('#overlayHost.0.#uploadTask.subtype()'), 'ClientLogUploadTask');
+    const uploadRequest = await environment.odc.getValue({ base: 'scene', keyPath: '#overlayHost.0.#uploadTask.request' });
+    // RTA reports an invalid Roku field as not found and omits its value.
+    assert.equal(uploadRequest.found, false);
   });
 
   it('Back cancels confirmation and keeps the log open', async function () {
@@ -57,6 +64,6 @@ describe('Starfin log upload confirmation', function () {
     await environment.ecp.sendKeypress(environment.ecp.Key.Back);
     await waitFor(async () => await value('#confirmationOverlayHost.getChildCount()') === 0, 'confirmation dismissed');
     assert.equal(await value('#overlayHost.getChildCount()'), 1);
-    assert.equal(await value(`${content}.#sendLog.hasFocus()`), true);
+    assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: `${content}.#sendLog` }), true);
   });
 });

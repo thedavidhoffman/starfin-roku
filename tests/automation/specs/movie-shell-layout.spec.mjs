@@ -81,7 +81,8 @@ async function assertPoster(environment) {
   assert.equal(posterLeft, 48);
   assert.equal(1920 - castRight, posterLeft);
   assert.ok((await read(environment, '#moviePosterGroup.maskUri')).endsWith('/movie-poster-mask.png'));
-  assert.deepEqual(await read(environment, '#moviePosterGroup.maskSize'), [600, 900]);
+  const maskSize = environment.config.OnDeviceComponent.uiResolution === 'hd' ? [400, 600] : [600, 900];
+  assert.deepEqual(await read(environment, '#moviePosterGroup.maskSize'), maskSize);
   assert.equal(await read(environment, '#moviePoster.width'), 600);
   assert.equal(await read(environment, '#moviePoster.height'), 900);
   assert.equal(await read(environment, '#mediaBackgroundFull.visible'), false);

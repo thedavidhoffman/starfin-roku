@@ -74,11 +74,28 @@ export async function clearStarfinRegistry(odc, maxAttempts = 3) {
   throw new Error(`Starfin registry sections remained after ${maxAttempts} reset attempts: ${remainingSections.join(', ')}.`);
 }
 
+export async function waitForStartup(environment) {
+  await waitFor(async () => {
+    const response = await environment.odc.getValues({
+      requests: {
+        login: { base: 'scene', keyPath: '#login.visible' },
+        home: { base: 'scene', keyPath: '#homePage.visible' },
+        ready: { base: 'scene', keyPath: '#homePage.ready' }
+      }
+    });
+    return response.results.login?.value === true ||
+      (response.results.home?.value === true && response.results.ready?.value === true);
+  }, 'initial authentication and Home loading to finish', 45000);
+}
+
 export async function resetRegistryAndRelaunch() {
   const environment = await getAutomationEnvironment();
 
   await launchStarfin(environment);
   await waitForMainScene(environment);
+  // A pending session-resume response can persist credentials after deletion.
+  // Wait for startup's registry writers before clearing their stored state.
+  await waitForStartup(environment);
 
   console.log('Resetting Starfin dev-channel registry for deterministic automation.');
   await clearStarfinRegistry(environment.odc);

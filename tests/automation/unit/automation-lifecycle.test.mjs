@@ -1,6 +1,42 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clearStarfinRegistry } from '../support/lifecycle.mjs';
+import { clearStarfinRegistry, waitForStartup } from '../support/lifecycle.mjs';
+
+test('waits for initial authentication to publish the login surface', async () => {
+  let reads = 0;
+  const environment = { odc: { getValues: async () => {
+    reads += 1;
+    return { results: { login: { value: reads === 2 }, home: { value: false }, ready: { value: false } } };
+  } } };
+
+  await waitForStartup(environment);
+
+  assert.equal(reads, 2);
+});
+
+test('waits for authenticated Home loading to finish before registry reset', async () => {
+  let reads = 0;
+  const environment = { odc: { getValues: async () => {
+    reads += 1;
+    return { results: { login: { value: false }, home: { value: true }, ready: { value: reads === 2 } } };
+  } } };
+
+  await waitForStartup(environment);
+
+  assert.equal(reads, 2);
+});
+
+test('does not accept a ready Home surface while it is hidden', async () => {
+  let reads = 0;
+  const environment = { odc: { getValues: async () => {
+    reads += 1;
+    return { results: { login: { value: false }, home: { value: reads === 2 }, ready: { value: true } } };
+  } } };
+
+  await waitForStartup(environment);
+
+  assert.equal(reads, 2);
+});
 
 test('accepts a clean registry while preserving the RTA runtime section', async () => {
   let fullDeletes = 0;

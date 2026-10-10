@@ -23,18 +23,45 @@ is not required for the release-readiness analysis to pass.
 This process provides reasonable confidence but cannot prove that the release
 contains no defects.
 
-## Stop on the First Release Blocker
+## Classify Test Failures and Stop on Release Blockers
 
 Run readiness steps sequentially and assess each result before starting the next.
-At the first confirmed hard failure that would prevent release, stop the review
-and report `NO SHIP`. Do not continue later checks, start another resolution's
-automation run, build release artifacts, or automatically fix and retry the
-failure during that review.
+When a unit test or automation test fails, preserve the evidence and determine
+whether the cause is a test defect, a production defect, or an unresolved issue
+before proceeding to later readiness steps:
+
+- **Confirmed test defect:** Correct the test and continue the same assessment
+  without requesting separate approval for each test repair. Preserve its intended
+  behavioral coverage; do not weaken assertions, skip tests, or change production
+  code or interfaces to obtain a pass. Base corrections on the intended behavior
+  and relevant API contracts, not merely the observed output. Review related
+  assertions for the same mistake before rerunning. Record the original failure,
+  evidence establishing the test defect, correction, and rerun results. A targeted
+  rerun may confirm the fix, but the complete affected suite must pass before SHIP.
+- **Confirmed production defect:** Stop and report `NO SHIP` without fixing
+  production code during the assessment.
+- **Unclear cause:** Stop and report `NO SHIP` with verification blocked by an
+  unresolved failure. Do not assume the test is wrong or claim a production defect
+  without evidence.
+
+Previously completed checks in the same assessment remain valid when their inputs
+are unchanged. Rerun checks affected by the correction. For an automation repair,
+this includes a complete run at each resolution affected by the changed test or
+shared helper; a resolution-independent change requires both 1080p and 720p.
+Regenerate and verify affected reports and archives, preserving private failure
+evidence separately. Do not clear the release folder when continuing after a test
+repair or present superseded artifacts as current evidence.
+
+At the first confirmed production defect or other hard failure that would prevent
+release, stop the review and report `NO SHIP`. Do not continue later checks, start
+another resolution's automation run, build release artifacts, or automatically
+fix and retry that blocker during the review. Confirmed test defects follow the
+repair procedure above instead.
 
 Examples include an audit finding assessed as a release-blocking security risk,
-a failed validation or unit test, and a failed automation run or archive
-verification. An outdated dependency or an audit finding assessed as inapplicable
-or safe to defer does not trigger this rule.
+a production validation failure, and failed archive verification. Test failures
+must first be classified as described above. An outdated dependency or an audit
+finding assessed as inapplicable or safe to defer does not trigger this rule.
 
 When a blocker becomes visible during a running check, stop that check safely
 where possible and preserve the available failure evidence. Perform only cleanup
@@ -200,11 +227,12 @@ unit-test suite for every release candidate:
 npm test -- --host <roku-host> --password "<developer-password>"
 ```
 
-Every unit test must execute and pass. Treat any failed test, incomplete run,
-unexpectedly skipped test, device disconnect, or test-runner error as a release
-blocker. Stop and report the failure under the stop-on-first-blocker rule. After
-the issue is resolved, the next review must rerun the complete suite; a partial
-or targeted rerun is not sufficient for the final release decision.
+Every unit test must execute and pass. Classify failures under **Classify Test
+Failures and Stop on Release Blockers**: repair confirmed test defects and rerun
+the complete affected suite within the same assessment; stop for production
+defects or unresolved causes. An incomplete run, unexpectedly skipped test, device
+disconnect, or test-runner error cannot count as passing evidence. A partial or
+targeted rerun is not sufficient for the final release decision.
 
 After the complete Rooibos suite passes, run the complete RTA device-automation
 suite at both resolutions in release-report mode:
@@ -275,9 +303,12 @@ addresses or to credentials.
 Each resolution must report at least one executed automation test, equal test
 and pass counts, and no failed, pending, skipped, or unexpected results. Both
 complete suites must pass and both sanitized archives must pass verification.
-A failed or incomplete run, missing archive, or failed archive verification is
-a release blocker. Record each resolution's aggregate result counts, archive
-verification result, and sanitized ZIP path in the decision record.
+A failed or incomplete run cannot satisfy this gate. Confirmed test defects may
+be repaired under the classification procedure above, followed by complete
+affected runs and archive verification. Production defects, unresolved failures,
+missing final archives, or failed archive verification block release. Record each
+resolution's aggregate result counts, archive verification result, and sanitized
+ZIP path in the decision record.
 
 Capture the complete console output from the final full-suite run in the
 versioned unit-test report in `.release/<version>/`. Sanitize the report before
@@ -370,6 +401,11 @@ Classify each finding before making the release decision:
   corruption, security issue, unusable navigation or focus, failed validation,
   or invalid release package. The release should not ship until resolved and
   reverified.
+- **Test defect:** A confirmed fault in a unit test or automation test. Repair it
+  within the assessment while preserving intended coverage, and obtain complete
+  passing results from the affected suites before recommending SHIP.
+- **Verification blocked:** A failure whose cause remains unresolved. Stop and
+  report NO SHIP without assuming either a test defect or a production defect.
 - **Follow-up:** A confirmed issue that is safe to defer. Document its impact,
   workaround, and intended follow-up before release.
 - **Observation:** A maintainability, consistency, or style concern that does
@@ -385,6 +421,10 @@ Write the completed decision record to
 - Baseline and proposed release commit.
 - User-confirmed target release version and manifest version match.
 - Validation commands and results.
+- Test repairs made during the assessment: original failures, evidence supporting
+  classification as test defects, corrections, preserved behavioral coverage,
+  targeted and complete rerun results, and which earlier checks remain valid
+  because their inputs were unchanged.
 - Dependency assessment: audit completion and counts by severity, advisory
   applicability and disposition, available fixes, and reasons for accepted or
   inapplicable findings; outdated packages with current/wanted/latest versions
