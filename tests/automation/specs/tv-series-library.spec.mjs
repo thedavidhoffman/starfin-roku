@@ -42,7 +42,7 @@ describe('Starfin TV series library', function () {
         responseId: { base: 'scene', keyPath: '#tvShowTaskAlternate.response.requestId' },
         ok: { base: 'scene', keyPath: '#tvShowTaskAlternate.response.ok' },
         itemId: { base: 'scene', keyPath: '#tvShowTaskAlternate.response.itemId' },
-        expectedPlay: { base: 'scene', keyPath: '#tvShowTaskAlternate.response.payload.upNextItem.Id' },
+        expectedPlay: { base: 'scene', keyPath: '#tvShowTaskAlternate.response.payload.playItem.Id' },
         expectedResume: { base: 'scene', keyPath: '#tvShowTaskAlternate.response.payload.resumeItem.Id' },
         play: { base: 'scene', keyPath: '#videoToolbar.playItem.Id' },
         resume: { base: 'scene', keyPath: '#videoToolbar.resumeItem.Id' }

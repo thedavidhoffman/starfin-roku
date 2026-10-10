@@ -94,6 +94,500 @@ namespace tests
             m.assertEqual(m.top.response.failureKind, "authenticationRequired")
         end function
 
+        @describe("series replay fallback")
+
+        @it("requests the earliest regular season before Specials")
+        function _()
+            m.stubReplayEpisodes({ "season-1": { ok: true, data: { Items: [{ Id: "s1e1", UserData: { Played: true } }] } } })
+            seasons = [{ Id: "season-2", IndexNumber: 2 }, { Id: "specials", IndexNumber: 0 }, { Id: "season-1", IndexNumber: 1 }]
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), seasons)
+
+            m.assertEqual(result.data.Id, "s1e1")
+            m.assertTrue(result.data.UserData.Played)
+            m.assertEqual(getGlobalAa().tvShowReplay.requests.Count(), 1)
+            m.assertTrue(Instr(1, getGlobalAa().tvShowReplay.requests[0], "seasonid=season-1") > 0)
+        end function
+
+        @it("uses the server's first episode in a Specials-only series")
+        function _()
+            m.stubReplayEpisodes({ "specials": { ok: true, data: { Items: [{ Id: "special-1" }] } } })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "specials", IndexNumber: 0 }])
+
+            m.assertEqual(result.data.Id, "special-1")
+            m.assertEqual(getGlobalAa().tvShowReplay.requests.Count(), 1)
+        end function
+
+        @it("permits seasons with unknown season numbers before Specials")
+        function _()
+            m.stubReplayEpisodes({ "unknown": { ok: true, data: { Items: [{ Id: "unknown-episode" }] } } })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "specials", IndexNumber: 0 }, { Id: "unknown" }])
+
+            m.assertEqual(result.data.Id, "unknown-episode")
+            m.assertEqual(getGlobalAa().tvShowReplay.requests.Count(), 1)
+        end function
+
+        @it("continues to later regular seasons when an earlier season is empty")
+        function _()
+            m.stubReplayEpisodes({ "season-2": { ok: true, data: { Items: [{ Id: "s2e1" }] } } })
+            seasons = [{ Id: "season-2", IndexNumber: 2 }, { Id: "specials", IndexNumber: 0 }, { Id: "season-1", IndexNumber: 1 }]
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), seasons)
+
+            m.assertEqual(result.data.Id, "s2e1")
+            requests = getGlobalAa().tvShowReplay.requests
+            m.assertEqual(requests.Count(), 2)
+            m.assertTrue(Instr(1, requests[0], "seasonid=season-1") > 0)
+            m.assertTrue(Instr(1, requests[1], "seasonid=season-2") > 0)
+        end function
+
+        @it("tries Specials only after every regular season is empty")
+        function _()
+            m.stubReplayEpisodes({ "specials": { ok: true, data: { Items: [{ Id: "special-1" }] } } })
+            seasons = [{ Id: "specials", IndexNumber: 0 }, { Id: "season-1", IndexNumber: 1 }, { Id: "season-2", IndexNumber: 2 }]
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), seasons)
+
+            m.assertEqual(result.data.Id, "special-1")
+            requests = getGlobalAa().tvShowReplay.requests
+            m.assertEqual(requests.Count(), 3)
+            m.assertTrue(Instr(1, requests[2], "seasonid=specials") > 0)
+        end function
+
+        @it("skips invalid season identities")
+        function _()
+            m.stubReplayEpisodes({ "season-2": { ok: true, data: { Items: [{ Id: "s2e1" }] } } })
+            seasons = [invalid, "bad", { IndexNumber: 1 }, { Id: "season-2", IndexNumber: 2 }]
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), seasons)
+
+            m.assertEqual(result.data.Id, "s2e1")
+            m.assertEqual(getGlobalAa().tvShowReplay.requests.Count(), 1)
+        end function
+
+        @it("pages past a leading Special to the first regular episode")
+        function _()
+            m.stubReplayEpisodes({ "season-1": [
+                { ok: true, data: { Items: [{ Id: "special", ParentIndexNumber: 0 }] } }
+                { ok: true, data: { Items: [{ Id: "s1e1", ParentIndexNumber: 1 }] } }
+            ] })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "season-1", IndexNumber: 1 }])
+
+            m.assertEqual(result.data.Id, "s1e1")
+            m.assertEqual(getGlobalAa().tvShowReplay.pages, [
+                { seasonId: "season-1", startIndex: 0, limit: 1 }
+                { seasonId: "season-1", startIndex: 1, limit: 1 }
+            ])
+        end function
+
+        @it("pages past multiple leading Specials")
+        function _()
+            m.stubReplayEpisodes({ "season-1": [
+                { ok: true, data: { Items: [{ Id: "special-1", ParentIndexNumber: 0 }] } }
+                { ok: true, data: { Items: [{ Id: "special-2", ParentIndexNumber: 0 }] } }
+                { ok: true, data: { Items: [{ Id: "s1e1", ParentIndexNumber: 1 }] } }
+            ] })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "season-1", IndexNumber: 1 }])
+
+            m.assertEqual(result.data.Id, "s1e1")
+            m.assertEqual(getGlobalAa().tvShowReplay.pages, [
+                { seasonId: "season-1", startIndex: 0, limit: 1 }
+                { seasonId: "season-1", startIndex: 1, limit: 1 }
+                { seasonId: "season-1", startIndex: 2, limit: 1 }
+            ])
+        end function
+
+        @it("pages past a malformed episode entry")
+        function _()
+            m.stubReplayEpisodes({ "season-1": [
+                { ok: true, data: { Items: ["bad"] } }
+                { ok: true, data: { Items: [{ Id: "s1e1", ParentIndexNumber: 1 }] } }
+            ] })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "season-1", IndexNumber: 1 }])
+
+            m.assertEqual(result.data.Id, "s1e1")
+            m.assertEqual(getGlobalAa().tvShowReplay.pages[1], { seasonId: "season-1", startIndex: 1, limit: 1 })
+        end function
+
+        @it("pages past an episode without an ID")
+        function _()
+            m.stubReplayEpisodes({ "season-1": [
+                { ok: true, data: { Items: [{ Name: "Missing episode ID" }] } }
+                { ok: true, data: { Items: [{ Id: "s1e1", ParentIndexNumber: 1 }] } }
+            ] })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "season-1", IndexNumber: 1 }])
+
+            m.assertEqual(result.data.Id, "s1e1")
+            m.assertEqual(getGlobalAa().tvShowReplay.pages[1], { seasonId: "season-1", startIndex: 1, limit: 1 })
+        end function
+
+        @it("resets paging for a later regular season after a season containing only Specials")
+        function _()
+            m.stubReplayEpisodes({
+                "season-1": [{ ok: true, data: { Items: [{ Id: "special", ParentIndexNumber: 0 }] } }]
+                "season-2": [{ ok: true, data: { Items: [{ Id: "s2e1", ParentIndexNumber: 2 }] } }]
+            })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "season-1", IndexNumber: 1 }, { Id: "season-2", IndexNumber: 2 }, { Id: "specials", IndexNumber: 0 }])
+
+            m.assertEqual(result.data.Id, "s2e1")
+            m.assertEqual(getGlobalAa().tvShowReplay.pages, [
+                { seasonId: "season-1", startIndex: 0, limit: 1 }
+                { seasonId: "season-1", startIndex: 1, limit: 1 }
+                { seasonId: "season-2", startIndex: 0, limit: 1 }
+            ])
+        end function
+
+        @it("allows Specials after all regular seasons contain only interleaved Specials")
+        function _()
+            m.stubReplayEpisodes({
+                "season-1": [{ ok: true, data: { Items: [{ Id: "special", ParentIndexNumber: 0 }] } }]
+                "specials": [{ ok: true, data: { Items: [{ Id: "special", ParentIndexNumber: 0 }] } }]
+            })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "specials", IndexNumber: 0 }, { Id: "season-1", IndexNumber: 1 }])
+
+            m.assertEqual(result.data.Id, "special")
+            m.assertEqual(getGlobalAa().tvShowReplay.pages, [
+                { seasonId: "season-1", startIndex: 0, limit: 1 }
+                { seasonId: "season-1", startIndex: 1, limit: 1 }
+                { seasonId: "specials", startIndex: 0, limit: 1 }
+            ])
+        end function
+
+        @it("preserves a failure during paging without trying another season")
+        function _()
+            m.stubReplayEpisodes({ "season-1": [
+                { ok: true, data: { Items: [{ Id: "special", ParentIndexNumber: 0 }] } }
+                { ok: false, status: 401, authExpired: true, failureKind: "authenticationRequired", errorMessage: "technical" }
+            ] })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "season-1", IndexNumber: 1 }, { Id: "season-2", IndexNumber: 2 }])
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.status, 401)
+            m.assertTrue(result.authExpired)
+            m.assertEqual(result.failureKind, "authenticationRequired")
+            m.assertEqual(result.errorMessage, "technical")
+            m.assertEqual(getGlobalAa().tvShowReplay.pages, [
+                { seasonId: "season-1", startIndex: 0, limit: 1 }
+                { seasonId: "season-1", startIndex: 1, limit: 1 }
+            ])
+        end function
+
+        @it("returns no target without episode requests when seasons are empty")
+        function _()
+            m.stubReplayEpisodes({})
+            request = m.createRequest()
+            'bs:disable-next-line 1001
+            m.expectNotCalled(loadSeasons(request))
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(request, [])
+
+            m.assertTrue(result.ok)
+            m.assertInvalid(result.data)
+            m.assertEqual(getGlobalAa().tvShowReplay.requests.Count(), 0)
+        end function
+
+        @it("loads seasons when a caller has no cached season context")
+        function _()
+            request = m.createRequest()
+            'bs:disable-next-line 1001
+            m.expectCalled(loadSeasons(request), { ok: true, data: { Items: [{ Id: "season-1", IndexNumber: 1 }] } })
+            m.stubReplayEpisodes({ "season-1": { ok: true, data: { Items: [{ Id: "s1e1" }] } } })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(request)
+
+            m.assertEqual(result.data.Id, "s1e1")
+        end function
+
+        @it("preserves a season loading failure without requesting episodes")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeasons, { ok: false, status: 401, authExpired: true, failureKind: "authenticationRequired" })
+            m.stubReplayEpisodes({})
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest())
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.status, 401)
+            m.assertTrue(result.authExpired)
+            m.assertEqual(result.failureKind, "authenticationRequired")
+            m.assertEqual(getGlobalAa().tvShowReplay.requests.Count(), 0)
+        end function
+
+        @it("stops on a regular season request failure instead of playing Specials")
+        function _()
+            m.stubReplayEpisodes({ "season-1": { ok: false, status: 503, errorMessage: "Unavailable" } })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "specials", IndexNumber: 0 }, { Id: "season-1", IndexNumber: 1 }])
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.status, 503)
+            m.assertEqual(getGlobalAa().tvShowReplay.requests.Count(), 1)
+        end function
+
+        @it("returns no replay target for an empty series")
+        function _()
+            request = m.prepareEmptyTargets()
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [] } })
+
+            'bs:disable-next-line 1140
+            result = getResponse(request)
+
+            m.assertTrue(result.ok)
+            m.assertInvalid(result.payload.playItem)
+            m.assertInvalid(result.payload.playbackQueue)
+        end function
+
+        @it("limits replay requests to one available episode in a season and preserves metadata")
+        function _()
+            getGlobalAa().tvShowReplayRequest = ""
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().tvShowReplayRequest = requestUrl
+                return { ok: true, data: { Items: [{ Id: "first", SeasonId: "season", People: [{ Name: "Actor" }], UserData: { Played: true } }] } }
+            end function)
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "season", IndexNumber: 1 }])
+
+            requestUrl = getGlobalAa().tvShowReplayRequest
+            m.assertTrue(Instr(1, requestUrl, "/Shows/series/Episodes?") > 0)
+            m.assertTrue(Instr(1, requestUrl, "ismissing=false") > 0)
+            m.assertTrue(Instr(1, requestUrl, "fields=SeriesInfo%2CPeople%2CUserData") > 0)
+            m.assertTrue(Instr(1, requestUrl, "seasonid=season") > 0)
+            m.assertTrue(Instr(1, requestUrl, "limit=1") > 0)
+            m.assertTrue(Instr(1, requestUrl, "startindex=0") > 0)
+            m.assertEqual(result.data.People[0].Name, "Actor")
+            m.assertTrue(result.data.UserData.Played)
+            getGlobalAa().Delete("tvShowReplayRequest")
+        end function
+
+        @it("uses the fallback for initial loading and anchors its queue")
+        function _()
+            request = m.prepareEmptyTargets()
+            request.playbackOnly = false
+            'bs:disable-next-line 1001
+            m.expectCalled(loadFirstEpisode(request, [{ Id: "season" }]), { ok: true, data: { Id: "first", SeasonId: "season" } })
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [{ Id: "first" }, { Id: "second" }] } })
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            result = m.top.response
+            m.assertTrue(result.ok)
+            m.assertEqual(result.requestId, 11)
+            m.assertInvalid(result.payload.upNextItem)
+            m.assertEqual(result.payload.playItem.Id, "first")
+            m.assertEqual(result.payload.playbackQueue[0].itemId, "first")
+            m.assertEqual(result.payload.playbackQueueIndex, 0)
+        end function
+
+        @it("resolves a fallback during playback-only refresh")
+        function _()
+            request = m.prepareEmptyTargets()
+            request.seasons = [{ Id: "season", IndexNumber: 1 }]
+            m.top.request = request
+            'bs:disable-next-line 1001
+            m.expectNotCalled(loadSeasons(request))
+            m.stubReplayEpisodes({ "season": { ok: true, data: { Items: [{ Id: "first", SeasonId: "season" }] } } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadPlaybackQueue, { items: [{ itemId: "first" }], index: 0 })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.payload.playItem.Id, "first")
+            m.assertInvalid(m.top.response.payload.upNextItem)
+            m.assertEqual(m.top.response.requestId, 11)
+        end function
+
+        @it("preserves Resume priority without fetching fallback episodes")
+        function _()
+            request = m.prepareEmptyTargets()
+            'bs:disable-next-line 1001
+            m.stubCall(loadResumeItem, { ok: true, data: { Items: [{ Id: "resume" }] } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadUpNextItem, { ok: true, data: { Items: [{ Id: "next" }] } })
+            'bs:disable-next-line 1001
+            m.expectNotCalled(loadFirstEpisode(request))
+            'bs:disable-next-line 1001
+            m.expectCalled(loadPlaybackQueue(request, { Id: "resume" }), invalid)
+
+            'bs:disable-next-line 1140
+            result = getResponse(request)
+
+            m.assertEqual(result.payload.resumeItem.Id, "resume")
+            m.assertEqual(result.payload.playItem.Id, "next")
+        end function
+
+        @it("preserves Next Up priority without fetching fallback episodes")
+        function _()
+            request = m.prepareEmptyTargets()
+            'bs:disable-next-line 1001
+            m.stubCall(loadUpNextItem, { ok: true, data: { Items: [{ Id: "next" }] } })
+            'bs:disable-next-line 1001
+            m.expectNotCalled(loadFirstEpisode(request))
+            'bs:disable-next-line 1001
+            m.stubCall(loadPlaybackQueue, invalid)
+
+            'bs:disable-next-line 1140
+            result = getResponse(request)
+
+            m.assertEqual(result.payload.playItem.Id, "next")
+        end function
+
+        @it("does not replay when an initial Next Up request fails")
+        function _()
+            request = m.prepareEmptyTargets()
+            request.playbackOnly = false
+            'bs:disable-next-line 1001
+            m.stubCall(loadUpNextItem, { ok: false, errorMessage: "Unavailable" })
+            'bs:disable-next-line 1001
+            m.expectNotCalled(loadFirstEpisode(request))
+
+            'bs:disable-next-line 1140
+            result = getResponse(request)
+
+            m.assertTrue(result.ok)
+            m.assertInvalid(result.payload.playItem)
+        end function
+
+        @it("does not replay when an initial Resume request fails")
+        function _()
+            request = m.prepareEmptyTargets()
+            request.playbackOnly = false
+            'bs:disable-next-line 1001
+            m.stubCall(loadResumeItem, { ok: false, errorMessage: "Unavailable" })
+            'bs:disable-next-line 1001
+            m.expectNotCalled(loadFirstEpisode(request))
+
+            'bs:disable-next-line 1140
+            result = getResponse(request)
+
+            m.assertTrue(result.ok)
+            m.assertInvalid(result.payload.playItem)
+        end function
+
+        @it("preserves structured errors from the fallback HTTP request")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: false, status: 401, authExpired: true, failureKind: "authenticationRequired", errorMessage: "technical" })
+
+            'bs:disable-next-line 1140
+            result = loadFirstEpisode(m.createRequest(), [{ Id: "season", IndexNumber: 1 }])
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.status, 401)
+            m.assertTrue(result.authExpired)
+            m.assertEqual(result.failureKind, "authenticationRequired")
+            m.assertEqual(result.errorMessage, "technical")
+        end function
+
+        @it("preserves structured fallback failure and correlation during refresh")
+        function _()
+            m.top.request = m.prepareEmptyTargets()
+            'bs:disable-next-line 1001
+            m.stubCall(loadFirstEpisode, { ok: false, status: 401, authExpired: true, failureKind: "authenticationRequired", errorMessage: "technical" })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.action, "tvShow")
+            m.assertEqual(m.top.response.itemId, "series")
+            m.assertEqual(m.top.response.requestId, 11)
+            m.assertEqual(m.top.response.status, 401)
+            m.assertTrue(m.top.response.authExpired)
+            m.assertEqual(m.top.response.failureKind, "authenticationRequired")
+        end function
+
+        @it("keeps initial series browsing available when fallback loading fails")
+        function _()
+            request = m.prepareEmptyTargets()
+            request.playbackOnly = false
+            'bs:disable-next-line 1001
+            m.stubCall(loadFirstEpisode, { ok: false, errorMessage: "Unavailable" })
+
+            'bs:disable-next-line 1140
+            result = getResponse(request)
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.payload.series.Id, "series")
+            m.assertEqual(result.payload.seasons.Items[0].Id, "season")
+            m.assertInvalid(result.payload.playItem)
+        end function
+
+        protected override function afterEach()
+            getGlobalAa().Delete("tvShowReplay")
+        end function
+
+        sub stubReplayEpisodes(results as object)
+            pagesBySeason = {}
+            for each seasonId in results
+                pages = results[seasonId]
+                if Type(pages) <> "roArray" then pages = [pages]
+                pagesBySeason[seasonId] = pages
+            end for
+            getGlobalAa().tvShowReplay = { results: pagesBySeason, requests: [], pages: [] }
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                fixture = getGlobalAa().tvShowReplay
+                fixture.requests.Push(requestUrl)
+                query = {}
+                for each parameter in requestUrl.Tokenize("?")[1].Tokenize("&")
+                    parts = parameter.Tokenize("=")
+                    query[parts[0]] = parts[1]
+                end for
+                startIndex = Number.ToInteger(query.startindex, 0)
+                fixture.pages.Push({ seasonId: query.seasonid, startIndex: startIndex, limit: Number.ToInteger(query.limit, 0) })
+                pages = fixture.results[query.seasonid]
+                if Type(pages) = "roArray" then
+                    if startIndex < pages.Count() then return pages[startIndex]
+                end if
+                return { ok: true, data: { Items: [] } }
+            end function)
+        end sub
+
+        function createRequest() as object
+            return { server: "http://server", token: "token", userId: "user", itemId: "series", playbackOnly: true, requestId: 11 }
+        end function
+
+        function prepareEmptyTargets() as object
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, { ok: true, data: { Id: "series" } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeasons, { ok: true, data: { Items: [{ Id: "season" }] } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadResumeItem, { ok: true, data: { Items: [] } })
+            'bs:disable-next-line 1001
+            m.stubCall(loadUpNextItem, { ok: true, data: { Items: [] } })
+            return m.createRequest()
+        end function
+
         @describe("episode cast metadata")
 
         @it("requests and preserves People for the Play target")

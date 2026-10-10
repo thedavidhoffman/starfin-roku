@@ -468,6 +468,7 @@ namespace tests
             request = m.node.pageState.taskPool.nodes[0].request
             m.assertTrue(request.playbackOnly)
             m.assertEqual(request.itemId, "series-1")
+            m.assertEqual(request.seasons[0].Id, "season-1")
             'bs:disable-next-line 1140
             handleTVShowResponse(m.refreshResponse(request.requestId))
 
@@ -534,13 +535,13 @@ namespace tests
             m.assertTrue(m.node.pageState.detailsLoad.latestRequestId > requestId)
         end function
 
-        @it("clears playback targets when no resume or next episode remains")
+        @it("clears playback targets when no episode is available")
         function _()
             AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
             'bs:disable-next-line 1140
             invalidatePlaybackTargets()
             response = m.refreshResponse(m.node.pageState.detailsLoad.latestRequestId)
-            response.payload = { resumeItem: invalid, upNextItem: invalid, playbackQueue: invalid, playbackQueueIndex: 0 }
+            response.payload = { resumeItem: invalid, upNextItem: invalid, playItem: invalid, playbackQueue: invalid, playbackQueueIndex: 0 }
 
             'bs:disable-next-line 1140
             handleTVShowResponse(response)
@@ -663,17 +664,94 @@ namespace tests
             m.assertInvalid(m.top.selectedEpisode)
         end function
 
-        @it("consumes pending Play without playing when no target remains")
+        @it("consumes pending Play without playing when no episode is available")
         function _()
             m.beginPendingPlay()
             response = m.refreshResponse(m.node.pageState.detailsLoad.latestRequestId)
-            response.payload = { resumeItem: invalid, upNextItem: invalid, playbackQueue: invalid, playbackQueueIndex: 0 }
+            response.payload = { resumeItem: invalid, upNextItem: invalid, playItem: invalid, playbackQueue: invalid, playbackQueueIndex: 0 }
 
             'bs:disable-next-line 1140
             handleTVShowResponse(response)
 
             m.assertFalse(m.node.pageState.playbackRefresh.playPending)
             m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("plays the initial replay target from zero with its series queue")
+        function _()
+            episode = m.createEpisode("first-episode")
+            episode.UserData = { Played: true, PlaybackPositionTicks: 700 }
+            queue = [{ itemId: episode.Id, item: episode }]
+
+            'bs:disable-next-line 1140
+            applyPlaybackTargets({ resumeItem: invalid, upNextItem: invalid, playItem: episode, playbackQueue: queue, playbackQueueIndex: 0 })
+            'bs:disable-next-line 1140
+            onVideoToolbarPlaySelected()
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "first-episode")
+            m.assertEqual(m.top.selectedEpisode.startPositionTicks, 0)
+            m.assertEqual(m.top.selectedEpisode.playbackQueue[0].itemId, "first-episode")
+            m.assertEqual(m.top.selectedEpisode.playbackQueueIndex, 0)
+            m.assertEqual(m.top.selectedEpisode.playbackQueueScope, "series")
+            m.assertTrue(m.top.selectedEpisode.item.UserData.Played)
+        end function
+
+        @it("plays a refreshed replay target exactly once after pending Play")
+        function _()
+            m.beginPendingPlay()
+            response = m.replayResponse(m.node.pageState.detailsLoad.latestRequestId)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "first-episode")
+            m.assertEqual(m.top.selectedEpisode.startPositionTicks, 0)
+            m.assertFalse(m.node.pageState.playbackRefresh.playPending)
+            m.top.selectedEpisode = invalid
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("ignores a stale replay target while Play awaits the latest refresh")
+        function _()
+            m.beginPendingPlay()
+            oldId = m.node.pageState.detailsLoad.latestRequestId
+            'bs:disable-next-line 1140
+            invalidatePlaybackTargets()
+            latestId = m.node.pageState.detailsLoad.latestRequestId
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.replayResponse(oldId))
+
+            m.assertInvalid(m.top.selectedEpisode)
+            m.assertTrue(m.node.pageState.playbackRefresh.playPending)
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.replayResponse(latestId))
+            m.assertEqual(m.top.selectedEpisode.itemId, "first-episode")
+        end function
+
+        @it("does not launch a replay target after navigation cancels pending Play")
+        function _()
+            m.beginPendingPlay()
+            requestId = m.node.pageState.detailsLoad.latestRequestId
+            m.top.callFunc("deactivate")
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(m.replayResponse(requestId))
+
+            m.assertInvalid(m.top.selectedEpisode)
+            m.assertFalse(m.node.pageState.playbackRefresh.playPending)
+        end function
+
+        function replayResponse(requestId as integer) as object
+            response = m.refreshResponse(requestId)
+            episode = m.createEpisode("first-episode")
+            episode.UserData = { Played: true, PlaybackPositionTicks: 700 }
+            response.payload.upNextItem = invalid
+            response.payload.playItem = episode
+            response.payload.playbackQueue = [{ itemId: episode.Id, item: episode }]
+            return response
         end function
 
         sub beginPendingPlay()
@@ -686,7 +764,7 @@ namespace tests
 
         function refreshResponse(requestId as integer) as object
             episode = m.createEpisode("next-episode")
-            return { action: "tvShow", requestId: requestId, ok: true, payload: { resumeItem: invalid, upNextItem: episode, playbackQueue: [{ itemId: episode.Id, item: episode }], playbackQueueIndex: 0 } }
+            return { action: "tvShow", requestId: requestId, ok: true, payload: { resumeItem: invalid, upNextItem: episode, playItem: episode, playbackQueue: [{ itemId: episode.Id, item: episode }], playbackQueueIndex: 0 } }
         end function
 
         function createRequest() as object

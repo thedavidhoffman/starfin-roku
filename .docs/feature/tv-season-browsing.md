@@ -107,6 +107,37 @@ responses. Deactivation cancels pending work and a dirty playback target refresh
 on activation. Failed refreshes leave stale targets unavailable and show the
 existing message dialog; selecting Play or reopening the series retries.
 
+Series Play keeps Resume first, then Next Up. When both requests succeed with
+no episode, TVShowTask resolves a replay target using season-scoped Episodes
+requests with `Limit=1` and `IsMissing=false`. Regular seasons are tried in season
+number order, continuing past seasons without an available episode. Season-zero
+Specials are tried only after all regular seasons are exhausted. Seasons without
+IDs are ignored; unknown season numbers remain eligible after numbered regular
+seasons and before Specials. Jellyfin supplies the episode order within a season.
+Each season starts at `StartIndex=0`. Replay advances one item at a time past
+malformed entries and episodes without IDs. In regular seasons it also skips
+episodes whose ParentIndexNumber is zero, because Jellyfin can interleave Specials
+into regular-season episode lists. An empty page advances to the next season,
+resetting the index; request failures stop resolution. Specials are eligible only
+when processing the Specials seasons. Unknown episode season numbers remain
+eligible. Replay starts from zero without
+resetting watched flags, and uses the existing queue anchored to that episode.
+This avoids downloading and sorting the complete series to select one episode.
+
+The task response preserves `upNextItem` as the actual Next Up result and adds
+`playItem` for the resolved Play target. Initial loads reuse the seasons already
+loaded by the task. Playback-only refresh requests pass the page's cached seasons
+explicitly; callers without season context load seasons only if replay resolution
+is needed. An explicitly empty season list resolves to no target without episode
+requests. Fallback requests retain SeriesInfo, People, and UserData.
+
+Fallback loading runs only when successful Resume and Next Up requests are empty;
+a request failure must not be interpreted as a fully watched series. A failed
+season or episode request stops fallback resolution instead of bypassing that
+season. Initial fallback failures are logged while series browsing remains
+available. Refresh failures retain the existing retry behavior and structured
+error information. An empty series still has no playable target.
+
 Play pressed during a playback-target refresh retains one pending Play intent.
 Repeated Play presses and activation reuse active or queued refresh work. Only a
 new watched-state change supersedes it. The latest successful refresh consumes

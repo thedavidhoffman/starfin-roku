@@ -4,6 +4,7 @@ import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/Number.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
 import "pkg:/source/api/HttpClient.bs"
@@ -81,7 +82,24 @@ function getResponse(request as dynamic) as object
         m.log.write("Unable to load series up-next item: " + Strings.ToString(upNextResult.errorMessage, "unknown error"))
     end if
 
-    playbackItem = upNextItem
+    playItem = upNextItem
+    if resumeItem = invalid and playItem = invalid and resumeResult.ok = true and upNextResult.ok = true then
+        replaySeasons = request.seasons
+        if request.playbackOnly <> true then replaySeasons = ApiPayload.GetItems(seasonsResult.data)
+        firstEpisodeResult = loadFirstEpisode(request, replaySeasons)
+        if firstEpisodeResult.ok = true then
+            playItem = firstEpisodeResult.data
+        else
+            if request.playbackOnly = true then
+                firstEpisodeResult.action = "tvShow"
+                firstEpisodeResult.itemId = request.itemId
+                return firstEpisodeResult
+            end if
+            m.log.write("Unable to load series replay item: " + Strings.ToString(firstEpisodeResult.errorMessage, "unknown error"))
+        end if
+    end if
+
+    playbackItem = playItem
     if resumeItem <> invalid then playbackItem = resumeItem
     playbackQueue = invalid
     playbackQueueIndex = 0
@@ -102,6 +120,7 @@ function getResponse(request as dynamic) as object
             seasons: seasonsResult.data
             resumeItem: resumeItem
             upNextItem: upNextItem
+            playItem: playItem
             playbackQueue: playbackQueue
             playbackQueueIndex: playbackQueueIndex
         }
@@ -142,6 +161,73 @@ function loadUpNextItem(request as object) as object
 
     requestUrl = request.server + "/Shows/NextUp" + Url.BuildQueryString(params)
     return HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+end function
+
+'-------------------------------------------------------------------------------
+' loadFirstEpisode
+'-------------------------------------------------------------------------------
+function loadFirstEpisode(request as object, seasons = invalid as dynamic) as object
+    if Arrays.IsArray(seasons) = false then
+        seasonsResult = loadSeasons(request)
+        if seasonsResult.ok <> true then return seasonsResult
+        seasons = ApiPayload.GetItems(seasonsResult.data)
+    end if
+
+    for each season in getReplaySeasons(seasons)
+        params = {
+            UserId: Strings.ToString(request.userId)
+            SeasonId: season.Id
+            Limit: 1
+            StartIndex: 0
+            IsMissing: false
+            Fields: "SeriesInfo,People,UserData"
+            EnableTotalRecordCount: false
+        }
+        while true
+            requestUrl = request.server + "/Shows/" + request.itemId + "/Episodes" + Url.BuildQueryString(params)
+            result = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+            if result.ok <> true then return result
+
+            episodes = ApiPayload.GetItems(result.data)
+            if episodes.Count() = 0 then exit while
+            episode = episodes[0]
+            if Arrays.IsAssocArray(episode) then
+                if Strings.ToString(episode.Id) <> "" then
+                    ' Jellyfin can interleave season-zero Specials into a regular season's episode order.
+                    if season.sortNumber = 0 or Number.ToInteger(episode.ParentIndexNumber, -1) <> 0 then return { ok: true, data: episode }
+                end if
+            end if
+            params.StartIndex = params.StartIndex + 1
+        end while
+    end for
+
+    return { ok: true, data: invalid }
+end function
+
+'-------------------------------------------------------------------------------
+' getReplaySeasons
+'-------------------------------------------------------------------------------
+function getReplaySeasons(seasons as object) as object
+    regularSeasons = []
+    specials = []
+    for each season in seasons
+        if Arrays.IsAssocArray(season) = false then continue for
+        seasonId = Strings.ToString(season.Id)
+        if seasonId = "" then continue for
+
+        seasonNumber = Number.ToInteger(season.IndexNumber, 999999)
+        entry = { Id: seasonId, sortNumber: seasonNumber }
+        if seasonNumber = 0 then
+            specials.Push(entry)
+        else
+            regularSeasons.Push(entry)
+        end if
+    end for
+
+    ' Sort only season identities; Jellyfin supplies episode order within each season.
+    regularSeasons.SortBy("sortNumber")
+    regularSeasons.Append(specials)
+    return regularSeasons
 end function
 
 '-------------------------------------------------------------------------------
