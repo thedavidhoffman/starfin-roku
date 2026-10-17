@@ -1,4 +1,4 @@
-# Next Item Playback
+# Next Item Playback and Automatic Skipping
 
 Starfin applies one per-user continuation preference whenever a completed video
 has another valid item in its playback queue. The **Next Item Playback** setting
@@ -17,8 +17,8 @@ mode finalizes its progress and watched state before continuing.
 
 ## Media-Segment Actions
 
-When Jellyfin reports an official `Outro` media segment and the queue has a
-valid next item, the player displays a contextual action during the actionable
+With Auto-skip credits Off, when Jellyfin reports an official `Outro` media
+segment and the queue has a valid next item, the player displays a contextual action during the actionable
 portion of the segment:
 
 - **Skip Credits** completes the item and opens Up next when Show "Up Next" is
@@ -47,9 +47,12 @@ artwork is never borrowed from a different series.
 
 ## Credits fallback
 
-Current user > Credits contains **Show next episode prompt**, an account-scoped
+Current user > Playback contains **Show next episode prompt**, an account-scoped
 setting with Off (default), 15 seconds, 30 seconds, 45 seconds, 60 seconds,
 75 seconds, 90 seconds, 105 seconds, and 120 seconds.
+The compact selector opens a nine-option picker above Settings. Selection updates
+the pending value; Back cancels. Both restore selector focus, and the normal
+Settings close flow persists edits. The former Credits category is removed.
 The registry key
 `next-episode-prompt-seconds` stores the selected seconds as a string; missing or
 unsupported values become `"0"` (Off). Changes use the normal settings save flow.
@@ -111,3 +114,71 @@ evaluating an official outro does not modify the stored range.
 Playback action presentation requires an active playback session and no pending
 completion. Stopped or resolving sessions cannot display prompts even while the
 Video node still reports playing during an asynchronous state transition.
+
+## Automatic segment skipping
+
+Current user > Playback also contains independent **Auto-skip intros** and
+**Auto-skip credits** Off/On cards, both Off by default. The account registry keys
+are `auto-skip-intros` and `auto-skip-credits`; unsupported values normalize to Off.
+Boolean request fields `autoSkipIntros` and `autoSkipCredits` carry the preferences
+through queue transitions, Up Next, and playback restoration/recovery.
+
+When enabled, the corresponding official Intro or Outro range triggers a seek
+to its end without displaying its manual button. Content after an Outro marker,
+including post-credits scenes, remains playable. Automatic credits skipping works
+without a next item. When a range ends within the final two seconds of the known
+duration, a queued next item uses the existing watched-state completion flow and
+Next item playback preference; otherwise the player seeks to one second before
+the end and finishes normally. Completion failures retain existing log-and-continue
+handling. Off preserves the existing manual actions.
+
+Only official markers trigger automatic skipping. The duration-based fallback
+remains a manual prompt, with its existing episode/next-item restrictions. Intro
+ranges take precedence over Outro ranges, including a manual Intro when only
+credits auto-skip is enabled. Automatic actions run before random Skip presentation.
+The existing actionable window excludes the final five seconds of each range.
+Paused, stopped, seeking, overlay-visible, and pending-completion states suppress
+automatic actions; a later eligible update can act on a still-active range.
+
+VideoPlayer owns handled range identities by action, start, and end. Each range
+is automatically handled once per playback item, so duplicate updates and seeking
+back do not skip it again. Same-item recovery preserves this state; a new playback
+item resets it. Automatic actions log `Playback action automatic` separately from
+clicks, with the segment source and endpoint.
+
+The implementation references the local Jellyfin Roku checkout's
+`settings/settings.json`, `displaySegmentSkipButton()` and `skipCurrentSegment()`
+in `components/video/VideoPlayerView.bs`. Starfin keeps its own completion policy
+at the end rather than unconditionally advancing to the next queued item.
+
+## Action coordination and recovery
+
+`updatePlaybackActions()` is VideoPlayer's coordinator for position, state,
+segment-response, and overlay-visibility changes. It checks eligibility, executes
+an automatic action if needed, and otherwise updates manual presentation.
+Presentation helpers do not seek or complete playback.
+
+The first playing event restores startup pause/focus intent before evaluating
+actions. A requested startup pause blocks actions until a paused event acknowledges
+it; stale playing/position notifications cannot skip a segment in the meantime.
+An error before pause acknowledgment carries that pause intent into recovery.
+A subsequent eligible resume can trigger the action normally.
+
+An automatic seek records both the handled range and a pending destination.
+Only an accepted playing/paused position at or beyond the destination minus one
+second confirms arrival. Earlier notifications do not clear this destination,
+even when they clear the general recovery seek field. Same-item recovery retries
+the pending destination instead of the pre-skip safe position, including across
+multiple attempts. A new explicit seek replaces that intent but retains the
+handled range so seeking back allows watching the segment. Normal teardown and
+new-item playback clear both the pending destination and handled ranges.
+
+Automatic-skip persistence automation first saves the opposite preference, then
+reopens Settings to save and verify the target. Missing-key defaults are covered
+separately, so persistence cases do not depend on previous test runs.
+
+RTA segment coverage uses Aaahh!!! Real Monsters S1E1 for manual and automatic
+Intro/Outro actions, both end-of-item policies, and stream-option changes opened paused that resume and auto-skip.
+Its Outro ends at runtime, so it does not provide device coverage for post-credits
+content. See [Automated Device Testing](automated-device-testing.md) for fixture
+requirements, state restoration, and verification status.

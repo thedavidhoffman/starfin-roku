@@ -138,12 +138,12 @@ describe('Starfin movie versions', function () {
         };
         if (state.requestId > firstRequest && state.ok === true
           && state.mediaSourceId === movie.MediaSources[1].Id
-          && state.videoState === (paused ? 'paused' : 'playing')) return true;
-        throw new Error(`Version restart expected source ${movie.MediaSources[1].Id}, request ID > ${firstRequest}, state ${paused ? 'paused' : 'playing'}; observed ${JSON.stringify(state)}`);
+          && state.videoState === 'playing') return true;
+        throw new Error(`Version restart expected source ${movie.MediaSources[1].Id}, request ID > ${firstRequest}, state playing; observed ${JSON.stringify(state)}`);
       }, 'version restart and state restoration', 60000);
       const requestPath = '#playbackController.0.playRequest';
       assert.equal(await value(environment, `${requestPath}.mediaSourceId`), movie.MediaSources[1].Id);
-      assert.equal(await value(environment, `${requestPath}.startPaused`), paused);
+      assert.equal(await value(environment, `${requestPath}.startPaused`), false);
       const positionTicks = await value(environment, `${requestPath}.startPositionTicks`);
       assert.ok(Math.abs(positionTicks / 10000000 - capturedPosition) <= 4);
       const sources = await value(environment, `${requestPath}.movieVersions.sources`);

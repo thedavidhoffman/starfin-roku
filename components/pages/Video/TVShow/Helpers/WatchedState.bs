@@ -1,0 +1,130 @@
+'-------------------------------------------------------------------------------
+' onMarkAsWatchedSelected
+'-------------------------------------------------------------------------------
+sub onMarkAsWatchedSelected()
+    runWatchedTask(WatchedAction.Command.MarkAsWatched)
+end sub
+
+'-------------------------------------------------------------------------------
+' onMarkAsUnwatchedSelected
+'-------------------------------------------------------------------------------
+sub onMarkAsUnwatchedSelected()
+    runWatchedTask(WatchedAction.Command.MarkAsUnwatched)
+end sub
+
+'-------------------------------------------------------------------------------
+' runWatchedTask
+'-------------------------------------------------------------------------------
+sub runWatchedTask(action as string)
+    if m.pageState.watched.pending <> invalid then return
+    if m.pageState.lifecycle.isActive <> true or m.pageState.seriesLoaded <> true then return
+    request = m.pageState.request
+    series = m.pageState.series
+    if request = invalid or Arrays.IsAssocArray(series) = false then return
+    itemId = Strings.ToString(series.Id)
+    if itemId = "" then return
+
+    AppMessage.Dismiss()
+    m.pageState.watched.nextRequestId += 1
+    m.pageState.watched.pending = { itemId: itemId, action: action, requestId: m.pageState.watched.nextRequestId }
+    m.watchedTask.request = {
+        server: request.server
+        token: request.token
+        userId: request.userId
+        itemId: itemId
+        action: action
+        requestId: m.pageState.watched.nextRequestId
+    }
+    m.watchedTask.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelWatchedAction
+'-------------------------------------------------------------------------------
+sub cancelWatchedAction()
+    m.pageState.watched.pending = invalid
+    m.watchedTask.control = TaskControl.Command.Stop
+end sub
+
+'-------------------------------------------------------------------------------
+' onWatchedTaskResponse
+'-------------------------------------------------------------------------------
+sub onWatchedTaskResponse()
+    response = m.watchedTask.response
+    pending = m.pageState.watched.pending
+    if response = invalid or pending = invalid or m.pageState.lifecycle.isActive <> true then return
+    if Number.ToInteger(response.requestId, -1) <> pending.requestId then return
+    if Strings.ToString(response.itemId) <> pending.itemId or Strings.ToString(response.action) <> pending.action then return
+    m.pageState.watched.pending = invalid
+
+    if response.ok <> true then
+        AppMessage.Show((response.failureKind <> invalid ? "Unable to update watched state. " : "") + RequestFailure.GetDisplayMessage(response, "Unable to update watched state."))
+        return
+    end if
+
+    isWatched = pending.action = WatchedAction.Command.MarkAsWatched
+    applySeriesWatchedChange(isWatched)
+    m.top.watchedStateChanged = { itemId: pending.itemId, isWatched: isWatched }
+    actionText = "Marked as unwatched"
+    if isWatched then actionText = "Marked as watched"
+    m.log.activity(actionText + " " + ActivityLog.ItemTitle(m.pageState.series, "TV series"))
+end sub
+
+'-------------------------------------------------------------------------------
+' applySeriesWatchedChange
+'-------------------------------------------------------------------------------
+sub applySeriesWatchedChange(isWatched as boolean)
+    ' Reject aggregate snapshots captured before this successful whole-series mutation.
+    m.episodeCountRefresh.callFunc("cancel")
+    setAggregateWatchedState(m.pageState.series, isWatched)
+    for each season in m.pageState.seasons
+        if Arrays.IsAssocArray(season) = false then continue for
+        setAggregateWatchedState(season, isWatched)
+        if m.seasonsGrid.content <> invalid then
+            for each child in m.seasonsGrid.content.getChildren(-1, 0)
+                if Strings.ToString(child.itemId) = Strings.ToString(season.Id) then child.raw = season
+            end for
+        end if
+    end for
+    cancelRandomPlaybackRequest()
+    m.pageState.randomPlaybackQueue = invalid
+    syncWatchedToolbar()
+    invalidatePlaybackTargets()
+    refreshEpisodeCounts()
+end sub
+
+'-------------------------------------------------------------------------------
+' setAggregateWatchedState
+'-------------------------------------------------------------------------------
+sub setAggregateWatchedState(item as object, isWatched as boolean)
+    MediaState.ApplyToItem(item, { action: "watched", value: isWatched })
+    item.UserData.PlaybackPositionTicks = 0
+    if isWatched then
+        item.UserData.UnplayedItemCount = 0
+    else
+        count = Number.ToInteger(Format.FirstNonEmpty([item.RecursiveItemCount, item.ChildCount], "-1"), -1)
+        if count >= 0 then
+            item.UserData.UnplayedItemCount = count
+        else
+            item.UserData.Delete("UnplayedItemCount")
+        end if
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' syncWatchedToolbar
+'-------------------------------------------------------------------------------
+sub syncWatchedToolbar()
+    series = m.pageState.series
+    m.videoToolbar.supportsWatchedActions = m.pageState.seriesLoaded = true and Arrays.IsAssocArray(series)
+    isWatched = false
+    if Arrays.IsAssocArray(series) then
+        count = UnwatchedEpisodeCount.GetCount(series)
+        if count >= 0 then
+            isWatched = count = 0
+        else if Arrays.IsAssocArray(series.UserData) then
+            isWatched = series.UserData.Played = true
+        end if
+    end if
+    m.videoToolbar.isWatched = isWatched
+end sub

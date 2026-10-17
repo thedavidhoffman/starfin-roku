@@ -1,3 +1,4 @@
+import "pkg:/source/AutoSkip.bs"
 import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 ' initPlaybackActions
@@ -8,6 +9,7 @@ sub initPlaybackActions()
         mode: PlaybackAction.Mode.None
         displayedSource: PlaybackAction.Source.None
         pendingCompletion: invalid
+        startupPausePending: false
         randomSkipDismissed: false
         musicVideoMetadataDismissed: false
     }
@@ -25,20 +27,28 @@ sub resetPlaybackActionsForItem(itemId as string)
 end sub
 
 '-------------------------------------------------------------------------------
-' updatePlaybackActionButton
+' updatePlaybackActions
 '-------------------------------------------------------------------------------
-sub updatePlaybackActionButton(position as dynamic)
+sub updatePlaybackActions(position as dynamic)
     if m.activePlayback = invalid then
         hidePlaybackIntroPresentation()
         return
     end if
 
     resetPlaybackActionsForItem(m.activePlayback.session.itemId)
-    if canShowPlaybackActionButton() <> true then
+    if canUpdatePlaybackActions() <> true then
         hidePlaybackIntroPresentation()
         return
     end if
 
+    if skipAutomaticMediaSegment(Number.ToFloat(position, 0)) then return
+    updateManualPlaybackPresentation(position)
+end sub
+
+'-------------------------------------------------------------------------------
+' updateManualPlaybackPresentation
+'-------------------------------------------------------------------------------
+sub updateManualPlaybackPresentation(position as dynamic)
     item = getCurrentPlaybackItem(getAcceptedOrPendingPlaybackRequest())
     updateMusicVideoIntroMetadata(item, position)
     showRandomSkip = VideoPlayerMetadata.ShouldShowRandomMusicVideoSkip(item, m.activePlayback.queue.mode, m.activePlayback.queue.scope, hasQueueItemAtOffset(1), position, m.playbackAction.randomSkipDismissed)
@@ -48,14 +58,14 @@ sub updatePlaybackActionButton(position as dynamic)
     end if
 
     activeIntro = getActiveIntroSegment(Number.ToFloat(position, 0))
-    if activeIntro <> invalid then
+    if activeIntro <> invalid and m.activePlayback.request.autoSkipIntros <> true then
         m.mediaSegments.activeEndSeconds = activeIntro.endSeconds
         showPlaybackActionButton(PlaybackAction.Mode.SkipIntro, "Skip Intro")
         return
     end if
 
     activeOutro = getActiveOutroSegment(Number.ToFloat(position, 0))
-    if activeOutro <> invalid and hasQueueItemAtOffset(1) then
+    if activeOutro <> invalid and hasQueueItemAtOffset(1) and (activeOutro.isFallback = true or m.activePlayback.request.autoSkipCredits <> true) then
         m.mediaSegments.activeEndSeconds = activeOutro.endSeconds
         m.mediaSegments.activeOutroIsFallback = activeOutro.isFallback = true
         if NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback) = NextItemPlayback.Mode.PlayNextImmediately then
@@ -86,11 +96,14 @@ sub updateMusicVideoIntroMetadata(item as dynamic, position as dynamic)
 end sub
 
 '-------------------------------------------------------------------------------
-' canShowPlaybackActionButton
+' canUpdatePlaybackActions
 '-------------------------------------------------------------------------------
-function canShowPlaybackActionButton() as boolean
+function canUpdatePlaybackActions() as boolean
     if m.playback.phase <> PlaybackSession.Phase.Active then return false
     if m.playbackAction.pendingCompletion <> invalid then return false
+    if m.playbackAction.startupPausePending then return false
+    if m.activePlayback.request.startPaused = true then return false
+    if m.mediaSegments.pendingAutomaticSeek <> invalid then return false
     if m.playback.isSeeking = true then return false
     if m.overlay.area <> "none" then return false
     return VideoPlayerState.Normalize(m.videoPlayer.state) = VideoPlayerState.Value.Playing
@@ -209,3 +222,48 @@ sub logPlaybackAction(eventName as string, mode as string, source as string)
     end if
     m.log.write(message)
 end sub
+
+'-------------------------------------------------------------------------------
+' skipAutomaticMediaSegment
+'-------------------------------------------------------------------------------
+function skipAutomaticMediaSegment(position as float) as boolean
+    if m.activePlayback.request.autoSkipIntros <> true and m.activePlayback.request.autoSkipCredits <> true then return false
+    segment = getActiveIntroSegment(position)
+    mode = PlaybackAction.Mode.SkipIntro
+    if segment <> invalid and m.activePlayback.request.autoSkipIntros <> true then return false
+    if segment = invalid and m.activePlayback.request.autoSkipCredits = true then
+        segment = getActiveOfficialOutroSegment(position)
+        mode = PlaybackAction.Mode.SkipCredits
+    end if
+    if segment = invalid then return false
+
+    key = mode + ":" + segment.startSeconds.ToStr() + ":" + segment.endSeconds.ToStr()
+    if m.mediaSegments.automaticallyHandled.DoesExist(key) then return false
+    ' Record before seeking: duplicate position events must not repeat the action.
+    m.mediaSegments.automaticallyHandled[key] = true
+    m.mediaSegments.activeEndSeconds = segment.endSeconds
+    m.mediaSegments.activeOutroIsFallback = false
+    logPlaybackAction("automatic", mode, getPlaybackActionSource(mode))
+    hidePlaybackIntroPresentation()
+
+    targetPosition = segment.endSeconds
+    if m.playback.duration > 0 and targetPosition >= m.playback.duration - 2 then
+        if hasQueueItemAtOffset(1) then
+            completionMode = PlaybackAction.Mode.SkipCredits
+            if NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback) = NextItemPlayback.Mode.PlayNextImmediately then completionMode = PlaybackAction.Mode.PlayNext
+            completeCurrentItemFromPlaybackAction(completionMode)
+            return true
+        end if
+        targetPosition = m.playback.duration - 1
+        if targetPosition < 0 then targetPosition = 0
+    end if
+
+    stopSeekTimers()
+    m.playback.position = targetPosition
+    m.playback.previewPosition = targetPosition
+    m.playbackControls.position = targetPosition
+    m.playbackControls.previewPosition = targetPosition
+    requestPlaybackSeek(AutoSkip.SeekReason.Segment, targetPosition)
+    reportPlaystateUpdate()
+    return true
+end function

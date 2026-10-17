@@ -180,7 +180,8 @@ surface can update its data.
 Its content owns an initial snapshot and pending selections; Back publishes one
 change-only result through OverlayHost. Pages own applying those selections.
 VideoPlayer owns a single combined commit that selects local updates or one
-correlated playback restart and restores prior playing/paused state. MainScene
+correlated playback restart. Effective changes resume playback; unchanged closes
+preserve prior playing/paused state. MainScene
 and PlaybackController route the overlay without applying individual options.
 MediaOptionsSession calculates display defaults and detail-page stream changes
 without side effects. Its context accepts selection intent and an optional resolved
@@ -325,3 +326,25 @@ retains read-time legacy compatibility. Normal saving owns current
 preferences only. Migration never calls Load or Save, avoiding recursive loading
 or saving unrelated defaults. No startup task or background registry writer is
 introduced. See [Settings Migrations](.docs/feature/settings-migrations.md).
+
+## Playback preferences and interval picker
+
+SettingsContent owns the single-page Playback editor: next-item playback, paired
+intro/credits automatic-skip preferences, and the compact fallback interval button.
+The former Credits category is consolidated into Playback without changing the
+fallback registry key or behavior. SettingsDialog correlates interval-picker
+requests/results; MainScene routes them through the existing confirmation
+OverlayHost to preserve Settings underneath. NextEpisodePromptDialog owns picker
+closure and NextEpisodePromptContent owns the nine choices. Selection edits the
+pending Settings snapshot; cancellation preserves it; both restore editor focus.
+
+VideoPlayer owns automatic official-segment actions and handled range identities.
+Its updatePlaybackActions coordinator separates eligibility and execution from
+manual presentation, running after startup pause/focus restoration. Pending pause
+acknowledgment prevents stale playing events from triggering actions. Existing seek
+and completion paths remain canonical. Media-segment state retains handled ranges
+and an unconfirmed automatic-seek destination through same-item recovery; recovery
+uses that destination until an accepted position confirms it. Explicit seeks clear
+the pending destination, and normal teardown clears both. Explicit preference
+booleans continue through playback requests.
+The timed fallback remains manual. See [Next Item Playback](.docs/feature/next-item-playback.md).

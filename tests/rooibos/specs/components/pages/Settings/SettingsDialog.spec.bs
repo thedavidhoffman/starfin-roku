@@ -682,6 +682,57 @@ namespace tests
             m.assertEqual(m.top.unwatchedEpisodeCountPreviewRequested, "subtle")
         end function
 
+        @describe("interval picker lifecycle")
+
+        @it("applies a correlated selection without saving Settings")
+        function _()
+            dialog = m.createFreshDialog()
+            dialog.callFunc("openSettings")
+            content = dialog.callFunc("getContentComponent")
+            content.findNode("userCategoryList").itemSelected = 3
+            content.findNode("nextEpisodePromptButton").setFocus(true)
+            content.findNode("nextEpisodePromptButton").buttonSelected = true
+            request = dialog.nextEpisodePromptRequested
+
+            dialog.callFunc("resolveNextEpisodePrompt", { requestId: request.requestId, selectedValue: "75" })
+
+            m.assertEqual(content.callFunc("getSettingsValues")[SettingsStore.Key.NextEpisodePromptSeconds], "75")
+            m.assertEqual(dialog.fixtureCapture.saveCount, 0)
+            m.assertFalse(dialog.closeRequested)
+            m.assertTrue(content.findNode("nextEpisodePromptButton").isInFocusChain())
+        end function
+
+        @it("ignores a stale picker result")
+        function _()
+            dialog = m.createFreshDialog()
+            dialog.callFunc("openSettings")
+            content = dialog.callFunc("getContentComponent")
+            content.findNode("userCategoryList").itemSelected = 3
+            content.findNode("nextEpisodePromptButton").setFocus(true)
+            content.findNode("nextEpisodePromptButton").buttonSelected = true
+            request = dialog.nextEpisodePromptRequested
+
+            dialog.callFunc("resolveNextEpisodePrompt", { requestId: request.requestId + 1, selectedValue: "75" })
+
+            m.assertEqual(content.callFunc("getSettingsValues")[SettingsStore.Key.NextEpisodePromptSeconds], "0")
+        end function
+
+        @it("cancels a correlated picker without changing settings")
+        function _()
+            dialog = m.createFreshDialog()
+            dialog.callFunc("openSettings")
+            content = dialog.callFunc("getContentComponent")
+            content.findNode("userCategoryList").itemSelected = 3
+            content.findNode("nextEpisodePromptButton").setFocus(true)
+            content.findNode("nextEpisodePromptButton").buttonSelected = true
+            request = dialog.nextEpisodePromptRequested
+
+            dialog.callFunc("resolveNextEpisodePrompt", { requestId: request.requestId, selectedValue: "" })
+
+            m.assertEqual(content.callFunc("getSettingsValues")[SettingsStore.Key.NextEpisodePromptSeconds], "0")
+            m.assertTrue(content.findNode("nextEpisodePromptButton").isInFocusChain())
+        end function
+
     end class
 
 end namespace

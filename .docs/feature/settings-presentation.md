@@ -39,7 +39,7 @@ highlight.
 ## Categories and cards
 
 Current user contains Libraries, Media shell, Theme, Playback, Subtitles,
-Credits, TV, and Screensaver. All eight rows are visible. The Device heading is
+TV, and Screensaver. All seven rows are visible. The Device heading is
 at y=488 and its three-row list starts at y=522: General, Video, and Advanced.
 Category navigation wraps across both lists: Up from Libraries moves to Advanced,
 and Down from Advanced moves to Libraries, updating the displayed panel with focus.
@@ -59,8 +59,13 @@ overhang, radio lists start at x=56 and use 1048px items, leaving equal margins.
 
 Libraries uses one titleless 1160 x 640px card around its unchanged table. The
 1045px table is centered at x=57.5 with a 24px vertical inset; all eight rows,
-column spacing, controls and navigation remain intact. Credits shows all nine
-presets. General retains the API-key text-input focus frame. Advanced keeps its
+column spacing, controls and navigation remain intact. Playback groups next-item
+behavior, paired auto-skip controls, and a compact next-episode prompt selector on
+one page. Its nine-option picker opens above Settings through the confirmation
+OverlayHost; selection or Back returns focus without closing or saving Settings.
+All Playback card descriptions, including both Next item playback choices, use
+automatic wrapped-text height so a fixed pixel limit does not suppress their second line.
+General retains the API-key text-input focus frame. Advanced keeps its
 Reset, Abort and Erase all data confirmation inside one card.
 
 ## Subtitle pages and saving
@@ -96,9 +101,11 @@ Episode Layout; the second contains Theme music. Additional settings, page
 numbers, chevrons, and a short fade follow the subtitle paging presentation.
 Each radio list contains only supported choices;
 saved choices and deferred rendering fallbacks are described in
-[Media Shell Layout Preferences](media-shell-layout.md). Credits uses
+[Media Shell Layout Preferences](media-shell-layout.md). The Playback interval
+picker uses
 NextEpisodePromptSeconds.Options() for its nine labels and stored values; Off
-remains the default. These presentation changes do not alter playback rules.
+remains the default. Relocating this fallback does not alter its playback rules.
+Automatic skipping is described in [Next Item Playback](next-item-playback.md).
 
 ## Retained experiment references
 

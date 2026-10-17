@@ -66,8 +66,8 @@ movie deep links retain their existing explicit zero position.
 
 Player commits combine a version change with other options into one correlated
 restart. The destination uses the captured elapsed time, bounded by its duration,
-or an explicitly selected destination chapter. Prior playing/paused state and
-Media Options focus restoration survive resolution and recovery. Accepted state
+or an explicitly selected destination chapter. Version changes resume playback even when opened while paused;
+Media Options focus restoration survives resolution and recovery. Accepted state
 changes only after a playback response is accepted. A failed or missing source
 does not silently select another version.
 
@@ -83,7 +83,7 @@ details restores the accepted version and tracks until the next movie load.
 Rooibos coverage includes catalog labels/order, source projection, resume data,
 category/focus behavior, draft change/revert, track reset/Off, asynchronous failure
 and closure, initial source loading, combined restart, duration bounds, chapter
-override, paused restoration, pending recovery, and negotiation source matching.
+override, resume after a paused opening, pending recovery, and negotiation source matching.
 Device verification also covers multi-source movies, source-specific chapters
 and trickplay, playing/paused switches, and return-to-details retention. The
 existing episode Media Options automation remains a regression check.

@@ -1,4 +1,4 @@
-import { categories, exerciseRadioSetting } from '../support/settings.mjs';
+import { categories, exerciseRadioSetting, openSettings, selectRadioOption, closeAndSaveSettings } from '../support/settings.mjs';
 
 const cases = [
   { label: 'Play next immediately', index: 1, value: 'play-next-immediately' },
@@ -18,5 +18,21 @@ describe('Starfin Playback settings persistence', function () {
         checkpoint: `settings-playback-${testCase.value}`
       });
     });
+  }
+});
+
+describe('Starfin automatic skipping preferences', function () {
+  for (const [nodeId, key] of [['autoSkipIntrosOptions', 'auto-skip-intros'], ['autoSkipCreditsOptions', 'auto-skip-credits']]) {
+    for (const [index, value] of ['off', 'on'].entries()) {
+      it(`persists ${key} ${value}`, async function () {
+        const { environment } = await openSettings(categories.playback);
+        await selectRadioOption(environment, nodeId, 1 - index);
+        await closeAndSaveSettings(environment);
+        await exerciseRadioSetting(this, {
+          category: categories.playback, nodeId, index, scope: 'account', key, value,
+          checkpoint: `settings-${key}-${value}`
+        });
+      });
+    }
   }
 });

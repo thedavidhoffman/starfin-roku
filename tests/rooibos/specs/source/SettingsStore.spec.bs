@@ -304,7 +304,7 @@ namespace tests
         function _()
             defaults = SettingsStore.Defaults()
 
-            m.assertEqual(defaults.Count(), 27)
+            m.assertEqual(defaults.Count(), 29)
             m.assertEqual(defaults[SettingsStore.Key.TvLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.MovieLibraryLayout], "poster;6")
             m.assertEqual(defaults[SettingsStore.Key.CollectionCardsLayout], "poster;6")
@@ -358,6 +358,8 @@ namespace tests
                 SettingsStore.Key.WatchedIndicatorStyle
                 SettingsStore.Key.ShowUnwatchedEpisodeCount
                 SettingsStore.Key.ThemeMusic
+                SettingsStore.Key.AutoSkipIntros
+                SettingsStore.Key.AutoSkipCredits
                 SettingsStore.Key.NextItemPlayback
                 SettingsStore.Key.NextEpisodePromptSeconds
                 SettingsStore.Key.ScreensaverType
@@ -1188,6 +1190,67 @@ namespace tests
             SettingsStore.Save("rooibos-count-contrast", settings)
 
             m.assertEqual(SettingsStore.Load("rooibos-count-contrast")[SettingsStore.Key.ShowUnwatchedEpisodeCount], "high-contrast")
+        end function
+
+        @describe("automatic skipping preferences")
+
+        @it("AutoSkipIntros defaults off")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue(invalid, SettingsStore.Key.AutoSkipIntros), "off")
+        end function
+
+        @it("AutoSkipIntros normalizes On")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "auto-skip-intros": "ON" }, SettingsStore.Key.AutoSkipIntros), "on")
+        end function
+
+        @it("AutoSkipIntros rejects unsupported values")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "auto-skip-intros": "unknown" }, SettingsStore.Key.AutoSkipIntros), "off")
+        end function
+
+        @it("AutoSkipCredits defaults off")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue(invalid, SettingsStore.Key.AutoSkipCredits), "off")
+        end function
+
+        @it("AutoSkipCredits normalizes On")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "auto-skip-credits": "ON" }, SettingsStore.Key.AutoSkipCredits), "on")
+        end function
+
+        @it("AutoSkipCredits rejects unsupported values")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({ "auto-skip-credits": "unknown" }, SettingsStore.Key.AutoSkipCredits), "off")
+        end function
+
+        @it("persists automatic skipping independently for each account")
+        function _()
+            m.snapshotMigrationRegistry([RegistryStore.AccountSectionName("rooibos-skip-a"), RegistryStore.AccountSectionName("rooibos-skip-b")])
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.AutoSkipIntros] = "on"
+            SettingsStore.Save("rooibos-skip-a", settings)
+            settings[SettingsStore.Key.AutoSkipIntros] = "off"
+            settings[SettingsStore.Key.AutoSkipCredits] = "on"
+            SettingsStore.Save("rooibos-skip-b", settings)
+
+            first = SettingsStore.Load("rooibos-skip-a")
+            second = SettingsStore.Load("rooibos-skip-b")
+
+            m.assertEqual(first[SettingsStore.Key.AutoSkipIntros], "on")
+            m.assertEqual(first[SettingsStore.Key.AutoSkipCredits], "off")
+            m.assertEqual(second[SettingsStore.Key.AutoSkipIntros], "off")
+            m.assertEqual(second[SettingsStore.Key.AutoSkipCredits], "on")
+        end function
+
+        @it("AutoSkipIntros defaults off when its key has never been saved")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.AutoSkipIntros), "off")
+        end function
+
+        @it("AutoSkipCredits defaults off when its key has never been saved")
+        function _()
+            m.assertEqual(SettingsStore.GetSettingValue({}, SettingsStore.Key.AutoSkipCredits), "off")
         end function
 
     end class

@@ -1,4 +1,7 @@
 import "pkg:/source/UnwatchedEpisodeCount.bs"
+import "pkg:/source/WatchedAction.bs"
+import "pkg:/source/MediaState.bs"
+import "pkg:/components/pages/Video/TVShow/Helpers/WatchedState.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/RequestFailure.bs"
@@ -40,9 +43,11 @@ sub init()
         seasons: []
         detailsLoad: LatestRequestLifecycle.Create()
         taskPool: { nodes: [m.tvShowTask, m.tvShowTaskAlternate], nextIndex: 0 }
+        watched: { nextRequestId: 0, pending: invalid }
         playbackRefresh: { needed: false, playPending: false }
         playbackQueue: invalid
         playbackQueueIndex: 0
+        randomRequest: { nextRequestId: 0, pendingRequestId: invalid }
         randomPlaybackQueue: invalid
         randomQueueLoading: false
         seriesLoaded: false
@@ -67,6 +72,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initReferences()
     m.log = new Logger("TVShow", m.global.logService)
+    m.watchedTask = m.top.findNode("watchedTask")
     m.episodeCountRefresh = m.top.findNode("episodeCountRefresh")
     m.contentGroup = m.top.findNode("contentGroup")
     m.mediaShell = m.top.findNode("mediaShell")
@@ -87,6 +93,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.top.observeField("loadRequest", "onLoadRequestChanged")
+    m.watchedTask.observeField("response", "onWatchedTaskResponse")
+    m.videoToolbar.observeField("markAsWatchedSelected", "onMarkAsWatchedSelected")
+    m.videoToolbar.observeField("markAsUnwatchedSelected", "onMarkAsUnwatchedSelected")
     m.episodeCountRefresh.observeField("response", "onEpisodeCountsRefreshed")
     m.tvShowTask.observeField("response", "onTVShowResponse")
     m.tvShowTaskAlternate.observeField("response", "onAlternateTVShowResponse")
@@ -142,14 +151,27 @@ sub onVideoToolbarRandomPlaySelected()
     if request = invalid then return
 
     m.pageState.randomQueueLoading = true
+    m.pageState.randomRequest.nextRequestId += 1
+    m.pageState.randomRequest.pendingRequestId = m.pageState.randomRequest.nextRequestId
     Spinner.Show()
     m.randomPlaybackTask.request = {
+        requestId: m.pageState.randomRequest.pendingRequestId
         server: request.server
         token: request.token
         userId: request.userId
         itemId: request.itemId
     }
     m.randomPlaybackTask.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelRandomPlaybackRequest
+'-------------------------------------------------------------------------------
+sub cancelRandomPlaybackRequest()
+    m.randomPlaybackTask.control = TaskControl.Command.Stop
+    if m.pageState.randomQueueLoading then Spinner.Hide()
+    m.pageState.randomRequest.pendingRequestId = invalid
+    m.pageState.randomQueueLoading = false
 end sub
 
 '-------------------------------------------------------------------------------
@@ -160,6 +182,9 @@ sub onRandomPlaybackResponse()
     if response = invalid then return
     if AsyncLifecycle.IsCurrentResponse(m.pageState.lifecycle, response, "itemId", "tvShowRandomPlayback") <> true then return
 
+    if m.pageState.randomQueueLoading <> true or m.pageState.randomRequest.pendingRequestId = invalid then return
+    if Number.ToInteger(response.requestId, -1) <> m.pageState.randomRequest.pendingRequestId then return
+    m.pageState.randomRequest.pendingRequestId = invalid
     m.pageState.randomQueueLoading = false
     Spinner.Hide()
     if response.ok <> true then
@@ -330,6 +355,8 @@ end function
 ' onLoadRequestChanged
 '-------------------------------------------------------------------------------
 sub onLoadRequestChanged()
+    cancelWatchedAction()
+    m.videoToolbar.supportsWatchedActions = false
     m.episodeCountRefresh.callFunc("cancel")
     request = m.top.loadRequest
     if request = invalid then return
@@ -343,9 +370,8 @@ sub onLoadRequestChanged()
     m.pageState.playbackQueue = invalid
     m.pageState.playbackQueueIndex = 0
     m.pageState.randomPlaybackQueue = invalid
-    m.pageState.randomQueueLoading = false
+    cancelRandomPlaybackRequest()
     m.pageState.seriesLoaded = false
-    m.randomPlaybackTask.control = TaskControl.Command.Stop
     m.pageState.themeLookupActive = false
     AsyncLifecycle.Begin(m.pageState.lifecycle, request.itemId)
     m.pageState.focusArea = "videoToolbar"
@@ -497,6 +523,7 @@ sub handleTVShowResponse(response as dynamic)
     else
         focusSeasonsIfActive()
     end if
+    refreshEpisodeCounts()
     loadThemeSong(payload.series)
 end sub
 
@@ -537,7 +564,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub onPlaybackProgressChange()
     change = m.top.playbackProgressChange
-    if change = invalid or change.isFinished <> true then return
+    if change = invalid then return
+    refreshEpisodeCounts()
+    if change.isFinished <> true then return
 
     queue = m.pageState.playbackQueue
     if queue = invalid then return
@@ -632,6 +661,7 @@ end sub
 ' renderSeries
 '-------------------------------------------------------------------------------
 sub renderSeries(item as dynamic, logoPending = false as boolean)
+    syncWatchedToolbar()
     if Arrays.IsAssocArray(item) = false then return
 
     m.mediaShell.mediaContent = {
@@ -748,6 +778,7 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    cancelWatchedAction()
     m.episodeCountRefresh.callFunc("cancel")
     m.pageState.playbackRefresh.playPending = false
     AsyncLifecycle.Deactivate(m.pageState.lifecycle)
@@ -755,9 +786,7 @@ sub deactivate()
     LatestRequestLifecycle.Deactivate(m.pageState.detailsLoad)
     m.tvShowTask.control = TaskControl.Command.Stop
     m.tvShowTaskAlternate.control = TaskControl.Command.Stop
-    m.randomPlaybackTask.control = TaskControl.Command.Stop
-    if m.pageState.randomQueueLoading then Spinner.Hide()
-    m.pageState.randomQueueLoading = false
+    cancelRandomPlaybackRequest()
     m.themeSongsTask.control = TaskControl.Command.Stop
     m.videoToolbar.callFunc("deactivate")
 end sub
@@ -1121,6 +1150,12 @@ end function
 sub onMediaStateChange()
     change = m.top.mediaStateChange
     if change = invalid or change.action <> "watched" then return
+    if Arrays.IsAssocArray(m.pageState.series) then
+        if Strings.ToString(change.itemId) = Strings.ToString(m.pageState.series.Id) then
+            applySeriesWatchedChange(change.value = true)
+            return
+        end if
+    end if
     for each season in m.pageState.seasons
         if Strings.ToString(season.Id) = Strings.ToString(change.itemId) then
             if UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) <> UnwatchedEpisodeCount.Mode.Off then
@@ -1143,7 +1178,10 @@ end sub
 sub refreshEpisodeCounts()
     request = m.pageState.request
     if request = invalid or m.pageState.lifecycle.isActive <> true then return
-    m.episodeCountRefresh.request = { server: request.server, token: request.token, userId: request.userId, items: m.pageState.seasons }
+    items = []
+    items.Append(m.pageState.seasons)
+    if Arrays.IsAssocArray(m.pageState.series) then items.Push(m.pageState.series)
+    m.episodeCountRefresh.request = { server: request.server, token: request.token, userId: request.userId, items: items, refreshWhenCountHidden: true }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1151,7 +1189,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub onEpisodeCountsRefreshed()
     response = m.episodeCountRefresh.response
+    if response = invalid or m.pageState.lifecycle.isActive <> true then return
     for each refreshed in response.payload
+        series = UnwatchedEpisodeCount.WithRefreshedCount(m.pageState.series, refreshed)
+        if series <> invalid then m.pageState.series = series
         for index = 0 to m.pageState.seasons.Count() - 1
             updated = UnwatchedEpisodeCount.WithRefreshedCount(m.pageState.seasons[index], refreshed)
             if updated <> invalid then
@@ -1164,4 +1205,5 @@ sub onEpisodeCountsRefreshed()
             end if
         end for
     end for
+    syncWatchedToolbar()
 end sub

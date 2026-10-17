@@ -157,3 +157,49 @@ orientation. They reopen Settings to verify the prior selection, reopen the same
 season through normal navigation, check card presence and order in the visible
 layout, preserve episode IDs, and capture screenshots for both states. These
 checks are separate from registry persistence and the existing Home artwork tests.
+
+## Whole-series watched toolbar
+
+After series details load, the existing VideoToolbar shows Mark as Watched for
+unwatched or partially watched series, and Mark as Unwatched for fully watched
+series. The order is Play/Resume, Mark as Watched/Unwatched, Play Random, then
+All Episodes, matching the watched action's position after playback on other
+detail pages. Selection immediately submits one WatchedTask request for the series ID,
+using the same recursive server behavior as the library Options action. There is
+no confirmation dialog or per-episode mutation loop.
+
+TVShow owns the pending mutation, monotonically increasing request ID, and explicit
+session context. Repeated presses are ignored while pending. Only a matching
+successful response commits series and season data. Failure preserves prior state
+and shows AppMessage; a new press retries. Navigation and new loads cancel pending
+work, and obsolete responses cannot update the page.
+
+Success updates existing season ContentNodes without rebuilding the grid, clears
+cached playback and random queues, and refreshes Play/Resume targets. If the
+random request was still running, its obsolete response cannot repopulate the
+cache or launch playback; subsequent requests use a new generation. If the
+watched action still owns focus, focus moves to its replacement action. Moving to
+another toolbar button while the request is pending preserves that button's focus.
+TVShow emits watchedStateChanged with itemId and isWatched; MainScene marks Home playback
+rows dirty and routes the change to the library.
+
+Aggregate refreshes include series and seasons and request refreshWhenCountHidden
+so toolbar state remains correct when numeric badges are disabled. Older snapshots
+are cancelled before a whole-series commit. Returned server aggregates reconcile
+canonical data and the toolbar, including changes made in season/episode pages.
+
+The toolbar owns focus mapping between Mark as Watched and Mark as Unwatched,
+including background aggregate reconciliation. Updating watched state preserves
+another focused action and does not pull focus into an inactive toolbar.
+TVShow uses one local random-request cancellation helper for new loads,
+deactivation, and whole-series commits. It stops pending work, clears its identity
+and loading state, and dismisses its loading spinner. Callers own cache lifetime:
+deactivation retains the random queue; new loads and whole-series commits clear it.
+Watched request producers and consumers share WatchedAction.Command, preserving
+the existing MarkAsWatched and MarkAsUnwatched request values.
+
+RTA watched-toolbar coverage exercises both mutation directions with count badges
+enabled and disabled, persisted server episode state, preserved season selection,
+and reopening. Background aggregate responses also test watched-action replacement
+and preservation of another focused button. Tests snapshot and restore individual
+episode user data; see [Automated Device Testing](automated-device-testing.md).

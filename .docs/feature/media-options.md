@@ -84,8 +84,12 @@ Recovery during resolution retains the full pending selection. Accepted stream
 indices are owned by ActivePlayback; recovery reads those same indices. Startup
 pause/focus intent remains on the request through retries and is consumed only
 when video starts. Deferred external-subtitle application is consumed once its
-track becomes available and is invalidated by a newer local selection. Startup restores
-the prior paused state and returns focus to the summary button. Teardown clears
+track becomes available and is invalidated by a newer local selection. Any effective
+change (video mode, version, audio, subtitles, or chapter) resumes playback after
+application, including when the dialog was opened while paused. Reloads request
+playing startup and return focus to the summary button; local changes resume after
+application. Closing unchanged, including selecting then reverting an option,
+preserves the prior playing/paused state. Teardown clears
 pending commits, and request identity rejects results for another session.
 
 The standalone media-information, playback-information, video-options, and

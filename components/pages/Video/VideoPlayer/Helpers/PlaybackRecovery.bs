@@ -292,13 +292,16 @@ function handlePlaybackRecoveryFailure(reason as string, detail as string) as bo
         return false
     end if
 
+    restartPosition = m.recovery.lastSafePosition
+    if m.mediaSegments.pendingAutomaticSeek <> invalid then restartPosition = m.mediaSegments.pendingAutomaticSeek
     failurePhase = "startup"
     if m.recovery.hasEverPlayed then failurePhase = "runtime"
-    m.log.write("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + Strings.ToString(m.recovery.lastSafePosition))
+    m.log.write("Playback recovery attempt itemId=" + m.recovery.itemId + " phase=" + failurePhase + " reason=" + reason + " detail=" + detail + " attempt=" + attemptKind + " fromMode=" + m.recovery.effectiveMode + " toMode=" + nextMode + " position=" + Strings.ToString(restartPosition))
     restartRequest = buildStreamRestartPlayRequest()
     if restartRequest = invalid then return false
 
-    restartRequest.startPositionTicks = secondsToTicks(m.recovery.lastSafePosition)
+    restartRequest.startPositionTicks = secondsToTicks(restartPosition)
+    if m.playbackAction.startupPausePending then restartRequest.startPaused = true
     restartRequest.videoMode = nextMode
     m.recovery.effectiveMode = nextMode
     m.recovery.isStable = false

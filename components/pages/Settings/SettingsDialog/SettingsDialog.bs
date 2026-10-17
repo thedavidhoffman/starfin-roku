@@ -7,6 +7,7 @@ import "pkg:/source/SettingsClose.bs"
 '-------------------------------------------------------------------------------
 sub openSettings()
     resetAccountState()
+    m.promptPicker = { requestId: 0, pending: false }
     m.originalSettings = invalid
     m.top.title = "Settings"
     m.top.dialogWidth = 1680
@@ -24,6 +25,7 @@ sub openSettings()
         content.observeField("watchedIndicatorPreviewRequested", "onWatchedIndicatorPreviewRequested")
         content.observeField("themePreviewRequested", "onThemePreviewRequested")
         content.observeField("accountSubtitleAction", "onAccountSubtitleAction")
+        content.observeField("nextEpisodePromptRequested", "onNextEpisodePromptRequested")
         content.callFunc("loadSettingsValues")
         m.originalSettings = content.callFunc("getSettingsValues")
     end if
@@ -127,4 +129,25 @@ end sub
 sub onUnwatchedEpisodeCountPreviewRequested()
     content = getSettingsContent()
     m.top.unwatchedEpisodeCountPreviewRequested = content.unwatchedEpisodeCountPreviewRequested
+end sub
+
+'-------------------------------------------------------------------------------
+' onNextEpisodePromptRequested
+'-------------------------------------------------------------------------------
+sub onNextEpisodePromptRequested()
+    if m.closeState.phase <> SettingsClose.Phase.Open or m.promptPicker.pending then return
+    content = getSettingsContent()
+    m.promptPicker.requestId++
+    m.promptPicker.pending = true
+    m.top.nextEpisodePromptRequested = { requestId: m.promptPicker.requestId, value: content.nextEpisodePromptRequested.value }
+end sub
+
+'-------------------------------------------------------------------------------
+' resolveNextEpisodePrompt
+'-------------------------------------------------------------------------------
+sub resolveNextEpisodePrompt(result as object)
+    if m.closeState.phase <> SettingsClose.Phase.Open or m.promptPicker.pending <> true then return
+    if result.requestId <> m.promptPicker.requestId then return
+    m.promptPicker.pending = false
+    getSettingsContent().callFunc("resolveNextEpisodePrompt", result)
 end sub

@@ -139,9 +139,11 @@ describe('Starfin unified media options', function () {
       await closeOptions(environment);
       await waitFor(async () => {
         const request = await value(environment, '#playbackController.0.playRequest.videoMode');
-        return request === 'automatic' && await value(environment, '#videoPlayer.state') === 'paused';
-      }, 'changed playback to remain paused', 120000);
+        return request === 'automatic' && await value(environment, '#videoPlayer.state') === 'playing';
+      }, 'changed playback to resume', 120000);
 
+      await environment.ecp.sendKeypress(environment.ecp.Key.Play);
+      await waitFor(async () => await value(environment, '#videoPlayer.state') === 'paused', 'pause before subtitle change');
       await openOptions(environment, true);
       let activeSubtitleCategory = 0;
       while (await value(environment, `#categories.content.${activeSubtitleCategory}.title`) !== 'Subtitles') {
@@ -154,7 +156,7 @@ describe('Starfin unified media options', function () {
       assert.equal(await value(environment, '#optionList.content.0.title'), 'Off');
       await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
       await closeOptions(environment);
-      await waitFor(async () => await value(environment, '#videoPlayer.state') === 'paused', 'manual Off to preserve pause', 120000);
+      await waitFor(async () => await value(environment, '#videoPlayer.state') === 'playing', 'manual Off to resume playback', 120000);
       await openOptions(environment, true);
       assert.equal(await value(environment, '#overlayHost.0.optionsContext.selection.subtitleStreamIndex'), -1);
       await closeOptions(environment);

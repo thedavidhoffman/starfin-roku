@@ -240,3 +240,50 @@ not faithfully capture DRM video planes, animation smoothness, overscan, or HDMI
 output. Treat result directories as private test artifacts because they may show
 server names, account names, Quick Connect codes, configured Search terms, or
 personal media titles and artwork.
+
+## Playback settings, official segments, and series watched actions
+
+New RTA coverage lives in settings-playback-navigation.spec.mjs,
+playback-segments.spec.mjs, and tv-series-watched.spec.mjs. The settings cases
+navigate paired cards and the interval picker with remote keys, verify both
+selection and cancellation focus, and inspect description bounds and ellipses
+with screenshots for both next-item descriptions.
+
+The media fixture is the exact series **Aaahh!!! Real Monsters**, S1E1
+**The Switching Hour**, with S1E2 available for continuation. Tests resolve IDs
+and marker times from the authenticated Jellyfin server; IDs are not hard-coded.
+Observed on 2026-10-17: Intro 0?43.777 seconds, Outro 1371.704?1414.336 seconds,
+runtime 1414.336 seconds. Missing/ambiguous media, missing markers, an incomplete
+episode snapshot, or an Outro no longer ending at runtime fails fixture setup
+rather than silently skipping coverage. This episode has no post-credits content;
+that scenario remains unit-covered pending another suitable media fixture.
+
+Playback cases exercise manual Intro/Outro actions, automatic Intro seeking,
+automatic endpoint Outro completion under both next-item policies, and paused
+Media Options changes inside each segment that resume and automatically skip. Remote selection performs the action
+under test; direct Video seeks shorten setup. Paused-opening cases use the existing
+PlaybackController request boundary to establish an unhandled segment and paused
+startup, then use the real Media Options dialog to change video mode. They require
+server transcoding. Up Next countdowns are stopped only after the page appears,
+to prevent screenshots and assertions racing the countdown.
+
+Whole-series cases test both watched directions with badges enabled and disabled,
+including server episode state, season-card updates, focus, and reopening.
+Two background-reconciliation cases preserve the watched-action or random-button
+focus when a real aggregate task response changes the series state.
+Each case establishes the opposite initial state independently. The shared fixture
+snapshots the test account's episode, season, and series user data before mutation.
+Cleanup stops playback, relaunches to prevent late progress writes, restores leaf
+data before aggregate data through Jellyfin's per-item UserData API, and verifies
+episode watched flags, resume ticks, and play counts. Settings selections are also
+restored. Use the configured automation account; do not run concurrently with
+manual playback or watched-state edits on that account. Forced termination can
+prevent cleanup, so allow afterEach hooks to finish.
+
+These cases were authored without executing RTA or automated validation in this
+development cycle. Existing unit-suite results do not verify these new scripts.
+
+Known deferred investigation: a forced-transcode restart from a paused 10-second
+position was observed at 6.04 seconds. The Media Options resume-policy cases do
+not assert exact post-restart position; requested-position coverage remains in
+unit tests. This runtime position discrepancy is not considered resolved.

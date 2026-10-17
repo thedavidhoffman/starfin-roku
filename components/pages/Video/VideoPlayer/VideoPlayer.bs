@@ -233,7 +233,7 @@ sub onVideoStateChanged()
 #endif
     m.playback.isPlaying = state = VideoPlayerState.Value.Playing or state = VideoPlayerState.Value.Buffering
     m.playbackControls.isPlaying = m.playback.isPlaying
-    updatePlaybackActionButton(m.playback.position)
+    if state <> VideoPlayerState.Value.Playing then hidePlaybackIntroPresentation()
     if state = VideoPlayerState.Value.Error then
         reportPlaystateStop()
         if handlePlaybackRecoveryFailure("videoError", m.videoPlayer.errorStr) then return
@@ -266,6 +266,7 @@ sub onVideoStateChanged()
             m.playstateTimer.control = TimerControl.Command.Stop
         end if
     else if state = VideoPlayerState.Value.Paused then
+        m.playbackAction.startupPausePending = false
         if activityStateChanged then m.log.activity("Paused " + getPlaybackActivityTitle())
         m.playstateTimer.control = TimerControl.Command.Stop
         reportPlaystateUpdate()
@@ -275,6 +276,7 @@ sub onVideoStateChanged()
         reportPlaystateStop()
     end if
 
+    updatePlaybackActions(m.playback.position)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -305,7 +307,8 @@ sub onVideoPositionChanged()
     diagnosePlaybackPosition(position)
     m.playback.position = position
     recordPlaybackRecoveryPosition(position)
-    updatePlaybackActionButton(position)
+    confirmAutomaticSkipPosition(position)
+    updatePlaybackActions(position)
     if m.playback.isSeeking <> true then
         m.playbackControls.position = m.playback.position
     end if
@@ -465,7 +468,7 @@ sub hideControls()
     m.playbackControls.callFunc("deactivate")
     if m.overlay.area = "controls" then m.overlay.area = "none"
     m.top.setFocus(true)
-    updatePlaybackActionButton(m.playback.position)
+    updatePlaybackActions(m.playback.position)
 
     if m.controlsAnimation.hiding = true then return
 

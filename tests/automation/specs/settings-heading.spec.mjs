@@ -5,7 +5,7 @@ import { waitFor } from '../support/lifecycle.mjs';
 const headings = [
   ['Libraries', categories.libraries], ['Media shell', categories.mediaShell],
   ['Theme', categories.theme], ['Playback', categories.playback],
-  ['Subtitles', categories.accountSubtitles], ['Credits', categories.credits],
+  ['Subtitles', categories.accountSubtitles],
   ['TV', categories.tv], ['Screensaver', categories.screensaver],
   ['General', categories.general], ['Video', categories.video], ['Advanced', categories.advanced]
 ];

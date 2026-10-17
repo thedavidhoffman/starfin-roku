@@ -1,3 +1,4 @@
+import "pkg:/source/NextEpisodePromptSeconds.bs"
 import "pkg:/source/SettingsClose.bs"
 
 '-------------------------------------------------------------------------------
@@ -36,6 +37,8 @@ sub onConfirmationClosed()
     if not owner.isSameNode(m.overlayHost.getChild(0)) then return
     if closed.request.id = "settingsSaveFailure" then
         owner.callFunc("resolveSubtitleSaveFailure", { requestId: requestId, decision: closed.overlay.decision })
+    else if closed.request.id = NextEpisodePromptSeconds.Overlay.Picker then
+        owner.callFunc("resolveNextEpisodePrompt", { requestId: requestId, selectedValue: closed.overlay.selectedValue })
     else if closed.request.id = "logUploadConfirmation" then
         owner.callFunc("resolveUploadConfirmation", { requestId: requestId, sendConfirmed: closed.overlay.sendConfirmed })
     end if
@@ -51,4 +54,16 @@ sub routeLogUploadConfirmation(request as object)
     clearConfirmation()
     m.confirmationState = { owner: owner, requestId: request.requestId }
     m.confirmationOverlayHost.callFunc("openOverlay", { id: "logUploadConfirmation", componentName: "LogUploadConfirmationDialog", openFunction: "openConfirmation", closeField: "closeRequested", requestId: request.requestId })
+end sub
+
+'-------------------------------------------------------------------------------
+' routeNextEpisodePromptPicker
+'-------------------------------------------------------------------------------
+sub routeNextEpisodePromptPicker(request as object)
+    if m.overlayHost.getChildCount() = 0 then return
+    owner = m.overlayHost.getChild(0)
+    if owner.subtype() <> "SettingsDialog" then return
+    clearConfirmation()
+    m.confirmationState = { owner: owner, requestId: request.requestId }
+    m.confirmationOverlayHost.callFunc("openOverlay", { id: NextEpisodePromptSeconds.Overlay.Picker, componentName: "NextEpisodePromptDialog", openFunction: "openPicker", closeField: "closeRequested", requestId: request.requestId, value: request.value })
 end sub

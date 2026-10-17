@@ -26,7 +26,7 @@ individual Starfin features.
 - [List and Grid Item Initialization](list-item-initialization.md)
 - [Media Authentication](media-authentication.md)
 - [Music Video Playback](music-videos.md)
-- [Next Item Playback and Credits Fallback](next-item-playback.md)
+- [Next Item Playback, Automatic Skipping, and Credits Fallback](next-item-playback.md)
 - [Music Library](music-library.md)
 - [Movie Detail Browsing](movie-detail-browsing.md)
 - [Playback Safeguards and Diagnostics](playback-safeguards.md)

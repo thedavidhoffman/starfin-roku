@@ -34,6 +34,51 @@ namespace tests
             m.assertEqual(m.node.refresh.tasks[0].control, "stop")
         end function
 
+        @it("refreshes functional watched state while count badges are disabled")
+        function _()
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "series", Type: "Series" }, { Id: "season", Type: "Season" }], refreshWhenCountHidden: true }
+
+            m.assertEqual(m.node.refresh.tasks[0].control, "run")
+            m.assertEqual(m.node.refresh.tasks[0].request.itemIds, ["series", "season"])
+        end function
+
+        @it("keeps functional refreshes available when count badges are turned off")
+        function _()
+            m.global.showUnwatchedEpisodeCount = "subtle"
+            m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "series", Type: "Series" }], refreshWhenCountHidden: true }
+            firstId = m.node.refresh.tasks[0].request.requestId
+
+            m.global.showUnwatchedEpisodeCount = "off"
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: firstId, ok: true, payload: [{ Id: "series" }] })
+
+            m.assertInvalid(m.top.response)
+            m.assertEqual(m.node.refresh.tasks[1].control, "run")
+            latestId = m.node.refresh.tasks[1].request.requestId
+            payload = [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 0, Played: true } }]
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: latestId, ok: true, payload: payload })
+            m.assertEqual(m.top.response.payload, payload)
+        end function
+
+        @it("rejects a functional snapshot captured before a whole-series commit")
+        function _()
+            request = { server: "server", token: "token", userId: "user", items: [{ Id: "series", Type: "Series" }], refreshWhenCountHidden: true }
+            m.top.request = request
+            oldId = m.node.refresh.tasks[0].request.requestId
+            m.top.callFunc("cancel")
+            m.top.request = request
+            latestId = m.node.refresh.lifecycle.latestRequestId
+
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: oldId, ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 9 } }] })
+
+            m.assertInvalid(m.top.response)
+            'bs:disable-next-line 1140
+            handleResponse({ requestId: latestId, ok: true, payload: [{ Id: "series", Type: "Series", UserData: { UnplayedItemCount: 0 } }] })
+            m.assertEqual(m.top.response.payload[0].UserData.UnplayedItemCount, 0)
+        end function
+
         @it("filters and deduplicates aggregate requests on enable")
         function _()
             m.top.request = { server: "server", token: "token", userId: "user", items: [{ Id: "a", Type: "Series" }, { Id: "a", Type: "Series" }, { Id: "b", Type: "Season" }, { Id: "e", Type: "Episode" }] }

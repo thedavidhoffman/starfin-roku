@@ -13,6 +13,8 @@ namespace tests
             m.node.playback.hasEmittedFinalProgress = false
             m.node.playback.phase = "active"
             m.node.recovery.pendingSeekTarget = invalid
+            m.node.mediaSegments.pendingAutomaticSeek = invalid
+            m.node.playbackAction.startupPausePending = false
             m.node.activePlayback = {
                 request: { itemId: "movie-1" }
                 context: { item: { Id: "movie-1" }, series: invalid, season: invalid }
@@ -1835,13 +1837,13 @@ namespace tests
             m.assertTrue(m.top.playRequest.startPositionTicks = 100000000)
         end function
 
-        @it("requests paused startup when options were opened while paused")
+        @it("resumes an audio restart when options were opened while paused")
         function _()
             m.prepareOptions({ audioStreamIndex: 3 }, false)
             'bs:disable-next-line 1140
             onMediaOptionsApplyTimerFire()
 
-            m.assertTrue(m.top.playRequest.startPaused)
+            m.assertFalse(m.top.playRequest.startPaused)
         end function
 
         @it("resumes unchanged playback without a restart")
@@ -1875,6 +1877,52 @@ namespace tests
             m.assertTrue(m.node.videoPlayer.seek = 60)
             m.assertEqual(m.node.playback.requestId, previousRequestId)
             m.assertEqual(m.node.videoPlayer.control, "resume")
+        end function
+
+        @it("resumes a video mode restart opened while paused")
+        function _()
+            m.prepareOptions({ videoMode: "transcode-no-remux" }, false)
+            m.node.playback.isPlaying = false
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertFalse(m.top.playRequest.startPaused)
+        end function
+
+        @it("resumes a burned subtitle restart opened while paused")
+        function _()
+            m.prepareOptions({ subtitleStreamIndex: -1 }, false)
+            m.node.playback.isPlaying = false
+            m.node.streamOptions.activeSubtitleDeliveryMethod = "encode"
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertFalse(m.top.playRequest.startPaused)
+        end function
+
+        @it("resumes a local subtitle change opened while paused")
+        function _()
+            m.prepareOptions({ subtitleStreamIndex: -1 }, false)
+            m.node.playback.isPlaying = false
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.videoPlayer.control, "resume")
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+        end function
+
+        @it("resumes a chapter seek opened while paused")
+        function _()
+            m.prepareOptions({ chapter: { label: "Next", startPositionTicks: 600000000, startPositionSeconds: 60 } }, false)
+            m.node.playback.isPlaying = false
+            previousRequestId = m.node.playback.requestId
+            'bs:disable-next-line 1140
+            onMediaOptionsApplyTimerFire()
+
+            m.assertEqual(m.node.videoPlayer.control, "resume")
+            m.assertEqual(m.node.playback.requestId, previousRequestId)
+            m.assertTrue(m.node.videoPlayer.seek = 60)
         end function
 
         @it("turns off external subtitles locally and commits accepted state")
@@ -2099,13 +2147,13 @@ namespace tests
             m.assertEqual(m.top.playRequest.startPositionTicks, 0&)
         end function
 
-        @it("preserves pause and focus restoration during a version restart")
+        @it("resumes playback and restores focus during a version restart")
         function _()
             m.prepareVersionOptions(false)
             'bs:disable-next-line 1140
             onMediaOptionsApplyTimerFire()
 
-            m.assertTrue(m.top.playRequest.startPaused)
+            m.assertFalse(m.top.playRequest.startPaused)
             m.assertTrue(m.top.playRequest.restoreMediaOptionsFocus)
         end function
 
@@ -2336,6 +2384,316 @@ namespace tests
             m.assertEqual(m.node.activePlayback.context.item.Chapters[0].Name, "Opening")
             m.assertInvalid(restart.loadItemDetails)
             m.assertEqual(restart.item.RunTimeTicks, 1200000000&)
+        end function
+
+        @describe("automatic skip lifecycle events")
+
+        private sub prepareAutomaticSkipPlayback()
+            m.prepareActivityPlayback("playing", "buffering")
+            m.node.activePlayback.request.server = "http://server"
+            m.node.activePlayback.request.token = "token"
+            m.node.activePlayback.request.userId = "user"
+            m.node.activePlayback.request.autoSkipIntros = true
+            m.node.activePlayback.request.autoSkipCredits = true
+            m.node.activePlayback.context.item.RunTimeTicks = 6000000000&
+            m.node.activePlayback.request.item = m.node.activePlayback.context.item
+            m.node.pendingPlaybackRequest = invalid
+            m.node.playbackInfoTask = { control: "", request: invalid, response: invalid }
+            m.node.mediaOptions.session = invalid
+            m.node.overlay.area = "none"
+            'bs:disable-next-line 1140
+            resetMediaSegments()
+            m.node.mediaSegments.itemId = "movie-1"
+            m.node.mediaSegments.resolved = true
+            m.node.mediaSegments.intros = [{ startSeconds: 530, endSeconds: 560 }]
+            'bs:disable-next-line 1140
+            resetPlaybackForStart(m.node.activePlayback.context.item, 540)
+            'bs:disable-next-line 1140
+            resetPlaybackRecovery(m.node.activePlayback.request)
+            m.node.recovery.lastSafePosition = 540
+            m.node.playback.hasReportedStart = false
+            m.node.playbackAction.pendingCompletion = invalid
+            m.node.videoPlayer.position = 540
+            m.node.videoPlayer.duration = 600
+        end sub
+
+        private sub acceptAutomaticSkipRecovery()
+            request = m.node.pendingPlaybackRequest
+            m.node.playbackInfoTask.response = { ok: true, requestId: request.requestId, item: request.item, playSessionId: "recovered-skip", startPositionTicks: request.startPositionTicks, streamUrl: "http://server/video.m3u8", streamFormat: "hls", audioStreamIndex: 1, subtitleStreamIndex: -1, subtitleDeliveryMethod: "none" }
+            'bs:disable-next-line 1140
+            onPlaybackInfoResponse()
+        end sub
+
+        @it("restores a paused stream restart before skipping Intro")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            m.node.activePlayback.request.startPaused = true
+            m.node.activePlayback.request.restoreMediaOptionsFocus = true
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.videoPlayer.control, "pause")
+            m.assertEqual(m.node.videoPlayer.seek, 0)
+            m.assertInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertTrue(m.node.playbackAction.startupPausePending)
+            m.assertTrue(m.node.playbackControls.isInFocusChain())
+        end function
+
+        @it("restores a paused stream restart before skipping Outro")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            m.node.mediaSegments.intros = []
+            m.node.mediaSegments.outros = [{ startSeconds: 530, endSeconds: 570 }]
+            m.node.activePlayback.queue.items = [{ itemId: "movie-1", item: m.node.activePlayback.context.item }, { itemId: "next", item: { Id: "next", Type: "Episode" } }]
+            m.node.activePlayback.queue.index = 0
+            m.node.activePlayback.request.startPaused = true
+            m.node.activePlayback.request.restoreMediaOptionsFocus = true
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.videoPlayer.control, "pause")
+            m.assertEqual(m.node.videoPlayer.seek, 0)
+            m.assertInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertTrue(m.node.playbackAction.startupPausePending)
+            m.assertTrue(m.node.playbackControls.isInFocusChain())
+        end function
+
+        @it("restores a paused stream restart before skipping near-end Outro")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            m.node.mediaSegments.intros = []
+            m.node.mediaSegments.outros = [{ startSeconds: 530, endSeconds: 600 }]
+            m.node.activePlayback.queue.items = [{ itemId: "movie-1", item: m.node.activePlayback.context.item }, { itemId: "next", item: { Id: "next", Type: "Episode" } }]
+            m.node.activePlayback.queue.index = 0
+            m.node.activePlayback.request.startPaused = true
+            m.node.activePlayback.request.restoreMediaOptionsFocus = true
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.node.videoPlayer.control, "pause")
+            m.assertEqual(m.node.videoPlayer.seek, 0)
+            m.assertInvalid(m.node.playbackAction.pendingCompletion)
+            m.assertTrue(m.node.playbackAction.startupPausePending)
+            m.assertTrue(m.node.playbackControls.isInFocusChain())
+        end function
+
+        @it("suppresses stale playing and position events until the startup pause is acknowledged")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            m.node.activePlayback.request.startPaused = true
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertEqual(m.node.videoPlayer.seek, 0)
+            m.assertTrue(m.node.playbackAction.startupPausePending)
+        end function
+
+        @it("permits automatic skipping after the restored pause is resumed")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            m.node.activePlayback.request.startPaused = true
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            m.node.videoPlayer.state = "paused"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.node.videoPlayer.state = "playing"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertFalse(m.node.playbackAction.startupPausePending)
+            m.assertEqual(m.node.videoPlayer.seek, 560)
+        end function
+
+        @it("recovers a failed automatic seek at its destination and confirms arrival")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "error"
+            m.node.videoPlayer.errorStr = "seek failed"
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.top.playRequest.startPositionTicks, 5600000000&)
+            m.assertEqual(m.node.mediaSegments.pendingAutomaticSeek, 560.0)
+            m.assertEqual(m.node.mediaSegments.automaticallyHandled.Count(), 1)
+
+            m.acceptAutomaticSkipRecovery()
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 560
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertInvalid(m.node.mediaSegments.pendingAutomaticSeek)
+            m.assertEqual(m.node.recovery.lastSafePosition, 560.0)
+            m.assertEqual(m.node.mediaSegments.automaticallyHandled.Count(), 1)
+        end function
+
+        @it("retains the automatic destination through repeated recovery attempts")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "error"
+            m.node.videoPlayer.errorStr = "seek failed"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+            m.acceptAutomaticSkipRecovery()
+            m.node.recovery.lastSafePosition = 540
+
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.top.playRequest.startPositionTicks, 5600000000&)
+            m.assertEqual(m.node.mediaSegments.pendingAutomaticSeek, 560.0)
+        end function
+
+        @it("ignores a pre-seek position")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 541
+
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertEqual(m.node.mediaSegments.pendingAutomaticSeek, 560.0)
+        end function
+
+        @it("accepts one-second destination tolerance")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 559
+
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertInvalid(m.node.mediaSegments.pendingAutomaticSeek)
+        end function
+
+        @it("does not accept a position outside tolerance")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "playing"
+            m.node.videoPlayer.position = 558
+
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertEqual(m.node.mediaSegments.pendingAutomaticSeek, 560.0)
+        end function
+
+        @it("accepts arrival while paused")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "paused"
+            m.node.videoPlayer.position = 560
+
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertInvalid(m.node.mediaSegments.pendingAutomaticSeek)
+        end function
+
+        @it("does not confirm a buffering position")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.state = "buffering"
+            m.node.videoPlayer.position = 560
+
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertEqual(m.node.mediaSegments.pendingAutomaticSeek, 560.0)
+        end function
+
+        @it("an explicit seek supersedes pending recovery without skipping the range again")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            'bs:disable-next-line 1140
+            requestPlaybackSeek("chapterSelection", 535)
+            m.node.videoPlayer.position = 535
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            m.assertInvalid(m.node.mediaSegments.pendingAutomaticSeek)
+            m.assertEqual(m.node.videoPlayer.seek, 535)
+            m.assertEqual(m.node.mediaSegments.automaticallyHandled.Count(), 1)
+        end function
+
+        @it("normal playback teardown clears the automatic destination and handled ranges")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+
+            'bs:disable-next-line 1140
+            stopPlayback()
+
+            m.assertInvalid(m.node.mediaSegments.pendingAutomaticSeek)
+            m.assertEqual(m.node.mediaSegments.automaticallyHandled.Count(), 0)
+        end function
+
+        @it("a stale position cannot redirect automatic recovery back into the segment")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.node.videoPlayer.position = 541
+            'bs:disable-next-line 1140
+            onVideoPositionChanged()
+            m.assertInvalid(m.node.recovery.pendingSeekTarget)
+
+            m.node.videoPlayer.state = "error"
+            m.node.videoPlayer.errorStr = "seek failed after a stale position"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertEqual(m.top.playRequest.startPositionTicks, 5600000000&)
+            m.assertEqual(m.node.mediaSegments.pendingAutomaticSeek, 560.0)
+        end function
+
+        @it("retains an unacknowledged startup pause through recovery")
+        function _()
+            m.prepareAutomaticSkipPlayback()
+            m.node.activePlayback.request.startPaused = true
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.node.videoPlayer.state = "error"
+            m.node.videoPlayer.errorStr = "error before pause acknowledgment"
+            'bs:disable-next-line 1140
+            onVideoStateChanged()
+
+            m.assertTrue(m.top.playRequest.startPaused)
+            m.assertEqual(m.node.videoPlayer.seek, 0)
         end function
 
     end class

@@ -204,3 +204,10 @@ persistence and previews, Theme card navigation, restored TV layout, and
 page-owned count application. Device
 font metrics, nine-patch rendering, and focus behavior require the explicitly
 authorized end-of-cycle runtime/UI checks.
+
+TVShow also uses aggregate refreshes for its whole-series watched toolbar.
+Its requests set `refreshWhenCountHidden: true`, allowing series and season
+watched-state reconciliation even when numeric badges are Off. Other callers
+retain preference-dependent refresh behavior. This flag does not enable badges.
+Whole-series toolbar actions cancel older aggregate work before committing local
+state and requesting a fresh snapshot; the refresher rejects late generations.

@@ -10,6 +10,8 @@ sub initMediaSegments()
         requestId: requestId
         pending: false
         itemId: ""
+        automaticallyHandled: {}
+        pendingAutomaticSeek: invalid
         intros: []
         outros: []
         resolved: false
@@ -98,7 +100,7 @@ sub resolveMediaSegments(segments as dynamic)
     m.mediaSegments.outros = VideoPlayerMediaSegments.BuildOutros(segments)
     m.mediaSegments.resolved = true
     m.log.write("Media segments resolved itemId=" + m.activePlayback.session.itemId + " introCount=" + m.mediaSegments.intros.Count().ToStr() + " outroCount=" + m.mediaSegments.outros.Count().ToStr())
-    updatePlaybackActionButton(m.playback.position)
+    updatePlaybackActions(m.playback.position)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -175,4 +177,14 @@ sub skipActiveIntro()
     m.videoPlayer.control = MediaControl.Command.Resume
     m.top.setFocus(true)
     reportPlaystateUpdate()
+end sub
+
+'-------------------------------------------------------------------------------
+' confirmAutomaticSkipPosition
+'-------------------------------------------------------------------------------
+sub confirmAutomaticSkipPosition(position as float)
+    if m.mediaSegments.pendingAutomaticSeek = invalid then return
+    state = VideoPlayerState.Normalize(m.videoPlayer.state)
+    if state <> VideoPlayerState.Value.Playing and state <> VideoPlayerState.Value.Paused then return
+    if position >= m.mediaSegments.pendingAutomaticSeek - 1 then m.mediaSegments.pendingAutomaticSeek = invalid
 end sub

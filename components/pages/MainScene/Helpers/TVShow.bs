@@ -20,6 +20,7 @@ sub tvShowShow(selection as object, shouldReset as boolean)
     m.log.activity("Opening TV show " + ActivityLog.ItemTitle(selection.item, "TV show"))
 
     page = CreateObject("roSGNode", "TVShow")
+    page.observeField("watchedStateChanged", "tvShowHandleWatchedStateChanged")
     page.observeField("closeRequested", "tvShowHandleCloseRequested")
     page.observeField("selectedSeason", "tvSeasonHandleTVShowSeasonSelected")
     page.observeField("selectedAllEpisodes", "tvSeasonHandleTVShowAllEpisodesSelected")
@@ -112,5 +113,19 @@ sub tvShowHandleCloseRequested()
     else
         resetDynamicPages()
         showHome()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' tvShowHandleWatchedStateChanged
+'-------------------------------------------------------------------------------
+sub tvShowHandleWatchedStateChanged()
+    if m.tvShowPage = invalid then return
+    change = m.tvShowPage.watchedStateChanged
+    if change = invalid then return
+
+    markHomePlaybackRowsDirty()
+    if m.videoLibraryPage <> invalid then
+        m.videoLibraryPage.mediaStateChange = { itemId: Strings.ToString(change.itemId), action: "watched", value: change.isWatched = true }
     end if
 end sub

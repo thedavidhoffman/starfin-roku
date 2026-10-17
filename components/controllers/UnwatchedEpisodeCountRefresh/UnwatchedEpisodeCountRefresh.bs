@@ -56,14 +56,16 @@ end sub
 ' queueRefresh
 '-------------------------------------------------------------------------------
 sub queueRefresh(forceFull as boolean)
-    if UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) = UnwatchedEpisodeCount.Mode.Off then
+    request = m.top.request
+    refreshWhenCountHidden = false
+    if request <> invalid then refreshWhenCountHidden = request.refreshWhenCountHidden = true
+    if UnwatchedEpisodeCount.Normalize(m.global.showUnwatchedEpisodeCount) = UnwatchedEpisodeCount.Mode.Off and refreshWhenCountHidden <> true then
         LatestRequestLifecycle.Deactivate(m.refresh.lifecycle)
         for each task in m.refresh.tasks
             task.control = TaskControl.Command.Stop
         end for
         return
     end if
-    request = m.top.request
     if request = invalid or request.items = invalid then return
     if forceFull <> true and request.snapshotOnly = true then return
     isFull = forceFull or GetInterface(request.itemIds, "ifArray") = invalid

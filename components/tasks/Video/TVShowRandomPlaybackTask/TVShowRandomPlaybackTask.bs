@@ -21,13 +21,23 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
+    response = buildResponse(request)
+    if request <> invalid then
+        if request.requestId <> invalid then response.requestId = request.requestId
+    end if
+    m.top.response = response
+end sub
+
+'-------------------------------------------------------------------------------
+' buildResponse
+'-------------------------------------------------------------------------------
+function buildResponse(request as dynamic) as object
     validationError = TaskRequest.ValidateRequest(request, "tvShowRandomPlayback", ["userId", "itemId"])
     if validationError <> invalid then
         itemId = ""
         if request <> invalid then itemId = Strings.ToString(request.itemId)
         validationError.AddReplace("itemId", itemId)
-        m.top.response = validationError
-        return
+        return validationError
     end if
 
     params = {
@@ -39,17 +49,16 @@ sub executeRequest()
     if result.ok <> true then
         result.AddReplace("action", "tvShowRandomPlayback")
         result.AddReplace("itemId", request.itemId)
-        m.top.response = result
-        return
+        return result
     end if
 
-    m.top.response = {
+    return {
         ok: true
         action: "tvShowRandomPlayback"
         itemId: request.itemId
         playbackQueue: buildPlaybackQueue(ApiPayload.GetItems(result.data))
     }
-end sub
+end function
 
 '-------------------------------------------------------------------------------
 ' buildPlaybackQueue

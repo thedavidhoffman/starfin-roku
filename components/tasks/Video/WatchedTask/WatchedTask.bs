@@ -1,4 +1,5 @@
 import "pkg:/source/String.bs"
+import "pkg:/source/WatchedAction.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
@@ -24,9 +25,9 @@ sub executeRequest()
     validationError = TaskRequest.ValidateRequest(request, action, ["userId", "itemId"])
     if validationError <> invalid then
         response = validationError
-    else if action = "MarkAsWatched" then
+    else if action = WatchedAction.Command.MarkAsWatched then
         response = markAsWatched(request)
-    else if action = "MarkAsUnwatched" then
+    else if action = WatchedAction.Command.MarkAsUnwatched then
         response = markAsUnwatched(request)
     else
         response = { ok: false, errorMessage: "Unknown watched request action." }
@@ -54,14 +55,14 @@ function markAsWatched(request as object) as object
     requestUrl = request.server + "/UserPlayedItems/" + request.itemId + Url.BuildQueryString(params)
     result = HttpClient.Request(requestUrl, "POST", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
     if result.ok <> true then
-        result.AddReplace("action", "MarkAsWatched")
+        result.AddReplace("action", WatchedAction.Command.MarkAsWatched)
         result.AddReplace("itemId", Strings.ToString(request.itemId))
         return result
     end if
 
     return {
         ok: true
-        action: "MarkAsWatched"
+        action: WatchedAction.Command.MarkAsWatched
         itemId: Strings.ToString(request.itemId)
         payload: result.data
     }
@@ -78,14 +79,14 @@ function markAsUnwatched(request as object) as object
     requestUrl = request.server + "/UserPlayedItems/" + request.itemId + Url.BuildQueryString(params)
     result = HttpClient.Request(requestUrl, "DELETE", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
     if result.ok <> true then
-        result.AddReplace("action", "MarkAsUnwatched")
+        result.AddReplace("action", WatchedAction.Command.MarkAsUnwatched)
         result.AddReplace("itemId", Strings.ToString(request.itemId))
         return result
     end if
 
     return {
         ok: true
-        action: "MarkAsUnwatched"
+        action: WatchedAction.Command.MarkAsUnwatched
         itemId: Strings.ToString(request.itemId)
         payload: result.data
     }

@@ -1,3 +1,4 @@
+import "pkg:/source/WatchedAction.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/RequestFailure.bs"
@@ -225,6 +226,8 @@ function buildQueuePlaybackRequest(queueItem as object, queueIndex as integer) a
         playbackQueueScope: m.activePlayback.queue.scope
         tracksPlaybackProgress: m.activePlayback.request.tracksPlaybackProgress
         nextItemPlayback: NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback)
+        autoSkipIntros: m.activePlayback.request.autoSkipIntros = true
+        autoSkipCredits: m.activePlayback.request.autoSkipCredits = true
         nextEpisodePromptSeconds: NextEpisodePromptSeconds.Normalize(m.activePlayback.request.nextEpisodePromptSeconds)
         videoMode: getOriginalPlaybackMode()
         subtitleBurnInMode: SubtitleBurnIn.Normalize(m.activePlayback.request.subtitleBurnInMode)
@@ -274,6 +277,7 @@ end function
 ' resetPlaybackForStart
 '-------------------------------------------------------------------------------
 sub resetPlaybackForStart(item as dynamic, startPositionSeconds as integer)
+    m.playbackAction.startupPausePending = false
     m.playback.phase = PlaybackSession.Phase.Active
     m.recovery.pendingSeekTarget = invalid
     m.playback.prematureFinish = false
@@ -533,6 +537,8 @@ function requestUpNextAutoPlay() as boolean
         playbackQueueScope: m.activePlayback.queue.scope
         tracksPlaybackProgress: m.activePlayback.request.tracksPlaybackProgress
         nextItemPlayback: NextItemPlayback.Normalize(m.activePlayback.request.nextItemPlayback)
+        autoSkipIntros: m.activePlayback.request.autoSkipIntros = true
+        autoSkipCredits: m.activePlayback.request.autoSkipCredits = true
         nextEpisodePromptSeconds: NextEpisodePromptSeconds.Normalize(m.activePlayback.request.nextEpisodePromptSeconds)
         videoMode: getOriginalPlaybackMode()
         subtitleBurnInMode: SubtitleBurnIn.Normalize(m.activePlayback.request.subtitleBurnInMode)
@@ -585,7 +591,7 @@ sub completeCurrentItemFromPlaybackAction(mode as string)
     Spinner.Show()
     finalizeCurrentPlaybackItem()
     m.playbackCompletionTask.request = {
-        action: "MarkAsWatched"
+        action: WatchedAction.Command.MarkAsWatched
         server: m.activePlayback.session.server
         token: m.activePlayback.session.token
         userId: m.activePlayback.session.userId
@@ -741,6 +747,10 @@ sub restorePlaybackStartupState()
     ' Consume restoration only after video starts; recovery retains it until then.
     m.activePlayback.request = PlaybackRequest.WithChanges(request, { startPaused: false, restoreMediaOptionsFocus: false })
     if m.pendingPlaybackRequest <> invalid and m.pendingPlaybackRequest.requestId = m.activePlayback.requestId then m.pendingPlaybackRequest = m.activePlayback.request
-    if pauseOnStart then m.videoPlayer.control = MediaControl.Command.Pause
+    if pauseOnStart then
+        ' Pause is asynchronous; action eligibility waits for the paused state event.
+        m.playbackAction.startupPausePending = true
+        m.videoPlayer.control = MediaControl.Command.Pause
+    end if
     if restoreFocus then restoreMediaOptionsFocus()
 end sub

@@ -627,6 +627,120 @@ namespace tests
             m.assertFalse(m.node.restartButton.findNode("textLabel").visible)
         end function
 
+        @describe("watched action order")
+
+        @it("places Mark as Watched between Play and Play Random")
+        function _()
+            m.prepareSeriesButtonOrder(false)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+
+            m.assertTrue(m.node.markWatchedButton.hasFocus())
+            m.assertTrue(m.node.markWatchedButton.translation[0] < m.node.randomPlayButton.translation[0])
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertTrue(m.node.randomPlayButton.hasFocus())
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertTrue(m.node.allEpisodesButton.hasFocus())
+        end function
+
+        @it("places Mark as Unwatched between Play and Play Random")
+        function _()
+            m.prepareSeriesButtonOrder(true)
+
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+
+            m.assertTrue(m.node.markUnwatchedButton.hasFocus())
+            m.assertTrue(m.node.markUnwatchedButton.translation[0] < m.node.randomPlayButton.translation[0])
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertTrue(m.node.randomPlayButton.hasFocus())
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertTrue(m.node.allEpisodesButton.hasFocus())
+        end function
+
+        @it("keeps Resume and Restart ahead of the watched action")
+        function _()
+            m.prepareSeriesButtonOrder(false)
+            m.top.supportsRestart = true
+            m.top.resumePositionSeconds = 30
+            m.top.callFunc("resetFocus")
+
+            m.assertTrue(m.node.resumeButton.hasFocus())
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertTrue(m.node.restartButton.hasFocus())
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertTrue(m.node.markWatchedButton.hasFocus())
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertTrue(m.node.randomPlayButton.hasFocus())
+        end function
+
+        @it("preserves markWatchedButton focus when watched state becomes true")
+        function _()
+            m.prepareSeriesButtonOrder(false)
+            m.node.markWatchedButton.setFocus(true)
+
+            m.top.isWatched = true
+
+            m.assertTrue(m.node.markUnwatchedButton.hasFocus())
+            m.assertEqual(m.node.focusState.focusedButtonId, "markUnwatchedButton")
+        end function
+
+        @it("preserves randomPlayButton focus when watched state becomes true")
+        function _()
+            m.prepareSeriesButtonOrder(false)
+            m.node.randomPlayButton.setFocus(true)
+
+            m.top.isWatched = true
+
+            m.assertTrue(m.node.randomPlayButton.hasFocus())
+            m.assertEqual(m.node.focusState.focusedButtonId, "randomPlayButton")
+        end function
+
+        @it("preserves markUnwatchedButton focus when watched state becomes false")
+        function _()
+            m.prepareSeriesButtonOrder(true)
+            m.node.markUnwatchedButton.setFocus(true)
+
+            m.top.isWatched = false
+
+            m.assertTrue(m.node.markWatchedButton.hasFocus())
+            m.assertEqual(m.node.focusState.focusedButtonId, "markWatchedButton")
+        end function
+
+        @it("preserves randomPlayButton focus when watched state becomes false")
+        function _()
+            m.prepareSeriesButtonOrder(true)
+            m.node.randomPlayButton.setFocus(true)
+
+            m.top.isWatched = false
+
+            m.assertTrue(m.node.randomPlayButton.hasFocus())
+            m.assertEqual(m.node.focusState.focusedButtonId, "randomPlayButton")
+        end function
+
+        sub prepareSeriesButtonOrder(isWatched as boolean)
+            m.top.mediaType = "tv-season"
+            m.top.supportsPlayback = true
+            m.top.supportsRestart = false
+            m.top.supportsItemNavigation = false
+            m.top.supportsWatchedActions = true
+            m.top.supportsRandomPlay = true
+            m.top.supportsAllEpisodes = true
+            m.top.resumePositionSeconds = 0
+            m.top.resumeItem = invalid
+            m.top.alwaysShowResumeRestartText = false
+            m.top.isWatched = isWatched
+            m.top.callFunc("resetFocus")
+        end sub
+
     end class
 
 end namespace

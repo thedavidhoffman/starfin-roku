@@ -5,9 +5,12 @@ namespace tests
     class TVShowTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.node.watchedTask = m.top.findNode("watchedTask")
+            m.node.episodeCountRefresh = CreateObject("roSGNode", "AggregateRefreshTestDouble")
             m.node.pageState.request = m.createRequest()
             m.node.pageState.detailsLoad = LatestRequestLifecycle.Create()
             m.node.pageState.lifecycle = AsyncLifecycle.Create()
+            m.node.pageState.watched = { nextRequestId: 0, pending: invalid }
             m.node.pageState.playbackRefresh = { needed: false, playPending: false }
             firstTask = CreateObject("roSGNode", "Node")
             firstTask.addFields({ request: {}, control: "stop" })
@@ -18,10 +21,12 @@ namespace tests
             m.node.pageState.seasons = []
             m.node.pageState.playbackQueue = invalid
             m.node.pageState.playbackQueueIndex = 0
+            m.node.pageState.randomRequest = { nextRequestId: 0, pendingRequestId: invalid }
             m.node.pageState.randomPlaybackQueue = invalid
             m.node.pageState.randomQueueLoading = false
             m.node.pageState.seriesLoaded = true
             m.node.pageState.focusArea = "videoToolbar"
+            m.top.watchedStateChanged = invalid
             m.top.selectedEpisode = invalid
             m.top.selectedSeason = invalid
             m.top.selectedAllEpisodes = invalid
@@ -754,6 +759,496 @@ namespace tests
             return response
         end function
 
+        @describe("whole-series watched toolbar")
+
+        @it("shows Mark as Watched for an unwatched series")
+        function _()
+            m.node.pageState.series.UserData = { Played: false, UnplayedItemCount: 8 }
+
+            'bs:disable-next-line 1140
+            syncWatchedToolbar()
+
+            m.assertTrue(m.top.findNode("videoToolbar").findNode("markWatchedButton").visible)
+            m.assertFalse(m.top.findNode("videoToolbar").findNode("markUnwatchedButton").visible)
+        end function
+
+        @it("shows Mark as Watched for a partially watched series")
+        function _()
+            m.node.pageState.series.UserData = { Played: false, UnplayedItemCount: 2 }
+
+            'bs:disable-next-line 1140
+            syncWatchedToolbar()
+
+            m.assertTrue(m.top.findNode("videoToolbar").findNode("markWatchedButton").visible)
+        end function
+
+        @it("shows Mark as Unwatched for a fully watched series")
+        function _()
+            m.node.pageState.series.UserData = { Played: true, UnplayedItemCount: 0 }
+
+            'bs:disable-next-line 1140
+            syncWatchedToolbar()
+
+            m.assertTrue(m.top.findNode("videoToolbar").findNode("markUnwatchedButton").visible)
+        end function
+
+        @it("keeps watched actions unavailable before details load")
+        function _()
+            m.node.pageState.seriesLoaded = false
+
+            'bs:disable-next-line 1140
+            syncWatchedToolbar()
+
+            m.assertFalse(m.top.findNode("videoToolbar").supportsWatchedActions)
+        end function
+
+        @it("sends a whole-series watched request with explicit session context")
+        function _()
+            m.prepareWatchedAction()
+
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+
+            request = m.node.watchedTask.request
+            m.assertEqual(request.action, "MarkAsWatched")
+            m.assertEqual(request.itemId, "series-1")
+            m.assertEqual(request.server, "http://server")
+            m.assertEqual(request.token, "token")
+            m.assertEqual(request.userId, "user")
+            m.assertEqual(request.requestId, 1)
+            m.assertEqual(m.node.watchedTask.control, "run")
+            m.assertInvalid(m.top.watchedStateChanged)
+        end function
+
+        @it("sends a whole-series unwatched request")
+        function _()
+            m.prepareWatchedAction()
+
+            'bs:disable-next-line 1140
+            onMarkAsUnwatchedSelected()
+
+            m.assertEqual(m.node.watchedTask.request.action, "MarkAsUnwatched")
+            m.assertEqual(m.node.watchedTask.request.itemId, "series-1")
+        end function
+
+        @it("ignores repeated watched presses while a request is pending")
+        function _()
+            m.prepareWatchedAction()
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+
+            'bs:disable-next-line 1140
+            onMarkAsUnwatchedSelected()
+
+            m.assertEqual(m.node.watchedTask.request.requestId, 1)
+            m.assertEqual(m.node.watchedTask.request.action, "MarkAsWatched")
+        end function
+
+        @it("commits watched state to all seasons and preserves grid selection and toolbar focus")
+        function _()
+            m.prepareWatchedAction()
+            m.node.pageState.seasons = [m.createSeason("season-1", "Season 1"), m.createSeason("season-2", "Season 2")]
+            'bs:disable-next-line 1140
+            renderSeasons(m.node.pageState.seasons)
+            grid = m.top.findNode("seasonsGrid")
+            content = grid.content
+            grid.jumpToItem = 1
+            selectedIndex = grid.itemFocused
+            'bs:disable-next-line 1140
+            syncWatchedToolbar()
+            m.top.findNode("videoToolbar").callFunc("focusWatchedAction")
+            m.node.pageState.randomPlaybackQueue = [{ itemId: "old" }]
+            m.node.pageState.playbackQueue = [{ itemId: "old" }]
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            m.node.watchedTask.response = m.watchedResponse(true)
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertTrue(m.node.pageState.series.UserData.Played)
+            m.assertEqual(m.node.pageState.series.UserData.UnplayedItemCount, 0)
+            m.assertTrue(m.node.pageState.seasons[0].UserData.Played)
+            m.assertTrue(grid.content.getChild(1).raw.UserData.Played)
+            m.assertEqual(grid.content, content)
+            m.assertEqual(grid.itemFocused, selectedIndex)
+            m.assertTrue(m.top.findNode("videoToolbar").findNode("markUnwatchedButton").hasFocus())
+            m.assertInvalid(m.node.pageState.randomPlaybackQueue)
+            m.assertInvalid(m.node.pageState.playbackQueue)
+            m.assertTrue(m.node.pageState.playbackRefresh.needed)
+            m.assertEqual(m.top.watchedStateChanged, { itemId: "series-1", isWatched: true })
+            m.assertEqual(m.node.episodeCountRefresh.cancellationCount, 1)
+            m.assertTrue(m.node.episodeCountRefresh.request.refreshWhenCountHidden)
+            m.assertEqual(m.node.episodeCountRefresh.request.items.Count(), 3)
+        end function
+
+        @it("preserves another toolbar button's focus after a pending watched action")
+        function _()
+            m.prepareWatchedAction()
+            toolbar = m.top.findNode("videoToolbar")
+            toolbar.supportsAllEpisodes = true
+            'bs:disable-next-line 1140
+            syncWatchedToolbar()
+            toolbar.callFunc("focusWatchedAction")
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+
+            toolbar.findNode("allEpisodesButton").setFocus(true)
+            m.node.watchedTask.response = m.watchedResponse(true)
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertTrue(toolbar.findNode("allEpisodesButton").hasFocus())
+            m.assertFalse(toolbar.findNode("markUnwatchedButton").hasFocus())
+            m.assertTrue(m.node.pageState.series.UserData.Played)
+        end function
+
+        @it("preserves another toolbar button's focus after a pending unwatched action")
+        function _()
+            m.prepareWatchedAction()
+            m.node.pageState.series.UserData = { Played: true, UnplayedItemCount: 0 }
+            toolbar = m.top.findNode("videoToolbar")
+            toolbar.supportsAllEpisodes = true
+            'bs:disable-next-line 1140
+            syncWatchedToolbar()
+            toolbar.callFunc("focusWatchedAction")
+            'bs:disable-next-line 1140
+            onMarkAsUnwatchedSelected()
+
+            toolbar.findNode("allEpisodesButton").setFocus(true)
+            m.node.watchedTask.response = m.watchedResponse(true)
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertTrue(toolbar.findNode("allEpisodesButton").hasFocus())
+            m.assertFalse(toolbar.findNode("markWatchedButton").hasFocus())
+            m.assertFalse(m.node.pageState.series.UserData.Played)
+        end function
+
+        @it("commits unwatched state and restores known season counts")
+        function _()
+            m.prepareWatchedAction()
+            season = m.createSeason("season-1", "Season 1")
+            season.RecursiveItemCount = 10
+            season.UserData = { Played: true, UnplayedItemCount: 0 }
+            m.node.pageState.seasons = [season]
+            m.node.pageState.series.RecursiveItemCount = 10
+            'bs:disable-next-line 1140
+            onMarkAsUnwatchedSelected()
+            m.node.watchedTask.response = m.watchedResponse(true)
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertFalse(m.node.pageState.series.UserData.Played)
+            m.assertEqual(m.node.pageState.seasons[0].UserData.UnplayedItemCount, 10)
+            m.assertEqual(m.top.watchedStateChanged.isWatched, false)
+        end function
+
+        @it("retains watched data without publishing success on failure")
+        function _()
+            m.prepareWatchedAction()
+            m.stubCall(AppMessage.Show, invalid)
+            m.node.pageState.series.UserData = { Played: false, UnplayedItemCount: 2 }
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            m.node.watchedTask.response = m.watchedResponse(false)
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertFalse(m.node.pageState.series.UserData.Played)
+            m.assertEqual(m.node.pageState.series.UserData.UnplayedItemCount, 2)
+            m.assertInvalid(m.top.watchedStateChanged)
+            m.assertInvalid(m.node.pageState.watched.pending)
+        end function
+
+        @it("allows an explicit retry after a watched mutation fails")
+        function _()
+            m.prepareWatchedAction()
+            m.stubCall(AppMessage.Show, invalid)
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            m.node.watchedTask.response = m.watchedResponse(false)
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+
+            m.assertEqual(m.node.watchedTask.request.requestId, 2)
+            m.assertEqual(m.node.watchedTask.control, "run")
+        end function
+
+        @it("rejects an obsolete watched response")
+        function _()
+            m.prepareWatchedAction()
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            response = m.watchedResponse(true)
+            response.requestId = 0
+            m.node.watchedTask.response = response
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertInvalid(m.top.watchedStateChanged)
+            m.assertNotInvalid(m.node.pageState.watched.pending)
+        end function
+
+        @it("rejects a watched response for another series")
+        function _()
+            m.prepareWatchedAction()
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            response = m.watchedResponse(true)
+            response.itemId = "another-series"
+            m.node.watchedTask.response = response
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertInvalid(m.top.watchedStateChanged)
+            m.assertNotInvalid(m.node.pageState.watched.pending)
+        end function
+
+        @it("rejects a watched response for another action")
+        function _()
+            m.prepareWatchedAction()
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            response = m.watchedResponse(true)
+            response.action = "MarkAsUnwatched"
+            m.node.watchedTask.response = response
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertInvalid(m.top.watchedStateChanged)
+            m.assertNotInvalid(m.node.pageState.watched.pending)
+        end function
+
+        @it("cancels pending watched work on navigation")
+        function _()
+            m.prepareWatchedAction()
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            response = m.watchedResponse(true)
+            m.top.callFunc("deactivate")
+            m.node.watchedTask.response = response
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertInvalid(m.top.watchedStateChanged)
+            m.assertInvalid(m.node.pageState.watched.pending)
+            m.assertEqual(m.node.watchedTask.control, "stop")
+        end function
+
+        @it("rejects watched responses after reloading the same series")
+        function _()
+            m.prepareWatchedAction()
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            response = m.watchedResponse(true)
+            m.top.loadRequest = m.createRequest()
+            m.node.pageState.series = m.createSeries()
+            m.node.pageState.seriesLoaded = true
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            m.node.watchedTask.response = response
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertInvalid(m.top.watchedStateChanged)
+            m.assertEqual(m.node.pageState.watched.nextRequestId, 2)
+            m.assertEqual(m.node.pageState.watched.pending.requestId, 2)
+        end function
+
+        @it("reconciles series watched state independently of badge visibility")
+        function _()
+            m.prepareWatchedAction()
+            m.node.episodeCountRefresh.response = { payload: [{ Id: "series-1", Type: "Series", UserData: { Played: true, UnplayedItemCount: 0 } }] }
+
+            'bs:disable-next-line 1140
+            onEpisodeCountsRefreshed()
+
+            m.assertTrue(m.top.findNode("videoToolbar").isWatched)
+            m.assertEqual(m.node.pageState.series.UserData.UnplayedItemCount, 0)
+        end function
+
+        @it("requests series reconciliation after a child watched-state change")
+        function _()
+            m.prepareWatchedAction()
+            m.node.pageState.seasons = [m.createSeason("season-1", "Season 1")]
+            m.top.seasonWatchedStateChange = { seasonId: "season-1", unplayedItemCount: 0 }
+
+            'bs:disable-next-line 1140
+            onSeasonWatchedStateChange()
+
+            request = m.node.episodeCountRefresh.request
+            m.assertTrue(request.refreshWhenCountHidden)
+            m.assertEqual(request.items[0].Id, "season-1")
+            m.assertEqual(request.items[1].Id, "series-1")
+        end function
+
+        @it("does not publish a second watched event for a repeated completion")
+        function _()
+            m.prepareWatchedAction()
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            m.node.watchedTask.response = m.watchedResponse(true)
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+            m.top.watchedStateChanged = invalid
+
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+
+            m.assertInvalid(m.top.watchedStateChanged)
+        end function
+
+        @it("rejects a random-play result captured before a whole-series watched commit")
+        function _()
+            m.prepareWatchedAction()
+            m.node.pageState.randomRequest = { nextRequestId: 1, pendingRequestId: 1 }
+            m.node.pageState.randomQueueLoading = true
+            m.stubCall(Spinner.Hide, invalid)
+            'bs:disable-next-line 1140
+            onMarkAsWatchedSelected()
+            m.node.watchedTask.response = m.watchedResponse(true)
+            'bs:disable-next-line 1140
+            onWatchedTaskResponse()
+            m.node.randomPlaybackTask.response = { ok: true, action: "tvShowRandomPlayback", itemId: "series-1", requestId: 1, playbackQueue: [{ itemId: "old" }] }
+
+            'bs:disable-next-line 1140
+            onRandomPlaybackResponse()
+
+            m.assertInvalid(m.node.pageState.randomPlaybackQueue)
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("rejects an obsolete random result while a new generation is pending")
+        function _()
+            m.prepareWatchedAction()
+            m.node.pageState.randomRequest = { nextRequestId: 2, pendingRequestId: 2 }
+            m.node.pageState.randomQueueLoading = true
+            m.node.randomPlaybackTask.response = { ok: true, action: "tvShowRandomPlayback", itemId: "series-1", requestId: 1, playbackQueue: [{ itemId: "old" }] }
+
+            'bs:disable-next-line 1140
+            onRandomPlaybackResponse()
+
+            m.assertTrue(m.node.pageState.randomQueueLoading)
+            m.assertEqual(m.node.pageState.randomRequest.pendingRequestId, 2)
+            m.assertInvalid(m.node.pageState.randomPlaybackQueue)
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("launches the current random generation once")
+        function _()
+            m.prepareWatchedAction()
+            m.stubCall(Spinner.Hide, invalid)
+            m.node.pageState.randomRequest = { nextRequestId: 2, pendingRequestId: 2 }
+            m.node.pageState.randomQueueLoading = true
+            episode = m.createEpisode("random-episode")
+            m.node.randomPlaybackTask.response = { ok: true, action: "tvShowRandomPlayback", itemId: "series-1", requestId: 2, playbackQueue: [{ itemId: episode.Id, item: episode }] }
+
+            'bs:disable-next-line 1140
+            onRandomPlaybackResponse()
+
+            m.assertEqual(m.top.selectedEpisode.itemId, "random-episode")
+            m.assertFalse(m.node.pageState.randomQueueLoading)
+            m.assertInvalid(m.node.pageState.randomRequest.pendingRequestId)
+            m.top.selectedEpisode = invalid
+            'bs:disable-next-line 1140
+            onRandomPlaybackResponse()
+            m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @it("keeps watched-action focus when aggregate reconciliation becomes true")
+        function _()
+            m.prepareWatchedAction()
+            toolbar = m.top.findNode("videoToolbar")
+            toolbar.supportsWatchedActions = true
+            toolbar.isWatched = false
+            toolbar.callFunc("focusWatchedAction")
+            m.node.episodeCountRefresh.response = { payload: [{ Id: "series-1", Type: "Series", UserData: { Played: true, UnplayedItemCount: 0 } }] }
+
+            'bs:disable-next-line 1140
+            onEpisodeCountsRefreshed()
+
+            m.assertTrue(toolbar.findNode("markUnwatchedButton").hasFocus())
+        end function
+
+        @it("keeps watched-action focus when aggregate reconciliation becomes false")
+        function _()
+            m.prepareWatchedAction()
+            toolbar = m.top.findNode("videoToolbar")
+            toolbar.supportsWatchedActions = true
+            toolbar.isWatched = true
+            toolbar.callFunc("focusWatchedAction")
+            m.node.episodeCountRefresh.response = { payload: [{ Id: "series-1", Type: "Series", UserData: { Played: false, UnplayedItemCount: 3 } }] }
+
+            'bs:disable-next-line 1140
+            onEpisodeCountsRefreshed()
+
+            m.assertTrue(toolbar.findNode("markWatchedButton").hasFocus())
+        end function
+
+        @it("cancels pending random work on deactivation while retaining the cached queue")
+        function _()
+            m.prepareWatchedAction()
+            m.node.pageState.randomRequest = { nextRequestId: 4, pendingRequestId: 4 }
+            m.node.pageState.randomQueueLoading = true
+            m.node.pageState.randomPlaybackQueue = [{ itemId: "cached" }]
+            m.stubCall(Spinner.Hide, invalid)
+
+            m.top.callFunc("deactivate")
+
+            m.assertInvalid(m.node.pageState.randomRequest.pendingRequestId)
+            m.assertEqual(m.node.pageState.randomRequest.nextRequestId, 4)
+            m.assertFalse(m.node.pageState.randomQueueLoading)
+            m.assertEqual(m.node.randomPlaybackTask.control, "stop")
+            m.assertEqual(m.node.pageState.randomPlaybackQueue[0].itemId, "cached")
+        end function
+
+        @it("cancels pending random work and clears the cached queue on a new load")
+        function _()
+            m.prepareWatchedAction()
+            m.node.pageState.randomRequest = { nextRequestId: 4, pendingRequestId: 4 }
+            m.node.pageState.randomQueueLoading = true
+            m.node.pageState.randomPlaybackQueue = [{ itemId: "cached" }]
+            m.stubCall(Spinner.Hide, invalid)
+            m.stubCall(Spinner.Show, invalid)
+            request = m.createRequest()
+            request.item = m.createSeries()
+
+            m.top.loadRequest = request
+
+            m.assertInvalid(m.node.pageState.randomRequest.pendingRequestId)
+            m.assertEqual(m.node.pageState.randomRequest.nextRequestId, 4)
+            m.assertFalse(m.node.pageState.randomQueueLoading)
+            m.assertEqual(m.node.randomPlaybackTask.control, "stop")
+            m.assertInvalid(m.node.pageState.randomPlaybackQueue)
+        end function
+
+        sub prepareWatchedAction()
+            m.top.findNode("videoToolbar").visible = true
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
+            task = CreateObject("roSGNode", "Node")
+            task.addFields({ request: {}, response: {}, control: "stop" })
+            m.node.watchedTask = task
+            refresher = CreateObject("roSGNode", "AggregateRefreshTestDouble")
+            m.node.episodeCountRefresh = refresher
+            m.stubCall(AppMessage.Dismiss, invalid)
+        end sub
+
+        function watchedResponse(ok as boolean) as object
+            pending = m.node.pageState.watched.pending
+            return { ok: ok, itemId: pending.itemId, action: pending.action, requestId: pending.requestId, errorMessage: "Unavailable" }
+        end function
+
         sub beginPendingPlay()
             AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
             'bs:disable-next-line 1140
@@ -1033,7 +1528,10 @@ namespace tests
             renderSeasons(m.node.pageState.seasons)
             grid = m.top.findNode("seasonsGrid")
 
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "series-1")
             m.node.episodeCountRefresh.response = { ok: true, payload: [{ Id: "season-1", Type: "Season", UserData: { UnplayedItemCount: 2 } }] }
+            'bs:disable-next-line 1140
+            onEpisodeCountsRefreshed()
 
             m.assertEqual(m.node.pageState.seasons[0].UserData.UnplayedItemCount, 2)
             m.assertEqual(grid.content.getChild(0).raw.UserData.UnplayedItemCount, 2)

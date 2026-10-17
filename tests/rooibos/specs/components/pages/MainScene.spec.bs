@@ -1064,6 +1064,54 @@ namespace tests
 
         @describe("media action activity")
 
+        @it("propagates a successful series toolbar watched action to Home and the library")
+        function _()
+            page = CreateObject("roSGNode", "Group")
+            page.addFields({ watchedStateChanged: { itemId: "series-1", isWatched: true } })
+            library = CreateObject("roSGNode", "Group")
+            library.addFields({ mediaStateChange: {} })
+            m.node.tvShowPage = page
+            m.node.videoLibraryPage = library
+            m.node.homeRefreshState.playbackRowsDirty = false
+
+            'bs:disable-next-line 1140
+            tvShowHandleWatchedStateChanged()
+
+            m.assertTrue(m.node.homeRefreshState.playbackRowsDirty)
+            m.assertEqual(library.mediaStateChange, { itemId: "series-1", action: "watched", value: true })
+        end function
+
+        @it("propagates a successful series toolbar unwatched action to the library")
+        function _()
+            page = CreateObject("roSGNode", "Group")
+            page.addFields({ watchedStateChanged: { itemId: "series-1", isWatched: false } })
+            library = CreateObject("roSGNode", "Group")
+            library.addFields({ mediaStateChange: {} })
+            m.node.tvShowPage = page
+            m.node.videoLibraryPage = library
+            m.node.homeRefreshState.playbackRowsDirty = false
+
+            'bs:disable-next-line 1140
+            tvShowHandleWatchedStateChanged()
+
+            m.assertTrue(m.node.homeRefreshState.playbackRowsDirty)
+            m.assertEqual(library.mediaStateChange, { itemId: "series-1", action: "watched", value: false })
+        end function
+
+        @it("does not invalidate Home without a completed series watched action")
+        function _()
+            page = CreateObject("roSGNode", "Group")
+            page.addFields({ watchedStateChanged: {} })
+            page.watchedStateChanged = invalid
+            m.node.tvShowPage = page
+            m.node.homeRefreshState.playbackRowsDirty = false
+
+            'bs:disable-next-line 1140
+            tvShowHandleWatchedStateChanged()
+
+            m.assertFalse(m.node.homeRefreshState.playbackRowsDirty)
+        end function
+
         @it("invalidates Home after a successful season watched action")
         function _()
             m.node.homeRefreshState.playbackRowsDirty = false
@@ -2971,6 +3019,36 @@ namespace tests
 
             m.assertEqual(m.node.messageState.overlay.title, "Message")
             m.top.callFunc("dismissMessage")
+        end function
+
+        @describe("automatic skip request routing")
+
+        @it("passes independent saved automatic skip preferences to playback")
+        function _()
+            m.node.settings[SettingsStore.Key.AutoSkipIntros] = "on"
+            m.node.settings[SettingsStore.Key.AutoSkipCredits] = "off"
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "episode-1", item: { Id: "episode-1", Type: "Episode" } })
+
+            m.assertTrue(m.node.playbackController.playRequest.autoSkipIntros)
+            m.assertFalse(m.node.playbackController.playRequest.autoSkipCredits)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("preserves explicit automatic skip continuation values")
+        function _()
+            m.node.settings[SettingsStore.Key.AutoSkipIntros] = "on"
+            m.node.settings[SettingsStore.Key.AutoSkipCredits] = "off"
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "episode-1", item: { Id: "episode-1", Type: "Episode" }, autoSkipIntros: false, autoSkipCredits: true })
+
+            m.assertFalse(m.node.playbackController.playRequest.autoSkipIntros)
+            m.assertTrue(m.node.playbackController.playRequest.autoSkipCredits)
+            m.node.playbackController = m.top.findNode("playbackController")
         end function
 
     end class

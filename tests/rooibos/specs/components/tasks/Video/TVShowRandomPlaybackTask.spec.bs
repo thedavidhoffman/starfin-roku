@@ -1,8 +1,37 @@
+import "pkg:/source/api/HttpClient.bs"
+
 namespace tests
 
     @SGNode("TVShowRandomPlaybackTask")
     @suite("TVShowRandomPlaybackTask component")
     class TVShowRandomPlaybackTaskTests extends rooibos.BaseTestSuite
+
+        @describe("request correlation")
+
+        @it("echoes a successful random playback generation")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: true, data: { Items: [{ Id: "episode" }] } })
+            m.top.request = { server: "server", token: "token", userId: "user", itemId: "series", requestId: 12 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 12)
+            m.assertEqual(m.top.response.playbackQueue[0].itemId, "episode")
+        end function
+
+        @it("echoes a failed random playback generation")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: false, errorMessage: "Unavailable" })
+            m.top.request = { server: "server", token: "token", userId: "user", itemId: "series", requestId: 13 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 13)
+        end function
 
         @describe("request validation")
 
