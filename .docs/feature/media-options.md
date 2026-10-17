@@ -92,6 +92,12 @@ application. Closing unchanged, including selecting then reverting an option,
 preserves the prior playing/paused state. Teardown clears
 pending commits, and request identity rejects results for another session.
 
+The native Video node requests accurate seeking for playback starts and seeks.
+This avoids rounding stream-restart positions down to an earlier sync frame or
+HLS segment on supported devices. The captured position and existing whole-second
+PlayStart conversion remain unchanged; no corrective seek or server segment-size
+change is applied.
+
 The standalone media-information, playback-information, video-options, and
 MediaStreamOptions wrappers and routes are retired. The generic OptionPicker
 remains available for other features, including media actions. Cast, transport,
@@ -108,3 +114,10 @@ remote navigation, scrolling, deferred changes, and restart restoration for both
 playing and paused video. It captures detail and playback screenshots. Visual
 verification must include long summary text, long information values, scrolling,
 and both detail and playback toolbars.
+
+`media-options-position.spec.mjs` checks the first playing position after changing
+from Automatic to Force Transcode (Remux Disabled), starting paused near 10 and
+40 seconds in Aaahh!!! Real Monsters S1E1. Auto-skip is disabled. The test records
+the captured/requested position, PlayStart, actualStart when exposed, seek mode,
+and first playing position. It checks the first landing immediately rather than
+waiting for playback to advance into the expected range.

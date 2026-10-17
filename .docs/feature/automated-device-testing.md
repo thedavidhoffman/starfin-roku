@@ -280,10 +280,21 @@ restored. Use the configured automation account; do not run concurrently with
 manual playback or watched-state edits on that account. Forced termination can
 prevent cleanup, so allow afterEach hooks to finish.
 
-These cases were authored without executing RTA or automated validation in this
-development cycle. Existing unit-suite results do not verify these new scripts.
+The full RTA suite passed 206 cases on 2026-10-17 before the accurate-seeking
+change below. After that change, the 17 affected Media Options, movie-version,
+segment-skipping, and episode-playback regression cases passed.
 
-Known deferred investigation: a forced-transcode restart from a paused 10-second
-position was observed at 6.04 seconds. The Media Options resume-policy cases do
-not assert exact post-restart position; requested-position coverage remains in
-unit tests. This runtime position discrepancy is not considered resolved.
+Stream-restart accuracy is covered by `media-options-position.spec.mjs`, with
+auto-skip disabled and normal playback establishing paused positions near 10 and
+40 seconds. The test selects Force Transcode (Remux Disabled) through Media
+Options and checks the first playing sample from the new playback response;
+it never waits for an incorrect early landing to play forward into tolerance.
+Evidence records the request, PlayStart, seek mode, first position, and Roku's
+actualStart when available. The landing window allows at most one second early
+and three seconds late for whole-second positioning and observation delay.
+
+On 2026-10-17 the new test reproduced PlayStart=10 landing at 6.04 with default
+seeking. After enabling accurate seeking, the same case landed at 10.161 seconds;
+the 40-second case landed at 40.045. This verifies the fix on the configured
+development device and fixture, not an exact-seek guarantee for every Roku codec
+and device combination.
