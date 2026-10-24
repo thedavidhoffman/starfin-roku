@@ -15,6 +15,7 @@ individual Starfin features.
 - [Audio Playback](audio-playback.md)
 - [Automated Device Testing](automated-device-testing.md)
 - [Character Constants](character-constants.md)
+- [Cast Display](cast.md)
 - [String Helpers](string-helpers.md)
 - [Deep Links and Roku Performance Beacons](deep-links.md)
 - [Detail Metadata Ratings](detail-metadata-ratings.md)

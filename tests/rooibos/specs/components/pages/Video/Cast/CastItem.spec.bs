@@ -18,6 +18,81 @@ namespace tests
             m.assertEqual(component.findNode("poster").uri, "http://server/person.jpg")
         end function
 
+        @describe("focused text scrolling")
+
+        @it("keeps both labels idle on a fresh component")
+        function _()
+            component = CreateObject("roSGNode", "CastItem")
+
+            m.assertEqual(component.findNode("nameLabel").repeatCount, 0)
+            m.assertEqual(component.findNode("detailsLabel").repeatCount, 0)
+        end function
+
+        @it("enables native overflow scrolling for both labels when focused")
+        function _()
+            component = CreateObject("roSGNode", "CastItem")
+            component.itemContent = m.createItem("An actor with a very long name", "A character with a very long name", "")
+
+            component.itemHasFocus = true
+
+            m.assertEqual(component.findNode("nameLabel").subtype(), "ScrollingLabel")
+            m.assertEqual(component.findNode("detailsLabel").subtype(), "ScrollingLabel")
+            m.assertEqual(component.findNode("nameLabel").maxWidth, 207)
+            m.assertEqual(component.findNode("detailsLabel").maxWidth, 207)
+            m.assertEqual(component.findNode("nameLabel").repeatCount, -1)
+            m.assertEqual(component.findNode("detailsLabel").repeatCount, -1)
+        end function
+
+        @it("disables scrolling for both labels when focus leaves")
+        function _()
+            component = CreateObject("roSGNode", "CastItem")
+            component.itemHasFocus = true
+
+            component.itemHasFocus = false
+
+            m.assertEqual(component.findNode("nameLabel").repeatCount, 0)
+            m.assertEqual(component.findNode("detailsLabel").repeatCount, 0)
+        end function
+
+        @it("enables scrolling again when focus returns")
+        function _()
+            component = CreateObject("roSGNode", "CastItem")
+            component.itemHasFocus = true
+            component.itemHasFocus = false
+
+            component.itemHasFocus = true
+
+            m.assertEqual(component.findNode("nameLabel").repeatCount, -1)
+            m.assertEqual(component.findNode("detailsLabel").repeatCount, -1)
+        end function
+
+        @it("updates both texts while retaining focused scrolling")
+        function _()
+            component = CreateObject("roSGNode", "CastItem")
+            component.itemContent = m.createItem("Original actor", "Original character", "")
+            component.itemHasFocus = true
+
+            component.itemContent = m.createItem("Replacement actor", "Replacement character", "")
+
+            m.assertEqual(component.findNode("nameLabel").text, "Replacement actor")
+            m.assertEqual(component.findNode("detailsLabel").text, "Replacement character")
+            m.assertEqual(component.findNode("nameLabel").repeatCount, -1)
+            m.assertEqual(component.findNode("detailsLabel").repeatCount, -1)
+        end function
+
+        @it("keeps replacement text idle when unfocused")
+        function _()
+            component = CreateObject("roSGNode", "CastItem")
+            component.itemContent = m.createItem("Original actor", "Original character", "")
+
+            component.itemContent = m.createItem("Replacement actor", "", "")
+
+            m.assertEqual(component.findNode("nameLabel").text, "Replacement actor")
+            m.assertEqual(component.findNode("detailsLabel").text, "")
+            m.assertEqual(component.findNode("nameLabel").repeatCount, 0)
+            m.assertEqual(component.findNode("detailsLabel").repeatCount, 0)
+        end function
+
         @describe("declarative component contract")
 
         @it("declares the posterMask node")
@@ -86,6 +161,7 @@ namespace tests
             item.HDPosterUrl = imageUrl
             return item
         end function
+
     end class
 
 end namespace
