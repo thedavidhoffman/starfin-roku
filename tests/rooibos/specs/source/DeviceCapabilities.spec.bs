@@ -243,6 +243,125 @@ namespace tests
 
         @describe("negotiated codec constraints")
 
+        @it("serializes a required ten Mbps H264 limit with Jellyfin overall profile ceilings")
+        function _()
+            profile = ParseJson(DeviceCapabilities.BuildDeviceProfileJson())
+            bitrateCondition = invalid
+            for each codecProfile in profile.CodecProfiles
+                if codecProfile.Codec = "h264,mpeg4 avc" then
+                    bitrateCondition = m.findCondition(codecProfile, "VideoBitrate")
+                    exit for
+                end if
+            end for
+
+            m.assertEqual(bitrateCondition, { Condition: "LessThanEqual", Property: "VideoBitrate", Value: "10000000", IsRequired: true })
+            m.assertEqual(profile.MaxStreamingBitrate, 120000000)
+            m.assertEqual(profile.MaxStaticBitrate, 100000000)
+        end function
+
+        @it("accepts H264 at the ten Mbps boundary")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("rejects H264 above ten Mbps across scoped profile limits")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000001, VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("applies the bitrate ceiling through the MPEG4 AVC alias")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "mpeg4 avc", { VideoBitrate: 10000001, VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("rejects H264 with unknown source bitrate")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
+        end function
+
+        @it("retains the H264 bitrate ceiling when detailed probes are unavailable")
+        function _()
+            device = m.capabilityDevice()
+            device.display = invalid
+            device.CanDecodeVideo = function(info as object) as dynamic
+                return invalid
+            end function
+
+            profile = m.findCodecProfile(DeviceCapabilities.__VideoCodecProfiles(device), "h264,mpeg4 avc")
+
+            m.assertEqual(m.findCondition(profile, "VideoBitrate"), { Condition: "LessThanEqual", Property: "VideoBitrate", Value: "10000000", IsRequired: true })
+        end function
+
+        @it("preserves HEVC eligibility above ten Mbps")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoBitrate: 40000000, VideoProfile: "Main 10", VideoLevel: 153, VideoBitDepth: 10 }))
+        end function
+
+        @it("rejects HEVC above forty Mbps through the H265 alias")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "h265", { VideoBitrate: 40000001, VideoProfile: "Main 10", VideoLevel: 153, VideoBitDepth: 10 }))
+        end function
+
+        @it("rejects VP9 above forty Mbps")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "vp9", { VideoBitrate: 40000001, VideoProfile: "Profile 2", VideoLevel: 51, VideoBitDepth: 10 }))
+        end function
+
+        @it("rejects AV1 above forty Mbps")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertFalse(m.allowsVideo(profiles, "av1", { VideoBitrate: 40000001, VideoProfile: "Main", VideoLevel: 13, VideoBitDepth: 10 }))
+        end function
+
+        @it("requires codec bitrate limits even without decoder or display probe results")
+        function _()
+            device = m.capabilityDevice()
+            device.display = invalid
+            device.CanDecodeVideo = function(info as object) as dynamic
+                return invalid
+            end function
+
+            profiles = DeviceCapabilities.__VideoCodecProfiles(device)
+
+            m.assertEqual(profiles.Count(), 4)
+            for each profileJson in profiles
+                profile = ParseJson(profileJson)
+                expectedLimit = "40000000"
+                if profile.Codec = "h264,mpeg4 avc" then expectedLimit = "10000000"
+                m.assertEqual(m.findCondition(profile, "VideoBitrate"), { Condition: "LessThanEqual", Property: "VideoBitrate", Value: expectedLimit, IsRequired: true })
+                m.assertFalse(m.allowsVideo(profiles, profile.Codec.Split(",")[0], {}))
+            end for
+        end function
+
+        @it("preserves VP9 eligibility above ten Mbps")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "vp9", { VideoBitrate: 40000000, VideoProfile: "Profile 2", VideoLevel: 51, VideoBitDepth: 10 }))
+        end function
+
+        @it("preserves AV1 eligibility above ten Mbps")
+        function _()
+            profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
+
+            m.assertTrue(m.allowsVideo(profiles, "av1", { VideoBitrate: 40000000, VideoProfile: "Main", VideoLevel: 13, VideoBitDepth: 10 }))
+        end function
+
         @it("keeps MP4-only audio out of the TS transcoding profile")
         function _()
             m.assertEqual(DeviceCapabilities.__TranscodingAudioCodecs(m.capabilityDevice(), "ts"), "ac3")
@@ -380,14 +499,14 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("permits constrained Baseline when only H264 High probes succeed")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
 
-            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "Constrained Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Constrained Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("permits the compact constrained Baseline spelling through the MPEG4 AVC alias")
@@ -397,7 +516,7 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertTrue(m.allowsVideo(profiles, "mpeg4 avc", { VideoProfile: "constrainedbaseline", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "mpeg4 avc", { VideoBitrate: 10000000, VideoProfile: "constrainedbaseline", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("caps fallback Baseline at the lower Main maximum when High supports more")
@@ -407,7 +526,7 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("caps fallback Baseline at the lower High maximum when Main supports more")
@@ -417,7 +536,7 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("permits fallback Baseline at the conservative boundary")
@@ -427,7 +546,7 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 31, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Baseline", VideoLevel: 31, VideoBitDepth: 8 }))
         end function
 
         @it("retains the higher High level after adding a conservative Baseline fallback")
@@ -437,7 +556,7 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("retains the lower Main level after adding a Baseline fallback")
@@ -447,14 +566,14 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Main", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Main", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("does not grant ten-bit H264 through the Baseline fallback")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.capabilityDevice())
 
-            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 10 }))
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 10 }))
         end function
 
         @it("preserves an explicit Baseline level above the inferred fallback limit")
@@ -464,7 +583,7 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("does not synthesize Baseline support when all H264 profile probes fail")
@@ -535,7 +654,7 @@ namespace tests
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main", VideoLevel: 153, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoBitrate: 40000000, VideoProfile: "Main", VideoLevel: 153, VideoBitDepth: 8 }))
         end function
 
         @it("keeps constrained H264 baseline aliases within the baseline level")
@@ -545,7 +664,7 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoProfile: "Constrained Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertFalse(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "Constrained Baseline", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("preserves the higher H264 High level beside a lower baseline limit")
@@ -555,7 +674,7 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "h264", { VideoBitrate: 10000000, VideoProfile: "High", VideoLevel: 41, VideoBitDepth: 8 }))
         end function
 
         @it("does not borrow the VP9 Profile 0 level for Profile 2")
@@ -565,77 +684,77 @@ namespace tests
 
             profiles = DeviceCapabilities.__VideoCodecProfiles(device)
 
-            m.assertFalse(m.allowsVideo(profiles, "vp9", { VideoProfile: "Profile 2", VideoLevel: 51, VideoBitDepth: 10 }))
+            m.assertFalse(m.allowsVideo(profiles, "vp9", { VideoBitrate: 40000000, VideoProfile: "Profile 2", VideoLevel: 51, VideoBitDepth: 10 }))
         end function
 
         @it("rejects HEVC Main 10 above its own supported level")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main 10", VideoLevel: 153, VideoBitDepth: 10 }))
+            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoBitrate: 40000000, VideoProfile: "Main 10", VideoLevel: 153, VideoBitDepth: 10 }))
         end function
 
         @it("accepts HEVC Main 10 at its own supported level")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main 10", VideoLevel: 123, VideoBitDepth: 10 }))
+            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoBitrate: 40000000, VideoProfile: "Main 10", VideoLevel: 123, VideoBitDepth: 10 }))
         end function
 
         @it("does not grant HEVC Main the bit depth of Main 10")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main", VideoLevel: 123, VideoBitDepth: 10 }))
+            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoBitrate: 40000000, VideoProfile: "Main", VideoLevel: 123, VideoBitDepth: 10 }))
         end function
 
         @it("preserves the higher AV1 eight-bit level despite the shared Main name")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertTrue(m.allowsVideo(profiles, "av1", { VideoProfile: "Main", VideoLevel: 13, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "av1", { VideoBitrate: 40000000, VideoProfile: "Main", VideoLevel: 13, VideoBitDepth: 8 }))
         end function
 
         @it("rejects ten-bit AV1 above its own supported level")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertFalse(m.allowsVideo(profiles, "av1", { VideoProfile: "Main", VideoLevel: 13, VideoBitDepth: 10 }))
+            m.assertFalse(m.allowsVideo(profiles, "av1", { VideoBitrate: 40000000, VideoProfile: "Main", VideoLevel: 13, VideoBitDepth: 10 }))
         end function
 
         @it("accepts ten-bit AV1 at its own supported level")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertTrue(m.allowsVideo(profiles, "av1", { VideoProfile: "Main", VideoLevel: 9, VideoBitDepth: 10 }))
+            m.assertTrue(m.allowsVideo(profiles, "av1", { VideoBitrate: 40000000, VideoProfile: "Main", VideoLevel: 9, VideoBitDepth: 10 }))
         end function
 
         @it("uses the conservative AV1 level when bit-depth metadata is missing")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertFalse(m.allowsVideo(profiles, "av1", { VideoProfile: "Main", VideoLevel: 13 }))
+            m.assertFalse(m.allowsVideo(profiles, "av1", { VideoBitrate: 40000000, VideoProfile: "Main", VideoLevel: 13 }))
         end function
 
         @it("uses the conservative level when video-profile metadata is missing")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoLevel: 153, VideoBitDepth: 8 }))
+            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoBitrate: 40000000, VideoLevel: 153, VideoBitDepth: 8 }))
         end function
 
         @it("permits missing video metadata within the conservative fallback limits")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoLevel: 123, VideoBitDepth: 8 }))
+            m.assertTrue(m.allowsVideo(profiles, "hevc", { VideoBitrate: 40000000, VideoLevel: 123, VideoBitDepth: 8 }))
         end function
 
         @it("rejects a known unsupported video profile")
         function _()
             profiles = DeviceCapabilities.__VideoCodecProfiles(m.mixedProfileDevice())
 
-            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoProfile: "Main 12", VideoLevel: 123, VideoBitDepth: 8 }))
+            m.assertFalse(m.allowsVideo(profiles, "hevc", { VideoBitrate: 40000000, VideoProfile: "Main 12", VideoLevel: 123, VideoBitDepth: 8 }))
         end function
 
         @it("advertises only SDR and the SDR Dolby Vision base layer without HDR display support")
@@ -760,9 +879,9 @@ namespace tests
                 else if condition.Condition = "NotEquals" then
                     if LCase(value) = LCase(condition.Value) then return false
                 else if condition.Condition = "LessThanEqual" then
-                    if value > Number.ToFloat(condition.Value, 0) then return false
+                    if value > Number.ToInteger(condition.Value, 0) then return false
                 else if condition.Condition = "GreaterThanEqual" then
-                    if value < Number.ToFloat(condition.Value, 0) then return false
+                    if value < Number.ToInteger(condition.Value, 0) then return false
                 else
                     return false
                 end if

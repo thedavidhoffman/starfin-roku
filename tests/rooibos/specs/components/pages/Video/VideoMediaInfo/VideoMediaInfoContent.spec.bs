@@ -14,10 +14,43 @@ namespace tests
             m.assertTrue(m.top.findNode("propertyViewport").clippingRect.width = 1080)
             m.assertTrue(m.top.findNode("scrollTrack").translation[0] = 1070)
             m.assertTrue(sheet.getChild(0).width = 1052)
-            m.assertTrue(sheet.getChild(2).width = 260)
-            m.assertTrue(sheet.getChild(3).translation[0] = 284)
-            m.assertTrue(sheet.getChild(3).width = 768)
+            m.assertTrue(sheet.getChild(2).width = 290)
+            m.assertTrue(sheet.getChild(3).translation[0] = 314)
+            m.assertTrue(sheet.getChild(3).width = 738)
             m.assertTrue(sheet.getChild(3).translation[0] + sheet.getChild(3).width = 1052)
+        end function
+
+        @it("cleans the Addams Family audio heading without changing metadata")
+        function _()
+            item = m.createItem(1)
+            title = Chr(12) + "SoundHandler - English - AAC - Stereo - Default"
+            item.MediaSources[0].MediaStreams[1].DisplayTitle = title
+
+            m.top.item = item
+
+            m.assertEqual(m.top.sections[2].title, "Audio 1 - SoundHandler - English - AAC - Stereo - Default")
+            m.assertEqual(m.top.item.MediaSources[0].MediaStreams[1].DisplayTitle, title)
+        end function
+
+        @it("uses the cleaned raw title when the display title contains only controls")
+        function _()
+            item = m.createItem(1)
+            item.MediaSources[0].MediaStreams[1].DisplayTitle = Chr(12)
+            item.MediaSources[0].MediaStreams[1].Title = Chr(12) + "English"
+
+            m.top.item = item
+
+            m.assertEqual(m.top.sections[2].title, "Audio 1 - English")
+        end function
+
+        @it("uses the metadata summary when both stream titles contain only controls")
+        function _()
+            item = m.createItem(1)
+            item.MediaSources[0].MediaStreams[1] = { Type: "Audio", DisplayTitle: Chr(12), Title: Chr(127), Codec: "aac" }
+
+            m.top.item = item
+
+            m.assertEqual(m.top.sections[2].title, "Audio 1 - aac")
         end function
 
         @it("omits the redundant source name row")
@@ -142,6 +175,17 @@ namespace tests
             m.assertEqual(m.valueFor(sourceCount, "Play method"), "Transcode")
             m.assertEqual(m.valueFor(sourceCount + 1, "Resolution"), "1280 × 720")
             m.assertEqual(m.valueFor(sourceCount + 2, "Play session ID"), "session-1")
+        end function
+
+        @it("cleans the playback audio stream value")
+        function _()
+            m.top.playbackInfo = invalid
+            m.top.item = m.createItem(1)
+            sourceCount = m.top.sections.Count()
+
+            m.top.playbackInfo = { audioStreamTitle: Chr(12) + "SoundHandler - English - AAC - Stereo - Default" }
+
+            m.assertEqual(m.valueFor(sourceCount + 1, "Audio stream"), "SoundHandler - English - AAC - Stereo - Default")
         end function
 
         @it("removes playback diagnostics when context is cleared")

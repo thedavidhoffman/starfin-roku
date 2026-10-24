@@ -92,6 +92,24 @@ namespace tests
 
         @describe("playback request policy")
 
+        @it("keeps room for audio in initial and followup playback negotiation")
+        function _()
+            m.runSubtitleNegotiation({}, 4)
+            capture = getGlobalAa().subtitleNegotiation
+
+            m.assertEqual(capture.calls.Count(), 2)
+            for each call in capture.calls
+                m.assertTrue(Instr(1, LCase(call.url), "maxstreamingbitrate=140000000") > 0)
+                m.assertTrue(Instr(1, LCase(call.url), "maxstaticbitrate=140000000") > 0)
+                profile = ParseJson(call.body).DeviceProfile
+                m.assertEqual(profile.MaxStreamingBitrate, 120000000)
+                m.assertEqual(profile.MaxStaticBitrate, 100000000)
+                ' A full 40 Mbps video plus audio fits beneath both overall ceilings.
+                m.assertTrue(profile.MaxStreamingBitrate > 40000000 + 384000)
+                m.assertTrue(profile.MaxStaticBitrate > 40000000 + 384000)
+            end for
+        end function
+
         @it("selects playback flags for automatic and forced modes")
         function _()
             'bs:disable-next-line 1140

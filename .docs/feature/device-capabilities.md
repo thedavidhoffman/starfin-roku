@@ -87,8 +87,25 @@ Profile, level, bit-depth, and range conditions are optional when source metadat
 is absent. If detailed probes all fail, profile and level conditions are omitted
 instead of emitting an empty profile list or a zero level. Bit-depth constraints
 are also omitted without positive evidence except for H.264's eight-bit ceiling.
-Unavailable display properties omit range conditions. The 40 Mbps bitrate limits
-remain unchanged.
+Unavailable display properties omit range conditions.
+
+H.264 has a required `VideoBitrate` upper bound of 10,000,000 bits per second
+(10 Mbps), matching Jellyfin Roku's default H.264 limit. This common constraint
+applies to both `h264` and `mpeg4 avc`, across all profiles, even when detailed
+decoder probes fail. It constrains direct-play eligibility and H.264 transcoding
+negotiation; missing source bitrate does not satisfy the required condition.
+HEVC (`hevc,h265`), VP9, and AV1 each have a required 40 Mbps video bitrate
+constraint, also independent of probe results. These match Jellyfin Roku's default
+codec limits. There is no user-facing bitrate control in this change.
+
+Overall ceilings match the local Jellyfin Roku reference: the device profile
+advertises 120 Mbps streaming and 100 Mbps static, while PlaybackInfo requests
+use 140 Mbps for both. `DeviceCapabilities.GetBitrateLimits()` owns these values;
+the playback task uses the request ceilings for initial negotiation and followups.
+These higher combined-stream ceilings leave room for audio alongside a full
+10 or 40 Mbps video stream. Jellyfin negotiates audio separately using the existing
+audio capabilities; Starfin does not add a fixed audio allowance or force a new
+audio bitrate. The standalone music transcoding limit remains unchanged.
 
 ## Diagnostics
 
@@ -113,7 +130,13 @@ model display name, not the user-assigned friendly name or a unique identifier.
 The DeviceCapabilities Rooibos suite covers container isolation, Opus advertising,
 per-codec channel limits, the AC3 exception, empty audio-list omission, separate
 UI/video dimensions, profile/level conversions, mixed-profile level and bit-depth
-limits, HDR flags, and unavailable probe results. Runtime verification remains subject to
+limits, HDR flags, unavailable probe results, and required 10/40 Mbps codec bitrate
+boundaries. Playback task coverage checks overall ceilings in initial and followup
+requests. Runtime verification remains subject to
 the development-cycle gate. Device checks should cover stereo and surround
 outputs, AV1/EAC3 and Opus titles, SDR/HDR displays, and unsupported video variants
 that should negotiate transcoding instead of failing in the Roku player.
+Inspect returned transcoding URLs for video bitrate at or below 10 Mbps for H.264
+or 40 Mbps for HEVC/VP9/AV1, with audio negotiated separately, and compare buffering
+on the reported title. The requested
+limit is not a measurement of actual output bitrate or proof that buffering is resolved.

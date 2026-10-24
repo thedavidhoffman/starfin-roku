@@ -59,8 +59,10 @@ namespace DeviceCapabilities
     '---------------------------------------------------------------------------
     function GetBitrateLimits() as object
         return {
-            maxStreaming: 40000000
-            maxStatic: 40000000
+            maxStreaming: 120000000
+            maxStatic: 100000000
+            requestMaxStreaming: 140000000
+            requestMaxStatic: 140000000
             musicTranscoding: 256000
         }
     end function
@@ -255,10 +257,10 @@ namespace DeviceCapabilities
         profiles = []
         display = deviceInfo.GetDisplayProperties()
         formats = [
-            { codec: "h264", aliases: "h264,mpeg4 avc", profiles: ["baseline", "main", "high"], levels: ["3", "3.1", "3.2", "4", "4.1", "4.2", "5", "5.1", "5.2", "6", "6.1", "6.2"] }
-            { codec: "hevc", aliases: "hevc,h265", profiles: ["main", "main 10"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2"] }
-            { codec: "vp9", aliases: "vp9", profiles: ["profile 0", "profile 2"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2"] }
-            { codec: "av1", aliases: "av1", profiles: ["main", "main 10"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "5.3", "6.0", "6.1", "6.2", "6.3"] }
+            { codec: "h264", maxBitrate: 10000000, aliases: "h264,mpeg4 avc", profiles: ["baseline", "main", "high"], levels: ["3", "3.1", "3.2", "4", "4.1", "4.2", "5", "5.1", "5.2", "6", "6.1", "6.2"] }
+            { codec: "hevc", maxBitrate: 40000000, aliases: "hevc,h265", profiles: ["main", "main 10"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2"] }
+            { codec: "vp9", maxBitrate: 40000000, aliases: "vp9", profiles: ["profile 0", "profile 2"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2"] }
+            { codec: "av1", maxBitrate: 40000000, aliases: "av1", profiles: ["main", "main 10"], levels: ["3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "5.3", "6.0", "6.1", "6.2", "6.3"] }
         ]
         for each codecSpec in formats
             supportedProfiles = []
@@ -303,6 +305,8 @@ namespace DeviceCapabilities
                 supportedProfiles.Append(baselineNames)
             end if
             conditions = []
+            ' Codec limits cover video only; the higher overall ceilings leave room for audio.
+            conditions.Push(__ProfileConditionJson(Comparison.LessThanEqual, "VideoBitrate", codecSpec.maxBitrate.ToStr()))
             ' Unknown probe results must not produce an empty allow-list or level zero.
             if supportedProfiles.Count() > 0 then
                 conditions.Push(__ProfileConditionJson(Comparison.EqualsAny, "VideoProfile", supportedProfiles.Join("|"), false))

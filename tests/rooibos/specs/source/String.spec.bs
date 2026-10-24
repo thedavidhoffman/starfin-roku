@@ -6,6 +6,55 @@ namespace tests
     @suite("String helpers")
     class StringTests extends rooibos.BaseTestSuite
 
+        @describe("Strings.RemoveControlCharacters")
+
+        @it("removes the form feed from the Addams Family audio title")
+        function _()
+            title = "SoundHandler - English - AAC - Stereo - Default"
+
+            m.assertEqual(Strings.RemoveControlCharacters(Chr(12) + title), title)
+        end function
+
+        @it("removes C0 controls other than single-line whitespace")
+        function _()
+            for codePoint = 0 to 31
+                if codePoint <> 9 and codePoint <> 10 and codePoint <> 13 then
+                    m.assertEqual(Strings.RemoveControlCharacters("A" + Chr(codePoint) + "B"), "AB")
+                end if
+            end for
+        end function
+
+        @it("removes DEL and C1 controls")
+        function _()
+            for codePoint = 127 to 159
+                m.assertEqual(Strings.RemoveControlCharacters("A" + Chr(codePoint) + "B"), "AB")
+            end for
+        end function
+
+        @it("converts tabs and line endings to spaces and trims the result")
+        function _()
+            title = " " + Chr(9) + "A" + Chr(9) + "B" + Chr(13) + "C" + Chr(10) + "D" + Chr(10)
+
+            m.assertEqual(Strings.RemoveControlCharacters(title), "A B C D")
+        end function
+
+        @it("returns empty text for a control-only title")
+        function _()
+            m.assertEqual(Strings.RemoveControlCharacters(Chr(12) + Chr(9) + Chr(159)), "")
+        end function
+
+        @it("preserves accented non-Latin and supplementary Unicode text")
+        function _()
+            title = "Français 日本語 العربية 🎵"
+
+            m.assertEqual(Strings.RemoveControlCharacters(title), title)
+        end function
+
+        @it("returns empty text for unavailable metadata")
+        function _()
+            m.assertEqual(Strings.RemoveControlCharacters(invalid), "")
+        end function
+
         @describe("Strings.ToString")
 
         @it("preserves boxed empty strings despite a custom fallback")
