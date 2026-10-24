@@ -292,6 +292,7 @@ sub refreshHomeData(blocking = false as boolean)
         }
     }
     if blocking = true then
+        m.top.setFocus(true)
         m.top.visible = false
         Spinner.Show()
     end if
@@ -346,6 +347,7 @@ sub refreshPlaybackRows(blocking = false as boolean)
         }
     }
     if blocking = true then
+        m.top.setFocus(true)
         m.top.visible = false
         Spinner.Show()
     end if
@@ -709,7 +711,7 @@ sub onDynamicLatestMediaResponse(event as object)
 
     library = m.homeState.latestLibraries[parentId]
     addRow("latest:" + Strings.ToString(library.id), "Recently Added in " + Format.FirstNonEmpty([library.name], "Library"), ApiPayload.GetItems(response.payload))
-    renderRows(false)
+    renderRows()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -766,7 +768,7 @@ end function
 '-------------------------------------------------------------------------------
 ' renderRows
 '-------------------------------------------------------------------------------
-sub renderRows(focusAfterRender = true as boolean)
+sub renderRows()
     hadFocus = m.top.isInFocusChain()
     clearShelfNodes()
 
@@ -812,8 +814,8 @@ sub renderRows(focusAfterRender = true as boolean)
 
     if hasRenderedRows() then
         Spinner.Hide()
-        shouldFocus = (focusAfterRender = true or hadFocus = true)
-        if shouldFocus = true and m.homeState.refresh.blocking <> true then focusShelf(m.homeState.focusedShelfIndex)
+        ' Rebuilding shelves may restore Home focus, but must not acquire it from another surface.
+        if hadFocus and m.top.visible and m.homeState.refresh.blocking <> true then focusShelf(m.homeState.focusedShelfIndex)
     end if
 end sub
 
@@ -847,7 +849,7 @@ sub finishBlockingRefreshIfReady()
     m.homeState.refresh.blocking = false
     m.top.visible = true
     Spinner.Hide()
-    focusHome()
+    if m.top.isInFocusChain() then focusHome()
     m.log.activity("Viewing home; sections=" + m.homeState.shelfNodes.Count().ToStr())
     m.top.playbackRowsRefreshCompleted = true
     m.top.ready = true

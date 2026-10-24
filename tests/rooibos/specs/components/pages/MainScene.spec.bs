@@ -3051,6 +3051,103 @@ namespace tests
             m.node.playbackController = m.top.findNode("playbackController")
         end function
 
+        @describe("single-season shortcut routing")
+
+        @it("removes the skipped series before opening its season")
+        function _()
+            page = CreateObject("roSGNode", "TVShow")
+            m.node.dynamicPageHost.appendChild(page)
+            m.node.tvShowPage = page
+            page.selectedSeason = {
+                seriesId: "series-1", seasonId: "season-1"
+                series: { Id: "series-1", Name: "Series" }
+                season: { Id: "season-1", Name: "Season 1" }
+                seasons: [{ Id: "season-1", Name: "Season 1" }]
+                skipSeriesPage: true
+            }
+
+            'bs:disable-next-line 1140
+            tvSeasonHandleTVShowSeasonSelected()
+
+            m.assertInvalid(m.node.tvShowPage)
+            m.assertInvalid(page.getParent())
+            m.assertEqual(m.node.tvSeasonPage.loadRequest.seasonId, "season-1")
+            m.assertEqual(m.node.tvSeasonPage.loadRequest.seasons.Count(), 1)
+        end function
+
+        @it("retains the series for an ordinary season selection")
+        function _()
+            page = CreateObject("roSGNode", "TVShow")
+            m.node.dynamicPageHost.appendChild(page)
+            m.node.tvShowPage = page
+            page.selectedSeason = {
+                seriesId: "series-1", seasonId: "season-1"
+                series: { Id: "series-1" }, season: { Id: "season-1" }, seasons: []
+            }
+
+            'bs:disable-next-line 1140
+            tvSeasonHandleTVShowSeasonSelected()
+
+            m.assertTrue(m.node.tvShowPage.isSameNode(page))
+            m.assertFalse(page.visible)
+            m.assertEqual(m.node.tvSeasonPage.loadRequest.seasonId, "season-1")
+        end function
+
+        @it("returns directly to personPage when no series page remains")
+        function _()
+            origin = m.createPlaybackReturnRecorder()
+            m.node.personPage = origin
+
+            'bs:disable-next-line 1140
+            tvSeasonHandleCloseRequested()
+
+            m.assertTrue(origin.visible)
+            m.assertEqual(origin.calls[0].name, "activate")
+            m.assertTrue(m.node.header.visible)
+            m.assertInvalid(m.node.tvShowPage)
+            m.node.personPage = invalid
+        end function
+
+        @it("returns directly to videoLibraryPage when no series page remains")
+        function _()
+            origin = m.createPlaybackReturnRecorder()
+            m.node.videoLibraryPage = origin
+
+            'bs:disable-next-line 1140
+            tvSeasonHandleCloseRequested()
+
+            m.assertTrue(origin.visible)
+            m.assertEqual(origin.calls[0].name, "activate")
+            m.assertTrue(m.node.header.visible)
+            m.assertInvalid(m.node.tvShowPage)
+            m.node.videoLibraryPage = invalid
+        end function
+
+        @it("returns directly to searchPage when no series page remains")
+        function _()
+            origin = m.createPlaybackReturnRecorder()
+            m.node.searchPage = origin
+
+            'bs:disable-next-line 1140
+            tvSeasonHandleCloseRequested()
+
+            m.assertTrue(origin.visible)
+            m.assertEqual(origin.calls[0].name, "activate")
+            m.assertTrue(m.node.header.visible)
+            m.assertInvalid(m.node.tvShowPage)
+            m.node.searchPage = invalid
+        end function
+
+        @it("returns Home when the skipped series has no retained origin")
+        function _()
+            'bs:disable-next-line 1140
+            tvSeasonHandleCloseRequested()
+
+            m.assertTrue(m.node.homePage.visible)
+            m.assertInvalid(m.node.tvShowPage)
+            m.assertInvalid(m.node.tvSeasonPage)
+        end function
+
     end class
 
 end namespace

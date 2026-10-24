@@ -16,6 +16,7 @@ export const accountDefaults = {
   'home-videos-layout': 'poster;6',
   'tv-ep-list-scroll': 'vertical',
   'show-season-summary-card': 'on',
+  'skip-single-season-series': 'off',
   'home-episode-images': 'series',
   'movie-shell-layout': 'full-screen',
   'tv-series-shell-layout': 'partial-screen',
@@ -66,6 +67,10 @@ export async function getAccountKey(environment) {
 
 export async function openSettings(category) {
   const environment = await ensureAuthenticated();
+  await waitFor(async () => {
+    const ready = await environment.odc.getValue({ base: 'scene', keyPath: '#homePage.ready' });
+    return ready.value === true;
+  }, 'Home loading to finish before opening Settings', 45000);
   const accountKey = await getAccountKey(environment);
   settingsTestsRan = true;
   activeAccountKey = accountKey;

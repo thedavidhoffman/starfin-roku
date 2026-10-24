@@ -25,6 +25,7 @@ namespace tests
             m.node.pageState.randomPlaybackQueue = invalid
             m.node.pageState.randomQueueLoading = false
             m.node.pageState.seriesLoaded = true
+            m.top.opacity = 1
             m.node.pageState.focusArea = "videoToolbar"
             m.top.watchedStateChanged = invalid
             m.top.selectedEpisode = invalid
@@ -1054,6 +1055,7 @@ namespace tests
             m.top.loadRequest = m.createRequest()
             m.node.pageState.series = m.createSeries()
             m.node.pageState.seriesLoaded = true
+            m.top.opacity = 1
             'bs:disable-next-line 1140
             onMarkAsWatchedSelected()
             m.node.watchedTask.response = response
@@ -1535,6 +1537,165 @@ namespace tests
 
             m.assertEqual(m.node.pageState.seasons[0].UserData.UnplayedItemCount, 2)
             m.assertEqual(grid.content.getChild(0).raw.UserData.UnplayedItemCount, 2)
+        end function
+
+        function shortcutResponse(seasons as object, enabled = true as boolean) as object
+            request = m.createRequest()
+            request.item = m.createSeries()
+            request.settings[SettingsStore.Key.SkipSingleSeasonSeries] = (enabled ? "on" : "off")
+            m.top.loadRequest = request
+            m.node.pageState.detailsLoad = LatestRequestLifecycle.Create()
+            'bs:disable-next-line 1140
+            onLoadRequestChanged()
+            entry = m.node.pageState.detailsLoad.active
+            skipSeriesPage = false
+            if enabled and seasons.Count() = 1 then skipSeriesPage = Strings.ToString(seasons[0].Id) <> ""
+            return { ok: true, action: "tvShow", requestId: entry.request.requestId, payload: { series: m.createSeries(), seasons: { Items: seasons }, skipSeriesPage: skipSeriesPage } }
+        end function
+
+        @describe("single-season shortcut")
+
+        @it("keeps series visuals hidden while resolving an enabled shortcut")
+        function _()
+            response = m.shortcutResponse([m.createSeason("season-1", "Season 1")])
+
+            m.assertEqual(m.top.opacity, 0.0)
+            m.assertTrue(m.node.pageState.detailsLoad.active.request.skipSingleSeason)
+            m.assertInvalid(m.top.selectedSeason)
+        end function
+
+        @it("opens the only regular season")
+        function _()
+            response = m.shortcutResponse([m.createSeason("season-1", "Season 1")], true)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertEqual(m.top.selectedSeason.seasonId, "season-1")
+            m.assertTrue(m.top.selectedSeason.skipSeriesPage)
+            m.assertEqual(m.top.selectedSeason.seriesId, "series-1")
+        end function
+
+        @it("opens a Specials-only series")
+        function _()
+            response = m.shortcutResponse([{ Id: "specials", Name: "Specials", IndexNumber: 0 }], true)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertEqual(m.top.selectedSeason.seasonId, "specials")
+            m.assertTrue(m.top.selectedSeason.skipSeriesPage)
+            m.assertEqual(m.top.selectedSeason.seriesId, "series-1")
+        end function
+
+        @it("keeps Season 1 plus Specials on the series page")
+        function _()
+            response = m.shortcutResponse([{ Id: "specials", IndexNumber: 0 }, m.createSeason("season-1", "Season 1")], true)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
+            m.assertEqual(m.top.opacity, 1.0)
+            m.assertTrue(m.node.pageState.seriesLoaded)
+        end function
+
+        @it("keeps multiple regular seasons on the series page")
+        function _()
+            response = m.shortcutResponse([m.createSeason("season-1", "Season 1"), m.createSeason("season-2", "Season 2")], true)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
+            m.assertEqual(m.top.opacity, 1.0)
+            m.assertTrue(m.node.pageState.seriesLoaded)
+        end function
+
+        @it("keeps an empty series on the series page")
+        function _()
+            response = m.shortcutResponse([], true)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
+            m.assertEqual(m.top.opacity, 1.0)
+            m.assertTrue(m.node.pageState.seriesLoaded)
+        end function
+
+        @it("keeps a season without an ID on the series page")
+        function _()
+            response = m.shortcutResponse([{ Name: "Season 1" }], true)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
+            m.assertEqual(m.top.opacity, 1.0)
+            m.assertTrue(m.node.pageState.seriesLoaded)
+        end function
+
+        @it("keeps the series page when the setting is Off")
+        function _()
+            response = m.shortcutResponse([m.createSeason("season-1", "Season 1")], false)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
+            m.assertEqual(m.top.opacity, 1.0)
+            m.assertTrue(m.node.pageState.seriesLoaded)
+        end function
+
+        @it("restores the series surface when loading fails")
+        function _()
+            response = m.shortcutResponse([])
+            response.ok = false
+            response.errorMessage = "Unavailable"
+            m.stubCall(AppMessage.Show, invalid)
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
+            m.assertEqual(m.top.opacity, 1.0)
+        end function
+
+        @it("ignores a shortcut response after deactivation")
+        function _()
+            response = m.shortcutResponse([m.createSeason("season-1", "Season 1")])
+            'bs:disable-next-line 1140
+            deactivate()
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
+        end function
+
+        @it("ignores the superseded series response")
+        function _()
+            response = m.shortcutResponse([m.createSeason("season-1", "Season 1")])
+            LatestRequestLifecycle.Queue(m.node.pageState.detailsLoad, m.createRequest())
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
+        end function
+
+        @it("does not redirect again for a repeated response")
+        function _()
+            response = m.shortcutResponse([m.createSeason("season-1", "Season 1")])
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+            m.top.selectedSeason = invalid
+
+            'bs:disable-next-line 1140
+            handleTVShowResponse(response)
+
+            m.assertInvalid(m.top.selectedSeason)
         end function
 
     end class

@@ -362,6 +362,9 @@ sub onLoadRequestChanged()
     if request = invalid then return
 
     m.pageState.request = request
+    skipSingleSeason = SettingsStore.GetSettingValue(request.settings, SettingsStore.Key.SkipSingleSeasonSeries) = SettingsStore.Toggle.On
+    ' Keep the loading page focusable without flashing details before a shortcut.
+    m.top.opacity = (skipSingleSeason ? 0 : 1)
     m.pageState.playbackRefresh = { needed: false, playPending: false }
     m.pageState.seasons = []
     m.pageState.seasonWindowStart = 0
@@ -388,7 +391,10 @@ sub onLoadRequestChanged()
     m.videoToolbar.resumeItem = invalid
     m.videoToolbar.playItem = invalid
 
-    LatestRequestLifecycle.Queue(m.pageState.detailsLoad, request)
+    taskRequest = {}
+    taskRequest.Append(request)
+    taskRequest.skipSingleSeason = skipSingleSeason
+    LatestRequestLifecycle.Queue(m.pageState.detailsLoad, taskRequest)
     startPendingTVShowLoad()
 end sub
 
@@ -488,6 +494,7 @@ sub handleTVShowResponse(response as dynamic)
     end if
 
     if response.ok <> true then
+        m.top.opacity = 1
         m.videoToolbar.visible = false
         Spinner.Hide()
         renderSeries(m.pageState.series, false)
@@ -499,6 +506,7 @@ sub handleTVShowResponse(response as dynamic)
 
     payload = response.payload
     if payload = invalid then
+        m.top.opacity = 1
         m.videoToolbar.visible = false
         Spinner.Hide()
         renderSeries(m.pageState.series, false)
@@ -510,6 +518,22 @@ sub handleTVShowResponse(response as dynamic)
     preserveRequestedSeriesImages(payload.series)
     m.pageState.series = payload.series
     m.pageState.seasons = ApiPayload.GetItems(payload.seasons)
+    if payload.skipSeriesPage = true and m.pageState.seasons.Count() = 1 then
+        season = m.pageState.seasons[0]
+        if Arrays.IsAssocArray(season) and Strings.ToString(season.Id) <> "" then
+            Spinner.Hide()
+            m.top.selectedSeason = {
+                seriesId: Strings.ToString(m.pageState.request.itemId)
+                seasonId: season.Id
+                series: SeriesIdentity.FromItem(m.pageState.request.server, payload.series)
+                season: season
+                seasons: m.pageState.seasons
+                skipSeriesPage: true
+            }
+            return
+        end if
+    end if
+    m.top.opacity = 1
     updateAllEpisodesAvailability()
     applyPlaybackTargets(payload)
     m.pageState.seriesLoaded = true

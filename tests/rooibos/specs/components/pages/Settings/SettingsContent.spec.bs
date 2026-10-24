@@ -360,7 +360,7 @@ namespace tests
             m.top.callFunc("loadSettingsValues")
             m.assertEqual(m.node.settingsControls.showSeasonSummaryCardOptions.checkedItem, 1)
             m.assertEqual(m.node.categoryControls[5][1], m.node.settingsControls.showSeasonSummaryCardOptions)
-            m.assertEqual(m.top.findNode("tvSummaryCard").title, "Show season summary card in TV episode list")
+            m.assertEqual(m.top.findNode("tvSummaryCard").title, "Show season card in episode list")
         end function
 
         @it("includes an edited Off preference in save values")
@@ -413,7 +413,7 @@ namespace tests
             m.top.accountKey = "rooibos-episode-images-default"
             m.top.callFunc("loadSettingsValues")
             m.assertEqual(m.node.settingsControls.homeEpisodeImagesOptions.checkedItem, 0)
-            m.assertEqual(m.node.categoryControls[5][2], m.node.settingsControls.homeEpisodeImagesOptions)
+            m.assertEqual(m.node.categoryControls[5][3], m.node.settingsControls.homeEpisodeImagesOptions)
             options = m.node.settingsControls.homeEpisodeImagesOptions.content
             m.assertEqual(options.getChild(0).title, "Series artwork")
             m.assertEqual(options.getChild(1).title, "Episode thumbnail with logo")
@@ -2084,16 +2084,18 @@ namespace tests
             m.assertEqual(m.top.unwatchedEpisodeCountPreviewRequested, "off")
         end function
 
-        @it("places the original three TV controls on one page")
+        @it("places four TV controls on one page with paired top cards")
         function _()
             'bs:disable-next-line 1140
             showCategory(5)
 
             controls = m.node.categoryControls[5]
 
-            m.assertEqual(controls, [m.top.findNode("tvEpisodeListDisplayOptions"), m.top.findNode("showSeasonSummaryCardOptions"), m.top.findNode("homeEpisodeImagesOptions")])
+            m.assertEqual(controls, [m.top.findNode("tvEpisodeListDisplayOptions"), m.top.findNode("showSeasonSummaryCardOptions"), m.top.findNode("skipSingleSeasonSeriesOptions"), m.top.findNode("homeEpisodeImagesOptions")])
             m.assertEqual(m.top.findNode("tvScrollCard").translation, [0.0, 0.0])
-            m.assertEqual(m.top.findNode("tvSummaryCard").translation, [0.0, 204.0])
+            m.assertEqual(m.top.findNode("tvSummaryCard").translation, [506.0, 0.0])
+            m.assertEqual(m.top.findNode("tvScrollCard").cardWidth + m.top.findNode("tvSummaryCard").cardWidth + 16, 1160.0)
+            m.assertEqual(m.top.findNode("skipSingleSeasonSeriesCard").translation, [0.0, 204.0])
             m.assertEqual(m.top.findNode("tvArtworkCard").translation, [0.0, 408.0])
             m.assertInvalid(m.top.findNode("tvPageNumber"))
         end function
@@ -2225,21 +2227,7 @@ namespace tests
             m.assertTrue(m.top.findNode("userCategoryList").isInFocusChain())
         end function
 
-        @it("moves down from TV scroll to season summary without paging")
-        function _()
-            'bs:disable-next-line 1140
-            showCategory(5)
-            'bs:disable-next-line 1140
-            focusCategoryControl(0, 1)
-
-            'bs:disable-next-line 1140
-            onKeyEvent("down", true)
-
-            m.assertTrue(m.top.findNode("showSeasonSummaryCardOptions").isInFocusChain())
-            m.assertTrue(m.top.findNode("tvPanel").visible)
-        end function
-
-        @it("moves up from TV season summary to episode scroll")
+        @it("keeps Up at the top of the paired season card within that card")
         function _()
             'bs:disable-next-line 1140
             showCategory(5)
@@ -2247,9 +2235,26 @@ namespace tests
             focusCategoryControl(1, 0)
 
             'bs:disable-next-line 1140
-            onKeyEvent("up", true)
+            handled = onKeyEvent("up", true)
 
-            m.assertTrue(m.top.findNode("tvEpisodeListDisplayOptions").isInFocusChain())
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("showSeasonSummaryCardOptions").isInFocusChain())
+            m.assertTrue(m.top.findNode("tvPanel").visible)
+        end function
+
+        @it("keeps Down at the bottom of artwork on the single TV page")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            'bs:disable-next-line 1140
+            focusCategoryControl(3, 2)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.findNode("homeEpisodeImagesOptions").isInFocusChain())
+            m.assertInvalid(m.top.findNode("tvPageNumber"))
         end function
 
         @it("leaves equal space after the headings in the two badge cards")
@@ -2410,6 +2415,150 @@ namespace tests
             m.assertFalse(description.isTextEllipsized)
             m.assertTrue(description.boundingRect().height > 0)
             m.assertTrue(description.translation[1] + description.boundingRect().height <= card.cardHeight)
+        end function
+
+        @describe("single-season shortcut on")
+
+        @it("includes on in the edited snapshot")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            m.node.settingsControls.skipSingleSeasonSeriesOptions.itemSelected = 1
+
+            'bs:disable-next-line 1140
+            onSkipSingleSeasonSeriesSelected()
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.SkipSingleSeasonSeries], "on")
+            m.assertEqual(m.node.settingsControls.skipSingleSeasonSeriesOptions.checkedItem, 1)
+        end function
+
+        @describe("single-season shortcut off")
+
+        @it("includes off in the edited snapshot")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            m.node.settingsControls.skipSingleSeasonSeriesOptions.itemSelected = 0
+
+            'bs:disable-next-line 1140
+            onSkipSingleSeasonSeriesSelected()
+
+            m.assertEqual(m.top.callFunc("getSettingsValues")[SettingsStore.Key.SkipSingleSeasonSeries], "off")
+            m.assertEqual(m.node.settingsControls.skipSingleSeasonSeriesOptions.checkedItem, 0)
+        end function
+
+        @describe("single-season shortcut editor")
+
+        @it("discards an unsaved shortcut on reload")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            m.top.accountKey = ""
+            m.node.settingsControls.skipSingleSeasonSeriesOptions.itemSelected = 1
+            'bs:disable-next-line 1140
+            onSkipSingleSeasonSeriesSelected()
+
+            m.top.callFunc("loadSettingsValues")
+
+            m.assertEqual(m.node.settingsControls.skipSingleSeasonSeriesOptions.checkedItem, 0)
+        end function
+
+        @it("moves right from scroll to season card")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            'bs:disable-next-line 1140
+            focusCategoryControl(0, 1)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.categoryControls[5][1].isInFocusChain())
+        end function
+
+        @it("moves left from season card to scroll")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            'bs:disable-next-line 1140
+            focusCategoryControl(1, 0)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.categoryControls[5][0].isInFocusChain())
+        end function
+
+        @it("moves down from scroll to shortcut")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            'bs:disable-next-line 1140
+            focusCategoryControl(0, 1)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.categoryControls[5][2].isInFocusChain())
+        end function
+
+        @it("moves down from season card to shortcut")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            'bs:disable-next-line 1140
+            focusCategoryControl(1, 1)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.categoryControls[5][2].isInFocusChain())
+        end function
+
+        @it("moves down from shortcut to artwork")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            'bs:disable-next-line 1140
+            focusCategoryControl(2, 1)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.categoryControls[5][3].isInFocusChain())
+        end function
+
+        @it("moves up from artwork to shortcut")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            'bs:disable-next-line 1140
+            focusCategoryControl(3, 0)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.categoryControls[5][2].isInFocusChain())
+        end function
+
+        @it("moves up from shortcut to scroll")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(5)
+            'bs:disable-next-line 1140
+            focusCategoryControl(2, 0)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.categoryControls[5][0].isInFocusChain())
         end function
 
     end class

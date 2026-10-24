@@ -27,7 +27,8 @@ describe('Starfin TV settings persistence', function () {
 
 describe('Starfin TV toggle settings persistence', function () {
   const settings = [
-    { label: 'season summary card', nodeId: 'showSeasonSummaryCardOptions', key: 'show-season-summary-card' }
+    { label: 'season summary card', nodeId: 'showSeasonSummaryCardOptions', key: 'show-season-summary-card' },
+    { label: 'single-season shortcut', nodeId: 'skipSingleSeasonSeriesOptions', key: 'skip-single-season-series' }
   ];
 
   for (const setting of settings) {

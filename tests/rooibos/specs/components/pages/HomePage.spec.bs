@@ -5,6 +5,8 @@ namespace tests
     class HomePageTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.focusTestSurface = invalid
+            m.top.visible = true
             m.node.homeState.request = { server: "http://server", token: "token", userId: "user" }
             m.node.homeState.rows = {}
             m.top.settings = { "home-episode-images": "episode-with-logo" }
@@ -34,6 +36,7 @@ namespace tests
             'bs:disable-next-line 1140
             cleanupHomeTasks()
             Spinner.HideBlocking()
+            if m.focusTestSurface <> invalid then m.top.getScene().removeChild(m.focusTestSurface)
             getGlobalAa().Delete("homeTestContext")
             getGlobalAa().Delete("homeStatusCapture")
         end function
@@ -114,7 +117,7 @@ namespace tests
             'bs:disable-next-line 1140
             addRow("nextUp", "Next Up", [item])
             'bs:disable-next-line 1140
-            renderRows(false)
+            renderRows()
             shelf = m.node.homeState.shelfNodes[0]
             row = m.node.homeState.rows.nextUp
             child = row.getChild(0)
@@ -937,7 +940,7 @@ namespace tests
             addRow("libraries", "My Media", [m.createLibrary("movies-1", "movies")])
 
             'bs:disable-next-line 1140
-            renderRows(false)
+            renderRows()
 
             m.assertEqual(m.top.findNode("shelvesGroup").getChildCount(), 2)
             m.assertEqual(m.top.findNode("shelvesGroup").getChild(0).rowContent.rowKey, "libraries")
@@ -1074,6 +1077,114 @@ namespace tests
 
         @describe("focus and keyboard behavior")
 
+        @it("keeps Settings TV focused while initial Home responses arrive")
+        function _()
+            m.startFocusRefresh(false)
+            m.openFocusTestSettings()
+            panel = m.focusTestSurface.findNode("tvPanel")
+            m.assertTrue(panel.isInFocusChain())
+
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+            m.assertTrue(panel.isInFocusChain())
+
+            m.finishOtherHomeRows()
+
+            m.assertTrue(m.top.ready)
+            m.assertEqual(m.node.homeState.rows.continueWatching.getChild(0).raw.Id, "movie")
+            m.assertTrue(panel.isInFocusChain())
+            m.assertFalse(m.top.isInFocusChain())
+        end function
+
+        @it("keeps Settings focused when a blocking Home refresh completes")
+        function _()
+            m.startFocusRefresh(true)
+            m.openFocusTestSettings()
+
+            m.finishOtherHomeRows()
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.top.playbackRowsRefreshCompleted)
+            m.assertTrue(m.focusTestSurface.findNode("tvPanel").isInFocusChain())
+            m.assertFalse(m.top.isInFocusChain())
+        end function
+
+        @it("keeps another surface focused while Home responses arrive")
+        function _()
+            m.startFocusRefresh(false)
+            m.focusTestSurface = CreateObject("roSGNode", "Group")
+            m.top.getScene().appendChild(m.focusTestSurface)
+            m.focusTestSurface.setFocus(true)
+
+            m.finishOtherHomeRows()
+
+            m.assertTrue(m.focusTestSurface.isInFocusChain())
+            m.assertTrue(m.top.ready)
+        end function
+
+        @it("focuses loaded shelves when Home still owns initial focus")
+        function _()
+            m.startFocusRefresh(false)
+
+            m.finishOtherHomeRows()
+
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertTrue(m.top.ready)
+        end function
+
+        @it("does not focus shelves when Home has been hidden")
+        function _()
+            m.startFocusRefresh(false)
+            m.top.visible = false
+
+            m.finishOtherHomeRows()
+
+            m.assertFalse(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("focuses loaded shelves after an uninterrupted blocking refresh")
+        function _()
+            m.startFocusRefresh(true)
+
+            m.finishOtherHomeRows()
+
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertTrue(m.top.visible)
+            m.assertTrue(m.top.ready)
+        end function
+
+        @it("restores the focused shelf when its nodes are rebuilt")
+        function _()
+            m.renderTwoRows()
+            'bs:disable-next-line 1140
+            focusShelf(1)
+            previousShelf = m.node.homeState.shelfNodes[1]
+
+            'bs:disable-next-line 1140
+            renderRows()
+
+            m.assertFalse(m.node.homeState.shelfNodes[1].isSameNode(previousShelf))
+            m.assertTrue(m.node.homeState.shelfNodes[1].isInFocusChain())
+        end function
+
+        function startFocusRefresh(blocking as boolean)
+            m.top.ready = false
+            m.top.playbackRowsRefreshCompleted = false
+            'bs:disable-next-line 1001
+            m.stubCall(runHomeTask, m.createControlledHomeTask)
+            m.node.homeState.request.permissions = { canAccessLiveTv: false }
+            'bs:disable-next-line 1140
+            refreshHomeData(blocking)
+            if blocking = false then m.top.callFunc("focusHome")
+        end function
+
+        function openFocusTestSettings()
+            m.focusTestSurface = CreateObject("roSGNode", "SettingsDialog")
+            m.top.getScene().appendChild(m.focusTestSurface)
+            m.focusTestSurface.callFunc("openSettings")
+            m.focusTestSurface.findNode("userCategoryList").itemSelected = 5
+        end function
+
         @it("moves down to the next shelf")
         function _()
             m.renderTwoRows()
@@ -1165,7 +1276,7 @@ namespace tests
             'bs:disable-next-line 1140
             addRow("nextUp", "Next Up", [{ Id: "episode-1", Type: "Episode", ImageTags: {} }])
             'bs:disable-next-line 1140
-            renderRows(false)
+            renderRows()
             m.node.homeState.focusedShelfIndex = 0
         end function
 

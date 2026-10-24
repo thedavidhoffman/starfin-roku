@@ -23,6 +23,23 @@ the standard authentication-response observer before the task runs. A 401 from
 a dynamic Latest Media or Live TV schedule request therefore expires only the
 matching active account through the same path as declarative task nodes.
 
+## Focus during refreshes
+
+Background responses rebuild Home shelves without taking focus from Settings,
+the header, another page, or another dialog. A rebuild restores shelf focus only
+when Home owned focus before the old shelf nodes were removed and remains visible.
+Initial navigation explicitly focuses Home, so arriving rows still receive focus
+when the user stays on Home.
+
+A blocking refresh takes Home focus when it starts, then restores shelf focus on
+completion only if Home still owns it. Opening Settings during that refresh leaves
+Settings focused when the final response arrives. Explicit navigation back to Home
+continues to use `focusHome`.
+
+The direct Settings automation helper waits for initial Home readiness before
+opening its category, matching the system-menu helper. Focus assertions remain in
+place, and component regression tests cover responses arriving after Settings opens.
+
 ## Live TV permission and denied access
 
 AuthController derives `permissions.canAccessLiveTv` from the authenticated user's

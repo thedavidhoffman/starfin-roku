@@ -47,9 +47,42 @@ Optional series metadata and season-list responses retain season-ID correlation.
 They update the page only while their originating season remains current and
 never clear the optimistically rendered season label.
 
+## Single-season series shortcut
+
+Settings > TV includes **Skip series page for single-season shows**, an
+account-specific Off/On preference stored as `skip-single-season-series`. It
+defaults to Off when no value is saved and follows the existing settings save
+lifecycle. No migration is required.
+
+When On, opening a series skips directly to its season episode list only when the
+successful season response contains exactly one season with a usable ID. Specials
+count like any other season: Season 1 plus Specials keeps the series page;
+Specials alone opens its episodes. Empty series and multiple seasons retain the
+series page. Loading errors retain the existing error presentation and Back path.
+
+TVShow captures the preference as an explicit `skipSingleSeason` task request
+flag. TVShowTask resolves it after loading series and seasons; an eligible
+response carries `skipSeriesPage` and returns before Resume, Next Up, replay
+fallback, or playback-queue requests. TVSeason owns loading the episodes once.
+Ineligible series and playback-only refreshes retain normal playback loading.
+TVShow accepts the correlated response and emits a season selection marked
+`skipSeriesPage` before rendering series details. MainScene removes the skipped
+series page before opening TVSeason; Back therefore returns to the original Home,
+library, search, or person surface. Cancelled, superseded, and repeated responses
+cannot trigger a later redirect. The preference is captured when a series opens;
+changing it does not redirect an already open series. Explicit season/episode
+entry and playback routes retain their existing behavior.
+
+The TV settings remain on one page. **TV episode list scroll** and **Show season
+card in episode list** share the top row, the shortcut occupies the middle row,
+and artwork remains in the bottom row. Left/Right moves between the top cards;
+Down from either reaches the shortcut, then artwork. Up from the shortcut returns
+to the scroll card. The shorter season-card label preserves its existing registry
+key and behavior.
+
 ## Episode cards and season actions
 
-Settings > TV includes **Show season summary card in TV episode list**, an account-specific Off/On
+Settings > TV includes **Show season card in episode list**, an account-specific Off/On
 preference stored as `show-season-summary-card`. It defaults to On for new and
 existing accounts without a saved value. The setting follows the existing Settings
 edit/save lifecycle and is included in System Info's account settings. No registry
@@ -148,8 +181,9 @@ failure retries and starts playback once fresh targets arrive.
 
 ## Automated setting coverage
 
-TV settings persistence tests independently save and verify On and Off for both
-Show season summary card in TV episode list and Use Episode Images. Each case saves the opposite
+TV toggle persistence tests independently save and verify On and Off for
+Show season card in episode list and Skip series page for single-season shows.
+Each case saves the opposite
 value first, so it exercises a real change even when run alone.
 
 TV season display tests flip the summary preference On and then Off in each list

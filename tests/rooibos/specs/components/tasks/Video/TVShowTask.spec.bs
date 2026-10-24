@@ -544,6 +544,7 @@ namespace tests
 
         protected override function afterEach()
             getGlobalAa().Delete("tvShowReplay")
+            getGlobalAa().Delete("tvShowShortcut")
         end function
 
         sub stubReplayEpisodes(results as object)
@@ -639,6 +640,236 @@ namespace tests
             m.assertTrue(Instr(1, getGlobalAa().tvShowCastRequest, "fields=MediaStreams%2CMediaSources%2COverview%2CTrickplay%2CUserData%2CPeople") > 0)
             m.assertEqual(response.items[0].item.People[0].Name, "Actor")
             getGlobalAa().Delete("tvShowCastRequest")
+        end function
+
+        function prepareShortcut(seasons as object) as object
+            getGlobalAa().tvShowShortcut = {
+                calls: []
+                seriesResult: { ok: true, data: { Id: "series", Name: "Series" } }
+                seasonsResult: { ok: true, data: { Items: seasons } }
+            }
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeries, function(request)
+                fixture = getGlobalAa().tvShowShortcut
+                fixture.calls.Push("series")
+                return fixture.seriesResult
+            end function)
+            'bs:disable-next-line 1001
+            m.stubCall(loadSeasons, function(request)
+                fixture = getGlobalAa().tvShowShortcut
+                fixture.calls.Push("seasons")
+                return fixture.seasonsResult
+            end function)
+            'bs:disable-next-line 1001
+            m.stubCall(loadResumeItem, function(request)
+                fixture = getGlobalAa().tvShowShortcut
+                fixture.calls.Push("resume")
+                return { ok: true, data: { Items: [] } }
+            end function)
+            'bs:disable-next-line 1001
+            m.stubCall(loadUpNextItem, function(request)
+                fixture = getGlobalAa().tvShowShortcut
+                fixture.calls.Push("next")
+                return { ok: true, data: { Items: [] } }
+            end function)
+            'bs:disable-next-line 1001
+            m.stubCall(loadFirstEpisode, function(request, seasons)
+                fixture = getGlobalAa().tvShowShortcut
+                fixture.calls.Push("replay")
+                return { ok: true, data: { Id: "episode", SeasonId: "season" } }
+            end function)
+            'bs:disable-next-line 1001
+            m.stubCall(loadPlaybackQueue, function(request, episode)
+                fixture = getGlobalAa().tvShowShortcut
+                fixture.calls.Push("queue")
+                return { items: [{ itemId: "episode" }], index: 0 }
+            end function)
+            request = m.createRequest()
+            request.playbackOnly = false
+            request.skipSingleSeason = true
+            return request
+        end function
+
+        @describe("single-season shortcut request sequence")
+
+        @it("returns the only season without requesting playback data")
+        function _()
+            seasons = [{ Id: "season", IndexNumber: 1 }]
+            request = m.prepareShortcut(seasons)
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 11)
+            m.assertEqual(response.itemId, "series")
+            m.assertTrue(response.payload.skipSeriesPage)
+            m.assertEqual(response.payload.seasons.Items, seasons)
+            m.assertInvalid(response.payload.playbackQueue)
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series", "seasons"])
+        end function
+
+        @it("returns Specials alone without requesting playback data")
+        function _()
+            seasons = [{ Id: "specials", IndexNumber: 0 }]
+            request = m.prepareShortcut(seasons)
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 11)
+            m.assertEqual(response.itemId, "series")
+            m.assertTrue(response.payload.skipSeriesPage)
+            m.assertEqual(response.payload.seasons.Items, seasons)
+            m.assertInvalid(response.payload.playbackQueue)
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series", "seasons"])
+        end function
+
+        @it("loads playback data for Season 1 plus Specials")
+        function _()
+            seasons = [{ Id: "season", IndexNumber: 1 }, { Id: "specials", IndexNumber: 0 }]
+            request = m.prepareShortcut(seasons)
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 11)
+            m.assertEqual(response.itemId, "series")
+            m.assertInvalid(response.payload.skipSeriesPage)
+            m.assertEqual(response.payload.playbackQueue[0].itemId, "episode")
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series", "seasons", "resume", "next", "replay", "queue"])
+        end function
+
+        @it("loads playback data for multiple regular seasons")
+        function _()
+            seasons = [{ Id: "season-1", IndexNumber: 1 }, { Id: "season-2", IndexNumber: 2 }]
+            request = m.prepareShortcut(seasons)
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 11)
+            m.assertEqual(response.itemId, "series")
+            m.assertInvalid(response.payload.skipSeriesPage)
+            m.assertEqual(response.payload.playbackQueue[0].itemId, "episode")
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series", "seasons", "resume", "next", "replay", "queue"])
+        end function
+
+        @it("retains normal loading for an empty series")
+        function _()
+            seasons = []
+            request = m.prepareShortcut(seasons)
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 11)
+            m.assertEqual(response.itemId, "series")
+            m.assertInvalid(response.payload.skipSeriesPage)
+            m.assertEqual(response.payload.playbackQueue[0].itemId, "episode")
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series", "seasons", "resume", "next", "replay", "queue"])
+        end function
+
+        @it("retains normal loading for a season without an ID")
+        function _()
+            seasons = [{ Name: "Season 1" }]
+            request = m.prepareShortcut(seasons)
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 11)
+            m.assertEqual(response.itemId, "series")
+            m.assertInvalid(response.payload.skipSeriesPage)
+            m.assertEqual(response.payload.playbackQueue[0].itemId, "episode")
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series", "seasons", "resume", "next", "replay", "queue"])
+        end function
+
+        @it("retains normal loading with the shortcut disabled")
+        function _()
+            seasons = [{ Id: "season" }]
+            request = m.prepareShortcut(seasons)
+            request.skipSingleSeason = false
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 11)
+            m.assertEqual(response.itemId, "series")
+            m.assertInvalid(response.payload.skipSeriesPage)
+            m.assertEqual(response.payload.playbackQueue[0].itemId, "episode")
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series", "seasons", "resume", "next", "replay", "queue"])
+        end function
+
+        @it("does not shortcut a playback-only refresh")
+        function _()
+            seasons = [{ Id: "season" }]
+            request = m.prepareShortcut(seasons)
+            request.playbackOnly = true
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            response = m.top.response
+            m.assertTrue(response.ok)
+            m.assertEqual(response.requestId, 11)
+            m.assertEqual(response.itemId, "series")
+            m.assertInvalid(response.payload.skipSeriesPage)
+            m.assertEqual(response.payload.playbackQueue[0].itemId, "episode")
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["resume", "next", "replay", "queue"])
+        end function
+
+        @it("preserves a series failure without requesting playback data")
+        function _()
+            request = m.prepareShortcut([{ Id: "season" }])
+            getGlobalAa().tvShowShortcut.seriesResult = { ok: false, status: 401, authExpired: true, errorMessage: "Unavailable" }
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 11)
+            m.assertEqual(m.top.response.status, 401)
+            m.assertTrue(m.top.response.authExpired)
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series"])
+        end function
+
+        @it("preserves a seasons failure without requesting playback data")
+        function _()
+            request = m.prepareShortcut([{ Id: "season" }])
+            getGlobalAa().tvShowShortcut.seasonsResult = { ok: false, status: 401, authExpired: true, errorMessage: "Unavailable" }
+            m.top.request = request
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 11)
+            m.assertEqual(m.top.response.status, 401)
+            m.assertTrue(m.top.response.authExpired)
+            m.assertEqual(getGlobalAa().tvShowShortcut.calls, ["series", "seasons"])
         end function
 
     end class

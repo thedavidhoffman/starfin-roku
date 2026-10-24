@@ -181,9 +181,10 @@ sub initCategoryReferences(index as integer, panel as object)
         initAccountSubtitleReferences(panel)
     else if index = 5 then
         m.settingsControls.showSeasonSummaryCardOptions = panel.findNode("showSeasonSummaryCardOptions")
+        m.settingsControls.skipSingleSeasonSeriesOptions = panel.findNode("skipSingleSeasonSeriesOptions")
         m.settingsControls.homeEpisodeImagesOptions = panel.findNode("homeEpisodeImagesOptions")
         m.settingsControls.tvEpisodeListDisplayOptions = panel.findNode("tvEpisodeListDisplayOptions")
-        m.categoryControls[index] = [m.settingsControls.tvEpisodeListDisplayOptions, m.settingsControls.showSeasonSummaryCardOptions, m.settingsControls.homeEpisodeImagesOptions]
+        m.categoryControls[index] = [m.settingsControls.tvEpisodeListDisplayOptions, m.settingsControls.showSeasonSummaryCardOptions, m.settingsControls.skipSingleSeasonSeriesOptions, m.settingsControls.homeEpisodeImagesOptions]
     else if index = 6 then
         m.settingsControls.screensaverTypeOptions = panel.findNode("screensaverTypeOptions")
         m.settingsControls.screensaverDelayOptions = panel.findNode("screensaverDelayOptions")
@@ -234,6 +235,7 @@ sub initCategoryHandlers(index as integer)
         initAccountSubtitleHandlers()
     else if index = 5 then
         m.settingsControls.showSeasonSummaryCardOptions.observeField("itemSelected", "onShowSeasonSummaryCardSelected")
+        m.settingsControls.skipSingleSeasonSeriesOptions.observeField("itemSelected", "onSkipSingleSeasonSeriesSelected")
         m.settingsControls.homeEpisodeImagesOptions.observeField("itemSelected", "onHomeEpisodeImagesSelected")
         m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
     else if index = 6 then
@@ -278,6 +280,7 @@ sub applyCategoryValues(index as integer)
         setSubtitleBurnInOption(m.settingsState.values[SettingsStore.Key.SubtitleBurnInMode])
     else if index = 5 then
         setOnOffOption(m.settingsControls.showSeasonSummaryCardOptions, m.settingsState.values[SettingsStore.Key.ShowSeasonSummaryCard])
+        setOnOffOption(m.settingsControls.skipSingleSeasonSeriesOptions, m.settingsState.values[SettingsStore.Key.SkipSingleSeasonSeries])
         setHomeEpisodeImagesOption(m.settingsState.values[SettingsStore.Key.HomeEpisodeImages])
         setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
     else if index = 6 then
@@ -339,6 +342,7 @@ sub initCategoryOptions(index as integer)
         setOptionTitles(m.settingsControls.subtitleBurnInOptions, ["During transcoding", "Prefer external subtitles", "Always burn in"])
     else if index = 5 then
         setOptionTitles(m.settingsControls.showSeasonSummaryCardOptions, ["Off", "On"])
+        setOptionTitles(m.settingsControls.skipSingleSeasonSeriesOptions, ["Off", "On"])
         setOptionTitles(m.settingsControls.homeEpisodeImagesOptions, ["Series artwork", "Episode thumbnail with logo", "Episode thumbnail without logo"])
         setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
     else if index = 6 then
@@ -539,6 +543,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if m.focusState.categoryIndex = SettingsNavigation.Category.MediaShell then return handleMediaShellKey(key)
     if m.focusState.categoryIndex = SettingsNavigation.Category.Theme then return handleThemeKey(key)
     if m.focusState.categoryIndex = SettingsNavigation.Category.Playback then return handlePlaybackKey(key)
+    if m.focusState.categoryIndex = SettingsNavigation.Category.TV then return handleTVKey(key)
 
     if m.resetStarfinState.confirmationVisible then
         if key = Remote.Key.Right and m.settingsControls.abortResetButton.isInFocusChain() then return focusCategoryControl(1, invalid)
@@ -741,6 +746,18 @@ sub onShowSeasonSummaryCardSelected()
     value = "off"
     if selectedIndex = 1 then value = "on"
     m.settingsState.values[SettingsStore.Key.ShowSeasonSummaryCard] = value
+end sub
+
+'-------------------------------------------------------------------------------
+' onSkipSingleSeasonSeriesSelected
+'-------------------------------------------------------------------------------
+sub onSkipSingleSeasonSeriesSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.skipSingleSeasonSeriesOptions)
+    if selectedIndex < 0 then return
+    m.settingsControls.skipSingleSeasonSeriesOptions.checkedItem = selectedIndex
+    value = SettingsStore.Toggle.Off
+    if selectedIndex = 1 then value = SettingsStore.Toggle.On
+    m.settingsState.values[SettingsStore.Key.SkipSingleSeasonSeries] = value
 end sub
 
 '-------------------------------------------------------------------------------
@@ -1355,6 +1372,32 @@ function handlePlaybackKey(key as string) as boolean
             if index <> SettingsNavigation.PlaybackControl.NextItem then return focusCategoryControl(SettingsNavigation.PlaybackControl.NextItem, 1)
             return true
         end if
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' handleTVKey
+'-------------------------------------------------------------------------------
+function handleTVKey(key as string) as boolean
+    controls = m.categoryControls[SettingsNavigation.Category.TV]
+    index = m.focusState.controlIndex
+    control = controls[index]
+    if key = Remote.Key.Left then
+        if index = SettingsNavigation.TVControl.SeasonCard then return focusCategoryControl(SettingsNavigation.TVControl.Scroll, control.itemFocused)
+        focusFirstField()
+        return true
+    else if key = Remote.Key.Right then
+        if index = SettingsNavigation.TVControl.Scroll then return focusCategoryControl(SettingsNavigation.TVControl.SeasonCard, control.itemFocused)
+        return true
+    else if key = Remote.Key.Down and isFocusedAtLastItem(control) then
+        if index <= SettingsNavigation.TVControl.SeasonCard then return focusCategoryControl(SettingsNavigation.TVControl.SkipSeries, 0)
+        if index = SettingsNavigation.TVControl.SkipSeries then return focusCategoryControl(SettingsNavigation.TVControl.Artwork, 0)
+        return true
+    else if key = Remote.Key.Up and isFocusedAtFirstItem(control) then
+        if index = SettingsNavigation.TVControl.Artwork then return focusCategoryControl(SettingsNavigation.TVControl.SkipSeries, 1)
+        if index = SettingsNavigation.TVControl.SkipSeries then return focusCategoryControl(SettingsNavigation.TVControl.Scroll, 1)
+        return true
     end if
     return false
 end function
