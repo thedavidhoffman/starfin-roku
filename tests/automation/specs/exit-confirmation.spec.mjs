@@ -23,7 +23,7 @@ async function openConfirmation(environment) {
   await press(environment, 'Back');
   await waitFor(async () => await value(environment, '#overlayHost.0.subtype()') === 'ExitConfirmationDialog',
     'Home Back to open exit confirmation');
-  assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: '#overlayHost.0.#cancel' }), true);
+  assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: '#overlayHost.0.#exit' }), true);
   assert.equal(await value(environment, 'closeRequested'), false);
 }
 
@@ -34,6 +34,11 @@ describe('Starfin Home exit confirmation', function () {
         const { environment, control, id } = await openHomeItem(index);
         try {
           await openConfirmation(environment);
+          if (dismissal === 'Ok') {
+            await press(environment, 'Left');
+            await waitFor(async () => await environment.odc.hasFocus({ base: 'scene', keyPath: '#overlayHost.0.#cancel' }),
+              'Cancel button focus');
+          }
           await press(environment, dismissal);
           await waitFor(async () => await value(environment, '#overlayHost.getChildCount()') === 0,
             'exit confirmation to close');
@@ -48,13 +53,10 @@ describe('Starfin Home exit confirmation', function () {
     }
   }
 
-  it('exits only after selecting Exit from the Home confirmation', async function () {
+  it('exits when OK selects the default Exit button', async function () {
     const { environment } = await openHomeItem(0);
     try {
       await openConfirmation(environment);
-      await press(environment, 'Right');
-      await waitFor(async () => await environment.odc.hasFocus({ base: 'scene', keyPath: '#overlayHost.0.#exit' }),
-        'Exit button focus');
       await press(environment, 'Ok');
       await waitFor(async () => (await environment.ecp.getActiveApp()).app?.id !== 'dev',
         'confirmed application exit');

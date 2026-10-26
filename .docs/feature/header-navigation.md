@@ -39,7 +39,7 @@ Back from any Home item also opens the same exit confirmation, replacing the
 previous immediate-exit behavior. Home emits a repeatable backSelected event;
 MainScene handles both Home and header Back through one confirmation path.
 
-The dialog offers Cancel and Exit, with Cancel focused initially. Left and Right
+The dialog offers Cancel and Exit, with Exit focused initially. Left and Right
 move between the buttons. Cancel or Back closes the dialog and restores focus to
 the Home item or header button that opened it. If Home rebuilt the originating
 shelf while the dialog was open, its existing focusHome path restores available
