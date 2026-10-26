@@ -44,6 +44,246 @@ namespace tests
             m.global.showUnwatchedEpisodeCount = m.originalCountMode
         end function
 
+        @describe("Home exit confirmation")
+
+        @it("Cancel restores the first Home item")
+        function _()
+            shelf = m.createExitHomeShelf("first")
+
+            m.node.homePage.backSelected = true
+            dialog = m.node.overlayHost.getChild(0)
+            content = dialog.callFunc("getContentComponent")
+            m.assertTrue(content.findNode("cancel").hasFocus())
+            content.findNode("cancel").buttonSelected = true
+
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "first")
+            m.assertFalse(m.top.closeRequested)
+            m.node.homePage.removeChild(shelf)
+        end function
+
+        @it("Cancel restores the second Home item")
+        function _()
+            shelf = m.createExitHomeShelf("second")
+
+            m.node.homePage.backSelected = true
+            dialog = m.node.overlayHost.getChild(0)
+            content = dialog.callFunc("getContentComponent")
+            m.assertTrue(content.findNode("cancel").hasFocus())
+            content.findNode("cancel").buttonSelected = true
+
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "second")
+            m.assertFalse(m.top.closeRequested)
+            m.node.homePage.removeChild(shelf)
+        end function
+
+        @it("Back dismissal restores the originating Home item")
+        function _()
+            shelf = m.createExitHomeShelf("second")
+            m.node.homePage.backSelected = true
+
+            m.node.overlayHost.getChild(0).callFunc("closeDialog")
+
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "second")
+            m.assertFalse(m.top.closeRequested)
+            m.node.homePage.removeChild(shelf)
+        end function
+
+        @it("Exit from Home requests application closure")
+        function _()
+            shelf = m.createExitHomeShelf("first")
+            m.node.homePage.backSelected = true
+
+            dialog = m.node.overlayHost.getChild(0)
+            dialog.callFunc("getContentComponent").findNode("exit").buttonSelected = true
+
+            m.assertTrue(m.top.closeRequested)
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.top.closeRequested = false
+            m.node.homePage.removeChild(shelf)
+        end function
+
+        @it("cancellation falls back to Home when the originating shelf was removed")
+        function _()
+            shelf = m.createExitHomeShelf("second")
+            m.node.homePage.backSelected = true
+            m.node.homePage.removeChild(shelf)
+
+            m.node.overlayHost.getChild(0).callFunc("closeDialog")
+
+            m.assertTrue(m.node.homePage.isInFocusChain())
+            m.assertFalse(shelf.isInFocusChain())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("repeated Home events do not replace the confirmation")
+        function _()
+            shelf = m.createExitHomeShelf("first")
+            m.node.homePage.backSelected = true
+            dialog = m.node.overlayHost.getChild(0)
+
+            m.node.homePage.backSelected = true
+
+            m.assertTrue(dialog.isSameNode(m.node.overlayHost.getChild(0)))
+            dialog.callFunc("closeDialog")
+            m.node.homePage.removeChild(shelf)
+        end function
+
+        private function createExitHomeShelf(itemId as string) as object
+            m.top.closeRequested = false
+            m.node.homePage.visible = true
+            shelf = CreateObject("roSGNode", "HomeShelf")
+            row = CreateObject("roSGNode", "ContentNode")
+            row.addFields({ rowKey: "movies" })
+            row.createChild("ContentNode").addFields({ raw: { Id: "first", Type: "Movie" } })
+            row.createChild("ContentNode").addFields({ raw: { Id: "second", Type: "Movie" } })
+            shelf.rowContent = row
+            m.node.homePage.appendChild(shelf)
+            shelf.callFunc("activate", itemId)
+            return shelf
+        end function
+
+        @describe("header exit confirmation")
+
+        @it("Cancel restores the Home header button")
+        function _()
+            m.top.closeRequested = false
+            m.node.header.visible = true
+            button = m.node.header.findNode("homeButton")
+            button.setFocus(true)
+
+            m.node.header.backSelected = true
+
+            overlay = m.node.overlayHost.getChild(0)
+            m.assertEqual(overlay.subtype(), "ExitConfirmationDialog")
+            content = overlay.callFunc("getContentComponent")
+            m.assertTrue(content.findNode("cancel").hasFocus())
+            content.findNode("cancel").buttonSelected = true
+
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertTrue(button.hasFocus())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Cancel restores the Search header button")
+        function _()
+            m.top.closeRequested = false
+            m.node.header.visible = true
+            button = m.node.header.findNode("searchButton")
+            button.setFocus(true)
+
+            m.node.header.backSelected = true
+
+            overlay = m.node.overlayHost.getChild(0)
+            m.assertEqual(overlay.subtype(), "ExitConfirmationDialog")
+            content = overlay.callFunc("getContentComponent")
+            m.assertTrue(content.findNode("cancel").hasFocus())
+            content.findNode("cancel").buttonSelected = true
+
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertTrue(button.hasFocus())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Cancel restores the System header button")
+        function _()
+            m.top.closeRequested = false
+            m.node.header.visible = true
+            button = m.node.header.findNode("systemButton")
+            button.setFocus(true)
+
+            m.node.header.backSelected = true
+
+            overlay = m.node.overlayHost.getChild(0)
+            m.assertEqual(overlay.subtype(), "ExitConfirmationDialog")
+            content = overlay.callFunc("getContentComponent")
+            m.assertTrue(content.findNode("cancel").hasFocus())
+            content.findNode("cancel").buttonSelected = true
+
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertTrue(button.hasFocus())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Cancel restores the Account header button")
+        function _()
+            m.top.closeRequested = false
+            m.node.header.visible = true
+            button = m.node.header.findNode("userMenuButton")
+            button.setFocus(true)
+
+            m.node.header.backSelected = true
+
+            overlay = m.node.overlayHost.getChild(0)
+            m.assertEqual(overlay.subtype(), "ExitConfirmationDialog")
+            content = overlay.callFunc("getContentComponent")
+            m.assertTrue(content.findNode("cancel").hasFocus())
+            content.findNode("cancel").buttonSelected = true
+
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertTrue(button.hasFocus())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("ignores an exit event while Home content holds focus")
+        function _()
+            m.top.closeRequested = false
+            m.node.header.visible = true
+            m.node.header.callFunc("focusHeader")
+            m.node.homePage.visible = true
+            m.node.homePage.setFocus(true)
+
+            m.node.header.backSelected = true
+
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertTrue(m.node.homePage.hasFocus())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Exit requests application closure")
+        function _()
+            m.top.closeRequested = false
+            m.node.header.visible = true
+            m.node.header.callFunc("focusHeader")
+
+            m.node.header.backSelected = true
+            overlay = m.node.overlayHost.getChild(0)
+            overlay.callFunc("getContentComponent").findNode("exit").buttonSelected = true
+
+            m.assertTrue(m.top.closeRequested)
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.top.closeRequested = false
+        end function
+
+        @it("repeated header Back does not replace the focused confirmation")
+        function _()
+            m.node.header.visible = true
+            m.node.header.callFunc("focusHeader")
+            m.node.header.backSelected = true
+            overlay = m.node.overlayHost.getChild(0)
+
+            m.node.header.backSelected = true
+
+            m.assertTrue(overlay.isSameNode(m.node.overlayHost.getChild(0)))
+            overlay.callFunc("closeDialog")
+        end function
+
+        @it("dismissal restores header focus without exiting")
+        function _()
+            m.top.closeRequested = false
+            m.node.header.visible = true
+            button = m.node.header.findNode("searchButton")
+            button.setFocus(true)
+            m.node.header.backSelected = true
+
+            m.node.overlayHost.getChild(0).callFunc("closeDialog")
+
+            m.assertTrue(button.hasFocus())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
         @describe("Settings failure confirmation routing")
 
         @it("opens the confirmation without replacing Settings")

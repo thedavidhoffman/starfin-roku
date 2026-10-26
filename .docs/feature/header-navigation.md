@@ -28,3 +28,22 @@ The Account dropdown uses opposing horizontal arrows for Switch and an arrow
 leaving a doorway for Logout. Both use the same 30-pixel icon column and the
 same 22-pixel glyph height as the System dropdown. Its menu width stays at 260
 pixels.
+
+## Back and exit confirmation
+
+Back from an open System or Account dropdown closes only the dropdown and returns
+focus to its header button. Back from any header button with no dropdown open
+shows an "Exit Starfin?" dialog above the header and current page.
+
+Back from any Home item also opens the same exit confirmation, replacing the
+previous immediate-exit behavior. Home emits a repeatable backSelected event;
+MainScene handles both Home and header Back through one confirmation path.
+
+The dialog offers Cancel and Exit, with Cancel focused initially. Left and Right
+move between the buttons. Cancel or Back closes the dialog and restores focus to
+the Home item or header button that opened it. If Home rebuilt the originating
+shelf while the dialog was open, its existing focusHome path restores available
+Home focus. Exit signals MainScene.closeRequested; the existing main loop closes
+the screen and ends the app. Back behavior on other pages and dialogs is unchanged.
+MainScene owns exit routing; the dialog and content
+own confirmation presentation and selection.

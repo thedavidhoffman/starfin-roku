@@ -30,6 +30,29 @@ sub navHandleHeaderDownSelected()
 end sub
 
 '-------------------------------------------------------------------------------
+' navHandleExitBackSelected
+'-------------------------------------------------------------------------------
+sub navHandleExitBackSelected(event as object)
+    owner = event.getRoSGNode()
+    if not owner.visible or not owner.isInFocusChain() then return
+    if m.overlayHost.getChildCount() > 0 then return
+    returnFocus = owner
+    while returnFocus.focusedChild <> invalid
+        child = returnFocus.focusedChild
+        if child.isSameNode(returnFocus) then exit while
+        returnFocus = child
+    end while
+    m.overlayHost.callFunc("openOverlay", {
+        id: "exitConfirmation"
+        componentName: "ExitConfirmationDialog"
+        openFunction: "openConfirmation"
+        closeField: "closeRequested"
+        returnFocus: returnFocus
+        returnOwner: owner
+    })
+end sub
+
+'-------------------------------------------------------------------------------
 ' navHandleHeaderHomeSelected
 '-------------------------------------------------------------------------------
 sub navHandleHeaderHomeSelected()
@@ -74,6 +97,17 @@ sub navHandleOverlayClosed()
     if closed = invalid then return
 
     request = closed.request
+    if request <> invalid and request.id = "exitConfirmation" then
+        if closed.overlay <> invalid and closed.overlay.exitConfirmed then
+            m.top.closeRequested = true
+        else if request.returnOwner.visible and request.returnFocus.getScene() <> invalid then
+            request.returnFocus.setFocus(true)
+        else
+            ' Home may have rebuilt its shelves while the confirmation was open.
+            focusActiveSurface()
+        end if
+        return
+    end if
     if request <> invalid and request.id = "logs" then clearConfirmation()
     if request <> invalid and request.id = HomeVideoPlayback.Overlay.Playback then
         selection = invalid
