@@ -1364,6 +1364,41 @@ namespace tests
             m.assertTrue(m.node.homeRefreshState.playbackRowsDirty)
         end function
 
+        @it("routes episode list watched results to the season page")
+        function _()
+            page = CreateObject("roSGNode", "TVSeason")
+            m.node.tvSeasonPage = page
+
+            'bs:disable-next-line 1140
+            routeMediaStateChange("tvSeason", { itemId: "episode-1", action: "watched", value: true })
+
+            m.assertEqual(page.watchedStateChange, { itemId: "episode-1", isWatched: true })
+        end function
+
+        @it("opens episode list watched actions through the overlay host")
+        function _()
+            page = CreateObject("roSGNode", "TVSeason")
+            m.node.tvSeasonPage = page
+            page.overlayRequested = {
+                id: "mediaActions"
+                sourcePage: "tvSeason"
+                componentName: "MediaActionsDialog"
+                openFunction: "openMediaActions"
+                closeField: "closeRequested"
+                watchedOnly: true
+                item: { Id: "episode-1", Name: "Episode", Type: "Episode", UserData: { Played: false } }
+            }
+
+            'bs:disable-next-line 1140
+            tvSeasonHandleOverlayRequested()
+
+            dialog = m.node.overlayHost.getChild(0)
+            m.assertEqual(dialog.item.Id, "episode-1")
+            m.assertTrue(dialog.watchedOnly)
+            m.assertEqual(dialog.options[0].key, "MarkAsWatched")
+            m.node.overlayHost.callFunc("closeOverlay")
+        end function
+
         @it("logs a successful favorite action with its item title")
         function _()
             collector = CreateObject("roSGNode", "LogService")

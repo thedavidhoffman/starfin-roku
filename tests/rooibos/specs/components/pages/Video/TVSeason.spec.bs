@@ -27,6 +27,7 @@ namespace tests
             m.node.pageState.detailsLoad = LatestRequestLifecycle.Create()
             m.node.pageState.detailsTaskPool.nextIndex = 0
             m.top.selectedEpisodeDetails = invalid
+            m.top.overlayRequested = invalid
             m.top.seasonWatchedStateChanged = invalid
             m.top.closeRequested = false
             scene = m.node.top.getScene()
@@ -1257,6 +1258,133 @@ namespace tests
             'bs:disable-next-line 1140
             m.assertTrue(onKeyEvent("back", true))
             m.assertTrue(m.top.closeRequested)
+        end function
+
+        @describe("episode Options actions")
+
+        @it("opens watched actions for the focused horizontal episode")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.node.episodesList.rowItemFocused = [0, 1]
+            m.node.episodesList.setFocus(true)
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("options", true))
+
+            request = m.top.overlayRequested
+            m.assertEqual(request.id, "mediaActions")
+            m.assertEqual(request.sourcePage, "tvSeason")
+            m.assertEqual(request.item.Id, "episode-2")
+            m.assertTrue(request.watchedOnly)
+            m.assertEqual(request.server, "http://server")
+            m.assertEqual(request.token, "token")
+            m.assertEqual(request.userId, "user")
+        end function
+
+        @it("opens watched actions for the focused vertical episode")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "off" }
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.node.episodesGrid.itemFocused = 0
+            m.node.episodesGrid.setFocus(true)
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("options", true))
+
+            m.assertEqual(m.top.overlayRequested.item.Id, "episode-1")
+        end function
+
+        @it("ignores Options release")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("options", false))
+
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("opens episode watched actions in All Episodes")
+        function _()
+            m.node.pageState.allEpisodes = true
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.node.episodesGrid.itemFocused = 0
+            m.node.episodesGrid.setFocus(true)
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("options", true))
+
+            m.assertEqual(m.top.overlayRequested.item.Id, "episode-1")
+        end function
+
+        @it("ignores Options outside episode list focus")
+        function _()
+            'bs:disable-next-line 1140
+            renderEpisodes([m.createEpisode("episode-1")])
+            m.node.episodesList.setFocus(false)
+            m.top.setFocus(true)
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("options", true))
+
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("does not open episode actions for the season summary")
+        function _()
+            m.top.settings = { "tv-ep-list-scroll": "vertical", "show-season-summary-card": "on" }
+            'bs:disable-next-line 1140
+            renderEpisodes([m.createEpisode("episode-1")])
+            m.node.episodesGrid.itemFocused = 0
+            m.node.episodesGrid.setFocus(true)
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("options", true))
+
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("does not open episode actions while loading")
+        function _()
+            m.node.pageState.episodesLoaded = false
+
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("options", true))
+
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("preserves the current episode selection after another episode is marked watched")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+            m.node.episodesList.rowItemFocused = [0, 1]
+            m.node.episodesList.setFocus(true)
+
+            m.top.callFunc("applyMediaStateChange", { itemId: "episode-1", action: "watched", value: true })
+
+            m.assertTrue(m.node.pageState.episodes[0].UserData.Played)
+            m.assertEqual(m.node.episodesList.jumpToRowItem, [0, 1])
+            m.assertTrue(m.node.episodesList.content.getChild(0).getChild(0).raw.UserData.Played)
+        end function
+
+        @it("applies an unwatched episode action")
+        function _()
+            episode = m.createEpisode("episode-1")
+            episode.UserData.Played = true
+            m.node.pageState.episodes = [episode]
+            'bs:disable-next-line 1140
+            renderEpisodes(m.node.pageState.episodes)
+
+            m.top.callFunc("applyMediaStateChange", { itemId: "episode-1", action: "watched", value: false })
+
+            m.assertFalse(m.node.pageState.episodes[0].UserData.Played)
+            m.assertFalse(m.node.episodesList.content.getChild(0).getChild(0).raw.UserData.Played)
         end function
 
         @describe("remote Play")

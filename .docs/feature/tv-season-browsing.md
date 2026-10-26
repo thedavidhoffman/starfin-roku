@@ -82,6 +82,32 @@ key and behavior.
 
 ## Episode cards and season actions
 
+Episode titles use a native `ScrollingLabel` within the existing 531-pixel title
+area in both horizontal and vertical lists. Like cast names, overflowing titles
+scroll at 100 pixels per second while their card has focus (`repeatCount = -1`).
+Leaving the card stops scrolling (`repeatCount = 0`); returning focus enables it
+again. Short titles stay still. `TVEpisodeCard` owns this through its existing
+`itemHasFocus` handler. Season summary cards continue to hide the title.
+The component suite covers initial state, focus entry, exit and return, and title
+replacement while focused.
+
+Pressing **\* Options** on an episode opens the shared media-actions dialog above
+the page, offering **Mark as Watched** or **Mark as Unwatched** according to the
+episode's current state. This works in horizontal, vertical, and All Episodes
+lists. The season summary, layout spacers, and season navigation do not open
+episode actions. The dialog uses `watchedOnly` to omit favorites and navigation
+actions; other media-action callers retain their existing choices.
+
+Back closes the dialog without changing state and restores list focus. Selecting
+an action uses the existing `MediaActionsController` request/failure flow with
+explicit session data. Successful results route back to TVSeason's canonical
+watched-state handler to update episode cards and season counts and notify the
+series page; Home playback rows are invalidated by the shared action flow.
+The current episode selection is preserved if the viewer moves while the request
+is pending. Failures leave watched state unchanged and show the existing error
+message. Component coverage includes list modes, eligibility, dialog options,
+overlay routing, watched/unwatched updates, and selection preservation.
+
 Settings > TV includes **Show season card in episode list**, an account-specific Off/On
 preference stored as `show-season-summary-card`. It defaults to On for new and
 existing accounts without a saved value. The setting follows the existing Settings
