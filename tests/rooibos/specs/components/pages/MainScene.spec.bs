@@ -1375,6 +1375,25 @@ namespace tests
             m.assertEqual(page.watchedStateChange, { itemId: "episode-1", isWatched: true })
         end function
 
+        @it("cancels episode actions without reactivating the season page")
+        function _()
+            page = CreateObject("roSGNode", "TVSeason")
+            m.node.dynamicPageHost.appendChild(page)
+            m.node.tvSeasonPage = page
+            getGlobalAa().episodeActionsActivatedSurface = false
+            m.stubCall(focusActiveSurface, sub()
+                getGlobalAa().episodeActionsActivatedSurface = true
+            end sub)
+            overlay = CreateObject("roSGNode", "MediaActionsDialog")
+
+            'bs:disable-next-line 1140
+            navHandleMediaActionsOverlayClosed({ request: { sourcePage: "tvSeason" }, overlay: overlay })
+
+            m.assertFalse(getGlobalAa().episodeActionsActivatedSurface)
+            m.assertTrue(page.isInFocusChain())
+            m.assertInvalid(m.node.mediaActionState.activeRequest)
+        end function
+
         @it("opens episode list watched actions through the overlay host")
         function _()
             page = CreateObject("roSGNode", "TVSeason")

@@ -1387,6 +1387,73 @@ namespace tests
             m.assertFalse(m.node.episodesList.content.getChild(0).getChild(0).raw.UserData.Played)
         end function
 
+        @it("restores dialog focus without replaying another episode's progress")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            m.top.playbackProgressChange = { itemId: "episode-1", isFinished: true }
+            m.node.episodesList.jumpToRowItem = [0, 1]
+            m.node.episodesList.rowItemFocused = [0, 1]
+            content = m.node.episodesList.content
+            m.node.episodesList.setFocus(false)
+
+            m.top.callFunc("focusEpisodesIfActive")
+
+            m.assertTrue(m.node.episodesList.isInFocusChain())
+            m.assertEqual(m.node.episodesList.content, content)
+            m.assertEqual(m.node.episodesList.jumpToRowItem, [0, 1])
+        end function
+
+        @it("keeps an episode unwatched after replaying retained progress")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            m.top.playbackProgressChange = { itemId: "episode-1", isFinished: true }
+
+            m.top.callFunc("applyMediaStateChange", { itemId: "episode-1", action: "watched", value: false })
+            'bs:disable-next-line 1140
+            refreshPlaybackProgressChange()
+
+            m.assertInvalid(m.top.playbackProgressChange)
+            m.assertFalse(m.node.pageState.episodes[0].UserData.Played)
+            m.assertFalse(m.node.episodesList.content.getChild(0).getChild(0).raw.UserData.Played)
+        end function
+
+        @it("clears superseded partial progress when marking an episode watched")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            m.top.playbackProgressChange = { itemId: "episode-1", isFinished: false, positionTicks: 10000000 }
+
+            m.top.callFunc("applyMediaStateChange", { itemId: "episode-1", action: "watched", value: true })
+            'bs:disable-next-line 1140
+            refreshPlaybackProgressChange()
+
+            m.assertInvalid(m.top.playbackProgressChange)
+            m.assertTrue(m.node.pageState.episodes[0].UserData.Played)
+        end function
+
+        @it("retains another episode's progress when marking an episode watched")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1"), m.createEpisode("episode-2")]
+            progress = { itemId: "episode-2", isFinished: false, positionTicks: 10000000 }
+            m.top.playbackProgressChange = progress
+
+            m.top.callFunc("applyMediaStateChange", { itemId: "episode-1", action: "watched", value: true })
+
+            m.assertEqual(m.top.playbackProgressChange, progress)
+        end function
+
+        @it("clears retained episode progress when marking its whole season unwatched")
+        function _()
+            m.node.pageState.episodes = [m.createEpisode("episode-1")]
+            m.top.playbackProgressChange = { itemId: "episode-1", isFinished: true }
+
+            m.top.watchedStateChange = { itemId: "season-1", isWatched: false }
+            'bs:disable-next-line 1140
+            refreshPlaybackProgressChange()
+
+            m.assertInvalid(m.top.playbackProgressChange)
+            m.assertFalse(m.node.pageState.episodes[0].UserData.Played)
+        end function
+
         @describe("remote Play")
 
         @it("plays a focused episode with its season queue")

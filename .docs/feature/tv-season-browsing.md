@@ -98,14 +98,19 @@ lists. The season summary, layout spacers, and season navigation do not open
 episode actions. The dialog uses `watchedOnly` to omit favorites and navigation
 actions; other media-action callers retain their existing choices.
 
-Back closes the dialog without changing state and restores list focus. Selecting
-an action uses the existing `MediaActionsController` request/failure flow with
+Back closes the dialog without changing state and restores list focus through
+TVSeason's focus-only interface, without reactivating the page or replaying retained
+playback progress. Selecting an action uses the existing `MediaActionsController`
+request/failure flow with
 explicit session data. Successful results route back to TVSeason's canonical
 watched-state handler to update episode cards and season counts and notify the
 series page; Home playback rows are invalidated by the shared action flow.
 The current episode selection is preserved if the viewer moves while the request
-is pending. Failures leave watched state unchanged and show the existing error
-message. Component coverage includes list modes, eligibility, dialog options,
+is pending. Either watched-state action invalidates retained playback progress for
+the affected episode so later activation cannot overwrite the explicit change.
+Whole-season changes also invalidate progress for episodes in that season; progress
+for unrelated episodes is retained. Failures leave watched state unchanged and
+show the existing error message. Component coverage includes list modes, eligibility, dialog options,
 overlay routing, watched/unwatched updates, and selection preservation.
 
 Settings > TV includes **Show season card in episode list**, an account-specific Off/On

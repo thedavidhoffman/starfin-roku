@@ -26,9 +26,20 @@ sub onWatchedStateChange()
     if itemId = "" then return
 
     isWatched = change.isWatched = true
-    if isWatched then m.top.playbackProgressChange = invalid
     affectedSeason = updateEpisodeWatchedState(itemId, isWatched)
     if affectedSeason = invalid then return
+    progress = m.top.playbackProgressChange
+    if progress <> invalid then
+        ' An explicit watched action supersedes older progress only for affected episodes.
+        progressItemId = Strings.ToString(progress.itemId)
+        if progressItemId = itemId then
+            m.top.playbackProgressChange = invalid
+        else if Arrays.IsAssocArray(m.pageState.season) and itemId = Strings.ToString(m.pageState.season.Id) then
+            for each episode in m.pageState.episodes
+                if Strings.ToString(episode.Id) = progressItemId then m.top.playbackProgressChange = invalid
+            end for
+        end if
+    end if
     renderEpisodes(m.pageState.episodes)
     restoreItemFocus(itemId)
     notifySeasonWatchedStateChanged(affectedSeason)
