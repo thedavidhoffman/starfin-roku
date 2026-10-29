@@ -1,0 +1,123 @@
+'-------------------------------------------------------------------------------
+' beginWatchStatusRefresh
+'-------------------------------------------------------------------------------
+sub beginWatchStatusRefresh()
+    state = m.pageState.watchRefresh
+    if state.active or state.loaded <> true or isWatchStatusBrowseActive() <> true then return
+    state.pending = false
+    state.active = true
+    state.items = []
+    state.nextStartIndex = 0
+    state.targetCount = m.pageState.allItems.Count()
+    state.focusIndex = getCurrentVideoLibraryFocusedIndex()
+    state.focusId = ""
+    if state.focusIndex >= 0 and state.focusIndex < m.pageState.allItems.Count() then state.focusId = Strings.ToString(m.pageState.allItems[state.focusIndex].Id)
+    m.episodeCountRefresh.callFunc("cancel")
+    m.pageState.isLoading = true
+    m.pageState.paging.queryId++
+    beginBrowseTransition("items", true)
+    AppMessage.Dismiss()
+    Spinner.Show(0)
+    loadVideoLibraryPage(0)
+    m.filterRefreshTimer.duration = 125
+    ' The non-alphabetic bucket makes two sequential server requests.
+    if m.pageState.letterFilter.selected = "#" then m.filterRefreshTimer.duration = 245
+    m.filterRefreshTimer.control = TimerControl.Command.Start
+end sub
+
+'-------------------------------------------------------------------------------
+' handleWatchStatusRefreshResponse
+'-------------------------------------------------------------------------------
+sub handleWatchStatusRefreshResponse(response as object)
+    state = m.pageState.watchRefresh
+    if response.ok <> true then
+        failWatchStatusRefresh(RequestFailure.GetDisplayMessage(response, "Unable to refresh library."))
+        return
+    end if
+    startIndex = Number.ToInteger(response.startIndex, -1)
+    if startIndex <> state.nextStartIndex then
+        failWatchStatusRefresh("Library refresh returned an unexpected page.")
+        return
+    end if
+    pageItems = ApiPayload.GetItems(response.payload)
+    nextStartIndex = Number.ToInteger(response.nextStartIndex, startIndex + pageItems.Count())
+    if response.hasMore = true and nextStartIndex <= startIndex then
+        failWatchStatusRefresh("Library refresh returned an empty page.")
+        return
+    end if
+    for each item in pageItems
+        state.items.Push(item)
+    end for
+    state.nextStartIndex = nextStartIndex
+    if response.hasMore = true and state.items.Count() < state.targetCount then
+        loadVideoLibraryPage(nextStartIndex)
+        m.filterRefreshTimer.control = TimerControl.Command.Stop
+        m.filterRefreshTimer.control = TimerControl.Command.Start
+        return
+    end if
+
+    ' Publish the replacement range only after every required page succeeds.
+    m.filterRefreshTimer.control = TimerControl.Command.Stop
+    m.filterRefreshTimer.duration = 0.2
+    m.pageState.allItems = state.items
+    state.items = []
+    m.pageState.paging.nextStartIndex = nextStartIndex
+    m.pageState.paging.totalCount = Number.ToInteger(response.totalRecordCount, m.pageState.allItems.Count())
+    m.pageState.paging.hasMore = response.hasMore = true
+    m.pageState.paging.requestInFlight = false
+    m.pageState.isLoading = false
+    focusIndex = state.focusIndex
+    for index = 0 to m.pageState.allItems.Count() - 1
+        if Strings.ToString(m.pageState.allItems[index].Id) = state.focusId then
+            focusIndex = index
+            exit for
+        end if
+    end for
+    if focusIndex >= m.pageState.allItems.Count() then focusIndex = m.pageState.allItems.Count() - 1
+    if focusIndex < 0 then focusIndex = 0
+    rebuildVideoLibraryItemNodeCache()
+    renderItems(m.pageState.allItems)
+    updateTitleLabel(m.pageState.paging.totalCount)
+    rememberCommittedVideoFilterView()
+    m.pageState.browseTransition.restoreFocusIndex = focusIndex
+    markBrowseTransitionItemsReady()
+    state.active = false
+    Spinner.Hide()
+    requestNextVideoLibraryPageIfNeeded()
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelWatchStatusRefresh
+'-------------------------------------------------------------------------------
+sub cancelWatchStatusRefresh()
+    state = m.pageState.watchRefresh
+    state.pending = false
+    if state.active <> true then return
+    m.videoLibraryTask.control = TaskControl.Command.Stop
+    m.filterRefreshTimer.control = TimerControl.Command.Stop
+    m.filterRefreshTimer.duration = 0.2
+    state.active = false
+    state.items = []
+    m.pageState.isLoading = false
+    m.pageState.paging.requestInFlight = false
+    m.pageState.paging.queryId++
+    m.pageState.filterRefresh.queryId = m.pageState.paging.queryId
+    m.pageState.browseTransition.phase = "idle"
+    Spinner.Hide()
+end sub
+
+'-------------------------------------------------------------------------------
+' failWatchStatusRefresh
+'-------------------------------------------------------------------------------
+sub failWatchStatusRefresh(message as string)
+    focusIndex = m.pageState.watchRefresh.focusIndex
+    cancelWatchStatusRefresh()
+    m.pageState.watchRefresh.pending = true
+    if m.pageState.allItems.Count() > 0 then
+        focusVideoLibraryItem(focusIndex)
+    else
+        focusBrowseByButton()
+    end if
+    AppMessage.Show(message)
+end sub
+

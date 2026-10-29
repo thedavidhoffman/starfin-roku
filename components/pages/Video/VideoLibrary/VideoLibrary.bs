@@ -27,6 +27,7 @@ import "pkg:/source/VideoCardPresentation.bs"
 import "pkg:/source/Array.bs"
 import "pkg:/source/VideoCardGridLayout.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Loading.bs"
+import "pkg:/components/pages/Video/VideoLibrary/Helpers/WatchStatusRefresh.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Browse.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/BrowseTransition.bs"
 import "pkg:/components/pages/Video/VideoLibrary/Helpers/Items.bs"
@@ -50,6 +51,16 @@ sub init()
     }
     m.pageState = {
         request: invalid
+        watchRefresh: {
+            loaded: false
+            pending: false
+            active: false
+            items: []
+            nextStartIndex: 0
+            targetCount: 0
+            focusId: ""
+            focusIndex: 0
+        }
         allItems: []
         items: []
         imageAspect: VideoCardPresentation.Type.Poster
@@ -115,7 +126,7 @@ sub initReferences()
     m.sortButton = m.top.findNode("sortButton")
     m.letterGutterButton = m.top.findNode("letterGutterButton")
     m.filterButtonRow = m.top.findNode("filterButtonRow")
-    m.emptyFavoritesLabel = m.top.findNode("emptyFavoritesLabel")
+    m.emptyBrowseLabel = m.top.findNode("emptyBrowseLabel")
     m.itemsGrid = m.top.findNode("itemsGrid")
     m.videoLibraryTask = m.top.findNode("videoLibraryTask")
     m.musicVideoRandomPlaybackTask = m.top.findNode("musicVideoRandomPlaybackTask")
@@ -180,6 +191,8 @@ sub onLoadRequestChanged()
     if request = invalid then
         return
     end if
+    cancelWatchStatusRefresh()
+    m.pageState.watchRefresh.loaded = false
     m.filterRefreshTimer.control = TimerControl.Command.Stop
     LibraryBrowseRefresh.Cancel(m.pageState.filterRefresh)
     m.pageState.committedFilterView = invalid
@@ -237,6 +250,10 @@ sub commitVideoLibraryBrowseState(selection as object)
 
     optionKey = Strings.ToString(selection.optionKey)
     if optionKey = "" then return
+    if optionKey = LibraryBrowse.Option.Watched or optionKey = LibraryBrowse.Option.Unwatched then
+        selection = buildSortSelection(optionKey, LibraryBrowse.NormalizeSortOrder(selection.sortOrder))
+        optionKey = selection.optionKey
+    end if
 
     m.pageState.selectedSortKey = optionKey
     m.pageState.selectedSort = selection
@@ -249,7 +266,12 @@ sub commitVideoLibraryBrowseState(selection as object)
     else
         clearFilterSelections()
     end if
-    if m.pageState.request <> invalid then m.pageState.request.favoriteOnly = optionKey = LibraryBrowse.Option.Favorites
+    if m.pageState.request <> invalid then
+        m.pageState.request.favoriteOnly = optionKey = LibraryBrowse.Option.Favorites
+        m.pageState.request.watchStatus = LibraryBrowse.WatchStatus.All
+        if optionKey = LibraryBrowse.Option.Watched then m.pageState.request.watchStatus = LibraryBrowse.WatchStatus.Watched
+        if optionKey = LibraryBrowse.Option.Unwatched then m.pageState.request.watchStatus = LibraryBrowse.WatchStatus.Unwatched
+    end if
     syncSortControls()
 end sub
 

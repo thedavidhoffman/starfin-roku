@@ -28,6 +28,7 @@ active visual to that tile.
 | --- | --- | --- |
 | Title | Yes | Items are ordered by title. |
 | Favorites | Yes | Favorite items remain ordered by title. |
+| Watched / Unwatched (movie and TV) | Yes | Server-filtered items remain ordered by title. |
 | Genre | Yes | Filtered items remain ordered by title. |
 | Decade | Yes | Filtered items remain ordered by title. |
 | Release Date | No | Items are ordered by release date. |
@@ -84,7 +85,7 @@ with this document whenever a library surface or browsing capability changes.
 Shared browse identifiers are defined by `LibraryBrowse.Option`, semantic sort
 keys by `LibraryBrowse.SortKey`, and directions by `LibraryBrowse.SortOrder`.
 Video supports Title (`SortName`), Release Date (`PremiereDate`), Date Added
-(`DateCreated`), Favorites, Decade, and Genre. Persisted identifiers retain
+(`DateCreated`), Favorites, Watched, Unwatched, Decade, and Genre. Persisted identifiers retain
 these existing string values and are normalized when restored, defaulting
 unsupported values to Title.
 
@@ -143,3 +144,80 @@ natural height; the grid and filter row keep their existing positions.
 The dedicated Collections browser also positions its centered heading at
 132 px, down 12 px. It has no Browse By/Sort controls and retains its natural
 heading height and existing grid position.
+
+## Watched and Unwatched
+
+Movie and TV libraries offer **Watched** and **Unwatched** immediately after
+Favorites. These are mutually exclusive Browse By choices: selecting either
+clears Favorites, Genre, Decade, and the current letter selection. Each starts
+with Title ascending; descending and letter navigation (including `#`) remain
+available. With Genre and Decade present, movies have eight choices and TV has
+nine. The existing seven-row dialog scrolls to expose every choice.
+
+Availability uses `collectionType` (`movies` or `tvshows`), falling back to
+`includeItemTypes` (`Movie` or `Series`) only when collection type is absent.
+Collections, playlists, music, music videos, and home media do not offer these
+choices. Unsupported supplied or restored choices normalize to Title.
+Selections and directions use the existing account/library persistence store.
+
+`LibraryBrowse.WatchStatus` defines the task request values `All`, `Watched`,
+and `Unwatched`. VideoLibrary's canonical selection commit derives `watchStatus`
+and resets it to `All` when leaving either mode. VideoLibraryTask translates
+these to Jellyfin's [IsPlayed and IsUnplayed filters](https://github.com/jellyfin/jellyfin/blob/master/MediaBrowser.Model/Querying/ItemFilter.cs)
+before server pagination. Watch status also participates in the non-alphabetic
+cache key. No episode fetching or local played-status filtering is involved:
+TV retains show cards and follows Jellyfin's show-level status, including
+partially watched shows under Unwatched.
+
+The shared filtered-empty label displays ?No watched items to display.? or
+?No unwatched items to display.? and Browse By receives focus. Empty letter
+selections retain the existing letter-picker behavior; a previously selected
+bucket that becomes empty during return refresh stays selected and displays
+the filtered-empty message.
+
+### Returning from details or playback
+
+VideoLibrary owns refresh state in `pageState.watchRefresh` and implements the
+transaction in `Helpers/WatchStatusRefresh.bs`. Deactivation arms a return
+refresh only after content has loaded in a watched mode. Initial activation
+does not duplicate its request, and repeated activation during a refresh does
+not restart it. Returning reloads from page zero with the same status,
+direction, and letter bucket, buffering enough pages to replace the previously
+loaded range. The first `#` page rebuilds the existing non-alphabetic cache.
+
+The old grid and count remain visible until all required pages succeed. The
+replacement content and count commit together, then the existing browse
+transition restores the focused item ID, or the nearest surviving index if
+that item disappeared. Empty results focus Browse By. Failed or timed-out
+refreshes discard buffered pages, retain the previous content/count, and show
+the existing app-level error message. Both grid paging and movie-detail next/previous
+paging stay paused until a new refresh or browse selection replaces that stale
+range. Failed, empty, or cancelled letter selections restore the previous range's
+refresh requirement along with its offsets; a successful letter selection replaces
+that range. Navigation, another browse selection, or
+a letter change cancels the transaction; lifecycle and query IDs reject stale
+responses. Watched and playback events may update card metadata but do not
+remove individual cards while retaining old server pagination offsets.
+
+### Coverage
+
+Rooibos cases cover option ordering and exclusions, task filters and hash-cache
+isolation, selection reset, directions, page requests, persistence, expanded
+menus, empty focus, and return transactions (initial/repeated activation,
+partial TV status, focus retention/removal, playback completion, rollback,
+timeout, cancellation, and stale responses).
+
+`video-library-watch.spec.mjs` compares complete movie/TV results with independent
+Jellyfin queries for both filters and directions, checks restoration and letter
+buckets, scrolls through the expanded menu, and exercises return refresh and
+empty-state focus after controlled server status changes. Mutable scenarios
+snapshot affected movie data or every episode/season/show before mutation,
+exit the old channel before cleanup, restore leaves before aggregates, and
+verify restored user-data fields. They require configured movie/TV libraries,
+Genre/Decade metadata, alphabetic titles, and a TV series with multiple episodes.
+Targeted verification on 2026-10-29 passed all 310 Rooibos cases in the selected
+browse suites. The RTA run passed 22 cases before being stopped for duration;
+remaining scenarios are unverified. Movie cleanup failed to restore absent
+`LastPlayedDate` values for four fixtures, although the other checked user-data
+fields were restored. Explicit null updates also left those timestamps intact.
+Mutable RTA coverage needs a cleanup strategy for absent timestamps before reuse.

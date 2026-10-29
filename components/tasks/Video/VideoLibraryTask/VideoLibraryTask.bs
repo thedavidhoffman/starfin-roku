@@ -12,6 +12,16 @@ import "pkg:/source/TaskRequest.bs"
 import "pkg:/source/Array.bs"
 
 '-------------------------------------------------------------------------------
+' getItemFilter
+'-------------------------------------------------------------------------------
+function getItemFilter(request as object) as string
+    if request.watchStatus = LibraryBrowse.WatchStatus.Watched then return "IsPlayed"
+    if request.watchStatus = LibraryBrowse.WatchStatus.Unwatched then return "IsUnplayed"
+    if request.favoriteOnly = true then return "IsFavorite"
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
@@ -42,7 +52,8 @@ sub executeRequest()
         sortBy: getSortBy(request)
         sortOrder: getSortOrder(request)
     }
-    if request.favoriteOnly = true then params.AddReplace("filters", "IsFavorite")
+    itemFilter = getItemFilter(request)
+    if itemFilter <> "" then params.AddReplace("filters", itemFilter)
     if Strings.ToString(request.genre) <> "" then params.AddReplace("genres", request.genre)
     if Type(request.years) = "roArray" and request.years.Count() > 0 then params.AddReplace("years", request.years.Join(","))
     startsWith = Strings.ToString(request.startsWith, "ALL")
@@ -135,6 +146,7 @@ function loadNonAlphabeticPage(request as object, params as object, startIndex a
     yearsKey = ""
     if Type(request.years) = "roArray" then yearsKey = request.years.Join(",")
     cacheKey = Strings.ToString(request.libraryId) + "|" + Strings.ToString(request.sortBy) + "|" + Strings.ToString(request.sortOrder) + "|" + Strings.ToString(request.genre) + "|" + yearsKey + "|" + (request.favoriteOnly = true).ToStr() + "|" + (request.detailed = true).ToStr()
+    cacheKey = cacheKey + "|" + getItemFilter(request)
     if startIndex = 0 or m.nonAlphabeticCache = invalid or m.nonAlphabeticCache.key <> cacheKey then
         baseParams = {}
         for each key in params

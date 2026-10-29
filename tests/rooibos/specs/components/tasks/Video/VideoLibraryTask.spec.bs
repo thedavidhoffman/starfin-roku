@@ -177,6 +177,101 @@ namespace tests
             m.assertEqual(descending[0].Name, "Zulu")
         end function
 
+        @it("preserves Watched filter contract")
+        function _()
+            'bs:disable-next-line 1140
+            result = getItemFilter({ watchStatus: "Watched", favoriteOnly: true })
+
+            m.assertEqual(result, "IsPlayed")
+        end function
+
+        @it("preserves Unwatched filter contract")
+        function _()
+            'bs:disable-next-line 1140
+            result = getItemFilter({ watchStatus: "Unwatched", favoriteOnly: true })
+
+            m.assertEqual(result, "IsUnplayed")
+        end function
+
+        @it("sends IsPlayed and title direction to Jellyfin before pagination")
+        function _()
+            getGlobalAa().watchTaskUrls = []
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                context = getGlobalAa()
+                context.watchTaskUrls.Push(requestUrl)
+                return { ok: true, data: { Items: [], TotalRecordCount: 0 } }
+            end function)
+            m.top.request = { server: "http://server", token: "token", userId: "user", libraryId: "library", includeItemTypes: "Series", collectionType: "tvshows", watchStatus: "Watched", sortBy: "SortName", sortOrder: "Descending", startsWith: "A", pageStartIndex: 100 }
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            requestUrl = LCase(getGlobalAa().watchTaskUrls[0])
+            m.assertTrue(Instr(1, requestUrl, "filters=isplayed") > 0)
+            m.assertTrue(Instr(1, requestUrl, "sortby=sortname") > 0)
+            m.assertTrue(Instr(1, requestUrl, "sortorder=descending") > 0)
+            m.assertTrue(Instr(1, requestUrl, "startindex=100") > 0)
+            m.assertTrue(Instr(1, requestUrl, "namestartswith=a") > 0)
+            m.assertTrue(Instr(1, requestUrl, "includeitemtypes=series") > 0)
+            getGlobalAa().Delete("watchTaskUrls")
+        end function
+
+        @it("sends IsUnplayed and title direction to Jellyfin before pagination")
+        function _()
+            getGlobalAa().watchTaskUrls = []
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                context = getGlobalAa()
+                context.watchTaskUrls.Push(requestUrl)
+                return { ok: true, data: { Items: [], TotalRecordCount: 0 } }
+            end function)
+            m.top.request = { server: "http://server", token: "token", userId: "user", libraryId: "library", includeItemTypes: "Series", collectionType: "tvshows", watchStatus: "Unwatched", sortBy: "SortName", sortOrder: "Descending", startsWith: "A", pageStartIndex: 100 }
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            requestUrl = LCase(getGlobalAa().watchTaskUrls[0])
+            m.assertTrue(Instr(1, requestUrl, "filters=isunplayed") > 0)
+            m.assertTrue(Instr(1, requestUrl, "sortby=sortname") > 0)
+            m.assertTrue(Instr(1, requestUrl, "sortorder=descending") > 0)
+            m.assertTrue(Instr(1, requestUrl, "startindex=100") > 0)
+            m.assertTrue(Instr(1, requestUrl, "namestartswith=a") > 0)
+            m.assertTrue(Instr(1, requestUrl, "includeitemtypes=series") > 0)
+            getGlobalAa().Delete("watchTaskUrls")
+        end function
+
+        @it("does not reuse another watch status hash cache on later pages")
+        function _()
+            getGlobalAa().watchTaskUrls = []
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                context = getGlobalAa()
+                context.watchTaskUrls.Push(requestUrl)
+                return { ok: true, data: { Items: [{ Id: "hash", Name: "1 title", SortName: "1 title" }], TotalRecordCount: 1 } }
+            end function)
+            request = { server: "http://server", token: "token", userId: "user", libraryId: "library", watchStatus: "Watched", sortBy: "SortName", sortOrder: "Ascending" }
+            'bs:disable-next-line 1140
+            loadNonAlphabeticPage(request, { filters: "IsPlayed" }, 0, 1)
+            request.watchStatus = "Unwatched"
+            'bs:disable-next-line 1140
+            loadNonAlphabeticPage(request, { filters: "IsUnplayed" }, 1, 1)
+
+            m.assertEqual(getGlobalAa().watchTaskUrls.Count(), 4)
+            m.assertTrue(Instr(1, LCase(getGlobalAa().watchTaskUrls[2]), "filters=isunplayed") > 0)
+            m.assertTrue(Instr(1, LCase(getGlobalAa().watchTaskUrls[3]), "filters=isunplayed") > 0)
+            getGlobalAa().Delete("watchTaskUrls")
+        end function
+
+        @it("keeps existing filter behavior for unfiltered")
+        function _()
+            'bs:disable-next-line 1140
+            result = getItemFilter({})
+            m.assertEqual(result, "")
+        end function
+
+        @it("keeps existing filter behavior for IsFavorite")
+        function _()
+            'bs:disable-next-line 1140
+            result = getItemFilter({ watchStatus: "All", favoriteOnly: true })
+            m.assertEqual(result, "IsFavorite")
+        end function
+
     end class
 
 end namespace

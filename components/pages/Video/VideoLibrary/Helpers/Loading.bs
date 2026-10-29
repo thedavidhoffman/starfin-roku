@@ -16,7 +16,11 @@ sub prepareLoadRequest(request as object)
         applySavedVideoLibraryViewState(request, restoredState)
     else
         normalizeLoadRequestSort(request)
-        if request.favoriteOnly = true then
+        if request.watchStatus = LibraryBrowse.WatchStatus.Watched then
+            selection = buildSortSelection(LibraryBrowse.Option.Watched, request.sortOrder)
+        else if request.watchStatus = LibraryBrowse.WatchStatus.Unwatched then
+            selection = buildSortSelection(LibraryBrowse.Option.Unwatched, request.sortOrder)
+        else if request.favoriteOnly = true then
             selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Favorites, LibraryBrowse.SortKey.Title, "Favorites", request.sortOrder)
         else
             selection = buildSortSelection(request.sortBy, request.sortOrder)
@@ -97,6 +101,10 @@ sub onVideoLibraryResponse()
         m.log.write("Library response ignored stale libraryId=" + getVideoLibraryId() + " mediaType=video queryId=" + Number.ToInteger(response.queryId, -1).ToStr())
         return
     end if
+    if m.pageState.watchRefresh.active then
+        handleWatchStatusRefreshResponse(response)
+        return
+    end if
     if response.ok <> true then
         if m.pageState.filterRefresh.phase = "loading" then
             m.filterRefreshTimer.control = TimerControl.Command.Stop
@@ -136,6 +144,7 @@ sub onVideoLibraryResponse()
     m.pageState.isLoading = false
     m.pageState.paging.requestInFlight = false
     pageItems = ApiPayload.GetItems(response.payload)
+    m.pageState.watchRefresh.loaded = true
     if startIndex = 0 and m.pageState.letterFilter.pending <> "" and pageItems.Count() = 0 then
         rejectedLetter = m.pageState.letterFilter.pending
         restorePagingAfterRejectedLetterSelection()
@@ -278,6 +287,7 @@ end sub
 ' requestNextVideoLibraryPageIfNeeded
 '-------------------------------------------------------------------------------
 sub requestNextVideoLibraryPageIfNeeded()
+    if m.pageState.watchRefresh.active or m.pageState.watchRefresh.pending then return
     if m.pageState.movieLibraryBrowse.active = true then
         requestNextMovieLibraryBrowsePageIfNeeded(m.pageState.movieLibraryBrowse.index)
         return

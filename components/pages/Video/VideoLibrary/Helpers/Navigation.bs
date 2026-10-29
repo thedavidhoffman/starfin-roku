@@ -4,10 +4,15 @@ import "pkg:/source/Remote.bs"
 '-------------------------------------------------------------------------------
 sub activate()
     AsyncLifecycle.BeginFromField(m.pageState.lifecycle, m.pageState.request, "libraryId")
-    refreshEpisodeCounts()
     m.pageState.movieLibraryBrowse.active = false
     m.top.thumbnailLayoutActive = m.pageState.isThumbnailLayout
     m.top.setFocus(true)
+    if m.pageState.watchRefresh.active then return
+    if m.pageState.watchRefresh.pending and isWatchStatusBrowseActive() then
+        beginWatchStatusRefresh()
+        return
+    end if
+    refreshEpisodeCounts()
     if isPlaylistsView() and m.top.callFunc("specializationActivate") then
         return
     end if
@@ -23,10 +28,13 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    cancelWatchStatusRefresh()
+    m.pageState.watchRefresh.pending = m.pageState.watchRefresh.loaded and isWatchStatusBrowseActive()
     m.episodeCountRefresh.callFunc("cancel")
     AsyncLifecycle.Deactivate(m.pageState.lifecycle)
     m.filterRefreshTimer.control = TimerControl.Command.Stop
     restoreFilterView = LibraryBrowseRefresh.IsActive(m.pageState.filterRefresh)
+    if m.pageState.filterRefresh.queryId < m.pageState.paging.queryId then m.pageState.filterRefresh.queryId = m.pageState.paging.queryId
     LibraryBrowseRefresh.Cancel(m.pageState.filterRefresh)
     if restoreFilterView then restoreCommittedVideoFilterView(m.pageState.committedFilterView)
     m.pageState.paging.queryId = m.pageState.filterRefresh.queryId

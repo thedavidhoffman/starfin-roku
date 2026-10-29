@@ -7,6 +7,7 @@ namespace tests
     class VideoLibraryTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.node.pageState.watchRefresh = { loaded: false, pending: false, active: false, items: [], nextStartIndex: 0, targetCount: 0, focusId: "", focusIndex: 0 }
             m.originalCountMode = m.global.showUnwatchedEpisodeCount
             m.global.showUnwatchedEpisodeCount = "off"
             m.node.itemsGrid = m.node.top.findNode("itemsGrid")
@@ -30,6 +31,8 @@ namespace tests
         end function
 
         protected override function afterEach()
+            'bs:disable-next-line 1140
+            cancelWatchStatusRefresh()
             m.node.episodeCountRefresh.callFunc("cancel")
             m.global.showUnwatchedEpisodeCount = m.originalCountMode
             m.cleanupRestoreRegistry()
@@ -1101,11 +1104,12 @@ namespace tests
 
         @it("omits Random from Browse By")
         function _()
+            m.configurePaging(0, 0, 0)
             m.node.pageState.filterOptions.decadeOptions = [{ label: "1990", value: 1990 }]
             m.node.pageState.filterOptions.genreOptions = [{ label: "Drama", value: "Drama" }]
             'bs:disable-next-line 1140
             options = getVideoSortOptions()
-            m.assertEqual(options.Count(), 6)
+            m.assertEqual(options.Count(), 8)
             for each option in options
                 m.assertFalse(option.optionKey = "Random")
             end for
@@ -1124,9 +1128,9 @@ namespace tests
             'bs:disable-next-line 1140
             options = getVideoSortOptions()
 
-            m.assertEqual(options.Count(), 6)
-            m.assertEqual(options[4].optionKey, "Decade")
-            m.assertEqual(options[5].optionKey, "Genre")
+            m.assertEqual(options.Count(), 8)
+            m.assertEqual(options[6].optionKey, "Decade")
+            m.assertEqual(options[7].optionKey, "Genre")
         end function
 
         @it("does not request pages during a filter transaction")
@@ -1786,7 +1790,7 @@ namespace tests
             'bs:disable-next-line 1140
             options = getVideoSortOptions()
 
-            m.assertEqual(options.Count(), 5)
+            m.assertEqual(options.Count(), 7)
             m.assertEqual(options[2].optionKey, "DateCreated")
             m.assertEqual(options[2].label, "Date Show Added")
             m.assertEqual(options[3].optionKey, "DateLastContentAdded")
@@ -1814,7 +1818,7 @@ namespace tests
             'bs:disable-next-line 1140
             options = getVideoSortOptions()
 
-            m.assertEqual(options.Count(), 4)
+            m.assertEqual(options.Count(), 6)
             m.assertEqual(options[2].label, "Date Added")
             m.assertEqual(options[3].optionKey, "Favorites")
         end function
@@ -3032,6 +3036,744 @@ namespace tests
             m.node.pageState.items = m.node.pageState.allItems
             m.node.pageState.itemNodeCache = {}
         end sub
+
+        @describe("watched browsing")
+
+        @it("selects Watched and clears previous filters and letter")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.itemsGrid = m.top.findNode("itemsGrid")
+            m.node.pageState.selectedSortKey = "Genre"
+            m.node.pageState.activeFilterType = "Genre"
+            m.node.pageState.filterSelection.genre = "Drama"
+            m.node.pageState.filterSelection.decade = 1990
+            m.node.pageState.request.favoriteOnly = true
+            m.node.pageState.letterFilter.selected = "M"
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Watched", sortKey: "SortName", label: "Watched", sortOrder: "Descending" })
+
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "Watched")
+            m.assertEqual(m.node.videoLibraryTask.request.sortBy, "SortName")
+            m.assertEqual(m.node.videoLibraryTask.request.sortOrder, "Ascending")
+            m.assertEqual(m.node.videoLibraryTask.request.startsWith, "ALL")
+            m.assertFalse(m.node.videoLibraryTask.request.favoriteOnly)
+            m.assertEqual(m.node.videoLibraryTask.request.genre, "")
+            m.assertEqual(m.node.videoLibraryTask.request.years, [])
+            m.assertEqual(m.node.pageState.filterSelection.decade, -1)
+            m.assertEqual(m.node.pageState.filterSelection.genre, "")
+            m.assertFalse(m.node.filterButtonRow.visible)
+            m.assertTrue(m.node.letterGutterButton.visible)
+        end function
+
+        @it("retains Watched Ascending on subsequent hash pages")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Ascending" })
+            m.node.pageState.letterFilter.selected = "#"
+            'bs:disable-next-line 1140
+            request = buildVideoLibraryPageRequest(60)
+
+            m.assertEqual(request.pageStartIndex, 60)
+            m.assertEqual(request.watchStatus, "Watched")
+            m.assertEqual(request.sortBy, "SortName")
+            m.assertEqual(request.sortOrder, "Ascending")
+            m.assertEqual(request.startsWith, "#")
+        end function
+
+        @it("retains Watched Descending on subsequent hash pages")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Descending" })
+            m.node.pageState.letterFilter.selected = "#"
+            'bs:disable-next-line 1140
+            request = buildVideoLibraryPageRequest(60)
+
+            m.assertEqual(request.pageStartIndex, 60)
+            m.assertEqual(request.watchStatus, "Watched")
+            m.assertEqual(request.sortBy, "SortName")
+            m.assertEqual(request.sortOrder, "Descending")
+            m.assertEqual(request.startsWith, "#")
+        end function
+
+        @it("persists and restores Watched descending")
+        function _()
+            request = m.restoreRequest("watch-library", "movies", "Movie")
+            m.node.pageState.request = request
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Watched", "SortName", "Watched", "Descending"))
+            'bs:disable-next-line 1140
+            persistVideoLibraryViewState()
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertEqual(m.node.browseByButton.selectedSort.label, "Watched")
+            m.assertEqual(request.watchStatus, "Watched")
+            m.assertEqual(request.sortOrder, "Descending")
+        end function
+
+        @it("shows Watched empty results and focuses Browse By")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            m.deliverWatchPage([], 0, 0, false, 0)
+
+            m.assertEqual(m.node.emptyBrowseLabel.text, "No watched items to display.")
+            m.assertTrue(m.node.emptyBrowseLabel.visible)
+            m.assertTrue(m.node.browseByButton.hasFocus())
+        end function
+
+        @it("falls back from Watched on collection")
+        function _()
+            m.node.pageState.request = { collectionType: "collection", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Watched", "SortName", "Watched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("falls back from Watched on playlist")
+        function _()
+            m.node.pageState.request = { collectionType: "playlist", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Watched", "SortName", "Watched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("falls back from Watched on music")
+        function _()
+            m.node.pageState.request = { collectionType: "music", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Watched", "SortName", "Watched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("falls back from Watched on musicvideos")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Watched", "SortName", "Watched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("falls back from Watched on homevideos")
+        function _()
+            m.node.pageState.request = { collectionType: "homevideos", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Watched", "SortName", "Watched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("selects Unwatched and clears previous filters and letter")
+        function _()
+            m.configurePaging(12, 12, 0)
+            m.node.itemsGrid = m.top.findNode("itemsGrid")
+            m.node.pageState.selectedSortKey = "Genre"
+            m.node.pageState.activeFilterType = "Genre"
+            m.node.pageState.filterSelection.genre = "Drama"
+            m.node.pageState.filterSelection.decade = 1990
+            m.node.pageState.request.favoriteOnly = true
+            m.node.pageState.letterFilter.selected = "M"
+            'bs:disable-next-line 1140
+            applySortSelection({ optionKey: "Unwatched", sortKey: "SortName", label: "Unwatched", sortOrder: "Descending" })
+
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "Unwatched")
+            m.assertEqual(m.node.videoLibraryTask.request.sortBy, "SortName")
+            m.assertEqual(m.node.videoLibraryTask.request.sortOrder, "Ascending")
+            m.assertEqual(m.node.videoLibraryTask.request.startsWith, "ALL")
+            m.assertFalse(m.node.videoLibraryTask.request.favoriteOnly)
+            m.assertEqual(m.node.videoLibraryTask.request.genre, "")
+            m.assertEqual(m.node.videoLibraryTask.request.years, [])
+            m.assertEqual(m.node.pageState.filterSelection.decade, -1)
+            m.assertEqual(m.node.pageState.filterSelection.genre, "")
+            m.assertFalse(m.node.filterButtonRow.visible)
+            m.assertTrue(m.node.letterGutterButton.visible)
+        end function
+
+        @it("retains Unwatched Ascending on subsequent hash pages")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Ascending" })
+            m.node.pageState.letterFilter.selected = "#"
+            'bs:disable-next-line 1140
+            request = buildVideoLibraryPageRequest(60)
+
+            m.assertEqual(request.pageStartIndex, 60)
+            m.assertEqual(request.watchStatus, "Unwatched")
+            m.assertEqual(request.sortBy, "SortName")
+            m.assertEqual(request.sortOrder, "Ascending")
+            m.assertEqual(request.startsWith, "#")
+        end function
+
+        @it("retains Unwatched Descending on subsequent hash pages")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Descending" })
+            m.node.pageState.letterFilter.selected = "#"
+            'bs:disable-next-line 1140
+            request = buildVideoLibraryPageRequest(60)
+
+            m.assertEqual(request.pageStartIndex, 60)
+            m.assertEqual(request.watchStatus, "Unwatched")
+            m.assertEqual(request.sortBy, "SortName")
+            m.assertEqual(request.sortOrder, "Descending")
+            m.assertEqual(request.startsWith, "#")
+        end function
+
+        @it("persists and restores Unwatched descending")
+        function _()
+            request = m.restoreRequest("watch-library", "movies", "Movie")
+            m.node.pageState.request = request
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Unwatched", "SortName", "Unwatched", "Descending"))
+            'bs:disable-next-line 1140
+            persistVideoLibraryViewState()
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertEqual(m.node.browseByButton.selectedSort.label, "Unwatched")
+            m.assertEqual(request.watchStatus, "Unwatched")
+            m.assertEqual(request.sortOrder, "Descending")
+        end function
+
+        @it("shows Unwatched empty results and focuses Browse By")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            m.deliverWatchPage([], 0, 0, false, 0)
+
+            m.assertEqual(m.node.emptyBrowseLabel.text, "No unwatched items to display.")
+            m.assertTrue(m.node.emptyBrowseLabel.visible)
+            m.assertTrue(m.node.browseByButton.hasFocus())
+        end function
+
+        @it("falls back from Unwatched on collection")
+        function _()
+            m.node.pageState.request = { collectionType: "collection", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Unwatched", "SortName", "Unwatched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("falls back from Unwatched on playlist")
+        function _()
+            m.node.pageState.request = { collectionType: "playlist", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Unwatched", "SortName", "Unwatched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("falls back from Unwatched on music")
+        function _()
+            m.node.pageState.request = { collectionType: "music", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Unwatched", "SortName", "Unwatched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("falls back from Unwatched on musicvideos")
+        function _()
+            m.node.pageState.request = { collectionType: "musicvideos", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Unwatched", "SortName", "Unwatched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("falls back from Unwatched on homevideos")
+        function _()
+            m.node.pageState.request = { collectionType: "homevideos", includeItemTypes: "Movie" }
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Unwatched", "SortName", "Unwatched"))
+
+            m.assertEqual(m.node.pageState.selectedSortKey, "SortName")
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+        end function
+
+        @it("orders every movies browse option")
+        function _()
+            m.node.pageState.request = { collectionType: "movies", includeItemTypes: "Movie" }
+            m.node.pageState.filterOptions = { decadeOptions: [{ label: "1990", value: "1990" }], genreOptions: [{ label: "Drama", value: "Drama" }] }
+            'bs:disable-next-line 1140
+            options = getVideoSortOptions()
+            labels = []
+            for each option in options
+                labels.Push(option.label)
+            end for
+
+            m.assertEqual(labels, ["Title", "Release Date", "Date Added", "Favorites", "Watched", "Unwatched", "Decade", "Genre"])
+        end function
+
+        @it("orders every tvshows browse option")
+        function _()
+            m.node.pageState.request = { collectionType: "tvshows", includeItemTypes: "Series" }
+            m.node.pageState.filterOptions = { decadeOptions: [{ label: "1990", value: "1990" }], genreOptions: [{ label: "Drama", value: "Drama" }] }
+            'bs:disable-next-line 1140
+            options = getVideoSortOptions()
+            labels = []
+            for each option in options
+                labels.Push(option.label)
+            end for
+
+            m.assertEqual(labels, ["Title", "Release Date", "Date Show Added", "Date Episode Added", "Favorites", "Watched", "Unwatched", "Decade", "Genre"])
+        end function
+
+        @it("clears watch status when leaving for Favorites")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            applySortSelection(LibraryBrowse.CreateSortSelection("Favorites", "SortName", "Favorites"))
+
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "All")
+            m.assertTrue(m.node.videoLibraryTask.request.favoriteOnly)
+        end function
+
+        @describe("watched return refresh")
+
+        @it("avoids a duplicate initial activation request")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            m.node.pageState.watchRefresh.loaded = false
+            m.node.videoLibraryTask.request = invalid
+            'bs:disable-next-line 1140
+            activate()
+
+            m.assertInvalid(m.node.videoLibraryTask.request)
+            m.assertFalse(m.node.pageState.watchRefresh.active)
+        end function
+
+        @it("refreshes once on return and preserves direction and letter")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            m.node.pageState.letterFilter.selected = "A"
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection("Unwatched", "SortName", "Unwatched", "Descending"))
+            'bs:disable-next-line 1140
+            deactivate()
+            'bs:disable-next-line 1140
+            activate()
+            queryId = m.node.videoLibraryTask.request.queryId
+            'bs:disable-next-line 1140
+            activate()
+
+            m.assertEqual(m.node.videoLibraryTask.request.queryId, queryId)
+            m.assertEqual(m.node.videoLibraryTask.request.startsWith, "A")
+            m.assertEqual(m.node.videoLibraryTask.request.sortOrder, "Descending")
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "Unwatched")
+            m.assertTrue(m.node.pageState.watchRefresh.active)
+        end function
+
+        @it("buffers the previous range and restores the focused ID after reordering")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            m.deliverWatchPage([{ Id: "1", Type: "Movie" }], 0, 1, true, 3)
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.pageState.allItems[0].Id, "0")
+            m.assertEqual(m.node.pageState.paging.totalCount, 3)
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 1)
+            m.deliverWatchPage([{ Id: "2", Type: "Movie" }, { Id: "0", Type: "Movie" }], 1, 3, false, 3)
+
+            m.assertEqual(m.node.pageState.allItems[0].Id, "1")
+            m.assertEqual(m.node.itemsGrid.itemFocused, 0)
+            m.assertFalse(m.node.pageState.watchRefresh.active)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+        end function
+
+        @it("uses the nearest surviving index after the focused item disappears")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            m.deliverWatchPage([{ Id: "2", Type: "Movie" }], 0, 1, false, 1)
+
+            m.assertEqual(m.node.itemsGrid.itemFocused, 0)
+            m.assertEqual(m.node.pageState.paging.totalCount, 1)
+            m.assertEqual(m.node.pageState.allItems[0].Id, "2")
+        end function
+
+        @it("keeps a partially watched show returned by Jellyfin")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            m.node.pageState.request.collectionType = "tvshows"
+            m.node.pageState.request.includeItemTypes = "Series"
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            m.deliverWatchPage([{ Id: "series", Type: "Series", UserData: { Played: false, UnplayedItemCount: 1 } }], 0, 1, false, 1)
+
+            m.assertEqual(m.node.pageState.allItems[0].Type, "Series")
+            m.assertFalse(m.node.pageState.allItems[0].UserData.Played)
+        end function
+
+        @it("retains the entire old range and count on a later page failure")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            getGlobalAa().requestFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            m.deliverWatchPage([{ Id: "new", Type: "Movie" }], 0, 1, true, 10)
+            'bs:disable-next-line 1140
+            handleWatchStatusRefreshResponse({ ok: false, errorMessage: "Refresh failed" })
+
+            m.assertEqual(getGlobalAa().requestFailureMessage, "Refresh failed")
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.pageState.allItems[0].Id, "0")
+            m.assertEqual(m.node.pageState.paging.totalCount, 3)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+            m.assertFalse(m.node.pageState.watchRefresh.active)
+            m.assertTrue(m.node.pageState.watchRefresh.pending)
+        end function
+
+        @it("ignores an old response after changing browse mode")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            oldQuery = m.node.pageState.paging.queryId
+            'bs:disable-next-line 1140
+            applySortSelection(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+            m.node.videoLibraryTask.response = { ok: true, action: "videoLibrary", libraryId: "library-1", queryId: oldQuery, startIndex: 0, payload: { Items: [{ Id: "stale" }] } }
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 0)
+            m.assertEqual(m.node.pageState.request.watchStatus, "All")
+            m.assertFalse(m.node.pageState.watchRefresh.active)
+        end function
+
+        @it("ignores a refresh response after navigation away")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            oldQuery = m.node.pageState.paging.queryId
+            'bs:disable-next-line 1140
+            deactivate()
+            m.node.videoLibraryTask.response = { ok: true, action: "videoLibrary", libraryId: "library-1", queryId: oldQuery, startIndex: 0, payload: { Items: [] } }
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertFalse(m.node.pageState.watchRefresh.active)
+            m.assertTrue(m.node.pageState.watchRefresh.pending)
+        end function
+
+        private sub prepareWatchRefresh(mode as string)
+            m.configurePaging(3, 3, 1)
+            m.node.itemsGrid = m.top.findNode("itemsGrid")
+            m.node.pageState.request.collectionType = "movies"
+            m.node.pageState.paging.totalCount = 3
+            m.node.pageState.paging.hasMore = false
+            m.node.pageState.isLoading = false
+            m.node.pageState.imageAspect = "poster"
+            m.node.pageState.filterRefresh.phase = "idle"
+            m.node.pageState.committedFilterView = invalid
+            m.node.chromeLayout.deferProgressSync = false
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, "library-1")
+            'bs:disable-next-line 1140
+            commitVideoLibraryBrowseState(LibraryBrowse.CreateSortSelection(mode, "SortName", mode))
+            'bs:disable-next-line 1140
+            renderItems(m.node.pageState.allItems)
+            m.node.itemsGrid.itemFocused = 1
+            m.node.pageState.watchRefresh.loaded = true
+        end sub
+
+        private sub deliverWatchPage(items as object, startIndex as integer, nextIndex as integer, hasMore as boolean, total as integer)
+            m.node.videoLibraryTask.response = {
+                ok: true
+                action: "videoLibrary"
+                libraryId: "library-1"
+                queryId: m.node.pageState.paging.queryId
+                startIndex: startIndex
+                nextStartIndex: nextIndex
+                totalRecordCount: total
+                hasMore: hasMore
+                payload: { Items: items }
+            }
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+        end sub
+
+        @it("does not remove Watched cards locally after a watched event")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            deactivate()
+            m.top.mediaStateChange = { action: "watched", itemId: "1", value: true }
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+            'bs:disable-next-line 1140
+            activate()
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 0)
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "Watched")
+        end function
+
+        @it("does not remove Unwatched cards locally after a watched event")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            'bs:disable-next-line 1140
+            deactivate()
+            m.top.mediaStateChange = { action: "watched", itemId: "1", value: true }
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+            'bs:disable-next-line 1140
+            activate()
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 0)
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "Unwatched")
+        end function
+
+        @it("refreshes after playback completion without removing cards locally")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            'bs:disable-next-line 1140
+            deactivate()
+            m.top.playbackProgressChange = { itemId: "1", isFinished: true }
+
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+            'bs:disable-next-line 1140
+            activate()
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 0)
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "Unwatched")
+        end function
+
+        @it("rolls back a refresh timeout and reports its failure")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            getGlobalAa().requestFailureMessage = ""
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            'bs:disable-next-line 1140
+            onVideoFilterRefreshTimerFired()
+
+            m.assertFalse(m.node.pageState.watchRefresh.active)
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(getGlobalAa().requestFailureMessage, "Library refresh timed out.")
+        end function
+
+        @it("keeps the in-flight refresh when the same watched mode is reselected")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            queryId = m.node.pageState.paging.queryId
+            'bs:disable-next-line 1140
+            applySortSelection(LibraryBrowse.CreateSortSelection("Watched", "SortName", "Watched"))
+
+            m.assertTrue(m.node.pageState.watchRefresh.active)
+            m.assertEqual(m.node.pageState.paging.queryId, queryId)
+        end function
+
+        @it("does not append ordinary pages while a return refresh is buffered")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            m.node.pageState.paging.hasMore = true
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 0)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+        end function
+
+        @it("cancels return refresh when a different letter is selected")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            queryId = m.node.pageState.paging.queryId
+            'bs:disable-next-line 1140
+            beginPendingLetterSelection("A")
+
+            m.assertFalse(m.node.pageState.watchRefresh.active)
+            m.assertEqual(m.node.videoLibraryTask.request.startsWith, "A")
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "Watched")
+            m.assertTrue(m.node.videoLibraryTask.request.queryId > queryId)
+        end function
+
+        @it("blocks movie detail boundary paging after watched status changes")
+        function _()
+            m.prepareWatchRefresh("Unwatched")
+            m.node.pageState.paging.hasMore = true
+            'bs:disable-next-line 1140
+            deactivate()
+            'bs:disable-next-line 1140
+            state = beginMovieLibraryBrowse(0)
+            m.node.pageState.allItems[0].UserData = { Played: true }
+            m.node.videoLibraryTask.request = invalid
+
+            'bs:disable-next-line 1140
+            state = selectMovieLibraryBrowseIndex(2)
+
+            m.assertEqual(state.itemId, m.node.pageState.allItems[2].Id)
+            m.assertTrue(m.node.pageState.watchRefresh.pending)
+            m.assertInvalid(m.node.videoLibraryTask.request)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+        end function
+
+        @it("blocks direct movie detail paging while refresh pages are buffered")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            m.node.pageState.paging.hasMore = true
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            m.node.pageState.paging.requestInFlight = false
+            m.node.videoLibraryTask.request = invalid
+
+            'bs:disable-next-line 1140
+            requestNextMovieLibraryBrowsePageIfNeeded(2)
+
+            m.assertInvalid(m.node.videoLibraryTask.request)
+            m.assertTrue(m.node.pageState.watchRefresh.active)
+        end function
+
+        @it("keeps stale offsets blocked after a failed letter request")
+        function _()
+            m.prepareWatchLetterAfterRefreshFailure()
+            m.node.videoLibraryTask.response = { ok: false, action: "videoLibrary", libraryId: "library-1", queryId: m.node.pageState.paging.queryId, errorMessage: "Failed" }
+
+            'bs:disable-next-line 1140
+            onVideoLibraryResponse()
+            m.node.videoLibraryTask.request = invalid
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+
+            m.assertTrue(m.node.pageState.watchRefresh.pending)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+            m.assertInvalid(m.node.videoLibraryTask.request)
+        end function
+
+        @it("keeps stale offsets blocked after an empty letter request")
+        function _()
+            m.prepareWatchLetterAfterRefreshFailure()
+
+            m.deliverWatchPage([], 0, 0, false, 0)
+            m.node.videoLibraryTask.request = invalid
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+
+            m.assertTrue(m.node.pageState.watchRefresh.pending)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+            m.assertInvalid(m.node.videoLibraryTask.request)
+        end function
+
+        @it("keeps stale offsets blocked after cancelling a letter request")
+        function _()
+            m.prepareWatchLetterAfterRefreshFailure()
+
+            'bs:disable-next-line 1140
+            cancelPendingLetterSelection()
+            m.node.videoLibraryTask.request = invalid
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+
+            m.assertTrue(m.node.pageState.watchRefresh.pending)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+            m.assertEqual(m.node.pageState.allItems.Count(), 3)
+            m.assertEqual(m.node.pageState.letterFilter.selected, "ALL")
+            m.assertInvalid(m.node.videoLibraryTask.request)
+        end function
+
+        @it("preserves the refresh requirement across repeated letter attempts")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            'bs:disable-next-line 1140
+            beginPendingLetterSelection("A")
+            'bs:disable-next-line 1140
+            beginPendingLetterSelection("B")
+
+            'bs:disable-next-line 1140
+            cancelPendingLetterSelection()
+
+            m.assertFalse(m.node.pageState.watchRefresh.active)
+            m.assertTrue(m.node.pageState.watchRefresh.pending)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+        end function
+
+        @it("resumes paging from the replacement range after a successful letter request")
+        function _()
+            m.prepareWatchLetterAfterRefreshFailure()
+            replacement = { Id: "replacement", Type: "Movie", Name: "Alpha", ImageTags: {} }
+
+            m.deliverWatchPage([replacement], 0, 1, true, 2)
+
+            m.assertFalse(m.node.pageState.watchRefresh.pending)
+            m.assertEqual(m.node.pageState.allItems.Count(), 1)
+            m.assertEqual(m.node.pageState.allItems[0].Id, "replacement")
+            m.assertEqual(m.node.pageState.letterFilter.selected, "A")
+            m.assertEqual(m.node.videoLibraryTask.request.pageStartIndex, 1)
+            m.assertEqual(m.node.videoLibraryTask.request.startsWith, "A")
+            m.assertEqual(m.node.videoLibraryTask.request.watchStatus, "Watched")
+        end function
+
+        private sub prepareWatchLetterAfterRefreshFailure()
+            m.prepareWatchRefresh("Watched")
+            m.node.pageState.paging.hasMore = true
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            'bs:disable-next-line 1140
+            handleWatchStatusRefreshResponse({ ok: false, errorMessage: "Failed" })
+            'bs:disable-next-line 1140
+            beginPendingLetterSelection("A")
+        end sub
+
+        @it("does not resume old pagination when a refresh fails")
+        function _()
+            m.prepareWatchRefresh("Watched")
+            m.node.pageState.paging.hasMore = true
+            m.stubCall(AppMessage.Show, m.captureRequestFailureMessage)
+            'bs:disable-next-line 1140
+            beginWatchStatusRefresh()
+            'bs:disable-next-line 1140
+            handleWatchStatusRefreshResponse({ ok: false, errorMessage: "Failed" })
+            m.node.videoLibraryTask.request = invalid
+            'bs:disable-next-line 1140
+            requestNextVideoLibraryPageIfNeeded()
+
+            m.assertInvalid(m.node.videoLibraryTask.request)
+            m.assertEqual(m.node.pageState.paging.nextStartIndex, 3)
+            m.assertTrue(m.node.pageState.watchRefresh.pending)
+        end function
 
     end class
 

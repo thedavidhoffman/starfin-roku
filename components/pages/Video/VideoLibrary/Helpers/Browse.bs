@@ -55,7 +55,9 @@ sub applySavedVideoLibraryViewState(request as object, state as object)
     m.pageState.request = request
     optionKey = LibraryBrowse.NormalizeVideoOption(state.optionKey)
     sortOrder = LibraryBrowse.NormalizeSortOrder(state.sortOrder)
-    if optionKey = LibraryBrowse.Option.Favorites then
+    if optionKey = LibraryBrowse.Option.Watched or optionKey = LibraryBrowse.Option.Unwatched then
+        selection = buildSortSelection(optionKey, sortOrder)
+    else if optionKey = LibraryBrowse.Option.Favorites then
         selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Favorites, LibraryBrowse.SortKey.Title, "Favorites", sortOrder)
     else if optionKey = LibraryBrowse.Option.Decade or optionKey = LibraryBrowse.Option.Genre then
         m.pageState.filterSelection.decade = Number.ToInteger(state.selectedDecade, -1)
@@ -267,8 +269,10 @@ sub beginPendingLetterSelection(letter as string)
             nextStartIndex: m.pageState.paging.nextStartIndex
             totalCount: m.pageState.paging.totalCount
             hasMore: m.pageState.paging.hasMore
+            watchRefreshPending: m.pageState.watchRefresh.pending or m.pageState.watchRefresh.active
         }
     end if
+    cancelWatchStatusRefresh()
     m.pageState.isLoading = true
     m.pageState.paging.nextStartIndex = 0
     m.pageState.paging.requestInFlight = false
@@ -291,6 +295,8 @@ sub restorePagingAfterRejectedLetterSelection()
     m.pageState.paging.nextStartIndex = previousPaging.nextStartIndex
     m.pageState.paging.totalCount = previousPaging.totalCount
     m.pageState.paging.hasMore = previousPaging.hasMore
+    ' Restoring the old range also restores its requirement for fresh server offsets.
+    m.pageState.watchRefresh.pending = m.pageState.watchRefresh.pending or previousPaging.watchRefreshPending = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -369,6 +375,10 @@ function getVideoSortOptions() as object
         sortOrder: ""
         label: "Favorites"
     })
+    if supportsWatchStatusBrowse() then
+        options.Push(LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Watched, LibraryBrowse.SortKey.Title, "Watched"))
+        options.Push(LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Unwatched, LibraryBrowse.SortKey.Title, "Unwatched"))
+    end if
     capabilities = getVideoLibraryBrowseCapabilities()
     if capabilities.filters = true and m.pageState.filterOptions.decadeOptions.Count() > 0 then
         options.Push({
@@ -414,7 +424,10 @@ sub applySortSelection(selection as object)
 
     filterRowAction = ""
     reloadTarget = "items"
-    if selectedSortKey = LibraryBrowse.Option.Favorites then
+    if selectedSortKey = LibraryBrowse.Option.Watched or selectedSortKey = LibraryBrowse.Option.Unwatched then
+        if selectedSortKey = m.pageState.selectedSortKey then return
+        filterRowAction = "hide"
+    else if selectedSortKey = LibraryBrowse.Option.Favorites then
         if isFavoriteBrowseActive() then return
 
         selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Favorites, LibraryBrowse.SortKey.Title, "Favorites")
@@ -444,6 +457,7 @@ sub applySortSelection(selection as object)
         end if
     end if
 
+    cancelWatchStatusRefresh()
     commitVideoLibraryBrowseState(selection)
     m.log.activity("Sorting " + ActivityLog.RequestTitle(m.pageState.request, "Library") + " by " + ActivityLog.Quote(selection.label, "Title") + " " + LibraryBrowse.NormalizeSortOrder(selection.sortOrder))
     if filterRowAction = LibraryBrowse.Option.Decade then
@@ -482,6 +496,10 @@ end sub
 ' onVideoFilterRefreshTimerFired
 '-------------------------------------------------------------------------------
 sub onVideoFilterRefreshTimerFired()
+    if m.pageState.watchRefresh.active then
+        failWatchStatusRefresh("Library refresh timed out.")
+        return
+    end if
     if m.pageState.filterRefresh.phase = "loading" then
         m.videoLibraryTask.control = TaskControl.Command.Stop
         rollbackVideoFilterRefresh("Library filter request timed out.")
@@ -605,6 +623,7 @@ function applySortOrderSelection(selection as object) as boolean
     end if
     current = m.pageState.selectedSort
     selection = LibraryBrowse.CreateSortSelection(current.optionKey, current.sortKey, current.label, sortOrder)
+    cancelWatchStatusRefresh()
     commitVideoLibraryBrowseState(selection)
     m.log.activity("Sorting " + ActivityLog.RequestTitle(m.pageState.request, "Library") + " by " + ActivityLog.Quote(selection.label, "Title") + " " + sortOrder)
     persistVideoLibraryViewState()
@@ -619,10 +638,14 @@ end function
 function resetSortOrder(selection as object) as object
     if selection = invalid then return selection
 
+    optionKey = Strings.ToString(selection.optionKey)
+    if optionKey = LibraryBrowse.Option.Watched or optionKey = LibraryBrowse.Option.Unwatched then
+        return buildSortSelection(optionKey, LibraryBrowse.SortOrder.Ascending)
+    end if
+
     sortKey = Strings.ToString(selection.sortKey)
     if sortKey = "" then return selection
 
-    optionKey = Strings.ToString(selection.optionKey)
     if optionKey = LibraryBrowse.Option.DateAdded or optionKey = LibraryBrowse.Option.DateEpisodeAdded then
         return buildSortSelection(optionKey, LibraryBrowse.SortOrder.Ascending)
     end if
@@ -634,6 +657,7 @@ end function
 ' reloadVideoLibraryForSort
 '-------------------------------------------------------------------------------
 sub reloadVideoLibraryForSort(refocusTarget = invalid as dynamic)
+    cancelWatchStatusRefresh()
     request = m.pageState.request
     if request = invalid then
         return
@@ -664,6 +688,7 @@ sub reloadVideoLibraryForSort(refocusTarget = invalid as dynamic)
     m.pageState.paging.queryId = m.pageState.paging.queryId + 1
     m.pageState.allItems = []
     Spinner.Show(0)
+    m.pageState.watchRefresh.loaded = false
     renderItems([])
     m.itemsGrid.jumpToItem = 0
     m.itemsGrid.itemFocused = 0
@@ -684,6 +709,10 @@ end function
 '-------------------------------------------------------------------------------
 function buildSortSelection(sortKey as string, sortOrder as string) as object
     normalizedSortKey = sortKey
+    if sortKey = LibraryBrowse.Option.Watched or sortKey = LibraryBrowse.Option.Unwatched then
+        if supportsWatchStatusBrowse() then return LibraryBrowse.CreateSortSelection(sortKey, LibraryBrowse.SortKey.Title, sortKey, sortOrder)
+        normalizedSortKey = LibraryBrowse.SortKey.Title
+    end if
     if normalizedSortKey = LibraryBrowse.SortKey.DateEpisodeAdded and isTVLibraryBrowse() = false then
         normalizedSortKey = LibraryBrowse.SortKey.Title
     end if
@@ -718,4 +747,23 @@ function isTVLibraryBrowse() as boolean
     collectionType = LCase(Strings.ToString(request.collectionType))
     if collectionType <> "" then return collectionType = "tvshows"
     return LCase(Strings.ToString(request.includeItemTypes)) = "series"
+end function
+
+'-------------------------------------------------------------------------------
+' supportsWatchStatusBrowse
+'-------------------------------------------------------------------------------
+function supportsWatchStatusBrowse() as boolean
+    request = m.pageState.request
+    if request = invalid or isPlaylistsView() then return false
+    collectionType = LCase(Strings.ToString(request.collectionType))
+    if collectionType <> "" then return collectionType = "movies" or collectionType = "tvshows"
+    itemTypes = LCase(Strings.ToString(request.includeItemTypes))
+    return itemTypes = "movie" or itemTypes = "series"
+end function
+
+'-------------------------------------------------------------------------------
+' isWatchStatusBrowseActive
+'-------------------------------------------------------------------------------
+function isWatchStatusBrowseActive() as boolean
+    return m.pageState.selectedSortKey = LibraryBrowse.Option.Watched or m.pageState.selectedSortKey = LibraryBrowse.Option.Unwatched
 end function

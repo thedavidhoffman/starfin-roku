@@ -91,6 +91,7 @@ end function
 ' requestNextMovieLibraryBrowsePageIfNeeded
 '-------------------------------------------------------------------------------
 sub requestNextMovieLibraryBrowsePageIfNeeded(index as integer)
+    if m.pageState.watchRefresh.active or m.pageState.watchRefresh.pending then return
     if m.pageState.paging.hasMore <> true or m.pageState.paging.requestInFlight = true then return
 
     loadedCount = m.pageState.allItems.Count()
@@ -163,7 +164,11 @@ sub renderItems(items as object, refreshCounts = true as boolean)
     content = buildVideoLibraryContent(items)
     m.itemsGrid.content = content
     m.itemsGrid.visible = content.getChildCount() > 0
-    m.emptyFavoritesLabel.visible = isFavoriteBrowseActive() and m.pageState.isLoading <> true and content.getChildCount() = 0
+    emptyText = "No items to display."
+    if m.pageState.selectedSortKey = LibraryBrowse.Option.Watched then emptyText = "No watched items to display."
+    if m.pageState.selectedSortKey = LibraryBrowse.Option.Unwatched then emptyText = "No unwatched items to display."
+    m.emptyBrowseLabel.text = emptyText
+    m.emptyBrowseLabel.visible = (isFavoriteBrowseActive() or isWatchStatusBrowseActive()) and m.pageState.isLoading <> true and content.getChildCount() = 0
     updateVideoLibraryProgressItemCount(content.getChildCount())
     refreshEpisodeCounts(invalid, refreshCounts <> true)
 end sub
