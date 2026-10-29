@@ -17,14 +17,24 @@ mode finalizes its progress and watched state before continuing.
 
 ## Media-Segment Actions
 
-With Auto-skip credits Off, when Jellyfin reports an official `Outro` media
-segment and the queue has a valid next item, the player displays a contextual action during the actionable
-portion of the segment:
+With Auto-skip credits Off, the contextual button appears **when playback enters
+an official Jellyfin `Outro` marker**, not when playback reaches the marker's end.
+The existing actionable window hides the button during the marker's final five
+seconds. The marker's endpoint determines the label and selection behavior:
 
-- **Skip Credits** completes the item and opens Up next when Show "Up Next" is
-  selected.
-- **Play Next** completes the item and immediately starts the next queue item
-  when Play next immediately is selected.
+| Marker and queue | Next Item Playback | Button | Selection behavior |
+| --- | --- | --- | --- |
+| Marker ends at the playback endpoint; another item exists | Play next immediately | **Play Next** | Complete the current item and start the next item |
+| Marker ends at the playback endpoint; another item exists | Show Up Next | **Skip Credits** | Complete the current item and open Up Next |
+| Marker ends at the playback endpoint; no next item exists | Either | **Skip Credits** | Complete the current item and close playback |
+| Content follows the marker, including a post-credits scene | Either | **Skip Credits** | Seek to the marker's end and continue the current item |
+| Playback duration is unknown | Either | **Skip Credits** | Seek to the marker's end without inferring completion |
+
+A marker ending within the final two seconds of the known playback duration, or
+beyond that duration, counts as ending at the playback endpoint. This tolerance is
+shared by label selection and completion handling. A final episode or standalone
+movie still offers Skip Credits even without a successor. Merely displaying a
+button never seeks, completes, or advances playback.
 
 Explicit completion reports the full item duration and waits for Jellyfin's
 watched-state request to finish before advancing. This prevents the next
@@ -67,8 +77,9 @@ lookup is logged and resolved with no segments, allowing the configured fallback
 without retrying. Pending requests still block fallback; stale or cancelled
 responses are ignored.
 
-The derived range uses the existing action path: Show Up Next displays
-**Skip Credits**, and immediate continuation displays **Play Next**. The action
+The derived range always displays **Play Next** because it identifies a continuation
+opportunity rather than a known credits segment. Selection completes the item and
+honors the saved Show Up Next or immediate continuation preference. The action
 appears at the selected threshold and hides during the final five seconds,
 matching official outros. Intro actions retain priority. Back dismisses the
 fallback by episode identity, including after seeking away and back or a
@@ -130,7 +141,7 @@ without a next item. When a range ends within the final two seconds of the known
 duration, a queued next item uses the existing watched-state completion flow and
 Next item playback preference; otherwise the player seeks to one second before
 the end and finishes normally. Completion failures retain existing log-and-continue
-handling. Off preserves the existing manual actions.
+handling. Off displays the manual segment actions described above.
 
 Only official markers trigger automatic skipping. The duration-based fallback
 remains a manual prompt, with its existing episode/next-item restrictions. Intro
@@ -179,6 +190,23 @@ separately, so persistence cases do not depend on previous test runs.
 
 RTA segment coverage uses Aaahh!!! Real Monsters S1E1 for manual and automatic
 Intro/Outro actions, both end-of-item policies, and stream-option changes opened paused that resume and auto-skip.
-Its Outro ends at runtime, so it does not provide device coverage for post-credits
-content. See [Automated Device Testing](automated-device-testing.md) for fixture
+Manual RTA cases cover Skip Credits opening Up Next and Play Next immediately
+starting S1E2. The no-successor case uses Aaahh!!! Real Monsters S4E26, verifies
+that the production queue has reached the series end, and checks Skip Credits
+closes playback without Up Next even with immediate continuation selected. Both
+fixtures require an official Outro ending at runtime. These added RTA cases have
+not yet been executed. Post-credits content remains covered by synthetic Rooibos
+ranges; no real-content device fixture is available. See [Automated Device Testing](automated-device-testing.md) for fixture
 requirements, state restoration, and verification status.
+
+## Manual credits regression coverage
+
+PlaybackActions tests cover official credits visibility without a next item,
+post-credits seeks with and without a successor under both continuation settings,
+final-episode completion and closure, official endpoint continuation, button display
+at marker start, and the two-second endpoint tolerance. Fallback
+coverage retains the next-item requirement and checks Play Next presentation and
+both saved continuation preferences. Existing completion coverage includes stale
+responses, persistence failures, cancellation, and repeated selection. These changes
+require authorized device verification; source coverage alone does not establish
+SceneGraph runtime behavior.

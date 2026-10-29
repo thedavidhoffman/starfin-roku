@@ -6,7 +6,9 @@ import { returnToHome, stopPlaybackForCleanup, selectConfiguredEpisode } from '.
 
 const fixtureTitle = 'Aaahh!!! Real Monsters';
 
-export async function loadSegmentFixture(environment) {
+export async function loadSegmentFixture(environment, {
+  season = 1, episodeNumber = 1, nextEpisodeNumber = 2, segmentTypes = ['Intro', 'Outro']
+} = {}) {
   const [server, token, userId] = await Promise.all(['server', 'token', 'userId'].map(
     field => value(environment, `#authController.authenticatedSession.${field}`)));
   const base = (server.includes('://') ? server : `http://${server}`).replace(/\/$/, '');
@@ -29,20 +31,27 @@ export async function loadSegmentFixture(environment) {
   const episodeResponse = await api(`/Shows/${series.Id}/Episodes`);
   const episodes = episodeResponse.Items;
   assert.equal(episodes.length, episodeResponse.TotalRecordCount, 'Snapshot must include every episode.');
-  const episode = episodes.find(item => item.ParentIndexNumber === 1 && item.IndexNumber === 1);
-  assert.ok(episode, 'S1E1 must exist.');
+  const episode = episodes.find(item => item.ParentIndexNumber === season && item.IndexNumber === episodeNumber);
+  assert.ok(episode, `S${season}E${episodeNumber} must exist.`);
   const segments = (await api(`/MediaSegments/${episode.Id}`)).Items;
   const ranges = {};
-  for (const type of ['Intro', 'Outro']) {
+  for (const type of segmentTypes) {
     const segment = segments.find(item => item.Type === type);
-    assert.ok(segment, `S1E1 requires a ${type} marker.`);
+    assert.ok(segment, `S${season}E${episodeNumber} requires a ${type} marker.`);
     ranges[type] = { start: segment.StartTicks / 1e7, end: segment.EndTicks / 1e7 };
     assert.ok(ranges[type].end - ranges[type].start > 15, `${type} needs a measurable test window.`);
   }
   const duration = episode.RunTimeTicks / 1e7;
   assert.ok(ranges.Outro.end >= duration - 2, 'This fixture tests credits ending at the media endpoint.');
-  const next = episodes.find(item => item.ParentIndexNumber === 1 && item.IndexNumber === 2);
-  assert.ok(next, 'S1E2 is required for queue continuation.');
+  const next = nextEpisodeNumber === null ? undefined
+    : episodes.find(item => item.ParentIndexNumber === season && item.IndexNumber === nextEpisodeNumber);
+  if (nextEpisodeNumber !== null) {
+    assert.ok(next, `S${season}E${nextEpisodeNumber} is required for queue continuation.`);
+  } else {
+    assert.ok(!episodes.some(item => item.ParentIndexNumber > season
+      || (item.ParentIndexNumber === season && item.IndexNumber > episodeNumber)),
+    `S${season}E${episodeNumber} must be the final episode in the series.`);
+  }
   const seasons = (await api(`/Shows/${series.Id}/Seasons`)).Items;
   // Restore leaves before aggregates; never overwrite the original mixed history with a series toggle.
   const snapshot = [...episodes, ...seasons, series].map(item => {
@@ -99,8 +108,8 @@ export async function playFixture(environment, fixture) {
       }
     }
     return false;
-  }, 'Aaahh!!! Real Monsters Season 1 to finish loading and render S1E1', 120000);
-  const scoped = { ...environment, tvSeriesSmokeTest: { testEpisode: { season: 1, episode: 1 } } };
+  }, `Aaahh!!! Real Monsters S${fixture.episode.ParentIndexNumber}E${fixture.episode.IndexNumber} to finish loading`, 120000);
+  const scoped = { ...environment, tvSeriesSmokeTest: { testEpisode: { season: fixture.episode.ParentIndexNumber, episode: fixture.episode.IndexNumber } } };
   const episode = await selectConfiguredEpisode(scoped);
   // Restart is the production zero-position action; Play can resume saved progress.
   await environment.odc.setValue({ base: 'scene', keyPath: '#mediaToolbar.restartSelected', value: true });

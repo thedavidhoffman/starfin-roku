@@ -59,6 +59,16 @@ describe('Starfin official Intro and Outro playback', function () {
     return path;
   }
 
+  async function assertNoUpNext() {
+    const count = await value(environment, '#dynamicPageHost.getChildCount()');
+    for (let index = 0; index < count; index++) {
+      const path = `#dynamicPageHost.${index}`;
+      if (await value(environment, `${path}.subtype()`) === 'TVEpisodeUpNextAutoPlay') {
+        assert.notEqual(await value(environment, `${path}.visible`), true, 'Up Next must not be shown.');
+      }
+    }
+  }
+
   it('shows the manual Intro button with automatic intro skipping Off', async function () {
     await playFixture(environment, fixture);
     await waitFor(async () => await value(environment, '#playbackActionButton.visible') === true
@@ -103,6 +113,77 @@ describe('Starfin official Intro and Outro playback', function () {
     await captureEvidence(this, 'outro-manual');
     await press(environment, 'Ok');
     await waitForUpNext();
+  });
+
+  it('offers Play Next during credits and immediately plays S1E2 after selection', async function () {
+    await playbackPreferences({ nextItemPlaybackOptions: 1 });
+    await fixture.api(`/UserItems/${fixture.next.Id}/UserData`, {}, {
+      ...fixture.next.UserData, PlaybackPositionTicks: 0
+    });
+    await playFixture(environment, fixture);
+    await waitForQueue();
+    await seekFixture(environment, fixture.ranges.Outro.start + 4);
+    await waitFor(async () => await value(environment, '#playbackActionButton.visible') === true
+      && await value(environment, '#playbackActionButton.text') === 'Play Next', 'manual Play Next action', 15000);
+    await samplePlayback(environment, 2, async () => {
+      assert.equal(await value(environment, '#playbackController.0.playRequest.itemId'), fixture.episode.Id);
+      assert.equal(await value(environment, '#playbackActionButton.visible'), true);
+      await assertNoUpNext();
+    });
+    await captureEvidence(this, 'outro-manual-play-next');
+    // Bound the assertion before natural completion so playing through cannot pass.
+    const transitionTimeout = Math.min(15000,
+      Math.floor((fixture.duration - await value(environment, '#videoPlayer.position') - 2) * 1000));
+    assert.ok(transitionTimeout > 0, 'Credits must still be playing before selection.');
+    await press(environment, 'Ok');
+    await waitFor(async () => {
+      await assertNoUpNext();
+      return await value(environment, '#playbackController.0.playRequest.itemId') === fixture.next.Id;
+    }, 'manual immediate continuation to S1E2', transitionTimeout);
+    await waitForVideo(environment, fixture.next.Id);
+    await assertNoUpNext();
+    await captureEvidence(this, 'outro-manual-next-playing');
+  });
+
+  it('offers Skip Credits on S4E26 with no successor and closes playback after selection', async function () {
+    fixture = await loadSegmentFixture(environment, {
+      season: 4, episodeNumber: 26, nextEpisodeNumber: null, segmentTypes: ['Outro']
+    });
+    addEvidenceMetadata(this, { segmentFixture: {
+      series: fixture.series.Name, season: 4, episodeNumber: 26, episode: fixture.episode.Name,
+      duration: fixture.duration, ranges: fixture.ranges
+    } });
+    // Immediate continuation must still label a final episode Skip Credits.
+    await playbackPreferences({ nextItemPlaybackOptions: 1 });
+    await playFixture(environment, fixture);
+    await waitFor(async () => await value(environment, '#episodeQueueTask.response.ok') === true
+      && await value(environment, '#episodeQueueTask.response.payload.reachedSeriesEnd') === true,
+    'the production queue to resolve the series endpoint', 30000);
+    const queue = await readPlaybackQueue(environment);
+    assert.equal(queue.currentItemId, fixture.episode.Id);
+    assert.equal(queue.nextItemId, undefined);
+    await seekFixture(environment, fixture.ranges.Outro.start + 4);
+    await waitFor(async () => await value(environment, '#playbackActionButton.visible') === true
+      && await value(environment, '#playbackActionButton.text') === 'Skip Credits', 'final-episode Skip Credits', 15000);
+    await samplePlayback(environment, 2, async () => {
+      assert.equal(await value(environment, '#playbackController.0.playRequest.itemId'), fixture.episode.Id);
+      assert.equal(await value(environment, '#playbackActionButton.visible'), true);
+    });
+    await captureEvidence(this, 'outro-finale-skip-credits');
+    // Bound the assertion before natural completion so playing through cannot pass.
+    const transitionTimeout = Math.min(15000,
+      Math.floor((fixture.duration - await value(environment, '#videoPlayer.position') - 2) * 1000));
+    assert.ok(transitionTimeout > 0, 'Credits must still be playing before selection.');
+    await press(environment, 'Ok');
+    await waitFor(async () => {
+      await assertNoUpNext();
+      return await value(environment, '#playbackController.getChildCount()') === 0;
+    }, 'final-episode credits selection to close playback', transitionTimeout);
+    await samplePlayback(environment, 2, async () => {
+      assert.equal(await value(environment, '#playbackController.getChildCount()'), 0);
+      await assertNoUpNext();
+    });
+    await captureEvidence(this, 'outro-finale-closed');
   });
 
   for (const immediate of [false, true]) {

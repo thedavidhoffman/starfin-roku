@@ -258,6 +258,18 @@ episode snapshot, or an Outro no longer ending at runtime fails fixture setup
 rather than silently skipping coverage. This episode has no post-credits content;
 that scenario remains unit-covered pending another suitable media fixture.
 
+The final-episode credits case uses **Aaahh!!! Real Monsters S4E26**, requiring an
+official Outro with a measurable window ending at runtime and no later regular
+series episode. It waits for the production queue's series-end response and
+asserts that no successor is queued before testing Skip Credits. Fixture navigation
+uses the selected episode's season and episode numbers. The existing full-series
+snapshot and cleanup also restore S4E26's user data.
+
+Manual credits RTA coverage includes S1E1 Skip Credits opening Up Next, S1E1
+Play Next starting S1E2 without Up Next, and S4E26 Skip Credits closing playback
+without Up Next under the immediate preference. The latter two cases are newly
+added and await authorized execution; no device pass is claimed for them.
+
 Playback cases exercise manual Intro/Outro actions, automatic Intro seeking,
 automatic endpoint Outro completion under both next-item policies, and paused
 Media Options changes inside each segment that resume and automatically skip. Remote selection performs the action
