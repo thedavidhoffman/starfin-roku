@@ -61,7 +61,7 @@ sub applySavedVideoLibraryViewState(request as object, state as object)
         m.pageState.filterSelection.decade = Number.ToInteger(state.selectedDecade, -1)
         m.pageState.filterSelection.genre = Strings.ToString(state.selectedGenre)
         selection = LibraryBrowse.CreateSortSelection(optionKey, LibraryBrowse.SortKey.Title, optionKey, sortOrder)
-    else if optionKey = LibraryBrowse.Option.ReleaseDate or optionKey = LibraryBrowse.Option.DateAdded or optionKey = LibraryBrowse.Option.Title then
+    else if optionKey = LibraryBrowse.Option.ReleaseDate or optionKey = LibraryBrowse.Option.DateAdded or optionKey = LibraryBrowse.Option.DateEpisodeAdded or optionKey = LibraryBrowse.Option.Title then
         selection = buildSortSelection(optionKey, sortOrder)
     else
         selection = LibraryBrowse.CreateSortSelection(LibraryBrowse.Option.Title, LibraryBrowse.SortKey.Title, "Title")
@@ -352,15 +352,23 @@ function getVideoSortOptions() as object
             optionKey: LibraryBrowse.Option.DateAdded
             sortKey: LibraryBrowse.SortKey.DateAdded
             sortOrder: ""
-            label: "Date Added"
-        }
-        {
-            optionKey: LibraryBrowse.Option.Favorites
-            sortKey: LibraryBrowse.SortKey.Title
-            sortOrder: ""
-            label: "Favorites"
+            label: getSortSelectionLabel(LibraryBrowse.SortKey.DateAdded)
         }
     ]
+    if isTVLibraryBrowse() then
+        options.Push({
+            optionKey: LibraryBrowse.Option.DateEpisodeAdded
+            sortKey: LibraryBrowse.SortKey.DateEpisodeAdded
+            sortOrder: ""
+            label: getSortSelectionLabel(LibraryBrowse.SortKey.DateEpisodeAdded)
+        })
+    end if
+    options.Push({
+        optionKey: LibraryBrowse.Option.Favorites
+        sortKey: LibraryBrowse.SortKey.Title
+        sortOrder: ""
+        label: "Favorites"
+    })
     capabilities = getVideoLibraryBrowseCapabilities()
     if capabilities.filters = true and m.pageState.filterOptions.decadeOptions.Count() > 0 then
         options.Push({
@@ -615,6 +623,9 @@ function resetSortOrder(selection as object) as object
     if sortKey = "" then return selection
 
     optionKey = Strings.ToString(selection.optionKey)
+    if optionKey = LibraryBrowse.Option.DateAdded or optionKey = LibraryBrowse.Option.DateEpisodeAdded then
+        return buildSortSelection(optionKey, LibraryBrowse.SortOrder.Ascending)
+    end if
     label = Strings.ToString(selection.label, optionKey)
     return LibraryBrowse.CreateSortSelection(optionKey, sortKey, label)
 end function
@@ -673,6 +684,9 @@ end function
 '-------------------------------------------------------------------------------
 function buildSortSelection(sortKey as string, sortOrder as string) as object
     normalizedSortKey = sortKey
+    if normalizedSortKey = LibraryBrowse.SortKey.DateEpisodeAdded and isTVLibraryBrowse() = false then
+        normalizedSortKey = LibraryBrowse.SortKey.Title
+    end if
     if normalizedSortKey = "Random" then
         normalizedSortKey = LibraryBrowse.SortKey.Title
     end if
@@ -687,7 +701,21 @@ function getSortSelectionLabel(sortKey as string) as string
         return "Release Date"
     end if
     if sortKey = LibraryBrowse.SortKey.DateAdded then
+        if isTVLibraryBrowse() then return "Date Show Added"
         return "Date Added"
     end if
+    if sortKey = LibraryBrowse.SortKey.DateEpisodeAdded then return "Date Episode Added"
     return "Title"
+end function
+
+'-------------------------------------------------------------------------------
+' isTVLibraryBrowse
+'-------------------------------------------------------------------------------
+function isTVLibraryBrowse() as boolean
+    request = m.pageState.request
+    if request = invalid then return false
+
+    collectionType = LCase(Strings.ToString(request.collectionType))
+    if collectionType <> "" then return collectionType = "tvshows"
+    return LCase(Strings.ToString(request.includeItemTypes)) = "series"
 end function

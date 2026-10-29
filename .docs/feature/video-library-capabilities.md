@@ -32,6 +32,8 @@ active visual to that tile.
 | Decade | Yes | Filtered items remain ordered by title. |
 | Release Date | No | Items are ordered by release date. |
 | Date Added | No | Items are ordered by date added. |
+| Date Show Added (TV) | No | Shows are ordered by their own added date. |
+| Date Episode Added (TV) | No | Shows are ordered by their newest episode addition. |
 
 ## Policy ownership
 
@@ -89,6 +91,42 @@ unsupported values to Title.
 Labels such as "Release Date" remain presentation text rather than enum values.
 This keeps user-facing wording separate from Jellyfin and persisted-state
 contracts.
+
+TV libraries label the existing `DateCreated` choice **Date Show Added** and
+offer **Date Episode Added** (`DateLastContentAdded`) immediately after it.
+Both choices retain show cards; Jellyfin owns the date values and ordering.
+Episode-added sorting uses the normal server-paged item request, with no local
+episode fetching or sorting. Other surfaces retain **Date Added** and do not
+offer episode-added sorting.
+
+These TV choices apply when `collectionType` is `tvshows`, or when it is absent
+and `includeItemTypes` is `Series`. Collection and playlist surfaces are excluded.
+The active button and restored selections use the same context-specific labels
+as the menu. Existing `DateCreated` preferences retain their saved identifier and
+direction; episode-added preferences use `DateLastContentAdded`. An episode-added
+selection supplied or restored on an unsupported surface falls back to Title.
+Both date choices disable letter navigation, and changing to either clears the
+active letter bucket. Episode-added selection and direction persist per account
+and library through the existing view-state store.
+
+The Browse By button widens from 190 to 300 pixels for either TV date choice.
+Its label and background share the wider size. The page keeps the sort-direction
+button anchored at the right edge and moves Browse By left, adjusting the heading
+space to avoid overlap. Other selections return to the standard 190-pixel width,
+including the generic Date Added choice outside TV libraries.
+
+RTA coverage in `tests/automation/specs/tv-library-sort.spec.mjs` exercises both
+TV date options in ascending and descending order, comparing every rendered item
+ID across all pages with an independent read-only Jellyfin query. Separate cases
+cover restoration after app relaunch, clearing an active letter filter, full-label
+rendering without ellipsis, control/heading spacing, and shrinking back to Title.
+Screenshots capture the wide labels and restored standard button.
+
+The scenarios use the configured `TV_LIBRARY` and authenticated session, require
+a nonempty library with an alphabetic sort name, and restore Title ascending after
+each case. Keep library contents unchanged while comparing paginated results.
+The existing resolution runner can exercise the same scenarios at each supported
+resolution. Adding these scenarios does not imply they have been run.
 
 Changing Browse By selects the new option's semantic sort key and resets its
 direction to ascending. The committed selection synchronizes both controls and
