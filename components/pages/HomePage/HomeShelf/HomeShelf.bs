@@ -1,6 +1,5 @@
 import "pkg:/source/String.bs"
-import "pkg:/source/MediaState.bs"
-import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/Number.bs"
 import "pkg:/source/ResolutionProfile.bs"
 import "pkg:/source/ResolutionAssets.bs"
 
@@ -74,69 +73,6 @@ function getFocusedItemImageUrl() as string
 end function
 
 '-------------------------------------------------------------------------------
-' applyMediaStateChange
-'-------------------------------------------------------------------------------
-function applyMediaStateChange(change as object) as boolean
-    rowContent = m.top.rowContent
-    if rowContent = invalid then return false
-
-    for i = 0 to rowContent.getChildCount() - 1
-        itemNode = rowContent.getChild(i)
-        item = itemNode.raw
-        if item <> invalid and Strings.ToString(item.Id) = Strings.ToString(change.itemId) then
-            updatedItem = cloneMediaItem(item)
-            if MediaState.ApplyToItem(updatedItem, change) <> true then return false
-            itemNode.raw = updatedItem
-            return true
-        end if
-    end for
-
-    return false
-end function
-
-'-------------------------------------------------------------------------------
-' applyPlaybackProgressChange
-'-------------------------------------------------------------------------------
-function applyPlaybackProgressChange(change as object) as boolean
-    rowContent = m.top.rowContent
-    if rowContent = invalid then return false
-
-    didApply = false
-    for i = 0 to rowContent.getChildCount() - 1
-        itemNode = rowContent.getChild(i)
-        item = itemNode.raw
-        if item <> invalid and Strings.ToString(item.Id) = Strings.ToString(change.itemId) then
-            updatedItem = cloneMediaItem(item)
-            if PlaybackProgress.ApplyChangeToItem(updatedItem, change) then
-                itemNode.raw = updatedItem
-                didApply = true
-            end if
-        end if
-    end for
-
-    return didApply
-end function
-
-'-------------------------------------------------------------------------------
-' cloneMediaItem
-'-------------------------------------------------------------------------------
-function cloneMediaItem(item as object) as object
-    clone = {}
-    for each key in item
-        clone[key] = item[key]
-    end for
-
-    userData = {}
-    if item.UserData <> invalid then
-        for each key in item.UserData
-            userData[key] = item.UserData[key]
-        end for
-    end if
-    clone.UserData = userData
-    return clone
-end function
-
-'-------------------------------------------------------------------------------
 ' onFocusExitAvailabilityChanged
 '-------------------------------------------------------------------------------
 sub onFocusExitAvailabilityChanged()
@@ -153,11 +89,27 @@ sub onRowContentChanged()
     rowContent = m.top.rowContent
     if rowContent = invalid then return
 
+    focusedItem = getFocusedItem()
+    position = m.items.rowItemFocused
+    targetIndex = 0
+    if position <> invalid and position.Count() > 1 then targetIndex = Number.ToInteger(position[1], 0)
+    if targetIndex < 0 then targetIndex = 0
+    if targetIndex >= rowContent.getChildCount() then targetIndex = rowContent.getChildCount() - 1
+    if focusedItem <> invalid then
+        for i = 0 to rowContent.getChildCount() - 1
+            if Strings.ToString(rowContent.getChild(i).raw.Id) = Strings.ToString(focusedItem.Id) then
+                targetIndex = i
+                exit for
+            end if
+        end for
+    end if
+
     m.titleLabel.text = rowContent.title
 
     content = CreateObject("roSGNode", "ContentNode")
     content.appendChild(rowContent)
     m.items.content = content
+    if targetIndex >= 0 then m.items.jumpToRowItem = [0, targetIndex]
 end sub
 
 '-------------------------------------------------------------------------------

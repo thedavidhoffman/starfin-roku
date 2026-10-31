@@ -1,0 +1,36 @@
+import "pkg:/source/Number.bs"
+
+namespace HomeRefresh
+
+    '---------------------------------------------------------------------------
+    ' HomeRefresh.Create
+    '---------------------------------------------------------------------------
+    function Create() as object
+        return { active: false, loaded: false, revision: 1, required: {}, applied: {}, attempted: {}, patches: {}, pendingReports: {}, failedReports: {} }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HomeRefresh.Require
+    '---------------------------------------------------------------------------
+    sub Require(state as object, section as string)
+        state.required[section] = state.revision
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' HomeRefresh.Accept
+    '---------------------------------------------------------------------------
+    sub Accept(state as object, section as string, revision as dynamic)
+        state.applied[section] = Number.ToInteger(revision, 0)
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' HomeRefresh.NeedsRefresh
+    '---------------------------------------------------------------------------
+    function NeedsRefresh(state as object, section as string, includeAttempted = false as boolean) as boolean
+        required = Number.ToInteger(state.required[section], 0)
+        if required <= Number.ToInteger(state.applied[section], 0) then return false
+        if section = "continueListening" and (state.pendingReports.Count() > 0 or state.failedReports.Count() > 0) then return false
+        return includeAttempted or required > Number.ToInteger(state.attempted[section], 0)
+    end function
+
+end namespace

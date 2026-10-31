@@ -51,6 +51,51 @@ namespace tests
 
         @describe("focus and selection")
 
+        @it("retains the selected item when replacement content reorders it")
+        function _()
+            m.top.rowContent = m.createItemsRow(["first", "selected", "last"])
+            m.top.findNode("items").rowItemFocused = [0, 1]
+
+            m.top.rowContent = m.createItemsRow(["selected", "first", "last"])
+
+            m.assertEqual(m.top.findNode("items").jumpToRowItem, [0, 0])
+        end function
+
+        @it("uses the nearest valid index when the selected item is removed")
+        function _()
+            m.top.rowContent = m.createItemsRow(["first", "second", "selected"])
+            m.top.findNode("items").rowItemFocused = [0, 2]
+
+            m.top.rowContent = m.createItemsRow(["first", "second"])
+
+            m.assertEqual(m.top.findNode("items").jumpToRowItem, [0, 1])
+        end function
+
+        @it("does not acquire focus when replacing content under another surface")
+        function _()
+            m.top.rowContent = m.createItemsRow(["first", "selected"])
+            m.top.findNode("items").rowItemFocused = [0, 1]
+            other = CreateObject("roSGNode", "Group")
+            m.top.getScene().appendChild(other)
+            other.setFocus(true)
+
+            m.top.rowContent = m.createItemsRow(["selected", "first"])
+
+            retainedFocus = other.hasFocus()
+            m.top.getScene().removeChild(other)
+            m.assertTrue(retainedFocus)
+            m.assertEqual(m.top.findNode("items").jumpToRowItem, [0, 0])
+        end function
+
+        function createItemsRow(ids as object) as object
+            row = CreateObject("roSGNode", "ContentNode")
+            for each id in ids
+                child = row.createChild("ContentNode")
+                child.AddFields({ raw: { Id: id } })
+            end for
+            return row
+        end function
+
         @it("activates the row list")
         function _()
             m.top.callFunc("activate")
@@ -129,26 +174,6 @@ namespace tests
 
             m.assertFalse(m.top.findNode("items").canFocusExitUp)
             m.assertFalse(m.top.findNode("items").canFocusExitDown)
-        end function
-
-        @describe("media state updates")
-
-        @it("returns false for a media state change without row content")
-        function _()
-            m.top.rowContent = invalid
-
-            changed = m.top.callFunc("applyMediaStateChange", { itemId: "item-1", action: "MarkAsWatched" })
-
-            m.assertFalse(changed)
-        end function
-
-        @it("returns false for playback progress on an unknown item")
-        function _()
-            m.top.rowContent = m.createRow()
-
-            changed = m.top.callFunc("applyPlaybackProgressChange", { itemId: "missing", positionTicks: 20 })
-
-            m.assertFalse(changed)
         end function
 
         function createRow() as object

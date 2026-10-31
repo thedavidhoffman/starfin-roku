@@ -105,7 +105,7 @@ export async function shelfItem(environment, group, id, type) {
   }, `${type ?? id} on ${group}`, 45000);
 }
 
-async function focusHomeItem(environment, rowKey, id) {
+export async function focusHomeItem(environment, rowKey, id) {
   await environment.odc.callFunc({ base: 'scene', keyPath: '#homePage', funcName: 'focusHome' });
   const shelfCount = await value(environment, '#shelvesGroup.getChildCount()');
   let control;

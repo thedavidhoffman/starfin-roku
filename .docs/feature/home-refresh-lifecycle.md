@@ -1,9 +1,29 @@
 # Home Refresh Lifecycle
 
+The Home lifecycle RTA coverage includes a controlled HTTP fixture for blocking
+refresh failure. It holds both core responses, fails Continue Watching with HTTP
+503, and releases Next Up separately to check loading, error presentation, and
+usable shelf focus after acknowledgment. Only Home's temporary load request uses
+the fixture; cleanup restores that request and closes the server. The Roku must
+be able to reach the test runner's local address and ephemeral HTTP port.
+
 Home data loads use a generation and account-session identity so only the
 current refresh may update shelves, loading state, or focus. Every full or
 playback-row refresh invalidates the prior generation and cancels its owned
 Task nodes before creating a fresh bounded set of one-shot tasks.
+
+A return refresh carries unfinished work and sections affected by mutations into
+its new generation. It reloads only sections with outstanding requirements,
+including affected Recently Added libraries.
+Watched changes and video playback progress invalidate all eligible non-music
+Recently Added libraries because change events do not identify the owning library.
+This also covers items absent from the retained snapshots (including empty shelves)
+and episodes grouped into show cards. Jellyfin determines membership on reload;
+marking a hidden movie unwatched can therefore bring it back without a full Home refresh.
+Completed rows stay rendered. Restarted core requests participate in completion,
+while Recently Added retains its existing background-loading behavior. Repeated
+refreshes replace the pending work again; superseded responses remain ineligible
+to commit.
 
 Each task receives `homeQueryId` and `homeSessionKey` in its private request
 snapshot. Response handlers verify the task is still the action's owned node and
@@ -25,9 +45,14 @@ matching active account through the same path as declarative task nodes.
 
 ## Focus during refreshes
 
-Background responses rebuild Home shelves without taking focus from Settings,
-the header, another page, or another dialog. A rebuild restores shelf focus only
-when Home owned focus before the old shelf nodes were removed and remains visible.
+Background responses reconcile Home shelves by row key. Unchanged shelves and
+their content remain attached, retaining native item focus and dialog return
+references. Added rows update layout and navigation indices without replacing
+unrelated shelves. Changed rows retain the selected item by ID, or the nearest
+valid item index when it disappears. If a whole row disappears, Home uses the
+nearest remaining shelf, or focuses Home itself when no shelves remain.
+Responses never take focus from Settings, the header, another page, or a dialog.
+Shelf focus is restored only when Home already owned focus and remains visible.
 Initial navigation explicitly focuses Home, so arriving rows still receive focus
 when the user stays on Home.
 
@@ -35,6 +60,48 @@ A blocking refresh takes Home focus when it starts, then restores shelf focus on
 completion only if Home still owns it. Opening Settings during that refresh leaves
 Settings focused when the final response arrives. Explicit navigation back to Home
 continues to use `focusHome`.
+
+Home owns refresh requirements, mutation revisions, and account-scoped raw section
+items. MainScene forwards navigation and normalized changes; it no longer owns a
+playback-row dirty flag. Successful watched, favorite, and playback changes update
+every retained occurrence, including Recently Added. Next Up is a derived view of
+its unfiltered section and Continue Watching, rather than a separately writable cache.
+
+Each section request captures the current mutation revision. Completion acknowledges
+only that revision, so changes made after launch remain pending. Older snapshots
+receive newer local field changes before rendering. Series/season mutations refresh
+server-derived video shelf data and counts rather than inventing aggregate totals.
+
+Activation loads initial content or refreshes pending sections. Departure explicitly
+marks Home inactive and suppresses errors; late responses may update retained data
+but cannot reopen Home or focus it. Account replacement clears account-specific state
+and invalidates all owned requests. Pending work is carried into superseding refreshes.
+Failed sections retain their previous content and remain pending for the next activation;
+they do not spin in an automatic retry loop. Newer mutations can trigger follow-up work.
+
+One completion path releases loading, establishes visibility and valid shelf focus,
+and then publishes aggregated errors. This ensures acknowledgment returns to a usable
+card. Blocking refreshes retain loading until core work settles; nonblocking initial
+loads release it once usable rows appear. Readiness resets on each core load, and
+MainScene ignores false readiness notifications. Immediate layout corrections and
+full clears stop obsolete shelf animations.
+
+## Home item selection
+
+OK on an On Now program plays its `ChannelId` through the existing live-channel
+player and returns to Home. Programs without a channel ID do not launch a player.
+OK on Continue Listening resumes that individual audio item through AudioPlayer;
+it does not load an album queue. Music videos launch the existing video player
+with item-detail hydration. Ordinary library and album selections retain their
+existing routes. Opening a photo from Home uses the same hide/suppress lifecycle
+as other departures, preventing late Home error messages over the viewer.
+
+Each refresh tracks whether it owns Home's loading spinner. A nonblocking refresh
+releases it on usable rows or empty completion; a blocking refresh releases it only
+when its required core work settles. Leaving
+Home relinquishes it through the existing navigation suppression path, so late
+core or Recently Added responses cannot hide another page's spinner. A new
+blocking playback refresh acquires its own loading state.
 
 The direct Settings automation helper waits for initial Home readiness before
 opening its category, matching the system-menu helper. Focus assertions remain in
@@ -144,3 +211,8 @@ settings are listed from `SettingsStore.AccountKeys()` so new preferences are
 included automatically. Device-wide streaming and subtitle burn-in settings
 appear once under Global Application Registry. Coverage checks every defined
 setting appears exactly once in the correct scope, including effective defaults.
+
+Standalone audiobook playback preserves the Jellyfin `AudioBook` type through Home
+selection, playback reporting, and Continue Listening reconciliation. Jellyfin decides
+resume eligibility: ordinary music `Audio` tracks do not retain bookmarks on 10.11.11.
+Audiobook bookmarks must fall within the server-configured resume thresholds.

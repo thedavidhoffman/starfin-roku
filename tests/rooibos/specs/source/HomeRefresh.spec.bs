@@ -1,0 +1,65 @@
+import "pkg:/source/HomeRefresh.bs"
+
+namespace tests
+
+    @suite("Home refresh revisions")
+    class HomeRefreshTests extends rooibos.BaseTestSuite
+
+        @describe("acknowledgment boundaries")
+
+        @it("an older completion cannot acknowledge a newer mutation")
+        function _()
+            state = HomeRefresh.Create()
+            HomeRefresh.Require(state, "nextUp")
+            captured = state.revision
+            state.revision++
+            HomeRefresh.Require(state, "nextUp")
+
+            HomeRefresh.Accept(state, "nextUp", captured)
+
+            m.assertTrue(HomeRefresh.NeedsRefresh(state, "nextUp"))
+        end function
+
+        @it("a successful current snapshot acknowledges its section")
+        function _()
+            state = HomeRefresh.Create()
+            HomeRefresh.Require(state, "nextUp")
+
+            HomeRefresh.Accept(state, "nextUp", state.revision)
+
+            m.assertFalse(HomeRefresh.NeedsRefresh(state, "nextUp", true))
+        end function
+
+        @it("failed attempted work waits for the next activation")
+        function _()
+            state = HomeRefresh.Create()
+            HomeRefresh.Require(state, "nextUp")
+            state.attempted.nextUp = state.revision
+
+            m.assertFalse(HomeRefresh.NeedsRefresh(state, "nextUp"))
+            m.assertTrue(HomeRefresh.NeedsRefresh(state, "nextUp", true))
+        end function
+
+        @it("pending audio writes block only the listening section")
+        function _()
+            state = HomeRefresh.Create()
+            HomeRefresh.Require(state, "continueListening")
+            HomeRefresh.Require(state, "nextUp")
+            state.pendingReports.one = true
+
+            m.assertFalse(HomeRefresh.NeedsRefresh(state, "continueListening", true))
+            m.assertTrue(HomeRefresh.NeedsRefresh(state, "nextUp"))
+        end function
+
+        @it("failed audio writes block a premature server rollback")
+        function _()
+            state = HomeRefresh.Create()
+            HomeRefresh.Require(state, "continueListening")
+            state.failedReports.one = true
+
+            m.assertFalse(HomeRefresh.NeedsRefresh(state, "continueListening", true))
+        end function
+
+    end class
+
+end namespace

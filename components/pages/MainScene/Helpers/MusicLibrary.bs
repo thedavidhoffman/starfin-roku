@@ -202,10 +202,12 @@ sub musicAudioPlayerShow(selection as dynamic, origin as object)
     themeAudioStop()
     page = CreateObject("roSGNode", "AudioPlayer")
     page.observeField("closeRequested", "musicAudioPlayerHandleCloseRequested")
+    page.reporter = m.audioPlaybackReporter
     page.loadRequest = {
         server: m.session.server
         token: m.session.token
         userId: m.session.userId
+        accountKey: m.session.accountKey
         albumId: selection.itemId
         item: selection.item
         settings: m.settings
@@ -280,4 +282,15 @@ sub musicLibraryHandleCloseRequested()
     end if
 
     showHome()
+end sub
+
+'-------------------------------------------------------------------------------
+' musicHandleAudioReportChanged
+'-------------------------------------------------------------------------------
+sub musicHandleAudioReportChanged()
+    change = m.audioPlaybackReporter.mediaChange
+    if change = invalid or m.session = invalid then return
+    if change.accountKey <> m.session.accountKey or change.server <> m.session.server or change.userId <> m.session.userId then return
+    m.homePage.callFunc("recordMediaChange", change)
+    if change.reportState = Playstate.Report.Failed and m.authenticatedContent.visible then AppMessage.Show("Unable to save listening progress. Your last listening position may not have been saved.")
 end sub

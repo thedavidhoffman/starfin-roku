@@ -166,6 +166,33 @@ namespace tests
             m.assertEqual(m.node.top.response.itemId, "item")
         end function
 
+        @it("returns direct audio reporting metadata")
+        function _()
+            m.node.top.request = { server: "https://server", token: "token", userId: "user", itemId: "track" }
+            m.stubCall(HttpClient.Request, { ok: true, data: { PlaySessionId: "session-1", MediaSources: [{ Id: "source-1", Container: "mp3" }] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertEqual(m.node.top.response.playSessionId, "session-1")
+            m.assertEqual(m.node.top.response.mediaSourceId, "source-1")
+            m.assertEqual(m.node.top.response.playMethod, "DirectPlay")
+            m.assertTrue(m.node.top.response.canSeek)
+        end function
+
+        @it("returns transcoded audio reporting metadata")
+        function _()
+            m.node.top.request = { server: "https://server", token: "token", userId: "user", itemId: "track" }
+            m.stubCall(HttpClient.Request, { ok: true, data: { PlaySessionId: "session-2", MediaSources: [{ Id: "source-2", TranscodingUrl: "/audio/master.m3u8" }] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertEqual(m.node.top.response.playSessionId, "session-2")
+            m.assertEqual(m.node.top.response.mediaSourceId, "source-2")
+            m.assertEqual(m.node.top.response.playMethod, "Transcode")
+        end function
+
         @it("echoes the generation when the server returns no playable source")
         function _()
             m.node.top.request = { requestId: 44, server: "https://server", token: "token", itemId: "item" }

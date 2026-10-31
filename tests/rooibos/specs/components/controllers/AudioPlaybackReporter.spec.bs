@@ -1,0 +1,234 @@
+namespace tests
+
+    @SGNode("AudioPlaybackReporter")
+    @suite("Audio reporting lifecycle")
+    class AudioPlaybackReporterTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.reporter = CreateObject("roSGNode", "AudioPlaybackReporterTestHarness")
+            m.top.appendChild(m.reporter)
+            m.id = m.reporter.callFunc("beginSession", { server: "http://server", token: "token", userId: "user", accountKey: "account", itemId: "track", playSessionId: "play", mediaSourceId: "source" })
+        end function
+
+        protected override function afterEach()
+            m.top.removeChild(m.reporter)
+            if m.dispatchTasks <> invalid then
+                for each task in m.dispatchTasks
+                    m.top.removeChild(task)
+                end for
+            end if
+            m.dispatchTasks = invalid
+        end function
+
+        @describe("production task dispatch")
+
+        @it("alternates task nodes while retaining ordered start update and stop requests")
+        function _()
+            id = m.prepareDispatch()
+            m.top.callFunc("report", id, "start", 0.0, 100.0)
+            firstId = m.dispatchTasks[0].request.requestId
+            m.top.callFunc("report", id, "update", 10.0, 100.0)
+            m.top.callFunc("report", id, "stop", 20.0, 100.0)
+
+            m.assertEqual(m.dispatchTasks[0].control, "run")
+            m.assertEqual(m.dispatchTasks[0].request.status, "start")
+            m.assertEqual(m.dispatchTasks[1].control, "")
+            m.completeDispatch(firstId)
+            m.assertEqual(m.dispatchTasks[1].control, "run")
+            m.assertEqual(m.dispatchTasks[1].request.status, "update")
+            m.assertEqual(m.dispatchTasks[0].request.requestId, firstId)
+            m.completeDispatch(m.dispatchTasks[1].request.requestId)
+            m.assertEqual(m.dispatchTasks[0].request.status, "stop")
+            m.assertEqual(m.dispatchTasks[0].request.position, 20.0)
+            m.assertNotEqual(m.dispatchTasks[0].request.requestId, firstId)
+            m.completeDispatch(m.dispatchTasks[0].request.requestId)
+            m.assertEqual(m.top.mediaChange.reportState, "saved")
+        end function
+
+        @it("dispatches a terminal retry on the other task with a fresh response identity")
+        function _()
+            id = m.prepareDispatch()
+            m.top.callFunc("report", id, "start", 0.0, 100.0)
+            m.top.callFunc("report", id, "stop", 20.0, 100.0)
+            m.completeDispatch(m.dispatchTasks[0].request.requestId)
+            stoppedId = m.dispatchTasks[1].request.requestId
+
+            m.completeDispatch(stoppedId, false)
+
+            retry = m.dispatchTasks[0].request
+            m.assertEqual(retry.status, "stop")
+            m.assertEqual(retry.position, 20.0)
+            m.assertEqual(retry.attempt, 1)
+            m.assertNotEqual(retry.requestId, stoppedId)
+            m.assertEqual(m.top.mediaChange.reportState, "pending")
+            m.completeDispatch(stoppedId)
+            m.assertEqual(m.top.mediaChange.reportState, "pending")
+            m.completeDispatch(retry.requestId)
+            m.assertEqual(m.top.mediaChange.reportState, "saved")
+        end function
+
+        @it("dispatches captured credentials without the account-key authentication shortcut")
+        function _()
+            id = m.prepareDispatch()
+            m.top.callFunc("report", id, "start", 0.0, 100.0)
+
+            request = m.dispatchTasks[0].request
+            m.assertEqual(request.server, "http://server")
+            m.assertEqual(request.token, "captured-token")
+            m.assertEqual(request.userId, "user")
+            m.assertFalse(request.DoesExist("accountKey"))
+            m.assertEqual(request.timeoutMs, 10000)
+            m.top.callFunc("report", id, "stop", 20.0, 100.0)
+            m.assertEqual(m.top.mediaChange.accountKey, "account")
+        end function
+
+        function prepareDispatch() as string
+            m.dispatchTasks = []
+            for i = 0 to 1
+                task = CreateObject("roSGNode", "Group")
+                task.addFields({ request: {}, control: "" })
+                m.top.appendChild(task)
+                m.dispatchTasks.Push(task)
+            end for
+            ' Replace only the network boundary; production dispatch remains intact.
+            m.node.reporting = { sequence: 0, sessions: {}, queue: [], active: invalid, nextIndex: 0, tasks: m.dispatchTasks }
+            return m.top.callFunc("beginSession", { server: "http://server", token: "captured-token", userId: "user", accountKey: "account", itemId: "track" })
+        end function
+
+        sub completeDispatch(requestId as integer, ok = true as boolean)
+            event = { response: { ok: ok, requestId: requestId }, getData: function()
+                return m.response
+            end function }
+            'bs:disable-next-line 1140
+            onReportResponse(event)
+        end sub
+
+        @describe("ordered writes")
+
+        @it("sends the captured session metadata with start")
+        function _()
+            m.reporter.callFunc("report", m.id, "start", 12.0, 100.0)
+
+            request = m.reporter.sent[0]
+            m.assertEqual(request.position, 12.0)
+            m.assertEqual(request.playSessionId, "play")
+            m.assertEqual(request.mediaSourceId, "source")
+            m.assertEqual(request.timeoutMs, 10000)
+        end function
+
+        @it("preserves audiobook identity in pending and saved outcomes")
+        function _()
+            id = m.reporter.callFunc("beginSession", { server: "http://server", userId: "user", itemId: "book", itemType: "AudioBook" })
+            m.reporter.callFunc("report", id, "start", 120.0, 3600.0)
+            m.assertEqual(m.reporter.sent[0].itemType, "AudioBook")
+            m.reporter.callFunc("report", id, "stop", 140.0, 3600.0)
+            m.assertEqual(m.reporter.mediaChange.itemType, "AudioBook")
+
+            m.reporter.callFunc("respond", true)
+            m.reporter.callFunc("respond", true)
+
+            m.assertEqual(m.reporter.mediaChange.reportState, "saved")
+            m.assertEqual(m.reporter.mediaChange.itemType, "AudioBook")
+        end function
+
+        @it("coalesces progress while preserving the terminal write")
+        function _()
+            m.reporter.callFunc("report", m.id, "start", 0.0, 100.0)
+            m.reporter.callFunc("report", m.id, "update", 10.0, 100.0)
+            m.reporter.callFunc("report", m.id, "update", 20.0, 100.0)
+            m.reporter.callFunc("report", m.id, "stop", 30.0, 100.0)
+
+            m.reporter.callFunc("respond", true)
+            m.assertEqual(m.reporter.sent[1].position, 20.0)
+            m.reporter.callFunc("respond", true)
+            m.assertEqual(m.reporter.sent[2].status, "stop")
+            m.assertEqual(m.reporter.sent[2].position, 30.0)
+        end function
+
+        @it("publishes pending before saved and keeps the final snapshot")
+        function _()
+            m.reporter.callFunc("report", m.id, "start", 0.0, 100.0)
+            m.reporter.callFunc("report", m.id, "stop", 100.0, 100.0, true)
+            m.assertEqual(m.reporter.mediaChange.reportState, "pending")
+
+            m.reporter.callFunc("respond", true)
+            m.reporter.callFunc("respond", true)
+
+            m.assertEqual(m.reporter.mediaChange.reportState, "saved")
+            m.assertTrue(m.reporter.mediaChange.isFinished)
+            m.assertEqual(m.reporter.mediaChange.accountKey, "account")
+        end function
+
+        @it("ignores repeated stop commands")
+        function _()
+            m.reporter.callFunc("report", m.id, "start", 0.0, 100.0)
+            m.reporter.callFunc("report", m.id, "stop", 30.0, 100.0)
+            m.reporter.callFunc("report", m.id, "stop", 0.0, 100.0)
+            m.reporter.callFunc("respond", true)
+            m.reporter.callFunc("respond", true)
+
+            m.assertEqual(m.reporter.sent.Count(), 2)
+            m.assertEqual(m.reporter.sent[1].position, 30.0)
+        end function
+
+        @it("preserves stop before the next track start")
+        function _()
+            m.reporter.callFunc("report", m.id, "start", 0.0, 100.0)
+            m.reporter.callFunc("report", m.id, "stop", 30.0, 100.0)
+            second = m.reporter.callFunc("beginSession", { server: "http://server", token: "next", userId: "other", accountKey: "other", itemId: "second" })
+            m.reporter.callFunc("report", second, "start", 0.0, 50.0)
+
+            m.reporter.callFunc("respond", true)
+            m.assertEqual(m.reporter.sent[1].status, "stop")
+            m.reporter.callFunc("respond", true)
+            m.assertEqual(m.reporter.sent[2].itemId, "second")
+            m.assertEqual(m.reporter.sent[1].token, "token")
+            m.assertEqual(m.reporter.sent[2].token, "next")
+        end function
+
+        @describe("failures and correlation")
+
+        @it("retries a terminal failure once then publishes failure")
+        function _()
+            m.reporter.callFunc("report", m.id, "start", 0.0, 100.0)
+            m.reporter.callFunc("report", m.id, "stop", 30.0, 100.0)
+            m.reporter.callFunc("respond", true)
+
+            m.reporter.callFunc("respond", false)
+            m.assertEqual(m.reporter.sent.Count(), 3)
+            m.assertEqual(m.reporter.mediaChange.reportState, "pending")
+            m.reporter.callFunc("respond", false)
+
+            m.assertEqual(m.reporter.sent.Count(), 3)
+            m.assertEqual(m.reporter.mediaChange.reportState, "failed")
+        end function
+
+        @it("rejects a duplicate response from before the terminal retry")
+        function _()
+            m.reporter.callFunc("report", m.id, "start", 0.0, 100.0)
+            m.reporter.callFunc("report", m.id, "stop", 30.0, 100.0)
+            m.reporter.callFunc("respond", true)
+            oldId = m.reporter.sent[1].requestId
+            m.reporter.callFunc("respond", false)
+
+            m.reporter.callFunc("respond", true, oldId)
+
+            m.assertEqual(m.reporter.mediaChange.reportState, "pending")
+            m.reporter.callFunc("respond", true)
+            m.assertEqual(m.reporter.mediaChange.reportState, "saved")
+        end function
+
+        @it("does not retry a periodic update failure")
+        function _()
+            m.reporter.callFunc("report", m.id, "start", 0.0, 100.0)
+            m.reporter.callFunc("report", m.id, "update", 30.0, 100.0)
+            m.reporter.callFunc("respond", true)
+
+            m.reporter.callFunc("respond", false)
+
+            m.assertEqual(m.reporter.sent.Count(), 2)
+        end function
+
+    end class
+
+end namespace

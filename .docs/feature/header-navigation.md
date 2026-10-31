@@ -43,7 +43,10 @@ The dialog offers Cancel and Exit, with Exit focused initially. Left and Right
 move between the buttons. Cancel or Back closes the dialog and restores focus to
 the Home item or header button that opened it. If Home rebuilt the originating
 shelf while the dialog was open, its existing focusHome path restores available
-Home focus. Exit signals MainScene.closeRequested; the existing main loop closes
+Home focus. Restoration checks the saved node's current parent chain through its
+original owner to MainScene: Roku can retain a valid `getScene()` on a detached
+shelf, so that value alone does not establish that the node is still attached.
+Exit signals MainScene.closeRequested; the existing main loop closes
 the screen and ends the app. Back behavior on other pages and dialogs is unchanged.
 MainScene owns exit routing; the dialog and content
 own confirmation presentation and selection.

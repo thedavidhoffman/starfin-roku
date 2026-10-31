@@ -73,6 +73,10 @@
 
 ## Repeated fixes and workflow design
 
+- Treat successive code reviews that keep uncovering related issues in the same feature or workflow as a signal to reassess implementation cohesion. Proactively identify this pattern; do not wait for the user to suggest a refactor.
+- Before continuing with isolated fixes, determine whether the findings are independent bugs or share a structural cause, such as fragmented state ownership, competing writers, duplicated transitions, or bypassed canonical paths.
+- When a shared structural cause is evident, recommend a bounded refactor alongside the findings. Explain the evidence, proposed ownership and transition changes, scope, tradeoffs, and workflow-level regression coverage. Do not recommend refactoring solely because a file is large or several unrelated bugs exist.
+- Avoid an indefinite patch-and-review loop. Establish explicit behavioral acceptance criteria and coverage for interactions between components; distinguish source-review conclusions from runtime verification.
 - Give each function one coherent responsibility, and name it for that responsibility. Separate distinct operations—such as loading editor data versus saving account changes—when combining them obscures their behavior or failure handling.
 - Apply this proportionally. A function may contain substantial logic, branching, validation, and multiple steps needed to complete one task. Length, multiple API calls, or several side effects alone do not justify splitting it.
 - Extract helpers when they clarify a meaningful operation, isolate reused logic, or make orchestration easier to follow. Avoid trivial wrappers, one-use objects for fixed values, and fragmentation that forces readers to jump between functions to understand a straightforward operation.

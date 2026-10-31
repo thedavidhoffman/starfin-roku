@@ -7,6 +7,49 @@ namespace tests
     @suite("AudioPlayer screensaver lifecycle")
     class AudioPlayerScreensaverTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.node.top = m.top
+        end function
+
+        protected override function afterEach()
+            m.node.top = m.top
+        end function
+
+        @describe("standalone audio selection")
+
+        @it("resumes a standalone Continue Listening item without requesting album tracks")
+        function _()
+            m.configureSelection()
+            m.top.loadRequest = { server: "https://server", token: "fresh", userId: "user", albumId: "track", item: { Id: "track", Name: "Track", Type: "Audio", UserData: { PlaybackPositionTicks: 120000000 } }, settings: SettingsStore.Defaults() }
+
+            m.assertEqual(m.node.playerState.tracks.Count(), 1)
+            m.assertEqual(m.node.playerState.tracks[0].Id, "track")
+            m.assertEqual(m.node.playerState.currentIndex, 0)
+            m.assertEqual(m.node.playerState.restartPosition, 12.0)
+            m.assertInvalid(m.node.playerState.tracksLoad.lifecycle.active)
+        end function
+
+        @it("resumes a standalone audiobook without requesting album tracks")
+        function _()
+            m.configureSelection()
+            m.top.loadRequest = { server: "https://server", token: "fresh", userId: "user", albumId: "track", item: { Id: "track", Name: "Track", Type: "AudioBook", UserData: { PlaybackPositionTicks: 120000000 } }, settings: SettingsStore.Defaults() }
+
+            m.assertEqual(m.node.playerState.tracks.Count(), 1)
+            m.assertEqual(m.node.playerState.tracks[0].Id, "track")
+            m.assertEqual(m.node.playerState.currentIndex, 0)
+            m.assertEqual(m.node.playerState.restartPosition, 12.0)
+            m.assertInvalid(m.node.playerState.tracksLoad.lifecycle.active)
+        end function
+
+        @it("starts an audio item without saved progress at zero")
+        function _()
+            m.configureSelection()
+            m.top.loadRequest = { server: "https://server", token: "fresh", userId: "user", albumId: "new-track", item: { Id: "new-track", Name: "Track", Type: "Audio" }, settings: SettingsStore.Defaults() }
+
+            m.assertEqual(m.node.playerState.restartPosition, 0.0)
+            m.assertEqual(m.node.playerState.tracks[0].Id, "new-track")
+        end function
+
         @describe("background composition")
 
         @it("shows the scene background beneath album art and dimming")
@@ -571,6 +614,140 @@ namespace tests
             handled = onKeyEvent("BACK", true)
 
             m.assertFalse(handled)
+        end function
+
+        @describe("track reporting integration")
+
+        @it("closing playback retains its final report outside the player")
+        function _()
+            reporter = m.startReportedTrack()
+            m.assertNotInvalid(reporter.sent)
+            m.assertEqual(reporter.sent.Count(), 1)
+            m.node.playerState.lastPosition = 42.0
+
+            m.top.callFunc("deactivate")
+            m.assertNotInvalid(reporter.mediaChange)
+            m.assertEqual(reporter.mediaChange.reportState, "pending")
+            reporter.callFunc("respond", true)
+
+            m.assertEqual(reporter.sent[1].status, "stop")
+            m.assertEqual(reporter.sent[1].position, 42.0)
+            m.assertEqual(m.node.audioReporting.id, "")
+            reporter.callFunc("respond", true)
+            m.assertEqual(reporter.mediaChange.reportState, "saved")
+            m.releaseReporter(reporter)
+        end function
+
+        @it("track completion saves its duration before advancing")
+        function _()
+            reporter = m.startReportedTrack()
+            m.node.player.state = "finished"
+
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+            reporter.callFunc("respond", true)
+
+            m.assertEqual(reporter.sent[1].position, 100.0)
+            m.assertTrue(reporter.mediaChange.isFinished)
+            m.assertEqual(m.node.playerState.currentIndex, 1)
+            m.releaseReporter(reporter)
+        end function
+
+        @it("skipping a track reports the interrupted track identity")
+        function _()
+            reporter = m.startReportedTrack()
+            m.node.playerState.lastPosition = 20.0
+
+            'bs:disable-next-line 1140
+            playNext()
+            reporter.callFunc("respond", true)
+
+            m.assertEqual(reporter.sent[1].itemId, "track-1")
+            m.assertEqual(reporter.sent[1].position, 20.0)
+            m.assertEqual(m.node.playerState.currentIndex, 1)
+            m.releaseReporter(reporter)
+        end function
+
+        @it("pause sends an update without ending the reporting session")
+        function _()
+            reporter = m.startReportedTrack()
+            reporter.callFunc("respond", true)
+            m.node.player.state = "paused"
+            m.node.playerState.lastPosition = 25.0
+
+            'bs:disable-next-line 1140
+            onPlayerStateChanged()
+
+            m.assertEqual(reporter.sent[1].status, "update")
+            m.assertTrue(reporter.sent[1].isPaused)
+            m.assertNotEqual(m.node.audioReporting.id, "")
+            m.releaseReporter(reporter)
+        end function
+
+        @it("periodic reporting uses the current track position")
+        function _()
+            reporter = m.startReportedTrack()
+            reporter.callFunc("respond", true)
+            m.node.playerState.lastPosition = 31.0
+
+            'bs:disable-next-line 1140
+            onAudioReportTimer()
+
+            m.assertEqual(reporter.sent[1].status, "update")
+            m.assertEqual(reporter.sent[1].position, 31.0)
+            m.releaseReporter(reporter)
+        end function
+
+        @it("reports a seek only when playback reaches the requested position")
+        function _()
+            reporter = m.startReportedTrack()
+            reporter.callFunc("respond", true)
+            m.node.audioReporting.seekTarget = 40.0
+            m.node.player.position = 20.0
+
+            'bs:disable-next-line 1140
+            onPlaybackProgressChanged()
+            m.assertEqual(reporter.sent.Count(), 1)
+
+            m.node.player.position = 40.0
+            'bs:disable-next-line 1140
+            onPlaybackProgressChanged()
+
+            m.assertEqual(reporter.sent[1].position, 40.0)
+            m.assertInvalid(m.node.audioReporting.seekTarget)
+            m.releaseReporter(reporter)
+        end function
+
+        @it("passes the audiobook type into its durable reporting session")
+        function _()
+            reporter = m.startReportedTrack("AudioBook")
+
+            m.assertEqual(reporter.sent[0].itemType, "AudioBook")
+            m.releaseReporter(reporter)
+        end function
+
+        function startReportedTrack(itemType = "Audio" as string) as object
+            m.configureSelection()
+            m.node.playerState.tracks[0].Type = itemType
+            m.node.playerState.tracks[0].RunTimeTicks = 1000000000
+            m.node.playerState.currentIndex = 0
+            m.node.playerState.request.accountKey = "account"
+            m.node.audioReporting = { id: "", resolved: { playSessionId: "session", mediaSourceId: "source", playMethod: "DirectPlay", canSeek: true }, seekTarget: invalid }
+            reporter = CreateObject("roSGNode", "AudioPlaybackReporterTestHarness")
+            m.top.getScene().appendChild(reporter)
+            m.top.reporter = reporter
+            m.node.player.state = "playing"
+            m.node.playerState.lastPosition = 0.0
+            'bs:disable-next-line 1140
+            startAudioReport()
+            return reporter
+        end function
+
+        function releaseReporter(reporter as object)
+            m.node.reportTimer.control = "stop"
+            m.top.reporter = invalid
+            m.node.audioReporting.id = ""
+            m.top.getScene().removeChild(reporter)
         end function
 
     end class

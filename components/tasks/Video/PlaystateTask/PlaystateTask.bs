@@ -1,3 +1,4 @@
+import "pkg:/source/Number.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Json.bs"
@@ -19,21 +20,28 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
+    response = performReport(request)
+    if request <> invalid then response.requestId = Number.ToInteger(request.requestId, -1)
+    m.top.response = response
+end sub
+
+'-------------------------------------------------------------------------------
+' performReport
+'-------------------------------------------------------------------------------
+function performReport(request as dynamic) as object
     validationError = TaskRequest.ValidateRequest(request, "playstate", ["itemId"])
     if validationError <> invalid then
-        m.top.response = validationError
-        return
+        return validationError
     end if
 
     endpoint = getPlaystateEndpoint(request.status)
     if endpoint = "" then
-        m.top.response = { ok: false, action: "playstate", errorMessage: "Invalid playstate status." }
-        return
+        return { ok: false, action: "playstate", errorMessage: "Invalid playstate status." }
     end if
 
     requestUrl = request.server + endpoint
     body = buildPlaystateBody(request)
-    result = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token), false)
+    result = HttpClient.Request(requestUrl, "POST", invalid, body, JellyfinAuth.BuildTokenHeaders(request.token), false, Number.ToInteger(request.timeoutMs, 60000))
     result.AddReplace("action", "playstate")
     result.AddReplace("statusName", Strings.ToString(request.status))
 
@@ -41,8 +49,8 @@ sub executeRequest()
         m.log.error("Playstate " + Strings.ToString(request.status) + " failed: " + Strings.ToString(result.errorMessage))
     end if
 
-    m.top.response = result
-end sub
+    return result
+end function
 
 
 '-------------------------------------------------------------------------------

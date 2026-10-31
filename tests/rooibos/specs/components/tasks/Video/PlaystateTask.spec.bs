@@ -4,6 +4,40 @@ namespace tests
     @suite("PlaystateTask component")
     class PlaystateTaskTests extends rooibos.BaseTestSuite
 
+        @describe("HTTP timeout forwarding")
+
+        @it("forwards the audio reporting timeout to the HTTP client")
+        function _()
+            m.captureTimeout()
+            m.top.request = { server: "http://server", token: "token", itemId: "track", status: "start", timeoutMs: 10000 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertEqual(getGlobalAa().playstateTimeout, 10000)
+            getGlobalAa().Delete("playstateTimeout")
+        end function
+
+        @it("preserves the default timeout for existing video callers")
+        function _()
+            m.captureTimeout()
+            m.top.request = { server: "http://server", token: "token", itemId: "movie", status: "update" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertEqual(getGlobalAa().playstateTimeout, 60000)
+            getGlobalAa().Delete("playstateTimeout")
+        end function
+
+        sub captureTimeout()
+            getGlobalAa().playstateTimeout = invalid
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().playstateTimeout = timeoutMs
+                return { ok: true }
+            end function)
+        end sub
+
         @describe("position conversion")
 
         @it("truncates fractional position seconds before converting to ticks")
@@ -63,6 +97,17 @@ namespace tests
             m.assertFalse(response.ok)
             m.assertEqual(response.action, "playstate")
             m.assertEqual(response.errorMessage, "Invalid playstate status.")
+        end function
+
+        @it("echoes correlation even on validation failure")
+        function _()
+            m.top.request = { requestId: 42 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 42)
         end function
 
     end class

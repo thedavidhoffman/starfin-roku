@@ -33,7 +33,10 @@ for (const surface of [
         await openLibrary(environment, environment[surface.name], surface.type);
         await selectWatch(environment, 'SortName');
       } catch (error) { failures.push(error); }
-      if (failures.length) throw new AggregateError(failures, 'Watched browse cleanup');
+      if (failures.length) {
+        const describeError = error => error.errors?.map(describeError).join('; ') ?? error.message;
+        throw new AggregateError(failures, 'Watched browse cleanup: ' + failures.map(describeError).join('; '));
+      }
     });
 
     for (const mode of ['Watched', 'Unwatched']) {

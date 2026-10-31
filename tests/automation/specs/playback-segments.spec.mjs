@@ -108,7 +108,8 @@ describe('Starfin official Intro and Outro playback', function () {
       && await value(environment, '#playbackActionButton.text') === 'Skip Credits', 'manual credits action', 15000);
     await samplePlayback(environment, 2, async () => {
       assert.equal(await value(environment, '#playbackController.0.playRequest.itemId'), fixture.episode.Id);
-      assert.equal(await value(environment, '#playbackActionButton.visible'), true);
+      assert.equal(await value(environment, '#playbackActionButton.visible'), true,
+        `Credits action vanished: state=${await value(environment, '#videoPlayer.state')}, position=${await value(environment, '#videoPlayer.position')}, seek=${await value(environment, '#videoPlayer.seek')}, end=${fixture.ranges.Outro.end}`);
     });
     await captureEvidence(this, 'outro-manual');
     await press(environment, 'Ok');
@@ -127,7 +128,8 @@ describe('Starfin official Intro and Outro playback', function () {
       && await value(environment, '#playbackActionButton.text') === 'Play Next', 'manual Play Next action', 15000);
     await samplePlayback(environment, 2, async () => {
       assert.equal(await value(environment, '#playbackController.0.playRequest.itemId'), fixture.episode.Id);
-      assert.equal(await value(environment, '#playbackActionButton.visible'), true);
+      assert.equal(await value(environment, '#playbackActionButton.visible'), true,
+        `Credits action vanished: state=${await value(environment, '#videoPlayer.state')}, position=${await value(environment, '#videoPlayer.position')}, seek=${await value(environment, '#videoPlayer.seek')}, end=${fixture.ranges.Outro.end}`);
       await assertNoUpNext();
     });
     await captureEvidence(this, 'outro-manual-play-next');
@@ -167,7 +169,8 @@ describe('Starfin official Intro and Outro playback', function () {
       && await value(environment, '#playbackActionButton.text') === 'Skip Credits', 'final-episode Skip Credits', 15000);
     await samplePlayback(environment, 2, async () => {
       assert.equal(await value(environment, '#playbackController.0.playRequest.itemId'), fixture.episode.Id);
-      assert.equal(await value(environment, '#playbackActionButton.visible'), true);
+      assert.equal(await value(environment, '#playbackActionButton.visible'), true,
+        `Credits action vanished: state=${await value(environment, '#videoPlayer.state')}, position=${await value(environment, '#videoPlayer.position')}, seek=${await value(environment, '#videoPlayer.seek')}, end=${fixture.ranges.Outro.end}`);
     });
     await captureEvidence(this, 'outro-finale-skip-credits');
     // Bound the assertion before natural completion so playing through cannot pass.

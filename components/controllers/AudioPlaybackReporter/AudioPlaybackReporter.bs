@@ -1,0 +1,131 @@
+import "pkg:/source/Playstate.bs"
+import "pkg:/source/MediaState.bs"
+import "pkg:/source/MediaItem.bs"
+import "pkg:/source/TaskControl.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.reporting = { sequence: 0, sessions: {}, queue: [], active: invalid, nextIndex: 0, tasks: [m.top.findNode("reportTask"), m.top.findNode("reportTaskAlternate")] }
+    m.reporting.tasks[0].observeField("response", "onReportResponse")
+    m.reporting.tasks[1].observeField("response", "onReportResponse")
+end sub
+
+'-------------------------------------------------------------------------------
+' beginSession
+'-------------------------------------------------------------------------------
+function beginSession(context as object) as string
+    m.reporting.sequence++
+    id = m.reporting.sequence.ToStr()
+    snapshot = {}
+    snapshot.Append(context)
+    snapshot.reportId = id
+    snapshot.started = false
+    snapshot.ended = false
+    m.reporting.sessions[id] = snapshot
+    return id
+end function
+
+'-------------------------------------------------------------------------------
+' report
+'-------------------------------------------------------------------------------
+sub report(id as string, status as string, position as float, duration as float, finished = false as boolean, paused = false as boolean)
+    session = m.reporting.sessions[id]
+    if session = invalid or session.ended then return
+    if status = Playstate.Status.Start then
+        if session.started then return
+        session.started = true
+    else if session.started <> true then
+        return
+    end if
+    if status = Playstate.Status.Stop then session.ended = true
+    request = {}
+    request.Append(session)
+    m.reporting.sequence++
+    request.requestId = m.reporting.sequence
+    request.status = status
+    request.position = position
+    request.duration = duration
+    request.isFinished = finished
+    request.isPaused = paused
+    request.timeoutMs = 10000
+    request.attempt = 0
+    if status = Playstate.Status.Update and m.reporting.queue.Count() > 0 then
+        lastIndex = m.reporting.queue.Count() - 1
+        last = m.reporting.queue[lastIndex]
+        if last.reportId = id and last.status = Playstate.Status.Update then m.reporting.queue.Delete(lastIndex)
+    end if
+    m.reporting.queue.Push(request)
+    if status = Playstate.Status.Stop then publishReportChange(request, Playstate.Report.Pending)
+    startNextReport()
+end sub
+
+'-------------------------------------------------------------------------------
+' startNextReport
+'-------------------------------------------------------------------------------
+sub startNextReport()
+    if m.reporting.active <> invalid or m.reporting.queue.Count() = 0 then return
+    m.reporting.active = m.reporting.queue.Shift()
+    startActiveReport()
+end sub
+
+'-------------------------------------------------------------------------------
+' startActiveReport
+'-------------------------------------------------------------------------------
+sub startActiveReport()
+    task = m.reporting.tasks[m.reporting.nextIndex]
+    m.reporting.nextIndex = (m.reporting.nextIndex + 1) mod 2
+    request = {}
+    request.Append(m.reporting.active)
+    ' Durable writes may outlive login; correlate authentication failures by token.
+    request.Delete("accountKey")
+    task.request = request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onReportResponse
+'-------------------------------------------------------------------------------
+sub onReportResponse(event as object)
+    response = event.getData()
+    request = m.reporting.active
+    if request = invalid or response = invalid then return
+    if Number.ToInteger(response.requestId, -1) <> request.requestId then return
+    if request.status = Playstate.Status.Stop then
+        if response.ok <> true and request.attempt = 0 then
+            request.attempt = 1
+            m.reporting.sequence++
+            request.requestId = m.reporting.sequence
+            startActiveReport()
+            return
+        end if
+        state = Playstate.Report.Saved
+        if response.ok <> true then state = Playstate.Report.Failed
+        publishReportChange(request, state)
+        m.reporting.sessions.Delete(request.reportId)
+    end if
+    m.reporting.active = invalid
+    startNextReport()
+end sub
+
+'-------------------------------------------------------------------------------
+' publishReportChange
+'-------------------------------------------------------------------------------
+sub publishReportChange(request as object, state as string)
+    m.top.mediaChange = {
+        server: request.server
+        userId: request.userId
+        accountKey: request.accountKey
+        itemId: request.itemId
+        itemType: request.itemType
+        action: MediaState.Change.Progress
+        reportId: request.reportId
+        reportState: state
+        positionTicks: Number.ToInteger(request.position, 0) * 10000000&
+        durationTicks: Number.ToInteger(request.duration, 0) * 10000000&
+        isFinished: request.isFinished
+    }
+end sub

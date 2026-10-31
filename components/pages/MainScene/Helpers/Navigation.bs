@@ -53,6 +53,21 @@ sub navHandleExitBackSelected(event as object)
 end sub
 
 '-------------------------------------------------------------------------------
+' isExitReturnFocusAttached
+'-------------------------------------------------------------------------------
+function isExitReturnFocusAttached(target as object, owner as object) as boolean
+    ' Detached nodes can retain getScene(); require the current parent chain instead.
+    current = target
+    foundOwner = false
+    while current <> invalid
+        if current.isSameNode(owner) then foundOwner = true
+        if current.isSameNode(m.top) then return foundOwner
+        current = current.getParent()
+    end while
+    return false
+end function
+
+'-------------------------------------------------------------------------------
 ' navHandleHeaderHomeSelected
 '-------------------------------------------------------------------------------
 sub navHandleHeaderHomeSelected()
@@ -100,7 +115,7 @@ sub navHandleOverlayClosed()
     if request <> invalid and request.id = "exitConfirmation" then
         if closed.overlay <> invalid and closed.overlay.exitConfirmed then
             m.top.closeRequested = true
-        else if request.returnOwner.visible and request.returnFocus.getScene() <> invalid then
+        else if request.returnOwner.visible and isExitReturnFocusAttached(request.returnFocus, request.returnOwner) then
             request.returnFocus.setFocus(true)
         else
             ' Home may have rebuilt its shelves while the confirmation was open.
@@ -374,7 +389,9 @@ sub navHandleMediaStateChanged()
     m.mediaActionState.activeRequest = invalid
     if change = invalid or request = invalid then return
 
-    if change.action = "watched" then markHomePlaybackRowsDirty()
+    itemType = ""
+    if request.item <> invalid then itemType = Strings.ToString(request.item.Type)
+    recordHomeMediaChange(change, itemType)
     routeMediaStateChange(Strings.ToString(request.sourcePage), change)
     activityAction = "Updated"
     if change.action = "watched" and change.value = true then activityAction = "Marked as watched"
@@ -404,9 +421,7 @@ end sub
 ' routeMediaStateChange
 '-------------------------------------------------------------------------------
 sub routeMediaStateChange(sourcePage as string, change as object)
-    if sourcePage = "home" then
-        m.homePage.callFunc("applyMediaStateChange", change)
-    else if sourcePage = "search" and m.searchPage <> invalid then
+    if sourcePage = "search" and m.searchPage <> invalid then
         m.searchPage.callFunc("applyMediaStateChange", change)
     else if sourcePage = "tvShow" and m.tvShowPage <> invalid then
         m.tvShowPage.mediaStateChange = change
@@ -463,19 +478,24 @@ sub navHandleStreamOptionsOverlayClosed(closed as object)
 end sub
 
 '-------------------------------------------------------------------------------
-' markHomePlaybackRowsDirty
+' recordHomeMediaChange
 '-------------------------------------------------------------------------------
-sub markHomePlaybackRowsDirty()
-    if m.homeRefreshState = invalid then m.homeRefreshState = { playbackRowsDirty: false }
-    m.homeRefreshState.playbackRowsDirty = true
+sub recordHomeMediaChange(change as object, itemType = "" as string)
+    if m.session = invalid then return
+    normalized = {}
+    normalized.Append(change)
+    normalized.server = m.session.server
+    normalized.userId = m.session.userId
+    normalized.accountKey = m.session.accountKey
+    if itemType <> "" then normalized.itemType = itemType
+    m.homePage.callFunc("recordMediaChange", normalized)
 end sub
 
 '-------------------------------------------------------------------------------
 ' hideHome
 '-------------------------------------------------------------------------------
 sub hideHome()
-    m.homePage.callFunc("suppressRefreshMessages")
-    m.homePage.visible = false
+    m.homePage.callFunc("deactivate")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -487,21 +507,7 @@ sub showHome(refresh = false as boolean)
     m.homePage.visible = true
     m.header.visible = true
 
-    if m.homeRefreshState <> invalid and m.homeRefreshState.playbackRowsDirty = true then
-        m.homePage.callFunc("activateBlocking")
-    else if refresh = true then
-        m.homePage.callFunc("activate")
-    else
-        m.homePage.callFunc("focusHome")
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' homeHandlePlaybackRowsRefreshCompleted
-'-------------------------------------------------------------------------------
-sub homeHandlePlaybackRowsRefreshCompleted()
-    if m.homeRefreshState = invalid then return
-    m.homeRefreshState.playbackRowsDirty = false
+    m.homePage.callFunc("activate", refresh)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -666,7 +672,7 @@ sub navShowAppRoute()
     resetDynamicPages()
 
     m.header.visible = true
-    m.homePage.callFunc("activate")
+    m.homePage.callFunc("activate", true)
     m.homePage.callFunc("focusHome")
 end sub
 

@@ -1,0 +1,157 @@
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    m.homeState.sync.active = false
+    suppressRefreshMessages()
+    m.top.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' hasPendingHomeWork
+'-------------------------------------------------------------------------------
+function hasPendingHomeWork() as boolean
+    if m.homeState.refresh.pendingCore.Count() > 0 then return true
+    for each key in m.homeState.sync.required
+        if HomeRefresh.NeedsRefresh(m.homeState.sync, key, true) then return true
+    end for
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' startDirtyHomeRequests
+'-------------------------------------------------------------------------------
+sub startDirtyHomeRequests()
+    if m.homeState.sync.active <> true then return
+    components = { libraries: "HomeLibrariesTask", continueWatching: "ContinueWatchingTask", continueListening: "ContinueListeningTask", nextUp: "NextUpTask", liveTvOnNow: "LiveTvOnNowTask" }
+    latest = {}
+    for each key in m.homeState.sync.required
+        if HomeRefresh.NeedsRefresh(m.homeState.sync, key) <> true then continue for
+        if Left(key, 7) = "latest:" then
+            libraryId = Mid(key, 8)
+            running = false
+            for each task in m.homeState.latestTasks
+                if task.request.parentId = libraryId then running = true
+            end for
+            if running <> true and m.homeState.latestLibraries.DoesExist(libraryId) then latest[libraryId] = true
+        else if components.DoesExist(key) and m.homeState.refresh.pendingCore.DoesExist(key) <> true then
+            m.top.ready = false
+            m.homeState.refresh.pendingCore[key] = true
+            handler = "onSectionResponse"
+            if key = "libraries" then handler = "onLibrariesResponse"
+            oldTask = m.tasks[key]
+            if oldTask <> invalid then cleanupHomeTask(oldTask, key)
+            runHomeTask(key, components[key], handler, m.homeState.request)
+        end if
+    end for
+    runLatestMediaTasks(latest)
+end sub
+
+'-------------------------------------------------------------------------------
+' recordMediaChange
+'-------------------------------------------------------------------------------
+sub recordMediaChange(change as object)
+    request = m.homeState.request
+    if request = invalid then return
+    if Strings.ToString(change.itemId) = "" then return
+    if change.action <> MediaState.Change.Watched and change.action <> MediaState.Change.Favorite and change.action <> MediaState.Change.Progress then return
+    if change.accountKey <> invalid and Strings.ToString(change.accountKey) <> Strings.ToString(request.accountKey) then return
+    if change.server <> invalid and change.server <> request.server then return
+    if change.userId <> invalid and change.userId <> request.userId then return
+
+    sync = m.homeState.sync
+    reportId = Strings.ToString(change.reportId)
+    if reportId <> "" then
+        if change.reportState = Playstate.Report.Pending then
+            sync.pendingReports[reportId] = true
+        else
+            sync.pendingReports.Delete(reportId)
+            if change.reportState = Playstate.Report.Failed then sync.failedReports[reportId] = true
+            ' Settlement releases the read barrier; it must not replay an older track snapshot.
+            sync.revision++
+            HomeRefresh.Require(sync, "continueListening")
+            startDirtyHomeRequests()
+            return
+        end if
+    end if
+    sync.revision++
+    itemId = Strings.ToString(change.itemId)
+    if itemId <> "" then
+        ' Keep separate field changes so a newer favorite cannot discard progress.
+        patches = sync.patches[itemId]
+        if patches = invalid then patches = {}
+        patches[Strings.ToString(change.action)] = { revision: sync.revision, change: change }
+        sync.patches[itemId] = patches
+    end if
+    audio = change.itemType = MediaItem.Type.Audio or change.itemType = MediaItem.Type.AudioBook
+    if audio then
+        HomeRefresh.Require(sync, "continueListening")
+    else if change.action <> MediaState.Change.Favorite then
+        HomeRefresh.Require(sync, "continueWatching")
+        HomeRefresh.Require(sync, "nextUp")
+    end if
+    aggregate = change.itemType = MediaItem.Type.Series or change.itemType = MediaItem.Type.Season
+    for each key in m.homeState.sectionItems
+        affected = false
+        for each item in m.homeState.sectionItems[key]
+            if Arrays.IsAssocArray(item) <> true then continue for
+            if Strings.ToString(item.Id) = itemId then
+                applyHomeItemChange(item, change)
+                affected = true
+            else if aggregate and (Strings.ToString(item.SeriesId) = itemId or Strings.ToString(item.SeasonId) = itemId) then
+                affected = true
+            end if
+        end for
+        if Left(key, 7) = "latest:" and (affected or aggregate) then HomeRefresh.Require(sync, key)
+    end for
+    ' Hidden or grouped items cannot identify their library from retained cards.
+    ' Watched/progress changes can alter Latest membership even without a matching card.
+    if aggregate or change.action = MediaState.Change.Watched or (not audio and change.action = MediaState.Change.Progress) then
+        for each id in m.homeState.latestLibraries
+            library = m.homeState.latestLibraries[id]
+            if library.collectionType <> "music" then HomeRefresh.Require(sync, "latest:" + id)
+        end for
+    end if
+    for each key in m.homeState.rows
+        for each node in m.homeState.rows[key].getChildren(-1, 0)
+            item = node.raw
+            if Strings.ToString(item.Id) = itemId then
+                applyHomeItemChange(item, change)
+                node.raw = item
+            end if
+        end for
+    end for
+    if change.action = MediaState.Change.Watched then refreshEpisodeCounts()
+    startDirtyHomeRequests()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyHomeItemChange
+'-------------------------------------------------------------------------------
+sub applyHomeItemChange(item as object, change as object)
+    if change.action = MediaState.Change.Progress then
+        PlaybackProgress.ApplyChangeToItem(item, change)
+    else
+        MediaState.ApplyToItem(item, change)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' reconcileHomeSnapshot
+'-------------------------------------------------------------------------------
+function reconcileHomeSnapshot(items as object, revision as dynamic) as object
+    for each item in items
+        if Arrays.IsAssocArray(item) <> true then continue for
+        patches = m.homeState.sync.patches[Strings.ToString(item.Id)]
+        if patches = invalid then continue for
+        ordered = []
+        for each action in patches
+            ordered.Push(patches[action])
+        end for
+        ordered.SortBy("revision")
+        for each patch in ordered
+            if patch.revision > Number.ToInteger(revision, 0) then applyHomeItemChange(item, patch.change)
+        end for
+    end for
+    return items
+end function

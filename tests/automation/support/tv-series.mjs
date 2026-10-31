@@ -259,7 +259,6 @@ function assertExpectedEpisodes(cards, expectedEpisodes) {
 
 async function selectConfiguredEpisode(environment) {
   const expected = environment.tvSeriesSmokeTest.testEpisode;
-  assert.equal(expected.season, 1, 'The current TV-series fixture provides episode data for Season 1.');
 
   const counts = await environment.odc.getValues({
     requests: {
@@ -284,7 +283,7 @@ async function selectConfiguredEpisode(environment) {
     { length: itemCount },
     (_, index) => Number(response.results[index]?.value) === expected.episode ? index : -1
   ).find(index => index >= 0);
-  assert.notEqual(itemIndex, undefined, `Season 1 Episode ${expected.episode} should be selectable.`);
+  assert.notEqual(itemIndex, undefined, `Season ${expected.season} Episode ${expected.episode} should be selectable.`);
 
   if (isHorizontal) {
     await environment.odc.setValue({

@@ -1,0 +1,46 @@
+sub runHomeTask(action as string, componentName as string, responseHandler as string, request as object)
+    task = CreateObject("roSGNode", "Group")
+    task.addFields({ request: {}, response: {}, control: "" })
+    task.id = action + "Task"
+    m.top.appendChild(task)
+    m.tasks[action] = task
+    task.observeField("response", responseHandler)
+    task.request = buildHomeTaskRequest(request)
+    m.homeState.sync.attempted[action] = task.request.homeRevision
+end sub
+
+sub runLatestMediaTasks(onlyLibraries = invalid as dynamic)
+    for each id in m.homeState.latestLibraries
+        if onlyLibraries <> invalid and not onlyLibraries.DoesExist(id) then continue for
+        task = CreateObject("roSGNode", "Group")
+        task.addFields({ request: {}, response: {}, control: "" })
+        m.top.appendChild(task)
+        m.homeState.latestTasks.Push(task)
+        task.observeField("response", "onDynamicLatestMediaResponse")
+        request = buildHomeTaskRequest(m.homeState.request)
+        request.parentId = id
+        task.request = request
+        m.homeState.sync.attempted["latest:" + id] = request.homeRevision
+    end for
+end sub
+
+sub deliverSection(key as string, items as object, ok = true as boolean)
+    if Left(key, 7) = "latest:" then
+        for each task in m.homeState.latestTasks
+            if task.request.parentId = Mid(key, 8) then
+                task.response = { ok: ok, action: "latestMedia", parentId: task.request.parentId, payload: items }
+                return
+            end if
+        end for
+    else
+        m.tasks[key].response = { ok: ok, action: key, payload: { Items: items } }
+    end if
+end sub
+
+function getRefreshSnapshot() as object
+    return { required: m.homeState.sync.required, applied: m.homeState.sync.applied, revision: m.homeState.sync.revision, pending: m.homeState.refresh.pendingCore, items: m.homeState.sectionItems, blocking: m.homeState.refresh.blocking }
+end function
+
+function getSectionRequest(key as string) as object
+    return m.tasks[key].request
+end function

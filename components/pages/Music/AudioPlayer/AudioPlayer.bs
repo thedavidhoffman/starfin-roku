@@ -1,3 +1,7 @@
+import "pkg:/source/TimerControl.bs"
+import "pkg:/source/Playstate.bs"
+import "pkg:/source/PlaybackProgress.bs"
+import "pkg:/source/MediaItem.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/LatestRequestLifecycle.bs"
@@ -26,6 +30,7 @@ sub init()
     m.log = new Logger("AudioPlayer", m.global.logService)
     MaskAssets.Apply(m.top.findNode("albumArtworkMask"), "audio-player-album-mask.png", [651, 651], [434, 434])
 
+    m.audioReporting = { id: "", resolved: invalid, seekTarget: invalid }
     m.playerState = {
         tracksLoad: { lifecycle: LatestRequestLifecycle.Create(), nodes: [], nextIndex: 0 }
         playbackLoad: { lifecycle: LatestRequestLifecycle.Create(), nodes: [], nextIndex: 0 }
@@ -67,6 +72,7 @@ sub initReferences()
     m.nextButton = m.top.findNode("nextButton")
     m.trackList = m.top.findNode("trackList")
     m.player = m.top.findNode("player")
+    m.reportTimer = m.top.findNode("reportTimer")
     m.screensaverOverlay = m.top.findNode("screensaverOverlay")
     m.playerState.tracksLoad.nodes = [m.top.findNode("tracksTask"), m.top.findNode("tracksTaskAlternate")]
     m.playerState.playbackLoad.nodes = [m.top.findNode("playbackInfoTask"), m.top.findNode("playbackInfoTaskAlternate")]
@@ -78,6 +84,7 @@ end sub
 sub initHandlers()
     m.playerState.tracksLoad.nodes[0].observeField("response", "onTracksResponse")
     m.playerState.playbackLoad.nodes[0].observeField("response", "onPlaybackInfoResponse")
+    m.reportTimer.observeField("fire", "onAudioReportTimer")
     m.player.observeField("state", "onPlayerStateChanged")
     m.player.observeField("position", "onPlaybackProgressChanged")
     m.player.observeField("duration", "onPlaybackProgressChanged")
@@ -129,6 +136,7 @@ end sub
 sub onLoadRequestChanged()
     request = m.top.loadRequest
     if request = invalid then return
+    finishAudioReport()
     previous = m.playerState.request
     if previous <> invalid then
         if previous.server <> request.server or previous.token <> request.token or previous.userId <> request.userId then cancelRequests(m.playerState.tracksLoad)
@@ -152,6 +160,13 @@ sub onLoadRequestChanged()
     m.backdrop.uri = ""
     m.trackList.content = CreateObject("roSGNode", "ContentNode")
     updateTimeline(0, 0)
+
+    if album.Type = MediaItem.Type.Audio or album.Type = MediaItem.Type.AudioBook then
+        cancelRequests(m.playerState.tracksLoad)
+        m.playerState.tracks = [album]
+        playTrack(0, PlaybackProgress.GetTicksFromItem(album) / 10000000.0)
+        return
+    end if
 
     taskRequest = {
         server: request.server
@@ -231,6 +246,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub playTrack(index as integer, restartPosition = 0.0 as float)
     if index < 0 or index >= m.playerState.tracks.Count() then return
+    finishAudioReport()
+    m.audioReporting.resolved = invalid
+    m.audioReporting.seekTarget = invalid
     m.playerState.changingTrack = true
     m.playerState.restartPosition = restartPosition
     m.player.control = MediaControl.Command.Stop
@@ -288,6 +306,7 @@ sub handlePlaybackInfoResponse(response as dynamic)
         stopScreensaverSession()
         return
     end if
+    m.audioReporting.resolved = response
     m.player.content = content
     m.player.control = MediaControl.Command.Play
     updatePlayPauseIcon()
@@ -310,11 +329,19 @@ sub onPlayerStateChanged()
         if m.playerState.changingTrack then m.log.activity("Playing track " + ActivityLog.ItemTitle(track, "Untitled Track"))
         if m.playerState.changingTrack <> true and previousPlayerState = "paused" then m.log.activity("Resumed track " + ActivityLog.ItemTitle(track, "Untitled Track"))
         m.playerState.changingTrack = false
-        if m.playerState.restartPosition > 0 then m.player.seek = m.playerState.restartPosition
+        if m.playerState.restartPosition > 0 then
+            m.playerState.lastPosition = m.playerState.restartPosition
+            m.audioReporting.seekTarget = m.playerState.restartPosition
+            m.player.seek = m.playerState.restartPosition
+        end if
+        startAudioReport()
+        m.reportTimer.control = TimerControl.Command.Start
+        if previousPlayerState = "paused" then reportAudioProgress()
         m.playerState.restartPosition = 0.0
         m.player.disableScreenSaver = true
         if m.screensaverOverlay.callFunc("isVisible") <> true then m.screensaverOverlay.callFunc("startDelay")
     else if state = "finished" then
+        finishAudioReport(true)
         if activityStateChanged then m.log.activity("Completed track " + ActivityLog.ItemTitle(track, "Untitled Track"))
         if m.playerState.currentIndex < m.playerState.tracks.Count() - 1 then
             playNext()
@@ -322,6 +349,12 @@ sub onPlayerStateChanged()
             stopScreensaverSession()
         end if
     else if state = "paused" or state = "error" or (state = "stopped" and m.playerState.changingTrack <> true) then
+        m.reportTimer.control = TimerControl.Command.Stop
+        if state = "paused" then
+            reportAudioProgress()
+        else
+            finishAudioReport()
+        end if
         if activityStateChanged and state = "paused" then m.log.activity("Paused track " + ActivityLog.ItemTitle(track, "Untitled Track"))
         if activityStateChanged and state = "stopped" and m.playerState.changingTrack <> true then m.log.activity("Stopped track " + ActivityLog.ItemTitle(track, "Untitled Track"))
         stopScreensaverSession()
@@ -383,6 +416,10 @@ sub onPlaybackProgressChanged()
     if m.playerState.seeking = true then return
     position = Number.ToFloat(m.player.position, 0.0)
     if position > 0 then m.playerState.lastPosition = position
+    if m.audioReporting.seekTarget <> invalid and Abs(position - m.audioReporting.seekTarget) < 1 then
+        m.audioReporting.seekTarget = invalid
+        reportAudioProgress()
+    end if
     updateTimeline(m.player.position, m.player.duration)
 end sub
 
@@ -413,6 +450,7 @@ sub seekBy(seconds as float)
     if position < 0 then position = 0
     if duration > 0 and position > duration then position = duration
     m.playerState.lastPosition = position
+    m.audioReporting.seekTarget = position
     m.player.seek = position
     updateTimeline(position, duration)
 end sub
@@ -533,6 +571,7 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    finishAudioReport()
     cancelRequests(m.playerState.tracksLoad)
     cancelRequests(m.playerState.playbackLoad)
     stopScreensaverSession()
@@ -584,4 +623,52 @@ sub stopScreensaverSession()
     m.playerState.changingTrack = false
     m.screensaverOverlay.callFunc("stopOverlay")
     m.player.disableScreenSaver = false
+end sub
+
+'-------------------------------------------------------------------------------
+' startAudioReport
+'-------------------------------------------------------------------------------
+sub startAudioReport()
+    if m.audioReporting.id <> "" or m.top.reporter = invalid then return
+    if m.audioReporting.resolved = invalid then return
+    request = m.playerState.request
+    track = getCurrentTrack()
+    if request = invalid or track = invalid then return
+    resolved = m.audioReporting.resolved
+    m.audioReporting.id = m.top.reporter.callFunc("beginSession", {
+        server: request.server, token: request.token, userId: request.userId, accountKey: request.accountKey
+        itemId: track.Id, itemType: track.Type, playSessionId: resolved.playSessionId, mediaSourceId: resolved.mediaSourceId
+        playMethod: resolved.playMethod, canSeek: resolved.canSeek = true
+    })
+    m.top.reporter.callFunc("report", m.audioReporting.id, Playstate.Status.Start, m.playerState.lastPosition, getTrackDuration(track))
+end sub
+
+'-------------------------------------------------------------------------------
+' onAudioReportTimer
+'-------------------------------------------------------------------------------
+sub onAudioReportTimer()
+    if LCase(m.player.state) = "playing" then reportAudioProgress()
+end sub
+
+'-------------------------------------------------------------------------------
+' reportAudioProgress
+'-------------------------------------------------------------------------------
+sub reportAudioProgress()
+    if m.audioReporting.id = "" or m.top.reporter = invalid then return
+    m.top.reporter.callFunc("report", m.audioReporting.id, Playstate.Status.Update, m.playerState.lastPosition, getTrackDuration(getCurrentTrack()), false, LCase(m.player.state) = "paused")
+end sub
+
+'-------------------------------------------------------------------------------
+' finishAudioReport
+'-------------------------------------------------------------------------------
+sub finishAudioReport(finished = false as boolean)
+    m.reportTimer.control = TimerControl.Command.Stop
+    if m.audioReporting.id = "" or m.top.reporter = invalid then return
+    id = m.audioReporting.id
+    m.audioReporting.id = ""
+    duration = getTrackDuration(getCurrentTrack())
+    if duration <= 0 then duration = Number.ToFloat(m.player.duration, 0.0)
+    position = m.playerState.lastPosition
+    if finished and duration > 0 then position = duration
+    m.top.reporter.callFunc("report", id, Playstate.Status.Stop, position, duration, finished)
 end sub

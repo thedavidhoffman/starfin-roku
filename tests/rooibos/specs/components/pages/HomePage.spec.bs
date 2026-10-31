@@ -9,11 +9,15 @@ namespace tests
             m.top.visible = true
             m.node.homeState.request = { server: "http://server", token: "token", userId: "user" }
             m.node.homeState.rows = {}
+            m.node.homeState.sectionItems = {}
+            m.node.homeState.latestLibraries = {}
+            m.node.homeState.sync = HomeRefresh.Create()
+            m.node.homeState.sync.active = true
             m.top.settings = { "home-episode-images": "episode-with-logo" }
             m.node.homeState.episodeImageMode = "episode-with-logo"
-            m.node.homeState.refresh = { blocking: false, pendingCore: {}, messages: [] }
-            m.node.homeState.playbackRows.continueWatchingItems = []
-            m.node.homeState.playbackRows.nextUpItems = []
+            m.node.homeState.refresh = { blocking: false, ownsSpinner: false, pendingCore: {}, messages: [] }
+            m.node.homeState.sectionItems.continueWatching = []
+            m.node.homeState.sectionItems.nextUp = []
             m.node.homeState.focusedShelfIndex = 0
             m.node.homeState.playbackOverlay = { open: false, returnTarget: invalid }
             m.top.overlayRequested = invalid
@@ -725,6 +729,52 @@ namespace tests
 
         @describe("selection routing")
 
+        @it("routes On Now programs to their channel")
+        function _()
+            'bs:disable-next-line 1140
+            selectHomeItem({ Id: "program", Type: "Program", ChannelId: "channel", Name: "Show" })
+
+            m.assertEqual(m.top.selectedLiveTV.itemId, "channel")
+            m.assertEqual(m.top.selectedLiveTV.item.Type, "TvChannel")
+            m.assertEqual(m.top.selectedLiveTV.item.CurrentProgram.Id, "program")
+        end function
+
+        @it("does not launch a program without a channel")
+        function _()
+            m.top.selectedLiveTV = invalid
+            'bs:disable-next-line 1140
+            selectHomeItem({ Id: "program", Type: "Program" })
+
+            m.assertInvalid(m.top.selectedLiveTV)
+        end function
+
+        @it("routes Continue Listening to the selected audio item")
+        function _()
+            'bs:disable-next-line 1140
+            selectHomeItem({ Id: "track", Type: "Audio", UserData: { PlaybackPositionTicks: 120000000 } })
+
+            m.assertEqual(m.top.selectedAlbum.itemId, "track")
+            m.assertEqual(m.top.selectedAlbum.item.UserData.PlaybackPositionTicks, 120000000)
+        end function
+
+        @it("routes Continue Listening to the selected audiobook")
+        function _()
+            'bs:disable-next-line 1140
+            selectHomeItem({ Id: "track", Type: "AudioBook", UserData: { PlaybackPositionTicks: 120000000 } })
+
+            m.assertEqual(m.top.selectedAlbum.itemId, "track")
+            m.assertEqual(m.top.selectedAlbum.item.UserData.PlaybackPositionTicks, 120000000)
+        end function
+
+        @it("routes music videos to video playback with hydration")
+        function _()
+            'bs:disable-next-line 1140
+            selectHomeItem({ Id: "clip", Type: "MusicVideo" })
+
+            m.assertEqual(m.top.selectedHomeMediaVideo.itemId, "clip")
+            m.assertTrue(m.top.selectedHomeMediaVideo.loadItemDetails)
+        end function
+
         @it("routes collection libraries")
         function _()
             item = m.createLibrary("collection-1", "boxsets")
@@ -949,8 +999,8 @@ namespace tests
 
         @it("filters Next Up items already represented by item id")
         function _()
-            m.node.homeState.playbackRows.continueWatchingItems = [{ Id: "episode-1", SeriesId: "series-1" }]
-            m.node.homeState.playbackRows.nextUpItems = [{ Id: "episode-1" }, { Id: "episode-2", SeriesId: "series-2" }]
+            m.node.homeState.sectionItems.continueWatching = [{ Id: "episode-1", SeriesId: "series-1" }]
+            m.node.homeState.sectionItems.nextUp = [{ Id: "episode-1" }, { Id: "episode-2", SeriesId: "series-2" }]
 
             'bs:disable-next-line 1140
             items = getFilteredNextUpItems()
@@ -961,8 +1011,8 @@ namespace tests
 
         @it("filters Next Up items already represented by series id")
         function _()
-            m.node.homeState.playbackRows.continueWatchingItems = [{ Id: "episode-1", SeriesId: "series-1" }]
-            m.node.homeState.playbackRows.nextUpItems = [{ Id: "episode-2", SeriesId: "series-1" }, { Id: "episode-3", SeriesId: "series-2" }]
+            m.node.homeState.sectionItems.continueWatching = [{ Id: "episode-1", SeriesId: "series-1" }]
+            m.node.homeState.sectionItems.nextUp = [{ Id: "episode-2", SeriesId: "series-1" }, { Id: "episode-3", SeriesId: "series-2" }]
 
             'bs:disable-next-line 1140
             items = getFilteredNextUpItems()
@@ -1033,7 +1083,7 @@ namespace tests
             task.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "stale-item" }] } }
 
             m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("continueWatching"))
-            m.assertEqual(m.node.homeState.playbackRows.continueWatchingItems.Count(), 0)
+            m.assertEqual(m.node.homeState.sectionItems.continueWatching.Count(), 0)
             'bs:disable-next-line 1140
             cleanupHomeTasks()
         end function
@@ -1077,6 +1127,274 @@ namespace tests
 
         @describe("focus and keyboard behavior")
 
+        @it("does not reopen Home when a blocking refresh completes after departure")
+        function _()
+            m.startFocusRefresh(true)
+            m.top.callFunc("deactivate")
+            m.top.visible = false
+            m.focusTestSurface = CreateObject("roSGNode", "Group")
+            m.top.getScene().appendChild(m.focusTestSurface)
+            m.focusTestSurface.setFocus(true)
+
+            m.finishOtherHomeRows()
+
+            m.assertFalse(m.top.visible)
+            m.assertTrue(m.focusTestSurface.hasFocus())
+            m.assertFalse(m.node.homeState.refresh.blocking)
+            m.assertTrue(m.top.ready)
+        end function
+
+        @it("stops an obsolete scroll animation before an immediate layout update")
+        function _()
+            'bs:disable-next-line 1140
+            setShelvesOffset(-300, true)
+            'bs:disable-next-line 1140
+            setShelvesOffset(-600, false)
+
+            m.assertEqual(m.node.shelvesAnimation.control, "stop")
+            m.assertEqual(m.node.shelvesGroup.translation, [0.0, -600.0])
+            m.assertEqual(m.node.homeState.shelfOffsetY, -600)
+        end function
+
+        @it("stops scrolling even when the immediate target equals the cached destination")
+        function _()
+            'bs:disable-next-line 1140
+            setShelvesOffset(-300, true)
+            'bs:disable-next-line 1140
+            setShelvesOffset(-300, false)
+
+            m.assertEqual(m.node.shelvesAnimation.control, "stop")
+            m.assertEqual(m.node.shelvesGroup.translation, [0.0, -300.0])
+        end function
+
+        @it("retains a favorite change when a later response reconstructs Next Up")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "episode", Type: "Episode", UserData: { IsFavorite: false } }] } }
+            m.top.callFunc("recordMediaChange", { itemId: "episode", action: "favorite", value: true })
+
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [] } }
+
+            m.assertTrue(m.node.homeState.rows.nextUp.getChild(0).raw.UserData.IsFavorite)
+            m.assertTrue(m.node.homeState.sectionItems.nextUp[0].UserData.IsFavorite)
+        end function
+
+        @it("retains playback progress when Next Up is reconstructed")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "episode", Type: "Episode", UserData: {} }] } }
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "episode", positionTicks: 120000000 })
+
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [] } }
+
+            m.assertEqual(Number.ToInteger(m.node.homeState.rows.nextUp.getChild(0).raw.UserData.PlaybackPositionTicks, -1), 120000000)
+        end function
+
+        @it("restarts unfinished nonplayback core requests on playback return")
+        function _()
+            m.startFocusRefresh(false)
+            previous = m.node.tasks.continueListening
+            generation = m.node.homeState.queryId
+
+            'bs:disable-next-line 1140
+            m.node.homeState.sync.revision++
+            HomeRefresh.Require(m.node.homeState.sync, "continueWatching")
+            HomeRefresh.Require(m.node.homeState.sync, "nextUp")
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+
+            m.assertEqual(m.node.homeState.queryId, generation + 1)
+            m.assertFalse(previous.isSameNode(m.node.tasks.continueListening))
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("libraries"))
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("continueListening"))
+            m.assertEqual(m.node.tasks.continueListening.request.homeQueryId, generation + 1)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [] } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
+            m.assertTrue(m.node.homeState.refresh.blocking)
+
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [] } }
+            m.node.tasks.continueListening.response = { ok: true, action: "continueListening", payload: { Items: [{ Id: "album", Type: "MusicAlbum" }] } }
+
+            m.assertFalse(m.node.homeState.refresh.blocking)
+            m.assertEqual(m.node.homeState.rows.continueListening.getChild(0).raw.Id, "album")
+        end function
+
+        @it("does not reload completed nonplayback core rows on playback return")
+        function _()
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            row = m.node.homeState.rows.continueWatching
+
+            'bs:disable-next-line 1140
+            m.node.homeState.sync.revision++
+            HomeRefresh.Require(m.node.homeState.sync, "continueWatching")
+            HomeRefresh.Require(m.node.homeState.sync, "nextUp")
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+
+            m.assertEqual(m.node.tasks.Count(), 2)
+            m.assertFalse(m.node.tasks.DoesExist("libraries"))
+            m.assertFalse(m.node.tasks.DoesExist("continueListening"))
+            m.assertTrue(m.node.homeState.rows.continueWatching.isSameNode(row))
+        end function
+
+        @it("carries only unfinished Recently Added libraries into the new generation")
+        function _()
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            task = CreateObject("roSGNode", "LatestMediaTask")
+            task.request = { parentId: "pending" }
+            m.top.appendChild(task)
+            m.node.homeState.latestTasks = [task]
+            m.node.homeState.latestLibraries = { pending: { id: "pending" }, completed: { id: "completed" } }
+            'bs:disable-next-line 1001
+            m.stubCall(runLatestMediaTasks, m.captureLatestRestart)
+
+            'bs:disable-next-line 1140
+            m.node.homeState.sync.revision++
+            HomeRefresh.Require(m.node.homeState.sync, "continueWatching")
+            HomeRefresh.Require(m.node.homeState.sync, "nextUp")
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+
+            m.assertEqual(getGlobalAa().homeStatusCapture.latestRestart, { pending: true })
+            m.assertInvalid(task.getParent())
+        end function
+
+        function captureLatestRestart(libraries = invalid)
+            getGlobalAa().homeStatusCapture.latestRestart = libraries
+        end function
+
+        @it("renders the replacement Recently Added task response in the new generation")
+        function _()
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            oldTask = CreateObject("roSGNode", "LatestMediaTask")
+            oldTask.request = { parentId: "movies", homeQueryId: m.node.homeState.queryId, homeSessionKey: m.node.homeState.sessionKey }
+            m.top.appendChild(oldTask)
+            m.node.homeState.latestTasks = [oldTask]
+            m.node.homeState.latestLibraries = { movies: { id: "movies", name: "Movies", collectionType: "movies" }, completed: { id: "completed", name: "Completed", collectionType: "movies" } }
+            m.node.homeState.rowOrder.Push("latest:movies")
+
+            'bs:disable-next-line 1140
+            m.node.homeState.sync.revision++
+            HomeRefresh.Require(m.node.homeState.sync, "continueWatching")
+            HomeRefresh.Require(m.node.homeState.sync, "nextUp")
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+            m.assertEqual(m.node.homeState.latestTasks.Count(), 1)
+            replacement = m.node.homeState.latestTasks[0]
+            replacement.control = "stop"
+            m.assertEqual(replacement.request.parentId, "movies")
+            m.assertEqual(replacement.request.homeQueryId, m.node.homeState.queryId)
+            m.assertFalse(replacement.isSameNode(oldTask))
+            replacement.response = { ok: true, action: "latestMedia", parentId: "movies", payload: [{ Id: "new-movie", Type: "Movie" }] }
+
+            m.assertEqual(m.node.homeState.rows["latest:movies"].getChild(0).raw.Id, "new-movie")
+            m.assertEqual(m.node.homeState.latestTasks.Count(), 0)
+        end function
+
+        @it("repeated playback refreshes retain unfinished core work without duplicate tasks")
+        function _()
+            m.startFocusRefresh(false)
+            'bs:disable-next-line 1140
+            m.node.homeState.sync.revision++
+            HomeRefresh.Require(m.node.homeState.sync, "continueWatching")
+            HomeRefresh.Require(m.node.homeState.sync, "nextUp")
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+            previous = m.node.tasks.libraries
+            'bs:disable-next-line 1140
+            m.node.homeState.sync.revision++
+            HomeRefresh.Require(m.node.homeState.sync, "continueWatching")
+            HomeRefresh.Require(m.node.homeState.sync, "nextUp")
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+
+            m.assertEqual(m.node.tasks.Count(), 4)
+            m.assertInvalid(previous.getParent())
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("libraries"))
+            m.finishOtherHomeRows()
+            m.assertFalse(m.node.homeState.refresh.blocking)
+        end function
+
+        @it("finishes a restarted refresh when carried core work fails")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.startFocusRefresh(false)
+            'bs:disable-next-line 1140
+            m.node.homeState.sync.revision++
+            HomeRefresh.Require(m.node.homeState.sync, "continueWatching")
+            HomeRefresh.Require(m.node.homeState.sync, "nextUp")
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+            for each action in ["libraries", "continueWatching", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+
+            m.node.tasks.continueListening.response = { ok: false, action: "continueListening", failureKind: "timeout" }
+
+            m.assertFalse(m.node.homeState.refresh.blocking)
+            m.assertTrue(m.top.ready)
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 1)
+        end function
+
+        @it("rejects superseded core results after restarting unfinished work")
+        function _()
+            m.startFocusRefresh(false)
+            previous = m.node.tasks.continueListening
+            'bs:disable-next-line 1140
+            m.node.homeState.sync.revision++
+            HomeRefresh.Require(m.node.homeState.sync, "continueWatching")
+            HomeRefresh.Require(m.node.homeState.sync, "nextUp")
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+
+            previous.response = { ok: true, action: "continueListening", payload: { Items: [{ Id: "stale", Type: "MusicAlbum" }] } }
+
+            m.assertFalse(m.node.homeState.rows.DoesExist("continueListening"))
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("continueListening"))
+        end function
+
+        @it("leaves another page spinner running when late Home rows arrive")
+        function _()
+            m.startFocusRefresh(false)
+            m.top.callFunc("deactivate")
+            m.top.visible = false
+            Spinner.Show(0)
+
+            m.finishOtherHomeRows()
+
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+            m.assertFalse(m.node.homeState.refresh.ownsSpinner)
+        end function
+
+        @it("does not stop a new spinner after Home already released its loading state")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            Spinner.Show(0)
+
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [] } }
+            m.node.tasks.continueListening.response = { ok: true, action: "continueListening", payload: { Items: [] } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
+
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+        end function
+
+        @it("releases Home spinner when an empty refresh completes")
+        function _()
+            m.startFocusRefresh(false)
+            for each action in ["libraries", "continueWatching", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            m.assertFalse(m.node.homeState.refresh.ownsSpinner)
+            m.assertTrue(m.top.ready)
+        end function
+
         @it("keeps Settings TV focused while initial Home responses arrive")
         function _()
             m.startFocusRefresh(false)
@@ -1103,7 +1421,7 @@ namespace tests
             m.finishOtherHomeRows()
 
             m.assertTrue(m.top.ready)
-            m.assertTrue(m.top.playbackRowsRefreshCompleted)
+            m.assertTrue(m.top.ready)
             m.assertTrue(m.focusTestSurface.findNode("tvPanel").isInFocusChain())
             m.assertFalse(m.top.isInFocusChain())
         end function
@@ -1153,7 +1471,7 @@ namespace tests
             m.assertTrue(m.top.ready)
         end function
 
-        @it("restores the focused shelf when its nodes are rebuilt")
+        @it("retains the focused shelf when unchanged rows render again")
         function _()
             m.renderTwoRows()
             'bs:disable-next-line 1140
@@ -1163,13 +1481,99 @@ namespace tests
             'bs:disable-next-line 1140
             renderRows()
 
-            m.assertFalse(m.node.homeState.shelfNodes[1].isSameNode(previousShelf))
+            m.assertTrue(m.node.homeState.shelfNodes[1].isSameNode(previousShelf))
             m.assertTrue(m.node.homeState.shelfNodes[1].isInFocusChain())
+        end function
+
+        @it("retains nonfirst item focus when another row arrives")
+        function _()
+            m.renderTwoRows()
+            'bs:disable-next-line 1140
+            addRow("libraries", "My Media", [m.createLibrary("one", "movies"), m.createLibrary("two", "tvshows")])
+            'bs:disable-next-line 1140
+            renderRows()
+            shelf = m.node.homeState.shelfNodes[0]
+            shelf.callFunc("activate", "two")
+            shelf.findNode("items").rowItemFocused = [0, 1]
+            content = shelf.findNode("items").content
+
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Continue Watching", [{ Id: "movie", Type: "Movie" }])
+            'bs:disable-next-line 1140
+            renderRows()
+
+            m.assertTrue(m.node.homeState.shelfNodes[0].isSameNode(shelf))
+            m.assertTrue(shelf.findNode("items").content.isSameNode(content))
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "two")
+            m.assertTrue(shelf.isInFocusChain())
+        end function
+
+        @it("tracks the selected row when a preceding row arrives")
+        function _()
+            m.renderTwoRows()
+            'bs:disable-next-line 1140
+            focusShelf(1)
+            shelf = m.node.homeState.shelfNodes[1]
+
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Continue Watching", [{ Id: "movie", Type: "Movie" }])
+            'bs:disable-next-line 1140
+            renderRows()
+
+            m.assertEqual(m.node.homeState.focusedShelfIndex, 2)
+            m.assertTrue(m.node.homeState.shelfNodes[2].isSameNode(shelf))
+            m.assertEqual(shelf.rowIndex, 2)
+            m.assertTrue(shelf.isInFocusChain())
+        end function
+
+        @it("falls back to the nearest shelf when the selected row disappears")
+        function _()
+            m.renderTwoRows()
+            'bs:disable-next-line 1140
+            focusShelf(1)
+            m.node.homeState.rows.Delete("nextUp")
+
+            'bs:disable-next-line 1140
+            renderRows()
+
+            m.assertEqual(m.node.homeState.focusedShelfIndex, 0)
+            m.assertEqual(m.node.shelvesGroup.getChildCount(), 1)
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+        end function
+
+        @it("retains overlay return nodes without taking overlay focus")
+        function _()
+            m.renderTwoRows()
+            shelf = m.node.homeState.shelfNodes[0]
+            m.focusTestSurface = CreateObject("roSGNode", "Group")
+            m.top.getScene().appendChild(m.focusTestSurface)
+            m.focusTestSurface.setFocus(true)
+
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Continue Watching", [{ Id: "movie", Type: "Movie" }])
+            'bs:disable-next-line 1140
+            renderRows()
+
+            m.assertTrue(shelf.getParent().isSameNode(m.node.shelvesGroup))
+            m.assertTrue(m.focusTestSurface.isInFocusChain())
+        end function
+
+        @it("keeps Home focused when its final row disappears")
+        function _()
+            m.renderTwoRows()
+            'bs:disable-next-line 1140
+            focusShelf(1)
+            m.node.homeState.rows = {}
+
+            'bs:disable-next-line 1140
+            renderRows()
+
+            m.assertEqual(m.node.shelvesGroup.getChildCount(), 0)
+            m.assertTrue(m.top.hasFocus())
         end function
 
         function startFocusRefresh(blocking as boolean)
             m.top.ready = false
-            m.top.playbackRowsRefreshCompleted = false
             'bs:disable-next-line 1001
             m.stubCall(runHomeTask, m.createControlledHomeTask)
             m.node.homeState.request.permissions = { canAccessLiveTv: false }
@@ -1250,6 +1654,8 @@ namespace tests
             task.observeField("response", responseHandler)
             controlledRequest = {}
             controlledRequest.Append(request)
+            controlledRequest.homeRevision = context.homeState.sync.revision
+            context.homeState.sync.attempted[action] = controlledRequest.homeRevision
             controlledRequest.homeQueryId = context.homeState.queryId
             controlledRequest.homeSessionKey = context.homeState.sessionKey
             task.request = controlledRequest
@@ -1424,7 +1830,9 @@ namespace tests
             renderRows()
             'bs:disable-next-line 1140
             selectHomeItem(item)
-            m.top.setFocus(true)
+            m.focusTestSurface = CreateObject("roSGNode", "Group")
+            m.top.getScene().appendChild(m.focusTestSurface)
+            m.focusTestSurface.setFocus(true)
 
             ' Change both the shelf index and the item index while the dialog is open.
             'bs:disable-next-line 1140
@@ -1645,6 +2053,196 @@ namespace tests
 
             m.assertEqual(child.raw.UserData.UnplayedItemCount, 2)
             m.assertTrue(m.node.homeState.shelfNodes[0].isSameNode(shelf))
+        end function
+
+        @describe("canonical media reconciliation")
+
+        @it("invalidates eligible non-music shelves for an unwatched item absent from retained cards")
+        function _()
+            m.top.callFunc("deactivate")
+            m.node.homeState.latestLibraries = {
+                movies: { id: "movies", collectionType: "movies" }
+                mixed: { id: "mixed", collectionType: "" }
+                music: { id: "music", collectionType: "music" }
+            }
+            'bs:disable-next-line 1140
+            addRow("latest:movies", "Movies", [{ Id: "other-movie", Type: "Movie" }])
+
+            m.top.callFunc("recordMediaChange", { itemId: "hidden-movie", itemType: "Movie", action: "watched", value: false })
+
+            m.assertTrue(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "latest:movies", true))
+            m.assertTrue(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "latest:mixed", true))
+            m.assertFalse(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "latest:music", true))
+            m.assertEqual(m.node.homeState.sectionItems["latest:movies"][0].Id, "other-movie")
+        end function
+
+        @it("invalidates a grouped TV shelf after progress changes an unlisted episode")
+        function _()
+            m.top.callFunc("deactivate")
+            m.node.homeState.latestLibraries = { tv: { id: "tv", collectionType: "tvshows" } }
+            'bs:disable-next-line 1140
+            addRow("latest:tv", "TV", [{ Id: "series", Type: "Series" }])
+
+            m.top.callFunc("recordMediaChange", { itemId: "episode", itemType: "Episode", action: "progress", isFinished: true })
+
+            m.assertTrue(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "latest:tv", true))
+            m.assertEqual(m.node.homeState.sectionItems["latest:tv"][0].Id, "series")
+        end function
+
+        @it("does not invalidate unrelated Latest shelves for an absent favorite change")
+        function _()
+            m.top.callFunc("deactivate")
+            m.node.homeState.latestLibraries = { movies: { id: "movies", collectionType: "movies" } }
+
+            m.top.callFunc("recordMediaChange", { itemId: "hidden-movie", itemType: "Movie", action: "favorite", value: true })
+
+            m.assertFalse(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "latest:movies", true))
+        end function
+
+        @it("does not invalidate unrelated video shelves for audio progress")
+        function _()
+            m.top.callFunc("deactivate")
+            m.node.homeState.latestLibraries = { movies: { id: "movies", collectionType: "movies" } }
+
+            m.top.callFunc("recordMediaChange", { itemId: "track", itemType: "Audio", action: "progress", positionTicks: 100000000 })
+
+            m.assertFalse(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "latest:movies", true))
+            m.assertTrue(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "continueListening", true))
+        end function
+
+        @it("updates every retained occurrence of a watched item while inactive")
+        function _()
+            m.top.callFunc("deactivate")
+            'bs:disable-next-line 1140
+            addRow("latest:movies", "Movies", [{ Id: "movie", Type: "Movie", UserData: { Played: false } }])
+            'bs:disable-next-line 1140
+            addRow("continueWatching", "Resume", [{ Id: "movie", Type: "Movie", UserData: { Played: false } }])
+
+            m.top.callFunc("recordMediaChange", { itemId: "movie", itemType: "Movie", action: "watched", value: true })
+
+            m.assertTrue(m.node.homeState.sectionItems["latest:movies"][0].UserData.Played)
+            m.assertTrue(m.node.homeState.rows["latest:movies"].getChild(0).raw.UserData.Played)
+            m.assertTrue(m.node.homeState.rows.continueWatching.getChild(0).raw.UserData.Played)
+            m.assertTrue(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "nextUp", true))
+        end function
+
+        @it("a departing refresh cannot acknowledge a subsequent mutation")
+        function _()
+            m.startFocusRefresh(true)
+            captured = m.node.tasks.continueWatching.request.homeRevision
+            m.top.callFunc("deactivate")
+            m.top.callFunc("recordMediaChange", { itemId: "movie", action: "watched", value: true })
+
+            m.finishOtherHomeRows()
+
+            m.assertEqual(m.node.homeState.sync.applied.continueWatching, captured)
+            m.assertTrue(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "continueWatching", true))
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("an older response retains a newer accepted favorite")
+        function _()
+            m.startFocusRefresh(false)
+            m.top.callFunc("recordMediaChange", { itemId: "episode", action: "favorite", value: true })
+
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "episode", Type: "Episode", UserData: { IsFavorite: false } }] } }
+
+            m.assertTrue(m.node.homeState.rows.nextUp.getChild(0).raw.UserData.IsFavorite)
+        end function
+
+        @it("keeps blocking loading between first and final responses")
+        function _()
+            m.startFocusRefresh(true)
+
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+            m.assertFalse(m.top.visible)
+            m.finishOtherHomeRows()
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            m.assertTrue(m.top.visible)
+        end function
+
+        @it("retains a failed section without automatic retries")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            m.top.callFunc("deactivate")
+            m.top.callFunc("recordMediaChange", { itemId: "movie", action: "watched", value: true })
+            m.top.callFunc("activate")
+            failedTask = m.node.tasks.continueWatching
+
+            failedTask.response = { ok: false, action: "continueWatching" }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
+
+            m.assertTrue(m.node.tasks.continueWatching.isSameNode(failedTask))
+            m.assertTrue(m.node.homeState.rows.DoesExist("continueWatching"))
+            m.assertTrue(HomeRefresh.NeedsRefresh(m.node.homeState.sync, "continueWatching", true))
+        end function
+
+        @it("retries a failed section on the next activation")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.startFocusRefresh(false)
+            m.node.tasks.continueListening.response = { ok: false, action: "continueListening" }
+            failedTask = m.node.tasks.continueListening
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [] } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [] } }
+
+            m.top.callFunc("activate")
+
+            m.assertFalse(m.node.tasks.continueListening.isSameNode(failedTask))
+        end function
+
+        @it("audiobook progress requires listening rather than video snapshots")
+        function _()
+            m.top.callFunc("deactivate")
+            m.node.homeState.sync.required = {}
+
+            m.top.callFunc("recordMediaChange", { itemId: "book", itemType: "AudioBook", action: "progress", positionTicks: 120000000 })
+
+            m.assertTrue(m.node.homeState.sync.required.DoesExist("continueListening"))
+            m.assertFalse(m.node.homeState.sync.required.DoesExist("continueWatching"))
+            m.assertFalse(m.node.homeState.sync.required.DoesExist("nextUp"))
+        end function
+
+        @it("settling an older audio report does not replay its progress over a newer stop")
+        function _()
+            m.top.callFunc("deactivate")
+            'bs:disable-next-line 1140
+            addRow("continueListening", "Listening", [{ Id: "track", Type: "Audio", UserData: {} }])
+            m.top.callFunc("recordMediaChange", { itemId: "track", itemType: "Audio", action: "progress", positionTicks: 100000000, reportId: "one", reportState: "pending" })
+            m.top.callFunc("recordMediaChange", { itemId: "track", itemType: "Audio", action: "progress", positionTicks: 200000000, reportId: "two", reportState: "pending" })
+
+            m.top.callFunc("recordMediaChange", { itemId: "track", itemType: "Audio", action: "progress", positionTicks: 100000000, reportId: "one", reportState: "saved" })
+
+            m.assertEqual(Number.ToInteger(m.node.homeState.sectionItems.continueListening[0].UserData.PlaybackPositionTicks, 0), 200000000)
+            m.assertTrue(m.node.homeState.sync.pendingReports.DoesExist("two"))
+        end function
+
+        @it("reconciles overlapping watched and progress changes in accepted order")
+        function _()
+            m.top.callFunc("deactivate")
+            revision = m.node.homeState.sync.revision
+            m.top.callFunc("recordMediaChange", { itemId: "movie", action: "watched", value: true })
+            m.top.callFunc("recordMediaChange", { itemId: "movie", action: "progress", positionTicks: 200000000, isFinished: false })
+
+            'bs:disable-next-line 1140
+            items = reconcileHomeSnapshot([{ Id: "movie", Type: "Movie", UserData: {} }], revision)
+
+            m.assertEqual(Number.ToInteger(items[0].UserData.PlaybackPositionTicks, 0), 200000000)
+            m.assertFalse(items[0].UserData.Played)
+        end function
+
+        @it("ignores media changes from another account")
+        function _()
+            revision = m.node.homeState.sync.revision
+
+            m.top.callFunc("recordMediaChange", { accountKey: "other", itemId: "movie", action: "watched", value: true })
+
+            m.assertEqual(m.node.homeState.sync.revision, revision)
         end function
 
     end class

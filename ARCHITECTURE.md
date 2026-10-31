@@ -348,3 +348,20 @@ uses that destination until an accepted position confirms it. Explicit seeks cle
 the pending destination, and normal teardown clears both. Explicit preference
 booleans continue through playback requests.
 The timed fallback remains manual. See [Next Item Playback](.docs/feature/next-item-playback.md).
+
+## Home reconciliation and audio reporting
+
+HomePage owns canonical raw section items, mutation revisions, per-section refresh
+requirements, activation state, and completion sequencing. MainScene routes normalized
+media changes and activation/deactivation; it does not acknowledge Home refreshes or
+maintain a competing dirty flag. HomeShelf owns presentation and item focus only.
+Home-local reconciliation coordinates requests and projection; HomeRefresh supplies
+pure revision bookkeeping. Successful older requests cannot acknowledge newer changes.
+
+AudioPlayer owns track selection and player observations. The scene-lifetime
+AudioPlaybackReporter owns ordered audio reporting and terminal retry independently
+of page teardown. MainScene supplies its reference and routes account-matched outcome
+events, without owning report queues or API calls. PlaystateTask remains the API
+boundary, with optional correlation and timeout parameters preserving video callers.
+Home defers listening snapshots while terminal writes are pending. Completion focus
+is established before acknowledgment messages capture their return target.

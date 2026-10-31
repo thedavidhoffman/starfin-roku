@@ -20,6 +20,7 @@ namespace tests
                 userId: "user"
                 accountKey: "account-1"
             }
+            m.node.homePage.loadRequest = m.node.session
             m.node.settings = SettingsStore.Defaults()
             m.node.performanceBeaconState = PerformanceBeacon.Create()
             m.node.deepLinkNavigation = {
@@ -42,6 +43,40 @@ namespace tests
             m.global.theme = m.originalTheme
             m.global.watchedIndicatorStyle = m.originalWatchedStyle
             m.global.showUnwatchedEpisodeCount = m.originalCountMode
+        end function
+
+        @describe("Home media navigation")
+
+        @it("opening a Home photo hides Home and closing restores it")
+        function _()
+            m.node.homePage.visible = true
+            'bs:disable-next-line 1140
+            showHomeMediaPhotoViewer({ items: [{ Id: "photo", Type: "Photo" }], index: 0, sourceFolderId: "folder" })
+
+            m.assertFalse(m.node.homePage.visible)
+            m.assertNotInvalid(m.node.photoViewerPage)
+
+            'bs:disable-next-line 1140
+            homeMediaLibraryHandlePhotoViewerClosed()
+
+            m.assertTrue(m.node.homePage.visible)
+            m.assertInvalid(m.node.photoViewerPage)
+        end function
+
+        @it("plays an On Now channel with Home as the return owner")
+        function _()
+            getGlobalAa().homeChannelPlayback = invalid
+            'bs:disable-next-line 1001
+            m.stubCall(playerShow, sub(selection, origin, returnBehavior)
+                getGlobalAa().homeChannelPlayback = { selection: selection, origin: origin }
+            end sub)
+            m.node.homePage.selectedLiveTV = { itemId: "channel", item: { Id: "channel", Type: "TvChannel" } }
+
+            captured = getGlobalAa().homeChannelPlayback
+            m.assertNotInvalid(captured)
+            m.assertEqual(captured.selection.itemId, "channel")
+            m.assertTrue(captured.origin.isSameNode(m.node.homePage))
+            getGlobalAa().Delete("homeChannelPlayback")
         end function
 
         @describe("Home exit confirmation")
@@ -115,6 +150,39 @@ namespace tests
 
             m.assertTrue(m.node.homePage.isInFocusChain())
             m.assertFalse(shelf.isInFocusChain())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Cancel falls back to Home after the originating shelf is detached")
+        function _()
+            shelf = m.createExitHomeShelf("second")
+            m.node.homePage.backSelected = true
+            dialog = m.node.overlayHost.getChild(0)
+            content = dialog.callFunc("getContentComponent")
+            m.node.homePage.removeChild(shelf)
+
+            content.findNode("cancel").buttonSelected = true
+
+            m.assertTrue(m.node.homePage.isInFocusChain())
+            m.assertFalse(shelf.isInFocusChain())
+            m.assertFalse(m.top.closeRequested)
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+        end function
+
+        @it("does not restore exit focus to a shelf moved outside Home")
+        function _()
+            shelf = m.createExitHomeShelf("second")
+            m.node.homePage.backSelected = true
+            m.node.homePage.removeChild(shelf)
+            m.node.dynamicPageHost.appendChild(shelf)
+
+            m.node.overlayHost.getChild(0).callFunc("closeDialog")
+            homeFocused = m.node.homePage.isInFocusChain()
+            shelfFocused = shelf.isInFocusChain()
+            m.node.dynamicPageHost.removeChild(shelf)
+
+            m.assertTrue(homeFocused)
+            m.assertFalse(shelfFocused)
             m.assertFalse(m.top.closeRequested)
         end function
 
@@ -1312,12 +1380,11 @@ namespace tests
             library.addFields({ mediaStateChange: {} })
             m.node.tvShowPage = page
             m.node.videoLibraryPage = library
-            m.node.homeRefreshState.playbackRowsDirty = false
 
             'bs:disable-next-line 1140
             tvShowHandleWatchedStateChanged()
 
-            m.assertTrue(m.node.homeRefreshState.playbackRowsDirty)
+            m.assertTrue(m.node.homePage.callFunc("getRefreshSnapshot").required.DoesExist("nextUp"))
             m.assertEqual(library.mediaStateChange, { itemId: "series-1", action: "watched", value: true })
         end function
 
@@ -1329,12 +1396,11 @@ namespace tests
             library.addFields({ mediaStateChange: {} })
             m.node.tvShowPage = page
             m.node.videoLibraryPage = library
-            m.node.homeRefreshState.playbackRowsDirty = false
 
             'bs:disable-next-line 1140
             tvShowHandleWatchedStateChanged()
 
-            m.assertTrue(m.node.homeRefreshState.playbackRowsDirty)
+            m.assertTrue(m.node.homePage.callFunc("getRefreshSnapshot").required.DoesExist("nextUp"))
             m.assertEqual(library.mediaStateChange, { itemId: "series-1", action: "watched", value: false })
         end function
 
@@ -1344,24 +1410,22 @@ namespace tests
             page.addFields({ watchedStateChanged: {} })
             page.watchedStateChanged = invalid
             m.node.tvShowPage = page
-            m.node.homeRefreshState.playbackRowsDirty = false
 
             'bs:disable-next-line 1140
             tvShowHandleWatchedStateChanged()
 
-            m.assertFalse(m.node.homeRefreshState.playbackRowsDirty)
+            m.assertFalse(m.node.homePage.callFunc("getRefreshSnapshot").required.DoesExist("nextUp"))
         end function
 
         @it("invalidates Home after a successful season watched action")
         function _()
-            m.node.homeRefreshState.playbackRowsDirty = false
             m.node.mediaActionState.activeRequest = { sourcePage: "tvShow", item: { Id: "season-1", Type: "Season" } }
             m.node.mediaActionsController.mediaStateChanged = { itemId: "season-1", action: "watched", value: true }
 
             'bs:disable-next-line 1140
             navHandleMediaStateChanged()
 
-            m.assertTrue(m.node.homeRefreshState.playbackRowsDirty)
+            m.assertTrue(m.node.homePage.callFunc("getRefreshSnapshot").required.DoesExist("nextUp"))
         end function
 
         @it("routes episode list watched results to the season page")
@@ -1381,6 +1445,7 @@ namespace tests
             m.node.dynamicPageHost.appendChild(page)
             m.node.tvSeasonPage = page
             getGlobalAa().episodeActionsActivatedSurface = false
+            'bs:disable-next-line 1001
             m.stubCall(focusActiveSurface, sub()
                 getGlobalAa().episodeActionsActivatedSurface = true
             end sub)
@@ -1474,6 +1539,7 @@ namespace tests
 
         @it("completes a normal launch when Home reports ready")
         function _()
+            m.node.homePage.ready = true
             'bs:disable-next-line 1140
             deepLinkHandleHomeReady()
 
@@ -1484,6 +1550,7 @@ namespace tests
         function _()
             m.node.deepLinkNavigation.launchAwaitingDestination = true
 
+            m.node.homePage.ready = true
             'bs:disable-next-line 1140
             deepLinkHandleHomeReady()
 
@@ -1514,6 +1581,7 @@ namespace tests
             m.node.deepLinkNavigation.launchAwaitingDestination = true
             m.node.deepLinkNavigation.fallbackMessage = "Unable to open that item."
 
+            m.node.homePage.ready = true
             'bs:disable-next-line 1140
             deepLinkHandleHomeReady()
 
@@ -1521,9 +1589,8 @@ namespace tests
             m.assertTrue(m.node.performanceBeaconState.launchComplete)
         end function
 
-        @it("selects one nonblocking refresh for a clean Home fallback")
+        @it("delegates a full Home fallback to Home activation")
         function _()
-            m.node.homeRefreshState.playbackRowsDirty = false
             homePage = m.node.homePage
             recorder = m.createHomePageCallRecorder()
             m.node.homePage = recorder
@@ -1535,9 +1602,9 @@ namespace tests
             m.assertEqual(recorder.calls, ["activate"])
         end function
 
-        @it("selects one blocking refresh for a dirty Home fallback")
+        @it("delegates a dirty Home fallback to Home activation")
         function _()
-            m.node.homeRefreshState.playbackRowsDirty = true
+            m.node.homePage.callFunc("recordMediaChange", { itemId: "movie", action: "watched", value: true })
             homePage = m.node.homePage
             recorder = m.createHomePageCallRecorder()
             m.node.homePage = recorder
@@ -1546,7 +1613,7 @@ namespace tests
             showHome(true)
 
             m.node.homePage = homePage
-            m.assertEqual(recorder.calls, ["activateBlocking"])
+            m.assertEqual(recorder.calls, ["activate"])
         end function
 
         @it("tracks authentication dialog performance beacons through its MainScene handlers")
@@ -1795,7 +1862,7 @@ namespace tests
             return {
                 visible: false
                 calls: []
-                callFunc: function(name as string) as dynamic
+                callFunc: function(name as string, argument = invalid as dynamic) as dynamic
                     m.calls.Push(name)
                     return invalid
                 end function
@@ -2107,7 +2174,7 @@ namespace tests
             Spinner.HideBlocking()
         end function
 
-        @it("suppresses outgoing Home refresh messages when hiding the page")
+        @it("delegates hiding and outgoing refresh suppression to Home deactivation")
         function _()
             homePage = m.node.homePage
             recorder = m.createHomePageCallRecorder()
@@ -2118,8 +2185,7 @@ namespace tests
             hideHome()
             m.node.homePage = homePage
 
-            m.assertFalse(recorder.visible)
-            m.assertEqual(recorder.calls, ["suppressRefreshMessages"])
+            m.assertEqual(recorder.calls, ["deactivate"])
         end function
 
         @it("suppresses outgoing Home refresh messages during session and page cleanup")
@@ -2950,7 +3016,7 @@ namespace tests
             capturePlaybackReturn(origin, PlaybackReturn.Behavior.Page)
             getGlobalAa().remotePlayCapture = invalid
             'bs:disable-next-line 1001
-            m.stubCall(playerShow, sub(selection, origin)
+            m.stubCall(playerShow, sub(selection, origin, returnBehavior)
                 getGlobalAa().remotePlayCapture = selection
             end sub)
 
@@ -2981,7 +3047,7 @@ namespace tests
             m.node.loadingSpinner.blockInteraction = true
             getGlobalAa().remotePlayCapture = invalid
             'bs:disable-next-line 1001
-            m.stubCall(playerShow, sub(selection, origin)
+            m.stubCall(playerShow, sub(selection, origin, returnBehavior)
                 getGlobalAa().remotePlayCapture = selection
             end sub)
 
@@ -3440,6 +3506,187 @@ namespace tests
             m.assertTrue(m.node.homePage.visible)
             m.assertInvalid(m.node.tvShowPage)
             m.assertInvalid(m.node.tvSeasonPage)
+        end function
+
+        @describe("durable audio authentication responses")
+
+        @it("ignores an old-token audio failure after the same account logs in again")
+        function _()
+            m.prepareAudioAuthResponse()
+            task = m.node.audioPlaybackReporter.findNode("reportTask")
+            task.request = { server: "http://server", userId: "user", token: "old-token" }
+
+            m.assertTrue(task.__authResponseObserved)
+            m.deliverAudioAuthFailure(task)
+
+            m.assertInvalid(m.node.authController.expireActiveSessionRequested)
+        end function
+
+        @it("routes a current-token audio failure to the active account")
+        function _()
+            m.prepareAudioAuthResponse()
+            task = m.node.audioPlaybackReporter.findNode("reportTaskAlternate")
+            task.request = { server: "http://server", userId: "user", token: "token" }
+
+            m.assertTrue(task.__authResponseObserved)
+            m.deliverAudioAuthFailure(task)
+
+            m.assertEqual(m.node.authController.expireActiveSessionRequested.accountKey, "account-1")
+        end function
+
+        sub deliverAudioAuthFailure(task as object)
+            event = {
+                task: task
+                getData: function()
+                    return { ok: false, authExpired: true }
+                end function
+                getRoSGNode: function()
+                    return m.task
+                end function
+            }
+            'bs:disable-next-line 1140
+            authHandleTaskResponse(event)
+        end sub
+
+        sub prepareAudioAuthResponse()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+        end sub
+
+        @describe("Home refresh integration")
+
+        @it("returning from movie details reconciles the retained Recently Added card")
+        function _()
+            m.seedHomeMovie()
+            'bs:disable-next-line 1140
+            hideHome()
+            page = CreateObject("roSGNode", "Group")
+            page.addFields({ watchedStateChanged: { itemId: "movie", isWatched: true } })
+            m.node.moviePage = page
+
+            'bs:disable-next-line 1140
+            movieHandleWatchedStateChanged()
+            m.node.moviePage = invalid
+            'bs:disable-next-line 1140
+            showHome()
+
+            snapshot = m.node.homePage.callFunc("getRefreshSnapshot")
+            m.assertTrue(snapshot.items["latest:movies"][0].UserData.Played)
+            m.assertTrue(snapshot.pending.DoesExist("nextUp"))
+            m.node.homePage.callFunc("deliverSection", "continueWatching", [])
+            m.node.homePage.callFunc("deliverSection", "nextUp", [])
+            m.node.homePage.callFunc("deliverSection", "latest:movies", [{ Id: "movie", Type: "Movie", UserData: { Played: true } }])
+            shelf = m.node.homePage.findNode("shelvesGroup").getChild(1)
+            m.assertTrue(shelf.rowContent.getChild(0).raw.UserData.Played)
+            m.assertTrue(m.node.homePage.visible)
+        end function
+
+        @it("returning from details restores a newly unwatched movie to an empty Recently Added shelf")
+        function _()
+            m.seedHomeMovie([])
+            m.assertEqual(m.node.homePage.findNode("shelvesGroup").getChildCount(), 1)
+            'bs:disable-next-line 1140
+            hideHome()
+            page = CreateObject("roSGNode", "Group")
+            page.addFields({ watchedStateChanged: { itemId: "hidden-movie", isWatched: false } })
+            m.node.moviePage = page
+
+            'bs:disable-next-line 1140
+            movieHandleWatchedStateChanged()
+            m.node.moviePage = invalid
+            'bs:disable-next-line 1140
+            showHome()
+            snapshot = m.node.homePage.callFunc("getRefreshSnapshot")
+            m.assertTrue(snapshot.required["latest:movies"] > snapshot.applied["latest:movies"])
+            m.node.homePage.callFunc("deliverSection", "continueWatching", [])
+            m.node.homePage.callFunc("deliverSection", "nextUp", [])
+            m.node.homePage.callFunc("deliverSection", "latest:movies", [{ Id: "hidden-movie", Type: "Movie", UserData: { Played: false } }])
+
+            shelf = m.node.homePage.findNode("shelvesGroup").getChild(1)
+            m.assertEqual(shelf.rowContent.rowKey, "latest:movies")
+            m.assertEqual(shelf.rowContent.getChild(0).raw.Id, "hidden-movie")
+            m.assertFalse(shelf.rowContent.getChild(0).raw.UserData.Played)
+            m.assertTrue(m.node.homePage.visible)
+        end function
+
+        @it("a hidden older completion leaves a later detail mutation pending")
+        function _()
+            m.seedHomeMovie()
+            'bs:disable-next-line 1140
+            hideHome()
+            'bs:disable-next-line 1140
+            recordHomeMediaChange({ itemId: "movie", action: "watched", value: true }, "Movie")
+            'bs:disable-next-line 1140
+            showHome()
+            oldRequest = m.node.homePage.callFunc("getSectionRequest", "nextUp")
+            'bs:disable-next-line 1140
+            hideHome()
+            'bs:disable-next-line 1140
+            recordHomeMediaChange({ itemId: "movie", action: "watched", value: false }, "Movie")
+
+            m.node.homePage.callFunc("deliverSection", "continueWatching", [])
+            m.node.homePage.callFunc("deliverSection", "nextUp", [])
+
+            snapshot = m.node.homePage.callFunc("getRefreshSnapshot")
+            m.assertTrue(snapshot.required.nextUp > snapshot.applied.nextUp)
+            m.assertFalse(m.node.homePage.visible)
+            'bs:disable-next-line 1140
+            showHome()
+            newRequest = m.node.homePage.callFunc("getSectionRequest", "nextUp")
+            m.assertTrue(newRequest.homeRevision > oldRequest.homeRevision)
+        end function
+
+        @it("acknowledging a blocking Home error restores usable shelf focus")
+        function _()
+            m.seedHomeMovie()
+            getGlobalAa().homeMessageScene = m.top
+            'bs:disable-next-line 1001
+            m.stubCall(AppMessage.Show, sub(message, title = "Message")
+                scene = getGlobalAa().homeMessageScene
+                scene.callFunc("showMessage", message, title)
+            end sub)
+            'bs:disable-next-line 1140
+            hideHome()
+            'bs:disable-next-line 1140
+            recordHomeMediaChange({ itemId: "unknown", action: "watched", value: true }, "Movie")
+            'bs:disable-next-line 1140
+            showHome()
+
+            m.node.homePage.callFunc("deliverSection", "continueWatching", [], false)
+            m.node.homePage.callFunc("deliverSection", "nextUp", [])
+            m.node.homePage.callFunc("deliverSection", "latest:movies", [{ Id: "movie", Type: "Movie", UserData: { Played: false } }])
+            'bs:disable-next-line 1140
+            onMessageOpenTimer()
+            'bs:disable-next-line 1140
+            dismissMessage(true)
+
+            shelf = m.node.homePage.findNode("shelvesGroup").getChild(0)
+            m.assertTrue(shelf.findNode("items").hasFocus())
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "movies")
+            getGlobalAa().Delete("homeMessageScene")
+        end function
+
+        @it("readiness reset does not complete a pending deep link fallback")
+        function _()
+            m.node.deepLinkNavigation.fallbackMessage = "Pending fallback"
+            m.node.homePage.ready = false
+
+            'bs:disable-next-line 1140
+            deepLinkHandleHomeReady()
+
+            m.assertEqual(m.node.deepLinkNavigation.fallbackMessage, "Pending fallback")
+        end function
+
+        function seedHomeMovie(latestItems = invalid as dynamic)
+            if latestItems = invalid then latestItems = [{ Id: "movie", Type: "Movie", UserData: { Played: false } }]
+            m.node.authenticatedContent.visible = true
+            m.node.homePage.visible = true
+            m.node.homePage.callFunc("activate", true)
+            m.node.homePage.callFunc("deliverSection", "libraries", [{ Id: "movies", Name: "Movies", Type: "CollectionFolder", CollectionType: "movies" }])
+            m.node.homePage.callFunc("deliverSection", "continueWatching", [])
+            m.node.homePage.callFunc("deliverSection", "continueListening", [])
+            m.node.homePage.callFunc("deliverSection", "nextUp", [])
+            m.node.homePage.callFunc("deliverSection", "latest:movies", latestItems)
+            m.node.homePage.callFunc("focusHome")
         end function
 
     end class

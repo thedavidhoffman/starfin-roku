@@ -95,7 +95,7 @@ async function signIn(environment) {
 
 describe('Starfin deep-link certification', function () {
   before(async function () {
-    await ensureAuthenticated();
+    await relaunchAuthenticatedStarfin();
   });
 
   for (const mode of ['cold', 'runtime']) {
