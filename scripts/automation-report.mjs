@@ -15,6 +15,8 @@ const referenceResolution = { width: 1920, height: 1080 };
 // the rows as the list grows. The Login field can remain visible behind it.
 const discoveryResults = { left: 435, top: 370, width: 1050, height: 440 };
 const serverKeyboardField = { left: 270, top: 260, width: 1380, height: 90 };
+// Roku can overlay a mobile-keyboard QR code, including while its banner fades.
+const keyboardQrCode = { left: 1650, top: 0, width: 270, height: 200 };
 const discoveryRedactions = new Map([
   ['discovery-login.png', [loginServerField]],
   // This checkpoint shows the initial scan with an empty Login server field.
@@ -27,21 +29,53 @@ const discoveryRedactions = new Map([
   ['discovery-manual-keyboard.png', [serverKeyboardField]]
 ]);
 
-export function validateAutomationReport(report) {
+// Explicitly approved for 2.2.1 while a seekable audiobook fixture is unavailable.
+const audiobookExceptions = new Set([
+  'saves an interrupted audio position and resumes it when reopened',
+  'reports audio completion and removes the item from Continue Listening'
+]);
+
+export function validateAutomationReport(report, version) {
   const stats = report?.stats;
   if (!stats || !Number.isInteger(stats.tests) || stats.tests < 1) {
     throw new Error('Automation report must contain at least one executed test.');
   }
   if (stats.failures !== 0) throw new Error('Automation report contains failed tests.');
-  if (stats.pending !== 0) throw new Error('Automation report contains pending tests.');
   if ((stats.skipped ?? 0) !== 0) throw new Error('Automation report contains skipped tests.');
   if ((stats.other ?? 0) !== 0) throw new Error('Automation report contains tests with an unexpected result.');
-  if (stats.passes !== stats.tests) throw new Error('Automation report pass count does not match its test count.');
+  const acceptedPending = [];
+  if (stats.pending !== 0) {
+    if (version !== '2.2.1') throw new Error('Automation report contains pending tests.');
+    const tests = [];
+    const visit = suite => {
+      tests.push(...(suite.tests ?? []).map(test => ({ test, suite })));
+      for (const child of suite.suites ?? []) visit(child);
+    };
+    for (const suite of report.results ?? []) visit(suite);
+    const pending = tests.filter(({ test }) => test.pending === true);
+    if (pending.length !== stats.pending || tests.length !== stats.tests
+      || tests.filter(({ test }) => test.pass === true && test.state === 'passed').length !== stats.passes
+      || tests.some(({ test }) => test.fail || test.skipped)) {
+      throw new Error('Automation report exception counts do not match its test records.');
+    }
+    for (const { test, suite } of pending) {
+      if (!/^Home lifecycle reconciliation \((1080p|720p)\)$/.test(suite.title)
+        || !audiobookExceptions.has(test.title) || test.state !== 'pending' || test.pass
+        || acceptedPending.includes(test.title)) {
+        throw new Error('Automation report contains an unapproved pending test.');
+      }
+      acceptedPending.push(test.title);
+    }
+  }
+  if (stats.passes < 1 || stats.passes + acceptedPending.length !== stats.tests) {
+    throw new Error('Automation report pass count does not match its test count.');
+  }
 
   return {
     tests: stats.tests,
     passes: stats.passes,
-    completedAt: stats.end
+    completedAt: stats.end,
+    ...(acceptedPending.length ? { acceptedPending } : {})
   };
 }
 
@@ -57,7 +91,11 @@ export function screenshotRedactionRegions(filename, width, height) {
   if (!discovery && (normalized.startsWith('discovery-') || normalized.includes('server-discovery'))) {
     throw new Error(`No redaction layout defined for discovery screenshot: ${filename}`);
   }
-  const regions = discovery ?? (shouldRedactLoginScreenshot(normalized) ? [loginServerField] : []);
+  const regions = [...(discovery ?? (shouldRedactLoginScreenshot(normalized) ? [loginServerField] : []))];
+  if (discovery || shouldRedactLoginScreenshot(normalized)
+    || /^settings-general-tmdb-key-(empty|set)[.]png$/.test(normalized)) {
+    regions.push(keyboardQrCode);
+  }
   return regions.map(region => ({
     left: Math.floor(region.left * width / referenceResolution.width),
     top: Math.floor(region.top * height / referenceResolution.height),
@@ -197,10 +235,31 @@ async function sanitizePublicText(publicDir, sensitiveValues) {
   for (const file of files) {
     if (!['.html', '.json'].includes(path.extname(file.relativePath).toLowerCase())) continue;
     const original = await fs.readFile(file.absolutePath, 'utf8');
-    const text = redactReportAddresses(original);
+    const text = redactReportCredentials(redactReportAddresses(original), sensitiveValues);
     assertNoSensitiveText(text, sensitiveValues, file.relativePath);
     if (text !== original) await fs.writeFile(file.absolutePath, text);
   }
+}
+
+export function redactReportCredentials(text, sensitiveValues) {
+  for (const sensitive of sensitiveValues.filter(item => item.wholeToken === true)) {
+    const value = sensitive.value;
+    if (!value) continue;
+    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    text = text.replace(new RegExp(escaped, 'g'), (match, offset, input) => {
+      const before = input[offset - 1] ?? '';
+      const after = input[offset + value.length] ?? '';
+      if (/[a-z0-9]/i.test(value[0]) && /[a-z0-9]/i.test(before)) return match;
+      if (/[a-z0-9]/i.test(value.at(-1)) && /[a-z0-9]/i.test(after)) return match;
+      // Preserve report schema keys, matching the scanner's existing exceptions.
+      for (const quote of ['"', '&quot;', '\\&quot;']) {
+        if (input.slice(0, offset).endsWith(quote)
+          && input.slice(offset + value.length).startsWith(`${quote}:`)) return match;
+      }
+      return '[credential_redacted]';
+    });
+  }
+  return text;
 }
 
 async function createZip(sourceDir, outputPath) {
@@ -229,7 +288,7 @@ export async function createReleaseAutomationReport({
 }) {
   const reportJsonPath = path.join(resultsDir, 'report.json');
   const report = JSON.parse(await fs.readFile(reportJsonPath, 'utf8'));
-  const summary = validateAutomationReport(report);
+  const summary = validateAutomationReport(report, version);
   const publicDir = path.join(resultsDir, 'public-report');
   const resolutionPart = resolution ? `-${resolution}` : '';
   const archiveName = `starfin-automation-report-v${version}${resolutionPart}-${runId}.zip`;
@@ -267,6 +326,7 @@ export async function createReleaseAutomationReport({
     starfinVersion: version,
     tests: summary.tests,
     passes: summary.passes,
+    ...(summary.acceptedPending ? { acceptedPending: summary.acceptedPending } : {}),
     completedAt: summary.completedAt,
     displayResolution: resolution,
     screenshotWidth: Number(uniqueDimensions[0].split('x')[0]),

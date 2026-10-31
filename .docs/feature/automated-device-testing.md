@@ -5,6 +5,32 @@ Rooibos remains responsible for unit and SceneGraph component coverage; RTA
 validates the deployed application through real Roku launch, ECP, and scene
 inspection behavior.
 
+## Release 2.2.1 audiobook coverage exception
+
+The user approved deferring the two pending Home audiobook lifecycle cases on
+October 31, 2026: interrupted-position persistence/resume and completed-item
+removal from Continue Listening. They remain explicitly skipped until a seekable
+AudioBook fixture is available. Rooibos coverage remains enabled.
+
+Release archive validation permits only these exact pending titles in the
+resolution-qualified Home lifecycle suite for version 2.2.1. It reconciles
+individual test records with aggregate counts, requires passing executed tests,
+and rejects other pending, skipped/unexecuted, failed, or unexpected results.
+Original report totals remain unchanged; verification.json lists acceptedPending
+titles separately. The exception does not apply to later versions. See the
+[readiness procedure](../release-readiness-review.md) for the approved scope.
+
+## Public report credential redaction
+
+Public release HTML and JSON redact whole-token configured password matches as
+`[credential_redacted]` before the final credential scan. This includes accidental
+matches in embedded test-source prose. Report schema keys and longer unrelated
+words retain their existing scanner exemptions. Private reports and test results
+remain unchanged; public archives still fail if the final sensitive-data scan fails.
+Login, discovery, and TMDB-key screenshots also mask the upper-right mobile-keyboard
+QR-code area, including faded banners, because Roku's link can carry an identifier.
+The searching-state dialog and empty server field remain visible.
+
 ## Rooibos HTTP fixture
 
 `npm test -- --host <roku-host> --password "<developer-password>"` starts a local

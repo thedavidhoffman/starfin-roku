@@ -10,6 +10,7 @@ import {
   createReleaseAutomationReport,
   redactScreenshot,
   redactReportAddresses,
+  redactReportCredentials,
   screenshotRedactionRegions,
   shouldRedactLoginScreenshot,
   validateAutomationReport
@@ -38,6 +39,66 @@ test('accepts a complete passing automation report', () => {
   });
 });
 
+function audiobookReport(resolution = '1080p') {
+  const report = passingReport({ tests: 3, passes: 1, pending: 2 });
+  report.results = [{ title: '', suites: [{
+    title: `Home lifecycle reconciliation (${resolution})`,
+    tests: [
+      { title: 'an executed test', state: 'passed', pass: true, pending: false },
+      { title: 'saves an interrupted audio position and resumes it when reopened', state: 'pending', pending: true },
+      { title: 'reports audio completion and removes the item from Continue Listening', state: 'pending', pending: true }
+    ]
+  }] }];
+  return report;
+}
+
+for (const resolution of ['1080p', '720p']) {
+  test(`records the two approved 2.2.1 audiobook exceptions at ${resolution}`, () => {
+    const summary = validateAutomationReport(audiobookReport(resolution), '2.2.1');
+    assert.equal(summary.tests, 3);
+    assert.equal(summary.passes, 1);
+    assert.deepEqual(summary.acceptedPending, [
+      'saves an interrupted audio position and resumes it when reopened',
+      'reports audio completion and removes the item from Continue Listening'
+    ]);
+  });
+}
+
+test('does not carry the audiobook exception into another release', () => {
+  assert.throws(() => validateAutomationReport(audiobookReport(), '2.2.2'));
+});
+
+test('rejects an unrelated pending test even with the approved pending count', () => {
+  const report = audiobookReport();
+  report.results[0].suites[0].tests[1].title = 'another workflow';
+  assert.throws(() => validateAutomationReport(report, '2.2.1'));
+});
+
+test('rejects matching audiobook names in another suite', () => {
+  const report = audiobookReport();
+  report.results[0].suites[0].title = 'Another suite (1080p)';
+  assert.throws(() => validateAutomationReport(report, '2.2.1'));
+});
+
+test('rejects an incomplete run with unexecuted tests despite approved pending cases', () => {
+  const report = audiobookReport();
+  report.stats.skipped = 1;
+  assert.throws(() => validateAutomationReport(report, '2.2.1'));
+});
+
+test('requires actual pending records for every claimed exception', () => {
+  const report = audiobookReport();
+  report.results[0].suites[0].tests.pop();
+  assert.throws(() => validateAutomationReport(report, '2.2.1'));
+});
+
+test('rejects duplicate audiobook exception records', () => {
+  const report = audiobookReport();
+  const tests = report.results[0].suites[0].tests;
+  tests[2] = { ...tests[1] };
+  assert.throws(() => validateAutomationReport(report, '2.2.1'));
+});
+
 for (const [name, stats] of [
   ['empty', { tests: 0, passes: 0 }],
   ['failed', { failures: 1, passes: 1 }],
@@ -61,7 +122,7 @@ test('selects normal and failure Login screenshots for redaction', () => {
 });
 
 test('scales the Login server field for HD screenshots', () => {
-  assert.deepEqual(screenshotRedactionRegions('login-screen-populated.png', 1280, 720), [{
+  assert.deepEqual(screenshotRedactionRegions('login-screen-populated.png', 1280, 720).slice(0, 1), [{
     left: 663,
     top: 259,
     width: 467,
@@ -140,7 +201,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720]]) {
 }
 
 test('matches discovery screenshot names without regard to case', () => {
-  assert.equal(screenshotRedactionRegions('DISCOVERY-RESULTS.PNG', 1920, 1080).length, 2);
+  assert.equal(screenshotRedactionRegions('DISCOVERY-RESULTS.PNG', 1920, 1080).length, 3);
 });
 
 for (const [width, height] of [[1920, 1080], [1280, 720]]) {
@@ -149,11 +210,26 @@ for (const [width, height] of [[1920, 1080], [1280, 720]]) {
     t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
     const input = path.join(tempDir, 'discovery-searching.png');
     await sharp({ create: { width, height, channels: 3, background: '#abcdef' } }).png().toFile(input);
-    const original = await fs.readFile(input);
-
-    assert.deepEqual(await redactScreenshot(input), []);
-    assert.deepEqual(await fs.readFile(input), original);
+    await redactScreenshot(input);
+    const pixel = await sharp(input).extract({ left: Math.floor(width / 2), top: Math.floor(height / 2), width: 1, height: 1 })
+      .removeAlpha().raw().toBuffer();
+    assert.deepEqual([...pixel], [171, 205, 239], 'searching state remains visible');
   });
+
+  for (const filename of ['login-screen-empty.png', 'discovery-searching.png', 'discovery-manual-selected.png', 'settings-general-tmdb-key-set.png', 'settings-general-tmdb-key-empty.png']) {
+    test(`redacts the mobile keyboard QR area in ${filename} at ${height}p`, async t => {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'starfin-qr-'));
+      t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+      const input = path.join(tempDir, filename);
+      await sharp({ create: { width, height, channels: 3, background: '#ff0000' } }).png().toFile(input);
+      await redactScreenshot(input);
+      for (const [x, y] of [[1660, 10], [1910, 190]]) {
+        const pixel = await sharp(input).extract({ left: Math.floor(x * width / 1920), top: Math.floor(y * height / 1080), width: 1, height: 1 })
+          .removeAlpha().raw().toBuffer();
+        assert.deepEqual([...pixel], [17, 24, 39]);
+      }
+    });
+  }
 }
 
 test('requires a redaction policy for new discovery checkpoints', () => {
@@ -200,6 +276,29 @@ test('does not treat a password embedded in an unrelated word as a credential le
   assert.throws(() => assertNoSensitiveText('credential="pass"', sensitive));
 });
 
+test('redacts credential matches in prose while preserving report keys and unrelated words', () => {
+  const sensitive = buildSensitiveValues({ rokuPassword: 'sample' });
+  const input = '{"sample":true,"code":"// sample here; sampled elsewhere"}';
+  const output = redactReportCredentials(input, sensitive);
+  assert.deepEqual(JSON.parse(output), { sample: true, code: '// [credential_redacted] here; sampled elsewhere' });
+  assert.doesNotThrow(() => assertNoSensitiveText(output, sensitive));
+});
+
+test('redacts HTML-encoded and nested JSON credential values without breaking encoding', () => {
+  const sensitive = buildSensitiveValues({ rokuPassword: 'sample' });
+  const input = '&quot;sample&quot;:true &quot;code&quot;:&quot;sample&quot;';
+  assert.equal(redactReportCredentials(input, sensitive),
+    '&quot;sample&quot;:true &quot;code&quot;:&quot;[credential_redacted]&quot;');
+  const nested = JSON.stringify({ context: JSON.stringify({ code: 'sample' }) });
+  assert.equal(JSON.parse(JSON.parse(redactReportCredentials(nested, sensitive)).context).code, '[credential_redacted]');
+});
+
+test('redacts literal punctuation in credentials and retains scanner rejection of unsanitized values', () => {
+  const sensitive = buildSensitiveValues({ rokuPassword: 'a.b+c' });
+  assert.equal(redactReportCredentials('a.b+c axbbc', sensitive), '[credential_redacted] axbbc');
+  assert.throws(() => assertNoSensitiveText('a.b+c', sensitive));
+});
+
 for (const [name, input, expected] of [
   ['unconfigured discovered server', 'http://10.23.45.67:8096/base', 'http://[ip_redacted]:8096/base'],
   ['encoded HTML metadata', '&quot;address&quot;:&quot;http://192.168.1.8:8096&quot;', '&quot;address&quot;:&quot;http://[ip_redacted]:8096&quot;'],
@@ -230,8 +329,8 @@ test('creates a sanitized archive without logs and preserves private evidence', 
   await fs.mkdir(path.join(tempDir, 'logs'), { recursive: true });
   await fs.mkdir(path.join(tempDir, 'assets'), { recursive: true });
   await fs.mkdir(screenshotsDir, { recursive: true });
-  const privateHtml = '<html><body>http://10.23.45.67:8096</body></html>';
-  const privateJson = JSON.stringify({ ...passingReport(), context: JSON.stringify({ servers: [{ address: 'http://10.23.45.67:8096' }] }) });
+  const privateHtml = '<html><body>http://10.23.45.67:8096 roku-secret</body></html>';
+  const privateJson = JSON.stringify({ ...passingReport(), code: '// roku-secret', context: JSON.stringify({ servers: [{ address: 'http://10.23.45.67:8096' }] }) });
   await fs.writeFile(path.join(tempDir, 'report.html'), privateHtml);
   await fs.writeFile(path.join(tempDir, 'report.json'), privateJson);
   await fs.writeFile(path.join(tempDir, 'logs', 'automation.log'), 'private log');
@@ -269,8 +368,9 @@ test('creates a sanitized archive without logs and preserves private evidence', 
   assert.equal(await fs.readFile(path.join(tempDir, 'report.html'), 'utf8'), privateHtml);
   assert.equal(await fs.readFile(path.join(tempDir, 'report.json'), 'utf8'), privateJson);
   assert.equal(await fs.readFile(path.join(result.publicDir, 'report.html'), 'utf8'),
-    '<html><body>http://[ip_redacted]:8096</body></html>');
+    '<html><body>http://[ip_redacted]:8096 [credential_redacted]</body></html>');
   const publicJson = JSON.parse(await fs.readFile(path.join(result.publicDir, 'report.json'), 'utf8'));
+  assert.equal(publicJson.code, '// [credential_redacted]');
   assert.equal(JSON.parse(publicJson.context).servers[0].address, 'http://[ip_redacted]:8096');
   const verification = await fs.readFile(path.join(result.publicDir, 'verification.json'), 'utf8').then(JSON.parse);
   assert.equal(verification.tests, 2);

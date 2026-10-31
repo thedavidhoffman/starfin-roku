@@ -23,9 +23,120 @@ is not required for the release-readiness analysis to pass.
 This process provides reasonable confidence but cannot prove that the release
 contains no defects.
 
+## Evidence-First, Resumable Execution
+
+Treat clearance as one assessment with persisted progress, not a fresh test run
+on every invocation. The intended workflow is a single orchestration command
+that discovers evidence, runs missing gates, creates artifacts, and emits the
+decision. This document defines that workflow; it does not imply that a complete
+orchestrator already exists. Until implemented, maintain the same record manually
+under `out/readiness-<version>/`.
+
+Before lengthy checks, perform a preflight:
+
+- Use the version already supplied by the user; ask only if it is missing.
+- Confirm the manifest match, baseline, candidate revision, and scoped working
+  tree changes. Preserve unrelated work.
+- Locate existing Rooibos and RTA results, especially when the user says tests
+  have already run. Evaluate their eligibility before scheduling device work.
+- Check required credentials without printing them, device reachability and
+  current resolution, fixture availability, report-tool dependencies, and local
+  browser verification availability. Surface missing prerequisites together.
+- Record approved exceptions once, with exact suite/test identities, reason,
+  release scope, and authorization. Request a decision only for missing approval;
+  never carry a release-specific waiver into another release automatically.
+- Exercise report generation and verification against existing evidence or a
+  representative fixture before starting hours of device tests. This checks
+  tooling readiness; final archives still require verification.
+- Announce the missing gates and expected device handoffs together. Do not ask
+  for permission to perform checks already authorized by the readiness request.
+
+### Evidence eligibility and invalidation
+
+Persist a private assessment record with the baseline, candidate commit, hashes
+of relevant uncommitted files, dependency lockfile and tool versions, effective
+build/test configuration, test inventory, fixture identity, device/OS context,
+resolution, run IDs, timestamps, exit status, totals, cleanup results, evidence
+paths and hashes, exceptions, and each gate's status. Keep credentials out of the
+record and device identity out of public reports.
+
+Reuse complete passing evidence when its recorded inputs match the candidate
+and required environment. A matching commit alone is insufficient when working
+tree files or configuration differ. Historical evidence lacking enough provenance
+to establish a match cannot satisfy a gate. Partial runs, unexplained skips,
+missing cleanup, and test-runner errors cannot count as a complete pass.
+
+- Production, dependency, fixture, test, or shared-helper changes invalidate
+  the gates they affect. Document the dependency reasoning; when uncertain,
+  rerun the affected complete suite at both resolutions.
+- Documentation-only changes do not invalidate device results.
+- Report formatting, redaction, or archive changes invalidate report-tool checks
+  and artifact verification, not otherwise matching device execution evidence.
+- Refresh dependency advisory checks for each assessment; an unchanged lockfile
+  does not establish that external vulnerability information is unchanged.
+- Verify the exact final package and archive bytes regardless of evidence reuse.
+
+Record each gate as pending, running, passed, failed, or blocked, together with
+whether its evidence was reused or newly produced. Persist progress after each
+gate and resume at the first unmet requirement. Recheck inputs on resume, including
+after a user response; invalidate only affected gates. Never infer a pass from
+an interrupted command. Preserve immutable raw logs, results, and screenshots;
+regenerate derived artifacts separately. Existing tools may require separate
+commands for these stages; do not rerun device tests merely to invoke packaging.
+
+### Required coverage and manual handoffs
+
+Complete Rooibos coverage and complete RTA coverage at both resolutions remain
+required, using eligible existing evidence where available. A future targeted
+720p layout/focus suite may replace the second full functional run only after its
+coverage is mapped, validated, and explicitly adopted in this procedure and the
+runner. Do not silently reduce coverage during an assessment.
+
+When device runs are needed, group them into one planned device-testing window:
+perform missing 1080p work, request the switch to 720p once if needed, complete
+missing 720p work, then request restoration to 1080p once. Verify actual resolution
+after each switch. Skip switches for resolutions with eligible evidence. Request
+restoration only when needed; verify the final resolution directly.
+
+Automate archive integrity, privacy, screenshot-reference, asset, and browser
+rendering checks. The browser check must cover styling and screenshot expansion,
+not just HTML existence. If browser automation is unavailable, prepare both final
+reports first and request one consolidated manual review with both paths and the
+specific checks. Record the fallback and confirmation. Verify sensitive screenshot
+layouts visually when automated coverage cannot establish redaction correctness.
+Do not request separate confirmations for every report or repeat a confirmed check
+unless the relevant content changes. Byte-identical HTML/assets may retain their
+rendering evidence after image-only redaction repairs, with the changed images
+separately verified.
+
+Reserve interruptions for necessary physical device changes, missing information,
+new exceptions, or decisions that require the user. Optional manual smoke testing
+must not become an additional approval gate.
+
+### Approved 2.2.1 audiobook exception
+
+On October 31, 2026, the user authorized skipping these two Home lifecycle RTA
+tests for release 2.2.1 while a seekable audiobook fixture is unavailable:
+
+- `saves an interrupted audio position and resumes it when reopened`
+- `reports audio completion and removes the item from Continue Listening`
+
+For this release only, those exact pending cases in the resolution-qualified
+Home lifecycle suite do not block SHIP. All other tests must execute and pass
+at both resolutions. Report totals, actual passes, and both accepted pending
+cases separately; never describe the exceptions as passed. The report validator
+checks the individual records and preserves the exceptions in archive verification
+metadata. Other pending tests, unexecuted tests from incomplete or filtered runs,
+failures, and unexpected results remain blockers. This exception overrides the
+zero-pending/equal-pass-count requirements below only for these two cases and
+does not waive archive or package verification. Resume the current assessment
+after authorization, retaining interrupted runs as historical evidence and using
+eligible complete runs or executing missing complete suites.
+
 ## Classify Test Failures and Stop on Release Blockers
 
-Run readiness steps sequentially and assess each result before starting the next.
+Evaluate gates in dependency order, accepting eligible evidence before executing
+missing checks, and assess each result before advancing dependent work.
 When a unit test or automation test fails, preserve the evidence and determine
 whether the cause is a test defect, a production defect, or an unresolved issue
 before proceeding to later readiness steps:
@@ -55,15 +166,23 @@ repair or present superseded artifacts as current evidence.
 At the first confirmed production defect or other hard failure that would prevent
 release, stop the review and report `NO SHIP`. Do not continue later checks, start
 another resolution's automation run, build release artifacts, or automatically
-fix and retry that blocker during the review. Confirmed test defects follow the
-repair procedure above instead.
+fix and retry that blocker during the review. Confirmed test and artifact-tooling
+defects follow their repair procedures instead.
 
-Examples include an audit finding assessed as a release-blocking security risk,
-a production validation failure, and failed archive verification. Test failures
+Examples include an audit finding assessed as a release-blocking security risk
+and a production validation failure. Test failures
 must first be classified as described above. An outdated dependency or an audit
 finding assessed as inapplicable or safe to defer does not trigger this rule.
 
-When a blocker becomes visible during a running check, stop that check safely
+A report-generation, redaction, or packaging defect blocks delivery of that
+artifact, but does not invalidate passing device results. Diagnose and repair
+confirmed tooling defects within the assessment, preserve raw evidence, rerun
+the affected tooling checks, and regenerate and verify the affected artifacts.
+Do not weaken privacy or coverage checks to obtain a pass. An unresolved artifact
+failure remains `NO SHIP`; classify failures of unclear origin before proceeding.
+
+When a production blocker or unresolved failure becomes visible during a running
+check, stop that check safely
 where possible and preserve the available failure evidence. Perform only cleanup
 and reporting afterward, including prompting for and verifying restoration to
 1080p if the resolution-switching workflow has begun. Cleanup must still happen
@@ -72,9 +191,9 @@ after failure; it does not authorize subsequent readiness checks.
 Report the failed step, concrete failure evidence, why it blocks release, and
 what must be resolved before another review. Mark all unperformed checks and
 missing artifacts as `NOT RUN` or `NOT PRODUCED` because the review stopped at
-that blocker; do not imply they passed or reuse earlier results as current
-evidence. Once the blocker is resolved, a new review must satisfy the complete
-verification requirements.
+that blocker; do not imply they passed. Once the blocker is resolved, resume
+against the updated candidate, retaining only eligible evidence and satisfying
+every remaining requirement. Record reused results separately from checks not run.
 
 ## Release Artifact Folder and Filenames
 
@@ -97,12 +216,11 @@ The automation ZIP filenames identify the version and resolution, without a
 run timestamp. Record the originating run IDs in the readiness report.
 
 After confirming the version and verifying the manifest match, create the
-version's release folder. If this is a new assessment for the same version,
-clear that specific version folder before writing any new artifacts. Verify
-that the resolved target is the intended version directory directly under the
-project's `.release/` directory before clearing it. Preserve other release
-versions and private evidence. Do not clear the folder between steps or when
-resuming the same assessment.
+version's release folder. Reconcile existing files with the assessment record;
+preserve verified eligible artifacts. Move superseded artifacts to private
+historical storage under `out/` before replacing them, checking that resolved
+paths remain within the intended workspace directories. Never clear evidence
+simply because an assessment was restarted. Preserve other release versions.
 
 Build and automation tools may use `build/` and `out/` as working directories.
 Preserve private reports, original screenshots, and raw logs there; place the
@@ -113,14 +231,15 @@ Verify the final copies in the release folder, including extracting and opening
 both automation ZIPs, before recommending `SHIP`.
 
 If the assessment stops at a blocker, write its `NO SHIP` readiness report to
-this same folder and retain only artifacts actually produced by that assessment.
+this same folder and retain only artifacts produced or explicitly accepted as
+eligible evidence by that assessment.
 Mark missing artifacts as `NOT PRODUCED`; never leave an earlier run's files
 in place as if they were current evidence.
 
 ## 1. Confirm the Release Version
 
-Before starting the review or running any checks, prompt the user for the target
-release version in `major.minor.build` format and wait for their response. Do not
+Use the target release version supplied in the request or earlier in the session.
+If none was supplied, prompt for it in `major.minor.build` format and wait. Do not
 infer the target from the current manifest, package metadata, or previous reports.
 
 Use the confirmed version throughout the decision record, report filenames,
@@ -129,8 +248,9 @@ automation archive names, and release artifact. Verify that the Roku manifest's
 If they differ, report the mismatch and resolve it with the user before continuing;
 do not silently change or increment the version.
 
-Once the version matches, initialize or clear its release folder as specified
-in **Release Artifact Folder and Filenames** before proceeding with the review.
+Once the version matches, initialize or reconcile its release folder as specified
+in **Release Artifact Folder and Filenames**, then complete preflight and evidence
+discovery before proceeding with lengthy checks.
 
 ## 2. Establish the Release Scope
 
@@ -174,8 +294,8 @@ alternate paths that bypass the current implementation.
 
 ## 5. Run Automated Verification
 
-Run the complete project validation rather than only the tests nearest to the
-latest changes:
+Require complete project validation rather than only checks nearest to the
+latest changes. Reuse eligible results; execute missing or invalidated checks:
 
 ```text
 npm run validate
@@ -220,8 +340,8 @@ the assessment incomplete and must be resolved before recommending `SHIP`.
 
 ## 6. Run Required Roku Device Tests
 
-Install and test on the configured development device. Run the complete Rooibos
-unit-test suite for every release candidate:
+Require a complete Rooibos unit-test result matching every release candidate.
+When eligible evidence is unavailable, install and test on the configured device:
 
 ```text
 npm test -- --host <roku-host> --password "<developer-password>"
@@ -234,14 +354,17 @@ defects or unresolved causes. An incomplete run, unexpectedly skipped test, devi
 disconnect, or test-runner error cannot count as passing evidence. A partial or
 targeted rerun is not sufficient for the final release decision.
 
-After the complete Rooibos suite passes, run the complete RTA device-automation
-suite at both resolutions in release-report mode:
+After the complete Rooibos gate passes, obtain complete RTA evidence at both
+resolutions. If neither resolution has eligible evidence, run the coordinator:
 
 ```text
 npm run automation:test:release:resolutions
 ```
 
-Follow this sequence:
+If only one resolution lacks eligible evidence, use the existing single-resolution
+release command (`npm run automation:test:release -- --resolution <resolution>`)
+for that resolution. Do not invoke a coordinator that repeats valid runs.
+For missing runs, follow this sequence, omitting already satisfied execution gates:
 
 1. Verify that the Roku is set to **1080p**, then run the complete suite in
    release-report mode.
@@ -278,7 +401,8 @@ Redaction verification must cover both image pixels and report data:
   as lists grow; verify masks at both resolutions rather than applying only
   the Login field rectangle. Unknown discovery screenshot layouts must stop
   packaging until their redaction coverage is defined and tested.
-  The initial `discovery-searching` checkpoint remains unmasked: confirm that
+  The initial `discovery-searching` dialog remains unmasked (the mobile-keyboard
+  QR-code area is masked): confirm that
   it shows only the searching state, with an empty server field and no results.
 - Sanitize and then scan every public HTML and JSON file, including nested or
   escaped context metadata and `verification.json`, for all IPv4 addresses.
@@ -301,7 +425,8 @@ remain subject to redaction; the exception does not extend to other loopback
 addresses or to credentials.
 
 Each resolution must report at least one executed automation test, equal test
-and pass counts, and no failed, pending, skipped, or unexpected results. Both
+and pass counts, and no failed, pending, skipped, or unexpected results, subject
+only to explicitly approved release-scoped exceptions recorded above. Both
 complete suites must pass and both sanitized archives must pass verification.
 A failed or incomplete run cannot satisfy this gate. Confirmed test defects may
 be repaired under the classification procedure above, followed by complete
@@ -421,6 +546,11 @@ Write the completed decision record to
 - Baseline and proposed release commit.
 - User-confirmed target release version and manifest version match.
 - Validation commands and results.
+- Evidence provenance and input fingerprints, reused versus newly executed gates,
+  invalidation reasons, and approved exceptions with actual passes and accepted
+  pending cases reported separately. Keep sensitive provenance in private notes.
+- Report-tool repairs and regenerated artifacts, including automated verification
+  results and any consolidated manual rendering confirmation.
 - Test repairs made during the assessment: original failures, evidence supporting
   classification as test defects, corrections, preserved behavioral coverage,
   targeted and complete rerun results, and which earlier checks remain valid
@@ -458,7 +588,12 @@ optional fields may be omitted without blocking a `SHIP` decision.
 
 A `SHIP` decision requires no unresolved release blockers, complete passing RTA
 suites at both 1080p and 720p with no failed, pending, skipped, or unexpected
-results, and successful verification of the final artifacts, including both
+results except explicitly approved release-scoped exceptions, and successful
+verification of the final artifacts, including both
 sanitized report archives, in `.release/<version>/`. Any accepted
 follow-up should have a documented owner and enough detail to be actionable
 after release.
+
+End with a concise `SHIP` or `NO SHIP` decision, aggregate results, approved
+exceptions or remaining blockers, and links to the package and readiness report.
+Distinguish artifact creation from publication; readiness does not publish a release.
