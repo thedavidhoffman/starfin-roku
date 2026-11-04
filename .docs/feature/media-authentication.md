@@ -17,3 +17,21 @@ fragments. Relative URLs resolve against the configured server's base path.
 Subtitle tracks use the supplied delivery URL without adding credentials.
 
 TMDB authentication is separate. Authentication tokens are redacted from logs.
+
+## HTTPS and Roku device identity
+
+The shared HTTP client and trickplay downloader use Roku's CA bundle through
+`SetCertificatesFile("common:/certs/ca-bundle.crt")` for HTTPS server-certificate
+verification. They do not call the deprecated `InitClientCertificates()` API,
+which presents a Roku-issued client certificate to servers requesting device
+authentication. Jellyfin requests retain their existing session authorization.
+
+Roku device attestation is not part of this request contract. Adding it would
+require backend verification of attestation tokens; it is not a replacement for
+HTTPS server-certificate verification or Jellyfin session authentication.
+
+Existing HTTP-client and trickplay tests cover authenticated requests and tile
+downloads through the local HTTP fixture. They do not establish HTTPS certificate
+behavior. Device verification for this change should cover HTTPS sign-in/API
+requests and trickplay downloads, followed by Roku static analysis of the new
+package to confirm the deprecated-API warnings are gone.
