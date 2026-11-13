@@ -3,31 +3,393 @@ namespace tests
     @suite("Authentication store helpers")
     class AuthStoreTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.registrySnapshots = {}
+            getGlobalAa().Delete("authStoreRegistryFixture")
+        end function
+
+        protected override function afterEach()
+            getGlobalAa().Delete("authStoreRegistryFixture")
+            registry = CreateObject("roRegistry")
+            for each name in m.registrySnapshots
+                registry.Delete(name)
+                values = m.registrySnapshots[name]
+                if values.Count() > 0 then
+                    section = CreateObject("roRegistrySection", name)
+                    section.WriteMulti(values)
+                    section.Flush()
+                end if
+            end for
+            registry.Flush()
+        end function
+
+        function migrationFixture() as object
+            oldKey = "rooibos-migration.invalid/user"
+            newKey = AuthStore.BuildAccountKey("https://rooibos-migration.invalid/Media", "user")
+            for each name in ["STARFIN_ROKU", RegistryStore.AccountSectionName(oldKey), RegistryStore.AccountSectionName(newKey)]
+                section = CreateObject("roRegistrySection", name)
+                m.registrySnapshots[name] = section.ReadMulti(section.GetKeyList())
+                if name <> "STARFIN_ROKU" then
+                    registry = CreateObject("roRegistry")
+                    registry.Delete(name)
+                end if
+            end for
+            legacy = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(oldKey))
+            legacy.WriteMulti({ server: "https://rooibos-migration.invalid/Media", "user-id": "user", username: "User", token: "saved-token", theme: "grey", "library-view": "saved-view" })
+            legacy.Flush()
+            globalStore = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            globalStore.Write("active-account-key", oldKey)
+            globalStore.Flush()
+            return { oldKey: oldKey, newKey: newKey, legacy: legacy }
+        end function
+
+        @describe("forgetting the last-used account")
+
+        @it("protects the active account by default")
+        function _()
+            fixture = m.migrationFixture()
+
+            m.assertFalse(AuthStore.ForgetAccount(fixture.oldKey))
+            m.assertEqual(AuthStore.GetActiveAccountKey(), fixture.oldKey)
+            m.assertNotInvalid(AuthStore.LoadAccount(fixture.oldKey))
+        end function
+
+        @it("clears the last-used reference after confirmed startup removal")
+        function _()
+            fixture = m.migrationFixture()
+
+            m.assertTrue(AuthStore.ForgetAccount(fixture.oldKey, true))
+
+            m.assertEqual(AuthStore.GetActiveAccountKey(), "")
+            m.assertInvalid(AuthStore.LoadAccount(fixture.oldKey))
+        end function
+
+        @it("keeps the last-used reference when deleting another account at startup")
+        function _()
+            fixture = m.migrationFixture()
+            section = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(fixture.newKey))
+            section.Write("user-id", "other")
+            section.Flush()
+
+            m.assertTrue(AuthStore.ForgetAccount(fixture.newKey, true))
+
+            m.assertEqual(AuthStore.GetActiveAccountKey(), fixture.oldKey)
+        end function
+
+        @it("retains the last-used reference when startup deletion fails")
+        function _()
+            state = m.createMigrationRegistry()
+            state.registry.Delete = function(name as string) as boolean
+                return false
+            end function
+
+            m.assertFalse(AuthStore.ForgetAccount(state.oldKey, true))
+
+            m.assertEqual(AuthStore.GetActiveAccountKey(), state.oldKey)
+            m.assertEqual(state.legacy.values.token, "legacy-token")
+        end function
+
         @describe("AuthStore.BuildAccountKey")
 
         @it("normalizes server authorities and user IDs (case 1)")
         function _()
-            m.assertEqual(AuthStore.BuildAccountKey(" HTTPS://Example.COM/ ", "user-1"), "example.com/user-1")
+            m.assertEqual(AuthStore.BuildAccountKey(" HTTPS://Example.COM/ ", "user-1"), "v2/https%3A%2F%2Fexample.com/user-1")
         end function
 
         @it("normalizes server authorities and user IDs (case 2)")
         function _()
-            m.assertEqual(AuthStore.BuildAccountKey("example.com/path", "user-1"), "example.com/user-1")
+            m.assertEqual(AuthStore.BuildAccountKey("example.com/path", "user-1"), "v2/http%3A%2F%2Fexample.com%2Fpath/user-1")
         end function
 
         @it("normalizes server authorities and user IDs (case 3)")
         function _()
-            m.assertEqual(AuthStore.BuildAccountKey("example.com?view=details", "user-1"), "example.com/user-1")
+            m.assertEqual(AuthStore.BuildAccountKey("example.com?view=details", "user-1"), "v2/http%3A%2F%2Fexample.com%3Fview%3Ddetails/user-1")
         end function
 
         @it("normalizes server authorities and user IDs (case 4)")
         function _()
-            m.assertEqual(AuthStore.BuildAccountKey("example.com#fragment", "user-1"), "example.com/user-1")
+            m.assertEqual(AuthStore.BuildAccountKey("example.com#fragment", "user-1"), "v2/http%3A%2F%2Fexample.com%23fragment/user-1")
         end function
 
         @it("uses an empty user suffix for invalid IDs")
         function _()
-            m.assertEqual(AuthStore.BuildAccountKey("example.com", invalid), "example.com/")
+            m.assertEqual(AuthStore.BuildAccountKey("example.com", invalid), "v2/http%3A%2F%2Fexample.com/")
+        end function
+
+        @describe("cross-server enumeration")
+
+        @it("retains account identity and server when listing all saved users")
+        function _()
+            name = RegistryStore.AccountSectionName("rooibos-enumeration/user")
+            section = CreateObject("roRegistrySection", name)
+            saved = section.ReadMulti(section.GetKeyList())
+            section.WriteMulti({ server: "https://other.example", "user-id": "user", username: "Other user", token: "test-token" })
+            section.Flush()
+
+            found = invalid
+            for each account in AuthStore.ListAllAccounts(true)
+                if account.accountKey = "rooibos-enumeration/user" then found = account
+            end for
+
+            registry = CreateObject("roRegistry")
+            registry.Delete(name)
+            if saved.Count() > 0 then
+                restored = CreateObject("roRegistrySection", name)
+                restored.WriteMulti(saved)
+                restored.Flush()
+            end if
+            registry.Flush()
+
+            m.assertNotInvalid(found)
+            if found = invalid then return invalid
+            m.assertEqual(found.server, "https://other.example")
+            m.assertEqual(found.username, "Other user")
+            m.assertEqual(found.userId, "user")
+            m.assertEqual(found.token, "test-token")
+        end function
+
+        @describe("versioned server account identity")
+
+        @it("separates the same user across server paths")
+        function _()
+            m.assertFalse(AuthStore.BuildAccountKey("https://host/a", "user") = AuthStore.BuildAccountKey("https://host/b", "user"))
+        end function
+
+        @it("separates the same user across schemes")
+        function _()
+            m.assertFalse(AuthStore.BuildAccountKey("http://host", "user") = AuthStore.BuildAccountKey("https://host", "user"))
+        end function
+
+        @it("preserves case-sensitive server paths")
+        function _()
+            m.assertFalse(AuthStore.BuildAccountKey("https://host/A", "user") = AuthStore.BuildAccountKey("https://host/a", "user"))
+        end function
+
+        @it("preserves port identity")
+        function _()
+            m.assertFalse(AuthStore.BuildAccountKey("http://host:8096", "user") = AuthStore.BuildAccountKey("http://host:8097", "user"))
+        end function
+
+        @describe("account record migration")
+
+        @it("moves credentials settings browsing state and the active reference together")
+        function _()
+            fixture = m.migrationFixture()
+
+            result = AuthStore.__MigrateAccount(fixture.legacy, fixture.oldKey, fixture.newKey)
+            account = AuthStore.Load()
+            destination = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(fixture.newKey))
+
+            m.assertTrue(result)
+            m.assertEqual(account.accountKey, fixture.newKey)
+            m.assertEqual(account.token, "saved-token")
+            m.assertEqual(destination.Read("theme"), "grey")
+            m.assertEqual(destination.Read("library-view"), "saved-view")
+            m.assertInvalid(AuthStore.LoadAccount(fixture.oldKey))
+        end function
+
+        @it("preserves destination values when retrying a partial copy")
+        function _()
+            fixture = m.migrationFixture()
+            destination = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(fixture.newKey))
+            destination.Write("theme", "blue")
+            destination.Flush()
+
+            result = AuthStore.__MigrateAccount(fixture.legacy, fixture.oldKey, fixture.newKey)
+
+            m.assertTrue(result)
+            m.assertEqual(destination.Read("theme"), "blue")
+            m.assertEqual(destination.Read("token"), "saved-token")
+            m.assertEqual(destination.Read("library-view"), "saved-view")
+        end function
+
+        @it("retains legacy data when the active reference cannot be persisted")
+        function _()
+            fixture = m.migrationFixture()
+            failedGlobal = {
+                oldKey: fixture.oldKey
+                Read: function(key as string) as string
+                    return m.oldKey
+                end function
+                Write: function(key as string, value as string) as boolean
+                    return true
+                end function
+                Flush: function() as boolean
+                    return false
+                end function
+            }
+            m.stubCall(AuthStore.__GetStore, failedGlobal)
+
+            result = AuthStore.__MigrateAccount(fixture.legacy, fixture.oldKey, fixture.newKey)
+
+            m.assertFalse(result)
+            m.assertEqual(AuthStore.LoadAccount(fixture.oldKey, true).token, "saved-token")
+            m.assertEqual(AuthStore.LoadAccount(fixture.newKey, true).token, "saved-token")
+        end function
+
+        @it("finishes a migration after an interrupted active-reference update")
+        function _()
+            fixture = m.migrationFixture()
+            failedGlobal = {
+                oldKey: fixture.oldKey
+                Read: function(key as string) as string
+                    return m.oldKey
+                end function
+                Write: function(key as string, value as string) as boolean
+                    return false
+                end function
+            }
+            m.stubCall(AuthStore.__GetStore, failedGlobal)
+            m.assertFalse(AuthStore.__MigrateAccount(fixture.legacy, fixture.oldKey, fixture.newKey))
+            realGlobal = CreateObject("roRegistrySection", "STARFIN_ROKU")
+            m.stubCall(AuthStore.__GetStore, realGlobal)
+
+            result = AuthStore.__MigrateAccount(fixture.legacy, fixture.oldKey, fixture.newKey)
+
+            m.assertTrue(result)
+            m.assertEqual(AuthStore.Load().accountKey, fixture.newKey)
+            m.assertInvalid(AuthStore.LoadAccount(fixture.oldKey))
+        end function
+
+        @describe("native registry failures and migration discovery")
+
+        @it("retains the legacy record and active key when a destination write fails")
+        function _()
+            state = m.createMigrationRegistry()
+            state.destination.failWrite = true
+
+            m.assertFalse(AuthStore.MigrateAccounts())
+
+            m.assertEqual(state.registry.deleted.Count(), 0)
+            m.assertEqual(state.globalStore.values["active-account-key"], state.oldKey)
+            m.assertEqual(state.legacy.values.token, "legacy-token")
+        end function
+
+        @it("retains the legacy record and active key when destination flush fails")
+        function _()
+            state = m.createMigrationRegistry()
+            state.destination.failFlush = true
+
+            m.assertFalse(AuthStore.MigrateAccounts())
+
+            m.assertEqual(state.registry.deleted.Count(), 0)
+            m.assertEqual(state.globalStore.values["active-account-key"], state.oldKey)
+        end function
+
+        @it("retries destination persistence before moving the active reference")
+        function _()
+            state = m.createMigrationRegistry()
+            state.destination.failFlush = true
+            m.assertFalse(AuthStore.MigrateAccounts())
+            state.destination.failFlush = false
+
+            m.assertTrue(AuthStore.MigrateAccounts())
+
+            m.assertEqual(state.destination.persisted.token, "legacy-token")
+            m.assertEqual(state.destination.persisted.theme, "grey")
+            m.assertEqual(state.globalStore.persisted["active-account-key"], state.newKey)
+            m.assertEqual(state.registry.deleted, [RegistryStore.AccountSectionName(state.oldKey)])
+        end function
+
+        @it("discovers legacy accounts and is idempotent on the next launch")
+        function _()
+            state = m.createMigrationRegistry()
+            m.assertTrue(AuthStore.MigrateAccounts())
+            writes = state.destination.writeCount
+
+            m.assertTrue(AuthStore.MigrateAccounts())
+
+            m.assertEqual(state.destination.writeCount, writes)
+            m.assertEqual(state.registry.deleted.Count(), 1)
+            m.assertEqual(state.globalStore.persisted["active-account-key"], state.newKey)
+        end function
+
+        @it("migrates inactive accounts without changing the active reference")
+        function _()
+            state = m.createMigrationRegistry()
+            state.globalStore.values["active-account-key"] = "another-account"
+
+            m.assertTrue(AuthStore.MigrateAccounts())
+
+            m.assertEqual(state.globalStore.values["active-account-key"], "another-account")
+            m.assertEqual(state.destination.persisted.token, "legacy-token")
+        end function
+
+        @it("preserves legacy sections without sufficient identity to migrate")
+        function _()
+            state = m.createMigrationRegistry()
+            state.legacy.values.Delete("user-id")
+
+            m.assertTrue(AuthStore.MigrateAccounts())
+
+            m.assertEqual(state.registry.deleted.Count(), 0)
+            m.assertEqual(state.destination.writeCount, 0)
+        end function
+
+        function createMigrationRegistry() as object
+            oldKey = "migration.invalid/user"
+            newKey = AuthStore.BuildAccountKey("https://migration.invalid/Media", "user")
+            legacy = m.createRegistrySection({ server: "https://migration.invalid/Media", "user-id": "user", token: "legacy-token", theme: "grey" })
+            destination = m.createRegistrySection({})
+            globalStore = m.createRegistrySection({ "active-account-key": oldKey })
+            sections = {}
+            sections[RegistryStore.AccountSectionName(oldKey)] = legacy
+            sections[RegistryStore.AccountSectionName(newKey)] = destination
+            sections["STARFIN_ROKU"] = globalStore
+            registry = {
+                names: ["STARFIN_ROKU", RegistryStore.AccountSectionName(oldKey), RegistryStore.AccountSectionName(newKey)]
+                deleted: []
+                GetSectionList: function() as object
+                    result = []
+                    result.Append(m.names)
+                    return result
+                end function
+                Delete: function(name as string) as boolean
+                    m.deleted.Push(name)
+                    for index = m.names.Count() - 1 to 0 step -1
+                        if m.names[index] = name then m.names.Delete(index)
+                    end for
+                    return true
+                end function
+                Flush: function() as boolean
+                    return true
+                end function
+            }
+            state = { registry: registry, sections: sections, legacy: legacy, destination: destination, globalStore: globalStore, oldKey: oldKey, newKey: newKey }
+            getGlobalAa().authStoreRegistryFixture = state
+            return state
+        end function
+
+        function createRegistrySection(values as object) as object
+            return {
+                values: values
+                persisted: {}
+                failWrite: false
+                failFlush: false
+                writeCount: 0
+                GetKeyList: function() as object
+                    return m.values.Keys()
+                end function
+                Read: function(key as string) as string
+                    if m.values.DoesExist(key) then return m.values[key]
+                    return ""
+                end function
+                Exists: function(key as string) as boolean
+                    return m.values.DoesExist(key)
+                end function
+                Write: function(key as string, value as string) as boolean
+                    m.writeCount++
+                    if m.failWrite then return false
+                    m.values[key] = value
+                    return true
+                end function
+                Flush: function() as boolean
+                    if m.failFlush then return false
+                    m.persisted = {}
+                    m.persisted.Append(m.values)
+                    return true
+                end function
+            }
         end function
 
     end class

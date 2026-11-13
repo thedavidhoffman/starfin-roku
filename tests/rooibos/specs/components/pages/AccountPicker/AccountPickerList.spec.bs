@@ -1,0 +1,75 @@
+namespace tests
+
+    @SGNode("AccountPickerList")
+    @suite("Account picker vertical navigation")
+    class AccountPickerListTests extends rooibos.BaseTestSuite
+
+        @describe("scrolling and footer navigation")
+
+        @it("leaves Down to native scrolling before the last account")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChildren(6, "ContentNode")
+            m.top.content = content
+            m.top.itemFocused = 0
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertFalse(handled)
+        end function
+
+        @it("exits to the footer only at the last account")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            content.createChildren(6, "ContentNode")
+            m.top.content = content
+            m.top.itemFocused = 5
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.focusExitDown)
+        end function
+
+        @it("ignores released Down events")
+        function _()
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", false)
+
+            m.assertFalse(handled)
+        end function
+
+        @describe("forget requests")
+
+        @it("publishes the focused account for the Options key")
+        function _()
+            content = CreateObject("roSGNode", "ContentNode")
+            item = content.createChild("ContentNode")
+            account = { accountKey: "other/user", isActive: false }
+            item.addFields({ account: account })
+            m.top.content = content
+            m.top.itemFocused = 0
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("options", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.forgetRequested, account)
+        end function
+
+        @it("does not publish a request for released Options")
+        function _()
+            m.top.forgetRequested = invalid
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("options", false)
+
+            m.assertFalse(handled)
+            m.assertInvalid(m.top.forgetRequested)
+        end function
+
+    end class
+
+end namespace

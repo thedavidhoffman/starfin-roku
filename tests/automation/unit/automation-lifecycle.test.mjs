@@ -2,6 +2,26 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { clearStarfinRegistry, waitForStartup } from '../support/lifecycle.mjs';
 
+test('recognizes the startup picker without waiting for Home or Login', async () => {
+  let requested;
+  const environment = { odc: { getValues: async request => {
+    requested = request;
+    return { results: { picker: { value: true }, login: { value: false }, home: { value: false } } };
+  } } };
+  await waitForStartup(environment);
+  assert.equal(requested.requests.picker.keyPath, '#startupAccountHost.0.visible');
+});
+
+test('does not accept a hidden retained picker as a completed startup surface', async () => {
+  let reads = 0;
+  const environment = { odc: { getValues: async () => {
+    reads++;
+    return { results: { picker: { value: false }, login: { value: reads === 2 }, home: { value: false } } };
+  } } };
+  await waitForStartup(environment);
+  assert.equal(reads, 2);
+});
+
 test('waits for initial authentication to publish the login surface', async () => {
   let reads = 0;
   const environment = { odc: { getValues: async () => {

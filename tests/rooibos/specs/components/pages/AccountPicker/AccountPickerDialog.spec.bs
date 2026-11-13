@@ -14,13 +14,14 @@ namespace tests
             m.assertEqual(m.top.title, "Switch Account")
         end function
 
-        @it("configures the account picker dimensions")
+        @it("fits the empty picker to its sign-in action")
         function _()
+            m.top.accounts = []
             'bs:disable-next-line 1140
             openAccountPicker()
 
             m.assertTrue(m.top.dialogWidth = 920)
-            m.assertTrue(m.top.dialogHeight = 590)
+            m.assertTrue(m.top.dialogHeight = 286)
         end function
 
         @it("uses AccountPickerContent for dialog content")
@@ -147,6 +148,117 @@ namespace tests
             onSignInSelected()
 
             m.assertFalse(m.node.dialog.visible)
+        end function
+
+        @describe("multi-server presentation")
+
+        @it("provides room for the shared vertical list and sign-in action")
+        function _()
+            m.top.accounts = [{ accountKey: "a", username: "A", server: "http://one" }, { accountKey: "b", username: "B", server: "http://two" }]
+
+            'bs:disable-next-line 1140
+            openAccountPicker()
+            content = m.top.callFunc("getContentComponent")
+
+            m.assertEqual(m.top.dialogHeight, 558)
+            m.assertEqual(m.top.dialogWidth, 760)
+            m.assertEqual(content.contentWidth, 640)
+            m.assertEqual(content.findNode("verticalAccounts").translation, [0.0, 0.0])
+            m.assertTrue(content.findNode("verticalAccounts").visible)
+            m.assertEqual(content.findNode("verticalAccounts").numRows, 2)
+        end function
+
+        @describe("content-driven dialog height")
+
+        @it("fits a single horizontal account without reserving vertical rows")
+        function _()
+            m.top.accounts = [{ accountKey: "a", username: "A", server: "http://one" }]
+
+            'bs:disable-next-line 1140
+            openAccountPicker()
+
+            m.assertEqual(m.top.dialogHeight, 574)
+            m.assertEqual(m.top.dialogWidth, 920)
+        end function
+
+        @it("caps a longer vertical list at three rows")
+        function _()
+            m.top.accounts = [
+                { accountKey: "a", username: "A", server: "http://one" }
+                { accountKey: "b", username: "B", server: "http://two" }
+                { accountKey: "c", username: "C", server: "http://two" }
+                { accountKey: "d", username: "D", server: "http://two" }
+            ]
+
+            'bs:disable-next-line 1140
+            openAccountPicker()
+            content = m.top.callFunc("getContentComponent")
+
+            m.assertEqual(m.top.dialogHeight, 686)
+            m.assertEqual(content.findNode("verticalAccounts").numRows, 3)
+        end function
+
+        @it("compacts confirmation and restores picker height on cancellation")
+        function _()
+            second = { accountKey: "b", username: "B", server: "http://two", isActive: false }
+            m.top.accounts = [{ accountKey: "a", username: "A", server: "http://one", isActive: true }, second]
+            'bs:disable-next-line 1140
+            openAccountPicker()
+            content = m.top.callFunc("getContentComponent")
+
+            content.findNode("verticalAccounts").forgetRequested = second
+
+            m.assertTrue(m.top.dialogHeight >= 547)
+            m.assertEqual(m.top.dialogHeight, content.preferredHeight + 230)
+            m.assertEqual(m.top.dialogWidth, 760)
+            m.assertEqual(content.findNode("removalPreview").translation, [0.0, 0.0])
+            m.assertEqual(content.findNode("removalDescription").width, 403.0)
+            description = content.findNode("removalDescription")
+            m.assertTrue(content.findNode("removeButton").translation[1] >= description.translation[1] + description.boundingRect().height + 24)
+            m.assertTrue(content.findNode("removeButton").isInFocusChain())
+
+            content.findNode("cancelButton").buttonSelected = true
+
+            m.assertEqual(m.top.dialogHeight, 558)
+            m.assertTrue(content.findNode("verticalAccounts").isInFocusChain())
+        end function
+
+        @it("restores horizontal width after the last other-server account is removed")
+        function _()
+            dialog = CreateObject("roSGNode", "AccountPickerDialog")
+            first = { accountKey: "a", username: "A", server: "http://one", isActive: true }
+            second = { accountKey: "b", username: "B", server: "http://two", isActive: false }
+            dialog.accounts = [first, second]
+            'bs:disable-next-line 1140
+            dialog.callFunc("openAccountPicker")
+            content = dialog.callFunc("getContentComponent")
+
+            content.accounts = [first]
+            content.accountsChanged = [first]
+
+            m.assertEqual(dialog.dialogWidth, 920)
+            m.assertEqual(content.contentWidth, 800)
+            m.assertTrue(content.findNode("accountRows").visible)
+        end function
+
+        @it("keeps the dialog at three horizontal accounts")
+        function _()
+            dialog = CreateObject("roSGNode", "AccountPickerDialog")
+            dialog.accounts = [
+                { accountKey: "a", server: "http://same" }
+                { accountKey: "b", server: "http://same" }
+                { accountKey: "c", server: "http://same" }
+                { accountKey: "d", server: "http://same" }
+            ]
+            dialog.initialFocusAccountKey = "c"
+
+            'bs:disable-next-line 1140
+            dialog.callFunc("openAccountPicker")
+            content = dialog.callFunc("getContentComponent")
+
+            m.assertEqual(content.horizontalVisibleCount, 3)
+            m.assertEqual(content.findNode("accountRows").itemSize, [693.0, 264.0])
+            m.assertEqual(content.findNode("accountRows").jumpToRowItem, [0, 2])
         end function
 
     end class

@@ -77,7 +77,7 @@ namespace tests
 
             'bs:disable-next-line 1140
             session = buildAuthenticatedSession(response)
-            m.assertEqual(session.accountKey, "server.example/user-id")
+            m.assertEqual(session.accountKey, "v2/https%3A%2F%2Fserver.example/user-id")
             m.assertEqual(session.server, "https://Server.Example/")
             m.assertEqual(session.username, "River")
             m.assertEqual(session.token, "payload-token")
@@ -158,7 +158,7 @@ namespace tests
         function _()
             original = { activeAccountKey: AuthStore.GetActiveAccountKey(), server: AuthStore.GetLastServer() }
             m.node.savedSession = { permissions: { canAccessLiveTv: true }, homePreferences: { latestItemsExcludes: ["previous"] } }
-            m.node.authState.pendingSwitch = { accountKey: "permission-test.invalid/denied" }
+            m.node.authState.pendingSwitch = { accountKey: "v2/https%3A%2F%2Fpermission-test.invalid/denied" }
             response = { server: "https://permission-test.invalid", payload: { AccessToken: "fixture", User: { Id: "denied", Policy: { EnableLiveTvAccess: false } } } }
 
             'bs:disable-next-line 1140
@@ -168,10 +168,10 @@ namespace tests
             m.assertFalse(m.top.authenticatedSession.permissions.canAccessLiveTv)
             m.assertEqual(m.top.authenticatedSession.userId, "denied")
             m.assertInvalid(m.node.authState.pendingSwitch)
-            m.assertFalse(AuthStore.LoadAccount("permission-test.invalid/denied", true).DoesExist("permissions"))
+            m.assertFalse(AuthStore.LoadAccount("v2/https%3A%2F%2Fpermission-test.invalid/denied", true).DoesExist("permissions"))
 
             AuthStore.ClearActiveAccount()
-            AuthStore.ForgetAccount("permission-test.invalid/denied")
+            AuthStore.ForgetAccount("v2/https%3A%2F%2Fpermission-test.invalid/denied")
             m.restoreAuthStoreState(original)
         end function
 
@@ -398,7 +398,7 @@ namespace tests
             'bs:disable-next-line 1140
             handleQuickConnectResponse(response)
 
-            accountKey = "quick-connect-test.invalid/quick-connect-test-user"
+            accountKey = "v2/https%3A%2F%2Fquick-connect-test.invalid/quick-connect-test-user"
             m.assertEqual(m.top.authenticatedSession.accountKey, accountKey)
             m.assertEqual(m.top.authenticatedSession.username, "Quick Connect Test")
             m.assertTrue(m.top.authenticatedSession.permissions.canAccessLiveTv)
@@ -504,6 +504,85 @@ namespace tests
             handleAuthError({ authExpired: false, failureKind: "requestRejected", status: 401, errorMessage: "Unauthorized" }, "login")
 
             m.assertEqual(m.top.loginFailed, { message: "Login failed: The server rejected the request." })
+        end function
+
+        @describe("signed-in accounts across servers")
+
+        @it("returns accounts from all servers without exposing tokens")
+        function _()
+            m.stubCall(AuthStore.ListAllAccounts, [
+                { accountKey: "a", server: "http://one", token: "secret-one" }
+                { accountKey: "b", server: "http://two", token: "secret-two" }
+            ])
+
+            'bs:disable-next-line 1140
+            accounts = getSignedInAccounts()
+
+            m.assertEqual(accounts, [{ accountKey: "a", server: "http://one" }, { accountKey: "b", server: "http://two" }])
+        end function
+
+        @it("excludes saved users without tokens")
+        function _()
+            m.stubCall(AuthStore.ListAllAccounts, [{ accountKey: "expired", token: "" }, { accountKey: "signed-out" }])
+
+            'bs:disable-next-line 1140
+            accounts = getSignedInAccounts()
+
+            m.assertEqual(accounts, [])
+        end function
+
+        @it("authorizes a selected account against its own server before committing it")
+        function _()
+            account = { accountKey: "other/user", server: "https://other", userId: "user", token: "other-token" }
+            m.stubCall(AuthStore.LoadAccount, account)
+            task = CreateObject("roSGNode", "Group")
+            task.addFields({ request: {}, control: "" })
+            m.node.authApiTask = task
+            previous = m.node.savedSession
+
+            m.top.switchAccountRequest = { accountKey: account.accountKey, source: "startup" }
+
+            m.assertEqual(task.request, { action: "authorize", server: "https://other", userId: "user", token: "other-token" })
+            m.assertEqual(m.node.savedSession, previous)
+            m.assertEqual(m.node.authState.pendingSwitch.source, "startup")
+        end function
+
+        @describe("selected-account authorization failures")
+
+        @it("removes only the selected expired token and retains the outgoing session")
+        function _()
+            original = m.node.savedSession
+            selected = { accountKey: "other-account", server: "https://other", username: "Other" }
+            m.node.authState.pendingSwitch = { account: selected, accountKey: selected.accountKey, source: "startup" }
+            getGlobalAa().removedAccountToken = ""
+            m.stubCall(AuthStore.RemoveToken, function(key as string) as void
+                getGlobalAa().removedAccountToken = key
+            end function)
+
+            'bs:disable-next-line 1140
+            handleAuthError({ ok: false, authExpired: true, errorMessage: "Expired" }, "authorize")
+
+            m.assertEqual(getGlobalAa().removedAccountToken, "other-account")
+            m.assertEqual(m.node.savedSession, original)
+            m.assertEqual(m.top.sessionExpired.server, "https://other")
+            m.assertEqual(m.top.sessionExpired.username, "Other")
+            m.assertFalse(m.top.sessionExpired.clearRuntimeSession)
+            m.assertInvalid(m.node.authState.pendingSwitch)
+            getGlobalAa().Delete("removedAccountToken")
+        end function
+
+        @it("reports the failed selected account without committing its server")
+        function _()
+            original = m.node.savedSession
+            m.node.authState.pendingSwitch = { account: { accountKey: "other", server: "https://other" }, accountKey: "other", source: "header" }
+
+            'bs:disable-next-line 1140
+            handleAuthError({ ok: false, status: 503, errorMessage: "Unavailable" }, "authorize")
+
+            m.assertEqual(m.top.loginFailed.accountKey, "other")
+            m.assertEqual(m.top.loginFailed.source, "header")
+            m.assertEqual(m.node.savedSession, original)
+            m.assertInvalid(m.node.authState.pendingSwitch)
         end function
 
     end class

@@ -1,3 +1,4 @@
+import "pkg:/source/AccountPicker.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/TaskControl.bs"
@@ -20,6 +21,7 @@ sub init()
     m.quickConnectTasks = [m.top.findNode("quickConnectTaskA"), m.top.findNode("quickConnectTaskB")]
     m.quickConnectTimer = m.top.findNode("quickConnectTimer")
     m.quickConnectDispatchTimer = m.top.findNode("quickConnectDispatchTimer")
+    if not AuthStore.MigrateAccounts() then m.log.write("Account migration incomplete; retained legacy records for retry.")
     m.savedSession = AuthStore.Load()
     m.authState = {
         isResumingSession: false
@@ -349,7 +351,7 @@ sub onSwitchAccountRequestChanged()
     if request = invalid then return
 
     accountKey = Strings.ToString(request.accountKey)
-    source = Strings.ToString(request.source, "header")
+    source = Strings.ToString(request.source, AccountPicker.Source.Header)
     account = AuthStore.LoadAccount(accountKey, true)
     if account = invalid then
         publishLoginFailed("The selected account is no longer available.", { accountKey: accountKey, source: source })
@@ -369,13 +371,6 @@ sub onSwitchAccountRequestChanged()
         userId: account.userId
     })
 end sub
-
-'-------------------------------------------------------------------------------
-' getAccountsForServer
-'-------------------------------------------------------------------------------
-function getAccountsForServer(server as string) as object
-    return AuthStore.ListAccounts(server)
-end function
 
 '-------------------------------------------------------------------------------
 ' clearSavedSession
@@ -619,3 +614,17 @@ sub publishLoginFailed(message as string, context = invalid as dynamic)
     end if
     m.top.loginFailed = result
 end sub
+
+'-------------------------------------------------------------------------------
+' getSignedInAccounts
+'-------------------------------------------------------------------------------
+function getSignedInAccounts() as object
+    accounts = []
+    for each account in AuthStore.ListAllAccounts(true)
+        if Strings.ToString(account.token) <> "" then
+            account.Delete("token")
+            accounts.Push(account)
+        end if
+    end for
+    return accounts
+end function

@@ -1,0 +1,86 @@
+import "pkg:/source/MaskAssets.bs"
+import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/ResolutionAssets.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    MaskAssets.Apply(m.row.avatarMask, "cast-mask.png", [96, 96], [64, 64])
+    m.row.status.font.size = 20
+    m.row.address.font.size = 26
+    initHandlers()
+    onContentChanged()
+    onFocusChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.row = {
+        avatarMask: m.top.findNode("avatarMask")
+        avatar: m.top.findNode("avatar")
+        username: m.top.findNode("username")
+        address: m.top.findNode("address")
+        status: m.top.findNode("status")
+        highlight: m.top.findNode("highlight")
+        observedItem: invalid
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("itemContent", "onContentChanged")
+    m.top.observeField("focusPercent", "onFocusChanged")
+end sub
+
+'-------------------------------------------------------------------------------
+' onContentChanged
+'-------------------------------------------------------------------------------
+sub onContentChanged()
+    if m.row.observedItem <> invalid then
+        m.row.observedItem.unobserveFieldScoped("listFocused")
+        m.row.observedItem.unobserveFieldScoped("rowWidth")
+    end if
+    item = m.top.itemContent
+    m.row.observedItem = item
+    if item = invalid then return
+    item.observeFieldScoped("listFocused", "onFocusChanged")
+    item.observeFieldScoped("rowWidth", "onWidthChanged")
+    m.row.avatar.uri = item.HDPosterUrl
+    m.row.username.text = item.title
+    m.row.address.text = item.description
+    m.row.status.text = item.accountStatus
+    onWidthChanged()
+    onFocusChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusChanged
+'-------------------------------------------------------------------------------
+sub onFocusChanged()
+    focused = false
+    if m.top.itemContent <> invalid then focused = m.top.itemContent.listFocused and m.top.focusPercent > 0.5
+    m.row.highlight.opacity = 0
+    m.row.username.color = &hF3F7FBFF
+    m.row.address.color = &hB9C7D6FF
+    m.row.status.color = &hB9C7D6FF
+    if focused then
+        m.row.highlight.opacity = 1
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onWidthChanged
+'-------------------------------------------------------------------------------
+sub onWidthChanged()
+    width = m.top.itemContent.rowWidth
+    m.row.highlight.width = width
+    for each label in [m.row.username, m.row.address, m.row.status]
+        label.width = width - 148
+    end for
+end sub

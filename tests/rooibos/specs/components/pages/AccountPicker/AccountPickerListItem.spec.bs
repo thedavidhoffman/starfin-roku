@@ -1,0 +1,101 @@
+namespace tests
+
+    @SGNode("AccountPickerListItem")
+    @suite("Account picker vertical row")
+    class AccountPickerListItemTests extends rooibos.BaseTestSuite
+
+        @describe("rendering and focus")
+
+        @it("renders username address and status on a fresh row")
+        function _()
+            row = CreateObject("roSGNode", "AccountPickerListItem")
+            item = m.content()
+
+            row.itemContent = item
+
+            m.assertEqual(row.findNode("username").text, "User")
+            m.assertEqual(row.findNode("address").text, item.description)
+            m.assertEqual(row.findNode("status").text, "Active")
+            m.assertEqual(row.findNode("address").width, 652.0)
+            m.assertFalse(row.findNode("address").wrap)
+            m.assertEqual(row.findNode("address").font.size, 26)
+            m.assertEqual(row.findNode("avatar").width, 96.0)
+        end function
+
+        @it("clears focus styling when the list loses focus")
+        function _()
+            row = CreateObject("roSGNode", "AccountPickerListItem")
+            item = m.content()
+            row.itemContent = item
+            row.focusPercent = 1
+            m.assertEqual(row.findNode("highlight").opacity, 1.0)
+
+            item.listFocused = false
+
+            m.assertEqual(row.findNode("highlight").opacity, 0.0)
+            m.assertEqual(row.findNode("username").color, &hF3F7FBFF)
+        end function
+
+        function content() as object
+            item = CreateObject("roSGNode", "ContentNode")
+            item.title = "User"
+            item.description = "https://a-very-long-server-address-that-must-stay-within-the-row.example:8096/jellyfin"
+            item.HDPosterUrl = "pkg:/images/cast/cast-placeholder-195x195.png"
+            item.addFields({ accountStatus: "Active", rowWidth: 800, listFocused: true })
+            return item
+        end function
+
+        @it("uses the trailer highlight while keeping focused text light")
+        function _()
+            row = CreateObject("roSGNode", "AccountPickerListItem")
+            row.itemContent = m.content()
+
+            row.focusPercent = 1
+
+            m.assertEqual(row.findNode("highlight").uri, "pkg:/images/media-card/trailer-row-highlight.png")
+            m.assertEqual(row.findNode("highlight").width, 800.0)
+            m.assertEqual(row.findNode("highlight").opacity, 1.0)
+            m.assertEqual(row.findNode("username").color, &hF3F7FBFF)
+        end function
+
+        @it("applies the circular account mask at the current resolution")
+        function _()
+            row = CreateObject("roSGNode", "AccountPickerListItem")
+            row.itemContent = m.content()
+            expected = MaskAssets.GetProfile("cast-mask.png", [96.0, 96.0], [64.0, 64.0])
+
+            mask = row.findNode("avatarMask")
+
+            m.assertEqual(mask.maskUri, expected.uri)
+            m.assertEqual(mask.maskSize, expected.size)
+            m.assertTrue(row.findNode("avatar").getParent().isSameNode(mask))
+        end function
+
+        @it("renders the forget hint from the explicit account status field")
+        function _()
+            row = CreateObject("roSGNode", "AccountPickerListItem")
+            item = m.content()
+            item.accountStatus = "* to forget"
+
+            row.itemContent = item
+
+            m.assertEqual(row.findNode("status").text, "* to forget")
+            m.assertEqual(row.findNode("status").font.size, 20)
+        end function
+
+        @it("updates label bounds when the existing content width changes")
+        function _()
+            row = CreateObject("roSGNode", "AccountPickerListItem")
+            item = m.content()
+            row.itemContent = item
+
+            item.rowWidth = 640
+
+            m.assertEqual(row.findNode("highlight").width, 640.0)
+            m.assertEqual(row.findNode("address").width, 492.0)
+            m.assertEqual(row.findNode("avatar").width, 96.0)
+        end function
+
+    end class
+
+end namespace

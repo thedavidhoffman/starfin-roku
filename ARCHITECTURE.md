@@ -367,6 +367,20 @@ refresher only coordinates correlated Task requests; pages merge returned server
 counts into canonical data and existing ContentNodes without changing focus.
 See [Watched Indicators and Unwatched Episode Counts](.docs/feature/watched-indicator.md).
 
+## Startup account selection
+
+MainScene gates startup before authentication when the device-wide account
+selection preference is enabled and multiple signed-in accounts are saved.
+It owns startup route/busy state and a temporary AccountPickerPage in the
+XML-declared startupAccountHost above the background and below Login/overlays; the page
+hosts the same AccountPickerContent as AccountPickerDialog. Shared content
+chooses horizontal avatars for one server and vertical address-bearing rows for
+multiple servers. AuthController enumerates signed-in accounts without exposing
+tokens and retains ownership of authorization and active-account persistence.
+The existing authenticated-session path applies the selected server and account
+settings before Home activation. Deep links stay deferred until authentication.
+See [.docs/feature/account-selection.md](.docs/feature/account-selection.md).
+
 ## Settings registry migrations
 
 `SettingsStore.Load()` synchronously invokes `SettingsMigration.Migrate()` before
@@ -417,3 +431,19 @@ events, without owning report queues or API calls. PlaystateTask remains the API
 boundary, with optional correlation and timeout parameters preserving video callers.
 Home defers listening snapshots while terminal writes are pending. Completion focus
 is established before acknowledgment messages capture their return target.
+
+### Account identity and picker recovery
+
+AuthStore owns versioned account identity and legacy-section migration before
+AuthController loads its saved session. `Url.ServerIdentity` defines normalized
+server identity for both persistence and picker presentation, retaining scheme,
+port and path distinctions. Migration preserves the complete account section and
+updates the active reference only after persisting its destination.
+
+MainScene retains originating surface and selected account identity while a dialog
+switch is pending. Connection failures reopen that picker and restore selection;
+success and expiry clear the pending context. The shared picker owns account
+focus identity and publishes its vertical/horizontal presentation decision.
+Containers choose width and capacity: startup has five horizontal slots, the
+dialog three. Geometry updates do not rebuild list content; forget confirmation
+uses an independent preview.

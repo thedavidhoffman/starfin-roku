@@ -367,6 +367,413 @@ namespace tests
             return m.node.accountRows.content.getChild(0).getChild(index)
         end function
 
+        @describe("adaptive account layouts")
+
+        @it("retains horizontal avatars for one normalized server")
+        function _()
+            component = CreateObject("roSGNode", "AccountPickerContent")
+            first = m.account("one", false)
+            second = m.account("two", true)
+            second.server = "HTTP://SERVER/"
+
+            component.accounts = [first, second]
+            component.callFunc("focusAccounts")
+
+            m.assertTrue(component.findNode("accountRows").visible)
+            m.assertFalse(component.findNode("verticalAccounts").visible)
+            m.assertEqual(component.findNode("accountRows").jumpToRowItem, [0, 1])
+        end function
+
+        @it("renders vertical rows with addresses for multiple servers")
+        function _()
+            component = CreateObject("roSGNode", "AccountPickerContent")
+            first = m.account("one", true)
+            second = m.account("two", false)
+            second.server = "https://second.example:8096"
+
+            component.accounts = [first, second]
+            rows = component.findNode("verticalAccounts")
+
+            m.assertTrue(rows.visible)
+            m.assertFalse(component.findNode("accountRows").visible)
+            m.assertEqual(rows.content.getChild(1).title, "two")
+            m.assertEqual(rows.content.getChild(1).description, second.server)
+            m.assertFalse(component.findNode("leftChevron").visible)
+            m.assertFalse(component.findNode("rightChevron").visible)
+        end function
+
+        @it("fits a short full-screen list to its actual account count")
+        function _()
+            component = CreateObject("roSGNode", "AccountPickerContent")
+            second = m.account("two", false)
+            second.server = "https://second"
+            component.visibleRows = 5
+            component.contentWidth = 1200
+
+            component.accounts = [m.account("one", true), second]
+
+            m.assertEqual(component.findNode("verticalAccounts").numRows, 2)
+            m.assertEqual(component.findNode("verticalAccounts").itemSize, [640.0, 120.0])
+            m.assertEqual(component.findNode("signInButton").translation[1], 272.0)
+        end function
+
+        @it("emits the account selected from the vertical list")
+        function _()
+            second = m.account("two", false)
+            second.server = "https://second"
+            m.renderAccountsForTest([m.account("one", true), second])
+            m.node.verticalAccounts.itemSelected = 1
+
+            'bs:disable-next-line 1140
+            onVerticalAccountSelected()
+
+            m.assertEqual(m.top.accountSelected, second)
+        end function
+
+        @it("moves from the vertical list to sign-in and back")
+        function _()
+            second = m.account("two", false)
+            second.server = "https://second"
+            m.renderAccountsForTest([m.account("one", true), second])
+            m.top.callFunc("focusAccounts")
+            m.node.verticalAccounts.itemFocused = 1
+
+            'bs:disable-next-line 1140
+            onAccountRowsFocusExitDown()
+            m.assertTrue(m.node.signInButton.isInFocusChain())
+            m.assertFalse(m.node.verticalAccounts.content.getChild(1).listFocused)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("up", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.verticalAccounts.isInFocusChain())
+            m.assertEqual(m.node.verticalAccounts.jumpToItem, 1)
+        end function
+
+        @it("returns to horizontal layout after forgetting the only other-server account")
+        function _()
+            first = m.account("one", true)
+            second = m.account("two", false)
+            second.server = "https://second"
+            m.renderAccountsForTest([first, second])
+            m.top.accountSelected = invalid
+            m.stubCall(AuthStore.ForgetAccount, true)
+            m.node.verticalAccounts.forgetRequested = second
+
+            'bs:disable-next-line 1140
+            onRemoveSelected()
+
+            m.assertEqual(m.top.accounts, [first])
+            m.assertFalse(m.node.verticalAccounts.visible)
+            m.assertTrue(m.node.accountRows.visible)
+            m.assertTrue(m.node.accountRows.isInFocusChain())
+            m.assertInvalid(m.top.accountSelected)
+        end function
+
+        @describe("vertical forget confirmation workflow")
+
+        @it("renders active status and the inactive account forget hint")
+        function _()
+            second = m.account("two", false)
+            second.server = "https://second"
+            m.renderAccountsForTest([m.account("one", true), second])
+
+            content = m.node.verticalAccounts.content
+
+            m.assertEqual(content.getChild(0).accountStatus, "Active")
+            m.assertEqual(content.getChild(1).accountStatus, "* to forget")
+        end function
+
+        @it("opens the existing confirmation from a vertical list forget request")
+        function _()
+            second = m.account("two", false)
+            second.server = "https://second"
+            m.renderAccountsForTest([m.account("one", true), second])
+            m.top.callFunc("focusAccounts")
+            m.node.verticalAccounts.itemFocused = 1
+
+            m.node.verticalAccounts.forgetRequested = second
+
+            m.assertEqual(m.node.accountState.mode, "remove")
+            m.assertEqual(m.node.accountState.removalCandidate, second)
+            m.assertFalse(m.node.verticalAccounts.visible)
+            m.assertFalse(m.node.accountRows.visible)
+            m.assertTrue(m.node.removalPreview.visible)
+            m.assertTrue(m.node.removalDescription.visible)
+            m.assertTrue(m.node.removeButton.isInFocusChain())
+            m.assertTrue(m.node.cancelButton.visible)
+        end function
+
+        @it("returns Back from confirmation to the same vertical account")
+        function _()
+            second = m.account("two", false)
+            second.server = "https://second"
+            m.renderAccountsForTest([m.account("one", true), second])
+            m.top.callFunc("focusAccounts")
+            m.node.verticalAccounts.itemFocused = 1
+            m.node.verticalAccounts.forgetRequested = second
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.accountState.mode, "picker")
+            m.assertTrue(m.node.verticalAccounts.isInFocusChain())
+            m.assertEqual(m.node.verticalAccounts.jumpToItem, 1)
+            m.assertEqual(m.top.accounts.Count(), 2)
+        end function
+
+        @it("does not allow forgetting the active account from the vertical list")
+        function _()
+            first = m.account("one", true)
+            second = m.account("two", false)
+            second.server = "https://second"
+            m.renderAccountsForTest([first, second])
+            m.top.callFunc("focusAccounts")
+
+            m.node.verticalAccounts.forgetRequested = first
+
+            m.assertEqual(m.node.accountState.mode, "picker")
+            m.assertFalse(m.node.removeButton.visible)
+            m.assertTrue(m.node.verticalAccounts.visible)
+        end function
+
+        @describe("compact vertical list width")
+
+        @it("centers compact rows and constrains their text width")
+        function _()
+            component = CreateObject("roSGNode", "AccountPickerContent")
+            second = m.account("two", false)
+            second.server = "https://second"
+            component.contentWidth = 800
+
+            component.accounts = [m.account("one", true), second]
+            list = component.findNode("verticalAccounts")
+
+            m.assertEqual(list.itemSize, [640.0, 120.0])
+            m.assertEqual(list.translation, [80.0, 0.0])
+            m.assertEqual(list.content.getChild(0).rowWidth, 640.0)
+        end function
+
+        @it("applies the host sign-in gap to footer placement and reported height")
+        function _()
+            component = CreateObject("roSGNode", "AccountPickerContent")
+            second = m.account("two", false)
+            second.server = "https://second"
+            component.accounts = [m.account("one", true), second]
+
+            component.signInGap = 40
+
+            m.assertEqual(component.findNode("signInButton").translation[1], 288.0)
+            m.assertEqual(component.preferredHeight, 344)
+        end function
+
+        @describe("startup forgetting")
+
+        @it("opens confirmation for the last-used horizontal account when protection is disabled")
+        function _()
+            m.top.protectActiveAccount = false
+            m.renderAccountsForTest([m.account("last-used", true)])
+            m.top.callFunc("focusAccounts")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("options", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.accountState.mode, "remove")
+            m.assertTrue(m.node.removalPreview.visible)
+            'bs:disable-next-line 1140
+            onCancelSelected()
+            m.top.protectActiveAccount = true
+        end function
+
+        @describe("horizontal account centering")
+
+        @it("centers a single account's visible avatar and labels")
+        function _()
+            m.renderAccountsForTest([m.account("one", true)])
+
+            m.assertEqual(m.node.accountRows.translation, [296.0, 0.0])
+            m.assertEqual(m.node.accountRows.itemSize, [246.0, 264.0])
+            m.assertFalse(m.node.leftChevron.visible)
+            m.assertFalse(m.node.rightChevron.visible)
+        end function
+
+        @it("centers two accounts as one visible group")
+        function _()
+            m.renderAccountsForTest([m.account("one", true), m.account("two", false)])
+
+            m.assertEqual(m.node.accountRows.translation, [181.0, 0.0])
+            m.assertEqual(m.node.accountRows.itemSize, [477.0, 264.0])
+        end function
+
+        @it("retains the existing three-account scrolling viewport")
+        function _()
+            m.renderAccountsForTest(m.fiveAccounts())
+
+            m.assertEqual(m.node.accountRows.translation, [65.0, 0.0])
+            m.assertEqual(m.node.accountRows.itemSize, [693.0, 264.0])
+        end function
+
+        @it("uses the confirmation layout instead of centering its lone avatar")
+        function _()
+            account = m.account("one", false)
+            m.renderAccountsForTest([account])
+
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(account)
+
+            m.assertEqual(m.node.removalPreview.translation, [80.0, 0.0])
+            m.assertEqual(m.node.removalDescription.translation[0], 317.0)
+            m.assertEqual(m.node.removalDescription.width, 403.0)
+        end function
+
+        @it("centers compact confirmation inside the five-account startup width")
+        function _()
+            m.top.contentWidth = 1280
+            m.top.horizontalVisibleCount = 5
+            m.renderAccountsForTest(m.fiveAccounts())
+            originalRowPosition = m.node.accountRows.translation
+
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(m.account("one", false))
+
+            m.assertEqual(m.node.removalPreview.translation, [320.0, 0.0])
+            m.assertEqual(m.node.removalDescription.translation[0], 557.0)
+            m.assertEqual(m.node.removalDescription.width, 403.0)
+            m.assertTrue(m.node.removeButton.translation[1] >= m.node.removalDescription.translation[1] + m.node.removalDescription.boundingRect().height + 24)
+            m.assertTrue(m.node.removeButton.isInFocusChain())
+
+            'bs:disable-next-line 1140
+            onCancelSelected()
+            m.assertEqual(m.node.accountRows.translation, originalRowPosition)
+            m.assertEqual(m.node.accountRows.itemSize, [1155.0, 264.0])
+            m.top.horizontalVisibleCount = 3
+            m.top.contentWidth = 800
+        end function
+
+        @it("uses the same compact confirmation body for vertical startup accounts")
+        function _()
+            first = m.account("one", false)
+            second = m.account("two", false)
+            second.server = "http://other"
+            m.top.contentWidth = 800
+            m.top.horizontalVisibleCount = 5
+            m.renderAccountsForTest([first, second])
+
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(first)
+
+            m.assertEqual(m.node.removalPreview.translation, [80.0, 0.0])
+            m.assertEqual(m.node.removalDescription.translation[0], 317.0)
+            m.assertEqual(m.node.removalDescription.width, 403.0)
+
+            'bs:disable-next-line 1140
+            onCancelSelected()
+            m.assertTrue(m.node.verticalAccounts.isInFocusChain())
+            m.top.horizontalVisibleCount = 3
+        end function
+
+        @it("grows confirmation height to fit wrapped text above its buttons")
+        function _()
+            originalText = m.node.removalDescription.text
+            m.node.removalDescription.text = originalText + " " + originalText + " " + originalText
+            m.renderAccountsForTest([m.account("one", false)])
+
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(m.account("one", false))
+
+            textHeight = m.node.removalDescription.boundingRect().height
+            m.assertEqual(m.node.removalDescription.height, 0.0)
+            m.assertEqual(m.node.removalDescription.numLines, 0)
+            m.assertTrue(textHeight > 237)
+            m.assertTrue(m.node.removeButton.translation[1] >= textHeight + 24)
+            m.assertEqual(m.node.cancelButton.translation[1], m.node.removeButton.translation[1])
+            m.assertTrue(m.top.preferredHeight = m.node.removeButton.translation[1] + 56)
+
+            m.node.removalDescription.text = originalText
+            'bs:disable-next-line 1140
+            onCancelSelected()
+            m.assertTrue(m.node.accountRows.isInFocusChain())
+        end function
+
+        @describe("stable picker presentation")
+
+        @it("does not replace content or focus identity for geometry changes")
+        function _()
+            m.renderAccountsForTest(m.fiveAccounts())
+            m.node.accountState.focusedKey = "three"
+            m.top.callFunc("focusAccounts")
+            content = m.node.accountRows.content
+
+            m.top.contentWidth = 1280
+            m.top.horizontalVisibleCount = 5
+
+            m.assertTrue(m.node.accountRows.content.isSameNode(content))
+            m.assertEqual(m.node.accountState.focusedKey, "three")
+            m.assertEqual(m.node.accountRows.itemSize, [1155.0, 264.0])
+            m.assertTrue(m.node.accountRows.isInFocusChain())
+        end function
+
+        @it("preserves horizontal content and account focus through confirmation cancellation")
+        function _()
+            m.renderAccountsForTest(m.fiveAccounts())
+            m.top.callFunc("focusAccounts")
+            m.node.accountRows.rowItemFocused = [0, 3]
+            content = m.node.accountRows.content
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(m.top.accounts[3])
+
+            'bs:disable-next-line 1140
+            onCancelSelected()
+
+            m.assertTrue(m.node.accountRows.content.isSameNode(content))
+            m.assertEqual(m.node.accountRows.jumpToRowItem, [0, 3])
+        end function
+
+        @it("focuses the next account after forgetting a middle account")
+        function _()
+            m.renderAccountsForTest(m.fiveAccounts())
+            m.top.callFunc("focusAccounts")
+            m.node.accountRows.rowItemFocused = [0, 2]
+            m.stubCall(AuthStore.ForgetAccount, true)
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(m.top.accounts[2])
+
+            'bs:disable-next-line 1140
+            onRemoveSelected()
+
+            m.assertEqual(m.node.accountState.focusedKey, "four")
+            m.assertEqual(m.node.accountRows.jumpToRowItem, [0, 2])
+        end function
+
+        @it("focuses the preceding account after forgetting the final account")
+        function _()
+            m.renderAccountsForTest(m.fiveAccounts())
+            m.top.callFunc("focusAccounts")
+            m.node.accountRows.rowItemFocused = [0, 4]
+            m.stubCall(AuthStore.ForgetAccount, true)
+            'bs:disable-next-line 1140
+            showRemoveConfirmation(m.top.accounts[4])
+
+            'bs:disable-next-line 1140
+            onRemoveSelected()
+
+            m.assertEqual(m.node.accountState.focusedKey, "four")
+            m.assertEqual(m.node.accountRows.jumpToRowItem, [0, 3])
+        end function
+
+        @it("creates only the vertical content for multiple servers")
+        function _()
+            second = m.account("two", false)
+            second.server = "https://second"
+            m.renderAccountsForTest([m.account("one", true), second])
+
+            m.assertInvalid(m.node.accountRows.content)
+            m.assertEqual(m.node.verticalAccounts.content.getChildCount(), 2)
+        end function
+
     end class
 
 end namespace

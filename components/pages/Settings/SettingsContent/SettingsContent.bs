@@ -190,9 +190,10 @@ sub initCategoryReferences(index as integer, panel as object)
         m.settingsControls.screensaverDelayOptions = panel.findNode("screensaverDelayOptions")
         m.categoryControls[index] = [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
     else if index = 7 then
+        m.settingsControls.selectAccountAtLoginOptions = panel.findNode("selectAccountAtLoginOptions")
         m.settingsControls.displayAccountBadgeOptions = panel.findNode("displayAccountBadgeOptions")
         m.settingsControls.tmdbApiKeyInput = panel.findNode("tmdbApiKeyInput")
-        m.categoryControls[index] = [m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
+        m.categoryControls[index] = [m.settingsControls.selectAccountAtLoginOptions, m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
     else if index = 8 then
         m.settingsControls.videoStreamingModeOptions = panel.findNode("videoStreamingModeOptions")
         m.videoStreamingModeCard = panel.findNode("videoStreamingModeCard")
@@ -242,6 +243,7 @@ sub initCategoryHandlers(index as integer)
         m.settingsControls.screensaverTypeOptions.observeField("itemSelected", "onScreensaverTypeSelected")
         m.settingsControls.screensaverDelayOptions.observeField("itemSelected", "onScreensaverDelaySelected")
     else if index = 7 then
+        m.settingsControls.selectAccountAtLoginOptions.observeField("itemSelected", "onSelectAccountAtLoginSelected")
         m.settingsControls.displayAccountBadgeOptions.observeField("itemSelected", "onDisplayAccountBadgeSelected")
     else if index = 8 then
         m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
@@ -287,6 +289,7 @@ sub applyCategoryValues(index as integer)
         setScreensaverTypeOption(m.settingsState.values[SettingsStore.Key.ScreensaverType])
         setScreensaverDelayOption(m.settingsState.values[SettingsStore.Key.ScreensaverDelay])
     else if index = 7 then
+        setOnOffOption(m.settingsControls.selectAccountAtLoginOptions, m.settingsState.values[SettingsStore.Key.SelectAccountAtLogin])
         setOnOffOption(m.settingsControls.displayAccountBadgeOptions, m.settingsState.values[SettingsStore.Key.DisplayAccountBadge])
         m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[SettingsStore.Key.TmdbApiKey]
     else if index = 8 then
@@ -349,6 +352,7 @@ sub initCategoryOptions(index as integer)
         setOptionTitles(m.settingsControls.screensaverTypeOptions, ["None", "Bouncing artwork", "Starfield"])
         setOptionTitles(m.settingsControls.screensaverDelayOptions, ["1 minute", "5 minutes", "15 minutes", "30 minutes"])
     else if index = 7 then
+        setOptionTitles(m.settingsControls.selectAccountAtLoginOptions, ["Off", "On"])
         setOptionTitles(m.settingsControls.displayAccountBadgeOptions, ["Off", "On"])
     else if index = 8 then
         setOptionTitles(m.settingsControls.videoStreamingModeOptions, ["Automatic", "Automatic (remux disabled)", "Force transcode (allow remux)", "Force transcode (remux disabled)"])
@@ -544,6 +548,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if m.focusState.categoryIndex = SettingsNavigation.Category.Theme then return handleThemeKey(key)
     if m.focusState.categoryIndex = SettingsNavigation.Category.Playback then return handlePlaybackKey(key)
     if m.focusState.categoryIndex = SettingsNavigation.Category.TV then return handleTVKey(key)
+    if m.focusState.categoryIndex = SettingsNavigation.Category.General then return handleGeneralKey(key)
 
     if m.resetStarfinState.confirmationVisible then
         if key = Remote.Key.Right and m.settingsControls.abortResetButton.isInFocusChain() then return focusCategoryControl(1, invalid)
@@ -1397,6 +1402,46 @@ function handleTVKey(key as string) as boolean
     else if key = Remote.Key.Up and isFocusedAtFirstItem(control) then
         if index = SettingsNavigation.TVControl.Artwork then return focusCategoryControl(SettingsNavigation.TVControl.SkipSeries, 1)
         if index = SettingsNavigation.TVControl.SkipSeries then return focusCategoryControl(SettingsNavigation.TVControl.Scroll, 1)
+        return true
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' onSelectAccountAtLoginSelected
+'-------------------------------------------------------------------------------
+sub onSelectAccountAtLoginSelected()
+    selectedIndex = getSelectedItemIndex(m.settingsControls.selectAccountAtLoginOptions)
+    if selectedIndex < 0 then return
+    m.settingsControls.selectAccountAtLoginOptions.checkedItem = selectedIndex
+    value = SettingsStore.Toggle.Off
+    if selectedIndex = 1 then value = SettingsStore.Toggle.On
+    m.settingsState.values[SettingsStore.Key.SelectAccountAtLogin] = value
+end sub
+
+'-------------------------------------------------------------------------------
+' handleGeneralKey
+'-------------------------------------------------------------------------------
+function handleGeneralKey(key as string) as boolean
+    index = m.focusState.controlIndex
+    controls = m.categoryControls[SettingsNavigation.Category.General]
+    control = controls[index]
+    if key = Remote.Key.Left then
+        if index = SettingsNavigation.GeneralControl.Badge then return focusCategoryControl(SettingsNavigation.GeneralControl.Startup, control.itemFocused)
+        focusFirstField()
+        return true
+    else if key = Remote.Key.Right then
+        if index = SettingsNavigation.GeneralControl.Startup then return focusCategoryControl(SettingsNavigation.GeneralControl.Badge, control.itemFocused)
+        return true
+    else if index = SettingsNavigation.GeneralControl.ApiKey then
+        if key = Remote.Key.Up then return focusCategoryControl(SettingsNavigation.GeneralControl.Startup, 1)
+        if key = Remote.Key.OK or key = Remote.Key.Select then
+            openKeyboardDialog()
+            return true
+        end if
+    else if key = Remote.Key.Down and isFocusedAtLastItem(control) then
+        return focusCategoryControl(SettingsNavigation.GeneralControl.ApiKey, invalid)
+    else if key = Remote.Key.Up and isFocusedAtFirstItem(control) then
         return true
     end if
     return false

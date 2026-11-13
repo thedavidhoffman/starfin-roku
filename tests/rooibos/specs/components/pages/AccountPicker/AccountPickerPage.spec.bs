@@ -1,0 +1,214 @@
+namespace tests
+
+    @SGNode("AccountPickerPage")
+    @suite("Startup account picker page")
+    class AccountPickerPageTests extends rooibos.BaseTestSuite
+
+        @describe("shared picker hosting")
+
+        @it("forwards selection from its shared picker")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            account = { accountKey: "a", username: "User", server: "http://one" }
+            page.accounts = [account]
+
+            page.findNode("picker").accountSelected = account
+
+            m.assertEqual(page.accountSelected, account)
+        end function
+
+        @it("forwards the additional sign-in action")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+
+            page.findNode("picker").signInSelected = true
+
+            m.assertTrue(page.signInSelected)
+        end function
+
+        @it("focuses the sign-in action when no saved accounts remain")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            m.top.appendChild(page)
+            page.accounts = []
+
+            page.callFunc("focusAccounts")
+
+            m.assertTrue(page.findNode("signInButton").isInFocusChain())
+            m.top.removeChild(page)
+        end function
+
+        @describe("last-used account presentation")
+
+        @it("focuses the last-used horizontal account without an active label")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            page.accounts = [{ accountKey: "a", server: "http://same" }, { accountKey: "b", server: "http://same", isActive: true }]
+
+            page.callFunc("focusAccounts")
+
+            rows = page.findNode("accountRows")
+            m.assertEqual(rows.jumpToRowItem, [0, 1])
+            m.assertEqual(rows.content.getChild(0).getChild(1).description, "* to forget")
+        end function
+
+        @it("allows the last-used vertical account to enter forget confirmation")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            account = { accountKey: "a", server: "http://one", isActive: true }
+            page.accounts = [account, { accountKey: "b", server: "http://two" }]
+            rows = page.findNode("verticalAccounts")
+            m.assertEqual(rows.content.getChild(0).accountStatus, "* to forget")
+
+            rows.forgetRequested = account
+
+            m.assertTrue(page.findNode("removalPreview").visible)
+            page.findNode("cancelButton").buttonSelected = true
+            m.assertEqual(page.accounts.Count(), 2)
+            m.assertFalse(page.findNode("removalPreview").visible)
+        end function
+
+        @describe("startup branding and layout")
+
+        @it("centers the cropped wordmark above the account picker")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            logo = page.findNode("startupLogo")
+            picker = page.findNode("picker")
+
+            m.assertEqual(logo.uri, "pkg:/images/logo-startup-wordmark.png")
+            m.assertEqual(logo.translation, [635.0, 353.0])
+            m.assertEqual(logo.width, 650.0)
+            m.assertEqual(logo.height, 166.0)
+            m.assertEqual(picker.translation, [320.0, 591.0])
+            m.assertEqual(picker.contentWidth, 1280)
+            m.assertInvalid(page.findNode("title"))
+        end function
+
+        @it("keeps five account rows and the sign-in action within the screen")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            accounts = []
+            for index = 0 to 5
+                accounts.Push({ accountKey: index.ToStr(), username: "User", server: "http://server" + index.ToStr() })
+            end for
+
+            page.accounts = accounts
+            picker = page.findNode("picker")
+
+            m.assertEqual(picker.findNode("verticalAccounts").numRows, 5)
+            m.assertTrue(picker.translation[1] + picker.preferredHeight < 1080)
+        end function
+
+        @it("rebalances the entire group when the account list becomes shorter")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            accounts = []
+            for index = 0 to 5
+                accounts.Push({ accountKey: index.ToStr(), username: "User", server: "http://server" + index.ToStr() })
+            end for
+            page.accounts = accounts
+            picker = page.findNode("picker")
+            m.assertEqual(picker.translation[1], 298.0)
+
+            page.accounts = [accounts[0], accounts[1]]
+
+            m.assertEqual(picker.translation[1], 447.0)
+            m.assertEqual(picker.findNode("signInButton").translation[1], 288.0)
+            m.assertEqual(page.findNode("startupLogo").translation[1], 209.0)
+        end function
+
+        @describe("horizontal startup capacity")
+
+        @it("shows five horizontal accounts before scrolling")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            accounts = []
+            for index = 0 to 5
+                accounts.Push({ accountKey: index.ToStr(), username: "User", server: "http://same" })
+            end for
+
+            page.accounts = accounts
+            picker = page.findNode("picker")
+
+            m.assertEqual(picker.horizontalVisibleCount, 5)
+            m.assertEqual(picker.contentWidth, 1280)
+            m.assertEqual(picker.translation[0], 320.0)
+            m.assertEqual(picker.findNode("accountRows").itemSize, [1155.0, 264.0])
+            m.assertEqual(picker.findNode("accountRows").translation[0], 74.0)
+            m.assertTrue(picker.findNode("rightChevron").visible)
+        end function
+
+        @it("centers four horizontal accounts inside the startup content")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            accounts = []
+            for index = 0 to 3
+                accounts.Push({ accountKey: index.ToStr(), username: "User", server: "http://same" })
+            end for
+
+            page.accounts = accounts
+
+            m.assertEqual(page.findNode("accountRows").translation[0], 190.0)
+            m.assertFalse(page.findNode("rightChevron").visible)
+        end function
+
+        @it("centers one horizontal startup account")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            accounts = []
+            for index = 0 to 0
+                accounts.Push({ accountKey: index.ToStr(), username: "User", server: "http://same" })
+            end for
+
+            page.accounts = accounts
+
+            m.assertEqual(page.findNode("accountRows").translation[0], 536.0)
+            m.assertFalse(page.findNode("rightChevron").visible)
+        end function
+
+        @it("centers two horizontal startup accounts")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            accounts = []
+            for index = 0 to 1
+                accounts.Push({ accountKey: index.ToStr(), username: "User", server: "http://same" })
+            end for
+
+            page.accounts = accounts
+
+            m.assertEqual(page.findNode("accountRows").translation[0], 421.0)
+            m.assertFalse(page.findNode("rightChevron").visible)
+        end function
+
+        @it("centers three horizontal startup accounts")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            accounts = []
+            for index = 0 to 2
+                accounts.Push({ accountKey: index.ToStr(), username: "User", server: "http://same" })
+            end for
+
+            page.accounts = accounts
+
+            m.assertEqual(page.findNode("accountRows").translation[0], 305.0)
+            m.assertFalse(page.findNode("rightChevron").visible)
+        end function
+
+        @it("centers five horizontal startup accounts by their visible bounds")
+        function _()
+            page = CreateObject("roSGNode", "AccountPickerPage")
+            accounts = []
+            for index = 0 to 4
+                accounts.Push({ accountKey: index.ToStr(), username: "User", server: "http://same" })
+            end for
+
+            page.accounts = accounts
+
+            m.assertEqual(page.findNode("accountRows").translation[0], 74.0)
+            m.assertFalse(page.findNode("rightChevron").visible)
+        end function
+
+    end class
+
+end namespace

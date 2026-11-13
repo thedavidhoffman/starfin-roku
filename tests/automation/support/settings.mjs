@@ -33,6 +33,7 @@ export const accountDefaults = {
 };
 
 export const globalDefaults = {
+  'select-account-at-login': 'off',
   'display-account-badge': 'off',
   'video-streaming-mode': 'automatic',
   'tmdb-api-key': ''

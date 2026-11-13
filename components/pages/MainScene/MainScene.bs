@@ -1,3 +1,4 @@
+import "pkg:/source/Remote.bs"
 import "pkg:/source/Trailers.bs"
 import "pkg:/source/Playstate.bs"
 import "pkg:/source/MediaState.bs"
@@ -69,7 +70,7 @@ sub startApp(launchArgs = invalid as dynamic)
     submitInput(launchArgs, true)
 
     authSyncSavedSessionToLogin()
-    authRequestResumeSession()
+    authStartApp()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -87,6 +88,7 @@ sub initReferences()
     m.login = m.top.findNode("login")
     m.overlayHost = m.top.findNode("overlayHost")
     m.dynamicPageHost = m.top.findNode("dynamicPageHost")
+    m.startupAccountHost = m.top.findNode("startupAccountHost")
     m.themeAudioController = m.top.findNode("themeAudioController")
     m.confirmationOverlayHost = m.top.findNode("confirmationOverlayHost")
     m.confirmationState = { owner: invalid, requestId: -1 }
@@ -107,6 +109,8 @@ sub initValues()
     syncTheme(m.settings)
     syncWatchedIndicatorStyle(m.settings)
     syncUnwatchedEpisodeCount(m.settings)
+    m.startupAccount = { active: false, busy: false, page: invalid }
+    m.accountSwitch = { pending: invalid }
     m.appLifecycle = {
         started: false
     }
@@ -159,7 +163,6 @@ sub initHandlers()
     m.login.observeField("quickConnectCancelled", "authHandleQuickConnectCancelled")
     m.login.observeField("overlayRequested", "authHandleLoginOverlayRequested")
     m.login.observeField("accountPickerRequested", "authHandleLoginAccountPickerRequested")
-    m.login.observeField("serverValue", "authHandleLoginServerChanged")
     m.authController.observeField("authenticatedSession", "authHandleAuthenticatedSession")
     m.authController.observeField("loginFailed", "authHandleLoginFailed")
     m.authController.observeField("loginRequired", "authHandleLoginRequired")
@@ -209,3 +212,20 @@ sub initHandlers()
     authObserveTaskOwner(m.homePage)
 
 end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press or key <> Remote.Key.Back then return false
+    if not m.startupAccount.active or m.startupAccount.busy then return false
+    if m.login.visible then
+        m.authController.quickConnectCancelRequested = true
+        authShowStartupPicker()
+    else if m.startupAccount.page <> invalid and m.startupAccount.page.visible then
+        m.top.closeRequested = true
+    else
+        return false
+    end if
+    return true
+end function

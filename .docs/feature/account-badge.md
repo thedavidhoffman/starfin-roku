@@ -6,6 +6,9 @@ provides the image URI, username, and palette colors. The control owns its
 internal artwork geometry and compositing, while Header owns its placement in
 the resolution-specific header layout.
 
+The device-wide toggle is in Settings > General, in the right-hand card beside
+Select account at login. Badge behavior is unchanged by the startup preference.
+
 ## Resolution Behavior
 
 The application uses a 1920x1080 SceneGraph coordinate space at every output

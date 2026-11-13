@@ -7,6 +7,9 @@ namespace tests
     class MainSceneTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
+            m.stubCall(SettingsStore.LoadGlobal, "off")
+            m.node.startupAccount = { active: false, busy: false, page: invalid }
+            m.node.accountSwitch = { pending: invalid }
             m.originalTheme = m.global.theme
             m.originalWatchedStyle = m.global.watchedIndicatorStyle
             m.originalCountMode = m.global.showUnwatchedEpisodeCount
@@ -40,6 +43,9 @@ namespace tests
         end function
 
         protected override function afterEach()
+            if m.node.startupAccount.page <> invalid then m.node.startupAccountHost.removeChild(m.node.startupAccount.page)
+            m.node.startupAccount = { active: false, busy: false, page: invalid }
+            m.node.accountSwitch = { pending: invalid }
             m.global.theme = m.originalTheme
             m.global.watchedIndicatorStyle = m.originalWatchedStyle
             m.global.showUnwatchedEpisodeCount = m.originalCountMode
@@ -558,16 +564,10 @@ namespace tests
 
         @describe("session permission forwarding")
 
-        @it("routes discovery selection and refreshes accounts for the chosen server")
+        @it("routes discovery selection without filtering the saved cross-server accounts")
         function _()
-            controller = {
-                lastServer: ""
-                callFunc: function(name as string, server as string) as object
-                    m.lastServer = server
-                    return []
-                end function
-            }
-            m.node.authController = controller
+            accounts = [{ accountKey: "other-server/user", server: "http://other", username: "User" }]
+            m.node.login.savedAccounts = accounts
             m.node.login.visible = true
             m.node.login.usernameValue = "old-user"
             m.node.login.passwordValue = "old-password"
@@ -576,8 +576,7 @@ namespace tests
             authHandleDiscoveryClosed({ overlay: { selectedServer: { address: "http://discovered:8097" } } })
 
             m.assertEqual(m.node.login.serverValue, "http://discovered:8097")
-            m.assertEqual(controller.lastServer, "http://discovered:8097")
-            m.assertEqual(m.node.login.savedAccounts, [])
+            m.assertEqual(m.node.login.savedAccounts, accounts)
             m.assertEqual(m.node.login.passwordValue, "")
         end function
 
@@ -3841,6 +3840,355 @@ namespace tests
 
             m.assertTrue(getGlobalAa().trailerErrorAfterFocus)
             m.node.moviePage = invalid
+        end function
+
+        @describe("startup account gate")
+
+        @it("keeps Home inactive until an account is selected")
+        function _()
+            m.prepareStartupAccounts(2)
+
+            'bs:disable-next-line 1140
+            authStartApp()
+
+            m.assertTrue(m.node.startupAccount.page.visible)
+            m.assertFalse(m.node.authenticatedContent.visible)
+            m.assertFalse(m.node.header.visible)
+            m.assertFalse(m.node.homePage.visible)
+            m.assertEqual(m.node.homePage.calls, ["deactivate"])
+            m.assertInvalid(m.node.homePage.loadRequest)
+            m.assertInvalid(m.node.authController.switchAccountRequest)
+            m.assertFalse(m.node.authController.resumeRequested)
+        end function
+
+        @it("authenticates the sole signed-in account directly")
+        function _()
+            m.prepareStartupAccounts(1)
+
+            'bs:disable-next-line 1140
+            authStartApp()
+
+            m.assertInvalid(m.node.startupAccount.page)
+            m.assertEqual(m.node.authController.switchAccountRequest.accountKey, "server-0/user")
+            m.assertEqual(m.node.homePage.calls, [])
+        end function
+
+        @it("opens Login when no accounts are signed in")
+        function _()
+            m.prepareStartupAccounts(0)
+
+            'bs:disable-next-line 1140
+            authStartApp()
+
+            m.assertTrue(m.node.login.visible)
+            m.assertInvalid(m.node.startupAccount.page)
+            m.assertInvalid(m.node.authController.switchAccountRequest)
+        end function
+
+        @it("resumes the active account when the setting is off")
+        function _()
+            m.prepareStartupAccounts(2)
+            m.stubCall(SettingsStore.LoadGlobal, "off")
+
+            'bs:disable-next-line 1140
+            authStartApp()
+
+            m.assertTrue(m.node.authController.resumeRequested)
+            m.assertInvalid(m.node.startupAccount.page)
+        end function
+
+        @it("blocks duplicate account selection while authorization is pending")
+        function _()
+            m.prepareStartupAccounts(2)
+            'bs:disable-next-line 1140
+            authStartApp()
+            m.node.startupAccount.page.accountSelected = m.node.authController.accounts[0]
+            'bs:disable-next-line 1140
+            authHandleStartupAccountSelected()
+
+            m.node.startupAccount.page.accountSelected = m.node.authController.accounts[1]
+            'bs:disable-next-line 1140
+            authHandleStartupAccountSelected()
+
+            m.assertTrue(m.node.startupAccount.busy)
+            m.assertEqual(m.node.authController.switchAccountRequest.accountKey, "server-0/user")
+            m.assertEqual(m.node.authController.switchAccountRequest.source, "startup")
+        end function
+
+        @it("returns connection failures to the picker without choosing another account")
+        function _()
+            m.prepareStartupAccounts(2)
+            'bs:disable-next-line 1140
+            authStartApp()
+            m.node.startupAccount.busy = true
+            m.node.authController.loginFailed = { source: "startup", message: "Unable to connect" }
+            m.stubCall(AppMessage.Show, invalid)
+
+            'bs:disable-next-line 1140
+            authHandleLoginFailed()
+
+            m.assertFalse(m.node.startupAccount.busy)
+            m.assertTrue(m.node.startupAccount.page.isInFocusChain())
+            m.assertInvalid(m.node.authController.switchAccountRequest)
+            m.assertInvalid(m.node.homePage.loadRequest)
+        end function
+
+        @it("prefills expired account credentials while preserving startup return navigation")
+        function _()
+            m.prepareStartupAccounts(2)
+            'bs:disable-next-line 1140
+            authStartApp()
+            m.node.startupAccount.busy = true
+            m.node.authController.sessionExpired = { server: "https://expired", username: "Expired user", message: "Sign in again", clearRuntimeSession: false }
+
+            'bs:disable-next-line 1140
+            authHandleSessionExpired()
+
+            m.assertTrue(m.node.login.visible)
+            m.assertEqual(m.node.login.serverValue, "https://expired")
+            m.assertEqual(m.node.login.usernameValue, "Expired user")
+            m.assertFalse(m.node.startupAccount.page.visible)
+            m.assertTrue(m.node.startupAccount.active)
+            m.assertFalse(m.node.startupAccount.busy)
+        end function
+
+        @it("returns from additional sign-in to the picker on Back")
+        function _()
+            m.prepareStartupAccounts(2)
+            'bs:disable-next-line 1140
+            authStartApp()
+            'bs:disable-next-line 1140
+            authHandleStartupSignInSelected()
+            m.assertTrue(m.node.login.visible)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertFalse(m.node.login.visible)
+            m.assertTrue(m.node.startupAccount.page.visible)
+            m.assertTrue(m.node.authController.quickConnectCancelRequested)
+        end function
+
+        @it("exits from the startup picker without resuming the active account")
+        function _()
+            m.prepareStartupAccounts(2)
+            'bs:disable-next-line 1140
+            authStartApp()
+            m.top.closeRequested = false
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("back", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.top.closeRequested)
+            m.assertFalse(m.node.authController.resumeRequested)
+            m.top.closeRequested = false
+        end function
+
+        @it("retains cold-launch deep links while waiting for account selection")
+        function _()
+            m.prepareStartupAccounts(2)
+            requests = {
+                calls: []
+                callFunc: function(name as string, data = invalid as dynamic, cold = invalid as dynamic) as dynamic
+                    m.calls.Push(name)
+                    return invalid
+                end function
+            }
+            originalController = m.node.deepLinkController
+            m.node.deepLinkController = requests
+            m.node.appLifecycle.started = false
+
+            'bs:disable-next-line 1140
+            startApp({ contentId: "movie", mediaType: "movie" })
+            m.node.startupAccount.page.accountSelected = m.node.authController.accounts[1]
+            'bs:disable-next-line 1140
+            authHandleStartupAccountSelected()
+            m.node.deepLinkController = originalController
+
+            m.assertEqual(requests.calls, ["submitInput"])
+            m.assertFalse(m.node.performanceBeaconState.launchComplete)
+            m.assertInvalid(m.node.homePage.loadRequest)
+        end function
+
+        @it("keeps the picker open after its account list shrinks to one")
+        function _()
+            m.prepareStartupAccounts(2)
+            'bs:disable-next-line 1140
+            authStartApp()
+            m.node.authController.accounts = [m.node.authController.accounts[0]]
+
+            'bs:disable-next-line 1140
+            authShowStartupPicker()
+
+            m.assertTrue(m.node.startupAccount.page.visible)
+            m.assertInvalid(m.node.authController.switchAccountRequest)
+        end function
+
+        @it("completes startup using the selected server and account settings")
+        function _()
+            m.prepareStartupAccounts(2)
+            'bs:disable-next-line 1140
+            authStartApp()
+            m.node.homePage = m.top.findNode("homePage")
+            selected = { accountKey: "second/user", server: "https://second", userId: "user", token: "selected-token" }
+            m.node.authController.authenticatedSession = selected
+            settings = SettingsStore.Defaults()
+            settings[SettingsStore.Key.Theme] = "grey"
+            m.stubCall(SettingsStore.Load, settings)
+            'bs:disable-next-line 1001
+            m.stubCall(navShowAppRoute, invalid)
+
+            'bs:disable-next-line 1140
+            authHandleAuthenticatedSession()
+
+            m.assertFalse(m.node.startupAccount.active)
+            m.assertInvalid(m.node.startupAccount.page)
+            m.assertEqual(m.node.startupAccountHost.getChildCount(), 0)
+            m.assertEqual(m.node.session, selected)
+            m.assertEqual(m.node.homePage.loadRequest.server, "https://second")
+            m.assertEqual(m.node.homePage.loadRequest.token, "selected-token")
+            m.assertEqual(m.node.settings[SettingsStore.Key.Theme], "grey")
+        end function
+
+        function prepareStartupAccounts(count as integer) as void
+            m.stubCall(SettingsStore.LoadGlobal, "on")
+            m.node.session = invalid
+            m.node.deepLinkController.callFunc("cancel")
+            m.node.deepLinkController.callFunc("updateSession", invalid)
+            m.node.authenticatedContent.visible = false
+            m.node.login.visible = false
+            m.node.startupAccount = { active: false, busy: false, page: invalid }
+            m.node.accountSwitch = { pending: invalid }
+            accounts = []
+            for index = 0 to count - 1
+                accounts.Push({ accountKey: "server-" + index.ToStr() + "/user", server: "http://server-" + index.ToStr(), username: "User", userId: "user", isActive: index = 0 })
+            end for
+            m.node.authController = {
+                accounts: accounts
+                resumeRequested: false
+                switchAccountRequest: invalid
+                savedSession: invalid
+                quickConnectCancelRequested: false
+                callFunc: function(name as string, value = invalid as dynamic) as dynamic
+                    return m.accounts
+                end function
+            }
+            m.node.homePage = m.createHomePageCallRecorder()
+            m.node.homePage.loadRequest = invalid
+        end function
+
+        @describe("single-account startup failures")
+
+        @it("opens Login after direct authorization fails")
+        function _()
+            m.prepareStartupAccounts(1)
+            'bs:disable-next-line 1140
+            authStartApp()
+            m.node.authController.loginFailed = { source: "login", message: "Server unavailable" }
+
+            'bs:disable-next-line 1140
+            authHandleLoginFailed()
+
+            m.assertTrue(m.node.login.visible)
+            m.assertEqual(m.node.login.serverValue, "http://server-0")
+            m.assertEqual(m.node.login.statusMessage, "Server unavailable")
+            m.assertInvalid(m.node.homePage.loadRequest)
+        end function
+
+        @describe("startup picker scene attachment")
+
+        @it("attaches and focuses the picker inside the declared startup host")
+        function _()
+            m.prepareStartupAccounts(2)
+
+            'bs:disable-next-line 1140
+            authStartApp()
+
+            page = m.node.startupAccount.page
+            host = m.top.findNode("startupAccountHost")
+            m.assertTrue(page.getParent().isSameNode(host))
+            m.assertTrue(host.visible)
+            m.assertTrue(page.visible)
+            m.assertTrue(page.isInFocusChain())
+            m.assertEqual(host.getChildCount(), 1)
+        end function
+
+        @it("orders the startup host above the background and below Login and overlays")
+        function _()
+            positions = {}
+            for index = 0 to m.top.getChildCount() - 1
+                child = m.top.getChild(index)
+                positions[child.id] = index
+            end for
+
+            m.assertTrue(positions.startupAccountHost > positions.bg)
+            m.assertTrue(positions.startupAccountHost < positions.login)
+            m.assertTrue(positions.startupAccountHost < positions.overlayHost)
+        end function
+
+        @describe("failed dialog switching recovery")
+
+        @it("reopens the failed account selection without changing the authenticated session")
+        function _()
+            previous = m.node.session
+            m.node.homePage = m.createHomePageCallRecorder()
+            m.node.authenticatedContent.visible = true
+            m.node.accountSwitch.pending = { accountKey: "other", source: "header" }
+            m.node.authController = {
+                loginFailed: { accountKey: "other", source: "header", message: "Unavailable" }
+                callFunc: function(name as string) as object
+                    return [{ accountKey: "other", username: "Other", server: "http://other" }]
+                end function
+            }
+            m.stubCall(AppMessage.Show, invalid)
+
+            'bs:disable-next-line 1140
+            authHandleLoginFailed()
+
+            overlay = m.node.overlayHost.getChild(0)
+            m.assertTrue(m.node.homePage.visible)
+            m.assertEqual(overlay.initialFocusAccountKey, "other")
+            m.assertTrue(overlay.callFunc("getContentComponent").isInFocusChain())
+            m.assertEqual(m.node.session, previous)
+            m.assertInvalid(m.node.accountSwitch.pending)
+            m.node.overlayHost.callFunc("closeOverlay")
+        end function
+
+        @it("ignores duplicate dialog selections while the original switch is pending")
+        function _()
+            m.node.accountSwitch.pending = { accountKey: "first", source: "header" }
+            controller = m.node.authController
+            m.node.authController = { switchAccountRequest: { accountKey: "first", source: "header" } }
+
+            'bs:disable-next-line 1140
+            authHandleAccountPickerClosed({ request: { source: "header" }, overlay: { selectedAccount: { accountKey: "second" } } })
+
+            m.assertEqual(m.node.authController.switchAccountRequest.accountKey, "first")
+            m.assertEqual(m.node.accountSwitch.pending.accountKey, "first")
+            m.node.authController = controller
+        end function
+
+        @it("restores a failed Login dialog selection without activating Home")
+        function _()
+            m.prepareStartupAccounts(2)
+            m.node.startupAccount.active = true
+            m.node.login.visible = true
+            m.node.authenticatedContent.visible = false
+            m.node.accountSwitch.pending = { accountKey: "server-1/user", source: "login" }
+            m.node.authController.loginFailed = { accountKey: "server-1/user", source: "login", message: "Unavailable" }
+            m.stubCall(AppMessage.Show, invalid)
+
+            'bs:disable-next-line 1140
+            authHandleLoginFailed()
+
+            overlay = m.node.overlayHost.getChild(0)
+            m.assertEqual(overlay.initialFocusAccountKey, "server-1/user")
+            m.assertEqual(m.node.homePage.calls, [])
+            m.assertTrue(m.node.login.visible)
+            m.assertFalse(m.node.startupAccount.busy)
+            m.node.overlayHost.callFunc("closeOverlay")
         end function
 
     end class

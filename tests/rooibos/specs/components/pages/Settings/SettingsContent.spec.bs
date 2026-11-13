@@ -297,9 +297,9 @@ namespace tests
         @it("moves focus from account badge options to the API-key field")
         function _()
             'bs:disable-next-line 1140
-            showCategory(m.node.categoryState.deviceOffset)
+            showCategory(SettingsNavigation.Category.General)
             'bs:disable-next-line 1140
-            focusCategoryControl(0, 1)
+            focusCategoryControl(SettingsNavigation.GeneralControl.Badge, 1)
 
             'bs:disable-next-line 1140
             handled = onKeyEvent("down", true)
@@ -309,20 +309,18 @@ namespace tests
             m.assertTrue(m.node.settingsControls.tmdbApiKeyInput.hasFocusVisual)
         end function
 
-        @it("moves focus from the API-key field back to account badge options")
+        @it("moves focus from the API-key field back to startup account options")
         function _()
             'bs:disable-next-line 1140
-            showCategory(m.node.categoryState.deviceOffset)
+            showCategory(SettingsNavigation.Category.General)
             'bs:disable-next-line 1140
-            focusCategoryControl(0, 1)
-            'bs:disable-next-line 1140
-            focusCategoryControl(1, invalid)
+            focusCategoryControl(SettingsNavigation.GeneralControl.ApiKey, invalid)
 
             'bs:disable-next-line 1140
             handled = onKeyEvent("up", true)
 
             m.assertTrue(handled)
-            m.assertTrue(m.node.settingsControls.displayAccountBadgeOptions.isInFocusChain())
+            m.assertTrue(m.node.settingsControls.selectAccountAtLoginOptions.isInFocusChain())
             m.assertEqual(m.node.focusState.controlIndex, 0)
             m.assertFalse(m.node.settingsControls.tmdbApiKeyInput.hasFocusVisual)
         end function
@@ -2559,6 +2557,61 @@ namespace tests
 
             m.assertTrue(handled)
             m.assertTrue(m.node.categoryControls[5][0].isInFocusChain())
+        end function
+
+        @describe("startup account setting")
+
+        @it("places equal width startup and badge cards beside each other")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(SettingsNavigation.Category.General)
+            startup = m.top.findNode("selectAccountAtLoginCard")
+            badge = m.top.findNode("accountBadgeCard")
+
+            m.assertEqual(startup.cardWidth, 572.0)
+            m.assertEqual(badge.cardWidth, startup.cardWidth)
+            m.assertEqual(badge.translation, [588.0, 0.0])
+        end function
+
+        @it("moves right from startup options to account badge options")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(SettingsNavigation.Category.General)
+            'bs:disable-next-line 1140
+            focusCategoryControl(0, 1)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("right", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.settingsControls.displayAccountBadgeOptions.isInFocusChain())
+        end function
+
+        @it("moves left from account badge options to startup options")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(SettingsNavigation.Category.General)
+            'bs:disable-next-line 1140
+            focusCategoryControl(1, 0)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("left", true)
+
+            m.assertTrue(handled)
+            m.assertTrue(m.node.settingsControls.selectAccountAtLoginOptions.isInFocusChain())
+        end function
+
+        @it("includes the selected startup preference in the edited snapshot")
+        function _()
+            'bs:disable-next-line 1140
+            showCategory(SettingsNavigation.Category.General)
+            m.node.settingsControls.selectAccountAtLoginOptions.itemSelected = 1
+
+            'bs:disable-next-line 1140
+            onSelectAccountAtLoginSelected()
+
+            values = m.top.callFunc("getSettingsValues")
+            m.assertEqual(values[SettingsStore.Key.SelectAccountAtLogin], "on")
         end function
 
     end class

@@ -336,3 +336,18 @@ seeking. After enabling accurate seeking, the same case landed at 10.161 seconds
 the 40-second case landed at 40.045. This verifies the fix on the configured
 development device and fixture, not an exact-seek guarantee for every Roku codec
 and device combination.
+
+## Startup account selection
+
+The account-selection automation suite uses a local HTTP fixture with two server
+base paths, synthetic credentials and controllable delayed/error responses. It
+requires the Roku to reach the runner's selected LAN address, like the existing
+Home-refresh fixture. It snapshots/restores Starfin registry sections per case,
+including the active account and global startup preference. No real Jellyfin
+users are created or modified. See [account selection](account-selection.md#automated-regression-workflows)
+for scenarios and the test-only registry fault-injection design.
+
+`waitForStartup` recognizes Login, ready Home, or the full-screen account picker.
+`ensureAuthenticated` waits for one of those surfaces and uses additional-account
+Login when the picker is present, so ordinary automation never selects an
+arbitrary saved account from another server.

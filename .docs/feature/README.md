@@ -13,6 +13,7 @@ individual Starfin features.
 - [Movie Extras](movie-extras.md)
 
 - [Account Badge](account-badge.md)
+- [Startup Account Selection and Multi-Server Switching](account-selection.md)
 - [Activity Logging](activity-logging.md)
 - [Sending Logs to Jellyfin](log-upload.md)
 - [Audio Playback](audio-playback.md)

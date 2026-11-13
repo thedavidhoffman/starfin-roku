@@ -1,3 +1,4 @@
+import "pkg:/source/AccountPicker.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/RequestFailure.bs"
 
@@ -22,6 +23,8 @@ end sub
 ' authHandleLoginRequested
 '-------------------------------------------------------------------------------
 sub authHandleLoginRequested()
+    if m.startupAccount.busy then return
+    if m.startupAccount.active then m.startupAccount.busy = true
     Spinner.ShowBlocking()
     m.authController.loginRequest = m.login.loginRequested
 end sub
@@ -55,24 +58,17 @@ end sub
 ' authShowLogin
 '-------------------------------------------------------------------------------
 sub authShowLogin(message as string)
+    if m.startupAccount.page <> invalid then m.startupAccount.page.visible = false
     m.login.statusMessage = message
     authRefreshLoginSavedAccounts()
     navShowLoginRoute()
 end sub
 
 '-------------------------------------------------------------------------------
-' authHandleLoginServerChanged
-'-------------------------------------------------------------------------------
-sub authHandleLoginServerChanged()
-    authRefreshLoginSavedAccounts()
-end sub
-
-'-------------------------------------------------------------------------------
 ' authRefreshLoginSavedAccounts
 '-------------------------------------------------------------------------------
 sub authRefreshLoginSavedAccounts()
-    server = Url.NormalizeServer(m.login.serverValue)
-    m.login.savedAccounts = m.authController.callFunc("getAccountsForServer", server)
+    m.login.savedAccounts = m.authController.callFunc("getSignedInAccounts")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -89,8 +85,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub authHandleSwitchAccountPressed()
     if m.session = invalid then return
-    accounts = m.authController.callFunc("getAccountsForServer", m.session.server)
-    openAccountPicker(accounts, "header")
+    accounts = m.authController.callFunc("getSignedInAccounts")
+    openAccountPicker(accounts, AccountPicker.Source.Header)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -99,15 +95,16 @@ end sub
 sub authHandleLoginAccountPickerRequested()
     request = m.login.accountPickerRequested
     if request = invalid then return
-    openAccountPicker(request.accounts, "login")
+    openAccountPicker(request.accounts, AccountPicker.Source.Login)
 end sub
 
 '-------------------------------------------------------------------------------
 ' openAccountPicker
 '-------------------------------------------------------------------------------
-sub openAccountPicker(accounts as object, source as string)
+sub openAccountPicker(accounts as object, source as string, initialFocusAccountKey = "" as string)
     m.overlayHost.callFunc("openOverlay", {
         id: "accountPicker"
+        initialFocusAccountKey: initialFocusAccountKey
         componentName: "AccountPickerDialog"
         openFunction: "openAccountPicker"
         closeField: "closeRequested"
@@ -120,15 +117,16 @@ end sub
 ' authHandleAccountPickerClosed
 '-------------------------------------------------------------------------------
 sub authHandleAccountPickerClosed(closed as object)
+    if m.accountSwitch.pending <> invalid then return
     request = closed.request
-    source = "header"
+    source = AccountPicker.Source.Header
     if request <> invalid then source = Strings.ToString(request.source, source)
     overlay = closed.overlay
     if overlay = invalid then
         restoreAccountPickerFocus(source)
         return
     end if
-    if source = "login" and overlay.accountsUpdated = true then authRefreshLoginSavedAccounts()
+    if source = AccountPicker.Source.Login and overlay.accountsUpdated = true then authRefreshLoginSavedAccounts()
     if overlay.signInSelected = true then
         server = m.login.serverValue
         if m.session <> invalid then server = Strings.ToString(m.session.server, server)
@@ -144,7 +142,7 @@ sub authHandleAccountPickerClosed(closed as object)
         restoreAccountPickerFocus(source)
         return
     end if
-    isAuthenticatedActiveAccount = source = "header" and m.authenticatedContent.visible = true and m.session <> invalid
+    isAuthenticatedActiveAccount = source = AccountPicker.Source.Header and m.authenticatedContent.visible = true and m.session <> invalid
     if isAuthenticatedActiveAccount then isAuthenticatedActiveAccount = Strings.ToString(m.session.token) <> ""
     if isAuthenticatedActiveAccount and Strings.ToString(account.accountKey) = Strings.ToString(m.session.accountKey) then
         restoreAccountPickerFocus(source)
@@ -152,17 +150,20 @@ sub authHandleAccountPickerClosed(closed as object)
     end if
 
     if isAuthenticatedActiveAccount then m.deepLinkController.callFunc("cancel")
+    if m.startupAccount.busy then return
+    if m.startupAccount.active then m.startupAccount.busy = true
     Spinner.ShowBlocking()
     themeAudioStop()
     resetDynamicPages()
-    m.authController.switchAccountRequest = { accountKey: account.accountKey, source: source }
+    m.accountSwitch.pending = { accountKey: account.accountKey, source: source }
+    m.authController.switchAccountRequest = m.accountSwitch.pending
 end sub
 
 '-------------------------------------------------------------------------------
 ' restoreAccountPickerFocus
 '-------------------------------------------------------------------------------
 sub restoreAccountPickerFocus(source as string)
-    if source = "login" then
+    if source = AccountPicker.Source.Login then
         m.login.callFunc("focusSavedAccountsButton")
     else
         m.header.callFunc("focusUserMenuButton")
@@ -316,6 +317,13 @@ sub authHandleAuthenticatedSession()
     session = m.authController.authenticatedSession
     if session = invalid then return
 
+    m.accountSwitch.pending = invalid
+    m.startupAccount.active = false
+    m.startupAccount.busy = false
+    if m.startupAccount.page <> invalid then
+        m.startupAccountHost.removeChild(m.startupAccount.page)
+        m.startupAccount.page = invalid
+    end if
     m.session = session
     completePerformanceDialog()
     m.deepLinkController.callFunc("updateSession", buildSessionLoadRequest())
@@ -329,14 +337,16 @@ end sub
 '-------------------------------------------------------------------------------
 sub authHandleLoginRequired()
     Spinner.HideBlocking()
+    m.startupAccount.busy = false
+    m.accountSwitch.pending = invalid
     request = m.authController.loginRequired
     if request = invalid then return
 
     beginPerformanceDialog()
 
     authShowLogin(request.message)
-    accounts = m.authController.callFunc("getAccountsForServer", Strings.ToString(m.authController.savedSession.server))
-    if request.openSavedAccounts = true and accounts.Count() > 0 then openAccountPicker(accounts, "login")
+    accounts = m.authController.callFunc("getSignedInAccounts")
+    if request.openSavedAccounts = true and accounts.Count() > 0 then openAccountPicker(accounts, AccountPicker.Source.Login)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -344,16 +354,34 @@ end sub
 '-------------------------------------------------------------------------------
 sub authHandleLoginFailed()
     Spinner.HideBlocking()
+    m.startupAccount.busy = false
     response = m.authController.loginFailed
     if response = invalid then return
 
+    pending = m.accountSwitch.pending
+    m.accountSwitch.pending = invalid
+    if pending <> invalid and Strings.ToString(response.accountKey) = pending.accountKey then
+        ' Outgoing dynamic pages were removed before authorization; keep a usable
+        ' authenticated background if the restored picker is subsequently cancelled.
+        if pending.source = AccountPicker.Source.Header then showHome()
+        if pending.source = AccountPicker.Source.Login then authRefreshLoginSavedAccounts()
+        openAccountPicker(m.authController.callFunc("getSignedInAccounts"), pending.source, pending.accountKey)
+        AppMessage.Show(response.message)
+        return
+    end if
+    if m.startupAccount.active and Strings.ToString(response.source) = AccountPicker.Source.Startup then
+        authShowStartupPicker()
+        AppMessage.Show(response.message)
+        return
+    end if
     if m.authenticatedContent.visible = true then
         m.homePage.visible = true
         m.homePage.callFunc("activate", true)
         AppMessage.Show(response.message)
     else
+        if not m.login.visible then authShowLogin(response.message)
         m.login.statusMessage = response.message
-        if Strings.ToString(response.source) = "login" then
+        if Strings.ToString(response.source) = AccountPicker.Source.Login then
             m.login.callFunc("focusSavedAccountsButton")
         else
             m.login.callFunc("focusLoginButton")
@@ -373,6 +401,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub authHandleSessionExpired()
     Spinner.HideBlocking()
+    m.startupAccount.busy = false
+    m.accountSwitch.pending = invalid
     response = m.authController.sessionExpired
     if response = invalid then return
 
@@ -421,4 +451,78 @@ sub authHandleDiscoveryClosed(closed as object)
     server = invalid
     if closed.overlay <> invalid then server = closed.overlay.selectedServer
     m.login.callFunc("handleDiscoveryClosed", server)
+end sub
+
+'-------------------------------------------------------------------------------
+' authStartApp
+'-------------------------------------------------------------------------------
+sub authStartApp()
+    if SettingsStore.LoadGlobal(SettingsStore.Key.SelectAccountAtLogin) <> SettingsStore.Toggle.On then
+        authRequestResumeSession()
+        return
+    end if
+    accounts = m.authController.callFunc("getSignedInAccounts")
+    if accounts.Count() > 1 then
+        m.startupAccount.active = true
+        authShowStartupPicker()
+    else if accounts.Count() = 1 then
+        m.login.serverValue = accounts[0].server
+        m.login.usernameValue = accounts[0].username
+        Spinner.ShowBlocking()
+        m.authController.switchAccountRequest = { accountKey: accounts[0].accountKey, source: AccountPicker.Source.Login }
+    else
+        beginPerformanceDialog()
+        authShowLogin("Enter your Jellyfin server and credentials to begin.")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' authShowStartupPicker
+'-------------------------------------------------------------------------------
+sub authShowStartupPicker()
+    AppMessage.Dismiss()
+    Spinner.HideBlocking()
+    m.startupAccount.busy = false
+    m.login.visible = false
+    m.authenticatedContent.visible = false
+    m.header.visible = false
+    hideHome()
+    beginPerformanceDialog()
+    if m.startupAccount.page = invalid then
+        m.log.write("Creating startup account picker")
+        page = CreateObject("roSGNode", "AccountPickerPage")
+        page.observeField("accountSelected", "authHandleStartupAccountSelected")
+        page.observeField("signInSelected", "authHandleStartupSignInSelected")
+        ' XML fixes this host above the background and below Login and overlays.
+        m.startupAccountHost.appendChild(page)
+        m.startupAccount.page = page
+    end if
+    m.startupAccount.page.accounts = m.authController.callFunc("getSignedInAccounts")
+    m.startupAccount.page.visible = true
+    m.startupAccount.page.callFunc("focusAccounts")
+    m.log.write("Startup account picker ready accounts=" + m.startupAccount.page.accounts.Count().ToStr() + " focused=" + m.startupAccount.page.isInFocusChain().ToStr())
+end sub
+
+'-------------------------------------------------------------------------------
+' authHandleStartupAccountSelected
+'-------------------------------------------------------------------------------
+sub authHandleStartupAccountSelected()
+    if not m.startupAccount.active or m.startupAccount.busy then return
+    if not m.startupAccount.page.visible then return
+    account = m.startupAccount.page.accountSelected
+    if account = invalid then return
+    m.startupAccount.busy = true
+    Spinner.ShowBlocking()
+    m.authController.switchAccountRequest = { accountKey: account.accountKey, source: AccountPicker.Source.Startup }
+end sub
+
+'-------------------------------------------------------------------------------
+' authHandleStartupSignInSelected
+'-------------------------------------------------------------------------------
+sub authHandleStartupSignInSelected()
+    if not m.startupAccount.active or m.startupAccount.busy then return
+    if not m.startupAccount.page.visible then return
+    m.login.usernameValue = ""
+    m.login.passwordValue = ""
+    authShowLogin("Sign in with another account.")
 end sub

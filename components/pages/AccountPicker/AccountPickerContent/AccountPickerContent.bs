@@ -1,3 +1,4 @@
+import "pkg:/source/AccountPicker.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/Encode.bs"
@@ -11,57 +12,106 @@ import "pkg:/source/store/AuthStore.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    initReferences()
+    m.accountState = {
+        windowStart: 0
+        mode: AccountPicker.Mode.Picker
+        removalCandidate: invalid
+        focusedKey: m.top.initialFocusAccountKey
+        rendering: false
+        accountsDirty: false
+    }
+    m.layoutState = {
+        verticalItemWidth: 640
+        itemWidth: 246
+        visualItemWidth: 207
+        itemSpacing: -15
+        chevronSize: 48
+    }
+    initHandlers()
+    onAccountsChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.verticalAccounts = m.top.findNode("verticalAccounts")
     m.accountRows = m.top.findNode("accountRows")
     m.leftChevron = m.top.findNode("leftChevron")
     m.rightChevron = m.top.findNode("rightChevron")
     m.signInButton = m.top.findNode("signInButton")
+    m.removalPreview = m.top.findNode("removalPreview")
     m.removalDescription = m.top.findNode("removalDescription")
     m.removeButton = m.top.findNode("removeButton")
     m.cancelButton = m.top.findNode("cancelButton")
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.verticalAccounts.observeField("itemSelected", "onVerticalAccountSelected")
+    m.verticalAccounts.observeField("itemFocused", "onVerticalAccountFocused")
+    m.verticalAccounts.observeField("focusExitDown", "onAccountRowsFocusExitDown")
+    m.verticalAccounts.observeField("forgetRequested", "onVerticalForgetRequested")
+    m.top.observeField("accounts", "onAccountsChanged")
+    m.top.observeField("protectActiveAccount", "onAccountsChanged")
+    m.top.observeField("contentWidth", "onGeometryChanged")
+    m.top.observeField("visibleRows", "onGeometryChanged")
+    m.top.observeField("signInGap", "onGeometryChanged")
+    m.top.observeField("horizontalVisibleCount", "onGeometryChanged")
+    m.top.observeField("initialFocusAccountKey", "onInitialFocusChanged")
     m.accountRows.observeField("rowItemSelected", "onAccountSelected")
     m.accountRows.observeField("rowItemFocused", "onAccountFocused")
     m.accountRows.observeField("focusExitDown", "onAccountRowsFocusExitDown")
     m.signInButton.observeField("buttonSelected", "onSignInSelected")
     m.removeButton.observeField("buttonSelected", "onRemoveSelected")
     m.cancelButton.observeField("buttonSelected", "onCancelSelected")
-    m.accountState = {
-        rowItem: [0, 0]
-        windowStart: 0
-        mode: "picker"
-        removalCandidate: invalid
-    }
-    m.layoutState = {
-        itemWidth: 246
-        visualItemWidth: 207
-        itemSpacing: -15
-        visibleItemCount: 3
-        chevronSize: 48
-    }
-    layoutContent()
-    renderAccounts()
 end sub
 
 '-------------------------------------------------------------------------------
 ' onAccountsChanged
 '-------------------------------------------------------------------------------
 sub onAccountsChanged()
-    if m.accountState.mode = "picker" then renderAccounts()
+    if m.accountState.mode = AccountPicker.Mode.Remove then
+        m.accountState.accountsDirty = true
+    else
+        renderAccounts()
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
 ' renderAccounts
 '-------------------------------------------------------------------------------
 sub renderAccounts()
+    m.accountState.accountsDirty = false
+    m.accountState.rendering = true
     m.accountState.windowStart = 0
     showPickerControls()
-    layoutAccountRows(false)
-    renderAccountRows(m.top.accounts)
+    accounts = m.top.accounts
+    if accounts = invalid then accounts = []
+    m.top.verticalLayout = AccountPicker.HasMultipleServers(accounts)
+    selectedIndex = getFocusedIndex()
+    if accounts.Count() > 0 then m.accountState.focusedKey = accounts[selectedIndex].accountKey
+    layoutContent()
+    if m.top.verticalLayout then
+        m.accountRows.content = invalid
+        renderVerticalAccounts(accounts)
+    else
+        m.verticalAccounts.content = invalid
+        renderAccountRows(accounts)
+    end if
+    m.accountRows.visible = accounts.Count() > 0 and not m.top.verticalLayout
+    m.verticalAccounts.visible = accounts.Count() > 0 and m.top.verticalLayout
+    m.accountState.rendering = false
+    updateChevrons()
 end sub
 
 '-------------------------------------------------------------------------------
 ' renderAccountRows
 '-------------------------------------------------------------------------------
-sub renderAccountRows(accounts as dynamic, showStatus = true as boolean)
+sub renderAccountRows(accounts as dynamic)
     content = CreateObject("roSGNode", "ContentNode")
     row = content.createChild("ContentNode")
     if accounts = invalid then accounts = []
@@ -69,11 +119,7 @@ sub renderAccountRows(accounts as dynamic, showStatus = true as boolean)
     for each account in accounts
         item = row.createChild("ContentNode")
         item.title = Strings.ToString(account.username, "Account")
-        if showStatus then
-            if account.isActive = true then item.description = "Active" else item.description = "* to forget"
-        else
-            item.description = ""
-        end if
+        if m.top.protectActiveAccount and account.isActive = true then item.description = "Active" else item.description = "* to forget"
         item.HDPosterUrl = buildAccountImageUri(account)
         item.AddFields({ account: account })
     end for
@@ -86,17 +132,22 @@ end sub
 '-------------------------------------------------------------------------------
 ' layoutAccountRows
 '-------------------------------------------------------------------------------
-sub layoutAccountRows(isSingleAccount as boolean)
+sub layoutAccountRows()
     contentWidth = Number.ToInteger(m.top.contentWidth, 800)
     itemStride = m.layoutState.itemWidth + m.layoutState.itemSpacing
-    rowWidth = itemStride * m.layoutState.visibleItemCount
+    rowWidth = itemStride * m.top.horizontalVisibleCount
     rowX = Number.ToInteger((contentWidth - rowWidth) / 2, 0)
-    if isSingleAccount then
-        m.accountRows.translation = [rowX, 0]
-        m.accountRows.itemSize = [m.layoutState.itemWidth, 264]
-        return
-    end if
 
+    accountCount = 0
+    if m.top.accounts <> invalid then accountCount = m.top.accounts.Count()
+    if accountCount > 0 then
+        ' Center visible avatars and labels rather than the padded focus canvases.
+        visibleCount = accountCount
+        if visibleCount > m.top.horizontalVisibleCount then visibleCount = m.top.horizontalVisibleCount
+        visualWidth = itemStride * (visibleCount - 1) + m.layoutState.visualItemWidth
+        rowX = Number.ToInteger((contentWidth - visualWidth) / 2, 0)
+        if accountCount < m.top.horizontalVisibleCount then rowWidth = itemStride * (accountCount - 1) + m.layoutState.itemWidth
+    end if
     m.accountRows.translation = [rowX, 0]
     m.accountRows.itemSize = [rowWidth, 264]
 end sub
@@ -106,21 +157,59 @@ end sub
 '-------------------------------------------------------------------------------
 sub layoutContent()
     contentWidth = Number.ToInteger(m.top.contentWidth, 800)
-    layoutAccountRows(m.accountState.mode = "remove")
+    layoutAccountRows()
     m.leftChevron.translation = [0, 74]
     m.rightChevron.translation = [contentWidth - m.layoutState.chevronSize, 74]
 
     buttonWidth = m.signInButton.callFunc("getPreferredWidth", 30)
     m.signInButton.buttonWidth = buttonWidth
     buttonX = Number.ToInteger((contentWidth - buttonWidth) / 2, 0)
-    m.signInButton.translation = [buttonX, 310]
+    accounts = m.top.accounts
+    accountCount = 0
+    if accounts <> invalid then accountCount = accounts.Count()
+    rowCount = accountCount
+    if rowCount > m.top.visibleRows then rowCount = m.top.visibleRows
+    bodyHeight = 264
+    if m.top.verticalLayout then bodyHeight = rowCount * 128 - 8
+    footerGap = m.top.signInGap
+    buttonY = bodyHeight + footerGap
+    if accountCount = 0 and m.accountState.mode = AccountPicker.Mode.Picker then buttonY = 0
+    m.signInButton.translation = [buttonX, buttonY]
+    listWidth = m.layoutState.verticalItemWidth
+    if listWidth > contentWidth then listWidth = contentWidth
+    m.verticalAccounts.translation = [Number.ToInteger((contentWidth - listWidth) / 2, 0), 0]
+    m.verticalAccounts.itemSize = [listWidth, 120]
+    if rowCount < 1 then rowCount = 1
+    m.verticalAccounts.numRows = rowCount
+    if m.verticalAccounts.content <> invalid then
+        for each item in m.verticalAccounts.content.getChildren(-1, 0)
+            item.rowWidth = listWidth
+        end for
+    end if
 
-    itemStride = m.layoutState.itemWidth + m.layoutState.itemSpacing
-    rowWidth = itemStride * m.layoutState.visibleItemCount
-    rowX = Number.ToInteger((contentWidth - rowWidth) / 2, 0)
-    descriptionX = rowX + m.layoutState.visualItemWidth + 30
-    m.removalDescription.translation = [descriptionX, 48]
-    m.removalDescription.width = contentWidth - descriptionX
+    if m.accountState.mode = AccountPicker.Mode.Remove then
+        m.top.preferredHeight = layoutRemovalConfirmation(contentWidth)
+    else
+        m.top.preferredHeight = buttonY + 56
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' layoutRemovalConfirmation
+'-------------------------------------------------------------------------------
+function layoutRemovalConfirmation(contentWidth as integer) as integer
+    ' Confirmation geometry is independent of the account list's capacity and presentation.
+    bodyWidth = 640
+    if bodyWidth > contentWidth then bodyWidth = contentWidth
+    previewX = Number.ToInteger((contentWidth - bodyWidth) / 2, 0)
+    m.removalPreview.translation = [previewX, 0]
+    descriptionX = previewX + m.layoutState.visualItemWidth + 30
+    m.removalDescription.width = bodyWidth - m.layoutState.visualItemWidth - 30
+    textHeight = Number.ToInteger(m.removalDescription.boundingRect().height + 0.999, 237)
+    bodyHeight = 237
+    if textHeight > bodyHeight then bodyHeight = textHeight
+    m.removalDescription.translation = [descriptionX, Number.ToInteger((bodyHeight - textHeight) / 2, 0)]
+    buttonY = bodyHeight + 24
 
     confirmationGap = 30
     removeButtonWidth = m.removeButton.callFunc("getPreferredWidth", 30)
@@ -128,14 +217,16 @@ sub layoutContent()
     cancelButtonWidth = Number.ToInteger(m.cancelButton.buttonWidth, 180)
     confirmationWidth = removeButtonWidth + confirmationGap + cancelButtonWidth
     confirmationX = Number.ToInteger((contentWidth - confirmationWidth) / 2, 0)
-    m.removeButton.translation = [confirmationX, 310]
-    m.cancelButton.translation = [confirmationX + removeButtonWidth + confirmationGap, 310]
-end sub
+    m.removeButton.translation = [confirmationX, buttonY]
+    m.cancelButton.translation = [confirmationX + removeButtonWidth + confirmationGap, buttonY]
+    return buttonY + 56
+end function
 
 '-------------------------------------------------------------------------------
 ' onAccountFocused
 '-------------------------------------------------------------------------------
 sub onAccountFocused(event as object)
+    if m.accountState.rendering or m.top.verticalLayout or not m.accountRows.visible then return
     saveFocusedAccount()
     updateChevrons(event.getData())
 end sub
@@ -144,6 +235,11 @@ end sub
 ' updateChevrons
 '-------------------------------------------------------------------------------
 sub updateChevrons(focused = invalid as dynamic)
+    if m.top.verticalLayout or m.accountState.mode = AccountPicker.Mode.Remove then
+        m.leftChevron.visible = false
+        m.rightChevron.visible = false
+        return
+    end if
     overflow = getAccountOverflowState(focused)
     m.leftChevron.visible = overflow.left
     m.rightChevron.visible = overflow.right
@@ -154,7 +250,7 @@ end sub
 '-------------------------------------------------------------------------------
 function getAccountOverflowState(focused = invalid as dynamic) as object
     state = { left: false, right: false }
-    visibleItemCount = m.layoutState.visibleItemCount
+    visibleItemCount = m.top.horizontalVisibleCount
 
     if m.accountRows.content = invalid then return state
     if m.accountRows.content.getChildCount() = 0 then return state
@@ -197,8 +293,14 @@ end function
 '-------------------------------------------------------------------------------
 function focusAccounts() as boolean
     m.signInButton.hasFocusVisual = false
+    if m.verticalAccounts.visible then
+        setVerticalFocusFeedback(true)
+        m.verticalAccounts.jumpToItem = getFocusedIndex()
+        m.verticalAccounts.setFocus(true)
+        return true
+    end if
     if m.accountRows.visible = true then
-        m.accountRows.jumpToRowItem = getValidRowItem(m.accountState.rowItem)
+        m.accountRows.jumpToRowItem = [0, getFocusedIndex()]
         m.accountRows.drawFocusFeedback = true
         m.accountRows.setFocus(true)
         return true
@@ -211,6 +313,7 @@ end function
 ' focusSignInButton
 '-------------------------------------------------------------------------------
 function focusSignInButton() as boolean
+    setVerticalFocusFeedback(false)
     m.accountRows.drawFocusFeedback = false
     m.signInButton.focusable = true
     m.signInButton.setFocus(true)
@@ -230,14 +333,14 @@ end sub
 ' onAccountSelected
 '-------------------------------------------------------------------------------
 sub onAccountSelected()
-    if m.accountState.mode <> "picker" then return
+    if m.accountState.mode <> AccountPicker.Mode.Picker then return
     selected = m.accountRows.rowItemSelected
     if selected = invalid or selected.Count() < 2 then return
     row = m.accountRows.content.getChild(selected[0])
     if row = invalid then return
     item = row.getChild(selected[1])
     if item = invalid or item.account = invalid then return
-    m.accountState.rowItem = selected
+    m.accountState.focusedKey = item.account.accountKey
     m.top.accountSelected = item.account
 end sub
 
@@ -252,9 +355,10 @@ end sub
 ' showPickerControls
 '-------------------------------------------------------------------------------
 sub showPickerControls()
-    m.accountState.mode = "picker"
+    m.accountState.mode = AccountPicker.Mode.Picker
     m.accountState.removalCandidate = invalid
     m.signInButton.visible = true
+    m.removalPreview.visible = false
     m.removalDescription.visible = false
     m.removeButton.visible = false
     m.cancelButton.visible = false
@@ -266,10 +370,12 @@ end sub
 ' showRemoveConfirmation
 '-------------------------------------------------------------------------------
 sub showRemoveConfirmation(account as object)
-    if account.isActive = true then return
+    if m.top.protectActiveAccount and account.isActive = true then return
 
     saveFocusedAccount()
-    m.accountState.mode = "remove"
+    m.accountState.mode = AccountPicker.Mode.Remove
+    m.verticalAccounts.visible = false
+    m.accountRows.visible = false
     m.accountState.removalCandidate = account
     m.signInButton.visible = false
     m.signInButton.hasFocusVisual = false
@@ -278,8 +384,12 @@ sub showRemoveConfirmation(account as object)
     m.rightChevron.visible = false
     m.removeButton.visible = true
     m.cancelButton.visible = true
-    layoutAccountRows(true)
-    renderAccountRows([account], false)
+    layoutContent()
+    preview = CreateObject("roSGNode", "ContentNode")
+    preview.title = Strings.ToString(account.username, "Account")
+    preview.HDPosterUrl = buildAccountImageUri(account)
+    m.removalPreview.itemContent = preview
+    m.removalPreview.visible = true
     focusConfirmationButton("remove")
 end sub
 
@@ -287,7 +397,15 @@ end sub
 ' showAccountPicker
 '-------------------------------------------------------------------------------
 sub showAccountPicker()
-    renderAccounts()
+    if m.accountState.accountsDirty then
+        renderAccounts()
+    else
+        showPickerControls()
+        m.accountRows.visible = not m.top.verticalLayout
+        m.verticalAccounts.visible = m.top.verticalLayout
+        layoutContent()
+        updateChevrons()
+    end if
     focusAccounts()
 end sub
 
@@ -311,11 +429,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub onRemoveSelected()
     account = m.accountState.removalCandidate
-    if account = invalid or account.isActive = true then
+    if account = invalid then
         showAccountPicker()
         return
     end if
-    if AuthStore.ForgetAccount(Strings.ToString(account.accountKey)) <> true then
+    if m.top.protectActiveAccount and account.isActive = true then
+        showAccountPicker()
+        return
+    end if
+    if AuthStore.ForgetAccount(Strings.ToString(account.accountKey), not m.top.protectActiveAccount) <> true then
         focusConfirmationButton("remove")
         return
     end if
@@ -326,6 +448,10 @@ sub onRemoveSelected()
     for each savedAccount in accounts
         if Strings.ToString(savedAccount.accountKey) <> Strings.ToString(account.accountKey) then remainingAccounts.Push(savedAccount)
     end for
+    remainingIndex = getFocusedIndex()
+    if remainingIndex >= remainingAccounts.Count() then remainingIndex = remainingAccounts.Count() - 1
+    m.accountState.focusedKey = ""
+    if remainingIndex >= 0 then m.accountState.focusedKey = remainingAccounts[remainingIndex].accountKey
     m.top.accounts = remainingAccounts
     m.top.accountsChanged = remainingAccounts
     showAccountPicker()
@@ -342,6 +468,11 @@ end sub
 ' getFocusedAccount
 '-------------------------------------------------------------------------------
 function getFocusedAccount() as dynamic
+    if m.top.verticalLayout then
+        item = m.verticalAccounts.content.getChild(m.verticalAccounts.itemFocused)
+        if item <> invalid then return item.account
+        return invalid
+    end if
     focused = getValidRowItem(m.accountRows.rowItemFocused)
     if focused = invalid then return invalid
     row = m.accountRows.content.getChild(focused[0])
@@ -355,8 +486,8 @@ end function
 ' saveFocusedAccount
 '-------------------------------------------------------------------------------
 sub saveFocusedAccount()
-    focused = getValidRowItem(m.accountRows.rowItemFocused)
-    if focused <> invalid then m.accountState.rowItem = focused
+    account = getFocusedAccount()
+    if account <> invalid then m.accountState.focusedKey = account.accountKey
 end sub
 
 '-------------------------------------------------------------------------------
@@ -378,7 +509,7 @@ end function
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if press = false then return false
-    if m.accountState.mode = "remove" then
+    if m.accountState.mode = AccountPicker.Mode.Remove then
         if m.removeButton.isInFocusChain() and key = Remote.Key.Right then
             focusConfirmationButton("cancel")
             return true
@@ -396,12 +527,96 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = Remote.Key.Options and m.accountRows.isInFocusChain() then
         account = getFocusedAccount()
-        if account <> invalid and account.isActive <> true then showRemoveConfirmation(account)
+        if account <> invalid then showRemoveConfirmation(account)
         return true
     end if
-    if m.signInButton.isInFocusChain() and key = Remote.Key.Up and m.accountRows.visible = true then
+    if m.signInButton.isInFocusChain() and key = Remote.Key.Up and (m.accountRows.visible or m.verticalAccounts.visible) then
         m.signInButton.hasFocusVisual = false
         return focusAccounts()
     end if
     return false
+end function
+
+'-------------------------------------------------------------------------------
+' renderVerticalAccounts
+'-------------------------------------------------------------------------------
+sub renderVerticalAccounts(accounts as object)
+    content = CreateObject("roSGNode", "ContentNode")
+    for each account in accounts
+        item = content.createChild("ContentNode")
+        item.title = Strings.ToString(account.username, "Account")
+        item.description = Url.NormalizeServer(account.server)
+        accountStatus = "* to forget"
+        if m.top.protectActiveAccount and account.isActive = true then accountStatus = "Active"
+        item.HDPosterUrl = buildAccountImageUri(account)
+        item.addFields({ account: account, accountStatus: accountStatus, rowWidth: m.verticalAccounts.itemSize[0], listFocused: false })
+    end for
+    m.verticalAccounts.content = content
+end sub
+
+'-------------------------------------------------------------------------------
+' setVerticalFocusFeedback
+'-------------------------------------------------------------------------------
+sub setVerticalFocusFeedback(focused as boolean)
+    if m.verticalAccounts.content = invalid then return
+    for each item in m.verticalAccounts.content.getChildren(-1, 0)
+        item.listFocused = focused
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' onVerticalAccountSelected
+'-------------------------------------------------------------------------------
+sub onVerticalAccountSelected()
+    if m.accountState.mode <> AccountPicker.Mode.Picker then return
+    item = m.verticalAccounts.content.getChild(m.verticalAccounts.itemSelected)
+    if item = invalid then return
+    m.accountState.focusedKey = item.account.accountKey
+    m.top.accountSelected = item.account
+end sub
+
+'-------------------------------------------------------------------------------
+' onVerticalAccountFocused
+'-------------------------------------------------------------------------------
+sub onVerticalAccountFocused()
+    if m.accountState.rendering or not m.verticalAccounts.visible then return
+    saveFocusedAccount()
+end sub
+
+'-------------------------------------------------------------------------------
+' onVerticalForgetRequested
+'-------------------------------------------------------------------------------
+sub onVerticalForgetRequested()
+    if m.accountState.mode <> AccountPicker.Mode.Picker or not m.verticalAccounts.visible then return
+    account = m.verticalAccounts.forgetRequested
+    if account <> invalid then showRemoveConfirmation(account)
+end sub
+
+'-------------------------------------------------------------------------------
+' onGeometryChanged
+'-------------------------------------------------------------------------------
+sub onGeometryChanged()
+    layoutContent()
+    updateChevrons()
+end sub
+
+'-------------------------------------------------------------------------------
+' onInitialFocusChanged
+'-------------------------------------------------------------------------------
+sub onInitialFocusChanged()
+    m.accountState.focusedKey = m.top.initialFocusAccountKey
+end sub
+
+'-------------------------------------------------------------------------------
+' getFocusedIndex
+'-------------------------------------------------------------------------------
+function getFocusedIndex() as integer
+    accounts = m.top.accounts
+    if accounts = invalid then return 0
+    activeIndex = 0
+    for index = 0 to accounts.Count() - 1
+        if accounts[index].accountKey = m.accountState.focusedKey then return index
+        if accounts[index].isActive = true then activeIndex = index
+    end for
+    return activeIndex
 end function

@@ -78,12 +78,13 @@ export async function waitForStartup(environment) {
   await waitFor(async () => {
     const response = await environment.odc.getValues({
       requests: {
+        picker: { base: 'scene', keyPath: '#startupAccountHost.0.visible' },
         login: { base: 'scene', keyPath: '#login.visible' },
         home: { base: 'scene', keyPath: '#homePage.visible' },
         ready: { base: 'scene', keyPath: '#homePage.ready' }
       }
     });
-    return response.results.login?.value === true ||
+    return response.results.picker?.value === true || response.results.login?.value === true ||
       (response.results.home?.value === true && response.results.ready?.value === true);
   }, 'initial authentication and Home loading to finish', 45000);
 }

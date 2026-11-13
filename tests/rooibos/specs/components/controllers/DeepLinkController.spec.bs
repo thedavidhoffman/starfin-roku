@@ -161,6 +161,34 @@ namespace tests
             return LatestRequestLifecycle.TakeNext(m.node.deepLinkState.lifecycle)
         end function
 
+        @describe("startup account selection handoff")
+
+        @it("resolves the deferred launch with the selected server and releases readiness only after its destination")
+        function _()
+            originalPool = m.node.deepLinkState.taskPool
+            first = CreateObject("roSGNode", "Group")
+            second = CreateObject("roSGNode", "Group")
+            first.addFields({ request: {}, control: "" })
+            second.addFields({ request: {}, control: "" })
+            m.node.deepLinkState.taskPool = { nodes: [first, second], nextIndex: 0 }
+            m.top.callFunc("submitInput", { contentId: "movie", mediaType: "movie" }, true)
+            m.assertEqual(first.control, "")
+            m.assertTrue(m.node.deepLinkState.coldLaunchPending)
+
+            m.top.callFunc("updateSession", { server: "https://selected", token: "selected-token", userId: "user", accountKey: "selected-account" })
+
+            m.assertEqual(first.request.server, "https://selected")
+            m.assertEqual(first.request.token, "selected-token")
+            m.assertEqual(first.request.contentId, "movie")
+            'bs:disable-next-line 1140
+            handleResolverResponse({ ok: true, action: "deepLinkResolve", requestId: first.request.requestId, payload: { type: "playback", itemId: "movie" } })
+            m.assertTrue(m.node.deepLinkState.coldLaunchPending)
+            m.top.callFunc("reportDestinationReady", m.top.destinationRequested.destinationId)
+            m.assertFalse(m.node.deepLinkState.coldLaunchPending)
+            m.assertFalse(m.top.launchGateChanged.awaitingDestination)
+            m.node.deepLinkState.taskPool = originalPool
+        end function
+
     end class
 
 end namespace

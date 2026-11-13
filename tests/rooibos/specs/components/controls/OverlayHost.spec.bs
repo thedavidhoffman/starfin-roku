@@ -6,6 +6,11 @@ namespace tests
     @suite("OverlayHost component")
     class OverlayHostTests extends rooibos.BaseTestSuite
 
+        protected override function beforeEach()
+            m.top.callFunc("closeOverlay", false)
+            m.fixtureChildCount = m.top.getChildCount()
+        end function
+
         @describe("OverlayHost behavior")
 
         @it("rejects an invalid overlay request")
@@ -335,7 +340,7 @@ namespace tests
 
             m.assertEqual(overlay.trailerRequest, request.trailerRequest)
             m.top.callFunc("closeOverlay")
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.top.getChildCount(), m.fixtureChildCount)
         end function
 
         @describe("active trailer teardown through the host")
@@ -346,7 +351,7 @@ namespace tests
 
             m.top.callFunc("closeOverlay")
 
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.top.getChildCount(), m.fixtureChildCount)
             m.assertInvalid(session.overlay.getParent())
             m.assertInvalid(session.player.getParent())
             m.assertEqual(session.player.findNode("video").control, "stop")
@@ -368,7 +373,7 @@ namespace tests
             session.player.findNode("video").state = "finished"
 
             m.assertEqual(session.overlay.cleanupSessions, ["host-session"])
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.top.getChildCount(), m.fixtureChildCount)
             m.assertFalse(session.overlay.findNode("dialog").visible)
             m.assertFalse(session.player.visible)
         end function
@@ -380,8 +385,8 @@ namespace tests
             replacement = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", title: "Replacement", text: "Details" })
             session.player.ended = { playbackId: session.playbackId, reason: "completed", message: "", hasStarted: true }
 
-            m.assertEqual(m.top.getChildCount(), 1)
-            m.assertTrue(m.top.getChild(0).isSameNode(replacement))
+            m.assertEqual(m.top.getChildCount(), m.fixtureChildCount + 1)
+            m.assertTrue(m.top.getChild(m.fixtureChildCount).isSameNode(replacement))
             m.assertInvalid(session.overlay.getParent())
             m.assertInvalid(session.player.getParent())
             m.assertEqual(session.player.findNode("video").control, "stop")
@@ -405,7 +410,7 @@ namespace tests
             m.assertFalse(overlay.findNode("trailerSpinner").visible)
             m.assertEqual(overlay.findNode("trailerSpinner").control, "stop")
             m.assertFalse(overlay.findNode("dialog").visible)
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.top.getChildCount(), m.fixtureChildCount)
         end function
 
         private function trailerRequest() as object
@@ -431,6 +436,25 @@ namespace tests
             m.assertTrue(player.findNode("loading").visible)
 
             return { overlay: overlay, player: player, playbackId: playbackTask.request.requestId }
+        end function
+
+        @it("forwards the failed account identity into the reopened picker")
+        function _()
+            request = {
+                id: "accountPicker"
+                componentName: "AccountPickerDialog"
+                openFunction: "openAccountPicker"
+                closeField: "closeRequested"
+                initialFocusAccountKey: "b"
+                accounts: [{ accountKey: "a", server: "http://one", isActive: true }, { accountKey: "b", server: "http://two" }]
+            }
+
+            overlay = m.top.callFunc("openOverlay", request)
+            content = overlay.callFunc("getContentComponent")
+
+            m.assertEqual(content.findNode("verticalAccounts").jumpToItem, 1)
+            m.assertTrue(content.isInFocusChain())
+            m.top.callFunc("closeOverlay")
         end function
 
     end class

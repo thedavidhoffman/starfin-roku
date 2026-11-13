@@ -4,15 +4,29 @@ import { relaunchStarfin, waitFor } from './lifecycle.mjs';
 async function getAuthenticationSurface(environment) {
   return environment.odc.getValues({
     requests: {
+      picker: { base: 'scene', keyPath: '#startupAccountHost.0.visible' },
       home: { base: 'scene', keyPath: '#homePage.visible' },
       login: { base: 'scene', keyPath: '#login.visible' }
     }
   });
 }
 
-export async function ensureAuthenticated() {
-  const environment = await getAutomationEnvironment();
-  const surface = await getAuthenticationSurface(environment);
+export async function ensureAuthenticated(environment = undefined) {
+  environment ??= await getAutomationEnvironment();
+  let surface = await waitFor(async () => {
+    const current = await getAuthenticationSurface(environment);
+    return current.results.picker?.value === true || current.results.login?.value === true || current.results.home?.value === true
+      ? current : false;
+  }, 'an authentication surface', 45000);
+  if (surface.results.picker?.value === true) {
+    // Enter the configured test account through Login rather than choosing an
+    // arbitrary saved account, which could belong to a different server.
+    await environment.odc.setValue({ base: 'scene', keyPath: '#startupAccountHost.0.#signInButton.buttonSelected', value: true });
+    await waitFor(async () => {
+      surface = await getAuthenticationSurface(environment);
+      return surface.results.login?.value === true;
+    }, 'Login from the startup account picker');
+  }
   if (surface.results.home?.value === true) return environment;
 
   if (surface.results.login?.value === true) {

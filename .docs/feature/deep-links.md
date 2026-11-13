@@ -27,6 +27,10 @@ status-label, or `MainScene` references.
 
 Only the latest submitted request can publish a destination. A request received
 without a valid session is retained and resumed when authentication succeeds.
+The optional startup account selector also holds authentication unavailable. Its
+initial selection, including an account on another server, preserves the pending
+launch request and resolves it against the selected account. Picker display does
+not complete launch readiness. See [Account Selection](account-selection.md).
 Session expiry during resolution follows the same path. Explicit logout, reset,
 or an actual account switch cancels the retained work.
 

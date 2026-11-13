@@ -1468,7 +1468,7 @@ namespace tests
             m.assertEqual(m.node.homeState.focusedShelfIndex, 0)
             m.assertEqual(m.node.homeState.shelfNodes[0].rowContent.rowKey, "libraries")
             m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
-            m.assertEqual(m.node.shelvesGroup.translation, [0, 0])
+            m.assertEqual(m.node.shelvesGroup.translation, [0.0, 0.0])
             m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
         end function
 
@@ -2469,6 +2469,24 @@ namespace tests
             m.top.callFunc("recordMediaChange", { accountKey: "other", itemId: "movie", action: "watched", value: true })
 
             m.assertEqual(m.node.homeState.sync.revision, revision)
+        end function
+
+        @it("cannot repopulate the new server after an outgoing response arrives")
+        function _()
+            oldTask = CreateObject("roSGNode", "HomeLibrariesTask")
+            oldTask.request = { homeQueryId: m.node.homeState.queryId, homeSessionKey: "old-account" }
+            oldTask.observeField("response", "onLibrariesResponse")
+            m.top.appendChild(oldTask)
+            m.node.tasks.libraries = oldTask
+            m.node.homeState.sessionKey = "old-account"
+
+            m.top.loadRequest = { server: "https://new", token: "new-token", userId: "user", accountKey: "new-account" }
+            oldTask.response = { ok: true, action: "libraries", payload: { Items: [{ Id: "old-library", Name: "Old server", CollectionType: "movies" }] } }
+
+            m.assertEqual(m.node.homeState.request.server, "https://new")
+            m.assertEqual(m.node.homeState.sessionKey, "new-account")
+            m.assertFalse(m.node.homeState.rows.DoesExist("libraries"))
+            m.assertInvalid(oldTask.getParent())
         end function
 
     end class
