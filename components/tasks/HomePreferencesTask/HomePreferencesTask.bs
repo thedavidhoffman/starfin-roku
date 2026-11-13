@@ -1,0 +1,36 @@
+import "pkg:/source/HomeLayout.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/TaskResponse.bs"
+import "pkg:/source/Url.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    try
+        request = m.top.request
+        validationError = TaskRequest.ValidateRequest(request, HomeLayout.Action.Preferences, ["userId"])
+        if validationError <> invalid then
+            m.top.response = validationError
+            return
+        end if
+        requestUrl = request.server + "/DisplayPreferences/usersettings" + Url.BuildQueryString({ userId: request.userId, client: "emby" })
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), true, 5000)
+        if response.ok <> true then
+            m.top.response = TaskResponse.Failure(response, HomeLayout.Action.Preferences)
+            return
+        end if
+        m.top.response = TaskResponse.Success(request, HomeLayout.Action.Preferences, response.data)
+    catch error
+        m.top.response = TaskResponse.Failure(invalid, HomeLayout.Action.Preferences)
+    end try
+end sub

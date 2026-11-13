@@ -264,3 +264,10 @@ continues to own native item selection and the nearest-item fallback.
 Separate-mode Next Up responses preserve the Continue Watching ContentNode and
 HomeShelf identity. Continue Watching responses still reproject Next Up to remove
 newly duplicated items or series. History updates only reproject combined mode.
+
+## Jellyfin section layout
+
+Home now resolves Jellyfin display preferences before initial/full content loading.
+Supported section order, visibility, library lookup dependencies and playback refresh
+eligibility share the resolved layout. Existing library exclusions remain in effect.
+See [Jellyfin Home Layout](home-layout.md) for defaults, failures and combined-row rules.

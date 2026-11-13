@@ -15,6 +15,9 @@ export async function startHomeRefreshFixture(rokuHost, movie, initialLatestItem
   }
 
   let hold = false;
+  let homePreferences = {};
+  const requests = [];
+  const sectionItems = {};
   let latestItems = initialLatestItems;
   let latestRequestCount = 0;
   const pending = new Map();
@@ -26,23 +29,28 @@ export async function startHomeRefreshFixture(rokuHost, movie, initialLatestItem
     request.resume();
     const url = new URL(request.url, 'http://fixture');
     const path = url.pathname.toLowerCase();
-    const audio = url.searchParams.get('MediaTypes') === 'Audio';
+    const query = Object.fromEntries([...url.searchParams].map(([key, entry]) => [key.toLowerCase(), entry]));
     const section = path === '/shows/nextup' ? 'nextUp'
-      : path === '/useritems/resume' && !audio ? 'continueWatching' : undefined;
-    if (hold && section) {
+      : path === '/useritems/resume' ? (query.mediatypes === 'Audio' ? 'continueListening' : 'continueWatching')
+      : path === '/items' && query.filters === 'IsPlayed' ? 'recentPlayedEpisodes'
+      : path === '/livetv/programs/recommended' ? 'liveTvOnNow' : undefined;
+    requests.push({ path, query: Object.fromEntries(url.searchParams), section });
+    if (hold && ['continueWatching', 'nextUp'].includes(section)) {
       pending.set(section, response);
       response.on('close', () => {
         if (pending.get(section) === response) pending.delete(section);
       });
       return;
     }
-    if (path === '/userviews') {
+    if (path === '/displaypreferences/usersettings') {
+      send(response, 200, { CustomPrefs: homePreferences });
+    } else if (path === '/userviews') {
       send(response, 200, { Items: [{ Id: 'fixture-movies', Name: 'Movies', Type: 'CollectionFolder', CollectionType: 'movies' }] });
     } else if (path === '/items/latest') {
       latestRequestCount++;
       send(response, 200, latestItems);
-    } else if (path === '/useritems/resume' || path === '/shows/nextup') {
-      send(response, 200, { Items: [] });
+    } else if (section) {
+      send(response, 200, { Items: sectionItems[section] || [] });
     } else {
       send(response, 404, {});
     }
@@ -51,6 +59,9 @@ export async function startHomeRefreshFixture(rokuHost, movie, initialLatestItem
   await once(server, 'listening');
   return {
     url: `http://${address}:${server.address().port}`,
+    requests,
+    setSectionItems(section, items) { sectionItems[section] = items; },
+    setHomePreferences(preferences) { homePreferences = preferences; },
     setLatestItems(items) { latestItems = items; },
     get latestRequestCount() { return latestRequestCount; },
     holdRefresh() { hold = true; },

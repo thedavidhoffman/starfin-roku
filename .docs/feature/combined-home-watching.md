@@ -5,8 +5,11 @@ The preference is account-specific (`combine-continue-watching-next-up`). Home a
 contains the existing episode artwork control; its `home-episode-images` key and
 saved value are unchanged. Both changes apply through the usual settings save flow.
 
-When enabled, the Continue Watching shelf becomes **Continue Watching & Next Up**
-and the separate Next Up shelf disappears. Continue Listening remains separate.
+When enabled and both sections are enabled in Jellyfin Home settings, the Continue Watching shelf becomes **Continue Watching & Next Up**
+and the separate Next Up shelf disappears. It takes the earlier configured slot.
+When only one is enabled, that section keeps its normal title and position; when
+neither is enabled, neither appears. The saved Combine preference is retained.
+Continue Listening remains separate. See [Jellyfin Home Layout](home-layout.md).
 The combined shelf reuses HomeShelf and its video cards, artwork, progress,
 metadata, selection and remote Play behavior.
 
@@ -37,10 +40,11 @@ Next Up filtering. Mode changes update both presentations, while history changes
 only affect the combined presentation. Unaffected shelf content is retained.
 History uses Home's
 existing task ownership, query/session correlation and revision tracking; it is
-requested only in combined mode. Video progress/watched changes refresh history
+requested only when combining is effective for the resolved Jellyfin layout. Video progress/watched changes refresh history
 alongside both video sources. Older requests cannot acknowledge newer changes.
 
-Enabling combines retained data immediately and requests history. Disabling cancels
+Enabling combines retained data immediately and requests history when both sections
+are enabled in the resolved Jellyfin layout. Disabling cancels
 history work and removes its pending/required bookkeeping. A session change clears
 history. History failures retain current-session history if available, otherwise
 use item dates, and join Home's normal aggregated failure message. Source failures

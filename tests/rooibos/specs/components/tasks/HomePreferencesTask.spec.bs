@@ -1,0 +1,58 @@
+namespace tests
+
+    @SGNode("HomePreferencesTask")
+    @suite("HomePreferencesTask component")
+    class HomePreferencesTaskTests extends rooibos.BaseTestSuite
+
+        @describe("preference loading")
+
+        @it("requires an explicit user id")
+        function _()
+            m.top.request = { server: "http://server", token: "token" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.action, "homePreferences")
+        end function
+
+        @it("publishes the display preferences payload")
+        function _()
+            m.top.request = { server: "http://server", token: "token", userId: "user" }
+            m.stubCall(HttpClient.Request, { ok: true, data: { CustomPrefs: { homesection0: "nextup" } } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.payload.CustomPrefs.homesection0, "nextup")
+        end function
+
+        @it("preserves authentication failure details")
+        function _()
+            m.top.request = { server: "http://server", token: "token", userId: "user" }
+            m.stubCall(HttpClient.Request, { ok: false, status: 401, authExpired: true })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.authExpired)
+            m.assertEqual(m.top.response.status, 401)
+        end function
+
+        @it("preserves timeout failures for the Home fallback")
+        function _()
+            m.top.request = { server: "http://server", token: "token", userId: "user" }
+            m.stubCall(HttpClient.Request, { ok: false, failureKind: "timeout" })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.failureKind, "timeout")
+        end function
+
+    end class
+
+end namespace

@@ -13,7 +13,7 @@ end sub
 function hasPendingHomeWork() as boolean
     if m.homeState.refresh.pendingCore.Count() > 0 then return true
     for each key in m.homeState.sync.required
-        if HomeRefresh.NeedsRefresh(m.homeState.sync, key, true) then return true
+        if isHomeRequestEnabled(key) and HomeRefresh.NeedsRefresh(m.homeState.sync, key, true) then return true
     end for
     return false
 end function
@@ -22,11 +22,12 @@ end function
 ' startDirtyHomeRequests
 '-------------------------------------------------------------------------------
 sub startDirtyHomeRequests()
-    if m.homeState.sync.active <> true then return
+    if m.homeState.sync.active <> true or m.homeState.layout.loading then return
     components = { libraries: "HomeLibrariesTask", continueWatching: "ContinueWatchingTask", continueListening: "ContinueListeningTask", nextUp: "NextUpTask", liveTvOnNow: "LiveTvOnNowTask" }
     components[HomeWatching.Section.History] = "RecentPlayedEpisodesTask"
     latest = {}
     for each key in m.homeState.sync.required
+        if not isHomeRequestEnabled(key) then continue for
         if HomeRefresh.NeedsRefresh(m.homeState.sync, key) <> true then continue for
         if Left(key, 7) = "latest:" then
             libraryId = Mid(key, 8)
@@ -70,7 +71,7 @@ sub recordMediaChange(change as object)
             if change.reportState = Playstate.Report.Failed then sync.failedReports[reportId] = true
             ' Settlement releases the read barrier; it must not replay an older track snapshot.
             sync.revision++
-            HomeRefresh.Require(sync, "continueListening")
+            requireHomeSection("continueListening")
             startDirtyHomeRequests()
             return
         end if
@@ -86,10 +87,10 @@ sub recordMediaChange(change as object)
     end if
     audio = change.itemType = MediaItem.Type.Audio or change.itemType = MediaItem.Type.AudioBook
     if audio then
-        HomeRefresh.Require(sync, "continueListening")
+        requireHomeSection("continueListening")
     else if change.action <> MediaState.Change.Favorite then
-        HomeRefresh.Require(sync, "continueWatching")
-        HomeRefresh.Require(sync, "nextUp")
+        requireHomeSection("continueWatching")
+        requireHomeSection("nextUp")
         if m.homeState.watching.combined then HomeRefresh.Require(sync, HomeWatching.Section.History)
     end if
     aggregate = change.itemType = MediaItem.Type.Series or change.itemType = MediaItem.Type.Season

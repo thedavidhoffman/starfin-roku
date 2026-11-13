@@ -1,0 +1,161 @@
+import "pkg:/source/HomeLayout.bs"
+
+namespace tests
+
+    @suite("Jellyfin Home layout")
+    class HomeLayoutTests extends rooibos.BaseTestSuite
+
+        @describe("section resolution")
+
+        @it("uses Jellyfin defaults")
+        function _()
+            result = HomeLayout.Resolve(invalid, false)
+
+            m.assertEqual(result.order, ["libraries", "continueWatching", "continueListening", "liveTvOnNow", "nextUp", "latestMedia"])
+        end function
+
+        @it("uses defaults for empty slots")
+        function _()
+            result = HomeLayout.Resolve({ homesection0: "" }, false)
+
+            m.assertEqual(result.order, ["libraries", "continueWatching", "continueListening", "liveTvOnNow", "nextUp", "latestMedia"])
+        end function
+
+        @it("skips unsupported sections")
+        function _()
+            result = HomeLayout.Resolve({ homesection0: "activerecordings", homesection1: "resumebook" }, false)
+
+            m.assertEqual(result.order, ["continueListening", "liveTvOnNow", "nextUp", "latestMedia"])
+        end function
+
+        @it("uses the first duplicate section")
+        function _()
+            result = HomeLayout.Resolve({ homesection0: "nextup" }, false)
+
+            m.assertEqual(result.order, ["nextUp", "continueWatching", "continueListening", "liveTvOnNow", "latestMedia"])
+        end function
+
+        @it("maps library buttons")
+        function _()
+            result = HomeLayout.Resolve({ homesection0: "librarybuttons" }, false)
+
+            m.assertEqual(result.order, ["libraries", "continueWatching", "continueListening", "liveTvOnNow", "nextUp", "latestMedia"])
+        end function
+
+        @it("maps legacy folders")
+        function _()
+            result = HomeLayout.Resolve({ homesection0: "folders" }, false)
+
+            m.assertEqual(result.order, ["libraries", "continueWatching", "continueListening", "liveTvOnNow", "nextUp", "latestMedia"])
+        end function
+
+        @it("combines at Continue Watching")
+        function _()
+            result = HomeLayout.Resolve(invalid, true)
+
+            m.assertEqual(result.order, ["libraries", "continueWatching", "continueListening", "liveTvOnNow", "latestMedia"])
+        end function
+
+        @it("combines at the earlier Next Up")
+        function _()
+            result = HomeLayout.Resolve({ homesection0: "nextup" }, true)
+
+            m.assertEqual(result.order, ["continueWatching", "continueListening", "liveTvOnNow", "latestMedia"])
+        end function
+
+        @it("shows Next Up alone")
+        function _()
+            result = HomeLayout.Resolve({ homesection1: "none" }, true)
+
+            m.assertEqual(result.order, ["libraries", "continueListening", "liveTvOnNow", "nextUp", "latestMedia"])
+        end function
+
+        @it("shows Continue Watching alone")
+        function _()
+            result = HomeLayout.Resolve({ homesection5: "none" }, true)
+
+            m.assertEqual(result.order, ["libraries", "continueWatching", "continueListening", "liveTvOnNow", "latestMedia"])
+        end function
+
+        @it("hides both watching sections")
+        function _()
+            result = HomeLayout.Resolve({ homesection1: "none", homesection5: "none" }, true)
+
+            m.assertEqual(result.order, ["libraries", "continueListening", "liveTvOnNow", "latestMedia"])
+        end function
+
+        @it("retains both sources when combining")
+        function _()
+            result = HomeLayout.Resolve(invalid, true)
+
+            m.assertTrue(result.combined)
+            m.assertTrue(result.enabled.continueWatching)
+            m.assertTrue(result.enabled.nextUp)
+        end function
+
+        @it("disables effective combining when a source is hidden")
+        function _()
+            result = HomeLayout.Resolve({ homesection1: "none" }, true)
+
+            m.assertFalse(result.combined)
+        end function
+
+        @it("supports an explicitly empty Home")
+        function _()
+            preferences = {}
+            for i = 0 to 9
+                preferences["homesection" + i.ToStr()] = "none"
+            end for
+
+            result = HomeLayout.Resolve(preferences, true)
+
+            m.assertEqual(result.order, [])
+            m.assertFalse(result.combined)
+        end function
+
+        @describe("every ordered subset with combining on and off")
+
+        @it("resolves every inclusion and ordering case")
+        ' HOME_LAYOUT_ORDERED_SUBSET_CASES
+        function _(wire as object, sections as object, combine as boolean, expectedOrder as object, expectedCombined as boolean)
+            preferences = {}
+            expectedEnabled = {}
+            for i = 0 to 9
+                preferences["homesection" + i.ToStr()] = "none"
+            end for
+            for i = 0 to wire.Count() - 1
+                preferences["homesection" + i.ToStr()] = wire[i]
+                expectedEnabled[sections[i]] = true
+            end for
+            label = "slots=[" + Strings.Join(wire, ",") + "], combine=" + Strings.ToString(combine)
+
+            result = HomeLayout.Resolve(preferences, combine)
+
+            m.assertEqual(result.order, expectedOrder, label)
+            m.assertEqual(result.sections, sections, label)
+            m.assertEqual(result.enabled, expectedEnabled, label)
+            m.assertEqual(result.combined, expectedCombined, label)
+        end function
+
+        @describe("sparse Jellyfin slots")
+
+        @it("combines rows three and five without moving the intervening row")
+        function _()
+            preferences = { homesection0: "none", homesection1: "none", homesection2: "resume", homesection3: "resumeaudio", homesection4: "nextup", homesection5: "none", homesection6: "none" }
+
+            result = HomeLayout.Resolve(preferences, true)
+
+            m.assertEqual(result.order, ["continueWatching", "continueListening"])
+        end function
+
+        @it("ignores unknown future sections")
+        function _()
+            result = HomeLayout.Resolve({ homesection0: "future-section" }, false)
+
+            m.assertFalse(result.enabled.DoesExist("libraries"))
+            m.assertEqual(result.order[0], "continueWatching")
+        end function
+
+    end class
+
+end namespace

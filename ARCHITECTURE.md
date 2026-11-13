@@ -460,3 +460,14 @@ shelf focus supersedes deferred state. Source-aware projection retains unaffecte
 shelf content in separate mode. SettingsContent owns the lazy Home panel, which
 contains the combine preference and the existing episode artwork preference. See
 [Combined Home Watching Row](.docs/feature/combined-home-watching.md).
+
+### Jellyfin Home layout
+
+HomePage owns session-scoped display preferences and the resolved Home layout.
+HomePreferencesTask reads Jellyfin display preferences with explicit session data;
+HomeLayout normalizes slots and derives enabled sections and effective combining.
+Home-local HomeLayoutLoading coordinates loading, fallback, dependencies and order.
+Initial/full refresh resolves preferences before content; playback refresh reuses
+that layout. The same eligibility path gates reconciliation requests. AuthController
+continues to retain library exclusions, and MainScene remains a router. See
+[Home Layout](.docs/feature/home-layout.md).

@@ -1,0 +1,86 @@
+'-------------------------------------------------------------------------------
+' resolveHomeLayout
+'-------------------------------------------------------------------------------
+sub resolveHomeLayout()
+    combine = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.CombineContinueWatchingNextUp) = SettingsStore.Toggle.On
+    layout = HomeLayout.Resolve(m.homeState.layout.preferences, combine)
+    m.homeState.layout.resolved = layout
+    order = []
+    for each section in layout.order
+        if section = HomeLayout.Section.Latest then
+            if m.homeState.layout.latestOrder <> invalid then
+                for each key in m.homeState.layout.latestOrder
+                    order.Push(key)
+                end for
+            end if
+        else
+            order.Push(section)
+        end if
+    end for
+    m.homeState.rowOrder = order
+end sub
+
+'-------------------------------------------------------------------------------
+' isHomeSectionEnabled
+'-------------------------------------------------------------------------------
+function isHomeSectionEnabled(section as string) as boolean
+    return m.homeState.layout.resolved.enabled.DoesExist(section)
+end function
+
+'-------------------------------------------------------------------------------
+' isHomeRequestEnabled
+'-------------------------------------------------------------------------------
+function isHomeRequestEnabled(section as string) as boolean
+    if section = HomeLayout.Section.Libraries then return isHomeSectionEnabled(section) or isHomeSectionEnabled(HomeLayout.Section.Latest)
+    if section = HomeWatching.Section.History then return m.homeState.watching.combined
+    if Left(section, 7) = "latest:" then return isHomeSectionEnabled(HomeLayout.Section.Latest) and m.homeState.latestLibraries.DoesExist(Mid(section, 8))
+    if section = HomeLayout.Section.LiveTv then
+        request = m.homeState.request
+        if request = invalid then return false
+        if request.permissions = invalid then return false
+        if request.permissions.canAccessLiveTv <> true then return false
+    end if
+    return isHomeSectionEnabled(section)
+end function
+
+'-------------------------------------------------------------------------------
+' requireHomeSection
+'-------------------------------------------------------------------------------
+sub requireHomeSection(section as string)
+    if isHomeRequestEnabled(section) then HomeRefresh.Require(m.homeState.sync, section)
+end sub
+
+'-------------------------------------------------------------------------------
+' onHomePreferencesResponse
+'-------------------------------------------------------------------------------
+sub onHomePreferencesResponse(event as object)
+    task = event.getRoSGNode()
+    if not isCurrentHomeTask(task, HomeLayout.Action.Preferences) then return
+    response = event.getData()
+    cleanupHomeTask(task, HomeLayout.Action.Preferences)
+    valid = false
+    if Arrays.IsAssocArray(response) then
+        if response.authExpired = true then
+            m.homeState.layout.loading = false
+            m.homeState.sync.required = {}
+            handleHomeResponseFailure(response)
+            markCoreTaskComplete(HomeLayout.Action.Preferences)
+            return
+        end if
+        if response.ok = true and Arrays.IsAssocArray(response.payload) then
+            valid = Arrays.IsAssocArray(response.payload.CustomPrefs)
+            if valid then m.homeState.layout.preferences = response.payload.CustomPrefs
+        end if
+    end if
+    if not valid then m.log.write("Home layout preferences unavailable; retaining session layout or using defaults.")
+    m.homeState.sync.required = {}
+    resolveHomeLayout()
+    m.homeState.watching.combined = m.homeState.layout.resolved.combined
+    m.homeState.layout.loading = false
+    m.homeState.refresh.pendingCore.Delete(HomeLayout.Action.Preferences)
+    for each section in [HomeLayout.Section.Libraries, HomeLayout.Section.Watching, HomeLayout.Section.Listening, HomeLayout.Section.NextUp, HomeLayout.Section.LiveTv, HomeWatching.Section.History]
+        requireHomeSection(section)
+    end for
+    startDirtyHomeRequests()
+    finishHomeRefreshIfReady()
+end sub

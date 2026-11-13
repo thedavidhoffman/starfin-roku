@@ -126,6 +126,43 @@ describe('Home lifecycle reconciliation', function () {
     assert.equal(await value(environment, `${details}.loadRequest.itemId`), selected.id);
   });
 
+  it('renders Jellyfin section order and skips hidden content requests', async function () {
+    const originalRequest = await value(environment, '#homePage.loadRequest');
+    const fixture = await startHomeRefreshFixture(environment.selectedDevice.host,
+      { Id: 'layout-movie', Name: 'Layout movie', Type: 'Movie', ImageTags: {} });
+    const preferences = Object.fromEntries(Array.from({ length: 10 }, (_, i) => ['homesection' + i, 'none']));
+    preferences.homesection2 = 'latestmedia';
+    preferences.homesection4 = 'resumebook';
+    preferences.homesection6 = 'smalllibrarytiles';
+    fixture.setHomePreferences(preferences);
+    const homeCall = (funcName, ...funcParams) => environment.odc.callFunc({
+      base: 'scene', keyPath: '#homePage', funcName, funcParams
+    });
+    try {
+      await set(environment, '#homePage.loadRequest', {
+        ...originalRequest, server: fixture.url, token: 'home-fixture-token',
+        permissions: { canAccessLiveTv: false }, homePreferences: { latestItemsExcludes: [] }
+      });
+      await homeCall('activate', true);
+      await waitFor(async () => await value(environment, '#homePage.ready') === true, 'configured Home loaded');
+
+      assert.equal(await value(environment, '#shelvesGroup.getChildCount()'), 2);
+      assert.equal(await value(environment, '#shelvesGroup.0.rowContent.rowKey'), 'latest:fixture-movies');
+      assert.equal(await value(environment, '#shelvesGroup.1.rowContent.rowKey'), 'libraries');
+      const preferenceRequest = fixture.requests.find(request => request.path === '/displaypreferences/usersettings');
+      assert.equal(preferenceRequest.query.client, 'emby');
+      assert.ok(Object.entries(preferenceRequest.query).find(([key]) => key.toLowerCase() === 'userid')?.[1]);
+      assert.ok(!fixture.requests.some(request => ['/useritems/resume', '/shows/nextup'].includes(request.path)));
+    } finally {
+      try {
+        await homeCall('deactivate');
+        await set(environment, '#homePage.loadRequest', originalRequest);
+      } finally {
+        await fixture.close();
+      }
+    }
+  });
+
   it('restores the retained shelf after a blocking refresh HTTP failure is acknowledged', async function () {
     const selected = await homeShelfItem(environment, 'latest', 'Movie');
     const movie = await getItem(environment, selected.id, 'Movie');

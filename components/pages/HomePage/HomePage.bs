@@ -1,3 +1,5 @@
+import "pkg:/source/HomeLayout.bs"
+import "pkg:/components/pages/HomePage/Helpers/HomeLayoutLoading.bs"
 import "pkg:/source/MediaCardContent.bs"
 import "pkg:/source/Playstate.bs"
 import "pkg:/source/HomeRefresh.bs"
@@ -42,8 +44,9 @@ sub init()
         sessionKey: ""
         rows: {}
         watching: { combined: false, history: [] }
+        layout: { preferences: invalid, resolved: HomeLayout.Resolve(invalid, false), loading: false }
         episodeImageMode: SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.HomeEpisodeImages)
-        rowOrder: ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow"]
+        rowOrder: []
         latestLibraries: {}
         latestTasks: []
         sectionItems: {}
@@ -91,7 +94,8 @@ end sub
 ' onSettingsChanged
 '-------------------------------------------------------------------------------
 sub onSettingsChanged()
-    combined = SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.CombineContinueWatchingNextUp) = SettingsStore.Toggle.On
+    resolveHomeLayout()
+    combined = m.homeState.layout.resolved.combined
     if combined <> m.homeState.watching.combined then
         m.homeState.watching.combined = combined
         refreshWatchingRows()
@@ -260,6 +264,9 @@ sub activate(fullRefresh = false as boolean)
         m.top.visible = true
         refreshHomeData(false)
         focusHome()
+    else if m.homeState.layout.loading then
+        m.top.visible = true
+        focusHome()
     else if hasPendingHomeWork() then
         refreshPlaybackRows(true)
     else
@@ -287,6 +294,9 @@ sub onLoadRequestChanged()
     m.homeState.request = m.top.loadRequest
     m.homeState.sessionKey = getHomeSessionKey(m.homeState.request)
     m.homeState.watching.history = []
+    m.homeState.layout = { preferences: invalid, resolved: HomeLayout.Resolve(invalid, false), loading: false }
+    resolveHomeLayout()
+    m.homeState.watching.combined = m.homeState.layout.resolved.combined
     m.homeState.sync = HomeRefresh.Create()
     m.homeState.sectionItems = {}
     m.homeState.rows = {}
@@ -314,13 +324,7 @@ sub refreshHomeData(blocking = false as boolean)
         ownsSpinner: true
         messages: []
         messagesSuppressed: false
-        pendingCore: {
-            libraries: true
-            continueWatching: true
-            continueListening: true
-            nextUp: true
-            liveTvOnNow: true
-        }
+        pendingCore: {}
     }
     if blocking = true then
         m.top.setFocus(true)
@@ -330,7 +334,8 @@ sub refreshHomeData(blocking = false as boolean)
 
     m.homeState.rows = {}
     m.homeState.focus.returnTarget = invalid
-    m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow"]
+    m.homeState.rowOrder = []
+    m.homeState.layout.latestOrder = []
     m.homeState.latestLibraries = {}
     m.homeState.latestTasks = []
     m.homeState.sectionItems = {}
@@ -342,30 +347,10 @@ sub refreshHomeData(blocking = false as boolean)
     clearRows()
     Spinner.Show()
 
-    for each key in ["libraries", "continueWatching", "continueListening", "nextUp", "liveTvOnNow"]
-        HomeRefresh.Require(m.homeState.sync, key)
-    end for
-    runHomeTask("libraries", "HomeLibrariesTask", "onLibrariesResponse", request)
-    runHomeTask("continueWatching", "ContinueWatchingTask", "onSectionResponse", request)
-    if HomeRefresh.NeedsRefresh(m.homeState.sync, "continueListening", true) then
-        runHomeTask("continueListening", "ContinueListeningTask", "onSectionResponse", request)
-    else
-        m.homeState.refresh.pendingCore.Delete("continueListening")
-    end if
-    runHomeTask("nextUp", "NextUpTask", "onSectionResponse", request)
-    if m.homeState.watching.combined then
-        HomeRefresh.Require(m.homeState.sync, HomeWatching.Section.History)
-        m.homeState.refresh.pendingCore[HomeWatching.Section.History] = true
-        runHomeTask(HomeWatching.Section.History, "RecentPlayedEpisodesTask", "onSectionResponse", request)
-    end if
-    canAccessLiveTv = false
-    if request.permissions <> invalid then canAccessLiveTv = request.permissions.canAccessLiveTv = true
-    if canAccessLiveTv then
-        runHomeTask("liveTvOnNow", "LiveTvOnNowTask", "onSectionResponse", request)
-    else
-        HomeRefresh.Accept(m.homeState.sync, "liveTvOnNow", m.homeState.sync.revision)
-        markCoreTaskComplete("liveTvOnNow")
-    end if
+    m.homeState.sync.required = {}
+    m.homeState.layout.loading = true
+    m.homeState.refresh.pendingCore[HomeLayout.Action.Preferences] = true
+    runHomeTask(HomeLayout.Action.Preferences, "HomePreferencesTask", "onHomePreferencesResponse", request)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -373,6 +358,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub refreshPlaybackRows(blocking = false as boolean)
     if m.homeState.request = invalid then return
+    if m.homeState.layout.loading then return
     ' Preserve unfinished work when replacing a refresh generation.
     for each key in m.homeState.refresh.pendingCore
         HomeRefresh.Require(m.homeState.sync, key)
@@ -523,7 +509,7 @@ sub onLibrariesResponse(event as object)
 
     HomeRefresh.Accept(m.homeState.sync, "libraries", task.request.homeRevision)
     libraries = reconcileHomeSnapshot(ApiPayload.GetItems(response.payload), task.request.homeRevision)
-    addRow("libraries", "My Media", libraries)
+    if isHomeSectionEnabled(HomeLayout.Section.Libraries) then addRow("libraries", "My Media", libraries)
     queueLatestMediaRows(libraries)
     renderRows()
     runLatestMediaTasks()
@@ -570,7 +556,9 @@ end sub
 ' getFilteredNextUpItems
 '-------------------------------------------------------------------------------
 function getFilteredNextUpItems() as object
-    return HomeWatching.FilterNextUp(m.homeState.sectionItems.continueWatching, m.homeState.sectionItems.nextUp)
+    resumeItems = invalid
+    if isHomeSectionEnabled(HomeLayout.Section.Watching) then resumeItems = m.homeState.sectionItems.continueWatching
+    return HomeWatching.FilterNextUp(resumeItems, m.homeState.sectionItems.nextUp)
 end function
 
 '-------------------------------------------------------------------------------
@@ -628,6 +616,7 @@ sub queueLatestMediaRows(libraries as object)
     end if
 
     for each item in libraries
+        if not isHomeSectionEnabled(HomeLayout.Section.Latest) then exit for
         if Arrays.IsAssocArray(item) = false then continue for
         if excludedIds.DoesExist(Strings.ToString(item.Id)) then continue for
 
@@ -646,12 +635,12 @@ sub queueLatestMediaRows(libraries as object)
         end if
     end for
 
-    m.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp"]
+    m.homeState.layout.latestOrder = []
     for each library in latestLibraries
-        m.homeState.rowOrder.Push("latest:" + library.id)
+        m.homeState.layout.latestOrder.Push("latest:" + library.id)
         HomeRefresh.Require(m.homeState.sync, "latest:" + library.id)
     end for
-    m.homeState.rowOrder.Push("liveTvOnNow")
+    resolveHomeLayout()
     obsolete = []
     for each key in m.homeState.sync.required
         if Left(key, 7) = "latest:" and not m.homeState.latestLibraries.DoesExist(Mid(key, 8)) then obsolete.Push(key)
@@ -882,6 +871,7 @@ end sub
 ' finishHomeRefreshIfReady
 '-------------------------------------------------------------------------------
 sub finishHomeRefreshIfReady()
+    if m.homeState.layout.loading then return
     if m.homeState.refresh.pendingCore.Count() > 0 then return
     startDirtyHomeRequests()
     if m.homeState.refresh.pendingCore.Count() > 0 then return
@@ -1486,12 +1476,17 @@ sub refreshWatchingRows(changedSection = "" as string)
         m.homeState.rows.Delete("nextUp")
     else
         if changedSection = HomeWatching.Section.History then return
-        if changedSection = "" or changedSection = "continueWatching" then
+        if isHomeSectionEnabled(HomeLayout.Section.Watching) and (changedSection = "" or changedSection = "continueWatching") then
             resumeItems = m.homeState.sectionItems.continueWatching
             if resumeItems = invalid then resumeItems = []
             setHomeRowContent("continueWatching", "Continue Watching", resumeItems)
         end if
-        setHomeRowContent("nextUp", "Next Up", getFilteredNextUpItems())
+        if not isHomeSectionEnabled(HomeLayout.Section.Watching) then m.homeState.rows.Delete("continueWatching")
+        if isHomeSectionEnabled(HomeLayout.Section.NextUp) then
+            setHomeRowContent("nextUp", "Next Up", getFilteredNextUpItems())
+        else
+            m.homeState.rows.Delete("nextUp")
+        end if
     end if
     renderRows()
 end sub

@@ -49,6 +49,8 @@ export async function startAccountSelectionFixture(rokuHost) {
       body = { Authenticated: state.approved };
     } else if (path === '/users/authenticatewithquickconnect') {
       body = { AccessToken: `${id}-token`, User: user('u0') };
+    } else if (path === '/displaypreferences/usersettings') {
+      body = { CustomPrefs: {} };
     } else if (path === '/userviews') {
       kind = 'home';
       body = { Items: [{ Id: `${id}-library`, Name: `Library ${id}`, Type: 'CollectionFolder', CollectionType: 'movies' }] };

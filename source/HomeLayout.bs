@@ -1,0 +1,72 @@
+import "pkg:/source/Array.bs"
+import "pkg:/source/String.bs"
+
+namespace HomeLayout
+
+    enum SectionType
+        None = "none"
+        LibraryTiles = "smalllibrarytiles"
+        LibraryButtons = "librarybuttons"
+        Folders = "folders"
+        Resume = "resume"
+        ResumeAudio = "resumeaudio"
+        ResumeBook = "resumebook"
+        NextUp = "nextup"
+        Latest = "latestmedia"
+        LiveTv = "livetv"
+    end enum
+
+    enum Section
+        Libraries = "libraries"
+        Watching = "continueWatching"
+        Listening = "continueListening"
+        NextUp = "nextUp"
+        Latest = "latestMedia"
+        LiveTv = "liveTvOnNow"
+    end enum
+
+    enum Action
+        Preferences = "homePreferences"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' HomeLayout.Resolve
+    '---------------------------------------------------------------------------
+    function Resolve(preferences as dynamic, combine as boolean) as object
+        defaults = [SectionType.LibraryTiles, SectionType.Resume, SectionType.ResumeAudio, SectionType.ResumeBook, SectionType.LiveTv, SectionType.NextUp, SectionType.Latest, SectionType.None, SectionType.None, SectionType.None]
+        mapping = {}
+        mapping[SectionType.LibraryTiles] = Section.Libraries
+        mapping[SectionType.LibraryButtons] = Section.Libraries
+        mapping[SectionType.Folders] = Section.Libraries
+        mapping[SectionType.Resume] = Section.Watching
+        mapping[SectionType.ResumeAudio] = Section.Listening
+        mapping[SectionType.NextUp] = Section.NextUp
+        mapping[SectionType.Latest] = Section.Latest
+        mapping[SectionType.LiveTv] = Section.LiveTv
+        sections = []
+        enabled = {}
+        for i = 0 to 9
+            value = ""
+            if Arrays.IsAssocArray(preferences) then value = LCase(Strings.ToString(preferences["homesection" + i.ToStr()]))
+            if value = "" then value = defaults[i]
+            if not mapping.DoesExist(value) then continue for
+            section = mapping[value]
+            if enabled.DoesExist(section) then continue for
+            enabled[section] = true
+            sections.Push(section)
+        end for
+        combined = combine and enabled.DoesExist(Section.Watching) and enabled.DoesExist(Section.NextUp)
+        order = []
+        watchingAdded = false
+        for each section in sections
+            if combined and (section = Section.Watching or section = Section.NextUp) then
+                if not watchingAdded then order.Push(Section.Watching)
+                watchingAdded = true
+            else
+                order.Push(section)
+            end if
+        end for
+        return { sections: sections, enabled: enabled, order: order, combined: combined }
+    end function
+
+end namespace
