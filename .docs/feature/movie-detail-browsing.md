@@ -22,8 +22,8 @@ previous/next navigation to settle on the final title without leaving the page
 partially rendered or permanently loading.
 
 Activation and deactivation follow the shared media-detail focus contract. The
-page deactivates Cast and previous/next controls, releases page focus, cancels
-detail loading, and clears the spinner when leaving. Returning restores page
+page suspends supplemental content, deactivates previous/next controls, releases
+page focus, cancels detail loading, and clears the spinner when leaving. Returning restores page
 focus through the saved focus area.
 
 Movie request orchestration lives in the component-local `Helpers/Loading.bs`
@@ -31,3 +31,12 @@ file. It owns load-request changes, latest-request dispatch and completion, and
 movie theme-song lookup while continuing to operate in the Movie component's
 context. This matches the responsibility split used by TVEpisode without moving
 page state or Task ownership into a separate component.
+
+Movie supplemental content owns its separate correlated extras requests and
+Extras/Cast row navigation. See [Movie Extras](movie-extras.md).
+
+Movie passes the initial SpecialFeatureCount hint to supplemental content and
+reconciles that hint with the accepted base-movie metadata response before
+rendering its people. Metadata failure releases that wait through the same
+interface. Supplemental content owns the positive-count loading hold; it never
+extends Movie's global metadata spinner or blocks movie playback actions.

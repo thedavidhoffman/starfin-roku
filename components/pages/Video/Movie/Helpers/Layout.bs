@@ -1,0 +1,93 @@
+'-------------------------------------------------------------------------------
+' applyMovieLayout
+'-------------------------------------------------------------------------------
+sub applyMovieLayout()
+    showRows = m.state.focusArea = MovieFocus.Area.Supplements and m.supplements.hasItems
+    if m.state.layout.isPoster then
+        applyMoviePosterLayout()
+    else if m.state.layout.isCinematic then
+        applyMovieCinematicLayout()
+    else
+        applyMovieBackdropLayout()
+    end if
+    m.supplements.displayEnabled = not m.state.layout.isCinematic or showRows
+    m.mediaShell.castVisible = m.state.layout.isCinematic and showRows
+    m.mediaShell.detailsVisible = not m.state.layout.isCinematic or not showRows
+    m.mediaToolbar.visible = not m.state.layout.isCinematic or not showRows
+    m.previousNextButton.displayEnabled = m.state.layout.isCinematic and m.state.layout.isFromLibrary
+    updateSupplementChevrons(showRows)
+end sub
+
+'-------------------------------------------------------------------------------
+' applyMoviePosterLayout
+'-------------------------------------------------------------------------------
+sub applyMoviePosterLayout()
+    m.mediaLayoutGroup.translation = [-37.5, 0]
+    m.supplements.viewportWidth = 1152
+    m.supplements.translation = [672, 681]
+    m.mediaShell.contentTranslation = [768, 90]
+    m.mediaToolbar.translation = [672, 570]
+end sub
+
+'-------------------------------------------------------------------------------
+' applyMovieCinematicLayout
+'-------------------------------------------------------------------------------
+sub applyMovieCinematicLayout()
+    m.mediaLayoutGroup.translation = [0, 0]
+    m.supplements.viewportWidth = 1848
+    m.supplements.translation = [0, 699]
+    m.mediaShell.contentTranslation = [96, 96]
+    m.mediaToolbar.translation = [0, 948]
+end sub
+
+'-------------------------------------------------------------------------------
+' applyMovieBackdropLayout
+'-------------------------------------------------------------------------------
+sub applyMovieBackdropLayout()
+    m.mediaLayoutGroup.translation = [0, 0]
+    m.supplements.viewportWidth = 1848
+    m.supplements.translation = [0, 699]
+    m.mediaShell.contentTranslation = [96, 108]
+    m.mediaToolbar.translation = [0, 588]
+end sub
+
+'-------------------------------------------------------------------------------
+' updateSupplementChevrons
+'-------------------------------------------------------------------------------
+sub updateSupplementChevrons(showRows as boolean)
+    m.layoutNodes.footer.direction = ""
+    m.layoutNodes.upFooter.direction = ""
+    hasNavigation = m.supplements.hasItems and (m.state.layout.isCinematic or m.supplements.hasMultipleRows)
+    showBoth = false
+    if hasNavigation then
+        if showRows and not m.supplements.canMoveDown then
+            m.layoutNodes.footer.direction = "up"
+        else
+            m.layoutNodes.footer.direction = "down"
+            showBoth = m.state.layout.isCinematic and showRows and m.supplements.canMoveDown
+            if showBoth then m.layoutNodes.upFooter.direction = "up"
+        end if
+    end if
+    positionSupplementChevrons(showBoth)
+end sub
+
+'-------------------------------------------------------------------------------
+' positionSupplementChevrons
+'-------------------------------------------------------------------------------
+sub positionSupplementChevrons(showBoth as boolean)
+    centerX = 960
+    if m.state.layout.isPoster then
+        ' The footer is outside the translated content groups; resolve their row viewport to scene coordinates.
+        centerX = m.mediaLayoutGroup.translation[0] + m.layoutNodes.content.translation[0] + m.supplements.translation[0] + m.supplements.viewportWidth / 2
+    end if
+    footerWidth = m.layoutNodes.footer.iconWidth
+    upWidth = m.layoutNodes.upFooter.iconWidth
+    m.layoutNodes.footer.translation = [centerX - footerWidth / 2, 1020]
+    m.layoutNodes.upFooter.translation = [centerX - upWidth / 2, 1020]
+    if showBoth then
+        gap = 12
+        pairLeft = centerX - (upWidth + gap + footerWidth) / 2
+        m.layoutNodes.upFooter.translation = [pairLeft, 1020]
+        m.layoutNodes.footer.translation = [pairLeft + upWidth + gap, 1020]
+    end if
+end sub

@@ -1,0 +1,101 @@
+namespace tests
+
+    @SGNode("MovieExtrasTask")
+    @suite("Movie extras task")
+    class MovieExtrasTaskTests extends rooibos.BaseTestSuite
+
+        @describe("catalog requests")
+
+        @it("rejects missing request data")
+        function _()
+            m.top.request = invalid
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.action, "movieExtras")
+            m.assertEqual(m.top.response.requestId, -1)
+        end function
+
+        @it("requires the user identity for filtered extras")
+        function _()
+            m.top.request = { server: "http://server", token: "token", itemId: "movie", requestId: 4 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.errorMessage, "Invalid request userId.")
+            m.assertEqual(m.top.response.itemId, "movie")
+            m.assertEqual(m.top.response.requestId, 4)
+        end function
+
+        @it("loads the authenticated special features endpoint and returns its array")
+        function _()
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().extrasHttpRequest = { url: requestUrl, method: method, headers: headers }
+                return { ok: true, data: [{ Id: "extra", Type: "Video" }] }
+            end function)
+            m.top.request = { server: "http://server", token: "token", userId: "user", itemId: "movie", requestId: 4 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            captured = getGlobalAa().extrasHttpRequest
+            m.assertEqual(LCase(captured.url), "http://server/items/movie/specialfeatures?userid=user")
+            m.assertEqual(captured.method, "GET")
+            m.assertNotInvalid(captured.headers)
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.payload[0].Id, "extra")
+            m.assertEqual(m.top.response.requestId, 4)
+            m.assertEqual(m.top.response.itemId, "movie")
+        end function
+
+        @it("accepts an empty extras array")
+        function _()
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                return { ok: true, data: [] }
+            end function)
+            m.top.request = { server: "server", token: "token", userId: "user", itemId: "movie" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.payload.Count(), 0)
+        end function
+
+        @it("rejects a malformed successful response")
+        function _()
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                return { ok: true, data: { Items: [] } }
+            end function)
+            m.top.request = { server: "server", token: "token", userId: "user", itemId: "movie" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.errorMessage, "Invalid extras response.")
+        end function
+
+        @it("preserves API failure classification and request correlation")
+        function _()
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                return { ok: false, failureKind: "unauthorized", errorMessage: "Unauthorized", statusCode: 401 }
+            end function)
+            m.top.request = { server: "server", token: "token", userId: "user", itemId: "movie", requestId: 9 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.statusCode, 401)
+            m.assertEqual(m.top.response.failureKind, "unauthorized")
+            m.assertEqual(m.top.response.requestId, 9)
+        end function
+
+    end class
+
+end namespace

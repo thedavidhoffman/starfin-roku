@@ -149,3 +149,18 @@ definition. Shared backdrop images, shade, gradient, and backdrop URL belong to
 its background state; movie-poster state contains only its poster nodes and URL.
 Metadata centering uses one positioning path after content or layout changes.
 The detail pages retain ownership of toolbar, cast, and season-grid geometry.
+
+## Movie supplemental rows
+
+Movie now positions one supplemental-content region in the former cast slot.
+Extras precede Cast & Crew, with only one row visible at a time. The existing
+Poster geometry and Cinematic detail visibility apply to the whole region.
+MovieSupplementalContent owns row choice and horizontal focus restoration; Movie
+owns shell visibility and the Up/Down footer indicators. See
+[Movie Extras](movie-extras.md).
+
+Movie's local Layout helper applies explicit Poster, Cinematic, and backdrop
+geometry before updating supplemental footer directions and placement. Poster
+centers the footer on the translated row viewport; other modes use screen center.
+Cinematic Extras with cast below shows a centered Up/Down pair beneath the row;
+the last row shows a single centered Up. Backdrop and Poster keep a single arrow.

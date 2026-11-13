@@ -10,16 +10,28 @@ describe('Starfin movie shell layout', function () {
     await returnToHome();
   });
 
-  it('renders the saved Poster layout and navigates to cast without hiding details', async function () {
+  it('renders the saved Poster layout and navigates supplemental rows without hiding details', async function () {
     const environment = await openMovieWithPoster();
     await assertPoster(environment);
     await environment.odc.callFunc({ base: 'scene', keyPath: '#dynamicPageHost.1', funcName: 'activate' });
     await environment.ecp.sendKeypress(environment.ecp.Key.Down, { wait: 400 });
+    assert.equal(await environment.odc.isInFocusChain({ base: 'scene', keyPath: '#supplements' }), true);
+    if (await read(environment, '#extras.visible')) {
+      assert.equal(await read(environment, '#cast.visible'), false);
+      assert.equal(await read(environment, '#chevronFooter.direction'), 'down');
+      assert.deepEqual(await read(environment, '#chevronFooter.translation'), [1282.5, 1020]);
+      await environment.ecp.sendKeypress(environment.ecp.Key.Down, { wait: 400 });
+    }
     assert.equal(await environment.odc.isInFocusChain({ base: 'scene', keyPath: '#cast' }), true);
+    assert.equal(await read(environment, '#extras.visible'), false);
     assert.equal(await read(environment, '#mediaShell.detailsVisible'), true);
     assert.equal(await read(environment, '#mediaToolbar.visible'), true);
     await captureEvidence(this, 'movie-poster-cast');
     await environment.ecp.sendKeypress(environment.ecp.Key.Up, { wait: 400 });
+    if (await read(environment, '#extras.visible')
+      && await environment.odc.isInFocusChain({ base: 'scene', keyPath: '#supplements' })) {
+      await environment.ecp.sendKeypress(environment.ecp.Key.Up, { wait: 400 });
+    }
     assert.equal(await environment.odc.isInFocusChain({ base: 'scene', keyPath: '#mediaToolbar' }), true);
     await captureEvidence(this, 'movie-poster-toolbar');
   });
@@ -65,7 +77,8 @@ async function openMovieWithPoster() {
   await environment.odc.setValue({ base: 'scene', keyPath: '#itemsGrid.itemSelected', value: index });
   await waitFor(async () => await read(environment, '#dynamicPageHost.1.subtype()') === 'Movie'
     && await read(environment, '#mediaShell.mediaContent.mediaType') === 'movie'
-    && await read(environment, '#cast.hasItems') === true, 'the movie details and cast', 120000);
+    && await read(environment, '#cast.hasItems') === true
+    && await read(environment, '#supplements.hasItems') === true, 'the movie details and cast', 120000);
   return environment;
 }
 
@@ -73,12 +86,12 @@ async function assertPoster(environment) {
   await waitFor(async () => await read(environment, '#moviePosterGroup.visible') === true
     && await read(environment, '#moviePoster.loadStatus') === 'ready', 'the movie Poster artwork');
   assert.equal(await read(environment, '#mediaShell.backgroundDisplay'), 'poster');
-  assert.deepEqual(await read(environment, '#mediaLayoutGroup.translation'), [-48, 0]);
+  assert.deepEqual(await read(environment, '#mediaLayoutGroup.translation'), [-37.5, 0]);
   assert.deepEqual(await read(environment, '#moviePosterGroup.translation'), [96, 90]);
-  const posterLeft = -48 + (await read(environment, '#moviePosterGroup.translation'))[0];
-  const castRight = -48 + (await read(environment, '#contentGroup.translation'))[0]
-    + (await read(environment, '#cast.translation'))[0] + await read(environment, '#cast.viewportWidth');
-  assert.equal(posterLeft, 48);
+  const posterLeft = -37.5 + (await read(environment, '#moviePosterGroup.translation'))[0];
+  const castRight = -37.5 + (await read(environment, '#contentGroup.translation'))[0]
+    + (await read(environment, '#supplements.translation'))[0] + 1131;
+  assert.equal(posterLeft, 58.5);
   assert.equal(1920 - castRight, posterLeft);
   assert.ok((await read(environment, '#moviePosterGroup.maskUri')).endsWith('/movie-poster-mask.png'));
   const maskSize = environment.config.OnDeviceComponent.uiResolution === 'hd' ? [400, 600] : [600, 900];
@@ -91,6 +104,6 @@ async function assertPoster(environment) {
   assert.equal(await read(environment, '#contentGradient.visible'), false);
   assert.deepEqual(await read(environment, '#mediaShell.contentTranslation'), [768, 90]);
   assert.deepEqual(await read(environment, '#mediaToolbar.translation'), [672, 570]);
-  assert.deepEqual(await read(environment, '#cast.translation'), [672, 681]);
+  assert.deepEqual(await read(environment, '#supplements.translation'), [672, 681]);
   assert.equal(await read(environment, '#cast.viewportWidth'), 1152);
 }

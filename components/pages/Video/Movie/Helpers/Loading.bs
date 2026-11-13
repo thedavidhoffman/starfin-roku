@@ -28,7 +28,9 @@ sub onLoadRequestChanged()
         subtitleOff: false
     }
     applyPlaybackVideoMode(request.videoMode)
-    m.cast.server = request.server
+    countHint = -1
+    if request.item <> invalid then countHint = Number.ToInteger(request.item.SpecialFeatureCount, -1)
+    m.supplements.loadRequest = { server: request.server, token: request.token, userId: request.userId, itemId: request.itemId, specialFeatureCount: countHint, waitForMetadata: countHint < 0 }
     Spinner.Show()
     renderMovie(request.item, true)
     LatestRequestLifecycle.Queue(m.state.detailsLoad, request)
@@ -87,6 +89,7 @@ sub handleMovieResponse(task as dynamic)
     end if
 
     if response.ok <> true then
+        if completion.context = invalid then m.supplements.callFunc("resolveMetadata", invalid)
         m.state.mediaInfoPending = false
         renderMovie(m.state.item, false)
         Spinner.Hide()
@@ -96,6 +99,7 @@ sub handleMovieResponse(task as dynamic)
         return
     end if
 
+    if completion.context = invalid then m.supplements.callFunc("resolveMetadata", response.payload)
     if completion.context <> invalid then
         sourceId = completion.context.sourceId
         if response.payload = invalid or Strings.ToString(response.payload.Id) <> sourceId then

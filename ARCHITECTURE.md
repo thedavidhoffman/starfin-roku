@@ -219,6 +219,18 @@ VideoPlaybackInfoTask owns direct-launch item hydration before negotiation;
 VideoPlayer retains accepted metadata through its normal recovery lifecycle.
 AudioPlayer continues to own ordered album playback and pause/resume behavior.
 
+## Movie supplemental content
+
+MovieSupplementalContent owns the movie's Extras/Cast region, correlated extras
+loading, row visibility, and retained row/item focus. Its local Loading helper
+coordinates MovieExtrasTask through LatestRequestLifecycle; MovieExtraItem owns
+card rendering. Supplemental content also owns the count-based catalog decision,
+loading hold, and catalog-resolution state. Movie supplies session context, the
+SpecialFeatureCount hint/resolved metadata, and people, positions the region,
+and routes its selection events. Extras use the existing player/return path with
+the extra's own identity and standalone playback policy. MainScene remains a
+router. See [.docs/feature/movie-extras.md](.docs/feature/movie-extras.md).
+
 ## Trailer playback
 
 Movie and TVShow expose trailer availability through VideoToolbar and emit a

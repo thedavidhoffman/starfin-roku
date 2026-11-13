@@ -1,0 +1,75 @@
+namespace tests
+
+    @SGNode("MovieExtraItem")
+    @suite("Movie extra item")
+    class MovieExtraItemTests extends rooibos.BaseTestSuite
+
+        @describe("fresh item rendering")
+
+        @it("renders thumbnail title and duration on a fresh item")
+        function _()
+            component = CreateObject("roSGNode", "MovieExtraItem")
+            content = CreateObject("roSGNode", "ContentNode")
+            content.title = "Behind the scenes"
+            content.description = "12m"
+            content.HDPosterUrl = "http://server/image.jpg"
+
+            component.itemContent = content
+
+            m.assertEqual(component.findNode("title").text, "Behind the scenes")
+            m.assertEqual(component.findNode("duration").text, "12m")
+            m.assertEqual(component.findNode("image").uri, "http://server/image.jpg")
+            m.assertEqual(component.findNode("image").height, 180.0)
+        end function
+
+        @it("applies the rounded mask at the current rendering resolution")
+        function _()
+            component = CreateObject("roSGNode", "MovieExtraItem")
+            mask = component.findNode("imageMask")
+            expectedSize = [320.0, 180.0]
+            if ResolutionProfile.IsHd() then expectedSize = [213.0, 120.0]
+
+            m.assertEqual(mask.maskUri, ResolutionAssets.GetMaskImageUri("movie-extra-mask.png"))
+            m.assertEqual(mask.maskSize, expectedSize)
+            m.assertEqual(mask.translation, [6.0, 6.0])
+            m.assertTrue(component.findNode("image").getParent().isSameNode(mask))
+        end function
+
+        @it("starts with title scrolling disabled")
+        function _()
+            component = CreateObject("roSGNode", "MovieExtraItem")
+
+            m.assertEqual(component.findNode("title").repeatCount, 0)
+        end function
+
+        @it("scrolls overflowing titles only while focused")
+        function _()
+            component = CreateObject("roSGNode", "MovieExtraItem")
+
+            component.itemHasFocus = true
+
+            m.assertEqual(component.findNode("title").repeatCount, -1)
+        end function
+
+        @it("stops title scrolling when focus leaves")
+        function _()
+            component = CreateObject("roSGNode", "MovieExtraItem")
+            component.itemHasFocus = true
+
+            component.itemHasFocus = false
+
+            m.assertEqual(component.findNode("title").repeatCount, 0)
+        end function
+
+        @it("provides artwork fallbacks for loading and failed images")
+        function _()
+            component = CreateObject("roSGNode", "MovieExtraItem")
+            poster = component.findNode("image")
+
+            m.assertEqual(poster.loadingBitmapUri, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
+            m.assertEqual(poster.failedBitmapUri, poster.loadingBitmapUri)
+        end function
+
+    end class
+
+end namespace

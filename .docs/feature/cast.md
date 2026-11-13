@@ -22,3 +22,7 @@ should cover short and overflowing text independently on both lines, movement
 between people, exiting the cast row, and returning from person details, on both
 detail pages and playback. Run verification only when the development-cycle gate
 authorizes it.
+
+On movie details, MovieSupplementalContent hosts Cast & Crew after Extras. Only
+one row is visible, and the host owns vertical row navigation while Cast keeps
+its own horizontal selection. See [Movie Extras](movie-extras.md).

@@ -1,0 +1,235 @@
+import "pkg:/source/Number.bs"
+import "pkg:/source/MovieSupplement.bs"
+import "pkg:/source/LatestRequestLifecycle.bs"
+import "pkg:/source/TaskControl.bs"
+import "pkg:/source/ItemImage.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/JellyfinImage.bs"
+import "pkg:/source/MediaMetadataFormatting.bs"
+import "pkg:/source/Remote.bs"
+import "pkg:/source/MediaItem.bs"
+import "pkg:/source/Array.bs"
+import "pkg:/source/PlaybackRequest.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/components/pages/Video/Movie/MovieSupplementalContent/Loading.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    initHandlers()
+    if m.state.request <> invalid then
+        m.nodes.cast.server = m.state.request.server
+        prepareExtrasLoad()
+    end if
+    onPeopleChanged()
+    reconcileRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.nodes = { extras: m.top.findNode("extras"), rows: m.top.findNode("extraRows"), cast: m.top.findNode("cast") }
+    m.state = { row: MovieSupplement.Row.Extras, focused: false, extraIndex: 0, extraCount: 0, request: m.top.loadRequest, reload: false, suspended: false }
+    m.loading = { lifecycle: LatestRequestLifecycle.Create(), tasks: [m.top.findNode("extrasTask"), m.top.findNode("extrasTaskAlternate")], nextIndex: 0, expectedCount: -1, awaitingMetadata: false, holdRows: false, catalogResolved: false }
+    m.log = new Logger("MovieSupplementalContent", m.global.logService)
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("loadRequest", "onLoadRequestChanged")
+    m.top.observeField("people", "onPeopleChanged")
+    m.top.observeField("displayEnabled", "reconcileRows")
+    m.top.observeField("viewportWidth", "reconcileRows")
+    m.nodes.cast.observeField("hasItems", "reconcileRows")
+    m.nodes.cast.observeField("selectedPerson", "onPersonSelected")
+    m.nodes.cast.observeField("focusExitUp", "moveUp")
+    m.nodes.rows.observeField("focusExitUp", "moveUp")
+    m.nodes.rows.observeField("focusExitDown", "moveDown")
+    m.nodes.rows.observeField("rowItemFocused", "onExtraFocused")
+    m.nodes.rows.observeField("rowItemSelected", "onExtraSelected")
+    for each task in m.loading.tasks
+        task.observeField("response", "onExtrasResponse")
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' onPeopleChanged
+'-------------------------------------------------------------------------------
+sub onPeopleChanged()
+    m.nodes.cast.people = m.top.people
+    reconcileRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' reconcileRows
+'-------------------------------------------------------------------------------
+sub reconcileRows()
+    hasExtras = not m.loading.holdRows and m.state.extraCount > 0
+    hasCast = not m.loading.holdRows and m.nodes.cast.hasItems
+    previousRow = m.state.row
+    if m.state.row = MovieSupplement.Row.Extras and not hasExtras then m.state.row = MovieSupplement.Row.Cast
+    if m.state.row = MovieSupplement.Row.Cast and not hasCast then m.state.row = MovieSupplement.Row.Extras
+    showExtras = m.state.row = MovieSupplement.Row.Extras and hasExtras
+    m.nodes.extras.visible = m.top.displayEnabled and showExtras
+    m.nodes.cast.displayEnabled = m.top.displayEnabled and not showExtras and hasCast
+    m.nodes.rows.itemSize = [m.top.viewportWidth, 264]
+    m.nodes.cast.viewportWidth = m.top.viewportWidth
+    m.top.hasItems = hasExtras or hasCast
+    m.top.hasMultipleRows = hasExtras and hasCast
+    m.top.canMoveDown = showExtras and hasCast
+    m.top.visible = m.top.displayEnabled and m.top.hasItems
+    if m.state.focused then
+        if not m.top.hasItems then
+            deactivate()
+            m.top.focusExitUp = true
+        else if previousRow <> m.state.row then
+            focusCurrentRow()
+        end if
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate(firstRow = false as boolean)
+    if firstRow then m.state.row = MovieSupplement.Row.Extras
+    m.state.focused = true
+    reconcileRows()
+    if m.top.hasItems then focusCurrentRow()
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    m.state.focused = false
+    m.nodes.cast.callFunc("deactivate")
+    m.nodes.rows.drawFocusFeedback = false
+    m.nodes.rows.setFocus(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusCurrentRow
+'-------------------------------------------------------------------------------
+sub focusCurrentRow()
+    m.nodes.cast.callFunc("deactivate")
+    m.nodes.rows.drawFocusFeedback = false
+    if m.state.row = MovieSupplement.Row.Extras then
+        m.nodes.rows.jumpToRowItem = [0, m.state.extraIndex]
+        m.nodes.rows.drawFocusFeedback = true
+        m.nodes.rows.setFocus(true)
+    else
+        m.nodes.cast.callFunc("activate")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' moveUp
+'-------------------------------------------------------------------------------
+sub moveUp()
+    if m.state.row = MovieSupplement.Row.Cast and m.state.extraCount > 0 then
+        m.state.row = MovieSupplement.Row.Extras
+        reconcileRows()
+        focusCurrentRow()
+    else
+        m.top.focusExitUp = true
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' moveDown
+'-------------------------------------------------------------------------------
+sub moveDown()
+    if m.state.row <> MovieSupplement.Row.Extras or not m.nodes.cast.hasItems then return
+    m.state.row = MovieSupplement.Row.Cast
+    reconcileRows()
+    focusCurrentRow()
+end sub
+
+'-------------------------------------------------------------------------------
+' onPersonSelected
+'-------------------------------------------------------------------------------
+sub onPersonSelected()
+    m.top.selectedPerson = m.nodes.cast.selectedPerson
+end sub
+
+'-------------------------------------------------------------------------------
+' onExtraFocused
+'-------------------------------------------------------------------------------
+sub onExtraFocused()
+    position = m.nodes.rows.rowItemFocused
+    if position = invalid or position.Count() < 2 then return
+    if position[1] >= 0 and position[1] < m.state.extraCount then m.state.extraIndex = position[1]
+end sub
+
+'-------------------------------------------------------------------------------
+' onExtraSelected
+'-------------------------------------------------------------------------------
+sub onExtraSelected()
+    position = m.nodes.rows.rowItemSelected
+    if position = invalid or position.Count() < 2 then return
+    if position[1] < 0 or position[1] >= m.state.extraCount then return
+    m.state.extraIndex = position[1]
+    playFocusedExtra()
+end sub
+
+'-------------------------------------------------------------------------------
+' playFocusedExtra
+'-------------------------------------------------------------------------------
+function playFocusedExtra() as boolean
+    if m.state.row <> MovieSupplement.Row.Extras or m.state.extraCount = 0 then return false
+    item = m.nodes.rows.content.getChild(0).getChild(m.state.extraIndex).raw
+    ' Extras are standalone clips: no movie queue, version selection, or resume state.
+    m.top.playSelected = { itemId: item.Id, item: PlaybackRequest.Create({ item: item }).item, startPositionTicks: 0, tracksPlaybackProgress: false }
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = Remote.Key.Play then
+        return playFocusedExtra()
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' renderExtras
+'-------------------------------------------------------------------------------
+sub renderExtras(items as object)
+    content = CreateObject("roSGNode", "ContentNode")
+    row = content.createChild("ContentNode")
+    sortedItems = []
+    for each item in items
+        if not Arrays.IsAssocArray(item) then continue for
+        if Strings.ToString(item.Id) = "" or item.IsMissing = true or item.IsVirtualItem = true then continue for
+        if Strings.ToString(item.MediaType) <> "Video" and item.Type <> MediaItem.Type.Video and item.Type <> MediaItem.Type.Movie then continue for
+        title = Strings.ToString(item.Name, "Extra").Trim()
+        if title = "" then title = "Extra"
+        sortedItems.Push({ item: item, title: title, sortKey: LCase(title) })
+    end for
+    sortedItems.SortBy("sortKey")
+    for each entry in sortedItems
+        item = entry.item
+        node = row.createChild("ContentNode")
+        node.title = entry.title
+        node.description = MediaMetadataFormatting.FormatRuntime(item.RunTimeTicks)
+        imageUrl = ItemImage.GetUrl(m.state.request.server, item, JellyfinImage.Type.Primary, 320, 180)
+        if imageUrl = "" then imageUrl = ItemImage.GetUrl(m.state.request.server, item, JellyfinImage.Type.Thumb, 320, 180)
+        if imageUrl = "" then imageUrl = "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
+        node.HDPosterUrl = imageUrl
+        node.AddFields({ raw: item })
+    end for
+    if not m.state.focused then m.state.row = MovieSupplement.Row.Extras
+    m.state.extraCount = row.getChildCount()
+    m.state.extraIndex = 0
+    m.nodes.rows.content = content
+    reconcileRows()
+end sub

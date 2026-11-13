@@ -1,0 +1,143 @@
+'-------------------------------------------------------------------------------
+' onLoadRequestChanged
+'-------------------------------------------------------------------------------
+sub onLoadRequestChanged()
+    request = m.top.loadRequest
+    cancelExtrasLoad()
+    m.state.request = request
+    m.state.row = MovieSupplement.Row.Extras
+    m.state.extraIndex = 0
+    m.state.extraCount = 0
+    m.nodes.rows.content = invalid
+    m.top.people = []
+    reconcileRows()
+    if request = invalid then
+        suspend()
+        return
+    end if
+    m.state.suspended = false
+    m.nodes.cast.server = request.server
+    prepareExtrasLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' queueExtrasLoad
+'-------------------------------------------------------------------------------
+sub queueExtrasLoad()
+    if m.state.request = invalid or m.state.suspended then return
+    m.state.reload = false
+    m.loading.holdRows = m.loading.expectedCount > 0 and not m.loading.catalogResolved and not m.state.focused
+    reconcileRows()
+    LatestRequestLifecycle.Queue(m.loading.lifecycle, m.state.request)
+    startPendingExtrasLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingExtrasLoad
+'-------------------------------------------------------------------------------
+sub startPendingExtrasLoad()
+    entry = LatestRequestLifecycle.TakeNext(m.loading.lifecycle)
+    if entry = invalid then return
+    task = m.loading.tasks[m.loading.nextIndex]
+    m.loading.nextIndex = (m.loading.nextIndex + 1) mod m.loading.tasks.Count()
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onExtrasResponse
+'-------------------------------------------------------------------------------
+sub onExtrasResponse(event as object)
+    response = event.getData()
+    completion = LatestRequestLifecycle.Complete(m.loading.lifecycle, response, MovieSupplement.Action.Load)
+    if not completion.matched then return
+    if completion.isCurrent and m.state.request <> invalid then
+        if Strings.ToString(response.itemId) = Strings.ToString(m.state.request.itemId) then
+            ' Even a failed first response releases Cast permanently for background retries.
+            m.loading.catalogResolved = true
+            releaseExtrasHold()
+            if response.ok = true then
+                renderExtras(response.payload)
+            else
+                ' Background extras failure must not obscure the movie or steal focus.
+                m.state.reload = true
+                reconcileRows()
+                m.log.write("Unable to load movie extras: " + Strings.ToString(response.errorMessage))
+            end if
+        end if
+    end if
+    startPendingExtrasLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' suspend
+'-------------------------------------------------------------------------------
+sub suspend()
+    m.state.suspended = true
+    m.state.reload = m.state.reload or m.loading.awaitingMetadata or m.loading.lifecycle.active <> invalid or m.loading.lifecycle.pending <> invalid
+    m.loading.awaitingMetadata = false
+    cancelExtrasLoad()
+    deactivate()
+end sub
+
+'-------------------------------------------------------------------------------
+' resume
+'-------------------------------------------------------------------------------
+sub resume()
+    m.state.suspended = false
+    if m.state.reload and not m.loading.awaitingMetadata then queueExtrasLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' prepareExtrasLoad
+'-------------------------------------------------------------------------------
+sub prepareExtrasLoad()
+    m.loading.catalogResolved = false
+    m.loading.expectedCount = Number.ToInteger(m.state.request.specialFeatureCount, -1)
+    m.loading.awaitingMetadata = m.loading.expectedCount < 0 and m.state.request.waitForMetadata = true
+    m.state.reload = false
+    if m.loading.awaitingMetadata then return
+    if m.loading.expectedCount = 0 then return
+    queueExtrasLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' resolveMetadata
+'-------------------------------------------------------------------------------
+sub resolveMetadata(item as dynamic)
+    if m.state.request = invalid then return
+    if item <> invalid then
+        if Strings.ToString(item.Id) <> Strings.ToString(m.state.request.itemId) then return
+        m.loading.expectedCount = Number.ToInteger(item.SpecialFeatureCount, -1)
+    end if
+    m.loading.awaitingMetadata = false
+    if m.loading.expectedCount = 0 then
+        cancelExtrasLoad()
+        m.loading.catalogResolved = false
+        m.state.reload = false
+        renderExtras([])
+        return
+    end if
+    if m.loading.catalogResolved then return
+    if m.loading.lifecycle.active <> invalid or m.loading.lifecycle.pending <> invalid then return
+    m.state.reload = true
+    queueExtrasLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseExtrasHold
+'-------------------------------------------------------------------------------
+sub releaseExtrasHold()
+    m.loading.holdRows = false
+end sub
+
+'-------------------------------------------------------------------------------
+' cancelExtrasLoad
+'-------------------------------------------------------------------------------
+sub cancelExtrasLoad()
+    LatestRequestLifecycle.Deactivate(m.loading.lifecycle)
+    for each task in m.loading.tasks
+        task.control = TaskControl.Command.Stop
+    end for
+    releaseExtrasHold()
+end sub

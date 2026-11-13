@@ -14,9 +14,11 @@ namespace tests
             m.node.watchedTask = m.top.findNode("watchedTask")
             m.node.state.focusArea = "toolbar"
             m.node.state.layout.isCinematic = false
+            m.node.state.layout.isPoster = false
             m.node.state.layout.isFromLibrary = false
             m.node.state.mediaInfoPending = false
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
+            m.top.findNode("supplements").people = []
             m.top.settings = {}
             m.top.playSelected = invalid
             m.top.selectedPerson = invalid
@@ -198,6 +200,242 @@ namespace tests
             m.assertFalse(m.top.findNode("previousNextButton").hasNext)
         end function
 
+        @describe("extras integration")
+
+        @it("keeps toolbar focus when supplemental rows are not ready")
+        function _()
+            m.top.findNode("supplements").people = []
+            m.node.state.focusArea = MovieFocus.Area.Toolbar
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("down", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.node.state.focusArea, "toolbar")
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "")
+            m.assertEqual(m.top.findNode("chevronUpFooter").direction, "")
+        end function
+
+        @it("routes standalone extras without inheriting movie streams or queue")
+        function _()
+            m.node.state.selectedStreams.audio = { streamIndex: 3 }
+            m.node.state.request.playbackQueue = [{ itemId: "another-movie" }]
+            m.top.findNode("supplements").playSelected = { itemId: "extra", item: { Id: "extra", Type: "Video" }, startPositionTicks: 0, tracksPlaybackProgress: false }
+
+            m.assertEqual(m.top.playSelected.itemId, "extra")
+            m.assertEqual(m.top.playSelected.startPositionTicks, 0)
+            m.assertFalse(m.top.playSelected.tracksPlaybackProgress)
+            m.assertInvalid(m.top.playSelected.audioStreamIndex)
+            m.assertInvalid(m.top.playSelected.movieVersions)
+            m.assertInvalid(m.top.playSelected.playbackQueue)
+        end function
+
+        @it("ignores an extra playback return when reconciling movie streams")
+        function _()
+            m.node.state.selectedStreams.subtitle = { streamIndex: 2 }
+
+            m.top.callFunc("applyPlaybackSelection", { itemId: "extra", subtitleStreamIndex: 5 })
+
+            m.assertEqual(m.node.state.item.Id, "movie-1")
+            m.assertEqual(m.node.state.selectedStreams.subtitle.streamIndex, 2)
+        end function
+
+        @it("ignores extra progress when updating the movie")
+        function _()
+            m.node.state.item.UserData = { Played: false, PlaybackPositionTicks: 500 }
+
+            m.top.playbackProgressChange = { itemId: "extra", isFinished: true, positionTicks: 900 }
+
+            m.assertFalse(m.node.state.item.UserData.Played)
+            m.assertEqual(m.node.state.item.UserData.PlaybackPositionTicks, 500)
+        end function
+
+        @it("hides chevrons for cast-only backdrop details")
+        function _()
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+
+            'bs:disable-next-line 1140
+            applyMovieLayout()
+
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "")
+        end function
+
+        @it("hides chevrons while focusing cast without extras")
+        function _()
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+
+            'bs:disable-next-line 1140
+            focusSupplementalContent()
+
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "")
+        end function
+
+        @it("hides chevrons for cast-only Poster details")
+        function _()
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+            m.top.settings = { "movie-shell-layout": "poster" }
+
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "")
+        end function
+
+        @it("retains the cinematic cue for hidden cast without extras")
+        function _()
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+            m.node.state.layout.isCinematic = true
+
+            'bs:disable-next-line 1140
+            applyMovieLayout()
+
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "down")
+        end function
+
+        @it("shows only the centered Down chevron for the extras row")
+        function _()
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+            m.top.findNode("supplements").hasMultipleRows = true
+            m.top.findNode("supplements").canMoveDown = true
+            m.top.findNode("chevronFooter").translation = [966, 1020]
+
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(true)
+
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "down")
+            m.assertEqual(m.top.findNode("chevronFooter").translation, [936.0, 1020.0])
+        end function
+
+        @it("shows only Up for the last supplemental row")
+        function _()
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+
+            m.top.findNode("supplements").hasMultipleRows = true
+
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(true)
+
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "up")
+        end function
+
+        @it("centers the Poster footer under the translated row viewport")
+        function _()
+            m.node.state.layout.isPoster = true
+
+            'bs:disable-next-line 1140
+            applyMovieLayout()
+
+            m.assertEqual(m.top.findNode("chevronFooter").translation, [1282.5, 1020.0])
+            m.assertEqual(m.top.findNode("chevronUpFooter").direction, "")
+        end function
+
+        @it("shows the centered pair on cinematic Extras when cast follows")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+            m.top.findNode("supplements").canMoveDown = true
+
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(true)
+
+            m.assertEqual(m.top.findNode("chevronUpFooter").direction, "up")
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "down")
+            m.assertEqual(m.top.findNode("chevronUpFooter").translation, [906.0, 1020.0])
+            m.assertEqual(m.top.findNode("chevronFooter").translation, [966.0, 1020.0])
+        end function
+
+        @it("collapses the cinematic pair to one centered Up on the last row")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+            m.top.findNode("supplements").canMoveDown = true
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(true)
+
+            m.top.findNode("supplements").canMoveDown = false
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(true)
+
+            m.assertEqual(m.top.findNode("chevronUpFooter").direction, "")
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "up")
+            m.assertEqual(m.top.findNode("chevronFooter").translation, [936.0, 1020.0])
+        end function
+
+        @it("shows only Up for a cinematic extras-only row")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.top.findNode("supplements").hasItems = true
+
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(true)
+
+            m.assertEqual(m.top.findNode("chevronUpFooter").direction, "")
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "up")
+        end function
+
+        @it("clears the cinematic pair when returning to movie actions")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+            m.top.findNode("supplements").canMoveDown = true
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(true)
+
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(false)
+
+            m.assertEqual(m.top.findNode("chevronUpFooter").direction, "")
+            m.assertEqual(m.top.findNode("chevronFooter").direction, "down")
+            m.assertEqual(m.top.findNode("chevronFooter").translation, [936.0, 1020.0])
+        end function
+
+        @it("repositions the footer when switching from Cinematic to Poster and backdrop")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+            m.top.findNode("supplements").canMoveDown = true
+            'bs:disable-next-line 1140
+            updateSupplementChevrons(true)
+
+            m.node.state.layout.isCinematic = false
+            m.node.state.layout.isPoster = true
+            'bs:disable-next-line 1140
+            applyMovieLayout()
+
+            m.assertEqual(m.top.findNode("chevronUpFooter").direction, "")
+            m.assertEqual(m.top.findNode("chevronFooter").translation, [1282.5, 1020.0])
+
+            m.node.state.layout.isPoster = false
+            'bs:disable-next-line 1140
+            applyMovieLayout()
+
+            m.assertEqual(m.top.findNode("chevronFooter").translation, [936.0, 1020.0])
+        end function
+
+        @it("hides cinematic details while focusing supplemental content")
+        function _()
+            m.node.state.layout.isCinematic = true
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+
+            'bs:disable-next-line 1140
+            focusSupplementalContent()
+
+            m.assertFalse(m.top.findNode("mediaShell").detailsVisible)
+            m.assertFalse(m.top.findNode("mediaToolbar").visible)
+            m.assertTrue(m.top.findNode("supplements").visible)
+        end function
+
+        @it("restores the supplemental focus area after playback")
+        function _()
+            m.top.findNode("supplements").people = [{ Id: "person", Name: "Person" }]
+            'bs:disable-next-line 1140
+            focusSupplementalContent()
+            m.top.callFunc("deactivate")
+
+            m.top.callFunc("applyPlaybackSelection", { itemId: "extra" })
+            m.top.callFunc("activate")
+
+            m.assertEqual(m.node.state.focusArea, "supplements")
+            m.assertTrue(m.top.findNode("supplements").isInFocusChain())
+        end function
+
         @describe("playback selection")
 
         @it("omits an explicit start position for normal play")
@@ -347,10 +585,10 @@ namespace tests
 
         @it("adds movie source identity to cast selection")
         function _()
-            m.top.findNode("cast").selectedPerson = { itemId: "person-1" }
+            m.top.findNode("supplements").selectedPerson = { itemId: "person-1" }
 
             'bs:disable-next-line 1140
-            onCastPersonSelected()
+            onSupplementPersonSelected()
 
             m.assertEqual(m.top.selectedPerson.sourceItemType, "movie")
             m.assertEqual(m.top.selectedPerson.sourceItemId, "movie-1")
@@ -762,7 +1000,7 @@ namespace tests
             card = CreateObject("roSGNode", "CastItem")
             cardStride = rows.rowItemSize[0][0] + rows.rowItemSpacing[0][0]
             visibleWidth = 4 * cardStride + card.findNode("nameLabel").maxWidth
-            castRight = offset + m.top.findNode("contentGroup").translation[0] + cast.translation[0] + visibleWidth
+            castRight = offset + m.top.findNode("contentGroup").translation[0] + m.top.findNode("supplements").translation[0] + visibleWidth
 
             m.assertEqual(posterLeft, 58.5)
             m.assertEqual(1920 - castRight, posterLeft)
@@ -773,10 +1011,10 @@ namespace tests
             m.top.settings = { "movie-shell-layout": "poster" }
             cast = m.top.findNode("cast")
 
-            m.assertEqual(cast.translation, [672.0, 681.0])
+            m.assertEqual(m.top.findNode("supplements").translation, [672.0, 681.0])
             m.assertEqual(cast.viewportWidth, 1152)
             m.assertEqual(cast.findNode("castRows").itemSize, [1152.0, 264.0])
-            m.assertTrue(cast.displayEnabled)
+            m.assertTrue(m.top.findNode("supplements").displayEnabled)
         end function
 
         @it("restores full-width geometry when leaving Poster")
@@ -788,7 +1026,7 @@ namespace tests
             m.assertEqual(m.top.findNode("mediaLayoutGroup").translation, [0.0, 0.0])
             m.assertEqual(m.top.findNode("mediaShell").contentTranslation, [96.0, 108.0])
             m.assertEqual(m.top.findNode("mediaToolbar").translation, [0.0, 588.0])
-            m.assertEqual(m.top.findNode("cast").translation, [0.0, 699.0])
+            m.assertEqual(m.top.findNode("supplements").translation, [0.0, 699.0])
             m.assertEqual(m.top.findNode("cast").viewportWidth, 1848)
         end function
 
@@ -798,9 +1036,9 @@ namespace tests
             m.top.findNode("cast").people = [{ Id: "person", Name: "Person" }]
 
             'bs:disable-next-line 1140
-            focusCast()
+            focusSupplementalContent()
 
-            m.assertEqual(m.node.state.focusArea, "cast")
+            m.assertEqual(m.node.state.focusArea, "supplements")
             m.assertTrue(m.top.findNode("cast").isInFocusChain())
             m.assertTrue(m.top.findNode("mediaShell").detailsVisible)
             m.assertTrue(m.top.findNode("mediaToolbar").visible)
@@ -1160,6 +1398,17 @@ namespace tests
         @it("uses Play Resume when description is focused")
         function _()
             m.node.state.focusArea = "description"
+
+            'bs:disable-next-line 1140
+            m.assertTrue(onKeyEvent("play", true))
+
+            m.assertEqual(m.top.playSelected.itemId, m.node.state.item.Id)
+            m.assertInvalid(m.top.playSelected.startPositionTicks)
+        end function
+
+        @it("uses Play Resume when supplemental cast is focused")
+        function _()
+            m.node.state.focusArea = MovieFocus.Area.Supplements
 
             'bs:disable-next-line 1140
             m.assertTrue(onKeyEvent("play", true))

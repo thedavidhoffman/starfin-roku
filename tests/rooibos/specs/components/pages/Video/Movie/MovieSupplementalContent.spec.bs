@@ -1,0 +1,682 @@
+namespace tests
+
+    @SGNode("MovieSupplementalContent")
+    @suite("Movie supplemental content")
+    class MovieSupplementalContentTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.callFunc("suspend")
+            m.node.loading.lifecycle = LatestRequestLifecycle.Create()
+            m.node.loading.tasks = [{ request: invalid, control: "stop" }, { request: invalid, control: "stop" }]
+            m.node.loading.nextIndex = 0
+            m.node.loading.expectedCount = -1
+            m.node.loading.awaitingMetadata = false
+            m.node.loading.holdRows = false
+            m.node.loading.catalogResolved = false
+            m.node.state.request = { server: "http://server", token: "token", userId: "user", itemId: "movie" }
+            m.node.state.suspended = false
+            m.node.state.reload = false
+            m.node.state.row = MovieSupplement.Row.Extras
+            m.top.people = []
+            m.top.displayEnabled = true
+            m.top.viewportWidth = 1848
+            m.top.playSelected = invalid
+            m.top.selectedPerson = invalid
+            m.top.focusExitUp = false
+            'bs:disable-next-line 1140
+            renderExtras([])
+        end function
+
+        @describe("rendering and navigation")
+
+        @it("starts empty on a fresh component")
+        function _()
+            component = CreateObject("roSGNode", "MovieSupplementalContent")
+
+            m.assertFalse(component.hasItems)
+            m.assertFalse(component.visible)
+        end function
+
+        @it("renders landscape extras with titles duration and artwork")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras([{ Id: "extra", Type: "Video", Name: "Behind the scenes", RunTimeTicks: 1200000000, ImageTags: { Primary: "tag" } }])
+
+            item = m.node.nodes.rows.content.getChild(0).getChild(0)
+            m.assertEqual(item.title, "Behind the scenes")
+            m.assertEqual(item.description, "2m")
+            m.assertTrue(Instr(1, item.HDPosterUrl, "/Items/extra/Images/Primary") > 0)
+            m.assertTrue(m.node.nodes.extras.visible)
+            m.assertFalse(m.node.nodes.cast.visible)
+        end function
+
+        @it("sorts extras alphabetically by displayed title ignoring case")
+        function _()
+            items = [{ Id: "z", Type: "Video", Name: "Zulu" }, { Id: "a", Type: "Video", Name: "alpha", SortName: "Zulu" }, { Id: "b", Type: "Video", Name: "Bravo" }]
+
+            'bs:disable-next-line 1140
+            renderExtras(items)
+
+            row = m.node.nodes.rows.content.getChild(0)
+            m.assertEqual(row.getChild(0).title, "alpha")
+            m.assertEqual(row.getChild(1).title, "Bravo")
+            m.assertEqual(row.getChild(2).title, "Zulu")
+            m.assertEqual(items[0].Id, "z")
+        end function
+
+        @it("plays the item at its sorted position")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras([{ Id: "z", Type: "Video", Name: "Zulu" }, { Id: "a", Type: "Video", Name: "Alpha" }])
+            m.top.callFunc("activate", true)
+
+            m.node.nodes.rows.rowItemSelected = [0, 0]
+
+            m.assertEqual(m.top.playSelected.itemId, "a")
+        end function
+
+        @it("uses a placeholder when an extra has no artwork")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+
+            m.assertEqual(m.node.nodes.rows.content.getChild(0).getChild(0).HDPosterUrl, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
+        end function
+
+        @it("omits missing and nonvideo items")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras([{ Id: "missing", Type: "Video", IsMissing: true }, { Id: "audio", Type: "Audio" }, { Type: "Video" }])
+
+            m.assertFalse(m.top.hasItems)
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("reports multiple rows only while extras and cast are both available")
+        function _()
+            m.top.people = m.people()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.assertTrue(m.top.hasMultipleRows)
+
+            'bs:disable-next-line 1140
+            renderExtras([])
+
+            m.assertTrue(m.top.hasItems)
+            m.assertFalse(m.top.hasMultipleRows)
+        end function
+
+        @it("does not report multiple rows for extras alone")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+
+            m.assertTrue(m.top.hasItems)
+            m.assertFalse(m.top.hasMultipleRows)
+        end function
+
+        @it("shows cast directly when extras are empty")
+        function _()
+            m.top.people = m.people()
+
+            m.top.callFunc("activate", true)
+
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertFalse(m.node.nodes.extras.visible)
+            m.assertFalse(m.top.canMoveDown)
+        end function
+
+        @it("moves from extras to cast with only one row visible")
+        function _()
+            m.top.people = m.people()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+            m.assertTrue(m.top.canMoveDown)
+
+            m.node.nodes.rows.focusExitDown = true
+
+            m.assertFalse(m.node.nodes.extras.visible)
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertTrue(m.node.nodes.cast.isInFocusChain())
+            m.assertFalse(m.top.canMoveDown)
+        end function
+
+        @it("returns from cast to the previously selected extra")
+        function _()
+            m.top.people = m.people()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+            m.node.nodes.rows.rowItemSelected = [0, 1]
+            m.node.nodes.rows.focusExitDown = true
+
+            m.node.nodes.cast.focusExitUp = true
+
+            m.assertTrue(m.node.nodes.extras.visible)
+            m.assertEqual(m.node.nodes.rows.jumpToRowItem, [0, 1])
+        end function
+
+        @it("exits upward from the first row")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+
+            m.node.nodes.rows.focusExitUp = true
+
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+        @it("does not move down when cast is absent")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+
+            m.node.nodes.rows.focusExitDown = true
+
+            m.assertTrue(m.node.nodes.extras.visible)
+            m.assertFalse(m.top.canMoveDown)
+        end function
+
+        @it("does not steal cast focus when extras arrive late")
+        function _()
+            m.top.people = m.people()
+            m.top.callFunc("activate", true)
+
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertTrue(m.node.nodes.cast.isInFocusChain())
+        end function
+
+        @it("returns focus upward when the last available row disappears")
+        function _()
+            m.top.people = m.people()
+            m.top.callFunc("activate", true)
+
+            m.top.people = []
+
+            m.assertTrue(m.top.focusExitUp)
+            m.assertFalse(m.top.hasItems)
+        end function
+
+        @it("preserves the cast row through suspension and layout changes")
+        function _()
+            m.top.people = m.people()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+            m.node.nodes.rows.focusExitDown = true
+            m.top.callFunc("suspend")
+            m.top.viewportWidth = 1152
+            m.top.displayEnabled = false
+
+            m.top.callFunc("resume")
+            m.top.displayEnabled = true
+            m.top.callFunc("activate")
+
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertEqual(m.node.nodes.cast.viewportWidth, 1152)
+            m.assertEqual(m.node.nodes.rows.itemSize, [1152.0, 264.0])
+        end function
+
+        @it("restores the selected extra after playback suspension")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+            m.node.nodes.rows.rowItemSelected = [0, 1]
+            m.top.callFunc("suspend")
+
+            m.top.callFunc("resume")
+            m.top.callFunc("activate")
+
+            m.assertEqual(m.node.nodes.rows.jumpToRowItem, [0, 1])
+            m.assertTrue(m.node.nodes.rows.isInFocusChain())
+        end function
+
+        @it("emits standalone playback for the selected extra")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+
+            m.node.nodes.rows.rowItemSelected = [0, 1]
+
+            m.assertEqual(m.top.playSelected.itemId, "extra-2")
+            m.assertEqual(m.top.playSelected.startPositionTicks, 0)
+            m.assertFalse(m.top.playSelected.tracksPlaybackProgress)
+            m.assertInvalid(m.top.playSelected.playbackQueue)
+            m.assertInvalid(m.top.playSelected.movieVersions)
+        end function
+
+        @it("remote Play selects the focused extra")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("play", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.playSelected.itemId, "extra-1")
+        end function
+
+        @it("leaves remote Play on cast unhandled for movie playback")
+        function _()
+            m.top.people = m.people()
+            m.top.callFunc("activate", true)
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("play", true)
+
+            m.assertFalse(handled)
+            m.assertInvalid(m.top.playSelected)
+        end function
+
+        @it("forwards person selections")
+        function _()
+            m.node.nodes.cast.selectedPerson = { itemId: "person" }
+
+            m.assertEqual(m.top.selectedPerson.itemId, "person")
+        end function
+
+        @describe("count-aware loading")
+
+        @it("skips the extras request for an explicit zero count")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 0 }
+            m.top.people = m.people()
+
+            m.assertInvalid(m.node.loading.tasks[0].request)
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertTrue(m.top.hasItems)
+        end function
+
+        @it("withholds cast and navigation until expected extras arrive")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            m.top.people = m.people()
+
+            m.assertFalse(m.node.nodes.cast.visible)
+            m.assertFalse(m.top.hasItems)
+            m.assertFalse(m.top.canMoveDown)
+            m.assertFalse(m.top.visible)
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", true))
+
+            m.assertTrue(m.node.nodes.extras.visible)
+            m.assertTrue(m.top.hasItems)
+            m.assertTrue(m.top.canMoveDown)
+            m.assertFalse(m.node.state.focused)
+        end function
+
+        @it("does not allow focus into the reserved rows")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            m.top.people = m.people()
+
+            m.top.callFunc("activate", true)
+
+            m.assertFalse(m.node.state.focused)
+            m.assertFalse(m.node.nodes.cast.isInFocusChain())
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+        @it("reveals cast when an expected extras request fails")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            m.top.people = m.people()
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", false))
+
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertTrue(m.top.hasItems)
+        end function
+
+        @it("reveals cast when a positive count resolves to an empty catalog")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            m.top.people = m.people()
+            response = m.responseEvent(1, "movie", true)
+            response.payload.payload = []
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(response)
+
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertFalse(m.top.hasMultipleRows)
+        end function
+
+        @it("waits for metadata when the initial movie has no count")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", waitForMetadata: true }
+            m.top.people = m.people()
+            m.assertInvalid(m.node.loading.tasks[0].request)
+
+            m.top.callFunc("resolveMetadata", { Id: "movie", SpecialFeatureCount: 0 })
+
+            m.assertInvalid(m.node.loading.tasks[0].request)
+            m.assertTrue(m.node.nodes.cast.visible)
+        end function
+
+        @it("holds rows when full metadata confirms extras before cast arrives")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", waitForMetadata: true }
+
+            m.top.callFunc("resolveMetadata", { Id: "movie", SpecialFeatureCount: 2 })
+            m.top.people = m.people()
+
+            m.assertEqual(m.node.loading.tasks[0].control, "run")
+            m.assertFalse(m.node.nodes.cast.visible)
+            m.assertFalse(m.top.hasItems)
+        end function
+
+        @it("fetches unknown counts without withholding available cast")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", waitForMetadata: true }
+            m.top.people = m.people()
+
+            m.top.callFunc("resolveMetadata", { Id: "movie" })
+
+            m.assertEqual(m.node.loading.tasks[0].control, "run")
+            m.assertTrue(m.node.nodes.cast.visible)
+        end function
+
+        @it("keeps already focused cast when late metadata confirms extras")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", waitForMetadata: true }
+            m.top.people = m.people()
+            m.top.callFunc("activate", true)
+
+            m.top.callFunc("resolveMetadata", { Id: "movie", SpecialFeatureCount: 2 })
+
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertTrue(m.node.nodes.cast.isInFocusChain())
+        end function
+
+        @it("falls back to a catalog lookup when metadata fails")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", waitForMetadata: true }
+
+            m.top.callFunc("resolveMetadata", invalid)
+
+            m.assertEqual(m.node.loading.tasks[0].control, "run")
+            m.assertFalse(m.node.loading.awaitingMetadata)
+        end function
+
+        @it("does not wait forever for metadata cancelled during suspension")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", waitForMetadata: true }
+            m.top.callFunc("suspend")
+
+            m.top.callFunc("resume")
+
+            m.assertFalse(m.node.loading.awaitingMetadata)
+            m.assertEqual(m.node.loading.tasks[0].control, "run")
+        end function
+
+        @it("does not let a previous positive-count response replace a zero-count movie")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "next", specialFeatureCount: 0 }
+            m.top.people = m.people()
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", true))
+
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertFalse(m.node.nodes.extras.visible)
+            m.assertFalse(m.node.loading.holdRows)
+        end function
+
+        @it("ignores metadata for a different movie")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", waitForMetadata: true }
+
+            m.top.callFunc("resolveMetadata", { Id: "other", SpecialFeatureCount: 2 })
+
+            m.assertTrue(m.node.loading.awaitingMetadata)
+            m.assertInvalid(m.node.loading.tasks[0].request)
+        end function
+
+        @it("cancels the initial hold when leaving the page")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+
+            m.top.callFunc("suspend")
+
+            m.assertInvalid(m.node.loading.lifecycle.active)
+            m.assertTrue(m.node.state.reload)
+        end function
+
+        @it("fetches extras when fresh metadata corrects a cached zero")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 0 }
+            m.top.people = m.people()
+
+            m.top.callFunc("resolveMetadata", { Id: "movie", SpecialFeatureCount: 2 })
+
+            m.assertEqual(m.node.loading.tasks[0].control, "run")
+            m.assertFalse(m.top.hasItems)
+        end function
+
+        @it("does not duplicate an active catalog request after fresh metadata")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+
+            m.top.callFunc("resolveMetadata", { Id: "movie", SpecialFeatureCount: 2 })
+
+            m.assertEqual(m.node.loading.lifecycle.active.request.requestId, 1)
+            m.assertInvalid(m.node.loading.lifecycle.pending)
+        end function
+
+        @it("does not refetch a completed catalog after fresh metadata")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", true))
+
+            m.top.callFunc("resolveMetadata", { Id: "movie", SpecialFeatureCount: 2 })
+
+            m.assertInvalid(m.node.loading.lifecycle.active)
+            m.assertEqual(m.node.state.extraCount, 2)
+        end function
+
+        @it("cancels an outdated positive hint when fresh metadata reports zero")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            m.top.people = m.people()
+
+            m.top.callFunc("resolveMetadata", { Id: "movie", SpecialFeatureCount: 0 })
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", true))
+
+            m.assertInvalid(m.node.loading.lifecycle.active)
+            m.assertFalse(m.node.state.reload)
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertEqual(m.node.state.extraCount, 0)
+        end function
+
+        @it("keeps cast available during a positive-count retry before focus restoration")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            m.top.people = m.people()
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", false))
+            m.top.callFunc("activate", true)
+            m.top.callFunc("suspend")
+
+            m.top.callFunc("resume")
+
+            m.assertTrue(m.top.hasItems)
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertFalse(m.node.loading.holdRows)
+            m.assertEqual(m.node.loading.tasks[1].request.requestId, 2)
+            m.top.callFunc("activate")
+            m.assertTrue(m.node.nodes.cast.isInFocusChain())
+        end function
+
+        @it("retains restored cast focus when the retry succeeds")
+        function _()
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "movie", specialFeatureCount: 2 }
+            m.top.people = m.people()
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", false))
+            m.top.callFunc("activate", true)
+            m.top.callFunc("suspend")
+            m.top.callFunc("resume")
+            m.top.callFunc("activate")
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(2, "movie", true))
+
+            m.assertTrue(m.node.nodes.cast.isInFocusChain())
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertTrue(m.top.hasMultipleRows)
+        end function
+
+        @describe("asynchronous loading")
+
+        @it("requests extras with explicit session and movie identity")
+        function _()
+            m.top.loadRequest = m.node.state.request
+
+            request = m.node.loading.tasks[0].request
+            m.assertEqual(request.itemId, "movie")
+            m.assertEqual(request.userId, "user")
+            m.assertEqual(request.token, "token")
+            m.assertEqual(request.requestId, 1)
+            m.assertEqual(m.node.loading.tasks[0].control, "run")
+        end function
+
+        @it("clears the previous movie rows immediately when another movie opens")
+        function _()
+            m.top.people = m.people()
+            'bs:disable-next-line 1140
+            renderExtras(m.extras())
+            m.top.callFunc("activate", true)
+
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user", itemId: "next-movie" }
+
+            m.assertFalse(m.top.hasItems)
+            m.assertFalse(m.node.nodes.cast.visible)
+            m.assertFalse(m.node.nodes.extras.visible)
+            m.assertEqual(m.node.loading.tasks[0].request.itemId, "next-movie")
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+        @it("uses thumb artwork when primary artwork is unavailable")
+        function _()
+            'bs:disable-next-line 1140
+            renderExtras([{ Id: "extra", Type: "Video", ImageTags: { Thumb: "thumb-tag" } }])
+
+            item = m.node.nodes.rows.content.getChild(0).getChild(0)
+            m.assertTrue(Instr(1, item.HDPosterUrl, "/Items/extra/Images/Thumb") > 0)
+        end function
+
+        @it("coalesces loads and rejects an older generation for the same movie")
+        function _()
+            'bs:disable-next-line 1140
+            queueExtrasLoad()
+            'bs:disable-next-line 1140
+            queueExtrasLoad()
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", true))
+
+            m.assertFalse(m.top.hasItems)
+            m.assertEqual(m.node.loading.tasks[1].request.requestId, 2)
+            m.assertEqual(m.node.loading.tasks[1].control, "run")
+        end function
+
+        @it("commits only the current extras response")
+        function _()
+            'bs:disable-next-line 1140
+            queueExtrasLoad()
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", true))
+
+            m.assertTrue(m.top.hasItems)
+            m.assertEqual(m.node.state.extraCount, 2)
+        end function
+
+        @it("ignores a response with the wrong movie identity")
+        function _()
+            'bs:disable-next-line 1140
+            queueExtrasLoad()
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "other", true))
+
+            m.assertFalse(m.top.hasItems)
+        end function
+
+        @it("does not release work for an unrelated response")
+        function _()
+            'bs:disable-next-line 1140
+            queueExtrasLoad()
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(99, "movie", true))
+
+            m.assertNotInvalid(m.node.loading.lifecycle.active)
+            m.assertFalse(m.top.hasItems)
+        end function
+
+        @it("keeps cast usable after extras failure and retries on resume")
+        function _()
+            m.top.people = m.people()
+            'bs:disable-next-line 1140
+            queueExtrasLoad()
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", false))
+
+            m.assertTrue(m.node.nodes.cast.visible)
+            m.assertTrue(m.node.state.reload)
+            m.top.callFunc("resume")
+
+            m.assertEqual(m.node.loading.tasks[1].request.requestId, 2)
+        end function
+
+        @it("ignores cancelled work and reloads with a fresh generation on return")
+        function _()
+            'bs:disable-next-line 1140
+            queueExtrasLoad()
+            m.top.callFunc("suspend")
+
+            'bs:disable-next-line 1140
+            onExtrasResponse(m.responseEvent(1, "movie", true))
+            m.assertFalse(m.top.hasItems)
+            m.top.callFunc("resume")
+
+            m.assertEqual(m.node.loading.tasks[1].request.requestId, 2)
+        end function
+
+        private function extras() as object
+            return [{ Id: "extra-1", Type: "Video", Name: "First" }, { Id: "extra-2", Type: "Video", Name: "Second" }]
+        end function
+
+        private function people() as object
+            return [{ Id: "person", Name: "Person" }]
+        end function
+
+        private function responseEvent(requestId as integer, itemId as string, ok as boolean) as object
+            return {
+                payload: { action: "movieExtras", requestId: requestId, itemId: itemId, ok: ok, payload: m.extras(), errorMessage: "Failed" }
+                getData: function()
+                    return m.payload
+                end function
+            }
+        end function
+
+    end class
+
+end namespace

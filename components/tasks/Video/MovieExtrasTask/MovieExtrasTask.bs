@@ -1,0 +1,40 @@
+import "pkg:/source/MovieSupplement.bs"
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    result = TaskRequest.ValidateRequest(request, MovieSupplement.Action.Load, ["itemId", "userId"])
+    if result = invalid then
+        requestUrl = request.server + "/Items/" + request.itemId + "/SpecialFeatures" + Url.BuildQueryString({ userId: request.userId })
+        result = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        if result.ok = true then
+            if type(result.data) = "roArray" then
+                result = { ok: true, payload: result.data }
+            else
+                result = { ok: false, errorMessage: "Invalid extras response." }
+            end if
+        end if
+    end if
+    result.action = MovieSupplement.Action.Load
+    result.itemId = ""
+    result.requestId = -1
+    if request <> invalid then
+        result.itemId = Strings.ToString(request.itemId)
+        result.requestId = Number.ToInteger(request.requestId, -1)
+    end if
+    m.top.response = result
+end sub
