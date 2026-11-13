@@ -1,0 +1,102 @@
+'-------------------------------------------------------------------------------
+' captureHomeFocus
+'-------------------------------------------------------------------------------
+sub captureHomeFocus(rowKey = "" as string, itemId = "" as string)
+    if itemId <> "" then
+        m.homeState.focus.returnTarget = { rowKey: rowKey, itemId: itemId }
+        return
+    end if
+    if m.homeState.refresh.initial = true then return
+    ' A dialog can restore a native control directly, without calling focusHome.
+    ' Its live selection always supersedes a target saved while Home lacked focus.
+    selectedShelf = invalid
+    for each shelf in m.homeState.shelfNodes
+        if shelf.isInFocusChain() then
+            selectedShelf = shelf
+            m.homeState.focus.returnTarget = invalid
+            exit for
+        end if
+    end for
+    if selectedShelf = invalid then
+        if m.homeState.focus.returnTarget <> invalid then return
+        index = m.homeState.focusedShelfIndex
+        if index >= 0 and index < m.homeState.shelfNodes.Count() then selectedShelf = m.homeState.shelfNodes[index]
+    end if
+    if selectedShelf = invalid then return
+    item = selectedShelf.callFunc("getFocusedItem")
+    if item = invalid then return
+    m.homeState.focus.returnTarget = { rowKey: Strings.ToString(selectedShelf.rowContent.rowKey), itemId: Strings.ToString(item.Id) }
+end sub
+
+'-------------------------------------------------------------------------------
+' resolveHomeFocus
+'-------------------------------------------------------------------------------
+function resolveHomeFocus() as object
+    result = { index: m.homeState.focusedShelfIndex, itemId: "" }
+    target = m.homeState.focus.returnTarget
+    if target <> invalid then
+        ' Search only the original row and its alternate watching presentation.
+        watching = target.rowKey = "continueWatching" or target.rowKey = "nextUp"
+        for i = 0 to m.homeState.shelfNodes.Count() - 1
+            row = m.homeState.shelfNodes[i].rowContent
+            sameRow = row.rowKey = target.rowKey
+            if sameRow then result.index = i
+            if sameRow or (watching and (row.rowKey = "continueWatching" or row.rowKey = "nextUp")) then
+                for each child in row.getChildren(-1, 0)
+                    if Strings.ToString(child.raw.Id) = target.itemId then return { index: i, itemId: target.itemId }
+                end for
+            end if
+        end for
+    end if
+    if result.index >= m.homeState.shelfNodes.Count() then result.index = m.homeState.shelfNodes.Count() - 1
+    if result.index < 0 then result.index = 0
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' restoreHomeFocus
+'-------------------------------------------------------------------------------
+sub restoreHomeFocus()
+    if m.homeState.focus.playbackOverlayOpen or m.homeState.refresh.initial then return
+    if m.homeState.shelfNodes.Count() = 0 then
+        m.top.setFocus(true)
+        m.homeState.focus.returnTarget = invalid
+        return
+    end if
+    target = resolveHomeFocus()
+    focusShelf(target.index, target.itemId)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusHome
+'-------------------------------------------------------------------------------
+sub focusHome()
+    refreshEpisodeCounts()
+    if m.homeState.focus.playbackOverlayOpen then return
+    if m.homeState.refresh.initial = true then
+        m.top.setFocus(true)
+        return
+    end if
+    captureHomeFocus()
+    restoreHomeFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusShelf
+'-------------------------------------------------------------------------------
+sub focusShelf(index as integer, itemId = "" as string)
+    if m.homeState.refresh.initial = true then return
+    if m.homeState.focus.playbackOverlayOpen then return
+    if m.homeState.shelfNodes.Count() = 0 then return
+    if index < 0 then index = 0
+    if index >= m.homeState.shelfNodes.Count() then index = m.homeState.shelfNodes.Count() - 1
+
+    m.homeState.focusedShelfIndex = index
+    updateShelfScroll(true)
+
+    shelf = m.homeState.shelfNodes[index]
+    if shelf <> invalid then
+        shelf.callFunc("activate", itemId)
+        m.homeState.focus.returnTarget = invalid
+    end if
+end sub

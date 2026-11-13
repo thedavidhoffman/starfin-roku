@@ -26,6 +26,7 @@ individual Starfin features.
 - [Episode Detail Browsing](episode-detail-browsing.md)
 - [Home Media Playback](home-media.md)
 - [Home Refresh Lifecycle](home-refresh-lifecycle.md)
+- [Combined Home Watching Row](combined-home-watching.md)
 - [Header Navigation](header-navigation.md)
 - [Library Genre Browsing](library-genre-browsing.md)
 - [List and Grid Item Initialization](list-item-initialization.md)

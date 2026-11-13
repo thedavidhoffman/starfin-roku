@@ -75,15 +75,15 @@ describe('Starfin Home episode images', function () {
   for (const { from, to } of transitions) {
     const enabled = to !== 'series';
     it(`updates both Home rows from ${from} to ${to} and restores on restart`, async function () {
-      const { environment, accountKey } = await openSettings(categories.tv);
+      const { environment, accountKey } = await openSettings(categories.home);
       // Force a change so even the default series mode gets a registry write.
       await selectRadioOption(environment, 'homeEpisodeImagesOptions', modes.indexOf(to));
       await closeAndSaveSettings(environment);
-      await openSettings(categories.tv);
+      await openSettings(categories.home);
       await selectRadioOption(environment, 'homeEpisodeImagesOptions', modes.indexOf(from));
       await closeAndSaveSettings(environment);
       await assertSettingPersisted(environment, accountKey, 'account', 'home-episode-images', from);
-      await openSettings(categories.tv);
+      await openSettings(categories.home);
       const read = async keyPath => (await environment.odc.getValue({ base: 'scene', keyPath })).value;
       const inspectRows = async () => {
         const count = await read('#shelvesGroup.getChildCount()');

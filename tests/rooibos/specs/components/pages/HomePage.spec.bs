@@ -8,6 +8,7 @@ namespace tests
             m.focusTestSurface = invalid
             m.top.visible = true
             m.node.homeState.request = { server: "http://server", token: "token", userId: "user" }
+            m.node.homeState.watching = { combined: false, history: [] }
             m.node.homeState.rows = {}
             m.node.homeState.sectionItems = {}
             m.node.homeState.latestLibraries = {}
@@ -19,7 +20,7 @@ namespace tests
             m.node.homeState.sectionItems.continueWatching = []
             m.node.homeState.sectionItems.nextUp = []
             m.node.homeState.focusedShelfIndex = 0
-            m.node.homeState.playbackOverlay = { open: false, returnTarget: invalid }
+            m.node.homeState.focus = { playbackOverlayOpen: false, returnTarget: invalid }
             m.top.overlayRequested = invalid
             m.top.selectedLibrary = invalid
             m.top.selectedHomeMediaLibrary = invalid
@@ -2085,12 +2086,12 @@ namespace tests
             addRow("libraries", "Libraries", [{ Id: "library", Type: "CollectionFolder" }])
             'bs:disable-next-line 1140
             renderRows()
-            m.node.homeState.playbackOverlay = { open: true, returnTarget: { rowKey: "removed", itemId: "home-1" } }
+            m.node.homeState.focus = { playbackOverlayOpen: true, returnTarget: { rowKey: "removed", itemId: "home-1" } }
 
             m.top.callFunc("handlePlaybackOverlayClosed", invalid)
 
             m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
-            m.assertInvalid(m.node.homeState.playbackOverlay.returnTarget)
+            m.assertInvalid(m.node.homeState.focus.returnTarget)
         end function
 
         @describe("root page Back handling")
@@ -2235,7 +2236,7 @@ namespace tests
             'bs:disable-next-line 1140
             m.assertTrue(onKeyEvent("play", true))
             m.assertEqual(m.top.playbackSelected.itemId, "second")
-            m.assertEqual(m.node.homeState.playbackOverlay.returnTarget, { rowKey: "movies", itemId: "second" })
+            m.assertEqual(m.node.homeState.focus.returnTarget, { rowKey: "movies", itemId: "second" })
             shelf.findNode("items").jumpToRowItem = [0, 0]
             m.top.setFocus(true)
 
@@ -2487,6 +2488,519 @@ namespace tests
             m.assertEqual(m.node.homeState.sessionKey, "new-account")
             m.assertFalse(m.node.homeState.rows.DoesExist("libraries"))
             m.assertInvalid(oldTask.getParent())
+        end function
+
+        @describe("combined watching shelf")
+
+        @it("renders recency order without changing canonical datasets")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+            m.node.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp"]
+            m.node.homeState.watching.combined = true
+            m.node.homeState.sectionItems.continueWatching = [{ Id: "movie", Type: "Movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }]
+            m.node.homeState.sectionItems.nextUp = [{ Id: "next", Type: "Episode", SeriesId: "series" }]
+            m.node.homeState.watching.history = [{ SeriesId: "series", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+
+            row = m.node.homeState.rows.continueWatching
+            m.assertEqual(row.title, "Continue Watching & Next Up")
+            m.assertEqual(row.getChild(0).raw.Id, "next")
+            m.assertEqual(row.getChild(1).raw.Id, "movie")
+            m.assertFalse(m.node.homeState.rows.DoesExist("nextUp"))
+            m.assertEqual(m.node.homeState.sectionItems.continueWatching.Count(), 1)
+        end function
+
+        @it("restores separate rows when combining is disabled")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+            m.node.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp"]
+            m.node.homeState.watching.combined = true
+            m.node.homeState.sectionItems.continueWatching = [{ Id: "movie", Type: "Movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }]
+            m.node.homeState.sectionItems.nextUp = [{ Id: "next", Type: "Episode", SeriesId: "series" }]
+            m.node.homeState.watching.history = [{ SeriesId: "series", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+            m.node.homeState.watching.combined = false
+
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+
+            m.assertEqual(m.node.homeState.rows.continueWatching.title, "Continue Watching")
+            m.assertEqual(m.node.homeState.rows.nextUp.getChild(0).raw.Id, "next")
+        end function
+
+        @it("hides a combined shelf when both sources are empty")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+            m.node.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp"]
+            m.node.homeState.watching.combined = true
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+
+            m.assertFalse(m.node.homeState.rows.DoesExist("continueWatching"))
+            m.assertFalse(m.node.homeState.rows.DoesExist("nextUp"))
+        end function
+
+        @it("retains the selected Next Up item when merging shelves")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+            m.node.homeState.rowOrder = ["libraries", "continueWatching", "continueListening", "nextUp"]
+            m.node.homeState.watching.combined = true
+            m.node.homeState.sectionItems.continueWatching = [{ Id: "movie", Type: "Movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }]
+            m.node.homeState.sectionItems.nextUp = [{ Id: "next", Type: "Episode", SeriesId: "series" }]
+            m.node.homeState.watching.history = [{ SeriesId: "series", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+            m.node.homeState.watching.combined = false
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+            'bs:disable-next-line 1140
+            focusShelf(1, "next")
+            m.node.homeState.watching.combined = true
+
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+
+            shelf = m.node.homeState.shelfNodes[0]
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "next")
+        end function
+
+        @describe("combined history lifecycle")
+
+        @it("projects responses arriving recentPlayedEpisodes, nextUp, continueWatching")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            payloads = {
+                continueWatching: [{ Id: "movie", Type: "Movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }]
+                nextUp: [{ Id: "episode", Type: "Episode", SeriesId: "series" }]
+                recentPlayedEpisodes: [{ SeriesId: "series", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+            }
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: payloads.recentPlayedEpisodes } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: payloads.nextUp } }
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: payloads.continueWatching } }
+
+            row = m.node.homeState.rows.continueWatching
+            m.assertEqual(row.getChild(0).raw.Id, "episode")
+            m.assertEqual(row.getChild(1).raw.Id, "movie")
+            m.assertFalse(m.node.homeState.rows.DoesExist("nextUp"))
+        end function
+
+        @it("projects responses arriving continueWatching, nextUp, recentPlayedEpisodes")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            payloads = {
+                continueWatching: [{ Id: "movie", Type: "Movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }]
+                nextUp: [{ Id: "episode", Type: "Episode", SeriesId: "series" }]
+                recentPlayedEpisodes: [{ SeriesId: "series", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+            }
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: payloads.continueWatching } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: payloads.nextUp } }
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: payloads.recentPlayedEpisodes } }
+
+            row = m.node.homeState.rows.continueWatching
+            m.assertEqual(row.getChild(0).raw.Id, "episode")
+            m.assertEqual(row.getChild(1).raw.Id, "movie")
+            m.assertFalse(m.node.homeState.rows.DoesExist("nextUp"))
+        end function
+
+        @it("projects responses arriving nextUp, recentPlayedEpisodes, continueWatching")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            payloads = {
+                continueWatching: [{ Id: "movie", Type: "Movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }]
+                nextUp: [{ Id: "episode", Type: "Episode", SeriesId: "series" }]
+                recentPlayedEpisodes: [{ SeriesId: "series", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+            }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: payloads.nextUp } }
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: payloads.recentPlayedEpisodes } }
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: payloads.continueWatching } }
+
+            row = m.node.homeState.rows.continueWatching
+            m.assertEqual(row.getChild(0).raw.Id, "episode")
+            m.assertEqual(row.getChild(1).raw.Id, "movie")
+            m.assertFalse(m.node.homeState.rows.DoesExist("nextUp"))
+        end function
+
+        @it("does not fetch history in separate mode")
+        function _()
+            m.startFocusRefresh(false)
+            m.assertFalse(m.node.tasks.DoesExist("recentPlayedEpisodes"))
+        end function
+
+        @it("finishes with retained history after a history failure")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.node.homeState.watching.combined = true
+            m.node.homeState.watching.history = [{ SeriesId: "series", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            m.node.tasks.recentPlayedEpisodes.response = { ok: false, action: "recentPlayedEpisodes", failureKind: "timeout" }
+
+            m.assertTrue(m.top.ready)
+            m.assertEqual(m.node.homeState.watching.history.Count(), 1)
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 1)
+        end function
+
+        @it("cancels history and ignores its late result when disabled")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            oldTask = m.node.tasks.recentPlayedEpisodes
+            m.top.settings = { "combine-continue-watching-next-up": "off" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+            oldTask.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [{ SeriesId: "stale" }] } }
+
+            m.assertFalse(m.node.homeState.refresh.pendingCore.DoesExist("recentPlayedEpisodes"))
+            m.assertFalse(m.node.homeState.sync.required.DoesExist("recentPlayedEpisodes"))
+            m.assertEqual(m.node.homeState.watching.history, [])
+            m.assertInvalid(oldTask.getParent())
+        end function
+
+        @it("requests history when enabled after separate rows load")
+        function _()
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            m.top.settings = { "combine-continue-watching-next-up": "on" }
+            'bs:disable-next-line 1140
+            onSettingsChanged()
+
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("recentPlayedEpisodes"))
+            m.assertEqual(m.node.homeState.rows.continueWatching.title, "Continue Watching & Next Up")
+        end function
+
+        @it("clears history when session context changes")
+        function _()
+            m.node.homeState.watching.history = [{ SeriesId: "old-account" }]
+            m.top.loadRequest = { server: "http://other", token: "token", userId: "other" }
+
+            m.assertEqual(m.node.homeState.watching.history, [])
+        end function
+
+        @it("rejects a superseded history response after refresh restart")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            oldTask = m.node.tasks.recentPlayedEpisodes
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(false)
+            oldTask.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [{ SeriesId: "stale" }] } }
+
+            m.assertEqual(m.node.homeState.watching.history, [])
+            m.assertFalse(m.node.tasks.recentPlayedEpisodes.isSameNode(oldTask))
+        end function
+
+        @it("refreshes history after video progress changes")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [] } }
+            oldTask = m.node.tasks.recentPlayedEpisodes
+
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "movie", itemType: "Movie", positionTicks: 120000000 })
+
+            m.assertFalse(m.node.tasks.recentPlayedEpisodes.isSameNode(oldTask))
+            m.assertTrue(m.node.homeState.refresh.pendingCore.DoesExist("recentPlayedEpisodes"))
+        end function
+
+        @it("keeps Settings focused while combined responses arrive")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            m.openFocusTestSettings()
+            m.finishOtherHomeRows()
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [] } }
+
+            m.assertTrue(m.focusTestSurface.findNode("tvPanel").isInFocusChain())
+            m.assertTrue(m.top.ready)
+        end function
+
+        @it("advances from a finished episode to Next Up")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [] } }
+            m.top.callFunc("recordMediaChange", { action: "watched", itemId: "finished", itemType: "Episode", value: true })
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "next", Type: "Episode", SeriesId: "s" }] } }
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [] } }
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [{ SeriesId: "s", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }] } }
+
+            m.assertEqual(m.node.homeState.rows.continueWatching.getChild(0).raw.Id, "next")
+        end function
+
+        @it("keeps a usable combined row when history has never loaded")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            m.node.tasks.recentPlayedEpisodes.response = { ok: false, action: "recentPlayedEpisodes", failureKind: "timeout" }
+
+            m.assertEqual(m.node.homeState.rows.continueWatching.getChild(0).raw.Id, "movie")
+            m.assertTrue(m.top.ready)
+        end function
+
+        @it("does not refresh history for favorite-only changes")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            m.finishOtherHomeRows()
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [] } }
+            oldTask = m.node.tasks.recentPlayedEpisodes
+
+            m.top.callFunc("recordMediaChange", { action: "favorite", itemId: "movie", itemType: "Movie", value: true })
+
+            m.assertTrue(m.node.tasks.recentPlayedEpisodes.isSameNode(oldTask))
+            m.assertFalse(m.node.homeState.refresh.pendingCore.DoesExist("recentPlayedEpisodes"))
+        end function
+
+        @it("does not let an older history request acknowledge newer progress")
+        function _()
+            m.node.homeState.watching.combined = true
+            m.startFocusRefresh(false)
+            oldTask = m.node.tasks.recentPlayedEpisodes
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "movie", itemType: "Movie", positionTicks: 120000000 })
+            required = m.node.homeState.sync.required.recentPlayedEpisodes
+
+            oldTask.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [] } }
+
+            m.assertTrue(m.node.homeState.sync.applied.recentPlayedEpisodes < required)
+            m.assertFalse(m.node.tasks.recentPlayedEpisodes.isSameNode(oldTask))
+            m.assertEqual(m.node.tasks.recentPlayedEpisodes.request.homeRevision, required)
+        end function
+
+        @it("returns selection to Next Up when splitting the combined shelf")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+            m.node.homeState.rowOrder = ["continueWatching", "nextUp"]
+            m.node.homeState.watching.combined = true
+            m.node.homeState.sectionItems.continueWatching = [{ Id: "movie", Type: "Movie" }]
+            m.node.homeState.sectionItems.nextUp = [{ Id: "next", Type: "Episode" }]
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+            'bs:disable-next-line 1140
+            focusShelf(0, "next")
+            m.node.homeState.watching.combined = false
+
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+
+            m.assertEqual(m.node.homeState.focusedShelfIndex, 1)
+            m.assertTrue(m.node.homeState.shelfNodes[1].isInFocusChain())
+            m.assertEqual(m.node.homeState.shelfNodes[1].callFunc("getFocusedItem").Id, "next")
+        end function
+
+        @it("keeps My Media startup focus when combined video data arrives first")
+        function _()
+            m.node.homeState.watching.combined = true
+            'bs:disable-next-line 1001
+            m.stubCall(runLatestMediaTasks, m.createControlledLatestTasks)
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
+            m.node.tasks.recentPlayedEpisodes.response = { ok: true, action: "recentPlayedEpisodes", payload: { Items: [] } }
+            m.node.tasks.continueListening.response = { ok: true, action: "continueListening", payload: { Items: [] } }
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("movies", "movies")] } }
+            for each task in m.node.homeState.latestTasks
+                task.control = "stop"
+                task.response = { ok: true, action: "latestMedia", parentId: task.request.parentId, payload: { Items: [] } }
+            end for
+
+            m.assertEqual(m.node.homeState.shelfNodes[m.node.homeState.focusedShelfIndex].rowContent.rowKey, "libraries")
+        end function
+
+        @it("remote Play uses the focused combined item and resume position")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+            m.node.homeState.rowOrder = ["continueWatching", "nextUp"]
+            m.node.homeState.watching.combined = true
+            m.node.homeState.sectionItems.continueWatching = [{ Id: "movie", Type: "Movie", UserData: { PlaybackPositionTicks: 120000000 } }]
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+            'bs:disable-next-line 1140
+            focusShelf(0, "movie")
+
+            'bs:disable-next-line 1140
+            handled = onKeyEvent("play", true)
+
+            m.assertTrue(handled)
+            m.assertEqual(m.top.playbackSelected.itemId, "movie")
+            m.assertEqual(PlaybackProgress.GetTicksFromSelection(m.top.playbackSelected), 120000000)
+        end function
+
+        @describe("canonical Home focus and scoped projection")
+
+        @it("keeps a newer selection after exit cancellation restores the native control directly")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "a", Type: "Movie" }, { Id: "b", Type: "Movie" }] } }
+            for each action in ["libraries", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+            'bs:disable-next-line 1140
+            focusShelf(0, "a")
+            shelf = m.node.homeState.shelfNodes[0]
+            returnControl = shelf.findNode("items")
+            m.focusTestSurface = CreateObject("roSGNode", "ExitConfirmationDialog")
+            m.top.getScene().appendChild(m.focusTestSurface)
+            m.focusTestSurface.callFunc("openConfirmation")
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "a", itemType: "Movie", positionTicks: 10000000 })
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "next", Type: "Episode" }] } }
+
+            m.assertEqual(m.node.homeState.focus.returnTarget.itemId, "a")
+            m.assertTrue(m.focusTestSurface.isInFocusChain())
+            content = m.focusTestSurface.callFunc("getContentComponent")
+            content.findNode("cancel").buttonSelected = true
+            ' Match MainScene's attached-return-control path, which intentionally bypasses focusHome.
+            returnControl.setFocus(true)
+            returnControl.jumpToRowItem = [0, 1]
+
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "a", Type: "Movie" }, { Id: "b", Type: "Movie" }] } }
+
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "b")
+            m.assertInvalid(m.node.homeState.focus.returnTarget)
+        end function
+
+        @it("preserves Continue Watching nodes and selection when only Next Up responds")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "a", Type: "Movie" }, { Id: "b", Type: "Movie" }] } }
+            for each action in ["libraries", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+            'bs:disable-next-line 1140
+            focusShelf(0, "a")
+            shelf = m.node.homeState.shelfNodes[0]
+            row = shelf.rowContent
+            child = row.getChild(0)
+            'bs:disable-next-line 1140
+            focusShelf(0, "b")
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "a", itemType: "Movie", positionTicks: 10000000 })
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "next", Type: "Episode" }] } }
+
+            m.assertTrue(shelf.isSameNode(m.node.homeState.shelfNodes[0]))
+            m.assertTrue(row.isSameNode(shelf.rowContent))
+            m.assertTrue(child.isSameNode(shelf.rowContent.getChild(0)))
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "b")
+        end function
+
+        @it("refilters Next Up after Continue Watching gains a matching series")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "a", Type: "Movie" }, { Id: "b", Type: "Movie" }] } }
+            for each action in ["libraries", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+            'bs:disable-next-line 1140
+            focusShelf(0, "a")
+            shelf = m.node.homeState.shelfNodes[0]
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "a", itemType: "Movie", positionTicks: 10000000 })
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "next", Type: "Episode", SeriesId: "series" }] } }
+            m.assertTrue(m.node.homeState.rows.DoesExist("nextUp"))
+
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "resume", Type: "Episode", SeriesId: "series" }] } }
+
+            m.assertFalse(m.node.homeState.rows.DoesExist("nextUp"))
+            m.assertEqual(m.node.homeState.rows.continueWatching.getChild(0).raw.Id, "resume")
+        end function
+
+        @it("defers merged selection while Settings owns focus and consumes it on return")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "a", Type: "Movie" }, { Id: "b", Type: "Movie" }] } }
+            for each action in ["libraries", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+            'bs:disable-next-line 1140
+            focusShelf(0, "a")
+            shelf = m.node.homeState.shelfNodes[0]
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "a", itemType: "Movie", positionTicks: 10000000 })
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [{ Id: "next", Type: "Episode" }] } }
+            'bs:disable-next-line 1140
+            focusShelf(1, "next")
+            m.openFocusTestSettings()
+            m.node.homeState.watching.combined = true
+
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+
+            m.assertTrue(m.focusTestSurface.isInFocusChain())
+            m.assertEqual(m.node.homeState.focus.returnTarget.itemId, "next")
+            m.top.callFunc("focusHome")
+            m.assertEqual(m.node.homeState.shelfNodes[0].callFunc("getFocusedItem").Id, "next")
+            m.assertInvalid(m.node.homeState.focus.returnTarget)
+        end function
+
+        @it("falls back to the nearest item when a deferred item disappears")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "a", Type: "Movie" }, { Id: "b", Type: "Movie" }] } }
+            for each action in ["libraries", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+            'bs:disable-next-line 1140
+            focusShelf(0, "a")
+            shelf = m.node.homeState.shelfNodes[0]
+            'bs:disable-next-line 1140
+            focusShelf(0, "b")
+            m.openFocusTestSettings()
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "a", itemType: "Movie", positionTicks: 10000000 })
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "a", Type: "Movie" }] } }
+            m.assertTrue(m.focusTestSurface.isInFocusChain())
+
+            m.top.callFunc("focusHome")
+
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "a")
+            m.assertInvalid(m.node.homeState.focus.returnTarget)
+        end function
+
+        @it("preserves a return target when an open playback overlay prevents restoration")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "a", Type: "Movie" }, { Id: "b", Type: "Movie" }] } }
+            for each action in ["libraries", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+            'bs:disable-next-line 1140
+            focusShelf(0, "a")
+            shelf = m.node.homeState.shelfNodes[0]
+            m.node.homeState.focus.playbackOverlayOpen = true
+            m.node.homeState.focus.returnTarget = { rowKey: "continueWatching", itemId: "b" }
+
+            m.top.callFunc("focusHome")
+
+            m.assertEqual(m.node.homeState.focus.returnTarget.itemId, "b")
+        end function
+
+        @it("ignores history projection in separate mode")
+        function _()
+            'bs:disable-next-line 1140
+            clearRows()
+            m.node.homeState.rowOrder = ["continueWatching", "nextUp"]
+            m.node.homeState.sectionItems.continueWatching = [{ Id: "movie", Type: "Movie" }]
+            m.node.homeState.sectionItems.nextUp = [{ Id: "next", Type: "Episode" }]
+            'bs:disable-next-line 1140
+            refreshWatchingRows()
+            resumeRow = m.node.homeState.rows.continueWatching
+            nextRow = m.node.homeState.rows.nextUp
+
+            'bs:disable-next-line 1140
+            refreshWatchingRows("recentPlayedEpisodes")
+
+            m.assertTrue(resumeRow.isSameNode(m.node.homeState.rows.continueWatching))
+            m.assertTrue(nextRow.isSameNode(m.node.homeState.rows.nextUp))
         end function
 
     end class

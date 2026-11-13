@@ -447,3 +447,16 @@ focus identity and publishes its vertical/horizontal presentation decision.
 Containers choose width and capacity: startup has five horizontal slots, the
 dialog three. Geometry updates do not rebuild list content; forget confirmation
 uses an independent preview.
+
+### Combined Home watching row
+
+HomePage owns separate Continue Watching, Next Up and recent episode history data.
+HomeWatching provides pure deduplication and stable recency ordering; it never
+mutates API data. RecentPlayedEpisodesTask owns the optional history API request,
+using Home's existing correlated refresh lifecycle. The combined presentation
+reuses HomeShelf. The Home-local HomeFocus helper captures, resolves and restores
+one pending return target across playback and row reconciliation; live native
+shelf focus supersedes deferred state. Source-aware projection retains unaffected
+shelf content in separate mode. SettingsContent owns the lazy Home panel, which
+contains the combine preference and the existing episode artwork preference. See
+[Combined Home Watching Row](.docs/feature/combined-home-watching.md).

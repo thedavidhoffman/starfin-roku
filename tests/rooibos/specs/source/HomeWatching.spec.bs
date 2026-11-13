@@ -1,0 +1,88 @@
+import "pkg:/source/HomeWatching.bs"
+
+namespace tests
+
+    @suite("Home watching projection")
+    class HomeWatchingTests extends rooibos.BaseTestSuite
+
+        @describe("recency ordering")
+
+        @it("interleaves recent series ahead of older resumed movies")
+        function _()
+            movie = { Id: "movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }
+            episode = { Id: "next", SeriesId: "series" }
+            history = [{ SeriesId: "series", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+
+            result = HomeWatching.Combine([movie], [episode], history)
+
+            m.assertEqual(result, [episode, movie])
+        end function
+
+        @it("prefers the Next Up item date over series history")
+        function _()
+            episode = { Id: "next", SeriesId: "s", UserData: { LastPlayedDate: "2026-11-09T12:00:00Z" } }
+            movie = { Id: "movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }
+            result = HomeWatching.Combine([movie], [episode], [{ SeriesId: "s", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }])
+            m.assertEqual(result, [movie, episode])
+        end function
+
+        @it("uses the latest series date regardless of history ordering")
+        function _()
+            nextItem = { Id: "next", SeriesId: "s" }
+            movie = { Id: "movie", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }
+            history = [{ SeriesId: "s", UserData: { LastPlayedDate: "2026-11-09T12:00:00Z" } }, { SeriesId: "s", UserData: { LastPlayedDate: "2026-11-11T12:00:00Z" } }]
+            m.assertEqual(HomeWatching.Combine([movie], [nextItem], history), [nextItem, movie])
+        end function
+
+        @it("keeps source order for equal dates")
+        function _()
+            a = { Id: "a", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }
+            b = { Id: "b", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }
+            c = { Id: "c", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }
+            m.assertEqual(HomeWatching.Combine([a, b], [c], []), [a, b, c])
+        end function
+
+        @it("puts undated items last in source order")
+        function _()
+            a = { Id: "a" }
+            b = { Id: "b", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }
+            c = { Id: "c" }
+            m.assertEqual(HomeWatching.Combine([a, b], [c], []), [b, a, c])
+        end function
+
+        @it("suppresses an identical Next Up item")
+        function _()
+            a = { Id: "a" }
+            m.assertEqual(HomeWatching.Combine([a], [{ Id: "a" }], []), [a])
+        end function
+
+        @it("suppresses Next Up from a resumable series")
+        function _()
+            a = { Id: "a", SeriesId: "s" }
+            m.assertEqual(HomeWatching.Combine([a], [{ Id: "b", SeriesId: "s" }], []), [a])
+        end function
+
+        @it("accepts empty and absent sources")
+        function _()
+            m.assertEqual(HomeWatching.Combine(invalid, [], invalid), [])
+        end function
+
+        @it("does not modify source arrays or infer dates into API objects")
+        function _()
+            a = { Id: "a" }
+            b = { Id: "b", SeriesId: "s", UserData: {} }
+            resumeItems = [a]
+            nextItems = [b]
+            history = [{ SeriesId: "s", UserData: { LastPlayedDate: "2026-11-10T12:00:00Z" } }]
+
+            result = HomeWatching.Combine(resumeItems, nextItems, history)
+
+            m.assertEqual(result, [b, a])
+            m.assertEqual(resumeItems, [a])
+            m.assertEqual(nextItems, [b])
+            m.assertEqual(b.UserData, {})
+        end function
+
+    end class
+
+end namespace

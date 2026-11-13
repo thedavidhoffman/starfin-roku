@@ -1,0 +1,69 @@
+import "pkg:/source/RequestFailure.bs"
+import "pkg:/source/HomeWatching.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/Encode.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/TaskResponse.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = new Logger("RecentPlayedEpisodesTask", m.global.logService)
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    try
+        request = m.top.request
+        validationError = TaskRequest.ValidateRequest(request, HomeWatching.Section.History)
+        if validationError <> invalid then
+            m.top.response = validationError
+            return
+        end if
+
+        params = buildRecentPlayedEpisodesParams()
+        params.UserId = TaskRequest.GetUserId(request)
+
+        requestUrl = request.server + "/Items" + Url.BuildQueryString(params)
+        response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+        if response.ok <> true then
+            m.top.response = TaskResponse.Failure(response, HomeWatching.Section.History)
+            return
+        end if
+
+        m.top.response = TaskResponse.Success(request, HomeWatching.Section.History, response.data)
+    catch error
+        m.log.error("Unable to load recent viewing history. Error=" + error.number.ToStr())
+        failure = {
+            ok: false
+            action: HomeWatching.Section.History
+            failureKind: RequestFailure.Kind.UnexpectedResponse
+            errorMessage: "Unable to load recent viewing history."
+        }
+        m.top.response = failure
+    end try
+end sub
+
+'-------------------------------------------------------------------------------
+' buildRecentPlayedEpisodesParams
+'-------------------------------------------------------------------------------
+function buildRecentPlayedEpisodesParams() as object
+    return {
+        recursive: true
+        SortBy: "DatePlayed"
+        SortOrder: "Descending"
+        Filters: "IsPlayed"
+        IncludeItemTypes: "Episode"
+        Limit: 100
+        EnableUserData: true
+        EnableImages: false
+        EnableTotalRecordCount: false
+    }
+end function

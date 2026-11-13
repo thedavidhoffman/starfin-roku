@@ -1,0 +1,90 @@
+import "pkg:/source/Array.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/DateTime.bs"
+
+namespace HomeWatching
+
+    enum Section
+        History = "recentPlayedEpisodes"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' HomeWatching.FilterNextUp
+    '---------------------------------------------------------------------------
+    function FilterNextUp(resumeItems as dynamic, nextItems as dynamic) as object
+        keys = {}
+        if resumeItems <> invalid then
+            for each item in resumeItems
+                if Arrays.IsAssocArray(item) then
+                    if Strings.ToString(item.Id) <> "" then keys["item:" + item.Id] = true
+                    if Strings.ToString(item.SeriesId) <> "" then keys["series:" + item.SeriesId] = true
+                end if
+            end for
+        end if
+        result = []
+        if nextItems <> invalid then
+            for each item in nextItems
+                if not Arrays.IsAssocArray(item) then continue for
+                if keys.DoesExist("item:" + Strings.ToString(item.Id)) then continue for
+                if keys.DoesExist("series:" + Strings.ToString(item.SeriesId)) then continue for
+                result.Push(item)
+            end for
+        end if
+        return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HomeWatching.Combine
+    '---------------------------------------------------------------------------
+    function Combine(resumeItems as dynamic, nextItems as dynamic, history as dynamic) as object
+        seriesDates = {}
+        if history <> invalid then
+            for each item in history
+                if not Arrays.IsAssocArray(item) then continue for
+                seriesId = Strings.ToString(item.SeriesId)
+                date = __PlayedDate(item)
+                if seriesId <> "" then
+                    if not seriesDates.DoesExist(seriesId) then seriesDates[seriesId] = 0
+                    if date > seriesDates[seriesId] then seriesDates[seriesId] = date
+                end if
+            end for
+        end if
+        ranked = []
+        if resumeItems <> invalid then
+            for each item in resumeItems
+                if Arrays.IsAssocArray(item) then ranked.Push({ item: item, date: __PlayedDate(item) })
+            end for
+        end if
+        for each item in FilterNextUp(resumeItems, nextItems)
+            date = __PlayedDate(item)
+            seriesId = Strings.ToString(item.SeriesId)
+            if date = 0 and seriesDates.DoesExist(seriesId) then date = seriesDates[seriesId]
+            ranked.Push({ item: item, date: date })
+        end for
+        ' Stable insertion preserves source ordering when dates tie, including missing dates.
+        for i = 1 to ranked.Count() - 1
+            current = ranked[i]
+            j = i - 1
+            while j >= 0
+                if ranked[j].date >= current.date then exit while
+                ranked[j + 1] = ranked[j]
+                j--
+            end while
+            ranked[j + 1] = current
+        end for
+        result = []
+        for each entry in ranked
+            result.Push(entry.item)
+        end for
+        return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' HomeWatching.__PlayedDate
+    '---------------------------------------------------------------------------
+    function __PlayedDate(item as object) as integer
+        if not Arrays.IsAssocArray(item.UserData) then return 0
+        return DateTime.FromIsoSeconds(item.UserData.LastPlayedDate)
+    end function
+
+end namespace

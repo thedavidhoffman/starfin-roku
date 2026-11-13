@@ -39,7 +39,7 @@ highlight.
 ## Categories and cards
 
 Current user contains Libraries, Media shell, Theme, Playback, Subtitles,
-TV, and Screensaver. All seven rows are visible. The Device heading is
+TV, Home, and Screensaver. All eight rows are visible. The Device heading is
 at y=488 and its three-row list starts at y=522: General, Video, and Advanced.
 Category navigation wraps across both lists: Up from Libraries moves to Advanced,
 and Down from Advanced moves to Libraries, updating the displayed panel with focus.
@@ -136,9 +136,16 @@ a 16px gap and remain 240px tall. Count choices are **Off** (default),
 the first option returns to Theme, and Left from the watched card returns to
 categories. Editor focus restoration retains the selected card.
 
-The TV category uses its original full-width single-page layout: **TV episode
-list scroll**, **Show season summary card in TV episode list**, then **TV artwork
-in "Next Up" and "Continue Watching"**. Paging controls and fades are removed.
+The TV category uses a single page with paired episode-scroll and season-card
+controls above **Skip series page for single-season shows**. Home episode artwork
+now lives in the Home category. Neither category uses paging controls or fades.
 
 Count selections preview through the Settings overlay and persist per account
 on close. See [Watched Indicators and Unwatched Episode Counts](watched-indicator.md).
+
+## Home preferences
+
+Home follows TV and contains the account-specific combine option above the existing
+episode artwork preference. TV retains episode scrolling, season cards and the
+single-season shortcut. Panels retain lazy initialization and generic vertical
+radio navigation. See [Combined Home Watching Row](combined-home-watching.md).

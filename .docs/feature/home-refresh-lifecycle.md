@@ -242,3 +242,25 @@ Standalone audiobook playback preserves the Jellyfin `AudioBook` type through Ho
 selection, playback reporting, and Continue Listening reconciliation. Jellyfin decides
 resume eligibility: ordinary music `Audio` tracks do not retain bookmarks on 10.11.11.
 Audiobook bookmarks must fall within the server-configured resume thresholds.
+
+## Combined watching projection
+
+When combining is enabled, recent played episode history participates in the same
+revision, task correlation and refresh completion lifecycle as the video shelves.
+HomePage projects its separate raw datasets through HomeWatching into the existing
+Continue Watching shelf. See [Combined Home Watching Row](combined-home-watching.md)
+for ordering, failure behavior and mode-switch focus restoration.
+
+### Canonical return focus
+
+The component-local HomeFocus helper owns capture, resolution and restoration.
+HomePage stores one pending target for playback return and reconciliation. Before
+rebuilding shelves, capture prefers the actual focused shelf over any old target;
+this also handles dialogs that restore an attached native control directly.
+Without live shelf focus, the target survives background responses and is resolved
+against the latest row membership. Successful restoration consumes it. HomeShelf
+continues to own native item selection and the nearest-item fallback.
+
+Separate-mode Next Up responses preserve the Continue Watching ContentNode and
+HomeShelf identity. Continue Watching responses still reproject Next Up to remove
+newly duplicated items or series. History updates only reproject combined mode.
