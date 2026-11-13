@@ -126,8 +126,11 @@ Muted production year (or existing series year range). Episode line 1 is the ser
 name followed by the aggregate season/episode/title string. Missing years leave
 line 3 blank. The separate TMDB Filmography list is unchanged.
 
-Person poster items use 297x501 canvases; episode items use 486x384. Every item in a
-shelf reserves the same space even when role or year is absent. The episode shelf
+Person poster items use 297x501 canvases; episode items use 486x384. Each credit
+shelf uses a viewport extending from x=76 to the right screen edge: both Person
+RowLists are 1844px wide in the 1920px design space. The biography and both focused
+layouts retain that horizontal origin; card sizes and spacing are unchanged.
+Every item in a shelf reserves the same space even when role or year is absent. The episode shelf
 starts at y=596 when movie/series items are present. Its focused page translation
 compensates for the added shelf height. The image size and focus outline remain
 unchanged; `person-credit-poster-focus.png` and `person-credit-episode-focus.png`
