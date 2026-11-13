@@ -48,8 +48,9 @@ separating direction selection from positioning. Layout changes and row
 availability changes use that same path, resetting both arrows each time.
 Movie routes extra selections through its existing
 `playSelected` event; MainScene and VideoPlayer require no special extras path.
-Poster retains the 1152-pixel viewport beside the poster. Other modes use 1848
-pixels. Cinematic hides details/actions while the region has focus; other layouts
+Poster keeps Cast in its 1152-pixel viewport and extends Extras to 1189.5
+pixels, from scene x=730.5 to the right screen edge. The footer centers under
+the active row viewport. Other modes use 1848 pixels. Cinematic hides details/actions while the region has focus; other layouts
 retain details/actions while showing one supplemental row.
 
 ## Loading and playback

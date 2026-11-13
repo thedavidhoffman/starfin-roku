@@ -19,7 +19,7 @@ describe('Starfin movie shell layout', function () {
     if (await read(environment, '#extras.visible')) {
       assert.equal(await read(environment, '#cast.visible'), false);
       assert.equal(await read(environment, '#chevronFooter.direction'), 'down');
-      assert.deepEqual(await read(environment, '#chevronFooter.translation'), [1282.5, 1020]);
+      assert.deepEqual(await read(environment, '#chevronFooter.translation'), [1301.25, 1020]);
       await environment.ecp.sendKeypress(environment.ecp.Key.Down, { wait: 400 });
     }
     assert.equal(await environment.odc.isInFocusChain({ base: 'scene', keyPath: '#cast' }), true);
@@ -106,4 +106,5 @@ async function assertPoster(environment) {
   assert.deepEqual(await read(environment, '#mediaToolbar.translation'), [672, 570]);
   assert.deepEqual(await read(environment, '#supplements.translation'), [672, 681]);
   assert.equal(await read(environment, '#cast.viewportWidth'), 1152);
+  assert.deepEqual(await read(environment, '#extraRows.itemSize'), [1189.5, 264]);
 }

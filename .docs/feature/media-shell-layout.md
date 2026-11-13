@@ -164,3 +164,8 @@ geometry before updating supplemental footer directions and placement. Poster
 centers the footer on the translated row viewport; other modes use screen center.
 Cinematic Extras with cast below shows a centered Up/Down pair beneath the row;
 the last row shows a single centered Up. Backdrop and Poster keep a single arrow.
+
+In Movie Poster mode, Extras extends its viewport from x=730.5 to the screen
+edge (1189.5 pixels), so the trailing card clips at the screen edge rather than
+inside the page. Cast retains its 1152-pixel viewport. The supplemental footer
+centers under the active row.
