@@ -2,11 +2,11 @@
 
 ## Device preference
 
-Settings > General contains two equal-width cards: **Select account at login**
+Settings > General contains two equal-width cards: **Select account at startup**
 on the left and **Account badge** on the right. The TMDB API key remains below.
 The startup preference defaults to Off, saves with the existing settings close
 flow, applies to every account on this Roku, and takes effect on the next launch.
-It uses the global `select-account-at-login` registry key with `off`/`on` values.
+It uses the global `select-account-at-startup` registry key with `off`/`on` values.
 Absent preference values use Off. Account identity migration is described below.
 
 With the preference Off, startup resumes the saved active account as before.

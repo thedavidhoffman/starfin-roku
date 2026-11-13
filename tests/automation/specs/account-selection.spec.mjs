@@ -31,7 +31,7 @@ describe('Starfin startup account selection and switching', function () {
 
   async function seed(accounts, enabled = true, launchParams = undefined) {
     await deleteStarfinSections();
-    const values = { STARFIN_ROKU: { 'select-account-at-login': enabled ? 'on' : 'off' } };
+    const values = { STARFIN_ROKU: { 'select-account-at-startup': enabled ? 'on' : 'off' } };
     for (const [index, entry] of accounts.entries()) {
       const key = keyFor(entry.server, entry.userId);
       values[`STARFIN_ACCOUNT_${key}`] = {
@@ -118,7 +118,7 @@ describe('Starfin startup account selection and switching', function () {
     await seed([account(), account('b')], false);
     await ready();
     await openSettings(categories.general);
-    await selectRadioOption(environment, 'selectAccountAtLoginOptions', 1);
+    await selectRadioOption(environment, 'selectAccountAtStartupOptions', 1);
     await closeAndSaveSettings(environment);
     assert.equal(await value('#homePage.visible'), true);
     await relaunchStarfin(environment);

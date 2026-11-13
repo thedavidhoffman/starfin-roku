@@ -7,7 +7,7 @@ internal artwork geometry and compositing, while Header owns its placement in
 the resolution-specific header layout.
 
 The device-wide toggle is in Settings > General, in the right-hand card beside
-Select account at login. Badge behavior is unchanged by the startup preference.
+Select account at startup. Badge behavior is unchanged by the startup preference.
 
 ## Resolution Behavior
 

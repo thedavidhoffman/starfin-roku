@@ -32,7 +32,7 @@ The background uses translucent header-nav-style glass with 12px FHD / 8px HD
 corners. It has no focus-dependent outline. Native control highlights supply
 focus feedback. The generator is scripts/generate-settings-card-assets.mjs.
 
-General uses two 572px cards separated by 16px: Select account at login first,
+General uses two 572px cards separated by 16px: Select account at startup first,
 then Account badge. The TMDB API key retains its full-width card below them.
 SettingsContent owns left/right navigation between the paired radio controls and
 Down/Up navigation to and from the API key. See [Account selection](account-selection.md).
