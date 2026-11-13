@@ -1,0 +1,26 @@
+import "pkg:/source/YouTubeTrailer.bs"
+import "pkg:/source/Logger.bs"
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = new Logger("TrailerResolveTask", m.global.logService)
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    m.log.write("Resolving trailer requestId=" + Strings.ToString(request.requestId))
+    resolvedCandidates = YouTubeTrailer.Resolve(request.videoId, m.global.logService)
+    if type(resolvedCandidates) <> "roArray" then resolvedCandidates = []
+    if resolvedCandidates.Count() = 0 then m.log.error("YouTube trailer resolution failed: unavailable or unsupported stream within the request deadline.")
+    m.log.write("Negotiation result requestId=" + Strings.ToString(request.requestId) + " candidates=" + resolvedCandidates.Count().ToStr())
+    for candidateIndex = 0 to resolvedCandidates.Count() - 1
+        candidate = resolvedCandidates[candidateIndex]
+        m.log.write("Rank=" + (candidateIndex + 1).ToStr() + " container=" + Strings.ToString(candidate.streamFormat) + " advertisedHeight=" + Strings.ToString(candidate.height))
+    end for
+    m.top.response = { requestId: request.requestId, ok: resolvedCandidates.Count() > 0, candidates: resolvedCandidates }
+end sub

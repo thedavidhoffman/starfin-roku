@@ -219,6 +219,46 @@ VideoPlaybackInfoTask owns direct-launch item hydration before negotiation;
 VideoPlayer retains accepted metadata through its normal recovery lifecycle.
 AudioPlayer continues to own ordered album playback and pause/resume behavior.
 
+## Trailer playback
+
+Movie and TVShow expose trailer availability through VideoToolbar and emit a
+narrow overlay request carrying item and explicit session context. TrailerDialog
+owns the catalog/selection/resolution lifecycle under the top-level OverlayHost;
+TrailerContent and TrailerListItem own picker presentation. TrailerDialog has one
+state transition path for frame visibility, resolution Spinner, interaction, and
+focus. Each selection carries a playback identity, and completion must match both
+that identity and the active player. Local attempts use fresh TrailerPlayback
+nodes; teardown clears ownership before stopping players or dispatching cleanup.
+The toolbar derives visibility and singular/plural text from trailerCount alone.
+TrailerPlayback owns
+a separate fullscreen Video node and reports completion to TrailerDialog. The
+dialog keeps its frame hidden during catalog discovery and single-trailer playback;
+a single trailer returns directly to details, while multiple trailers return to
+the retained picker. Shared Spinner children own loading visuals during resolution
+and playback buffering. Single-trailer failures travel in the overlay close result
+so MainScene can display AppMessage after restoring detail focus. MainScene only routes the overlay, suppresses competing theme audio,
+and restores the originating toolbar and eligible theme on normal closure.
+
+Trailer tasks perform catalog lookup, YouTube metadata and stream resolution,
+and session-scoped local-transcode cleanup. Local trailers reuse
+VideoPlaybackInfoTask negotiation without entering VideoPlayer's queue, resume,
+watched-state reporting, or Up Next lifecycle. Source helpers isolate trailer
+normalization and YouTube's provider-specific protocol. OverlayHost invokes
+explicit cleanup before removal, including cancellation during navigation.
+See [.docs/feature/trailers.md](.docs/feature/trailers.md).
+
+### YouTube trailer quality ownership
+
+YouTubeTrailer resolves provider responses within a shared request budget;
+YouTubeTrailerQuality inspects HLS and ranks compatible HLS/progressive candidates
+against a 1080p target. TrailerResolveTask passes the candidate array to the
+trailer dialog, which delegates YouTube playback to YouTubeTrailerPlayback.
+That component alone owns bounded startup fallback and fresh child-player
+lifetimes. TrailerPlayback reports failure/completion/cancellation and whether
+playback ever started; it contains no provider-specific retry policy. Local
+trailers continue through the existing Jellyfin negotiation and cleanup path.
+See [Trailers](.docs/feature/trailers.md).
+
 ## Build and test boundaries
 
 `bsconfig.json` builds the production channel. Component-specific pure playback

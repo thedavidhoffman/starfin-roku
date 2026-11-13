@@ -15,7 +15,7 @@ namespace tests
             m.node.homeState.sync.active = true
             m.top.settings = { "home-episode-images": "episode-with-logo" }
             m.node.homeState.episodeImageMode = "episode-with-logo"
-            m.node.homeState.refresh = { blocking: false, ownsSpinner: false, pendingCore: {}, messages: [] }
+            m.node.homeState.refresh = { initial: false, blocking: false, ownsSpinner: false, pendingCore: {}, messages: [] }
             m.node.homeState.sectionItems.continueWatching = []
             m.node.homeState.sectionItems.nextUp = []
             m.node.homeState.focusedShelfIndex = 0
@@ -719,7 +719,7 @@ namespace tests
             m.node.homeState.refresh = { blocking: true, pendingCore: {}, messages: [] }
 
             'bs:disable-next-line 1140
-            finishBlockingRefreshIfReady()
+            finishHomeRefreshIfReady()
 
             m.assertTrue(m.top.ready)
             entries = collector.callFunc("getSnapshot")
@@ -1372,12 +1372,12 @@ namespace tests
         @it("does not stop a new spinner after Home already released its loading state")
         function _()
             m.startFocusRefresh(false)
-            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+            m.finishOtherHomeRows()
             m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
             Spinner.Show(0)
 
-            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [] } }
-            m.node.tasks.continueListening.response = { ok: true, action: "continueListening", payload: { Items: [] } }
+            m.top.callFunc("recordMediaChange", { action: "progress", itemId: "movie", positionTicks: 120000000 })
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
             m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
 
             m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
@@ -1447,6 +1447,218 @@ namespace tests
 
             m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
             m.assertTrue(m.top.ready)
+        end function
+
+        @it("selects My Media when Continue Watching arrives first during startup")
+        function _()
+            m.startFocusRefresh(false)
+
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertFalse(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertFalse(m.top.ready)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("collections", "boxsets")] } }
+            m.node.tasks.continueListening.response = { ok: true, action: "continueListening", payload: { Items: [] } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
+
+            m.assertTrue(m.top.ready)
+            m.assertEqual(m.node.homeState.focusedShelfIndex, 0)
+            m.assertEqual(m.node.homeState.shelfNodes[0].rowContent.rowKey, "libraries")
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertEqual(m.node.shelvesGroup.translation, [0, 0])
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+        end function
+
+        @it("waits for remaining core rows when My Media arrives first")
+        function _()
+            m.startFocusRefresh(false)
+
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("collections", "boxsets")] } }
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertFalse(m.top.ready)
+            m.assertFalse(m.node.homeState.sync.loaded)
+
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+            m.node.tasks.continueListening.response = { ok: true, action: "continueListening", payload: { Items: [] } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertEqual(m.node.homeState.shelfNodes[0].rowContent.rowKey, "libraries")
+        end function
+
+        @it("waits for every Recently Added row before completing startup")
+        function _()
+            m.startFocusRefresh(false)
+            'bs:disable-next-line 1001
+            m.stubCall(runLatestMediaTasks, m.createControlledLatestTasks)
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("movies", "movies"), m.createLibrary("tv", "tvshows")] } }
+            first = m.node.homeState.latestTasks[0]
+            last = m.node.homeState.latestTasks[1]
+            for each action in ["continueWatching", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+
+            first.response = { ok: true, action: "latestMedia", parentId: first.request.parentId, payload: [{ Id: "first", Type: "Movie" }] }
+
+            m.assertFalse(m.top.ready)
+            m.assertFalse(m.node.homeState.sync.loaded)
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+
+            last.response = { ok: true, action: "latestMedia", parentId: last.request.parentId, payload: [{ Id: "last", Type: "Series" }] }
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.node.homeState.sync.loaded)
+            m.assertEqual(m.node.homeState.shelfNodes.Count(), 3)
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertEqual(m.node.homeState.shelfNodes[0].rowContent.rowKey, "libraries")
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+        end function
+
+        @it("completes startup when the last Recently Added request fails")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.startFocusRefresh(false)
+            'bs:disable-next-line 1001
+            m.stubCall(runLatestMediaTasks, m.createControlledLatestTasks)
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("movies", "movies")] } }
+            latest = m.node.homeState.latestTasks[0]
+            for each action in ["continueWatching", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+
+            latest.response = { ok: false, action: "latestMedia", parentId: "movies", failureKind: "timeout" }
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 1)
+        end function
+
+        @it("waits for core responses when Recently Added finishes first")
+        function _()
+            m.startFocusRefresh(false)
+            'bs:disable-next-line 1001
+            m.stubCall(runLatestMediaTasks, m.createControlledLatestTasks)
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("movies", "movies")] } }
+            latest = m.node.homeState.latestTasks[0]
+
+            latest.response = { ok: true, action: "latestMedia", parentId: "movies", payload: [] }
+
+            m.assertFalse(m.top.ready)
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+
+            for each action in ["continueWatching", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+        end function
+
+        @it("retains initial completion gating when a partial refresh replaces startup")
+        function _()
+            m.startFocusRefresh(false)
+            'bs:disable-next-line 1001
+            m.stubCall(runLatestMediaTasks, m.createControlledLatestTasks)
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("movies", "movies")] } }
+            previous = m.node.homeState.latestTasks[0]
+
+            'bs:disable-next-line 1140
+            refreshPlaybackRows(true)
+            latest = m.node.homeState.latestTasks[0]
+            for each action in ["continueWatching", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+            previous.response = { ok: true, action: "latestMedia", parentId: "movies", payload: [] }
+
+            m.assertFalse(m.top.ready)
+            m.assertFalse(m.top.visible)
+            m.assertTrue(m.node.homeState.refresh.initial)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+
+            latest.response = { ok: true, action: "latestMedia", parentId: "movies", payload: [] }
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.top.visible)
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertFalse(m.node.homeState.refresh.initial)
+        end function
+
+        @it("does not reopen Home when Recently Added finishes after departure")
+        function _()
+            m.startFocusRefresh(false)
+            'bs:disable-next-line 1001
+            m.stubCall(runLatestMediaTasks, m.createControlledLatestTasks)
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("movies", "movies")] } }
+            latest = m.node.homeState.latestTasks[0]
+            for each action in ["continueWatching", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: true, action: action, payload: { Items: [] } }
+            end for
+            m.top.callFunc("deactivate")
+            m.openFocusTestSettings()
+            Spinner.Show(0)
+
+            latest.response = { ok: true, action: "latestMedia", parentId: "movies", payload: [] }
+
+            m.assertTrue(m.top.ready)
+            m.assertFalse(m.top.visible)
+            m.assertTrue(m.focusTestSurface.findNode("tvPanel").isInFocusChain())
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "start")
+        end function
+
+        @it("uses the first available row when My Media fails during startup")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+            m.node.tasks.continueListening.response = { ok: true, action: "continueListening", payload: { Items: [] } }
+            m.node.tasks.nextUp.response = { ok: true, action: "nextUp", payload: { Items: [] } }
+
+            m.node.tasks.libraries.response = { ok: false, action: "libraries", failureKind: "timeout" }
+
+            m.assertTrue(m.top.ready)
+            m.assertEqual(m.node.homeState.shelfNodes[0].rowContent.rowKey, "continueWatching")
+            m.assertTrue(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 1)
+        end function
+
+        @it("finishes startup without shelf focus when all core requests fail")
+        function _()
+            m.stubCall(AppMessage.Show, m.captureStatusMessage)
+            m.startFocusRefresh(false)
+
+            for each action in ["libraries", "continueWatching", "continueListening", "nextUp"]
+                m.node.tasks[action].response = { ok: false, action: action, failureKind: "timeout" }
+            end for
+
+            m.assertTrue(m.top.ready)
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.node.homeState.shelfNodes.Count(), 0)
+            m.assertEqual(m.top.getScene().findNode("loadingSpinner").control, "stop")
+            m.assertEqual(getGlobalAa().homeStatusCapture.writes, 1)
+        end function
+
+        @it("does not navigate into partial startup shelves")
+        function _()
+            m.startFocusRefresh(false)
+            m.node.tasks.continueWatching.response = { ok: true, action: "continueWatching", payload: { Items: [{ Id: "movie", Type: "Movie" }] } }
+            m.node.tasks.libraries.response = { ok: true, action: "libraries", payload: { Items: [m.createLibrary("collections", "boxsets")] } }
+
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            m.top.callFunc("focusHome")
+
+            m.assertTrue(m.top.hasFocus())
+            m.assertEqual(m.node.homeState.focusedShelfIndex, 0)
+            m.assertFalse(m.node.homeState.shelfNodes[0].isInFocusChain())
+            m.assertFalse(m.node.homeState.shelfNodes[1].isInFocusChain())
         end function
 
         @it("does not focus shelves when Home has been hidden")
@@ -1659,6 +1871,20 @@ namespace tests
             controlledRequest.homeQueryId = context.homeState.queryId
             controlledRequest.homeSessionKey = context.homeState.sessionKey
             task.request = controlledRequest
+        end function
+
+        function createControlledLatestTasks(onlyLibraries = invalid)
+            context = getGlobalAa().homeTestContext
+            for each libraryId in context.homeState.latestLibraries
+                if onlyLibraries <> invalid and not onlyLibraries.DoesExist(libraryId) then continue for
+                task = CreateObject("roSGNode", "Group")
+                task.addFields({ request: {}, response: {}, control: "" })
+                context.top.appendChild(task)
+                context.homeState.latestTasks.Push(task)
+                task.observeField("response", "onDynamicLatestMediaResponse")
+                task.request = { parentId: libraryId, homeRevision: context.homeState.sync.revision, homeQueryId: context.homeState.queryId, homeSessionKey: context.homeState.sessionKey }
+                context.homeState.sync.attempted["latest:" + libraryId] = context.homeState.sync.revision
+            end for
         end function
 
         function startPermissionRefresh(permissions as dynamic)

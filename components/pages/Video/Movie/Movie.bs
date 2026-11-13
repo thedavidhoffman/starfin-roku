@@ -1,3 +1,4 @@
+import "pkg:/source/Trailers.bs"
 import "pkg:/source/WatchedAction.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/MediaShellLayout.bs"
@@ -101,6 +102,7 @@ sub initHandlers()
     m.watchedTask.observeField("response", "onWatchedTaskResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
     m.mediaToolbar.observeField("focusExitDown", "onVideoToolbarFocusExitDown")
+    m.mediaToolbar.observeField("trailerSelected", "onTrailerSelected")
     m.mediaToolbar.observeField("playSelected", "onVideoToolbarPlaySelected")
     m.mediaToolbar.observeField("restartSelected", "onVideoToolbarRestartSelected")
     m.mediaToolbar.observeField("mediaInfoSelected", "onVideoToolbarMediaInfoSelected")
@@ -117,6 +119,7 @@ end sub
 ' renderMovie
 '-------------------------------------------------------------------------------
 sub renderMovie(item as dynamic, logoPending = false as boolean)
+    m.mediaToolbar.trailerCount = Trailers.GetCount(item)
     refreshMediaInfoText(item)
     if Arrays.IsAssocArray(item) = false then return
 
@@ -1007,4 +1010,20 @@ sub refreshMediaInfoText(item as dynamic)
     else
         m.mediaToolbar.mediaInfoText = VideoMediaSummary.GetText(item, getSelectedAudioStreamIndex())
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onTrailerSelected
+'-------------------------------------------------------------------------------
+sub onTrailerSelected()
+    if m.state.request = invalid or m.state.item = invalid then return
+    m.top.overlayRequested = Trailers.OverlayRequest(m.state.item, m.state.request, "movie")
+end sub
+
+'-------------------------------------------------------------------------------
+' handleTrailersClosed
+'-------------------------------------------------------------------------------
+sub handleTrailersClosed()
+    focusVideoToolbar()
+    m.mediaToolbar.callFunc("focusTrailer")
 end sub

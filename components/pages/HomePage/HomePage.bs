@@ -50,6 +50,7 @@ sub init()
         playbackOverlay: { open: false, returnTarget: invalid }
         shelfOffsetY: 0
         refresh: {
+            initial: false
             blocking: false
             ownsSpinner: false
             messages: []
@@ -259,6 +260,10 @@ end sub
 sub focusHome()
     refreshEpisodeCounts()
     if m.homeState.playbackOverlay.open then return
+    if m.homeState.refresh.initial = true then
+        m.top.setFocus(true)
+        return
+    end if
     target = m.homeState.playbackOverlay.returnTarget
     m.homeState.playbackOverlay.returnTarget = invalid
     if target <> invalid then
@@ -306,6 +311,7 @@ sub refreshHomeData(blocking = false as boolean)
     m.top.ready = false
     m.homeState.sync.active = true
     m.homeState.refresh = {
+        initial: true
         blocking: blocking
         ownsSpinner: true
         messages: []
@@ -373,14 +379,15 @@ sub refreshPlaybackRows(blocking = false as boolean)
     beginHomeRefresh()
     m.homeState.sync.attempted = {}
     m.top.ready = false
-    m.homeState.refresh = { blocking: blocking, ownsSpinner: blocking, messages: [], messagesSuppressed: false, pendingCore: {} }
+    initial = m.homeState.refresh.initial = true
+    m.homeState.refresh = { initial: initial, blocking: blocking, ownsSpinner: blocking or initial, messages: [], messagesSuppressed: false, pendingCore: {} }
     if blocking then
         m.top.setFocus(true)
         m.top.visible = false
         Spinner.Show()
     end if
     startDirtyHomeRequests()
-    finishBlockingRefreshIfReady()
+    finishHomeRefreshIfReady()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -746,7 +753,7 @@ sub onDynamicLatestMediaResponse(event as object)
     cleanupLatestMediaTask(task)
     failed = handleHomeResponseFailure(response, libraryName)
     if failed then
-        finishBlockingRefreshIfReady()
+        finishHomeRefreshIfReady()
         return
     end if
 
@@ -759,7 +766,7 @@ sub onDynamicLatestMediaResponse(event as object)
     HomeRefresh.Accept(m.homeState.sync, key, task.request.homeRevision)
     addRow(key, "Recently Added in " + Format.FirstNonEmpty([library.name], "Library"), reconcileHomeSnapshot(ApiPayload.GetItems(response.payload), task.request.homeRevision))
     renderRows()
-    finishBlockingRefreshIfReady()
+    finishHomeRefreshIfReady()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -831,7 +838,7 @@ sub renderRows()
     for i = 0 to m.homeState.shelfNodes.Count() - 1
         shelf = m.homeState.shelfNodes[i]
         key = Strings.ToString(shelf.rowContent.rowKey)
-        if i = m.homeState.focusedShelfIndex then selectedKey = key
+        if m.homeState.refresh.initial <> true and i = m.homeState.focusedShelfIndex then selectedKey = key
         if m.homeState.rows.DoesExist(key) then
             existingShelves[key] = shelf
         else
@@ -895,7 +902,7 @@ sub renderRows()
     updateShelfScroll(false)
 
     if hasRenderedRows() then
-        if m.homeState.refresh.blocking <> true then stopHomeLoading()
+        if m.homeState.refresh.initial <> true and m.homeState.refresh.blocking <> true then stopHomeLoading()
         ' Only the surface that already owned focus may restore it after row removal.
         if hadFocus and m.top.visible and m.homeState.refresh.blocking <> true then focusShelf(m.homeState.focusedShelfIndex)
     else if hadFocus and m.top.visible then
@@ -923,25 +930,33 @@ sub markCoreTaskComplete(action as string)
     if m.homeState.refresh.pendingCore.DoesExist(action) = false then return
 
     m.homeState.refresh.pendingCore.Delete(action)
-    finishBlockingRefreshIfReady()
+    finishHomeRefreshIfReady()
 end sub
 
 '-------------------------------------------------------------------------------
-' finishBlockingRefreshIfReady
+' finishHomeRefreshIfReady
 '-------------------------------------------------------------------------------
-sub finishBlockingRefreshIfReady()
+sub finishHomeRefreshIfReady()
     if m.homeState.refresh.pendingCore.Count() > 0 then return
     startDirtyHomeRequests()
     if m.homeState.refresh.pendingCore.Count() > 0 then return
+    ' Startup chooses focus once, after library-dependent shelves have also settled.
+    if m.homeState.refresh.initial = true and m.homeState.latestTasks.Count() > 0 then return
     if m.homeState.latestTasks.Count() = 0 then m.homeState.sync.patches = {}
 
+    wasInitial = m.homeState.refresh.initial = true
     wasBlocking = m.homeState.refresh.blocking
     stopHomeLoading()
+    m.homeState.refresh.initial = false
     m.homeState.refresh.blocking = false
     m.homeState.sync.loaded = true
-    if wasBlocking and m.homeState.sync.active then
-        m.top.visible = true
-        if m.top.isInFocusChain() then focusHome()
+    if wasInitial then
+        m.homeState.focusedShelfIndex = 0
+        updateShelfScroll(false)
+    end if
+    if m.homeState.sync.active then
+        if wasBlocking then m.top.visible = true
+        if (wasInitial or wasBlocking) and m.top.visible and m.top.isInFocusChain() then focusHome()
     end if
     ' Capture acknowledgment return focus only after the usable page is established.
     publishHomeRefreshMessages()
@@ -1035,6 +1050,7 @@ end function
 ' focusShelf
 '-------------------------------------------------------------------------------
 sub focusShelf(index as integer, itemId = "" as string)
+    if m.homeState.refresh.initial = true then return
     if m.homeState.playbackOverlay.open then return
     if m.homeState.shelfNodes.Count() = 0 then return
     if index < 0 then index = 0

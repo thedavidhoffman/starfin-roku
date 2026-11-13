@@ -1,0 +1,28 @@
+import "pkg:/source/Trailers.bs"
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    error = TaskRequest.ValidateRequest(request, "trailers", ["itemId"])
+    if error <> invalid then
+        if request <> invalid then error.requestId = request.requestId
+        m.top.response = error
+        return
+    end if
+    requestUrl = request.server + "/Items/" + request.itemId + "/LocalTrailers" + Url.BuildQueryString({ userId: request.userId })
+    result = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token), true, 8000)
+    items = Trailers.Candidates(request.item, result.data, request.server)
+    m.top.response = { requestId: request.requestId, ok: result.ok, items: items }
+end sub

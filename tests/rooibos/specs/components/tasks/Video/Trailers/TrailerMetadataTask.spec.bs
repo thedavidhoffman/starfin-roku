@@ -1,0 +1,33 @@
+namespace tests
+
+    @SGNode("TrailerMetadataTask")
+    @suite("Trailer metadata task")
+    class TrailermetadatataskTests extends rooibos.BaseTestSuite
+
+        @describe("request and response behavior")
+
+        @it("publishes title and candidate identity without channel metadata")
+        function _()
+            m.stubCall(YouTubeTrailer.Fetch, { title: "Official", author_name: "Studio" })
+            m.top.request = { requestId: 3, items: [{ key: "youtube:abcdefghijk", source: "youtube", videoId: "abcdefghijk", title: "Fallback" }] }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertEqual(m.top.response.title, "Official")
+            m.assertInvalid(m.top.response.channel)
+            m.assertEqual(m.top.response.key, "youtube:abcdefghijk")
+            m.assertEqual(m.top.response.requestId, 3)
+        end function
+
+        @it("leaves fallback metadata intact when lookup fails")
+        function _()
+            m.stubCall(YouTubeTrailer.Fetch, invalid)
+            m.top.response = invalid
+            m.top.request = { requestId: 3, items: [{ source: "youtube", videoId: "abcdefghijk" }] }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertInvalid(m.top.response)
+        end function
+
+    end class
+
+end namespace

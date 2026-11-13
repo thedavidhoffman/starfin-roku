@@ -1,0 +1,158 @@
+namespace tests
+
+    @SGNode("YouTubeTrailerPlayback")
+    @suite("YouTube trailer startup fallbacks")
+    class YouTubeTrailerPlaybackTests extends rooibos.BaseTestSuite
+
+        protected override function afterEach()
+            m.top.callFunc("stopPlayback")
+        end function
+
+        @describe("production player lifecycle with a mocked Video boundary")
+
+        @it("starts the highest ranked candidate with its playback identity")
+        function _()
+            m.start()
+            player = m.top.getChild(0)
+
+            m.assertEqual(player.findNode("video").content.url, "https://video/1080")
+            m.assertEqual(player.findNode("video").control, "play")
+            m.assertEqual(player.findNode("loading").control, "start")
+            m.assertEqual(m.node.playback.playbackId, 41)
+        end function
+
+        @it("creates a fresh fallback player through the production ended observer")
+        function _()
+            m.start()
+            previousPlayer = m.top.getChild(0)
+            previousPlayer.findNode("video").state = "error"
+            nextPlayer = m.top.getChild(0)
+
+            m.assertFalse(nextPlayer.isSameNode(previousPlayer))
+            m.assertEqual(nextPlayer.findNode("video").content.url, "https://video/720")
+            m.assertEqual(previousPlayer.findNode("video").control, "stop")
+            m.assertEqual(m.node.playback.playbackId, 41)
+            m.assertInvalid(m.top.ended)
+        end function
+
+        @it("stops after three startup failures even with another candidate available")
+        function _()
+            m.start()
+            m.top.getChild(0).findNode("video").state = "error"
+            m.top.getChild(0).findNode("video").state = "error"
+            m.top.getChild(0).findNode("video").state = "error"
+
+            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(m.top.ended.reason, "failed")
+            m.assertEqual(m.top.ended.playbackId, 41)
+            m.assertFalse(m.top.visible)
+        end function
+
+        @it("does not retry an error after playing")
+        function _()
+            m.start()
+            videoNode = m.top.getChild(0).findNode("video")
+            videoNode.state = "playing"
+            videoNode.state = "error"
+
+            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertTrue(m.top.ended.hasStarted)
+            m.assertEqual(m.top.ended.playbackId, 41)
+        end function
+
+        @it("cancels on Back without a fallback")
+        function _()
+            m.start()
+            previousPlayer = m.top.getChild(0)
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertEqual(m.top.ended.reason, "cancelled")
+            m.assertEqual(m.top.ended.playbackId, 41)
+            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertEqual(previousPlayer.findNode("loading").control, "stop")
+        end function
+
+        @it("forwards natural completion through the child event")
+        function _()
+            m.start()
+            m.top.getChild(0).findNode("video").state = "finished"
+
+            m.assertEqual(m.top.ended.reason, "completed")
+            m.assertEqual(m.top.ended.playbackId, 41)
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+        @it("rejects a queued event from a replaced child")
+        function _()
+            m.start()
+            previousPlayer = m.top.getChild(0)
+            previousPlayer.findNode("video").state = "error"
+            nextPlayer = m.top.getChild(0)
+            'bs:disable-next-line 1140
+            onCandidateEnded(m.event(previousPlayer, 41))
+
+            m.assertTrue(m.top.getChild(0).isSameNode(nextPlayer))
+            m.assertInvalid(m.top.ended)
+        end function
+
+        @it("rejects the wrong selection identity even from the current child")
+        function _()
+            m.start()
+            player = m.top.getChild(0)
+            player.ended = { playbackId: 40, reason: "failed", hasStarted: false, message: "" }
+
+            m.assertTrue(m.top.getChild(0).isSameNode(player))
+            m.assertInvalid(m.top.ended)
+        end function
+
+        @it("ignores child completion after teardown")
+        function _()
+            m.start()
+            previousPlayer = m.top.getChild(0)
+            m.top.callFunc("stopPlayback")
+            'bs:disable-next-line 1140
+            onCandidateEnded(m.event(previousPlayer, 41))
+
+            m.assertInvalid(m.top.ended)
+            m.assertInvalid(m.node.playback.playbackId)
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+        @it("preserves identity when the candidate list is empty")
+        function _()
+            m.top.ended = invalid
+            m.top.callFunc("playCandidates", [], 42)
+
+            m.assertEqual(m.top.ended.reason, "failed")
+            m.assertEqual(m.top.ended.playbackId, 42)
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+        private sub start()
+            m.top.callFunc("stopPlayback")
+            m.top.ended = invalid
+            m.top.callFunc("playCandidates", [
+                { streamUrl: "https://video/720", streamFormat: "mp4", height: 720 }
+                { streamUrl: "https://video/1080", streamFormat: "mp4", height: 1080 }
+                { streamUrl: "https://video/360", streamFormat: "mp4", height: 360 }
+                { streamUrl: "https://video/240", streamFormat: "mp4", height: 240 }
+            ], 41)
+        end sub
+
+        private function event(owner as object, playbackId as integer) as object
+            return {
+                owner: owner
+                result: { playbackId: playbackId, reason: "failed", hasStarted: false, message: "" }
+                getData: function()
+                    return m.result
+                end function
+                getRoSGNode: function()
+                    return m.owner
+                end function
+            }
+        end function
+
+    end class
+
+end namespace

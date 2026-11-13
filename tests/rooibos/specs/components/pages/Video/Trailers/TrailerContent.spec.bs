@@ -1,0 +1,173 @@
+namespace tests
+
+    @SGNode("TrailerContent")
+    @suite("Trailer picker content")
+    class TrailerpickercontentTests extends rooibos.BaseTestSuite
+
+        @describe("observable behavior")
+
+        @it("renders only existing rows")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            content.items = [{ key: "one", title: "One", thumbnail: "" }]
+            m.assertTrue(content.findNode("row0").visible)
+            m.assertFalse(content.findNode("row1").visible)
+        end function
+
+        @it("scrolls to keep a fourth selection visible")
+        function _()
+            m.top.items = m.items()
+            m.top.selectedIndex = 0
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+
+            m.assertEqual(m.top.selectedIndex, 3)
+            m.assertEqual(m.top.findNode("row2").findNode("title").text, "Four")
+        end function
+
+        @it("publishes the selected index")
+        function _()
+            m.top.items = m.items()
+            m.top.selectedIndex = 1
+            m.top.busy = false
+            'bs:disable-next-line 1140
+            onKeyEvent("OK", true)
+            m.assertEqual(m.top.itemSelected, 1)
+        end function
+
+        @it("blocks selection while resolving")
+        function _()
+            m.top.items = m.items()
+            m.top.selectedIndex = 0
+            m.top.busy = true
+            'bs:disable-next-line 1140
+            onKeyEvent("down", true)
+            m.assertEqual(m.top.selectedIndex, 0)
+            m.top.busy = false
+        end function
+
+        @it("updates metadata without moving selection")
+        function _()
+            m.top.items = m.items()
+            m.top.selectedIndex = 2
+            m.top.callFunc("updateMetadata", { key: "three", title: "Updated" })
+            m.assertEqual(m.top.selectedIndex, 2)
+            m.assertEqual(m.top.findNode("row2").findNode("title").text, "Updated")
+        end function
+
+        @it("lets Back reach the dialog")
+        function _()
+            m.top.busy = true
+            'bs:disable-next-line 1140
+            m.assertFalse(onKeyEvent("back", true))
+            m.top.busy = false
+        end function
+
+        @it("places three larger rows at the top without instruction space")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            content.items = m.items()
+
+            m.assertEqual(content.findNode("row0").translation, [0, -36])
+            m.assertEqual(content.findNode("row1").translation, [0, 176])
+            m.assertEqual(content.findNode("row2").translation, [0, 388])
+            m.assertFalse(content.findNode("status").visible)
+            m.assertEqual(content.findNode("position").text, "1 / 4")
+        end function
+
+        @it("shows temporary status in the footer without moving rows or selection")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            content.items = m.items()
+            content.selectedIndex = 2
+            content.statusText = "Loading trailer... Press Back to cancel."
+
+            m.assertTrue(content.findNode("status").visible)
+            m.assertEqual(content.findNode("status").text, content.statusText)
+            m.assertEqual(content.findNode("row0").translation, [0, -36])
+            m.assertEqual(content.selectedIndex, 2)
+        end function
+
+        @it("hides cleared status after returning to the picker")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            content.statusText = "Loading trailers..."
+            content.statusText = ""
+
+            m.assertFalse(content.findNode("status").visible)
+        end function
+
+        @it("retains empty-state guidance without a position count")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            content.items = []
+            content.statusText = "No trailers available. Press OK to retry, or Back to close."
+
+            m.assertTrue(content.findNode("status").visible)
+            m.assertFalse(content.findNode("row0").visible)
+            m.assertEqual(content.findNode("position").text, "")
+        end function
+
+        @it("hides the position count for 1 trailers")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            entries = m.items()
+            content.items = [entries[0]]
+
+            m.assertFalse(content.findNode("position").visible)
+            m.assertEqual(content.findNode("position").text, "")
+        end function
+
+        @it("hides the position count for 2 trailers")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            entries = m.items()
+            content.items = [entries[0], entries[1]]
+
+            m.assertFalse(content.findNode("position").visible)
+            m.assertEqual(content.findNode("position").text, "")
+        end function
+
+        @it("hides the position count for 3 trailers")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            entries = m.items()
+            content.items = [entries[0], entries[1], entries[2]]
+
+            m.assertFalse(content.findNode("position").visible)
+            m.assertEqual(content.findNode("position").text, "")
+        end function
+
+        @it("updates the count while scrolling a list larger than the viewport")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            content.items = m.items()
+            content.selectedIndex = 3
+
+            m.assertTrue(content.findNode("position").visible)
+            m.assertEqual(content.findNode("position").text, "4 / 4")
+        end function
+
+        @it("clears the previous count when a list shrinks to fit")
+        function _()
+            content = CreateObject("roSGNode", "TrailerContent")
+            entries = m.items()
+            content.items = entries
+            content.selectedIndex = 3
+            content.items = [entries[0], entries[1], entries[2]]
+
+            m.assertFalse(content.findNode("position").visible)
+            m.assertEqual(content.findNode("position").text, "")
+        end function
+
+        private function items() as object
+            return [{ key: "one", title: "One", thumbnail: "" }, { key: "two", title: "Two", thumbnail: "" }, { key: "three", title: "Three", thumbnail: "" }, { key: "four", title: "Four", thumbnail: "" }]
+        end function
+
+    end class
+
+end namespace

@@ -21,7 +21,7 @@ This also covers items absent from the retained snapshots (including empty shelv
 and episodes grouped into show cards. Jellyfin determines membership on reload;
 marking a hidden movie unwatched can therefore bring it back without a full Home refresh.
 Completed rows stay rendered. Restarted core requests participate in completion,
-while Recently Added retains its existing background-loading behavior. Repeated
+while Recently Added retains its background-loading behavior after initial loading. Repeated
 refreshes replace the pending work again; superseded responses remain ineligible
 to commit.
 
@@ -45,6 +45,31 @@ matching active account through the same path as declarative task nodes.
 
 ## Focus during refreshes
 
+Initial loading and explicit full reloads render arriving rows without assigning
+shelf focus. Home's single refresh-completion path waits for all core requests
+and every eligible Recently Added request queued by the libraries response to
+succeed or fail. Until then, Home retains its loading indicator, reports
+`ready = false`, and defers shelf navigation. Up and Back can still leave Home.
+The completion path selects row zero, resets scrolling to the top, releases the
+loading indicator, establishes focus when eligible, publishes collected failures,
+and reports readiness. My Media is first when nonempty; otherwise the first
+available row is selected. With no usable rows, focus remains on Home itself.
+Response order cannot turn a temporary first row into the startup selection.
+
+Initial-load state belongs to HomePage's refresh state and survives a superseding
+partial refresh. Completion does not steal focus from another surface or reopen
+an inactive Home page. Failed requests settle the load rather than preventing
+completion; the slowest outstanding request determines startup readiness.
+HomeShelf retains presentation and item focus, and MainScene retains activation
+and navigation routing without coordinating section requests.
+
+Exit confirmation can capture the Home container while startup is pending.
+Cancel or Back dismissal restores that container through HomePage's `focusHome`
+interface, so a load completed behind the dialog selects My Media (or the first
+available row). If loading is still pending or no rows are available, focus stays
+on Home itself. Attached shelf-item and header return targets retain their direct
+focus restoration; unavailable targets retain the active-surface fallback.
+
 Background responses reconcile Home shelves by row key. Unchanged shelves and
 their content remain attached, retaining native item focus and dialog return
 references. Added rows update layout and navigation indices without replacing
@@ -53,8 +78,8 @@ valid item index when it disappears. If a whole row disappears, Home uses the
 nearest remaining shelf, or focuses Home itself when no shelves remain.
 Responses never take focus from Settings, the header, another page, or a dialog.
 Shelf focus is restored only when Home already owned focus and remains visible.
-Initial navigation explicitly focuses Home, so arriving rows still receive focus
-when the user stays on Home.
+Initial navigation explicitly focuses Home; the initial shelf receives focus
+once the complete load settles, if the user stays on Home.
 
 A blocking refresh takes Home focus when it starts, then restores shelf focus on
 completion only if Home still owns it. Opening Settings during that refresh leaves
@@ -146,7 +171,8 @@ On Now 403 exception remain unchanged. Empty-Home behavior is unchanged.
 
 Each refresh owns a message list. Accepted failures are collected, preserving the
 On Now 403 omission, and published once through AppMessage after core and current
-Recently Added requests finish. Existing ready/spinner timing remains intact. A
+Recently Added requests finish. Initial readiness and spinner dismissal share
+that completion boundary; subsequent refreshes retain their existing timing. A
 new refresh discards prior collected messages; stale responses cannot contribute.
 Successful responses never dismiss a visible acknowledgment.
 

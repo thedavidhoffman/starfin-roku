@@ -1,3 +1,4 @@
+import "pkg:/source/Trailers.bs"
 import "pkg:/source/UnwatchedEpisodeCount.bs"
 import "pkg:/source/WatchedAction.bs"
 import "pkg:/source/MediaState.bs"
@@ -102,6 +103,7 @@ sub initHandlers()
     m.randomPlaybackTask.observeField("response", "onRandomPlaybackResponse")
     m.themeSongsTask.observeField("response", "onThemeSongsResponse")
     m.mediaShell.observeField("overlayRequested", "onMediaShellOverlayRequested")
+    m.videoToolbar.observeField("trailerSelected", "onTrailerSelected")
     m.videoToolbar.observeField("playSelected", "onVideoToolbarPlaySelected")
     m.videoToolbar.observeField("randomPlaySelected", "onVideoToolbarRandomPlaySelected")
     m.videoToolbar.observeField("allEpisodesSelected", "onVideoToolbarAllEpisodesSelected")
@@ -685,6 +687,7 @@ end sub
 ' renderSeries
 '-------------------------------------------------------------------------------
 sub renderSeries(item as dynamic, logoPending = false as boolean)
+    m.videoToolbar.trailerCount = Trailers.GetCount(item)
     syncWatchedToolbar()
     if Arrays.IsAssocArray(item) = false then return
 
@@ -1230,4 +1233,20 @@ sub onEpisodeCountsRefreshed()
         end for
     end for
     syncWatchedToolbar()
+end sub
+
+'-------------------------------------------------------------------------------
+' onTrailerSelected
+'-------------------------------------------------------------------------------
+sub onTrailerSelected()
+    if m.pageState.request = invalid or m.pageState.series = invalid then return
+    m.top.overlayRequested = Trailers.OverlayRequest(m.pageState.series, m.pageState.request, "tvShow")
+end sub
+
+'-------------------------------------------------------------------------------
+' handleTrailersClosed
+'-------------------------------------------------------------------------------
+sub handleTrailersClosed()
+    focusVideoToolbar()
+    m.videoToolbar.callFunc("focusTrailer")
 end sub

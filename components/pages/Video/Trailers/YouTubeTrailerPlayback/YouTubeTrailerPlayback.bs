@@ -1,0 +1,113 @@
+import "pkg:/source/YouTubeTrailerQuality.bs"
+import "pkg:/source/TrailerPlaybackResult.bs"
+import "pkg:/source/Remote.bs"
+import "pkg:/source/Logger.bs"
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = new Logger("YouTubeTrailerPlayback", m.global.logService)
+    m.playback = { active: false, candidates: [], index: 0, player: invalid, playbackId: invalid }
+    m.top.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' playCandidates
+'-------------------------------------------------------------------------------
+sub playCandidates(candidates as object, playbackId = 0 as integer)
+    stopPlayback()
+    m.playback.candidates = YouTubeTrailerQuality.Rank(candidates)
+    m.log.write("Playback candidates=" + m.playback.candidates.Count().ToStr() + " maxAttempts=3")
+    m.playback.index = 0
+    m.playback.playbackId = playbackId
+    m.playback.active = true
+    m.top.visible = true
+    if m.playback.candidates.Count() = 0 then
+        finishPlayback({ message: "This YouTube trailer is unavailable.", reason: TrailerPlaybackResult.Reason.Failed })
+        return
+    end if
+    startCandidate()
+end sub
+
+'-------------------------------------------------------------------------------
+' startCandidate
+'-------------------------------------------------------------------------------
+sub startCandidate()
+    candidate = m.playback.candidates[m.playback.index]
+    m.log.write("Starting playbackId=" + Strings.ToString(m.playback.playbackId) + " attempt=" + (m.playback.index + 1).ToStr() + " container=" + Strings.ToString(candidate.streamFormat) + " advertisedHeight=" + Strings.ToString(candidate.height))
+    releasePlayer()
+    ' A fresh player isolates queued Video/timer events from the previous attempt.
+    m.playback.player = CreateObject("roSGNode", "TrailerPlayback")
+    m.top.appendChild(m.playback.player)
+    m.playback.player.observeFieldScoped("ended", "onCandidateEnded")
+    m.playback.player.callFunc("playStream", m.playback.candidates[m.playback.index], invalid, m.playback.playbackId)
+end sub
+
+'-------------------------------------------------------------------------------
+' onCandidateEnded
+'-------------------------------------------------------------------------------
+sub onCandidateEnded(event as object)
+    if not m.playback.active or m.playback.player = invalid then return
+    if not event.getRoSGNode().isSameNode(m.playback.player) then return
+    result = event.getData()
+    if result.playbackId <> m.playback.playbackId then return
+    m.log.write("Attempt=" + (m.playback.index + 1).ToStr() + " ended reason=" + Strings.ToString(result.reason) + " hasStarted=" + Strings.ToString(result.hasStarted))
+    if result.reason = TrailerPlaybackResult.Reason.Failed and result.hasStarted = false and m.playback.index < 2 and m.playback.index + 1 < m.playback.candidates.Count() then
+        m.log.write("Startup failed; advancing to fallback")
+        m.playback.index += 1
+        startCandidate()
+        return
+    end if
+    if result.reason <> TrailerPlaybackResult.Reason.Failed then
+        m.log.write("No retry: completion or cancellation")
+    else if result.hasStarted = true then
+        m.log.write("No retry: playback had already started")
+    else
+        m.log.write("No retry: attempt limit or available candidates exhausted")
+    end if
+    finishPlayback(result)
+end sub
+
+'-------------------------------------------------------------------------------
+' releasePlayer
+'-------------------------------------------------------------------------------
+sub releasePlayer()
+    if m.playback.player = invalid then return
+    previousPlayer = m.playback.player
+    m.playback.player = invalid
+    previousPlayer.unobserveFieldScoped("ended")
+    previousPlayer.callFunc("stopPlayback")
+    m.top.removeChild(previousPlayer)
+end sub
+
+'-------------------------------------------------------------------------------
+' stopPlayback
+'-------------------------------------------------------------------------------
+sub stopPlayback()
+    if m.playback.active then m.log.write("Stopping YouTube playback and releasing candidates")
+    m.playback.active = false
+    m.playback.playbackId = invalid
+    releasePlayer()
+    m.playback.candidates = []
+    m.top.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' finishPlayback
+'-------------------------------------------------------------------------------
+sub finishPlayback(result as object)
+    if not m.playback.active then return
+    result.playbackId = m.playback.playbackId
+    m.log.write("Session ended reason=" + Strings.ToString(result.reason))
+    stopPlayback()
+    m.top.ended = result
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = Remote.Key.Back and m.playback.active then finishPlayback({ message: "", reason: TrailerPlaybackResult.Reason.Cancelled })
+    return true
+end function

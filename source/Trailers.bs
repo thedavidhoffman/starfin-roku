@@ -1,0 +1,105 @@
+import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/JellyfinImage.bs"
+namespace Trailers
+    enum Source
+        Local = "local"
+        YouTube = "youtube"
+    end enum
+    enum State
+        Loading = "loading"
+        Choosing = "choosing"
+        Resolving = "resolving"
+        Playing = "playing"
+        Closed = "closed"
+    end enum
+    enum Overlay
+        Picker = "trailers"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' Trailers.VideoId
+    '---------------------------------------------------------------------------
+    function VideoId(urlValue as dynamic) as string
+        value = Strings.Trim(urlValue)
+        ' Anchor the hostname: a lookalike domain must never become a trusted trailer URL.
+        shortMatch = CreateObject("roRegex", "^https?://youtu\.be/([A-Za-z0-9_-]{11})([?&#/].*)?$", "i").Match(value)
+        if shortMatch.Count() > 1 then return shortMatch[1]
+        hostMatch = CreateObject("roRegex", "^https?://((www|m|music)\.)?(youtube\.com|youtube-nocookie\.com)/(.*)$", "i").Match(value)
+        if hostMatch.Count() = 0 then return ""
+        path = hostMatch[4]
+        pathMatch = CreateObject("roRegex", "^(embed|shorts|v|live)/([A-Za-z0-9_-]{11})([?&#/].*)?$", "i").Match(path)
+        if pathMatch.Count() > 2 then return pathMatch[2]
+        if Left(path, 6) <> "watch?" then return ""
+        queryMatch = CreateObject("roRegex", "[?&]v=([A-Za-z0-9_-]{11})(&|#|$)", "").Match(path)
+        if queryMatch.Count() > 1 then return queryMatch[1]
+        return ""
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Trailers.Candidates
+    '---------------------------------------------------------------------------
+    function Candidates(item as dynamic, localItems as dynamic, server = "" as string) as object
+        result = []
+        seen = {}
+        seen.SetModeCaseSensitive()
+        if type(localItems) = "roArray" then
+            for each entry in localItems
+                if type(entry) = "roAssociativeArray" then
+                    id = Strings.ToString(entry.Id)
+                    if id <> "" and not seen.DoesExist("local:" + id) then
+                        seen["local:" + id] = true
+                        title = Strings.ToString(entry.Name, "Local trailer")
+                        if Strings.Trim(title) = "" then title = "Local trailer"
+                        if type(entry.MediaSources) = "roArray" then
+                            for each trailerMediaSource in entry.MediaSources
+                                if type(trailerMediaSource) = "roAssociativeArray" then
+                                    mediaSourceTitle = Strings.Trim(trailerMediaSource.Name)
+                                    if mediaSourceTitle <> "" then
+                                        title = mediaSourceTitle
+                                        exit for
+                                    end if
+                                end if
+                            end for
+                        end if
+                        thumbnail = ""
+                        if entry.ImageTags <> invalid and entry.ImageTags.Primary <> invalid then thumbnail = Url.BuildImageUrl(server, id, JellyfinImage.Type.Primary, Strings.ToString(entry.ImageTags.Primary), 320, 180)
+                        result.Push({ key: "local:" + id, source: Source.Local, item: entry, title: title, thumbnail: thumbnail })
+                    end if
+                end if
+            end for
+        end if
+        if type(item) <> "roAssociativeArray" then return result
+        if type(item.RemoteTrailers) <> "roArray" then return result
+        for each entry in item.RemoteTrailers
+            if type(entry) = "roAssociativeArray" then
+                id = VideoId(entry.Url)
+                if id <> "" and not seen.DoesExist("youtube:" + id) then
+                    seen["youtube:" + id] = true
+                    title = Strings.Trim(entry.Name)
+                    if title = "" then title = "YouTube trailer"
+                    result.Push({ key: "youtube:" + id, source: Source.YouTube, videoId: id, title: title, thumbnail: "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg" })
+                end if
+            end if
+        end for
+        return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Trailers.GetCount
+    '---------------------------------------------------------------------------
+    function GetCount(item as dynamic) as integer
+        if type(item) <> "roAssociativeArray" then return 0
+        localCount = Number.ToInteger(item.LocalTrailerCount, 0)
+        if localCount < 0 then localCount = 0
+        return localCount + Candidates(item, []).Count()
+    end function
+
+    '---------------------------------------------------------------------------
+    ' Trailers.OverlayRequest
+    '---------------------------------------------------------------------------
+    function OverlayRequest(item as object, session as object, sourcePage as string) as object
+        return { id: Overlay.Picker, componentName: "TrailerDialog", openFunction: "openTrailers", closeField: "closeRequested", sourcePage: sourcePage, trailerRequest: { item: item, server: session.server, token: session.token, userId: session.userId } }
+    end function
+end namespace

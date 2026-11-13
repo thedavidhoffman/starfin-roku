@@ -1,0 +1,146 @@
+import "pkg:/source/Remote.bs"
+import "pkg:/source/SpinnerControl.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/TrailerPlaybackResult.bs"
+import "pkg:/source/MediaControl.bs"
+import "pkg:/source/TimerControl.bs"
+import "pkg:/source/VideoPlayerState.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.log = new Logger("TrailerPlayback", m.global.logService)
+    m.top.visible = false
+    initReferences()
+    m.playback = { active: false, language: "", hasStarted: false, playbackId: 0 }
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.nodes = { video: m.top.findNode("video"), loading: m.top.findNode("loading"), timeout: m.top.findNode("timeout") }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.nodes.video.observeField("state", "onVideoState")
+    m.nodes.video.observeField("availableAudioTracks", "selectOriginalAudio")
+    m.nodes.timeout.observeField("fire", "onTimeout")
+end sub
+
+'-------------------------------------------------------------------------------
+' playStream
+'-------------------------------------------------------------------------------
+sub playStream(stream as object, session as dynamic, playbackId = 0 as integer)
+    stopPlayback()
+    if session <> invalid then
+        content = JellyfinAuth.CreateContent(session.server, stream.streamUrl, session.token, session.userId)
+    else
+        content = CreateObject("roSGNode", "ContentNode")
+        content.url = stream.streamUrl
+        content.HttpHeaders = []
+    end if
+    m.log.write("Starting playbackId=" + playbackId.ToStr() + " stream container=" + Strings.ToString(stream.streamFormat) + " local=" + (session <> invalid).ToStr() + " advertisedHeight=" + Strings.ToString(stream.height) + " timeoutSeconds=20")
+    content.streamFormat = stream.streamFormat
+    m.playback = { active: true, language: Strings.ToString(stream.audioLanguage), hasStarted: false, playbackId: playbackId }
+    m.nodes.video.content = content
+    m.nodes.loading.control = SpinnerControl.Command.Start
+    m.top.visible = true
+    ' Keep focus on this Group so native Video controls cannot pause or seek.
+    m.top.setFocus(true)
+    m.nodes.timeout.control = TimerControl.Command.Start
+    m.nodes.video.control = MediaControl.Command.Play
+end sub
+
+'-------------------------------------------------------------------------------
+' stopPlayback
+'-------------------------------------------------------------------------------
+sub stopPlayback()
+    if m.playback.active then m.log.write("Stopping video hasStarted=" + Strings.ToString(m.playback.hasStarted))
+    m.playback.active = false
+    m.playback.playbackId = invalid
+    m.nodes.loading.control = SpinnerControl.Command.Stop
+    m.nodes.timeout.control = TimerControl.Command.Stop
+    m.nodes.video.control = MediaControl.Command.Stop
+    m.nodes.video.content = invalid
+    m.top.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' selectOriginalAudio
+'-------------------------------------------------------------------------------
+sub selectOriginalAudio()
+    if not m.playback.active then return
+    tracks = m.nodes.video.availableAudioTracks
+    if tracks = invalid then return
+    if m.playback.language = "" then return
+    named = ""
+    spoken = ""
+    for each track in tracks
+        name = LCase(Strings.ToString(track.Name))
+        language = Strings.ToString(track.Language)
+        if Instr(1, name, "original") > 0 then named = Strings.ToString(track.Track)
+        if LCase(Left(language, 2)) = LCase(Left(m.playback.language, 2)) then spoken = Strings.ToString(track.Track)
+    end for
+    selected = spoken
+    if named <> "" then selected = named
+    if selected <> "" and m.nodes.video.audioTrack <> selected then m.nodes.video.audioTrack = selected
+end sub
+
+'-------------------------------------------------------------------------------
+' onVideoState
+'-------------------------------------------------------------------------------
+sub onVideoState(event = invalid as dynamic)
+    if not m.playback.active then return
+    state = m.nodes.video.state
+    if event <> invalid then state = event.getData()
+    m.log.write("Video state=" + state + " hasStarted=" + Strings.ToString(m.playback.hasStarted))
+    if state = VideoPlayerState.Value.Playing then
+        m.playback.hasStarted = true
+        m.nodes.timeout.control = TimerControl.Command.Stop
+        m.nodes.loading.control = SpinnerControl.Command.Stop
+        selectOriginalAudio()
+    else if state = VideoPlayerState.Value.Buffering then
+        m.nodes.timeout.control = TimerControl.Command.Start
+        m.nodes.loading.control = SpinnerControl.Command.Start
+    else if state = VideoPlayerState.Value.Finished then
+        finishPlayback("", TrailerPlaybackResult.Reason.Completed)
+    else if state = VideoPlayerState.Value.Error then
+        m.log.error("Video error code=" + Strings.ToString(m.nodes.video.errorCode))
+        finishPlayback("This trailer could not be played. Select it to try again.", TrailerPlaybackResult.Reason.Failed)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onTimeout
+'-------------------------------------------------------------------------------
+sub onTimeout()
+    if not m.playback.active then return
+    m.log.error("Playback timeout hasStarted=" + Strings.ToString(m.playback.hasStarted))
+    finishPlayback("Trailer playback timed out. Select it to try again.", TrailerPlaybackResult.Reason.Failed)
+end sub
+
+'-------------------------------------------------------------------------------
+' finishPlayback
+'-------------------------------------------------------------------------------
+sub finishPlayback(message as string, reason as string)
+    if not m.playback.active then return
+    m.log.write("Playback ended reason=" + reason + " playbackId=" + Strings.ToString(m.playback.playbackId) + " hasStarted=" + Strings.ToString(m.playback.hasStarted))
+    result = { message: message, reason: reason, hasStarted: m.playback.hasStarted, playbackId: m.playback.playbackId }
+    stopPlayback()
+    m.top.ended = result
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = Remote.Key.Back then finishPlayback("", TrailerPlaybackResult.Reason.Cancelled)
+    return true
+end function

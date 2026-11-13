@@ -1,0 +1,336 @@
+namespace tests
+
+    @SGNode("TrailerDialog")
+    @suite("Trailer dialog")
+    class TrailerdialogTests extends rooibos.BaseTestSuite
+
+        protected override function afterEach()
+            m.top.callFunc("deactivateTrailers")
+        end function
+
+        @describe("catalog to playback lifecycle")
+
+        @it("loads using explicit context with the frame hidden and spinner active")
+        function _()
+            m.open()
+            request = getGlobalAa().trailerTaskRequests[0].request
+
+            m.assertEqual(request.itemId, "parent")
+            m.assertEqual(request.token, "token")
+            m.assertFalse(m.top.findNode("dialog").visible)
+            m.assertEqual(m.node.trailer.loadingIndicator.control, "start")
+            m.assertTrue(m.node.trailer.content.busy)
+        end function
+
+        @it("opens the picker for multiple candidates")
+        function _()
+            m.catalog(m.candidates())
+
+            m.assertEqual(m.node.trailer.state, "choosing")
+            m.assertTrue(m.top.findNode("dialog").visible)
+            m.assertEqual(m.node.trailer.loadingIndicator.control, "stop")
+            m.assertFalse(m.node.trailer.content.busy)
+            m.assertTrue(m.node.trailer.content.hasFocus())
+        end function
+
+        @it("shrinks and centers the picker for two trailers")
+        function _()
+            m.catalog(m.candidates())
+
+            m.assertEqual(m.top.dialogHeight, 628)
+            m.assertEqual(m.node.panel.height, 628)
+            m.assertEqual(m.node.panel.translation, [420, 226])
+            m.assertTrue(m.node.trailer.content.findNode("row1").visible)
+            m.assertFalse(m.node.trailer.content.findNode("row2").visible)
+            m.assertFalse(m.node.trailer.content.findNode("position").visible)
+        end function
+
+        @it("keeps the full picker height for three trailers")
+        function _()
+            entries = m.candidates()
+            entries.Push({ key: "youtube:third", source: "youtube", videoId: "third", title: "Third trailer", thumbnail: "" })
+
+            m.catalog(entries)
+
+            m.assertEqual(m.top.dialogHeight, 840)
+            m.assertEqual(m.node.panel.height, 840)
+            m.assertEqual(m.node.panel.translation, [420, 120])
+            m.assertTrue(m.node.trailer.content.findNode("row2").visible)
+        end function
+
+        @it("starts a single trailer without showing a picker")
+        function _()
+            entries = m.candidates()
+            m.catalog([entries[0]])
+
+            m.assertEqual(m.node.trailer.state, "resolving")
+            m.assertFalse(m.top.findNode("dialog").visible)
+            m.assertTrue(m.node.trailer.directPlayback)
+            m.assertEqual(m.node.trailer.content.statusText, "")
+            m.assertEqual(getGlobalAa().trailerTaskRequests.Peek().name, "TrailerResolveTask")
+        end function
+
+        @it("returns multi-trailer playback to the retained selection through real child events")
+        function _()
+            m.catalog(m.candidates())
+            m.node.trailer.content.itemSelected = 1
+            m.deliverYouTube()
+            coordinator = m.node.trailer.activePlayer
+            videoNode = coordinator.getChild(0).findNode("video")
+            videoNode.state = "playing"
+            videoNode.state = "finished"
+
+            m.assertEqual(m.node.trailer.state, "choosing")
+            m.assertEqual(m.node.trailer.content.selectedIndex, 1)
+            m.assertEqual(m.node.trailer.content.items.Count(), 2)
+            m.assertEqual(m.top.dialogHeight, 628)
+            m.assertTrue(m.node.trailer.content.hasFocus())
+            m.assertFalse(m.top.closeRequested)
+            m.assertInvalid(m.node.trailer.activePlayer)
+        end function
+
+        @it("closes a single trailer after production playback completion")
+        function _()
+            entries = m.candidates()
+            m.catalog([entries[0]])
+            m.deliverYouTube()
+            m.node.trailer.activePlayer.getChild(0).findNode("video").state = "finished"
+
+            m.assertTrue(m.top.closeRequested)
+            m.assertEqual(m.node.trailer.state, "closed")
+            m.assertFalse(m.top.findNode("dialog").visible)
+            m.assertEqual(m.node.trailer.loadingIndicator.control, "stop")
+        end function
+
+        @it("cancels discovery and ignores its late catalog response")
+        function _()
+            m.open()
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event({ requestId: 1, ok: true, items: m.candidates() }))
+
+            m.assertEqual(m.node.trailer.state, "closed")
+            m.assertInvalid(m.node.trailer.activePlayer)
+            m.assertEqual(m.node.trailer.loadingIndicator.control, "stop")
+        end function
+
+        @it("cancels single-trailer resolution without showing the picker")
+        function _()
+            entries = m.candidates()
+            m.catalog([entries[0]])
+            requestId = m.node.trailer.generation
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+            'bs:disable-next-line 1140
+            onYouTubeResponse(m.event({ requestId: requestId, ok: false }))
+
+            m.assertTrue(m.top.closeRequested)
+            m.assertEqual(m.top.errorMessage, "")
+            m.assertFalse(m.top.findNode("dialog").visible)
+        end function
+
+        @it("cancels multi-trailer resolution and preserves picker selection")
+        function _()
+            m.catalog(m.candidates())
+            m.node.trailer.content.itemSelected = 1
+            requestId = m.node.trailer.generation
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+            'bs:disable-next-line 1140
+            onYouTubeResponse(m.event({ requestId: requestId, ok: true, candidates: [] }))
+
+            m.assertEqual(m.node.trailer.state, "choosing")
+            m.assertEqual(m.node.trailer.content.selectedIndex, 1)
+            m.assertInvalid(m.node.trailer.activePlaybackId)
+            m.assertEqual(m.node.trailer.loadingIndicator.control, "stop")
+        end function
+
+        @it("returns single-trailer failure through the overlay close result")
+        function _()
+            entries = m.candidates()
+            m.catalog([entries[0]])
+            'bs:disable-next-line 1140
+            onYouTubeResponse(m.event({ requestId: m.node.trailer.generation, ok: false }))
+
+            m.assertTrue(m.top.closeRequested)
+            m.assertTrue(m.top.errorMessage <> "")
+            m.assertFalse(m.top.findNode("dialog").visible)
+        end function
+
+        @it("reports multi-trailer failure after restoring picker focus")
+        function _()
+            m.catalog(m.candidates())
+            m.node.trailer.content.itemSelected = 1
+            'bs:disable-next-line 1140
+            onYouTubeResponse(m.event({ requestId: m.node.trailer.generation, ok: false }))
+
+            m.assertEqual(m.node.trailer.state, "choosing")
+            m.assertTrue(m.node.trailer.content.hasFocus())
+            m.assertTrue(getGlobalAa().trailerMessage <> "")
+        end function
+
+        @it("keeps partial results without autoplay after catalog failure")
+        function _()
+            entries = m.candidates()
+            m.catalog([entries[0]], false)
+
+            m.assertEqual(m.node.trailer.state, "choosing")
+            m.assertFalse(m.node.trailer.directPlayback)
+            m.assertTrue(getGlobalAa().trailerMessage <> "")
+        end function
+
+        @it("keeps title metadata current without moving selection")
+        function _()
+            m.catalog(m.candidates())
+            m.node.trailer.content.selectedIndex = 1
+            'bs:disable-next-line 1140
+            onMetadataResponse(m.event({ requestId: 1, key: "youtube:abcdefghijk", title: "Official trailer" }))
+
+            m.assertEqual(m.node.trailer.content.findNode("row0").findNode("title").text, "Official trailer")
+            m.assertEqual(m.node.trailer.content.selectedIndex, 1)
+        end function
+
+        @it("negotiates local trailers from zero without parent progress")
+        function _()
+            m.catalog(m.localCandidates())
+            m.node.trailer.content.itemSelected = 0
+            request = getGlobalAa().trailerTaskRequests.Peek().request
+
+            m.assertEqual(request.itemId, "local")
+            m.assertEqual(request.startPositionTicks, 0)
+            m.assertEqual(request.subtitleStreamIndex, -1)
+            m.assertInvalid(request.playbackQueue)
+        end function
+
+        @it("creates a fresh local player and a new identity for replay")
+        function _()
+            m.startLocal()
+            previousPlayer = m.node.trailer.activePlayer
+            previousId = m.node.trailer.activePlaybackId
+            previousPlayer.findNode("video").state = "finished"
+            m.node.trailer.content.itemSelected = 0
+            m.deliverLocal()
+            previousPlayer.findNode("video").state = "error"
+
+            m.assertEqual(m.node.trailer.state, "playing")
+            m.assertFalse(m.node.trailer.activePlayer.isSameNode(previousPlayer))
+            m.assertTrue(m.node.trailer.activePlaybackId > previousId)
+            m.assertEqual(previousPlayer.findNode("video").control, "stop")
+        end function
+
+        @it("rejects a stale completion identity from the current player")
+        function _()
+            m.startLocal()
+            m.node.trailer.activePlayer.ended = { playbackId: m.node.trailer.activePlaybackId - 1, message: "", reason: "completed" }
+
+            m.assertEqual(m.node.trailer.state, "playing")
+            m.assertEqual(getGlobalAa().trailerCleanupSessions.Count(), 0)
+        end function
+
+        @it("rejects a matching identity from an obsolete player")
+        function _()
+            m.startLocal()
+            previousPlayer = m.node.trailer.activePlayer
+            previousPlayer.findNode("video").state = "finished"
+            m.node.trailer.content.itemSelected = 0
+            m.deliverLocal()
+            'bs:disable-next-line 1140
+            onTrailerEnded(m.event({ playbackId: m.node.trailer.activePlaybackId, message: "" }, previousPlayer))
+
+            m.assertEqual(m.node.trailer.state, "playing")
+            m.assertEqual(getGlobalAa().trailerCleanupSessions.Count(), 1)
+        end function
+
+        @it("cleans local encoding exactly once across completion and repeated teardown")
+        function _()
+            m.startLocal()
+            previousPlayer = m.node.trailer.activePlayer
+            previousId = m.node.trailer.activePlaybackId
+            previousPlayer.findNode("video").state = "finished"
+            'bs:disable-next-line 1140
+            onTrailerEnded(m.event({ playbackId: previousId, message: "" }, previousPlayer))
+            m.top.callFunc("deactivateTrailers")
+            m.top.callFunc("deactivateTrailers")
+
+            m.assertEqual(getGlobalAa().trailerCleanupSessions.Count(), 1)
+            m.assertEqual(m.node.trailer.loadingIndicator.control, "stop")
+            m.assertEqual(previousPlayer.findNode("loading").control, "stop")
+            m.assertInvalid(m.node.trailer.activePlayer)
+        end function
+
+        @it("returns playback cancellation through the wired child event")
+        function _()
+            m.startLocal()
+            previousPlayer = m.node.trailer.activePlayer
+            previousPlayer.ended = { playbackId: m.node.trailer.activePlaybackId, message: "", reason: "cancelled", hasStarted: false }
+
+            m.assertEqual(m.node.trailer.state, "choosing")
+            m.assertEqual(getGlobalAa().trailerCleanupSessions.Count(), 1)
+            m.assertEqual(previousPlayer.findNode("video").control, "stop")
+        end function
+
+        private sub open()
+            m.top.callFunc("deactivateTrailers")
+            m.top.closeRequested = false
+            m.top.trailerRequest = { item: { Id: "parent" }, server: "https://server", token: "token", userId: "user" }
+            getGlobalAa().trailerTaskRequests = []
+            getGlobalAa().trailerMessage = ""
+            getGlobalAa().trailerCleanupSessions = []
+            'bs:disable-next-line 1001
+            m.stubCall(startTrailerTask, function(name, request, handler)
+                getGlobalAa().trailerTaskRequests.Push({ name: name, request: request })
+                return CreateObject("roSGNode", "TrailerResolveTask")
+            end function)
+            'bs:disable-next-line 1001
+            m.stubCall(stopLocalEncoding, sub(playSessionId)
+                getGlobalAa().trailerCleanupSessions.Push(playSessionId)
+            end sub)
+            m.stubCall(AppMessage.Dismiss, invalid)
+            m.stubCall(AppMessage.Show, sub(message, title)
+                getGlobalAa().trailerMessage = message
+            end sub)
+            m.top.callFunc("openTrailers")
+        end sub
+
+        private sub catalog(entries as object, ok = true as boolean)
+            m.open()
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event({ requestId: 1, ok: ok, items: entries }))
+        end sub
+
+        private sub deliverYouTube()
+            'bs:disable-next-line 1140
+            onYouTubeResponse(m.event({ requestId: m.node.trailer.generation, ok: true, candidates: [{ streamUrl: "https://video/1080", streamFormat: "mp4", height: 1080 }] }))
+        end sub
+
+        private sub deliverLocal()
+            'bs:disable-next-line 1140
+            onLocalResponse(m.event({ requestId: m.node.trailer.generation, ok: true, streamUrl: "https://server/video", streamFormat: "mp4", playSessionId: "session" }))
+        end sub
+
+        private sub startLocal()
+            m.catalog(m.localCandidates())
+            m.node.trailer.content.itemSelected = 0
+            m.deliverLocal()
+        end sub
+
+        private function event(value as dynamic, owner = invalid as dynamic) as object
+            return { value: value, owner: owner, getData: function()
+                return m.value
+            end function, getRoSGNode: function()
+                return m.owner
+            end function }
+        end function
+
+        private function candidates() as object
+            return [{ key: "youtube:abcdefghijk", source: "youtube", videoId: "abcdefghijk", title: "One", thumbnail: "" }, { key: "youtube:12345678901", source: "youtube", videoId: "12345678901", title: "Two", thumbnail: "" }]
+        end function
+
+        private function localCandidates() as object
+            return [{ key: "local:local", source: "local", item: { Id: "local", UserData: { PlaybackPositionTicks: 999 } }, title: "Local", thumbnail: "" }, m.candidates()[0]]
+        end function
+
+    end class
+
+end namespace

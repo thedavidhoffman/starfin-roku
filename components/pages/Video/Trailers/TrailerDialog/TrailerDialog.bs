@@ -1,0 +1,321 @@
+import "pkg:/source/Trailers.bs"
+import "pkg:/source/TaskControl.bs"
+import "pkg:/source/AsyncLifecycle.bs"
+import "pkg:/source/PlaybackMode.bs"
+import "pkg:/source/SubtitleSelection.bs"
+import "pkg:/source/AppMessage.bs"
+import "pkg:/source/Remote.bs"
+import "pkg:/source/SpinnerControl.bs"
+'-------------------------------------------------------------------------------
+' openTrailers
+'-------------------------------------------------------------------------------
+sub openTrailers()
+    m.top.title = "Trailers"
+    m.top.errorMessage = ""
+    m.top.dialogWidth = 1080
+    m.top.dialogHeight = 840
+    m.top.showButtons = false
+    m.top.closeOnContentSelected = false
+    m.top.contentComponentName = "TrailerContent"
+    m.trailer = {
+        directPlayback: false
+        loadingIndicator: m.top.findNode("trailerSpinner")
+        state: invalid
+        activePlaybackId: invalid
+        generation: 0
+        catalogGeneration: 0
+        lifecycle: AsyncLifecycle.Create()
+        items: []
+        tasks: []
+        metadata: invalid
+        localStream: invalid
+        pending: invalid
+        content: m.top.callFunc("getContentComponent")
+        youtubePlayer: m.top.findNode("youtubePlayback")
+        activePlayer: invalid
+    }
+    m.trailer.content.observeFieldScoped("itemSelected", "onTrailerSelected")
+    m.trailer.content.observeFieldScoped("retryRequested", "loadTrailers")
+    m.trailer.youtubePlayer.observeFieldScoped("ended", "onTrailerEnded")
+    loadTrailers()
+end sub
+
+'-------------------------------------------------------------------------------
+' loadTrailers
+'-------------------------------------------------------------------------------
+sub loadTrailers()
+    transitionTrailer(Trailers.State.Loading)
+    m.trailer.generation += 1
+    AsyncLifecycle.Begin(m.trailer.lifecycle, m.trailer.generation)
+    m.trailer.catalogGeneration = m.trailer.generation
+    request = m.top.trailerRequest
+    startTrailerTask("TrailerCatalogTask", { requestId: m.trailer.generation, server: request.server, token: request.token, userId: request.userId, item: request.item, itemId: request.item.Id }, "onCatalogResponse")
+end sub
+
+'-------------------------------------------------------------------------------
+' startTrailerTask
+'-------------------------------------------------------------------------------
+function startTrailerTask(componentName as string, request as object, handler as string) as object
+    activeTasks = []
+    for each previous in m.trailer.tasks
+        ' Keep the current metadata observer until closure, including queued final rows.
+        isMetadata = false
+        if m.trailer.metadata <> invalid then isMetadata = previous.isSameNode(m.trailer.metadata)
+        if not isMetadata and (previous.state = TaskControl.State.Done or previous.state = TaskControl.State.Stopped) then
+            previous.unobserveFieldScoped("response")
+        else
+            activeTasks.Push(previous)
+        end if
+    end for
+    m.trailer.tasks = activeTasks
+    task = CreateObject("roSGNode", componentName)
+    task.request = request
+    task.observeFieldScoped("response", handler)
+    m.trailer.tasks.Push(task)
+    task.control = TaskControl.Command.Run
+    return task
+end function
+
+'-------------------------------------------------------------------------------
+' onCatalogResponse
+'-------------------------------------------------------------------------------
+sub onCatalogResponse(event as object)
+    response = event.getData()
+    if not AsyncLifecycle.IsCurrentResponse(m.trailer.lifecycle, response, "requestId") then return
+    AsyncLifecycle.Deactivate(m.trailer.lifecycle)
+    m.trailer.items = response.items
+    if m.trailer.items = invalid then m.trailer.items = []
+    if m.trailer.items.Count() = 2 then
+        ' Remove one row's 212px pitch while retaining the existing frame padding.
+        m.top.dialogHeight = 628
+    else
+        m.top.dialogHeight = 840
+    end if
+    m.trailer.content.items = m.trailer.items
+    if response.ok <> true then
+        transitionTrailer(Trailers.State.Choosing)
+        AppMessage.Show("Local trailers could not be loaded. Close and reopen Trailers to retry.")
+        return
+    end if
+    m.trailer.directPlayback = m.trailer.items.Count() = 1
+    if m.trailer.directPlayback then
+        playTrailer(0)
+    else
+        transitionTrailer(Trailers.State.Choosing)
+        m.trailer.metadata = startTrailerTask("TrailerMetadataTask", { requestId: m.trailer.generation, items: m.trailer.items }, "onMetadataResponse")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onMetadataResponse
+'-------------------------------------------------------------------------------
+sub onMetadataResponse(event as object)
+    response = event.getData()
+    ' Metadata belongs to the dialog generation, not the current playback attempt.
+    if m.trailer.state = Trailers.State.Closed or response.requestId <> m.trailer.catalogGeneration then return
+    m.trailer.content.callFunc("updateMetadata", response)
+end sub
+
+'-------------------------------------------------------------------------------
+' onTrailerSelected
+'-------------------------------------------------------------------------------
+sub onTrailerSelected(event as object)
+    if m.trailer.state <> Trailers.State.Choosing then return
+    playTrailer(event.getData())
+end sub
+
+'-------------------------------------------------------------------------------
+' playTrailer
+'-------------------------------------------------------------------------------
+sub playTrailer(index as integer)
+    if index < 0 or index >= m.trailer.items.Count() then return
+    AppMessage.Dismiss()
+    m.trailer.content.selectedIndex = index
+    item = m.trailer.items[index]
+    m.trailer.generation += 1
+    m.trailer.activePlaybackId = m.trailer.generation
+    transitionTrailer(Trailers.State.Resolving)
+    AsyncLifecycle.Begin(m.trailer.lifecycle, m.trailer.generation)
+    if item.source = Trailers.Source.YouTube then
+        m.trailer.pending = startTrailerTask("TrailerResolveTask", { requestId: m.trailer.generation, videoId: item.videoId }, "onYouTubeResponse")
+    else
+        session = m.top.trailerRequest
+        request = { requestId: m.trailer.generation, server: session.server, token: session.token, userId: session.userId, itemId: item.item.Id, item: item.item, startPositionTicks: 0, videoMode: PlaybackMode.Mode.Automatic, subtitleStreamIndex: SubtitleSelection.None }
+        m.trailer.pending = startTrailerTask("VideoPlaybackInfoTask", request, "onLocalResponse")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onYouTubeResponse
+'-------------------------------------------------------------------------------
+sub onYouTubeResponse(event as object)
+    response = event.getData()
+    if not AsyncLifecycle.IsCurrentResponse(m.trailer.lifecycle, response, "requestId") then return
+    AsyncLifecycle.Deactivate(m.trailer.lifecycle)
+    if response.ok <> true then
+        returnFromTrailer("This YouTube trailer is unavailable. Select it to try again, or choose another trailer.")
+        return
+    end if
+    m.trailer.activePlayer = m.trailer.youtubePlayer
+    transitionTrailer(Trailers.State.Playing)
+    m.trailer.activePlayer.callFunc("playCandidates", response.candidates, m.trailer.activePlaybackId)
+end sub
+
+'-------------------------------------------------------------------------------
+' onLocalResponse
+'-------------------------------------------------------------------------------
+sub onLocalResponse(event as object)
+    response = event.getData()
+    if not AsyncLifecycle.IsCurrentResponse(m.trailer.lifecycle, response, "requestId") then return
+    AsyncLifecycle.Deactivate(m.trailer.lifecycle)
+    if response.ok <> true then
+        returnFromTrailer("This local trailer could not be loaded. Select it to try again.")
+        return
+    end if
+    m.trailer.localStream = response
+    m.trailer.activePlayer = CreateObject("roSGNode", "TrailerPlayback")
+    m.top.appendChild(m.trailer.activePlayer)
+    m.trailer.activePlayer.observeFieldScoped("ended", "onTrailerEnded")
+    transitionTrailer(Trailers.State.Playing)
+    m.trailer.activePlayer.callFunc("playStream", response, m.top.trailerRequest, m.trailer.activePlaybackId)
+end sub
+
+'-------------------------------------------------------------------------------
+' onTrailerEnded
+'-------------------------------------------------------------------------------
+sub onTrailerEnded(event as object)
+    if m.trailer.state <> Trailers.State.Playing then return
+    if m.trailer.activePlayer = invalid or m.trailer.activePlaybackId = invalid then return
+    result = event.getData()
+    if result.playbackId <> m.trailer.activePlaybackId then return
+    if not event.getRoSGNode().isSameNode(m.trailer.activePlayer) then return
+    returnFromTrailer(result.message)
+end sub
+
+'-------------------------------------------------------------------------------
+' returnFromTrailer
+'-------------------------------------------------------------------------------
+sub returnFromTrailer(message as string)
+    releaseTrailerStream()
+    if m.trailer.directPlayback then
+        if message <> "" then m.top.errorMessage = "This trailer could not be played. Select Trailer to try again."
+        m.top.callFunc("closeDialog")
+    else
+        transitionTrailer(Trailers.State.Choosing)
+        if message <> "" then AppMessage.Show(message)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' transitionTrailer
+'-------------------------------------------------------------------------------
+sub transitionTrailer(nextState as string)
+    m.trailer.state = nextState
+    isChoosing = nextState = Trailers.State.Choosing
+    isLoading = nextState = Trailers.State.Loading or nextState = Trailers.State.Resolving
+    m.dialog.visible = isChoosing or (nextState = Trailers.State.Resolving and not m.trailer.directPlayback)
+    m.trailer.content.busy = not isChoosing
+    m.trailer.content.statusText = ""
+    if isChoosing and m.trailer.items.Count() = 0 then m.trailer.content.statusText = "No trailers available. Press OK to retry, or Back to close."
+    if isLoading then
+        m.trailer.loadingIndicator.control = SpinnerControl.Command.Start
+    else
+        m.trailer.loadingIndicator.control = SpinnerControl.Command.Stop
+    end if
+    m.top.callFunc("focusContent")
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseTrailerStream
+'-------------------------------------------------------------------------------
+sub releaseTrailerStream()
+    previousPlayer = m.trailer.activePlayer
+    previousStream = m.trailer.localStream
+    ' Clear ownership before stop can emit queued or synchronous completion events.
+    m.trailer.activePlayer = invalid
+    m.trailer.activePlaybackId = invalid
+    m.trailer.localStream = invalid
+    if previousPlayer <> invalid then
+        isYouTube = previousPlayer.isSameNode(m.trailer.youtubePlayer)
+        if not isYouTube then previousPlayer.unobserveFieldScoped("ended")
+        previousPlayer.callFunc("stopPlayback")
+        if not isYouTube then m.top.removeChild(previousPlayer)
+    end if
+    if previousStream <> invalid then stopLocalEncoding(Strings.ToString(previousStream.playSessionId))
+end sub
+
+'-------------------------------------------------------------------------------
+' stopLocalEncoding
+'-------------------------------------------------------------------------------
+sub stopLocalEncoding(playSessionId as string)
+    if playSessionId = "" then return
+    session = m.top.trailerRequest
+    cleanup = CreateObject("roSGNode", "TrailerCleanupTask")
+    cleanup.request = { server: session.server, token: session.token, playSessionId: playSessionId }
+    cleanup.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivateTrailers
+'-------------------------------------------------------------------------------
+sub deactivateTrailers()
+    if m.trailer = invalid then return
+    if m.trailer.state = Trailers.State.Closed then return
+    transitionTrailer(Trailers.State.Closed)
+    AsyncLifecycle.Deactivate(m.trailer.lifecycle)
+    for each task in m.trailer.tasks
+        task.unobserveFieldScoped("response")
+        task.control = TaskControl.Command.Stop
+    end for
+    m.trailer.tasks = []
+    m.trailer.metadata = invalid
+    m.trailer.pending = invalid
+    m.trailer.content.unobserveFieldScoped("itemSelected")
+    m.trailer.content.unobserveFieldScoped("retryRequested")
+    m.trailer.youtubePlayer.unobserveFieldScoped("ended")
+    releaseTrailerStream()
+end sub
+
+'-------------------------------------------------------------------------------
+' onCloseRequested
+'-------------------------------------------------------------------------------
+sub onCloseRequested()
+    deactivateTrailers()
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = Remote.Key.Back then
+        if m.trailer.state = Trailers.State.Resolving then
+            AsyncLifecycle.Deactivate(m.trailer.lifecycle)
+            if m.trailer.pending <> invalid then
+                m.trailer.pending.unobserveFieldScoped("response")
+                m.trailer.pending.control = TaskControl.Command.Stop
+                m.trailer.pending = invalid
+            end if
+            returnFromTrailer("")
+        else
+            m.top.callFunc("closeDialog")
+        end if
+    end if
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' focusContent
+'-------------------------------------------------------------------------------
+function focusContent() as boolean
+    if m.trailer = invalid then return false
+    if m.trailer.state = Trailers.State.Closed then return false
+    if m.trailer.state = Trailers.State.Playing then
+        m.trailer.activePlayer.setFocus(true)
+    else if m.trailer.state = Trailers.State.Choosing then
+        m.trailer.content.setFocus(true)
+    else
+        m.top.setFocus(true)
+    end if
+    return true
+end function

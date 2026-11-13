@@ -1,0 +1,188 @@
+namespace tests
+
+    @suite("Trailer catalog helpers")
+    class TrailercataloghelpersTests extends rooibos.BaseTestSuite
+
+        @describe("observable behavior")
+
+        @it("parses watch")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://www.youtube.com/watch?v=abcdefghijk&t=5"), "abcdefghijk")
+        end function
+
+        @it("parses short link")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://youtu.be/abcdefghijk?si=x"), "abcdefghijk")
+        end function
+
+        @it("parses embed")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://www.youtube-nocookie.com/embed/abcdefghijk"), "abcdefghijk")
+        end function
+
+        @it("parses shorts")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://youtube.com/shorts/abcdefghijk"), "abcdefghijk")
+        end function
+
+        @it("parses mobile")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://m.youtube.com/watch?x=1&v=abcdefghijk"), "abcdefghijk")
+        end function
+
+        @it("parses lookalike host")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://youtube.com.evil.test/watch?v=abcdefghijk"), "")
+        end function
+
+        @it("parses userinfo host")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://youtube.com@evil.test/watch?v=abcdefghijk"), "")
+        end function
+
+        @it("parses short ID")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://youtu.be/abc"), "")
+        end function
+
+        @it("parses long ID")
+        function _()
+            m.assertEqual(Trailers.VideoId("https://youtube.com/watch?v=abcdefghijkl"), "")
+        end function
+
+        @it("parses unsupported scheme")
+        function _()
+            m.assertEqual(Trailers.VideoId("javascript:youtube.com/watch?v=abcdefghijk"), "")
+        end function
+
+        @it("keeps local trailers first and deduplicates each source")
+        function _()
+            item = { RemoteTrailers: [{ Url: "https://youtu.be/abcdefghijk" }, { Url: "https://youtube.com/watch?v=abcdefghijk" }] }
+            localItems = [{ Id: "local", Name: "Teaser" }, { Id: "local" }]
+            items = Trailers.Candidates(item, localItems)
+
+            m.assertEqual(items.Count(), 2)
+            m.assertEqual(items[0].source, "local")
+            m.assertEqual(items[0].title, "Teaser")
+            m.assertEqual(items[1].source, "youtube")
+        end function
+
+        @it("prefers the local media source title over the root title")
+        function _()
+            localItems = [{ Id: "local", Name: "Blade Runner", MediaSources: [{ Name: "Blade Runner (1982) modern trailer" }] }]
+
+            candidates = Trailers.Candidates({}, localItems)
+
+            m.assertEqual(candidates[0].title, "Blade Runner (1982) modern trailer")
+        end function
+
+        @it("uses the first nonempty media source title in server order")
+        function _()
+            localItems = [{ Id: "local", Name: "Movie", MediaSources: [invalid, "bad", {}, { Name: "  " }, { Name: "  Modern trailer  " }, { Name: "Alternate" }] }]
+
+            candidates = Trailers.Candidates({}, localItems)
+
+            m.assertEqual(candidates[0].title, "Modern trailer")
+        end function
+
+        @it("falls back to the root title when media source names are empty")
+        function _()
+            localItems = [{ Id: "local", Name: "Teaser", MediaSources: [{ Name: " " }, {}] }]
+
+            candidates = Trailers.Candidates({}, localItems)
+
+            m.assertEqual(candidates[0].title, "Teaser")
+        end function
+
+        @it("falls back to the root title for malformed media sources")
+        function _()
+            candidates = Trailers.Candidates({}, [{ Id: "local", Name: "Teaser", MediaSources: "bad" }])
+
+            m.assertEqual(candidates[0].title, "Teaser")
+        end function
+
+        @it("uses the local trailer label when all titles are missing")
+        function _()
+            candidates = Trailers.Candidates({}, [{ Id: "local", Name: " ", MediaSources: [{}] }])
+
+            m.assertEqual(candidates[0].title, "Local trailer")
+        end function
+
+        @it("includes the local artwork tag and preview dimensions in its URL")
+        function _()
+            candidates = Trailers.Candidates({}, [{ Id: "local", ImageTags: { Primary: "image-v1" } }], "https://server/")
+
+            m.assertEqual(candidates[0].thumbnail, "https://server/Items/local/Images/Primary?tag=image-v1&maxWidth=320&maxHeight=180&quality=90")
+        end function
+
+        @it("changes the local thumbnail URL when the primary image tag changes")
+        function _()
+            before = Trailers.Candidates({}, [{ Id: "local", ImageTags: { Primary: "image-v1" } }], "https://server")
+            after = Trailers.Candidates({}, [{ Id: "local", ImageTags: { Primary: "image-v2" } }], "https://server")
+
+            m.assertTrue(before[0].thumbnail <> after[0].thumbnail)
+            m.assertTrue(Instr(1, after[0].thumbnail, "tag=image-v2") > 0)
+        end function
+
+        @it("leaves the thumbnail empty for placeholder rendering when primary artwork is missing")
+        function _()
+            candidates = Trailers.Candidates({}, [{ Id: "local", ImageTags: {} }], "https://server")
+
+            m.assertEqual(candidates[0].thumbnail, "")
+        end function
+
+        @it("leaves the thumbnail empty when image metadata is absent")
+        function _()
+            candidates = Trailers.Candidates({}, [{ Id: "local" }], "https://server")
+
+            m.assertEqual(candidates[0].thumbnail, "")
+        end function
+
+        @it("handles absent and malformed metadata")
+        function _()
+            m.assertEqual(Trailers.Candidates({ RemoteTrailers: [invalid, "bad", { Url: "https://example.com" }] }, invalid), [])
+        end function
+
+        @it("exposes local-only availability")
+        function _()
+            m.assertEqual(Trailers.GetCount({ LocalTrailerCount: 1 }), 1)
+        end function
+
+        @it("hides unsupported remote links")
+        function _()
+            m.assertEqual(Trailers.GetCount({ RemoteTrailers: [{ Url: "https://example.com/trailer" }] }), 0)
+        end function
+
+        @it("carries session context into the overlay request")
+        function _()
+            request = Trailers.OverlayRequest({ Id: "movie" }, { server: "https://server", token: "token", userId: "user" }, "movie")
+            m.assertEqual(request.id, "trailers")
+            m.assertEqual(request.trailerRequest.token, "token")
+            m.assertEqual(request.sourcePage, "movie")
+        end function
+
+        @it("counts local trailers and deduplicated supported YouTube links")
+        function _()
+            item = { LocalTrailerCount: 1, RemoteTrailers: [{ Url: "https://youtu.be/abcdefghijk" }, { Url: "https://www.youtube.com/watch?v=abcdefghijk" }, { Url: "https://example.com/trailer" }] }
+            m.assertEqual(Trailers.GetCount(item), 2)
+        end function
+
+        @it("counts a single YouTube trailer")
+        function _()
+            m.assertEqual(Trailers.GetCount({ RemoteTrailers: [{ Url: "https://youtu.be/abcdefghijk" }] }), 1)
+        end function
+
+        @it("keeps distinct YouTube IDs that differ only in case")
+        function _()
+            item = { RemoteTrailers: [{ Url: "https://youtu.be/abcdefghijk" }, { Url: "https://youtu.be/Abcdefghijk" }] }
+            candidates = Trailers.Candidates(item, [])
+
+            m.assertEqual(candidates.Count(), 2)
+            m.assertEqual(candidates[0].videoId, "abcdefghijk")
+            m.assertEqual(candidates[1].videoId, "Abcdefghijk")
+            m.assertEqual(Trailers.GetCount(item), 2)
+        end function
+
+    end class
+
+end namespace

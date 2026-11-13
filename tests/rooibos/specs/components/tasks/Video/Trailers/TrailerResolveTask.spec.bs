@@ -1,0 +1,81 @@
+namespace tests
+
+    @SGNode("TrailerResolveTask")
+    @suite("Trailer resolver task")
+    class TrailerresolvertaskTests extends rooibos.BaseTestSuite
+
+        @describe("request and response behavior")
+
+        @it("returns the selected stream and request identity")
+        function _()
+            m.stubCall(YouTubeTrailer.Resolve, [{ streamUrl: "https://video/stream", streamFormat: "hls", height: 1080 }])
+            m.top.request = { requestId: 4, videoId: "abcdefghijk" }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 4)
+            m.assertEqual(m.top.response.candidates[0].streamFormat, "hls")
+        end function
+
+        @it("publishes an unavailable result without a stream")
+        function _()
+            m.stubCall(YouTubeTrailer.Resolve, invalid)
+            m.top.request = { requestId: 5, videoId: "abcdefghijk" }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.candidates.Count(), 0)
+        end function
+
+        @it("publishes resolved HLS data through the SceneGraph response field")
+        function _()
+            m.stubCall(YouTubeTrailer.FetchText, invalid)
+            m.stubCall(YouTubeTrailer.Fetch, { playabilityStatus: { status: "OK" }, streamingData: { hlsManifestUrl: "https://video/manifest" } })
+            m.top.request = { requestId: 6, videoId: "abcdefghijk" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(type(m.top.response.candidates[0]), "roAssociativeArray")
+            m.assertEqual(m.top.response.candidates[0].streamUrl, "https://video/manifest")
+            m.assertEqual(m.top.response.candidates[0].streamFormat, "hls")
+        end function
+
+        @it("publishes resolved progressive data through the SceneGraph response field")
+        function _()
+            m.stubCall(YouTubeTrailer.FetchText, invalid)
+            m.stubCall(YouTubeTrailer.Fetch, { playabilityStatus: { status: "OK" }, streamingData: { formats: [{ url: "https://video/progressive", mimeType: "video/mp4; avc1, mp4a", height: 720 }] } })
+            m.top.request = { requestId: 7, videoId: "abcdefghijk" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(type(m.top.response.candidates[0]), "roAssociativeArray")
+            m.assertEqual(m.top.response.candidates[0].streamUrl, "https://video/progressive")
+            m.assertEqual(m.top.response.candidates[0].streamFormat, "mp4")
+        end function
+
+        @it("logs ranked candidate quality with request identity and no signed URL")
+        function _()
+            getGlobalAa().trailerNegotiationLogs = ""
+            originalLog = m.node.log
+            m.node.log = { write: sub(message)
+                getGlobalAa().trailerNegotiationLogs += message + Chr(10)
+            end sub }
+            m.stubCall(YouTubeTrailer.Resolve, [{ streamUrl: "https://video?signature=secret", streamFormat: "hls", height: 1080 }])
+            m.top.request = { requestId: 8, videoId: "abcdefghijk" }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.node.log = originalLog
+
+            m.assertTrue(Instr(1, getGlobalAa().trailerNegotiationLogs, "requestId=8") > 0)
+            m.assertTrue(Instr(1, getGlobalAa().trailerNegotiationLogs, "Rank=1 container=hls advertisedHeight=1080") > 0)
+            m.assertEqual(Instr(1, getGlobalAa().trailerNegotiationLogs, "secret"), 0)
+        end function
+
+    end class
+
+end namespace

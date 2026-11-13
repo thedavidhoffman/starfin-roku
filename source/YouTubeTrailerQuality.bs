@@ -1,0 +1,105 @@
+import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
+namespace YouTubeTrailerQuality
+    enum Container
+        Hls = "hls"
+        Mp4 = "mp4"
+    end enum
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailerQuality.CollectProgressive
+    '---------------------------------------------------------------------------
+    function CollectProgressive(streamingData as object, audioLanguage as string) as object
+        candidates = []
+        if type(streamingData.formats) <> "roArray" then return candidates
+        for each mediaFormat in streamingData.formats
+            if type(mediaFormat) <> "roAssociativeArray" then continue for
+            streamUrl = Strings.ToString(mediaFormat.url)
+            mime = LCase(Strings.ToString(mediaFormat.mimeType))
+            pixelHeight = Number.ToInteger(mediaFormat.height, 0)
+            ' Progressive files must contain audio; separate adaptive tracks are not playable pairs.
+            if Left(streamUrl, 8) = "https://" and Instr(1, mime, "video/mp4") > 0 and Instr(1, mime, "avc1") > 0 and Instr(1, mime, "mp4a") > 0 and pixelHeight > 0 and pixelHeight <= 1080 then
+                candidates.Push({ streamUrl: streamUrl, streamFormat: Container.Mp4, audioLanguage: audioLanguage, height: pixelHeight })
+            end if
+        end for
+        return candidates
+    end function
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailerQuality.InspectHls
+    '---------------------------------------------------------------------------
+    function InspectHls(manifestUrl as string, manifestText as dynamic, audioLanguage as string) as dynamic
+        if Left(manifestUrl, 8) <> "https://" then return invalid
+        ' An unavailable manifest remains a last-resort candidate, never evidence of HD.
+        if manifestText = invalid then return { streamUrl: manifestUrl, streamFormat: Container.Hls, audioLanguage: audioLanguage, height: 0 }
+        manifestBody = Strings.ToString(manifestText)
+        if Left(manifestBody.Trim(), 7) <> "#EXTM3U" then return invalid
+        highest = 0
+        pendingHeight = 0
+        hasVariants = false
+        for each manifestLine in manifestBody.Split(Chr(10))
+            manifestLine = manifestLine.Trim()
+            if Left(manifestLine, 18) = "#EXT-X-STREAM-INF:" then
+                hasVariants = true
+                pendingHeight = 0
+                codecs = LCase(__Attribute(manifestLine, "CODECS"))
+                dimensions = __Attribute(manifestLine, "RESOLUTION").Split("x")
+                if dimensions.Count() = 2 and Instr(1, codecs, "avc1") > 0 and Instr(1, codecs, "mp4a") > 0 then
+                    variantHeight = Number.ToInteger(dimensions[1], 0)
+                    if variantHeight > 0 and variantHeight <= 1080 then pendingHeight = variantHeight
+                end if
+            else if manifestLine <> "" and Left(manifestLine, 1) <> "#" then
+                if pendingHeight > highest then highest = pendingHeight
+                pendingHeight = 0
+            end if
+        end for
+        if hasVariants and highest = 0 then return invalid
+        if not hasVariants and Instr(1, manifestBody, "#EXTINF:") = 0 then return invalid
+        ' Keep the master URL: selecting a video rendition alone can discard its audio group.
+        return { streamUrl: manifestUrl, streamFormat: Container.Hls, audioLanguage: audioLanguage, height: highest }
+    end function
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailerQuality.__Attribute
+    '---------------------------------------------------------------------------
+    function __Attribute(manifestLine as string, attributeName as string) as string
+        expression = CreateObject("roRegex", "(?:[:,])" + attributeName + "=(" + Chr(34) + "[^" + Chr(34) + "]*" + Chr(34) + "|[^,]*)", "i")
+        matches = expression.Match(manifestLine)
+        if matches.Count() < 2 then return ""
+        return matches[1].Replace(Chr(34), "")
+    end function
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailerQuality.Rank
+    '---------------------------------------------------------------------------
+    function Rank(candidates as object) as object
+        ranked = []
+        for each candidate in candidates
+            if type(candidate) <> "roAssociativeArray" then continue for
+            candidateUrl = Strings.ToString(candidate.streamUrl)
+            if candidateUrl = "" then continue for
+            position = ranked.Count()
+            for index = 0 to ranked.Count() - 1
+                if candidate.height > ranked[index].height or (candidate.height = ranked[index].height and candidate.streamFormat = Container.Hls and ranked[index].streamFormat <> Container.Hls) then
+                    position = index
+                    exit for
+                end if
+            end for
+            ranked.Push(candidate)
+            for shiftIndex = ranked.Count() - 1 to position + 1 step -1
+                ranked[shiftIndex] = ranked[shiftIndex - 1]
+            end for
+            ranked[position] = candidate
+        end for
+        uniqueCandidates = []
+        seenUrls = {}
+        seenUrls.SetModeCaseSensitive()
+        for each candidate in ranked
+            if not seenUrls.DoesExist(candidate.streamUrl) then
+                seenUrls[candidate.streamUrl] = true
+                uniqueCandidates.Push(candidate)
+            end if
+        end for
+        return uniqueCandidates
+    end function
+end namespace

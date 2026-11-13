@@ -6,6 +6,8 @@ individual Starfin features.
 
 ## Table of Contents
 
+- [Trailers](trailers.md)
+
 - [Settings Cards](settings-cards.md)
 - [Movie Versions](movie-versions.md)
 

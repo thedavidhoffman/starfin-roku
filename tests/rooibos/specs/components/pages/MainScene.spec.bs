@@ -81,6 +81,111 @@ namespace tests
 
         @describe("Home exit confirmation")
 
+        @it("Cancel focuses My Media when startup finishes while Exit is open")
+        function _()
+            m.startExitHomeLoad()
+            m.node.homePage.backSelected = true
+            dialog = m.node.overlayHost.getChild(0)
+            content = dialog.callFunc("getContentComponent")
+
+            m.node.homePage.callFunc("deliverSection", "latest:movies", [])
+
+            m.assertTrue(m.node.homePage.ready)
+            m.assertTrue(content.findNode("exit").hasFocus())
+
+            content.findNode("cancel").buttonSelected = true
+
+            shelf = m.node.homePage.findNode("shelvesGroup").getChild(0)
+            m.assertEqual(shelf.rowContent.rowKey, "libraries")
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "movies")
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Back dismissal focuses My Media when startup finishes while Exit is open")
+        function _()
+            m.startExitHomeLoad()
+            m.node.homePage.backSelected = true
+            dialog = m.node.overlayHost.getChild(0)
+
+            m.node.homePage.callFunc("deliverSection", "latest:movies", [])
+
+            m.assertTrue(m.node.homePage.ready)
+            m.assertTrue(dialog.isInFocusChain())
+
+            dialog.callFunc("closeDialog")
+
+            shelf = m.node.homePage.findNode("shelvesGroup").getChild(0)
+            m.assertEqual(shelf.rowContent.rowKey, "libraries")
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertEqual(shelf.callFunc("getFocusedItem").Id, "movies")
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Cancel during startup retains Home focus until the initial load completes")
+        function _()
+            m.startExitHomeLoad()
+            m.node.homePage.backSelected = true
+            dialog = m.node.overlayHost.getChild(0)
+
+            dialog.callFunc("getContentComponent").findNode("cancel").buttonSelected = true
+
+            m.assertFalse(m.node.homePage.ready)
+            m.assertTrue(m.node.homePage.hasFocus())
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+
+            m.node.homePage.callFunc("deliverSection", "latest:movies", [])
+
+            shelf = m.node.homePage.findNode("shelvesGroup").getChild(0)
+            m.assertTrue(m.node.homePage.ready)
+            m.assertEqual(shelf.rowContent.rowKey, "libraries")
+            m.assertTrue(shelf.isInFocusChain())
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Cancel restores usable empty Home after startup completes")
+        function _()
+            m.top.closeRequested = false
+            m.node.authenticatedContent.visible = true
+            m.node.homePage.visible = true
+            m.node.homePage.callFunc("activate", true)
+            m.node.homePage.backSelected = true
+            dialog = m.node.overlayHost.getChild(0)
+
+            for each section in ["libraries", "continueWatching", "continueListening", "nextUp"]
+                m.node.homePage.callFunc("deliverSection", section, [])
+            end for
+            dialog.callFunc("getContentComponent").findNode("cancel").buttonSelected = true
+
+            m.assertTrue(m.node.homePage.ready)
+            m.assertTrue(m.node.homePage.hasFocus())
+            m.assertEqual(m.node.homePage.findNode("shelvesGroup").getChildCount(), 0)
+            m.assertEqual(m.node.overlayHost.getChildCount(), 0)
+            m.assertFalse(m.top.closeRequested)
+
+            m.node.homePage.backSelected = true
+
+            m.assertEqual(m.node.overlayHost.getChildCount(), 1)
+            m.node.overlayHost.getChild(0).callFunc("closeDialog")
+            m.assertTrue(m.node.homePage.hasFocus())
+        end function
+
+        private function startExitHomeLoad()
+            m.top.closeRequested = false
+            m.node.authenticatedContent.visible = true
+            m.node.homePage.visible = true
+            m.node.homePage.callFunc("activate", true)
+            m.node.homePage.callFunc("deliverSection", "continueWatching", [{ Id: "movie", Type: "Movie" }])
+            m.node.homePage.callFunc("deliverSection", "libraries", [{ Id: "movies", Name: "Movies", Type: "CollectionFolder", CollectionType: "movies" }])
+            m.node.homePage.callFunc("deliverSection", "continueListening", [])
+            m.node.homePage.callFunc("deliverSection", "nextUp", [])
+
+            m.assertFalse(m.node.homePage.ready)
+            m.assertTrue(m.node.homePage.hasFocus())
+        end function
+
         @it("Cancel restores the first Home item")
         function _()
             shelf = m.createExitHomeShelf("first")
@@ -3687,6 +3792,55 @@ namespace tests
             m.node.homePage.callFunc("deliverSection", "nextUp", [])
             m.node.homePage.callFunc("deliverSection", "latest:movies", latestItems)
             m.node.homePage.callFunc("focusHome")
+        end function
+
+        @it("suppresses a late theme request while the trailer dialog is open")
+        function _()
+            m.node.settings[SettingsStore.Key.ThemeMusic] = "on"
+            m.node.overlayHost.callFunc("openOverlay", { id: "trailers", componentName: "TrailerDialog", trailerRequest: {} })
+            getGlobalAa().trailerThemeStarted = false
+            m.node.themeAudioController = { callFunc: function(name, request = invalid)
+                getGlobalAa().trailerThemeStarted = true
+            end function }
+            'bs:disable-next-line 1140
+            themeAudioPlay({ itemId: "theme", server: "https://server", token: "token" })
+            m.assertFalse(getGlobalAa().trailerThemeStarted)
+            m.node.overlayHost.callFunc("closeOverlay")
+            m.node.themeAudioController = m.top.findNode("themeAudioController")
+        end function
+
+        @it("restores trailer focus without replaying another titles theme")
+        function _()
+            getGlobalAa().trailerFocusReturned = false
+            getGlobalAa().trailerWrongTheme = false
+            m.node.moviePage = { visible: true, themeRequested: { sourceItemId: "old" }, callFunc: function(name)
+                getGlobalAa().trailerFocusReturned = name = "handleTrailersClosed"
+            end function }
+            'bs:disable-next-line 1001
+            m.stubCall(themeAudioPlay, sub(request)
+                getGlobalAa().trailerWrongTheme = true
+            end sub)
+            m.node.overlayHost.closed = { request: { id: "trailers", sourcePage: "movie", trailerRequest: { item: { Id: "current" } } } }
+            m.assertTrue(getGlobalAa().trailerFocusReturned)
+            m.assertFalse(getGlobalAa().trailerWrongTheme)
+            m.node.moviePage = invalid
+        end function
+
+        @it("shows single-trailer failure after returning detail focus")
+        function _()
+            getGlobalAa().trailerFocusReturned = false
+            getGlobalAa().trailerErrorAfterFocus = false
+            m.node.moviePage = { visible: true, themeRequested: invalid, callFunc: function(name)
+                getGlobalAa().trailerFocusReturned = name = "handleTrailersClosed"
+            end function }
+            m.stubCall(AppMessage.Show, sub(message, title)
+                getGlobalAa().trailerErrorAfterFocus = getGlobalAa().trailerFocusReturned and message = "Trailer failed"
+            end sub)
+
+            m.node.overlayHost.closed = { request: { id: "trailers", sourcePage: "movie", trailerRequest: { item: { Id: "current" } } }, overlay: { errorMessage: "Trailer failed" } }
+
+            m.assertTrue(getGlobalAa().trailerErrorAfterFocus)
+            m.node.moviePage = invalid
         end function
 
     end class

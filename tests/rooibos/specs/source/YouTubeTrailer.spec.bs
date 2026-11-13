@@ -1,0 +1,135 @@
+namespace tests
+
+    @suite("YouTube trailer helpers")
+    class YouTubetrailerhelpersTests extends rooibos.BaseTestSuite
+
+        @describe("observable behavior")
+
+        @it("preserves outbound JSON field spelling")
+        function _()
+            body = YouTubeTrailer.RequestBody("abcdefghijk", { name: "ANDROID", version: "1" }, "visitor")
+            m.assertTrue(Instr(1, body, Chr(34) + "videoId" + Chr(34)) > 0)
+            m.assertTrue(Instr(1, body, Chr(34) + "clientName" + Chr(34)) > 0)
+            m.assertTrue(Instr(1, body, Chr(34) + "visitorData" + Chr(34)) > 0)
+            m.assertEqual(ParseJson(body).videoId, "abcdefghijk")
+        end function
+
+        @it("retries a new visitor identity")
+        function _()
+            m.stubCall(YouTubeTrailer.FetchText, invalid)
+            getGlobalAa().trailerFetchCalls = 0
+            m.stubCall(YouTubeTrailer.Fetch, function(requestUrl, body, agent, timeout)
+                getGlobalAa().trailerFetchCalls += 1
+                if getGlobalAa().trailerFetchCalls = 1 then return { responseContext: { visitorData: "fresh" } }
+                return { playabilityStatus: { status: "OK" }, streamingData: { hlsManifestUrl: "https://video/manifest" } }
+            end function)
+
+            resolvedCandidates = YouTubeTrailer.Resolve("abcdefghijk")
+
+            m.assertEqual(getGlobalAa().trailerFetchCalls, 3)
+            m.assertEqual(resolvedCandidates[0].streamFormat, "hls")
+        end function
+
+        @it("falls back to the next client after a failed response")
+        function _()
+            m.stubCall(YouTubeTrailer.FetchText, invalid)
+            getGlobalAa().trailerFetchCalls = 0
+            m.stubCall(YouTubeTrailer.Fetch, function(requestUrl, body, agent, timeout)
+                getGlobalAa().trailerFetchCalls += 1
+                if getGlobalAa().trailerFetchCalls = 1 then return invalid
+                return { playabilityStatus: { status: "OK" }, streamingData: { hlsManifestUrl: "https://video/manifest" } }
+            end function)
+
+            m.assertEqual(YouTubeTrailer.Resolve("abcdefghijk").Count(), 1)
+            m.assertEqual(getGlobalAa().trailerFetchCalls, 2)
+        end function
+
+        @it("stops after bounded failures")
+        function _()
+            m.stubCall(YouTubeTrailer.FetchText, invalid)
+            getGlobalAa().trailerFetchCalls = 0
+            m.stubCall(YouTubeTrailer.Fetch, function(requestUrl, body, agent, timeout)
+                getGlobalAa().trailerFetchCalls += 1
+                return { responseContext: { visitorData: "same" } }
+            end function)
+
+            m.assertEqual(YouTubeTrailer.Resolve("abcdefghijk").Count(), 0)
+            m.assertEqual(getGlobalAa().trailerFetchCalls, 4)
+        end function
+
+        @it("continues from 720p to a later client offering 1080p")
+        function _()
+            getGlobalAa().trailerFetchCalls = 0
+            m.stubCall(YouTubeTrailer.Fetch, function(requestUrl, body, agent, timeout)
+                getGlobalAa().trailerFetchCalls += 1
+                pixelHeight = 720
+                if getGlobalAa().trailerFetchCalls = 2 then pixelHeight = 1080
+                return { playabilityStatus: { status: "OK" }, streamingData: { formats: [{ url: "https://video/" + pixelHeight.ToStr(), height: pixelHeight, mimeType: "video/mp4; avc1, mp4a" }] } }
+            end function)
+
+            resolvedCandidates = YouTubeTrailer.Resolve("abcdefghijk")
+
+            m.assertEqual(resolvedCandidates[0].height, 1080)
+            m.assertEqual(resolvedCandidates[1].height, 720)
+            m.assertEqual(getGlobalAa().trailerFetchCalls, 2)
+        end function
+
+        @it("keeps the earlier fallback when the next client fails")
+        function _()
+            getGlobalAa().trailerFetchCalls = 0
+            m.stubCall(YouTubeTrailer.Fetch, function(requestUrl, body, agent, timeout)
+                getGlobalAa().trailerFetchCalls += 1
+                if getGlobalAa().trailerFetchCalls = 2 then return invalid
+                return { playabilityStatus: { status: "OK" }, streamingData: { formats: [{ url: "https://video/720", height: 720, mimeType: "video/mp4; avc1, mp4a" }] } }
+            end function)
+
+            resolvedCandidates = YouTubeTrailer.Resolve("abcdefghijk")
+
+            m.assertEqual(resolvedCandidates.Count(), 1)
+            m.assertEqual(resolvedCandidates[0].height, 720)
+        end function
+
+        @it("stops client discovery after confirmed 1080p HLS")
+        function _()
+            getGlobalAa().trailerFetchCalls = 0
+            m.stubCall(YouTubeTrailer.Fetch, function(requestUrl, body, agent, timeout)
+                getGlobalAa().trailerFetchCalls += 1
+                return { playabilityStatus: { status: "OK" }, streamingData: { hlsManifestUrl: "https://video/master", adaptiveFormats: [{ audioTrack: { id: "en.1", displayName: "English original" } }] } }
+            end function)
+            m.stubCall(YouTubeTrailer.FetchText, "#EXTM3U" + Chr(10) + "#EXT-X-STREAM-INF:RESOLUTION=1920x1080,CODECS=" + Chr(34) + "avc1.640028,mp4a.40.2" + Chr(34) + Chr(10) + "video.m3u8")
+
+            resolvedCandidates = YouTubeTrailer.Resolve("abcdefghijk")
+
+            m.assertEqual(getGlobalAa().trailerFetchCalls, 1)
+            m.assertEqual(resolvedCandidates[0].height, 1080)
+            m.assertEqual(resolvedCandidates[0].audioLanguage, "en")
+        end function
+
+        @it("rejects restricted responses even when they contain a manifest")
+        function _()
+            m.stubCall(YouTubeTrailer.Fetch, { playabilityStatus: { status: "LOGIN_REQUIRED" }, streamingData: { hlsManifestUrl: "https://video/restricted" } })
+
+            m.assertEqual(YouTubeTrailer.Resolve("abcdefghijk").Count(), 0)
+        end function
+
+        @it("rejects malformed provider responses")
+        function _()
+            m.stubCall(YouTubeTrailer.Fetch, { playabilityStatus: "bad" })
+
+            m.assertEqual(YouTubeTrailer.Resolve("abcdefghijk").Count(), 0)
+        end function
+
+        @it("logs the quality target without exposing signed URLs")
+        function _()
+            m.stubCall(YouTubeTrailer.Fetch, { playabilityStatus: { status: "OK" }, streamingData: { formats: [{ url: "https://video/1080?signature=secret", height: 1080, mimeType: "video/mp4; avc1, mp4a" }] } })
+            collector = {}
+
+            YouTubeTrailer.Resolve("abcdefghijk", collector)
+
+            m.assertTrue(Instr(1, collector.appendRequested, "1080p target available") > 0)
+            m.assertEqual(Instr(1, collector.appendRequested, "secret"), 0)
+        end function
+
+    end class
+
+end namespace

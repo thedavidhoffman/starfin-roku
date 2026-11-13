@@ -1,0 +1,86 @@
+import "pkg:/source/Remote.bs"
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    m.view.status.font.size = 24
+    m.items = []
+    initHandlers()
+    onItemsChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.view = { rows: [m.top.findNode("row0"), m.top.findNode("row1"), m.top.findNode("row2")], status: m.top.findNode("status"), position: m.top.findNode("position") }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("items", "onItemsChanged")
+    m.top.observeField("selectedIndex", "renderRows")
+    m.top.observeField("statusText", "renderRows")
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemsChanged
+'-------------------------------------------------------------------------------
+sub onItemsChanged()
+    m.items = m.top.items
+    if m.items = invalid then m.items = []
+    if m.top.selectedIndex >= m.items.Count() then m.top.selectedIndex = 0
+    renderRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateMetadata
+'-------------------------------------------------------------------------------
+sub updateMetadata(metadata as object)
+    for each item in m.items
+        if item.key = metadata.key then
+            item.title = metadata.title
+            exit for
+        end if
+    end for
+    renderRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderRows
+'-------------------------------------------------------------------------------
+sub renderRows()
+    m.view.status.text = m.top.statusText
+    m.view.status.visible = m.top.statusText <> ""
+    first = m.top.selectedIndex - 2
+    if first < 0 then first = 0
+    for row = 0 to 2
+        index = first + row
+        m.view.rows[row].visible = index < m.items.Count()
+        if index < m.items.Count() then m.view.rows[row].callFunc("render", m.items[index], index = m.top.selectedIndex)
+    end for
+    m.view.position.text = ""
+    m.view.position.visible = m.items.Count() > m.view.rows.Count()
+    if m.view.position.visible then m.view.position.text = (m.top.selectedIndex + 1).ToStr() + " / " + m.items.Count().ToStr()
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press or key = Remote.Key.Back then return false
+    if m.top.busy then return true
+    if key = Remote.Key.Up and m.top.selectedIndex > 0 then m.top.selectedIndex -= 1
+    if key = Remote.Key.Down and m.top.selectedIndex + 1 < m.items.Count() then m.top.selectedIndex += 1
+    if key = Remote.Key.OK or key = Remote.Key.Select then
+        if m.items.Count() > 0 then
+            m.top.itemSelected = m.top.selectedIndex
+        else
+            m.top.retryRequested = true
+        end if
+    end if
+    return true
+end function

@@ -1,3 +1,5 @@
+import "pkg:/source/AppMessage.bs"
+
 namespace tests
 
     @SGNode("OverlayHost")
@@ -324,6 +326,111 @@ namespace tests
             m.assertEqual(content.findNode("promptOptions").checkedItem, 5)
             'bs:disable-next-line 1140
             closeOverlay(false)
+        end function
+
+        @it("passes only the captured trailer request to the dialog")
+        function _()
+            request = { id: "trailers", componentName: "TrailerDialog", trailerRequest: { item: { Id: "parent" }, server: "https://server", token: "token", userId: "user" } }
+            overlay = m.top.callFunc("openOverlay", request)
+
+            m.assertEqual(overlay.trailerRequest, request.trailerRequest)
+            m.top.callFunc("closeOverlay")
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+        @describe("active trailer teardown through the host")
+
+        @it("stops local playback and both spinners when the host removes the dialog")
+        function _()
+            session = m.startLocalTrailer()
+
+            m.top.callFunc("closeOverlay")
+
+            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertInvalid(session.overlay.getParent())
+            m.assertInvalid(session.player.getParent())
+            m.assertEqual(session.player.findNode("video").control, "stop")
+            m.assertInvalid(session.player.findNode("video").content)
+            m.assertEqual(session.overlay.findNode("trailerSpinner").control, "stop")
+            m.assertFalse(session.overlay.findNode("trailerSpinner").visible)
+            m.assertEqual(session.player.findNode("loading").control, "stop")
+            m.assertFalse(session.player.findNode("loading").visible)
+            m.assertEqual(session.overlay.cleanupSessions, ["host-session"])
+        end function
+
+        @it("does not repeat local cleanup after repeated host closure and late completion")
+        function _()
+            session = m.startLocalTrailer()
+            m.top.callFunc("closeOverlay")
+
+            m.top.callFunc("closeOverlay")
+            session.player.ended = { playbackId: session.playbackId, reason: "completed", message: "", hasStarted: true }
+            session.player.findNode("video").state = "finished"
+
+            m.assertEqual(session.overlay.cleanupSessions, ["host-session"])
+            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertFalse(session.overlay.findNode("dialog").visible)
+            m.assertFalse(session.player.visible)
+        end function
+
+        @it("cleans active local playback when another overlay replaces the trailer dialog")
+        function _()
+            session = m.startLocalTrailer()
+
+            replacement = m.top.callFunc("openOverlay", { id: "description", componentName: "DescriptionDialog", title: "Replacement", text: "Details" })
+            session.player.ended = { playbackId: session.playbackId, reason: "completed", message: "", hasStarted: true }
+
+            m.assertEqual(m.top.getChildCount(), 1)
+            m.assertTrue(m.top.getChild(0).isSameNode(replacement))
+            m.assertInvalid(session.overlay.getParent())
+            m.assertInvalid(session.player.getParent())
+            m.assertEqual(session.player.findNode("video").control, "stop")
+            m.assertEqual(session.player.findNode("loading").control, "stop")
+            m.assertEqual(session.overlay.findNode("trailerSpinner").control, "stop")
+            m.assertEqual(session.overlay.cleanupSessions, ["host-session"])
+
+            m.top.callFunc("closeOverlay", false)
+        end function
+
+        @it("stops the discovery spinner when the host removes a loading trailer dialog")
+        function _()
+            m.top.callFunc("closeOverlay", false)
+            overlay = m.top.callFunc("openOverlay", m.trailerRequest())
+            catalogTask = overlay.findNode("TrailerCatalogTask")
+            m.assertTrue(overlay.findNode("trailerSpinner").visible)
+
+            m.top.callFunc("closeOverlay")
+            catalogTask.response = { requestId: catalogTask.request.requestId, ok: true, items: [] }
+
+            m.assertFalse(overlay.findNode("trailerSpinner").visible)
+            m.assertEqual(overlay.findNode("trailerSpinner").control, "stop")
+            m.assertFalse(overlay.findNode("dialog").visible)
+            m.assertEqual(m.top.getChildCount(), 0)
+        end function
+
+        private function trailerRequest() as object
+            return { id: "trailers", componentName: "TrailerDialogTestHarness", openFunction: "openTrailers", closeField: "closeRequested", trailerRequest: { item: { Id: "parent" }, server: "https://server", token: "token", userId: "user" } }
+        end function
+
+        private function startLocalTrailer() as object
+            m.top.callFunc("closeOverlay", false)
+            m.stubCall(AppMessage.Dismiss, invalid)
+            overlay = m.top.callFunc("openOverlay", m.trailerRequest())
+            catalogTask = overlay.findNode("TrailerCatalogTask")
+            catalogTask.response = { requestId: catalogTask.request.requestId, ok: true, items: [{ key: "local:local", source: "local", item: { Id: "local" }, title: "Local", thumbnail: "" }] }
+            playbackTask = overlay.findNode("VideoPlaybackInfoTask")
+            playbackTask.response = { requestId: playbackTask.request.requestId, ok: true, streamUrl: "https://server/video", streamFormat: "mp4", playSessionId: "host-session" }
+            player = invalid
+            for each child in overlay.getChildren(-1, 0)
+                if child.subtype() = "TrailerPlayback" then player = child
+            end for
+            m.assertNotInvalid(player)
+            player.findNode("video").state = "playing"
+            player.findNode("video").state = "buffering"
+            m.assertEqual(player.findNode("video").control, "play")
+            m.assertTrue(player.findNode("loading").visible)
+
+            return { overlay: overlay, player: player, playbackId: playbackTask.request.requestId }
         end function
 
     end class

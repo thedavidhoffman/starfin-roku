@@ -1,0 +1,93 @@
+namespace tests
+
+    @suite("YouTube trailer quality")
+    class YouTubeTrailerQualityTests extends rooibos.BaseTestSuite
+
+        @describe("compatible candidates and ranking")
+
+        @it("ranks verified 1080p before 720p and prefers HLS at equal height")
+        function _()
+            rankedCandidates = YouTubeTrailerQuality.Rank([
+                { streamUrl: "https://video/720", streamFormat: "hls", height: 720 }
+                { streamUrl: "https://video/1080.mp4", streamFormat: "mp4", height: 1080 }
+                { streamUrl: "https://video/1080.m3u8", streamFormat: "hls", height: 1080 }
+            ])
+
+            m.assertEqual(rankedCandidates[0].streamUrl, "https://video/1080.m3u8")
+            m.assertEqual(rankedCandidates[1].streamUrl, "https://video/1080.mp4")
+            m.assertEqual(rankedCandidates[2].height, 720)
+        end function
+
+        @it("deduplicates signed URLs returned by multiple clients")
+        function _()
+            candidate = { streamUrl: "https://video/same", streamFormat: "mp4", height: 720 }
+            m.assertEqual(YouTubeTrailerQuality.Rank([candidate, candidate]).Count(), 1)
+        end function
+
+        @it("rejects silent progressive video")
+        function _()
+            candidates = YouTubeTrailerQuality.CollectProgressive({ formats: [{ url: "https://video/silent", mimeType: "video/mp4; avc1", height: 1080 }] }, "")
+            m.assertEqual(candidates.Count(), 0)
+        end function
+
+        @it("rejects cipher-only progressive video")
+        function _()
+            candidates = YouTubeTrailerQuality.CollectProgressive({ formats: [{ signatureCipher: "cipher", mimeType: "video/mp4; avc1, mp4a", height: 1080 }] }, "")
+            m.assertEqual(candidates.Count(), 0)
+        end function
+
+        @it("excludes progressive streams above the target")
+        function _()
+            candidates = YouTubeTrailerQuality.CollectProgressive({ formats: [{ url: "https://video/4k", mimeType: "video/mp4; avc1, mp4a", height: 2160 }] }, "")
+            m.assertEqual(candidates.Count(), 0)
+        end function
+
+        @it("retains the adaptive master and original language for compatible 1080p")
+        function _()
+            manifestText = "#EXTM3U" + Chr(10) + "#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080,CODECS=" + Chr(34) + "avc1.640028,mp4a.40.2" + Chr(34) + ",AUDIO=" + Chr(34) + "original" + Chr(34) + Chr(10) + "video-only.m3u8"
+            candidate = YouTubeTrailerQuality.InspectHls("https://video/master", manifestText, "en")
+
+            m.assertEqual(candidate.height, 1080)
+            m.assertEqual(candidate.streamUrl, "https://video/master")
+            m.assertEqual(candidate.audioLanguage, "en")
+        end function
+
+        @it("does not invent a quality for a manifest that could not be fetched")
+        function _()
+            candidate = YouTubeTrailerQuality.InspectHls("https://video/master", invalid, "")
+            m.assertEqual(candidate.height, 0)
+        end function
+
+        @it("rejects an incompatible HLS master")
+        function _()
+            manifestText = "#EXTM3U" + Chr(10) + "#EXT-X-STREAM-INF:RESOLUTION=1920x1080,CODECS=" + Chr(34) + "av01,mp4a.40.2" + Chr(34) + Chr(10) + "video.m3u8"
+            m.assertInvalid(YouTubeTrailerQuality.InspectHls("https://video/master", manifestText, ""))
+        end function
+
+        @it("rejects HTML returned in place of a playlist")
+        function _()
+            m.assertInvalid(YouTubeTrailerQuality.InspectHls("https://video/master", "<html>error</html>", ""))
+        end function
+
+        @it("does not rank an incomplete variant as 1080p")
+        function _()
+            manifestText = "#EXTM3U" + Chr(10) + "#EXT-X-STREAM-INF:RESOLUTION=1920x1080,CODECS=" + Chr(34) + "avc1,mp4a" + Chr(34)
+            m.assertInvalid(YouTubeTrailerQuality.InspectHls("https://video/master", manifestText, ""))
+        end function
+
+        @it("retains distinct case-sensitive signed URLs")
+        function _()
+            rankedCandidates = YouTubeTrailerQuality.Rank([{ streamUrl: "https://video?sig=Abc", streamFormat: "mp4", height: 720 }, { streamUrl: "https://video?sig=abc", streamFormat: "mp4", height: 720 }])
+            m.assertEqual(rankedCandidates.Count(), 2)
+        end function
+
+        @it("keeps the best quality evidence for the same URL")
+        function _()
+            rankedCandidates = YouTubeTrailerQuality.Rank([{ streamUrl: "https://video/master", streamFormat: "hls", height: 0 }, { streamUrl: "https://video/master", streamFormat: "hls", height: 1080 }])
+            m.assertEqual(rankedCandidates.Count(), 1)
+            m.assertEqual(rankedCandidates[0].height, 1080)
+        end function
+
+    end class
+
+end namespace

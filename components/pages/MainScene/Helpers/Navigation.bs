@@ -112,11 +112,34 @@ sub navHandleOverlayClosed()
     if closed = invalid then return
 
     request = closed.request
+    if request <> invalid and request.id = Trailers.Overlay.Picker then
+        if request.sourcePage = "movie" and m.moviePage <> invalid then
+            if m.moviePage.visible then
+                m.moviePage.callFunc("handleTrailersClosed")
+                themeRequest = m.moviePage.themeRequested
+                if themeRequest <> invalid and themeRequest.sourceItemId = request.trailerRequest.item.Id then themeAudioPlay(themeRequest)
+            end if
+        else if request.sourcePage = "tvShow" and m.tvShowPage <> invalid then
+            if m.tvShowPage.visible then
+                m.tvShowPage.callFunc("handleTrailersClosed")
+                themeRequest = m.tvShowPage.themeRequested
+                if themeRequest <> invalid and themeRequest.sourceItemId = request.trailerRequest.item.Id then themeAudioPlay(themeRequest)
+            end if
+        end if
+        if closed.overlay <> invalid then
+            if Strings.ToString(closed.overlay.errorMessage) <> "" then AppMessage.Show(closed.overlay.errorMessage)
+        end if
+        return
+    end if
     if request <> invalid and request.id = "exitConfirmation" then
         if closed.overlay <> invalid and closed.overlay.exitConfirmed then
             m.top.closeRequested = true
         else if request.returnOwner.visible and isExitReturnFocusAttached(request.returnFocus, request.returnOwner) then
-            request.returnFocus.setFocus(true)
+            if request.returnFocus.isSameNode(m.homePage) then
+                m.homePage.callFunc("focusHome")
+            else
+                request.returnFocus.setFocus(true)
+            end if
         else
             ' Home may have rebuilt its shelves while the confirmation was open.
             focusActiveSurface()

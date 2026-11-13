@@ -1,0 +1,200 @@
+namespace tests
+
+    @SGNode("TrailerPlayback")
+    @suite("Trailer playback")
+    class TrailerplaybackTests extends rooibos.BaseTestSuite
+
+        @describe("workflow behavior")
+
+        @it("creates fresh playback with no visible video")
+        function _()
+            player = CreateObject("roSGNode", "TrailerPlayback")
+            m.assertFalse(player.visible)
+            m.assertFalse(player.findNode("video").enableUI)
+            m.assertFalse(player.findNode("video").enableTrickPlay)
+        end function
+
+        @it("uses an unauthenticated content node for YouTube")
+        function _()
+            m.prepare()
+            'bs:disable-next-line 1140
+            playStream({ streamUrl: "https://youtube.example/video", streamFormat: "mp4" }, invalid)
+            m.assertEqual(m.node.nodes.video.content.url, "https://youtube.example/video")
+            m.assertEqual(m.node.nodes.video.content.HttpHeaders.Count(), 0)
+            m.assertEqual(m.node.nodes.video.control, "play")
+        end function
+
+        @it("authenticates local content only to its captured server")
+        function _()
+            m.prepare()
+            'bs:disable-next-line 1140
+            playStream({ streamUrl: "https://server/video", streamFormat: "mp4" }, { server: "https://server", token: "token", userId: "user" })
+            m.assertEqual(m.node.nodes.video.content.HttpHeaders.Count(), 1)
+            m.assertTrue(Instr(1, m.node.nodes.video.content.HttpHeaders[0], "token") > 0)
+        end function
+
+        @it("ignores pause and seek keys")
+        function _()
+            m.prepare()
+            m.node.playback.active = true
+            m.node.nodes.video.control = "play"
+            'bs:disable-next-line 1140
+            onKeyEvent("play", true)
+            'bs:disable-next-line 1140
+            onKeyEvent("right", true)
+            m.assertEqual(m.node.nodes.video.control, "play")
+        end function
+
+        @it("stops video and emits a return event on Back")
+        function _()
+            m.prepare()
+            m.node.playback.active = true
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+            m.assertFalse(m.node.playback.active)
+            m.assertEqual(m.node.nodes.video.control, "stop")
+            m.assertEqual(m.top.ended.message, "")
+        end function
+
+        @it("returns on natural completion")
+        function _()
+            m.prepare()
+            m.node.playback.active = true
+            m.node.nodes.video.state = "finished"
+            'bs:disable-next-line 1140
+            onVideoState()
+            m.assertFalse(m.node.playback.active)
+            m.assertEqual(m.top.ended.message, "")
+        end function
+
+        @it("reports timeout after stopping the stream")
+        function _()
+            m.prepare()
+            m.node.playback.active = true
+            'bs:disable-next-line 1140
+            onTimeout()
+            m.assertEqual(m.node.nodes.video.control, "stop")
+            m.assertTrue(Instr(1, m.top.ended.message, "timed out") > 0)
+        end function
+
+        @it("selects the last original audio group")
+        function _()
+            m.prepare()
+            m.node.playback = { active: true, language: "en" }
+            m.node.nodes.video.availableAudioTracks = [{ Track: "one", Name: "English original", Language: "en" }, { Track: "two", Name: "English original", Language: "en" }]
+            'bs:disable-next-line 1140
+            selectOriginalAudio()
+            m.assertEqual(m.node.nodes.video.audioTrack, "two")
+        end function
+
+        @it("reports failure after playing without permitting a startup retry")
+        function _()
+            m.prepare()
+            m.node.playback.active = true
+            m.node.nodes.video.state = "playing"
+            'bs:disable-next-line 1140
+            onVideoState()
+            m.node.nodes.video.state = "error"
+            'bs:disable-next-line 1140
+            onVideoState()
+
+            m.assertTrue(m.top.ended.hasStarted)
+            m.assertEqual(m.top.ended.reason, "failed")
+        end function
+
+        @it("reports a startup error as eligible for fallback")
+        function _()
+            m.prepare()
+            m.node.playback.active = true
+            m.node.nodes.video.state = "error"
+            'bs:disable-next-line 1140
+            onVideoState()
+
+            m.assertFalse(m.top.ended.hasStarted)
+            m.assertEqual(m.top.ended.reason, "failed")
+        end function
+
+        @it("remembers a playing event even when the current video state has advanced")
+        function _()
+            m.prepare()
+            m.node.playback.active = true
+            m.node.nodes.video.state = "error"
+            playingEvent = { getData: function()
+                return "playing"
+            end function }
+
+            'bs:disable-next-line 1140
+            onVideoState(playingEvent)
+            'bs:disable-next-line 1140
+            onVideoState()
+
+            m.assertTrue(m.top.ended.hasStarted)
+        end function
+
+        @it("logs playback failure phase and numeric error without dumping media data")
+        function _()
+            m.prepare()
+            getGlobalAa().trailerPlaybackLogs = ""
+            m.node.log = {
+                write: sub(message)
+                    getGlobalAa().trailerPlaybackLogs += message + Chr(10)
+                end sub
+                error: sub(message)
+                    getGlobalAa().trailerPlaybackLogs += message + Chr(10)
+                end sub
+            }
+            m.node.playback.active = true
+            m.node.nodes.video.state = "error"
+            m.node.nodes.video.errorCode = -3
+            m.node.nodes.video.errorMsg = "https://video?signature=secret"
+
+            'bs:disable-next-line 1140
+            onVideoState()
+
+            m.assertTrue(Instr(1, getGlobalAa().trailerPlaybackLogs, "Video error code=-3") > 0)
+            m.assertTrue(Instr(1, getGlobalAa().trailerPlaybackLogs, "Playback ended reason=failed") > 0)
+            m.assertEqual(Instr(1, getGlobalAa().trailerPlaybackLogs, "secret"), 0)
+        end function
+
+        @it("uses the shared spinner for startup and buffering and stops it on teardown")
+        function _()
+            m.prepare()
+            'bs:disable-next-line 1140
+            playStream({ streamUrl: "https://video/stream", streamFormat: "mp4" }, invalid)
+            m.assertEqual(m.node.nodes.loading.control, "start")
+            m.node.nodes.video.state = "playing"
+            'bs:disable-next-line 1140
+            onVideoState()
+            m.assertEqual(m.node.nodes.loading.control, "stop")
+            m.node.nodes.video.state = "buffering"
+            'bs:disable-next-line 1140
+            onVideoState()
+            m.assertEqual(m.node.nodes.loading.control, "start")
+            'bs:disable-next-line 1140
+            stopPlayback()
+            m.assertEqual(m.node.nodes.loading.control, "stop")
+        end function
+
+        @it("includes the playback identity in completion and invalidates it on stop")
+        function _()
+            m.prepare()
+            'bs:disable-next-line 1140
+            playStream({ streamUrl: "https://video/stream", streamFormat: "mp4" }, invalid, 17)
+            m.node.nodes.video.state = "finished"
+            'bs:disable-next-line 1140
+            onVideoState()
+
+            m.assertEqual(m.top.ended.playbackId, 17)
+            m.assertInvalid(m.node.playback.playbackId)
+        end function
+
+        private sub prepare()
+            m.node.log = new Logger("TrailerPlayback", invalid)
+            m.node.nodes = { video: { control: "", content: invalid, state: "none", audioTrack: "" }, loading: { control: "stop" }, timeout: { control: "" } }
+            m.node.playback = { active: false, language: "", hasStarted: false, playbackId: 0 }
+            m.top.ended = invalid
+        end sub
+
+    end class
+
+end namespace

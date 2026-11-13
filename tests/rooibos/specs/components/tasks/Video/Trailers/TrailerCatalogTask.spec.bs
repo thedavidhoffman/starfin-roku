@@ -1,0 +1,41 @@
+namespace tests
+
+    @SGNode("TrailerCatalogTask")
+    @suite("Trailer catalog task")
+    class TrailercatalogtaskTests extends rooibos.BaseTestSuite
+
+        @describe("request and response behavior")
+
+        @it("rejects a missing request without starting HTTP")
+        function _()
+            m.top.request = invalid
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertFalse(m.top.response.ok)
+        end function
+
+        @it("combines local and remote candidates and echoes correlation")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: true, data: [{ Id: "local", Name: "Local" }] })
+            m.top.request = { requestId: 7, server: "https://server", token: "token", userId: "user", itemId: "parent", item: { RemoteTrailers: [{ Url: "https://youtu.be/abcdefghijk" }] } }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 7)
+            m.assertEqual(m.top.response.items[0].source, "local")
+            m.assertEqual(m.top.response.items[1].source, "youtube")
+        end function
+
+        @it("retains YouTube candidates after a local endpoint failure")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: false })
+            m.top.request = { requestId: 8, server: "https://server", token: "token", itemId: "parent", item: { RemoteTrailers: [{ Url: "https://youtu.be/abcdefghijk" }] } }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.items.Count(), 1)
+        end function
+
+    end class
+
+end namespace

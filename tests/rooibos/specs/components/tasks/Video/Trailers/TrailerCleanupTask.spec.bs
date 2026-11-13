@@ -1,0 +1,39 @@
+namespace tests
+
+    @SGNode("TrailerCleanupTask")
+    @suite("Trailer cleanup task")
+    class TrailercleanuptaskTests extends rooibos.BaseTestSuite
+
+        @describe("request and response behavior")
+
+        @it("targets only the captured transcode session")
+        function _()
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeout)
+                getGlobalAa().trailerCleanup = { url: requestUrl, method: method, headers: headers }
+                return { ok: true }
+            end function)
+            m.top.request = { server: "https://server", token: "token", playSessionId: "session-1" }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertEqual(getGlobalAa().trailerCleanup.method, "DELETE")
+            m.assertTrue(Instr(1, getGlobalAa().trailerCleanup.url, "PlaySessionId=session-1") > 0)
+            m.assertTrue(Instr(1, getGlobalAa().trailerCleanup.url, "/Videos/ActiveEncodings") > 0)
+            m.assertTrue(m.top.response.ok)
+        end function
+
+        @it("does not issue an unscoped cleanup")
+        function _()
+            getGlobalAa().trailerCleanupCalled = false
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeout)
+                getGlobalAa().trailerCleanupCalled = true
+                return { ok: true }
+            end function)
+            m.top.request = { server: "https://server", token: "token", playSessionId: "" }
+            'bs:disable-next-line 1140
+            executeRequest()
+            m.assertFalse(getGlobalAa().trailerCleanupCalled)
+        end function
+
+    end class
+
+end namespace

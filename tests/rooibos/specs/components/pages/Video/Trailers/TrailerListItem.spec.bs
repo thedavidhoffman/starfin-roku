@@ -1,0 +1,105 @@
+namespace tests
+
+    @SGNode("TrailerListItem")
+    @suite("Trailer list item")
+    class TrailerlistitemTests extends rooibos.BaseTestSuite
+
+        @describe("observable behavior")
+
+        @it("renders title thumbnail and selection without a channel line")
+        function _()
+            item = CreateObject("roSGNode", "TrailerListItem")
+            item.callFunc("render", { title: "Trailer", thumbnail: "pkg:/images/media-card/thumbnail-placeholder-441x249.png" }, true)
+            m.assertEqual(item.findNode("title").text, "Trailer")
+            m.assertInvalid(item.findNode("channel"))
+            m.assertEqual(item.findNode("thumbnail").uri, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
+            m.assertTrue(item.findNode("highlight").visible)
+        end function
+
+        @it("uses a placeholder for missing artwork")
+        function _()
+            item = CreateObject("roSGNode", "TrailerListItem")
+            item.callFunc("render", { title: "Local", thumbnail: "" }, false)
+            m.assertEqual(item.findNode("thumbnail").uri, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
+            m.assertFalse(item.findNode("highlight").visible)
+        end function
+
+        @it("uses a larger cropped widescreen preview with a rounded mask")
+        function _()
+            item = CreateObject("roSGNode", "TrailerListItem")
+            item.callFunc("render", { title: "Trailer", thumbnail: "" }, true)
+
+            m.assertEqual(item.findNode("thumbnail").width, 320)
+            m.assertEqual(item.findNode("thumbnail").height, 180)
+            m.assertEqual(item.findNode("thumbnail").loadDisplayMode, "scaleToZoom")
+            m.assertEqual(item.findNode("thumbnailMask").maskUri, ResolutionAssets.GetMaskImageUri("thumbnail-4-col-mask.png"))
+            m.assertEqual(item.findNode("thumbnail").failedBitmapUri, "pkg:/images/media-card/thumbnail-placeholder-441x249.png")
+        end function
+
+        @it("keeps long titles intact for the smaller two-line label")
+        function _()
+            item = CreateObject("roSGNode", "TrailerListItem")
+            longTitle = "The Super Mario Galaxy Movie | Official Final Trailer with a long descriptive title"
+            item.callFunc("render", { title: longTitle, thumbnail: "" }, false)
+
+            m.assertEqual(item.findNode("title").text, longTitle)
+            m.assertEqual(item.findNode("title").font.size, 28)
+            m.assertEqual(item.findNode("title").numLines, 2)
+            m.assertTrue(item.findNode("title").wrap)
+        end function
+
+        @it("clears selection when a row is reused")
+        function _()
+            item = CreateObject("roSGNode", "TrailerListItem")
+            item.callFunc("render", { title: "First", thumbnail: "" }, true)
+            item.callFunc("render", { title: "Next", thumbnail: "" }, false)
+
+            m.assertFalse(item.findNode("highlight").visible)
+            m.assertEqual(item.findNode("title").text, "Next")
+        end function
+
+        @it("uses FHD mask dimensions for the widescreen preview")
+        function _()
+            m.stubCall(ResolutionProfile.IsHd, false)
+            item = CreateObject("roSGNode", "TrailerListItem")
+            item.callFunc("render", { title: "Trailer", thumbnail: "" }, true)
+
+            m.assertEqual(item.findNode("thumbnailMask").maskSize, [320, 180])
+        end function
+
+        @it("uses HD mask dimensions while retaining logical preview size")
+        function _()
+            m.stubCall(ResolutionProfile.IsHd, true)
+            item = CreateObject("roSGNode", "TrailerListItem")
+            item.callFunc("render", { title: "Trailer", thumbnail: "" }, true)
+
+            m.assertEqual(item.findNode("thumbnailMask").maskSize, [320 * 2 / 3, 120])
+            m.assertEqual(item.findNode("thumbnail").width, 320)
+            m.assertEqual(item.findNode("thumbnail").height, 180)
+        end function
+
+        @it("uses a rounded selection background with equal image padding")
+        function _()
+            item = CreateObject("roSGNode", "TrailerListItem")
+            item.callFunc("render", { title: "Trailer", thumbnail: "" }, true)
+
+            m.assertTrue(item.findNode("highlight").visible)
+            m.assertEqual(item.findNode("highlight").uri, "pkg:/images/media-card/trailer-row-highlight.png")
+            m.assertEqual(item.findNode("highlight").height, 204)
+            m.assertEqual(item.findNode("thumbnailMask").translation, [12, 12])
+            m.assertEqual(item.findNode("highlight").height - item.findNode("thumbnail").height, 24)
+        end function
+
+        @it("aligns the title to the preview top edge")
+        function _()
+            item = CreateObject("roSGNode", "TrailerListItem")
+            item.callFunc("render", { title: "A two-line trailer title", thumbnail: "" }, false)
+
+            m.assertEqual(item.findNode("title").translation, [356, 12])
+            m.assertEqual(item.findNode("title").vertAlign, "top")
+            m.assertEqual(item.findNode("title").numLines, 2)
+        end function
+
+    end class
+
+end namespace

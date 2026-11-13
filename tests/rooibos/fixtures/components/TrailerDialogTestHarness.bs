@@ -1,0 +1,19 @@
+' Keep production response handlers and their observers, but let tests deliver
+' responses through idle task nodes instead of starting network requests.
+function startTrailerTask(componentName as string, request as object, handler as string) as object
+    task = CreateObject("roSGNode", "TrailerResolveTask")
+    task.id = componentName
+    task.request = request
+    task.observeFieldScoped("response", handler)
+    m.trailer.tasks.Push(task)
+    m.top.appendChild(task)
+    return task
+end function
+
+' Record the cleanup dispatch boundary without contacting Jellyfin.
+sub stopLocalEncoding(playSessionId as string)
+    sessions = m.top.cleanupSessions
+    if sessions = invalid then sessions = []
+    sessions.Push(playSessionId)
+    m.top.cleanupSessions = sessions
+end sub

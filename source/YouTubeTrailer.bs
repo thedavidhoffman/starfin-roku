@@ -1,0 +1,167 @@
+import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/Json.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/source/YouTubeTrailerQuality.bs"
+namespace YouTubeTrailer
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailer.Clients
+    '---------------------------------------------------------------------------
+    function Clients() as object
+        return [
+            { name: "VISIONOS", version: "1.02", userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15" }
+            { name: "ANDROID", version: "20.10.41", userAgent: "com.google.android.youtube/20.10.41 (Linux; U; Android 11) gzip" }
+        ]
+    end function
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailer.RequestBody
+    '---------------------------------------------------------------------------
+    function RequestBody(videoId as string, client as object, visitor = "" as string) as string
+        fields = [Json.Pair("clientName", client.name), Json.Pair("clientVersion", client.version), Json.Pair("hl", "en")]
+        if client.name = "VISIONOS" then
+            fields.Push(Json.Pair("deviceMake", "Apple"))
+            fields.Push(Json.Pair("deviceModel", "RealityDevice17,1"))
+            fields.Push(Json.Pair("osName", "visionOS"))
+            fields.Push(Json.Pair("osVersion", "26.5.23O471"))
+        else
+            fields.Push(Json.Pair("platform", "MOBILE"))
+            fields.Push(Json.Pair("osName", "Android"))
+            fields.Push(Json.Pair("osVersion", "11"))
+            fields.Push(Json.NumberPair("androidSdkVersion", 30))
+        end if
+        if visitor <> "" then fields.Push(Json.Pair("visitorData", visitor))
+        return Json.Object([Json.Pair("videoId", videoId), Json.ObjectPair("context", [Json.ObjectPair("client", fields)])])
+    end function
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailer.Fetch
+    '---------------------------------------------------------------------------
+    function Fetch(requestUrl as string, body = invalid as dynamic, userAgent = "" as string, timeoutMs = 5000 as integer) as dynamic
+        responseText = FetchText(requestUrl, body, userAgent, timeoutMs)
+        if responseText = invalid then return invalid
+        return ParseJson(responseText)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailer.FetchText
+    '---------------------------------------------------------------------------
+    function FetchText(requestUrl as string, body = invalid as dynamic, userAgent = "" as string, timeoutMs = 5000 as integer) as dynamic
+        if timeoutMs <= 0 then return invalid
+        transfer = invalid
+        try
+            transfer = CreateObject("roUrlTransfer")
+            port = CreateObject("roMessagePort")
+            transfer.SetMessagePort(port)
+            transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+            transfer.InitClientCertificates()
+            transfer.EnableEncodings(true)
+            transfer.SetUrl(requestUrl)
+            if userAgent <> "" then transfer.AddHeader("User-Agent", userAgent)
+            if body = invalid then
+                started = transfer.AsyncGetToString()
+            else
+                transfer.AddHeader("Content-Type", "application/json")
+                started = transfer.AsyncPostFromString(body)
+            end if
+            if not started then return invalid
+            event = wait(timeoutMs, port)
+            if type(event) <> "roUrlEvent" then
+                transfer.AsyncCancel()
+                return invalid
+            end if
+            if event.GetResponseCode() <> 200 then return invalid
+            return event.GetString()
+        catch error
+            if transfer <> invalid then transfer.AsyncCancel()
+            return invalid
+        end try
+    end function
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailer.Resolve
+    '---------------------------------------------------------------------------
+    function Resolve(videoId as string, logCollector = invalid as dynamic) as object
+        trailerLog = new Logger("YouTubeTrailer", logCollector)
+        trailerLog.write("Negotiation started targetHeight=1080 budgetMs=8000")
+        deadline = CreateObject("roTimespan")
+        candidates = []
+        for each client in Clients()
+            visitor = ""
+            for attempt = 0 to 1
+                remaining = 8000 - deadline.TotalMilliseconds()
+                if remaining <= 0 then
+                    trailerLog.write("Negotiation deadline reached; retaining collected fallbacks count=" + candidates.Count().ToStr())
+                    return YouTubeTrailerQuality.Rank(candidates)
+                end if
+                if remaining > 5000 then remaining = 5000
+                trailerLog.write("Player request client=" + client.name + " attempt=" + (attempt + 1).ToStr() + " timeoutMs=" + remaining.ToStr())
+                response = Fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", RequestBody(videoId, client, visitor), client.userAgent, remaining)
+                if type(response) <> "roAssociativeArray" then
+                    trailerLog.write("Player request failed or returned malformed data client=" + client.name)
+                    exit for
+                end if
+                if type(response.playabilityStatus) = "roAssociativeArray" and type(response.streamingData) = "roAssociativeArray" then
+                    if response.playabilityStatus.status = "OK" then
+                        streamingData = response.streamingData
+                        audioLanguage = __OriginalLanguage(streamingData)
+                        progressiveCandidates = YouTubeTrailerQuality.CollectProgressive(streamingData, audioLanguage)
+                        trailerLog.write("Compatible progressive candidates client=" + client.name + " count=" + progressiveCandidates.Count().ToStr())
+                        candidates.Append(progressiveCandidates)
+                        manifestUrl = Strings.ToString(streamingData.hlsManifestUrl)
+                        if Left(manifestUrl, 8) = "https://" then
+                            remaining = 8000 - deadline.TotalMilliseconds()
+                            if remaining > 2000 then remaining = 2000
+                            manifestText = invalid
+                            if remaining > 0 then manifestText = FetchText(manifestUrl, invalid, client.userAgent, remaining)
+                            hlsCandidate = YouTubeTrailerQuality.InspectHls(manifestUrl, manifestText, audioLanguage)
+                            if hlsCandidate <> invalid then
+                                candidates.Push(hlsCandidate)
+                                trailerLog.write("HLS candidate client=" + client.name + " advertisedHeight=" + hlsCandidate.height.ToStr() + " (0=unknown; adaptive playback)")
+                            else
+                                trailerLog.write("HLS rejected client=" + client.name + " reason=malformed-or-incompatible-manifest")
+                            end if
+                        end if
+                        rankedCandidates = YouTubeTrailerQuality.Rank(candidates)
+                        if rankedCandidates.Count() > 0 then
+                            trailerLog.write("Best candidate client=" + client.name + " container=" + rankedCandidates[0].streamFormat + " advertisedHeight=" + rankedCandidates[0].height.ToStr())
+                            if rankedCandidates[0].height >= 1080 then
+                                trailerLog.write("1080p target available; ending discovery elapsedMs=" + deadline.TotalMilliseconds().ToStr())
+                                return rankedCandidates
+                            end if
+                        end if
+                        trailerLog.write("Target not reached; retaining fallbacks and advancing client")
+                        ' A playable lower-quality response advances to the next client, not visitor retry.
+                        exit for
+                    end if
+                end if
+                trailerLog.write("No usable player data client=" + client.name + "; checking visitor retry")
+                if type(response.responseContext) <> "roAssociativeArray" then exit for
+                fresh = Strings.ToString(response.responseContext.visitorData)
+                if fresh = "" or fresh = visitor then exit for
+                trailerLog.write("Retrying client=" + client.name + " with fresh visitor identity")
+                visitor = fresh
+            end for
+        end for
+        trailerLog.write("Client discovery exhausted elapsedMs=" + deadline.TotalMilliseconds().ToStr() + " collected=" + candidates.Count().ToStr())
+        return YouTubeTrailerQuality.Rank(candidates)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' YouTubeTrailer.__OriginalLanguage
+    '---------------------------------------------------------------------------
+    function __OriginalLanguage(streamingData as object) as string
+        defaultLanguage = ""
+        originalLanguage = ""
+        if type(streamingData.adaptiveFormats) <> "roArray" then return ""
+        for each audioFormat in streamingData.adaptiveFormats
+            if type(audioFormat) <> "roAssociativeArray" then continue for
+            if type(audioFormat.audioTrack) <> "roAssociativeArray" then continue for
+            trackLanguage = Strings.ToString(audioFormat.audioTrack.id).Split(".")[0]
+            if audioFormat.audioTrack.audioIsDefault = true then defaultLanguage = trackLanguage
+            if Instr(1, LCase(Strings.ToString(audioFormat.audioTrack.displayName)), "original") > 0 then originalLanguage = trackLanguage
+        end for
+        if originalLanguage <> "" then return originalLanguage
+        return defaultLanguage
+    end function
+end namespace
