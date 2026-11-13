@@ -27,19 +27,22 @@ backdrop. Music currently controls the artist detail page.
 ## Rendering
 
 Movie and episode pages apply their own settings on load and committed settings
-changes. Movie Poster renders a 600-by-900-pixel primary poster at [48, 90], leaving
+changes. Movie Poster renders a 600-by-900-pixel primary poster at [58.5, 90], leaving
 90-pixel top and bottom margins. It uses the regular Starfin background without
 movie backdrop artwork, backdrop shading, or the content gradient. Missing or
 failed primary artwork uses the standard poster placeholder.
 
-The poster, details, toolbar, and cast share a layout group shifted 48 pixels
-left in Poster mode, giving the combined content equal 48-pixel page margins.
-The right-side details group starts at [720, 90]. The toolbar starts at
-[720, 570], and Cast & Crew starts at [720, 681]. These elements sit 18 pixels
+The poster, details, toolbar, and cast share a layout group shifted 37.5 pixels
+left in Poster mode, giving the combined visible content equal 58.5-pixel page
+margins. Centering uses the five cast cards' 1131-pixel visual span (four
+231-pixel strides plus the final 207-pixel text area), excluding the viewport's
+21 pixels of trailing space. The right-side details group starts at [730.5, 90].
+The toolbar starts at [730.5, 570], and Cast & Crew starts at [730.5, 681]. These elements sit 18 pixels
 higher than the original Poster layout; the cast row bounds end at y=993,
 3 pixels below the poster bottom at y=990.
 Details use a 1056-pixel-wide column. Cast and crew sit below the toolbar in
-a 1152-pixel-wide row ending 48 pixels from the screen's right edge. The poster uses a dedicated antialiased 600-by-900-pixel rounded
+a 1152-pixel-wide viewport; its five visible card areas end 58.5 pixels from the
+screen's right edge. The poster uses a dedicated antialiased 600-by-900-pixel rounded
 mask (400 by 600 at HD), avoiding enlargement of the library poster mask. Both remain visible while navigating between
 the toolbar and cast. Changing the saved layout restores the appropriate
 positions, widths, and background immediately. MediaShell owns the poster and
