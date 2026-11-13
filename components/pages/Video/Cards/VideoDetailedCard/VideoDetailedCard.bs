@@ -1,8 +1,6 @@
-import "pkg:/source/String.bs"
 import "pkg:/source/MediaMetadata.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/MaskAssets.bs"
-import "pkg:/source/MediaMetadataFormatting.bs"
 import "pkg:/source/ResolutionAssets.bs"
 import "pkg:/source/ResolutionProfile.bs"
 import "pkg:/source/Theme.bs"
@@ -12,7 +10,6 @@ import "pkg:/source/Theme.bs"
 '-------------------------------------------------------------------------------
 sub init()
     initBase()
-    m.cardNodes.title.font = "font:SmallBoldSystemFont"
     m.cardNodes.metadataRow = m.top.findNode("metadataRow")
     m.cardNodes.contentGroup.appendChild(m.cardNodes.metadataRow)
     m.cardNodes.titleDivider = m.top.findNode("titleDivider")
@@ -22,8 +19,9 @@ sub init()
         posterSize: [288, 432], hdPosterSize: [192, 288], posterTranslation: [24, 32]
         progressTranslation: [9, 414], progressWidth: 270, progressHeight: 9
         watchedTranslation: [258, 44], watchedSize: 42
-        title: { translation: [336, 32], width: 516, height: 64, numLines: 1 }
-        metadata: { translation: [336, 96], width: 516, height: 34, numLines: 1 }
+        textLineSpacing: 40
+        title: { translation: [336, 32], width: 516, height: 64, primaryFont: "font:SmallBoldSystemFont" }
+        metadata: { translation: [336, 96], width: 516, height: 34 }
     })
     MaskAssets.Apply(m.cardNodes.cardMask, "detailed-card-mask.png", [882, 496], [588, 331])
     m.cardNodes.cardMask.visible = true
@@ -52,24 +50,33 @@ end sub
 '-------------------------------------------------------------------------------
 sub renderPresentation(content as object)
     item = content.raw
-    if item = invalid then return
-    m.cardNodes.title.text = Format.FirstNonEmpty([item.Name], "Untitled")
-    if content.hasField("metadataText") then
-        m.cardNodes.metadataLabel.text = Strings.ToString(content.metadataText)
-    end if
-    m.cardNodes.metadataLabel.visible = content.hasField("metadataText") and content.showMetadata <> false
-    runtimeText = ""
-    if LCase(Strings.ToString(item.Type)) <> "series" then runtimeText = MediaMetadataFormatting.FormatRuntime(item.RunTimeTicks)
+    hasMetadataRow = content.detailMetadata <> invalid
+    renderStandardText(content, hasMetadataRow, hasMetadataRow)
+    textOffset = 0
+    if content.line3 <> invalid then textOffset = 30
+    m.cardNodes.titleDivider.translation = [336, 125 + textOffset]
+    m.cardNodes.overviewLabel.translation = [336, 142 + textOffset]
+    m.cardNodes.overviewLabel.height = 354 - textOffset
+    m.cardNodes.metadataRow.translation = m.cardNodes.metadataLabel.translation
+    m.cardNodes.metadataRow.visible = hasMetadataRow
+    if hasMetadataRow then renderDetailedMetadata(content.detailMetadata)
+    overview = "No description available."
+    if item <> invalid then overview = Format.FirstNonEmpty([item.Overview], overview)
+    m.cardNodes.overviewLabel.text = overview
+end sub
+
+'-------------------------------------------------------------------------------
+' renderDetailedMetadata
+'-------------------------------------------------------------------------------
+sub renderDetailedMetadata(data as object)
     input = new MediaMetadata()
-    input.leadingText = Strings.ToString(item.ProductionYear)
-    input.runtimeText = runtimeText
-    input.officialRating = Strings.ToString(item.OfficialRating)
-    input.communityRating = item.CommunityRating
-    input.criticRating = item.CriticRating
-    input.availableWidth = 516
+    input.leadingText = data.leadingText
+    input.runtimeText = data.runtimeText
+    input.officialRating = data.officialRating
+    input.communityRating = data.communityRating
+    input.criticRating = data.criticRating
+    input.availableWidth = m.cardNodes.metadataLabel.maxWidth
     input.truncateLeadingText = false
     input.scaleToFit = true
     m.cardNodes.metadataRow.callFunc("render", input)
-    m.cardNodes.metadataRow.visible = not content.hasField("metadataText") and content.showMetadata <> false
-    m.cardNodes.overviewLabel.text = Format.FirstNonEmpty([item.Overview], "No description available.")
 end sub

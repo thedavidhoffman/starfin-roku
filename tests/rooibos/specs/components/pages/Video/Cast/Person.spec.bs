@@ -1,3 +1,6 @@
+import "pkg:/source/Spinner.bs"
+import "pkg:/source/MediaMetadataFormatting.bs"
+
 namespace tests
 
     @SGNode("Person")
@@ -626,6 +629,105 @@ namespace tests
             'bs:disable-next-line 1140
             m.assertFalse(onKeyEvent("play", true))
             m.assertInvalid(m.top.playbackSelected)
+        end function
+
+        @describe("person credit text")
+
+        @it("supplies title matched character and year to movie cards")
+        function _()
+            'bs:disable-next-line 1140
+            renderRelated([{ Id: "movie", Name: "The Dark Knight", Type: "Movie", ProductionYear: 2008, People: [{ Id: "other", Role: "Joker" }, { Id: "person-1", Role: "Bruce Wayne / Batman" }] }], [])
+
+            card = m.top.findNode("relatedRows").content.getChild(0).getChild(0)
+            m.assertEqual(card.line1, { text: "The Dark Knight", style: "primary" })
+            m.assertEqual(card.line2, { text: "Bruce Wayne / Batman", style: "secondary" })
+            m.assertEqual(card.line3, { text: "2008", style: "muted" })
+        end function
+
+        @it("keeps episode identification together above role and year")
+        function _()
+            'bs:disable-next-line 1140
+            renderRelated([], [{ Id: "episode", Type: "Episode", Name: "Pilot", SeriesName: "Series", ParentIndexNumber: 1, IndexNumber: 2, ProductionYear: 2020, People: [{ Id: "person-1", Role: "Guest" }] }])
+
+            card = m.top.findNode("relatedEpisodeRows").content.getChild(0).getChild(0)
+            m.assertEqual(card.line1.text, "Series - S1" + MediaMetadataFormatting.BulletSeparator() + "E2 - Pilot")
+            m.assertEqual(card.line2.text, "Guest")
+            m.assertEqual(card.line3.text, "2020")
+        end function
+
+        @it("leaves the role blank when People is absent")
+        function _()
+            'bs:disable-next-line 1140
+            lines = getCreditLines({ Type: "Movie", Name: "Movie", ProductionYear: 2008 })
+
+            m.assertEqual(lines.line2.text, "")
+            m.assertEqual(lines.line3.text, "2008")
+        end function
+
+        @it("does not use another person's role")
+        function _()
+            'bs:disable-next-line 1140
+            lines = getCreditLines({ Name: "Movie", People: [{ Id: "other", Role: "Character" }] })
+
+            m.assertEqual(lines.line2.text, "")
+        end function
+
+        @it("joins distinct roles without duplicating the same credit")
+        function _()
+            'bs:disable-next-line 1140
+            lines = getCreditLines({ Name: "Movie", People: [{ Id: "person-1", Role: "One" }, { Id: "person-1", Role: "Two" }, { Id: "person-1", Role: "One" }, { Id: "person-1", Role: " " }] })
+
+            m.assertEqual(lines.line2.text, "One" + MediaMetadataFormatting.BulletSeparator() + "Two")
+        end function
+
+        @it("leaves an unavailable year blank without moving the role")
+        function _()
+            'bs:disable-next-line 1140
+            lines = getCreditLines({ Name: "Movie", People: [{ Id: "person-1", Role: "Character" }] })
+
+            m.assertEqual(lines.line2.text, "Character")
+            m.assertEqual(lines.line3.text, "")
+        end function
+
+        @it("reserves consistent person shelf geometry with missing credits")
+        function _()
+            'bs:disable-next-line 1140
+            renderRelated([{ Id: "movie", Name: "Movie" }], [{ Id: "episode", Name: "Episode", Type: "Episode" }])
+
+            m.assertEqual(m.top.findNode("relatedRows").rowItemSize, [[297.0, 501.0]])
+            m.assertEqual(m.top.findNode("relatedEpisodeRows").rowItemSize, [[486.0, 384.0]])
+            m.assertEqual(m.top.findNode("relatedEpisodesGroup").translation, [0.0, 596.0])
+        end function
+
+        @it("separates character and crew credits without an acting prefix")
+        function _()
+            'bs:disable-next-line 1140
+            lines = getCreditLines({ Name: "Jesse Stone", People: [{ Id: "person-1", Role: "Jesse Stone" }, { Id: "person-1", Role: "Screenwriter" }] })
+
+            m.assertEqual(lines.line2.text, "Jesse Stone" + MediaMetadataFormatting.BulletSeparator() + "Screenwriter")
+        end function
+
+        @describe("loading feedback")
+
+        @it("requests the spinner immediately when loading a person")
+        function _()
+            getGlobalAa().personSpinnerDelay = invalid
+            m.stubCall(Spinner.Show, sub(delay)
+                getGlobalAa().personSpinnerDelay = delay
+            end sub)
+            originalTask = m.node.personTask
+            task = { request: invalid, control: "" }
+            m.node.personTask = task
+            request = { server: "http://server", token: "token", userId: "user", itemId: "person-1", item: m.createPerson() }
+
+            m.top.loadRequest = request
+            m.node.personTask = originalTask
+
+            delay = getGlobalAa().personSpinnerDelay
+            getGlobalAa().Delete("personSpinnerDelay")
+            m.assertEqual(delay, 0)
+            m.assertEqual(task.control, "run")
+            m.assertEqual(task.request.itemId, "person-1")
         end function
 
     end class

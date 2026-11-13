@@ -1,0 +1,67 @@
+import "pkg:/source/MediaCard.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/Format.bs"
+import "pkg:/source/DateTime.bs"
+import "pkg:/source/MediaMetadataFormatting.bs"
+
+namespace MediaCardContent
+
+    '---------------------------------------------------------------------------
+    ' MediaCardContent.Build
+    '---------------------------------------------------------------------------
+    function Build(item as object, showSecond = true as boolean, detailed = false as boolean) as object
+        title = Format.FirstNonEmpty([item.Name], "Untitled")
+        metadata = ""
+        mediaType = LCase(Strings.ToString(item.Type))
+        if mediaType = "episode" then
+            if not detailed then title = Format.FirstNonEmpty([item.SeriesName, item.Name], "Untitled")
+            metadata = GetEpisodeMetadata(item)
+        else if mediaType = "series" then
+            metadata = GetSeriesYearRange(item)
+        else if mediaType = "movie" or mediaType = "video" then
+            metadata = Strings.ToString(item.ProductionYear)
+        else
+            metadata = Format.FirstNonEmpty([item.SeriesName, item.AlbumArtist, item.Album, item.CollectionType, item.Type], "")
+        end if
+        result = { line1: { text: title, style: MediaCard.TextStyle.Primary } }
+        if showSecond then result.line2 = { text: metadata, style: MediaCard.TextStyle.Muted }
+        if detailed and showSecond then
+            runtime = ""
+            if mediaType <> "series" then runtime = MediaMetadataFormatting.FormatRuntime(item.RunTimeTicks)
+            result.detailMetadata = {
+                leadingText: Strings.ToString(item.ProductionYear), runtimeText: runtime
+                officialRating: Strings.ToString(item.OfficialRating)
+                communityRating: item.CommunityRating, criticRating: item.CriticRating
+            }
+        end if
+        return result
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaCardContent.GetSeriesYearRange
+    '---------------------------------------------------------------------------
+    function GetSeriesYearRange(item as object) as string
+        productionYear = Strings.ToString(item.ProductionYear)
+        if productionYear = "" then return ""
+        status = LCase(Strings.ToString(item.Status))
+        if status = "continuing" then return productionYear + " - Present"
+        if status = "ended" then
+            endYear = DateTime.ToYear(item.EndDate)
+            if endYear = productionYear then return productionYear
+            if endYear <> "" then return productionYear + " - " + endYear
+        end if
+        return productionYear
+    end function
+
+    '---------------------------------------------------------------------------
+    ' MediaCardContent.GetEpisodeMetadata
+    '---------------------------------------------------------------------------
+    function GetEpisodeMetadata(item as object) as string
+        episodeTitle = Strings.ToString(item.Name)
+        seasonNumber = Strings.ToString(item.ParentIndexNumber)
+        episodeNumber = Strings.ToString(item.IndexNumber)
+        if seasonNumber = "" or episodeNumber = "" then return episodeTitle
+        return "S" + seasonNumber + MediaMetadataFormatting.BulletSeparator() + "E" + episodeNumber + " - " + episodeTitle
+    end function
+
+end namespace

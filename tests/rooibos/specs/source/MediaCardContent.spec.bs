@@ -1,0 +1,88 @@
+import "pkg:/source/MediaCardContent.bs"
+
+namespace tests
+
+    @suite("Media card content formatting")
+    class MediaCardContentTests extends rooibos.BaseTestSuite
+
+        @describe("consumer text projection")
+
+        @it("supplies movie title and muted year without a third line")
+        function _()
+            lines = MediaCardContent.Build({ Type: "Movie", Name: "Movie", ProductionYear: 2008 })
+
+            m.assertEqual(lines.line1.text, "Movie")
+            m.assertEqual(lines.line1.style, MediaCard.TextStyle.Primary)
+            m.assertEqual(lines.line2.text, "2008")
+            m.assertEqual(lines.line2.style, MediaCard.TextStyle.Muted)
+            m.assertInvalid(lines.line3)
+        end function
+
+        @it("omits secondary content for title-only consumers")
+        function _()
+            lines = MediaCardContent.Build({ Name: "Collection", Type: "BoxSet" }, false, true)
+
+            m.assertEqual(lines.line1.text, "Collection")
+            m.assertInvalid(lines.line2)
+            m.assertInvalid(lines.detailMetadata)
+        end function
+
+        @it("preserves continuing series year ranges")
+        function _()
+            lines = MediaCardContent.Build({ Name: "Series", Type: "Series", ProductionYear: 2020, Status: "Continuing" })
+
+            m.assertEqual(lines.line2.text, "2020 - Present")
+        end function
+
+        @it("preserves ended series year ranges")
+        function _()
+            lines = MediaCardContent.Build({ Name: "Series", Type: "Series", ProductionYear: 2020, Status: "Ended", EndDate: "2024-01-01T00:00:00Z" })
+
+            m.assertEqual(lines.line2.text, "2020 - 2024")
+        end function
+
+        @it("does not repeat a same-year series date")
+        function _()
+            lines = MediaCardContent.Build({ Name: "Series", Type: "Series", ProductionYear: 2020, Status: "Ended", EndDate: "2020-12-01T00:00:00Z" })
+
+            m.assertEqual(lines.line2.text, "2020")
+        end function
+
+        @it("keeps episode details together in the standard second line")
+        function _()
+            lines = MediaCardContent.Build({ Type: "Episode", SeriesName: "Series", Name: "Pilot", ParentIndexNumber: 2, IndexNumber: 3 })
+
+            m.assertEqual(lines.line1.text, "Series")
+            m.assertEqual(lines.line2.text, "S2" + MediaMetadataFormatting.BulletSeparator() + "E3 - Pilot")
+        end function
+
+        @it("keeps the episode name when numbering is unavailable")
+        function _()
+            lines = MediaCardContent.Build({ Type: "Episode", SeriesName: "Series", Name: "Pilot" })
+
+            m.assertEqual(lines.line2.text, "Pilot")
+        end function
+
+        @it("supplies detailed metadata without losing missing ratings")
+        function _()
+            lines = MediaCardContent.Build({ Type: "Movie", Name: "Movie", ProductionYear: 2008, OfficialRating: "PG-13" }, true, true)
+
+            m.assertEqual(lines.detailMetadata.leadingText, "2008")
+            m.assertEqual(lines.detailMetadata.officialRating, "PG-13")
+            m.assertInvalid(lines.detailMetadata.criticRating)
+            m.assertInvalid(lines.detailMetadata.availableWidth)
+            m.assertInvalid(lines.detailMetadata.itemSpacing)
+            m.assertInvalid(lines.detailMetadata.scaleToFit)
+            m.assertInvalid(lines.detailMetadata.truncateLeadingText)
+        end function
+
+        @it("preserves the episode title for detailed presentation")
+        function _()
+            lines = MediaCardContent.Build({ Type: "Episode", SeriesName: "Series", Name: "Pilot" }, true, true)
+
+            m.assertEqual(lines.line1.text, "Pilot")
+        end function
+
+    end class
+
+end namespace

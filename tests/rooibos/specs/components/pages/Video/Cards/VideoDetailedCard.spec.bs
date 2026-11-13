@@ -1,3 +1,5 @@
+import "pkg:/source/MediaCardContent.bs"
+
 namespace tests
 
     @SGNode("VideoDetailedCard")
@@ -185,7 +187,7 @@ namespace tests
         @it("uses plain text for custom metadata and restores icons on reuse")
         function _()
             photo = m.createItem({ Name: "Photo" })
-            photo.AddFields({ metadataText: "Aug 14, 2022" })
+            photo.AddFields({ line2: { text: "Aug 14, 2022", style: MediaCard.TextStyle.Muted }, detailMetadata: invalid })
             m.top.itemContent = photo
             m.assertTrue(m.top.findNode("metadataLabel").visible)
             m.assertFalse(m.top.findNode("metadataRow").visible)
@@ -200,7 +202,8 @@ namespace tests
         @it("hides metadata when explicitly disabled")
         function _()
             item = m.createItem({ Name: "Movie", CommunityRating: 8.3 })
-            item.AddFields({ showMetadata: false })
+            item.line2 = invalid
+            item.detailMetadata = invalid
 
             m.top.itemContent = item
 
@@ -241,13 +244,13 @@ namespace tests
         @it("renders explicit Home Media metadata including an intentional blank")
         function _()
             photo = m.createItem({ Name: "Photo", Type: "Photo", UserData: {} })
-            photo.AddFields({ metadataText: "Aug 14, 2022 at 11:30 AM" })
+            photo.AddFields({ line2: { text: "Aug 14, 2022 at 11:30 AM", style: MediaCard.TextStyle.Muted }, detailMetadata: invalid })
             m.top.itemContent = photo
 
             m.assertEqual(m.top.findNode("metadataLabel").text, "Aug 14, 2022 at 11:30 AM")
 
             folder = m.createItem({ Name: "Folder", Type: "Folder", UserData: {} })
-            folder.AddFields({ metadataText: "" })
+            folder.AddFields({ line2: { text: "", style: MediaCard.TextStyle.Muted }, detailMetadata: invalid })
             m.top.itemContent = folder
 
             m.assertEqual(m.top.findNode("metadataLabel").text, "")
@@ -385,6 +388,7 @@ namespace tests
 
         function createItem(raw as object) as object
             item = CreateObject("roSGNode", "ContentNode")
+            item.AddFields(MediaCardContent.Build(raw, true, true))
             item.AddFields({ raw: raw, fitArtwork: false, showArtworkBackground: false })
             return item
         end function
@@ -408,8 +412,9 @@ namespace tests
             m.global.showUnwatchedEpisodeCount = "subtle"
             card = CreateObject("roSGNode", "VideoDetailedCard")
             content = CreateObject("roSGNode", "ContentNode")
-            content.addFields({ raw: { Type: "Series", Name: "Series", UserData: { UnplayedItemCount: 200 } }, showMetadata: true, fitArtwork: false, showArtworkBackground: false })
+            content.addFields({ raw: { Type: "Series", Name: "Series", UserData: { UnplayedItemCount: 200 } }, fitArtwork: false, showArtworkBackground: false })
 
+            content.AddFields(MediaCardContent.Build(content.raw, true, true))
             card.itemContent = content
 
             badge = card.findNode("watchedIndicator")
@@ -417,6 +422,84 @@ namespace tests
             m.assertEqual(badge.translation, [258.0, 44.0])
             m.assertEqual((badge.findNode("countBackground").height * badge.findNode("countBackground").scale[1]), 42.0)
             m.global.showUnwatchedEpisodeCount = originalCountMode
+        end function
+
+        @describe("optional third line")
+
+        @it("reserves space for a third line and restores the two-line layout on reuse")
+        function _()
+            card = CreateObject("roSGNode", "VideoDetailedCard")
+            item = m.createItem({ Name: "Title" })
+            item.detailMetadata = invalid
+            item.line2 = { text: "Credit", style: MediaCard.TextStyle.Secondary }
+            item.AddFields({ line3: { text: "2008", style: MediaCard.TextStyle.Muted } })
+
+            card.itemContent = item
+
+            m.assertEqual(card.findNode("line3").text, "2008")
+            m.assertEqual(card.findNode("title").translation, [336.0, 32.0])
+            m.assertEqual(card.findNode("metadataLabel").translation, [336.0, 72.0])
+            m.assertEqual(card.findNode("line3").translation, [336.0, 112.0])
+            m.assertEqual(card.findNode("overviewLabel").translation, [336.0, 172.0])
+            m.assertEqual(card.findNode("titleDivider").translation, [336.0, 155.0])
+
+            card.itemContent = m.createItem({ Name: "Next" })
+
+            m.assertFalse(card.findNode("line3").visible)
+            m.assertEqual(card.findNode("overviewLabel").translation, [336.0, 142.0])
+            m.assertEqual(card.findNode("titleDivider").translation, [336.0, 125.0])
+        end function
+
+        @describe("presentation-owned text and metadata")
+
+        @it("uses the detailed title font and excludes the replaced line from scrolling")
+        function _()
+            card = CreateObject("roSGNode", "VideoDetailedCard")
+            item = m.createItem({ Name: "Detailed title", ProductionYear: 2008 })
+            item.line2 = { text: "Replaced text", style: MediaCard.TextStyle.Secondary }
+            card.itemHasFocus = true
+            reference = CreateObject("roSGNode", "Label")
+            reference.font = "font:SmallBoldSystemFont"
+
+            card.itemContent = item
+
+            m.assertEqual(card.findNode("title").font.size, reference.font.size)
+            m.assertEqual(card.findNode("title").repeatCount, -1.0)
+            m.assertTrue(card.findNode("metadataRow").visible)
+            m.assertFalse(card.findNode("metadataLabel").visible)
+            m.assertEqual(card.findNode("metadataLabel").repeatCount, 0.0)
+        end function
+
+        @it("reserves the rich metadata slot when the plain second line is empty")
+        function _()
+            card = CreateObject("roSGNode", "VideoDetailedCard")
+            item = m.createItem({ Name: "Title", ProductionYear: 2008 })
+            item.line2 = { text: "", style: MediaCard.TextStyle.Muted }
+            item.AddFields({ line3: { text: "Additional text", style: MediaCard.TextStyle.Muted } })
+
+            card.itemContent = item
+
+            m.assertTrue(card.findNode("metadataRow").visible)
+            m.assertEqual(card.findNode("metadataRow").translation, [336.0, 72.0])
+            m.assertEqual(card.findNode("metadataRow").findNode("leadingLabel").text, "2008")
+            m.assertEqual(card.findNode("line3").translation, [336.0, 112.0])
+        end function
+
+        @it("restores plain secondary scrolling when rich metadata is removed on reuse")
+        function _()
+            card = CreateObject("roSGNode", "VideoDetailedCard")
+            card.itemHasFocus = true
+            card.itemContent = m.createItem({ Name: "Rich", ProductionYear: 2008 })
+            replacement = m.createItem({ Name: "Plain" })
+            replacement.detailMetadata = invalid
+            replacement.line2 = { text: "Secondary", style: MediaCard.TextStyle.Secondary }
+
+            card.itemContent = replacement
+
+            m.assertFalse(card.findNode("metadataRow").visible)
+            m.assertTrue(card.findNode("metadataLabel").visible)
+            m.assertEqual(card.findNode("metadataLabel").repeatCount, -1.0)
+            m.assertEqual(card.findNode("metadataLabel").translation, [336.0, 96.0])
         end function
 
     end class

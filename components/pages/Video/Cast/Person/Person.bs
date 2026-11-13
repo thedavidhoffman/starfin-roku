@@ -1,3 +1,4 @@
+import "pkg:/source/MediaCardContent.bs"
 import "pkg:/source/RemotePlayback.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/RequestFailure.bs"
@@ -50,7 +51,7 @@ sub init()
         bioEpisodesFocused: [0, -680]
         rowsDefault: [76, 750]
         rowsRelatedFocused: [76, 492]
-        rowsEpisodesFocused: [76, 50]
+        rowsEpisodesFocused: [76, 14]
         overviewDefaultTranslation: [536, 266]
         overviewNoMetadataTranslation: [536, 175]
     }
@@ -73,11 +74,11 @@ sub initReferences()
     m.relatedItemsGroup = m.top.findNode("relatedItemsGroup")
     m.relatedTitleLabel = m.top.findNode("relatedTitleLabel")
     m.relatedRows = m.top.findNode("relatedRows")
-    m.relatedRows.focusBitmapUri = ResolutionAssets.GetHomepageImageUri("home-page-poster-focus.png")
+    m.relatedRows.focusBitmapUri = ResolutionAssets.GetHomepageImageUri("person-credit-poster-focus.png")
     m.relatedEpisodesGroup = m.top.findNode("relatedEpisodesGroup")
     m.relatedEpisodesTitleLabel = m.top.findNode("relatedEpisodesTitleLabel")
     m.relatedEpisodeRows = m.top.findNode("relatedEpisodeRows")
-    m.relatedEpisodeRows.focusBitmapUri = ResolutionAssets.GetHomepageImageUri("person-episode-focus.png")
+    m.relatedEpisodeRows.focusBitmapUri = ResolutionAssets.GetHomepageImageUri("person-credit-episode-focus.png")
     m.layoutAnimation = m.top.findNode("layoutAnimation")
     m.bioTranslation = m.top.findNode("bioTranslation")
     m.relatedRowsTranslation = m.top.findNode("relatedRowsTranslation")
@@ -110,7 +111,7 @@ sub onLoadRequestChanged()
     setLayoutMode("bio", false)
     m.readMoreButton.visible = false
     clearRelated()
-    Spinner.Show()
+    Spinner.Show(0)
     renderPerson(request.item)
     m.overviewLabel.text = ""
 
@@ -350,7 +351,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub updateRelatedEpisodesLayout(hasRelatedItems as boolean)
     if hasRelatedItems then
-        m.relatedEpisodesGroup.translation = [0, 560]
+        m.relatedEpisodesGroup.translation = [0, 596]
     else
         m.relatedEpisodesGroup.translation = [0, 0]
     end if
@@ -405,6 +406,7 @@ sub addRelatedItemNode(row as object, item as dynamic, imageAspect as string)
 
     child = row.createChild("ContentNode")
     child.HDPosterUrl = getItemImageUrl(item, imageAspect)
+    child.AddFields(getCreditLines(item))
     child.AddFields({
         imageAspect: imageAspect
         raw: item
@@ -946,4 +948,37 @@ function playFocusedMedia() as boolean
     if selection = invalid then return false
     m.top.playbackSelected = selection
     return true
+end function
+
+'-------------------------------------------------------------------------------
+' getCreditLines
+'-------------------------------------------------------------------------------
+function getCreditLines(item as object) as object
+    lines = MediaCardContent.Build(item)
+    title = lines.line1.text
+    year = Strings.ToString(item.ProductionYear)
+    if item.Type = "Series" then year = MediaCardContent.GetSeriesYearRange(item)
+    if item.Type = "Episode" then title += " - " + MediaCardContent.GetEpisodeMetadata(item)
+    roleText = ""
+    roles = []
+    seenRoles = {}
+    if m.pageState.request <> invalid and Arrays.IsArray(item.People) then
+        for each person in item.People
+            if Arrays.IsAssocArray(person) then
+                if Strings.ToString(person.Id) = Strings.ToString(m.pageState.request.itemId) then
+                    role = Strings.ToString(person.Role).Trim()
+                    if role <> "" and not seenRoles.DoesExist(role) then
+                        roles.Push(role)
+                        seenRoles[role] = true
+                    end if
+                end if
+            end if
+        end for
+    end if
+    if roles.Count() > 0 then roleText = Strings.Join(roles, MediaMetadataFormatting.BulletSeparator())
+    return {
+        line1: { text: title, style: MediaCard.TextStyle.Primary }
+        line2: { text: roleText, style: MediaCard.TextStyle.Secondary }
+        line3: { text: year, style: MediaCard.TextStyle.Muted }
+    }
 end function

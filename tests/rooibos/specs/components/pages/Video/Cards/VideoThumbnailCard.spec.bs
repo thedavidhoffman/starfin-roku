@@ -1,3 +1,4 @@
+import "pkg:/source/MediaCardContent.bs"
 import "pkg:/source/Number.bs"
 
 namespace tests
@@ -20,16 +21,16 @@ namespace tests
 
         @describe("thumbnail presentation")
 
-        @it("renders thumbnail artwork and two title lines when metadata is hidden")
+        @it("renders thumbnail artwork and a scrolling title when the second line is absent")
         function _()
             content = m.createContent({ Type: "Movie", Name: "Movie", UserData: {} })
-            content.showMetadata = false
+            content.line2 = invalid
 
             m.top.itemContent = content
 
             m.assertEqual(Number.ToInteger(m.top.findNode("poster").width, -1), 441)
             m.assertEqual(Number.ToInteger(m.top.findNode("poster").height, -1), 249)
-            m.assertEqual(Number.ToInteger(m.top.findNode("title").numLines, -1), 2)
+            m.assertEqual(m.top.findNode("title").subtype(), "ScrollingLabel")
             m.assertFalse(m.top.findNode("metadataLabel").visible)
             m.assertFalse(m.top.findNode("logoGradient").visible)
         end function
@@ -179,7 +180,8 @@ namespace tests
 
         function createContent(raw as object) as object
             content = CreateObject("roSGNode", "ContentNode")
-            content.addFields({ raw: raw, showMetadata: true, fitArtwork: false, showArtworkBackground: false, tracksPlaybackProgress: true })
+            content.AddFields(MediaCardContent.Build(raw, true, false))
+            content.addFields({ raw: raw, fitArtwork: false, showArtworkBackground: false, tracksPlaybackProgress: true })
             return content
         end function
 
@@ -191,8 +193,9 @@ namespace tests
             m.global.showUnwatchedEpisodeCount = "subtle"
             card = CreateObject("roSGNode", "VideoThumbnailCard")
             content = CreateObject("roSGNode", "ContentNode")
-            content.addFields({ raw: { Type: "Series", Name: "Series", UserData: { UnplayedItemCount: 200 } }, showMetadata: true, fitArtwork: false, showArtworkBackground: false })
+            content.addFields({ raw: { Type: "Series", Name: "Series", UserData: { UnplayedItemCount: 200 } }, fitArtwork: false, showArtworkBackground: false })
 
+            content.AddFields(MediaCardContent.Build(content.raw, true, false))
             card.itemContent = content
 
             badge = card.findNode("watchedIndicator")

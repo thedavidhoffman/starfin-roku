@@ -53,7 +53,7 @@ individual Starfin features.
 - [TV Season Browsing](tv-season-browsing.md)
 - [Filmography](filmography.md)
 - [Video Library Capabilities](video-library-capabilities.md)
-- [Video Media Cards](video-media-cards.md)
+- [Video Media Cards](video-media-cards.md) ? explicit text lines, focus scrolling, and person credits
 - [Video Media Information](video-media-information.md)
 - [Media Options](media-options.md)
 - [Automatic Subtitles](automatic-subtitles.md)

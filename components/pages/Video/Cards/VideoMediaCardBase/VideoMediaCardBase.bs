@@ -1,3 +1,5 @@
+import "pkg:/source/MediaCard.bs"
+import "pkg:/source/String.bs"
 import "pkg:/source/MaskAssets.bs"
 import "pkg:/source/UnwatchedEpisodeCount.bs"
 import "pkg:/source/MediaPlaybackPolicy.bs"
@@ -19,7 +21,7 @@ end sub
 ' initBase
 '-------------------------------------------------------------------------------
 sub initBase()
-    m.cardState = { content: invalid, badgeSize: 42 }
+    m.cardState = { content: invalid, badgeSize: 42, layout: invalid }
     m.cardNodes = {
         contentGroup: m.top.findNode("contentGroup")
         cardMask: m.top.findNode("cardMask")
@@ -31,6 +33,7 @@ sub initBase()
         watchedIndicator: m.top.findNode("watchedIndicator")
         title: m.top.findNode("title")
         metadataLabel: m.top.findNode("metadataLabel")
+        line3: m.top.findNode("line3")
         overviewLabel: m.top.findNode("overviewLabel")
     }
 end sub
@@ -51,6 +54,11 @@ sub onItemContentChanged()
     if m.cardState.content <> invalid then m.cardState.content.unobserveField("raw")
     m.cardState.content = content
     if content = invalid then
+        for each label in [m.cardNodes.title, m.cardNodes.metadataLabel, m.cardNodes.line3]
+            label.text = ""
+            label.repeatCount = 0
+            label.visible = false
+        end for
         updateWatchedIndicator(invalid, invalid, invalid)
         updateProgress(invalid, invalid)
         return
@@ -65,6 +73,7 @@ sub onItemContentChanged()
     updateProgress(item, content.tracksPlaybackProgress)
     m.top.callFunc("renderPresentation", content)
     updateWatchedIndicator(item, content.tracksPlaybackProgress, content.showWatchedIndicator)
+    onCardFocusChanged()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -125,6 +134,7 @@ end function
 ' applyCardLayout
 '-------------------------------------------------------------------------------
 sub applyCardLayout(layout as object)
+    m.cardState.layout = layout
     m.cardNodes.contentGroup.translation = layout.contentTranslation
     MaskAssets.Apply(m.cardNodes.posterMask, layout.posterMaskName, layout.posterSize, layout.hdPosterSize)
     setNodeSize(m.cardNodes.artworkBackground, layout.posterSize)
@@ -152,9 +162,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub applyLabelLayout(label as object, layout as object)
     label.translation = layout.translation
-    label.width = layout.width
+    label.maxWidth = layout.width
     label.height = layout.height
-    label.numLines = layout.numLines
+    if layout.primaryFont <> invalid then label.font = layout.primaryFont
 end sub
 
 '-------------------------------------------------------------------------------
@@ -172,4 +182,72 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.top.observeField("itemContent", "onItemContentChanged")
+    m.top.observeField("itemHasFocus", "onCardFocusChanged")
+end sub
+
+'-------------------------------------------------------------------------------
+' renderStandardText
+'-------------------------------------------------------------------------------
+sub renderStandardText(content as object, hideSecond = false as boolean, reserveSecond = false as boolean)
+    layout = m.cardState.layout
+    applyLabelLayout(m.cardNodes.title, layout.title)
+    applyLabelLayout(m.cardNodes.metadataLabel, layout.metadata)
+    applyLabelLayout(m.cardNodes.line3, layout.metadata)
+    primaryFont = Strings.ToString(layout.title.primaryFont, "font:SmallestBoldSystemFont")
+    renderTextLine(m.cardNodes.title, content.line1, primaryFont)
+    renderTextLine(m.cardNodes.metadataLabel, content.line2)
+    renderTextLine(m.cardNodes.line3, content.line3)
+    if hideSecond then m.cardNodes.metadataLabel.visible = false
+    if content.line3 <> invalid then
+        ' One stack owns three-line spacing. Hidden slots consume no height, but
+        ' the caller's item canvas stays fixed so rows and focus do not move.
+        spacing = Number.ToInteger(layout.textLineSpacing, 30)
+        y = layout.title.translation[1]
+        for each label in [m.cardNodes.title, m.cardNodes.metadataLabel, m.cardNodes.line3]
+            label.translation = [layout.title.translation[0], y]
+            label.height = spacing
+            occupied = label.visible
+            if label.isSameNode(m.cardNodes.metadataLabel) and reserveSecond then occupied = true
+            if occupied then y += spacing
+        end for
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderTextLine
+'-------------------------------------------------------------------------------
+sub renderTextLine(label as object, line as dynamic, primaryFont = "font:SmallestBoldSystemFont" as string)
+    label.repeatCount = 0
+    label.text = ""
+    label.visible = false
+    if line = invalid then return
+    label.text = Strings.ToString(line.text)
+    label.visible = Strings.Trim(label.text) <> ""
+    label.font = "font:TinySystemFont"
+    label.color = &hB9C7D6FF
+    if line.style = MediaCard.TextStyle.Primary then
+        label.font = primaryFont
+        label.color = &hF3F7FBFF
+    else if line.style = MediaCard.TextStyle.Secondary then
+        label.font = "font:SmallestSystemFont"
+        label.color = &hD8E2ECFF
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onCardFocusChanged
+'-------------------------------------------------------------------------------
+sub onCardFocusChanged()
+    content = m.cardState.content
+    labels = [m.cardNodes.title, m.cardNodes.metadataLabel, m.cardNodes.line3]
+    for i = 0 to 2
+        label = labels[i]
+        label.repeatCount = 0
+        if content <> invalid and m.top.itemHasFocus then
+            line = content["line" + (i + 1).ToStr()]
+            if line <> invalid and label.visible then
+                if line.style = MediaCard.TextStyle.Primary or line.style = MediaCard.TextStyle.Secondary then label.repeatCount = -1
+            end if
+        end if
+    end for
 end sub

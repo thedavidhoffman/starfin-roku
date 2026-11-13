@@ -1,3 +1,4 @@
+import "pkg:/source/RequestFailure.bs"
 import "pkg:/source/Format.bs"
 import "pkg:/source/JellyfinImage.bs"
 import "pkg:/source/String.bs"
@@ -90,7 +91,7 @@ function loadPersonItems(request as object) as object
         Recursive: true
         SortBy: "SortName"
         SortOrder: "Ascending"
-        Fields: "PrimaryImageAspectRatio,Overview"
+        Fields: "PrimaryImageAspectRatio,Overview,People"
         ImageTypeLimit: 1
         EnableImageTypes: Strings.Join([JellyfinImage.Type.Primary, JellyfinImage.Type.Backdrop])
         Limit: 40
@@ -136,8 +137,57 @@ function loadPersonEpisodeItems(request as object, excludedSeriesIds as object) 
         end for
     end if
 
-    response.AddReplace("data", episodeItems)
-    return response
+    return loadEpisodeCredits(request, episodeItems)
+end function
+
+'-------------------------------------------------------------------------------
+' loadEpisodeCredits
+'-------------------------------------------------------------------------------
+function loadEpisodeCredits(request as object, episodeItems as object) as object
+    ids = []
+    for each item in episodeItems
+        if Arrays.IsAssocArray(item) then
+            itemId = Strings.ToString(item.Id)
+            if itemId <> "" then ids.Push(itemId)
+        end if
+    end for
+    if ids.Count() = 0 then return { ok: true, data: episodeItems }
+
+    ' The discovery query may return 500 episodes, most of which are discarded.
+    ' Request full casts only for the retained shelf items, in one bounded batch.
+    params = {
+        UserId: Strings.ToString(request.userId)
+        Ids: Strings.Join(ids, ",")
+        Fields: "People"
+        EnableImages: false
+        EnableUserData: false
+        EnableTotalRecordCount: false
+        Limit: ids.Count()
+    }
+    requestUrl = request.server + "/Users/" + request.userId + "/Items" + Url.BuildQueryString(params)
+    response = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
+    if response.ok <> true then
+        if response.authExpired = true or response.failureKind = RequestFailure.Kind.AuthenticationRequired then return response
+        ' Credits are optional enrichment; retain the successfully discovered shelf.
+        return { ok: true, data: episodeItems }
+    end if
+
+    creditsById = {}
+    creditItems = getPayloadItems(response.data)
+    if Arrays.IsArray(creditItems) then
+        for each item in creditItems
+            if Arrays.IsAssocArray(item) then creditsById[Strings.ToString(item.Id)] = item
+        end for
+    end if
+    ' Merge by ID: the batch response need not retain discovery order. Keep the
+    ' original artwork, playback metadata, and membership when a credit is absent.
+    for each item in episodeItems
+        if Arrays.IsAssocArray(item) then
+            credit = creditsById[Strings.ToString(item.Id)]
+            if credit <> invalid then item.People = credit.People
+        end if
+    end for
+    return { ok: true, data: episodeItems }
 end function
 
 '-------------------------------------------------------------------------------

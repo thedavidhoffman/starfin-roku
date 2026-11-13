@@ -1,3 +1,5 @@
+import "pkg:/source/api/HttpClient.bs"
+
 namespace tests
 
     @SGNode("PersonTask")
@@ -45,6 +47,195 @@ namespace tests
             m.assertEqual(response.action, "person")
             m.assertEqual(response.errorMessage, "Invalid request itemId.")
             m.assertEqual(response.itemId, "")
+        end function
+
+        @describe("credit metadata requests")
+
+        @it("requests and retains People for movies and series")
+        function _()
+            getGlobalAa().personCreditRequest = ""
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().personCreditRequest = requestUrl
+                return { ok: true, data: { Items: [{ Id: "item", People: [{ Id: "person-1", Role: "Character" }] }] } }
+            end function)
+            request = { server: "http://server", token: "token", userId: "user", itemId: "person-1" }
+
+            'bs:disable-next-line 1140
+            result = loadPersonItems(request)
+
+            m.assertTrue(Instr(1, getGlobalAa().personCreditRequest, "fields=PrimaryImageAspectRatio%2COverview%2CPeople") > 0)
+            m.assertTrue(Instr(1, getGlobalAa().personCreditRequest, "personids=person-1") > 0)
+            m.assertEqual(result.data.Items[0].People[0].Role, "Character")
+            getGlobalAa().Delete("personCreditRequest")
+        end function
+
+        @it("requests episode casts only after lightweight discovery")
+        function _()
+            m.mockEpisodeResponses({ ok: true, data: { Items: [{ Id: "episode", Name: "Pilot" }] } }, { ok: true, data: { Items: [{ Id: "episode", People: [{ Id: "person-1", Role: "Character" }] }] } })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), [])
+
+            calls = getGlobalAa().personEpisodeCalls
+            m.assertEqual(calls.Count(), 2)
+            m.assertTrue(Instr(1, calls[0], "fields=PrimaryImageAspectRatio%2COverview%2CSeriesName") > 0)
+            m.assertEqual(Instr(1, calls[0], "People"), 0)
+            m.assertTrue(Instr(1, calls[0], "personids=person-1") > 0)
+            m.assertTrue(Instr(1, calls[1], "ids=episode") > 0)
+            m.assertTrue(Instr(1, calls[1], "fields=People") > 0)
+            m.assertTrue(Instr(1, calls[1], "enableimages=false") > 0)
+            m.assertTrue(Instr(1, calls[1], "enableuserdata=false") > 0)
+            m.assertTrue(Instr(1, calls[1], "enabletotalrecordcount=false") > 0)
+            m.assertEqual(result.data[0].People[0].Role, "Character")
+        end function
+
+        @it("limits credit enrichment to forty retained episodes after series exclusion")
+        function _()
+            episodes = []
+            for i = 0 to 499
+                seriesId = "guest-series"
+                if i < 10 then seriesId = "excluded-series"
+                episodes.Push({ Id: "episode-" + i.ToStr(), SeriesId: seriesId })
+            end for
+            m.mockEpisodeResponses({ ok: true, data: { Items: episodes } }, { ok: true, data: { Items: [] } })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), ["excluded-series"])
+
+            calls = getGlobalAa().personEpisodeCalls
+            m.assertEqual(calls.Count(), 2)
+            m.assertEqual(result.data.Count(), 40)
+            m.assertEqual(result.data[0].Id, "episode-10")
+            m.assertEqual(result.data[39].Id, "episode-49")
+            m.assertTrue(Instr(1, calls[1], "ids=episode-10%2Cepisode-11") > 0)
+            m.assertEqual(Instr(1, calls[1], "episode-0"), 0)
+            m.assertEqual(Instr(1, calls[1], "episode-50"), 0)
+            m.assertTrue(Instr(1, calls[1], "limit=40") > 0)
+        end function
+
+        @it("skips the credit request when all discovered episodes are excluded")
+        function _()
+            m.mockEpisodeResponses({ ok: true, data: { Items: [{ Id: "episode", SeriesId: "excluded" }] } }, { ok: true, data: { Items: [] } })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), ["excluded"])
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.data.Count(), 0)
+            m.assertEqual(getGlobalAa().personEpisodeCalls.Count(), 1)
+        end function
+
+        @it("merges credits by ID while preserving episode order and original metadata")
+        function _()
+            episodes = [{ Id: "first", Name: "First", ImageTags: { Primary: "image" }, UserData: { Played: true } }, { Id: "second", Name: "Second" }]
+            credits = [{ Id: "second", People: [{ Role: "Second role" }] }, { Id: "first", Name: "Different name", People: [{ Role: "First role" }] }]
+            m.mockEpisodeResponses({ ok: true, data: { Items: episodes } }, { ok: true, data: { Items: credits } })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), [])
+
+            m.assertEqual(result.data[0].Id, "first")
+            m.assertEqual(result.data[0].Name, "First")
+            m.assertEqual(result.data[0].ImageTags.Primary, "image")
+            m.assertTrue(result.data[0].UserData.Played)
+            m.assertEqual(result.data[0].People[0].Role, "First role")
+            m.assertEqual(result.data[1].People[0].Role, "Second role")
+        end function
+
+        @it("retains episodes missing from the credit response")
+        function _()
+            m.mockEpisodeResponses({ ok: true, data: { Items: [{ Id: "episode", Name: "Pilot" }] } }, { ok: true, data: { Items: [] } })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), [])
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.data.Count(), 1)
+            m.assertEqual(result.data[0].Name, "Pilot")
+            m.assertInvalid(result.data[0].People)
+        end function
+
+        @it("propagates discovery failure without making a credit request")
+        function _()
+            m.mockEpisodeResponses({ ok: false, status: 503, errorMessage: "Unavailable" }, { ok: true, data: { Items: [] } })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), [])
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.status, 503)
+            m.assertEqual(getGlobalAa().personEpisodeCalls.Count(), 1)
+        end function
+
+        @it("preserves authentication failures from the credit request")
+        function _()
+            m.mockEpisodeResponses({ ok: true, data: { Items: [{ Id: "episode" }] } }, { ok: false, status: 401, authExpired: true, errorMessage: "Expired" })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), [])
+
+            m.assertFalse(result.ok)
+            m.assertTrue(result.authExpired)
+            m.assertEqual(result.status, 401)
+            m.assertEqual(getGlobalAa().personEpisodeCalls.Count(), 2)
+        end function
+
+        @it("retains discovered episodes when credits time out")
+        function _()
+            episodes = [{ Id: "episode", Name: "Pilot", ImageTags: { Primary: "image" }, UserData: { Played: true } }]
+            m.mockEpisodeResponses({ ok: true, data: { Items: episodes } }, { ok: false, failureKind: "timeout", errorMessage: "Timed out" })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), [])
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.data, episodes)
+            m.assertInvalid(result.data[0].People)
+        end function
+
+        @it("retains discovered episode order when credits return a server error")
+        function _()
+            episodes = [{ Id: "first", Name: "First" }, { Id: "second", Name: "Second" }]
+            m.mockEpisodeResponses({ ok: true, data: { Items: episodes } }, { ok: false, status: 503, failureKind: "serverError", errorMessage: "Unavailable" })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), [])
+
+            m.assertTrue(result.ok)
+            m.assertEqual(result.data, episodes)
+            m.assertEqual(getGlobalAa().personEpisodeCalls.Count(), 2)
+        end function
+
+        @it("propagates the authentication failure kind even without an expiry flag")
+        function _()
+            m.mockEpisodeResponses({ ok: true, data: { Items: [{ Id: "episode" }] } }, { ok: false, failureKind: "authenticationRequired", errorMessage: "Expired" })
+
+            'bs:disable-next-line 1140
+            result = loadPersonEpisodeItems(m.createRequest(), [])
+
+            m.assertFalse(result.ok)
+            m.assertEqual(result.failureKind, "authenticationRequired")
+        end function
+
+        function createRequest() as object
+            return { server: "http://server", token: "token", userId: "user", itemId: "person-1" }
+        end function
+
+        sub mockEpisodeResponses(discovery as object, credits as object)
+            getGlobalAa().personEpisodeCalls = []
+            getGlobalAa().personEpisodeDiscovery = discovery
+            getGlobalAa().personEpisodeCredits = credits
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().personEpisodeCalls.Push(requestUrl)
+                if Instr(1, requestUrl, "fields=People") > 0 then return getGlobalAa().personEpisodeCredits
+                return getGlobalAa().personEpisodeDiscovery
+            end function)
+        end sub
+
+        protected override function afterEach()
+            getGlobalAa().Delete("personEpisodeCalls")
+            getGlobalAa().Delete("personEpisodeDiscovery")
+            getGlobalAa().Delete("personEpisodeCredits")
         end function
 
     end class
