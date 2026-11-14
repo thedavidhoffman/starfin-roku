@@ -1,3 +1,6 @@
+import "pkg:/source/ThemeAudio.bs"
+import "pkg:/source/Array.bs"
+import "pkg:/source/Format.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/LatestRequestLifecycle.bs"
 import "pkg:/source/Number.bs"
@@ -15,6 +18,8 @@ sub init()
     m.themeAudioState = {
         request: invalid
         isActive: false
+        lookup: LatestRequestLifecycle.Create()
+        lookupPool: { nodes: [], nextIndex: 0 }
         lifecycle: LatestRequestLifecycle.Create()
         taskPool: { nodes: [], nextIndex: 0 }
     }
@@ -27,6 +32,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initReferences()
     m.audio = m.top.findNode("audio")
+    m.themeAudioState.lookupPool.nodes = [m.top.findNode("themeSongsTask"), m.top.findNode("themeSongsTaskAlternate")]
     m.themeAudioState.taskPool.nodes = [m.top.findNode("playbackInfoTask"), m.top.findNode("playbackInfoTaskAlternate")]
 end sub
 
@@ -34,6 +40,8 @@ end sub
 ' initHandlers
 '-------------------------------------------------------------------------------
 sub initHandlers()
+    m.themeAudioState.lookupPool.nodes[0].observeField("response", "onThemeSongsResponse")
+    m.themeAudioState.lookupPool.nodes[1].observeField("response", "onAlternateThemeSongsResponse")
     m.themeAudioState.taskPool.nodes[0].observeField("response", "onPlaybackInfoResponse")
     m.themeAudioState.taskPool.nodes[1].observeField("response", "onAlternatePlaybackInfoResponse")
     m.audio.observeField("state", "onAudioStateChanged")
@@ -57,34 +65,95 @@ end sub
 '-------------------------------------------------------------------------------
 sub playTheme(request as object)
     if request = invalid then return
-    if Strings.ToString(request.itemId) = "" then return
+    if Strings.ToString(request.sourceItemId) = "" then return
 
     previous = m.themeAudioState.request
     if previous <> invalid then
         if previous.server <> request.server or previous.token <> request.token or previous.userId <> request.userId then stopTheme()
     end if
-    m.themeAudioState.isActive = false
-    m.audio.control = MediaControl.Command.Stop
-    m.audio.content = invalid
+    ' Invalidate stream resolution immediately, even while the next lookup is pending.
+    stopThemePlayback()
     capturedRequest = PlaybackRequest.Create(request)
     m.themeAudioState.request = capturedRequest
-    m.log.write("Resolving theme music playback itemId=" + Strings.ToString(request.itemId))
-    LatestRequestLifecycle.Queue(m.themeAudioState.lifecycle, capturedRequest, capturedRequest)
-    startPendingPlayback()
+    lookupRequest = PlaybackRequest.Create(capturedRequest)
+    lookupRequest.itemId = capturedRequest.sourceItemId
+    LatestRequestLifecycle.Queue(m.themeAudioState.lookup, lookupRequest, capturedRequest)
+    startPendingThemeLookup()
 end sub
 
 '-------------------------------------------------------------------------------
 ' stopTheme
 '-------------------------------------------------------------------------------
 sub stopTheme()
-    m.themeAudioState.isActive = false
     m.themeAudioState.request = invalid
+    LatestRequestLifecycle.Deactivate(m.themeAudioState.lookup)
+    for each task in m.themeAudioState.lookupPool.nodes
+        task.control = TaskControl.Command.Stop
+    end for
+    stopThemePlayback()
+end sub
+
+'-------------------------------------------------------------------------------
+' stopThemePlayback
+'-------------------------------------------------------------------------------
+sub stopThemePlayback()
+    m.themeAudioState.isActive = false
     LatestRequestLifecycle.Deactivate(m.themeAudioState.lifecycle)
     for each task in m.themeAudioState.taskPool.nodes
         task.control = TaskControl.Command.Stop
     end for
     m.audio.control = MediaControl.Command.Stop
     m.audio.content = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' startPendingThemeLookup
+'-------------------------------------------------------------------------------
+sub startPendingThemeLookup()
+    entry = LatestRequestLifecycle.TakeNext(m.themeAudioState.lookup)
+    if entry = invalid then return
+    pool = m.themeAudioState.lookupPool
+    task = pool.nodes[pool.nextIndex]
+    pool.nextIndex = (pool.nextIndex + 1) mod pool.nodes.Count()
+    task.request = entry.request
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onThemeSongsResponse
+'-------------------------------------------------------------------------------
+sub onThemeSongsResponse()
+    handleThemeSongsResponse(m.themeAudioState.lookupPool.nodes[0].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' onAlternateThemeSongsResponse
+'-------------------------------------------------------------------------------
+sub onAlternateThemeSongsResponse()
+    handleThemeSongsResponse(m.themeAudioState.lookupPool.nodes[1].response)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleThemeSongsResponse
+'-------------------------------------------------------------------------------
+sub handleThemeSongsResponse(response as dynamic)
+    completion = LatestRequestLifecycle.Complete(m.themeAudioState.lookup, response, ThemeAudio.Action.Lookup)
+    if completion.matched <> true then return
+    startPendingThemeLookup()
+    if completion.isCurrent <> true then return
+    if response.ok <> true then
+        m.log.write("Theme lookup failed: " + Strings.ToString(response.errorMessage, "Unknown error."))
+        return
+    end if
+    song = response.payload
+    if Arrays.IsAssocArray(song) <> true then return
+    if Strings.ToString(song.Id) = "" then return
+
+    request = PlaybackRequest.Create(completion.context)
+    request.itemId = song.Id
+    request.title = Format.FirstNonEmpty([song.Name, request.title], "Theme Music")
+    LatestRequestLifecycle.Queue(m.themeAudioState.lifecycle, request, request)
+    startPendingPlayback()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -105,9 +174,8 @@ end sub
 ' handlePlaybackInfoResponse
 '-------------------------------------------------------------------------------
 sub handlePlaybackInfoResponse(response as dynamic)
-    completion = LatestRequestLifecycle.Complete(m.themeAudioState.lifecycle, response, "themeAudioPlaybackInfo")
+    completion = LatestRequestLifecycle.Complete(m.themeAudioState.lifecycle, response, ThemeAudio.Action.PlaybackInfo)
     if completion.matched <> true then return
-    startPendingPlayback()
     if completion.isCurrent <> true then return
 
     if response.ok <> true then

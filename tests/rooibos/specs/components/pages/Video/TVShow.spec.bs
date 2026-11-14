@@ -106,11 +106,6 @@ namespace tests
             m.assertNotInvalid(m.top.findNode("randomPlaybackTask"))
         end function
 
-        @it("declares the themeSongsTask node")
-        function _()
-            m.assertNotInvalid(m.top.findNode("themeSongsTask"))
-        end function
-
         @describe("series and season rendering")
 
         @it("renders series identity and overview")
@@ -325,7 +320,6 @@ namespace tests
 
             m.assertEqual(m.top.findNode("tvShowTask").control, "stop")
             m.assertEqual(m.top.findNode("randomPlaybackTask").control, "stop")
-            m.assertEqual(m.top.findNode("themeSongsTask").control, "stop")
         end function
 
         @it("Back requests close")
@@ -1566,6 +1560,7 @@ namespace tests
 
         @it("opens the only regular season")
         function _()
+            m.top.themeRequested = invalid
             response = m.shortcutResponse([m.createSeason("season-1", "Season 1")], true)
 
             'bs:disable-next-line 1140
@@ -1573,6 +1568,7 @@ namespace tests
 
             m.assertEqual(m.top.selectedSeason.seasonId, "season-1")
             m.assertTrue(m.top.selectedSeason.skipSeriesPage)
+            m.assertInvalid(m.top.themeRequested)
             m.assertEqual(m.top.selectedSeason.seriesId, "series-1")
         end function
 
@@ -1719,6 +1715,78 @@ namespace tests
 
             m.assertEqual(m.top.findNode("videoToolbar").trailerCount, 1)
             m.assertEqual(m.top.findNode("videoToolbar").findNode("trailerButton").text, "Trailer")
+        end function
+
+        @describe("theme source requests")
+
+        @it("emits the source identity and session for controller-owned theme lookup")
+        function _()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, m.node.pageState.request.itemId)
+            m.top.settings = { "theme-music": "on" }
+            m.top.themeRequested = invalid
+            item = m.createSeries()
+
+            'bs:disable-next-line 1140
+            requestTheme(item)
+
+            request = m.top.themeRequested
+            m.assertEqual(request.sourceItemId, item.Id)
+            m.assertEqual(request.title, item.Name)
+            m.assertEqual(request.server, m.node.pageState.request.server)
+            m.assertEqual(request.token, m.node.pageState.request.token)
+            m.assertEqual(request.userId, m.node.pageState.request.userId)
+            m.assertInvalid(request.itemId)
+        end function
+
+        @it("does not emit a theme request when music is disabled")
+        function _()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, m.node.pageState.request.itemId)
+            m.top.settings = { "theme-music": "off" }
+            m.top.themeRequested = invalid
+
+            'bs:disable-next-line 1140
+            requestTheme(m.createSeries())
+
+            m.assertInvalid(m.top.themeRequested)
+        end function
+
+        @it("does not emit a new source request after deactivation")
+        function _()
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, m.node.pageState.request.itemId)
+            m.top.settings = { "theme-music": "on" }
+            'bs:disable-next-line 1140
+            deactivate()
+            m.top.themeRequested = invalid
+
+            'bs:disable-next-line 1140
+            requestTheme(m.createSeries())
+
+            m.assertInvalid(m.top.themeRequested)
+        end function
+
+        @it("does not restart an inactive page theme when settings enable music")
+        function _()
+            m.top.settings = { "theme-music": "off" }
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, m.node.pageState.request.itemId)
+            'bs:disable-next-line 1140
+            deactivate()
+            m.top.themeRequested = invalid
+
+            m.top.settings = { "theme-music": "on" }
+
+            m.assertInvalid(m.top.themeRequested)
+        end function
+
+        @it("requests the active page theme when settings enable music")
+        function _()
+            m.top.settings = { "theme-music": "off" }
+            AsyncLifecycle.Begin(m.node.pageState.lifecycle, m.node.pageState.request.itemId)
+            m.top.themeRequested = invalid
+
+            m.top.settings = { "theme-music": "on" }
+
+            item = m.createSeries()
+            m.assertEqual(m.top.themeRequested.sourceItemId, item.Id)
         end function
 
     end class

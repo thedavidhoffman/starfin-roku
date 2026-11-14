@@ -28,9 +28,9 @@ focus through the saved focus area.
 
 Movie request orchestration lives in the component-local `Helpers/Loading.bs`
 file. It owns load-request changes, latest-request dispatch and completion, and
-movie theme-song lookup while continuing to operate in the Movie component's
-context. This matches the responsibility split used by TVEpisode without moving
-page state or Task ownership into a separate component.
+movie theme source requests while continuing to operate in the Movie component's
+context. Movie metadata and page state remain local; ThemeAudioController owns
+the separate theme lookup and playback lifecycle.
 
 Movie supplemental content owns its separate correlated extras requests and
 Extras/Cast row navigation. See [Movie Extras](movie-extras.md).

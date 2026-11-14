@@ -73,6 +73,13 @@ cannot trigger a later redirect. The preference is captured when a series opens;
 changing it does not redirect an already open series. Explicit season/episode
 entry and playback routes retain their existing behavior.
 
+When theme music is enabled, MainScene submits the selected series identity to
+ThemeAudioController after opening the shortcut season page. The controller owns
+lookup and playback independently of the removed TVShow. TVSeason has no theme
+task, and the redirect branch does not also emit a normal TVShow theme request.
+Direct season entry remains unchanged. Back and playback use the existing theme
+stop path. See [Theme Songs](theme-songs.md).
+
 The TV settings remain on one page. **TV episode list scroll** and **Show season
 card in episode list** share the top row, the shortcut occupies the middle row,
 and artwork remains in the bottom row. Left/Right moves between the top cards;

@@ -20,7 +20,6 @@ sub onLoadRequestChanged()
     applyMediaShellBackgroundSetting(request.settings)
     applyLibraryBrowseState(request.libraryBrowseState)
     m.state.item = request.item
-    m.state.themeLookupActive = false
     AsyncLifecycle.Begin(m.state.lifecycle, request.itemId)
     m.state.selectedStreams = {
         audio: invalid
@@ -129,74 +128,26 @@ sub handleMovieResponse(task as dynamic)
     renderMovie(m.state.item, false)
     m.log.activity("Viewing movie " + ActivityLog.ItemTitle(response.payload, "movie"))
     Spinner.Hide()
-    loadThemeSong(m.state.item)
+    requestTheme(m.state.item)
 end sub
 
 '-------------------------------------------------------------------------------
-' loadThemeSong
+' requestTheme
 '-------------------------------------------------------------------------------
-sub loadThemeSong(item as dynamic)
-    request = m.state.request
-    if request = invalid then return
-    if SettingsStore.IsThemeMusicEnabled(m.top.settings) <> true then
-        m.log.write("Theme music playback is disabled")
-        return
-    end if
-
-    m.log.write("Theme music playback is enabled")
-
-    itemId = Format.FirstNonEmpty([item.Id, request.itemId], "")
-    if itemId = "" then return
-
-    m.state.themeLookupActive = true
-    m.themeSongsTask.control = TaskControl.Command.Stop
-    m.themeSongsTask.request = {
-        server: request.server
-        token: request.token
-        userId: request.userId
-        itemId: itemId
-    }
-    m.themeSongsTask.control = TaskControl.Command.Run
-end sub
-
-'-------------------------------------------------------------------------------
-' onThemeSongsResponse
-'-------------------------------------------------------------------------------
-sub onThemeSongsResponse()
-    response = m.themeSongsTask.response
-    if response = invalid then return
+sub requestTheme(item as dynamic)
     if m.state.lifecycle.isActive <> true then return
-    if m.state.themeLookupActive <> true then return
-    if response.ok <> true then
-        m.log.write("Theme song lookup failed: " + Strings.ToString(response.errorMessage, "Unknown error."))
-        return
-    end if
-
-    themeSong = response.payload
-    if Arrays.IsAssocArray(themeSong) = false then
-        m.state.themeLookupActive = false
-        m.log.write("Theme music enabled, but no theme song was found")
-        return
-    end if
-
     request = m.state.request
     if request = invalid then return
-    if Strings.ToString(response.itemId) <> Strings.ToString(request.itemId) then return
+    if SettingsStore.IsThemeMusicEnabled(m.top.settings) <> true then return
+    if Arrays.IsAssocArray(item) <> true then return
 
-    m.state.themeLookupActive = false
-    themeSongId = Strings.ToString(themeSong.Id)
-    if themeSongId = "" then
-        m.state.themeLookupActive = false
-        return
-    end if
-
-    m.log.write("Theme song found itemId=" + themeSongId)
+    sourceItemId = Format.FirstNonEmpty([item.Id, request.itemId], "")
+    if sourceItemId = "" then return
     m.top.themeRequested = {
         server: request.server
         token: request.token
         userId: request.userId
-        itemId: themeSongId
-        title: Format.FirstNonEmpty([themeSong.Name, m.state.item.Name], "Theme Music")
-        sourceItemId: Strings.ToString(request.itemId)
+        sourceItemId: sourceItemId
+        title: Format.FirstNonEmpty([item.Name], "Theme Music")
     }
 end sub

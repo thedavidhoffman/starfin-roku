@@ -1,4 +1,6 @@
+import "pkg:/source/ThemeAudio.bs"
 import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/Encode.bs"
 import "pkg:/source/Url.bs"
@@ -20,10 +22,19 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    validationError = TaskRequest.ValidateRequest(request, "themeSongs", ["itemId"])
+    response = resolveRequest(request)
+    response.requestId = -1
+    if request <> invalid then response.requestId = Number.ToInteger(request.requestId, -1)
+    m.top.response = response
+end sub
+
+'-------------------------------------------------------------------------------
+' resolveRequest
+'-------------------------------------------------------------------------------
+function resolveRequest(request as dynamic) as object
+    validationError = TaskRequest.ValidateRequest(request, ThemeAudio.Action.Lookup, ["itemId"])
     if validationError <> invalid then
-        m.top.response = validationError
-        return
+        return validationError
     end if
 
     params = {
@@ -33,21 +44,20 @@ sub executeRequest()
     requestUrl = request.server + "/Items/" + Strings.ToString(request.itemId) + "/ThemeSongs" + Url.BuildQueryString(params)
     result = HttpClient.Request(requestUrl, "GET", invalid, invalid, JellyfinAuth.BuildTokenHeaders(request.token))
     if result.ok <> true then
-        result.AddReplace("action", "themeSongs")
-        m.top.response = result
-        return
+        result.AddReplace("action", ThemeAudio.Action.Lookup)
+        return result
     end if
 
     items = getPayloadItems(result.data)
     themeSong = getFirstThemeSongFromItems(items)
     m.log.write("ThemeSongs response itemId=" + Strings.ToString(request.itemId) + " count=" + items.Count().ToStr() + " selectedThemeSongId=" + getThemeSongId(themeSong))
-    m.top.response = {
+    return {
         ok: true
-        action: "themeSongs"
+        action: ThemeAudio.Action.Lookup
         itemId: Strings.ToString(request.itemId)
         payload: themeSong
     }
-end sub
+end function
 
 '-------------------------------------------------------------------------------
 ' getFirstThemeSongFromItems

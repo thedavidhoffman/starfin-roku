@@ -3515,7 +3515,126 @@ namespace tests
             m.node.playbackController = m.top.findNode("playbackController")
         end function
 
+        private function recordThemeCalls()
+            getGlobalAa().themeCalls = []
+            m.node.themeAudioController = { callFunc: function(name, request = invalid)
+                getGlobalAa().themeCalls.Push({ name: name, request: request })
+            end function }
+        end function
+
+        private function selectThemeSeason(shortcut as boolean)
+            page = CreateObject("roSGNode", "TVShow")
+            m.node.dynamicPageHost.appendChild(page)
+            m.node.tvShowPage = page
+            page.selectedSeason = {
+                seriesId: "series-1", seasonId: "season-1"
+                series: { Id: "series-1", Name: "Series" }
+                season: { Id: "season-1", Name: "Season 1" }
+                seasons: [{ Id: "season-1", Name: "Season 1" }]
+                skipSeriesPage: shortcut
+            }
+            'bs:disable-next-line 1140
+            tvSeasonHandleTVShowSeasonSelected()
+        end function
+
         @describe("single-season shortcut routing")
+
+        @it("routes one series source request after the shortcut opens its season")
+        function _()
+            m.node.settings[SettingsStore.Key.ThemeMusic] = "on"
+            m.recordThemeCalls()
+
+            m.selectThemeSeason(true)
+
+            calls = getGlobalAa().themeCalls
+            m.assertEqual(calls.Count(), 1)
+            m.assertEqual(calls[0].name, "playTheme")
+            m.assertEqual(calls[0].request, { server: "http://server", token: "token", userId: "user", sourceItemId: "series-1", title: "Series" })
+            m.assertInvalid(m.node.tvShowPage)
+            m.assertEqual(m.node.tvSeasonPage.loadRequest.seasonId, "season-1")
+            m.node.themeAudioController = m.top.findNode("themeAudioController")
+        end function
+
+        @it("does not request shortcut music when disabled")
+        function _()
+            m.node.settings[SettingsStore.Key.ThemeMusic] = "off"
+            m.recordThemeCalls()
+
+            m.selectThemeSeason(true)
+
+            m.assertEqual(getGlobalAa().themeCalls.Count(), 0)
+            m.node.themeAudioController = m.top.findNode("themeAudioController")
+        end function
+
+        @it("does not restart music for ordinary season navigation")
+        function _()
+            m.node.settings[SettingsStore.Key.ThemeMusic] = "on"
+            m.recordThemeCalls()
+
+            m.selectThemeSeason(false)
+
+            m.assertEqual(getGlobalAa().themeCalls.Count(), 0)
+            m.node.themeAudioController = m.top.findNode("themeAudioController")
+        end function
+
+        @it("does not request theme music on direct season entry")
+        function _()
+            m.node.settings[SettingsStore.Key.ThemeMusic] = "on"
+            m.recordThemeCalls()
+
+            'bs:disable-next-line 1140
+            tvSeasonShow({ seriesId: "series-1", seasonId: "season-1", series: { Id: "series-1" }, season: { Id: "season-1" }, seasons: [] })
+
+            m.assertEqual(getGlobalAa().themeCalls.Count(), 0)
+            m.node.themeAudioController = m.top.findNode("themeAudioController")
+        end function
+
+        @it("resubmits the source request when its trailer closes")
+        function _()
+            m.node.settings[SettingsStore.Key.ThemeMusic] = "on"
+            m.recordThemeCalls()
+            source = { server: "http://server", token: "token", userId: "user", sourceItemId: "current", title: "Movie" }
+            m.node.moviePage = { visible: true, themeRequested: source, callFunc: function(name)
+                return invalid
+            end function }
+
+            m.node.overlayHost.closed = { request: { id: "trailers", sourcePage: "movie", trailerRequest: { item: { Id: "current" } } } }
+
+            m.assertEqual(getGlobalAa().themeCalls.Count(), 1)
+            m.assertEqual(getGlobalAa().themeCalls[0].request, source)
+            m.node.moviePage = invalid
+            m.node.themeAudioController = m.top.findNode("themeAudioController")
+        end function
+
+        @it("starting playback cancels pending theme work")
+        function _()
+            m.recordThemeCalls()
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "episode", item: { Id: "episode", Type: "Episode" } })
+
+            m.assertEqual(getGlobalAa().themeCalls[0].name, "stopTheme")
+            m.assertEqual(m.node.playbackController.playRequest.itemId, "episode")
+            m.node.playbackController = m.top.findNode("playbackController")
+            m.node.themeAudioController = m.top.findNode("themeAudioController")
+        end function
+
+        @it("leaving the shortcut season cancels controller work")
+        function _()
+            m.node.settings[SettingsStore.Key.ThemeMusic] = "on"
+            m.recordThemeCalls()
+            m.selectThemeSeason(true)
+            m.node.personPage = m.createPlaybackReturnRecorder()
+            getGlobalAa().themeCalls = []
+
+            'bs:disable-next-line 1140
+            tvSeasonHandleCloseRequested()
+
+            m.assertEqual(getGlobalAa().themeCalls[0].name, "stopTheme")
+            m.node.personPage = invalid
+            m.node.themeAudioController = m.top.findNode("themeAudioController")
+        end function
 
         @it("removes the skipped series before opening its season")
         function _()
@@ -3802,7 +3921,7 @@ namespace tests
                 getGlobalAa().trailerThemeStarted = true
             end function }
             'bs:disable-next-line 1140
-            themeAudioPlay({ itemId: "theme", server: "https://server", token: "token" })
+            themeAudioPlay({ sourceItemId: "series", server: "https://server", token: "token" })
             m.assertFalse(getGlobalAa().trailerThemeStarted)
             m.node.overlayHost.callFunc("closeOverlay")
             m.node.themeAudioController = m.top.findNode("themeAudioController")

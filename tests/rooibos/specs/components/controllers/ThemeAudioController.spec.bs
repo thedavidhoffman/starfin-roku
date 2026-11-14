@@ -9,6 +9,8 @@ namespace tests
         @describe("request ownership and playback")
 
         protected override function beforeEach()
+            m.node.themeAudioState.lookup = LatestRequestLifecycle.Create()
+            m.node.themeAudioState.lookupPool = { nodes: [{}, {}], nextIndex: 0 }
             m.node.themeAudioState.lifecycle = LatestRequestLifecycle.Create()
             m.node.themeAudioState.request = invalid
             m.node.themeAudioState.isActive = false
@@ -17,17 +19,22 @@ namespace tests
         end function
 
         private function request(token = "fresh" as string) as object
-            return { server: "https://server", token: token, userId: "user", itemId: "item-1", title: "Theme Song" }
+            return { server: "https://server", token: token, userId: "user", sourceItemId: "series-1", title: "Theme Song" }
         end function
 
         private function response(requestId as integer, streamUrl = "https://server/stream?ApiKey=server-token&x=1#part" as string, streamFormat = "mp3" as string) as object
             return { requestId: requestId, action: "themeAudioPlaybackInfo", ok: true, itemId: "item-1", streamUrl: streamUrl, streamFormat: streamFormat, title: "Theme Song" }
         end function
 
+        private function completeLookup()
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: m.node.themeAudioState.lookup.latestRequestId, action: "themeSongs", ok: true, payload: { Id: "item-1", Name: "Theme Song" } })
+        end function
+
         @it("ignores an empty item")
         function _()
             'bs:disable-next-line 1140
-            playTheme({ itemId: "" })
+            playTheme({ sourceItemId: "" })
             m.assertEqual(m.node.audio.control, "")
             m.assertInvalid(m.node.themeAudioState.lifecycle.active)
         end function
@@ -36,6 +43,7 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             response = m.response(1, "https://server/stream?ApiKey=server-token&x=1#part", "mp3")
             m.node.themeAudioState.taskPool.nodes[0].response = response
             'bs:disable-next-line 1140
@@ -51,6 +59,7 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             response = m.response(1, "https://server/stream?ApiKey=server-token&x=1#part", "hls")
             m.node.themeAudioState.taskPool.nodes[0].response = response
             'bs:disable-next-line 1140
@@ -62,7 +71,7 @@ namespace tests
             m.assertTrue(m.node.themeAudioState.isActive)
         end function
 
-        @it("coalesces rapid selections and rejects same-item stale success")
+        @it("coalesces rapid lookups and rejects same-source stale success")
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
@@ -70,36 +79,39 @@ namespace tests
             playTheme(m.request())
             'bs:disable-next-line 1140
             playTheme(m.request())
+
             'bs:disable-next-line 1140
-            handlePlaybackInfoResponse(m.response(1))
-            m.assertInvalid(m.node.audio.content)
-            m.assertEqual(m.node.themeAudioState.taskPool.nodes[1].request.requestId, 3)
-            m.node.themeAudioState.taskPool.nodes[1].response = m.response(3)
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: true, payload: { Id: "old" } })
+
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertEqual(m.node.themeAudioState.lookupPool.nodes[1].request.requestId, 3)
+
+            m.node.themeAudioState.lookupPool.nodes[1].response = { requestId: 3, action: "themeSongs", ok: true, payload: { Id: "current" } }
             'bs:disable-next-line 1140
-            onAlternatePlaybackInfoResponse()
-            m.assertEqual(m.node.audio.control, "play")
-            'bs:disable-next-line 1140
-            handlePlaybackInfoResponse(m.response(1))
-            m.assertEqual(m.node.audio.content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
+            onAlternateThemeSongsResponse()
+
+            m.assertEqual(m.node.themeAudioState.taskPool.nodes[0].request.itemId, "current")
         end function
 
-        @it("stale failures advance pending work without committing playback")
+        @it("stale lookup failures advance pending work")
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
             'bs:disable-next-line 1140
             playTheme(m.request())
+
             'bs:disable-next-line 1140
-            handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false })
-            m.assertInvalid(m.node.audio.content)
-            m.assertFalse(m.node.themeAudioState.isActive)
-            m.assertEqual(m.node.themeAudioState.taskPool.nodes[1].request.requestId, 2)
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: false })
+
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertEqual(m.node.themeAudioState.lookupPool.nodes[1].request.requestId, 2)
         end function
 
         @it("cancellation rejects late completion and preserves generation counters")
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             'bs:disable-next-line 1140
             stopTheme()
             'bs:disable-next-line 1140
@@ -110,6 +122,7 @@ namespace tests
             m.assertEqual(m.node.themeAudioState.taskPool.nodes[1].control, "stop")
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             m.assertEqual(m.node.themeAudioState.lifecycle.active.request.requestId, 2)
         end function
 
@@ -119,6 +132,7 @@ namespace tests
             'bs:disable-next-line 1140
             playTheme(request)
             request.token = "mutated"
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(1))
             m.assertEqual(m.node.audio.content.HttpHeaders, [TestMediaAuthentication.ExpectedHeader("fresh", "user")])
@@ -128,10 +142,12 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(1))
             'bs:disable-next-line 1140
             playTheme(m.request("fresh"))
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(2, "https://cdn.test/stream?ApiKey=provider"))
             'bs:disable-next-line 1140
@@ -144,10 +160,12 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(1))
             'bs:disable-next-line 1140
             playTheme(m.request(""))
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(2, "https://server/stream"))
             'bs:disable-next-line 1140
@@ -160,10 +178,12 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(1))
             'bs:disable-next-line 1140
             playTheme(m.request("replacement"))
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(2, "https://server/stream"))
             'bs:disable-next-line 1140
@@ -176,8 +196,10 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             'bs:disable-next-line 1140
             playTheme(m.request("replacement"))
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(1))
             m.assertInvalid(m.node.audio.content)
@@ -190,6 +212,7 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse(m.response(1))
             m.node.audio.state = "finished"
@@ -204,11 +227,169 @@ namespace tests
         function _()
             'bs:disable-next-line 1140
             playTheme(m.request())
+            m.completeLookup()
             'bs:disable-next-line 1140
             handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false, errorMessage: "Failed" })
             m.assertFalse(m.node.themeAudioState.isActive)
             m.assertInvalid(m.node.audio.content)
             m.assertEqual(m.node.audio.control, "stop")
+        end function
+
+        @it("looks up the series with captured session data before resolving a song")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+
+            lookup = m.node.themeAudioState.lookupPool.nodes[0].request
+            m.assertEqual(lookup.itemId, "series-1")
+            m.assertEqual(lookup.server, "https://server")
+            m.assertEqual(lookup.token, "fresh")
+            m.assertEqual(lookup.userId, "user")
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+
+            m.node.themeAudioState.lookupPool.nodes[0].response = { requestId: 1, action: "themeSongs", ok: true, payload: { Id: "song", Name: "Found theme" } }
+            'bs:disable-next-line 1140
+            onThemeSongsResponse()
+
+            m.assertEqual(m.node.themeAudioState.taskPool.nodes[0].request.itemId, "song")
+            m.assertEqual(m.node.themeAudioState.taskPool.nodes[0].request.title, "Found theme")
+        end function
+
+        @it("ignores missing theme")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: true, payload: invalid })
+
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertInvalid(m.node.audio.content)
+        end function
+
+        @it("ignores malformed theme")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: true, payload: "bad" })
+
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertInvalid(m.node.audio.content)
+        end function
+
+        @it("ignores theme without an ID")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: true, payload: {} })
+
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertInvalid(m.node.audio.content)
+        end function
+
+        @it("lookup failure leaves browsing audio stopped")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: false, errorMessage: "offline" })
+
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertEqual(m.node.audio.control, "stop")
+        end function
+
+        @it("stop rejects lookup completion and stops both lookup tasks")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            stopTheme()
+            m.completeLookup()
+
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertEqual(m.node.themeAudioState.lookupPool.nodes[0].control, "stop")
+            m.assertEqual(m.node.themeAudioState.lookupPool.nodes[1].control, "stop")
+        end function
+
+        @it("replacement invalidates stream resolution before its lookup completes")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+
+            m.assertInvalid(m.node.audio.content)
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertNotInvalid(m.node.themeAudioState.lookup.active)
+        end function
+
+        @it("duplicate lookup completion cannot resolve twice")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+            m.completeLookup()
+
+            m.assertEqual(m.node.themeAudioState.lifecycle.latestRequestId, 1)
+            m.assertInvalid(m.node.themeAudioState.lifecycle.pending)
+        end function
+
+        @it("session replacement rejects a late same-source lookup")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            playTheme(m.request("replacement"))
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: true, payload: { Id: "old" } })
+
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.completeLookup()
+            m.assertEqual(m.node.themeAudioState.taskPool.nodes[0].request.token, "replacement")
+        end function
+
+        @it("a new source clears playing audio while retaining the next lookup")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse(m.response(1))
+
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+
+            m.assertFalse(m.node.themeAudioState.isActive)
+            m.assertInvalid(m.node.audio.content)
+            m.assertEqual(m.node.audio.control, "stop")
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertEqual(m.node.themeAudioState.taskPool.nodes[0].control, "stop")
+            m.assertEqual(m.node.themeAudioState.taskPool.nodes[1].control, "stop")
+            m.assertEqual(m.node.themeAudioState.lookup.active.request.requestId, 2)
+        end function
+
+        @it("the alternate stream task completes a replacement theme")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+            m.node.themeAudioState.taskPool.nodes[1].response = m.response(2)
+
+            'bs:disable-next-line 1140
+            onAlternatePlaybackInfoResponse()
+
+            m.assertEqual(m.node.audio.control, "play")
+            m.assertTrue(m.node.themeAudioState.isActive)
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertInvalid(m.node.themeAudioState.lifecycle.pending)
         end function
 
     end class

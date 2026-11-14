@@ -66,6 +66,12 @@
 - Run device tests with `npm test -- --host <roku-host> --password "<developer-password>"`. Do not commit the developer password or place it in command examples with a real value.
 - If no test change is necessary, verify that the existing tests still cover the behavior and mention that in the final response.
 
+## Automated UI workflow coverage
+
+- Test shortcuts are acceptable when they preserve a reachable UI state and production behavior. Do not count user-inaccessible workflows as end-to-end UI coverage; identify internal component or integration coverage separately.
+- Fixture setup may configure data or control network timing before exercising a workflow. Do not use injected events or function calls to bypass UI availability restrictions within the workflow being tested.
+- Apply this guidance to new or modified tests within the current task. Do not initiate a retrospective audit or rewrite of unrelated tests unless requested.
+
 ## Workspace hygiene
 
 - Treat unrelated pending changes as user-owned or concurrent work. Preserve them, do not reformat or revert them, and scope reviews and verification to the requested work.

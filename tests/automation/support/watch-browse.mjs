@@ -114,7 +114,10 @@ export async function watchApi(environment) {
     url.search = new URLSearchParams({ UserId: session.userId, ...query }).toString();
     const result = await fetch(url, {
       method: method ?? (body === undefined ? 'GET' : 'POST'),
-      headers: { 'X-Emby-Token': session.token, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `MediaBrowser Client="Starfin Automation", Device="Test", DeviceId="starfin-automation", Version="1", Token="${session.token}"`,
+        'Content-Type': 'application/json'
+      },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(120000)
     });
     assert.ok(result.ok, `${path}: HTTP ${result.status}`);

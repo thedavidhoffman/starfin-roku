@@ -166,6 +166,21 @@ Theme.SquareButton palette to fixed tiles, wide-button tints, and active text.
 Header observes theme changes and supplies Theme.AccountBadge colors to the
 badge; AccountBadge continues to own its renderer-compatible compositing.
 
+## Theme audio ownership
+
+ThemeAudioController owns theme-song lookup, stream resolution, and audio playback.
+Movie and TVShow emit source requests with explicit session data and sourceItemId
+after loading eligible metadata. MainScene routes these requests and submits the
+series source after a single-season shortcut opens TVSeason. TVSeason owns no
+theme lookup, and direct season entry does not start theme music.
+
+Lookup and stream resolution have separate correlated latest-request lifecycles
+and bounded task pairs. New source selections invalidate old stream work immediately;
+stop, navigation away, playback, trailer opening, settings disable, and session
+replacement invalidate outstanding work. Theme lookup can survive removal of the
+skipped series page. Trailer closure resubmits the retained source request through
+the normal routing checks.
+
 ## Media flow
 
 Libraries own loading, filtering, paging, and their grid state. Selecting an item

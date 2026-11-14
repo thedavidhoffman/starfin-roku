@@ -17,11 +17,12 @@ namespace tests
             m.assertFalse(response.ok)
             m.assertEqual(response.action, "themeSongs")
             m.assertEqual(response.errorMessage, "Invalid request.")
+            m.assertEqual(response.requestId, -1)
         end function
 
         @it("rejects a missing item ID")
         function _()
-            m.node.top.request = { server: "server", token: "token" }
+            m.node.top.request = { server: "server", token: "token", requestId: 19 }
 
             'bs:disable-next-line 1140
             executeRequest()
@@ -30,6 +31,7 @@ namespace tests
             m.assertFalse(response.ok)
             m.assertEqual(response.action, "themeSongs")
             m.assertEqual(response.errorMessage, "Invalid request itemId.")
+            m.assertEqual(response.requestId, 19)
         end function
 
         @describe("theme song selection")
@@ -44,6 +46,36 @@ namespace tests
             m.assertEqual(getThemeSongId(selected), "song-1")
             'bs:disable-next-line 1140
             m.assertInvalid(getFirstThemeSongFromItems([]))
+        end function
+
+        @it("echoes request generation on success")
+        function _()
+            m.stubCall(HttpClient.Request, function(url, method, token, body, headers, displayRequest = true, timeoutMs = 60000)
+                return { ok: true, data: { Items: [{ Id: "song" }] } }
+            end function)
+            m.node.top.request = { server: "https://server", token: "token", userId: "user", itemId: "series", requestId: 23 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertEqual(m.node.top.response.requestId, 23)
+            m.assertEqual(m.node.top.response.action, "themeSongs")
+            m.assertEqual(m.node.top.response.ok, true)
+        end function
+
+        @it("echoes request generation on HTTP failure")
+        function _()
+            m.stubCall(HttpClient.Request, function(url, method, token, body, headers, displayRequest = true, timeoutMs = 60000)
+                return { ok: false, errorMessage: "offline" }
+            end function)
+            m.node.top.request = { server: "https://server", token: "token", userId: "user", itemId: "series", requestId: 23 }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertEqual(m.node.top.response.requestId, 23)
+            m.assertEqual(m.node.top.response.action, "themeSongs")
+            m.assertEqual(m.node.top.response.ok, false)
         end function
 
     end class
