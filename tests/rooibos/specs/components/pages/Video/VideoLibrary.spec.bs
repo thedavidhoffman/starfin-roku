@@ -488,28 +488,28 @@ namespace tests
             m.assertTrue(canPersist)
         end function
 
-        @it("does not persist a mixed collection")
+        @it("persists a mixed collection")
         function _()
             'bs:disable-next-line 1140
             canPersist = canPersistVideoLibraryViewState({ collectionType: "collection", includeItemTypes: "Movie,Series" })
 
-            m.assertFalse(canPersist)
+            m.assertTrue(canPersist)
         end function
 
-        @it("does not persist a movie-only collection")
+        @it("persists a movie-only collection")
         function _()
             'bs:disable-next-line 1140
             canPersist = canPersistVideoLibraryViewState({ collectionType: "collection", includeItemTypes: "Movie" })
 
-            m.assertFalse(canPersist)
+            m.assertTrue(canPersist)
         end function
 
-        @it("does not persist a series-only collection")
+        @it("persists a series-only collection")
         function _()
             'bs:disable-next-line 1140
             canPersist = canPersistVideoLibraryViewState({ collectionType: "collection", includeItemTypes: "Series" })
 
-            m.assertFalse(canPersist)
+            m.assertTrue(canPersist)
         end function
 
         @it("restores a decade filter with its saved title sort order enabled")
@@ -555,7 +555,7 @@ namespace tests
             m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Descending")
         end function
 
-        @it("ignores saved browse state for collection content")
+        @it("restores saved browse state for collection content")
         function _()
             request = m.restoreRequest("collection-saved-state", "collection", "Movie")
             m.saveRestoreState(request, "DateCreated", -1, "", "Descending")
@@ -563,8 +563,8 @@ namespace tests
             'bs:disable-next-line 1140
             prepareLoadRequest(request)
 
-            m.assertEqual(m.node.pageState.selectedSort.optionKey, "SortName")
-            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Ascending")
+            m.assertEqual(m.node.pageState.selectedSort.optionKey, "DateCreated")
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Descending")
             m.assertEqual(m.node.pageState.activeFilterType, "")
             m.assertEqual(request.favoriteOnly, false)
         end function
@@ -620,6 +620,286 @@ namespace tests
             m.assertEqual(m.node.pageState.filterSelection.genre, "Comedy")
             m.assertEqual(request.favoriteOnly, false)
         end function
+
+        @describe("collection browse preferences")
+
+        @it("remembers collection SortName Descending")
+        function _()
+            m.assertCollectionRoundTrip("SortName", "Descending")
+        end function
+
+        @it("remembers collection PremiereDate Ascending")
+        function _()
+            m.assertCollectionRoundTrip("PremiereDate", "Ascending")
+        end function
+
+        @it("remembers collection PremiereDate Descending")
+        function _()
+            m.assertCollectionRoundTrip("PremiereDate", "Descending")
+        end function
+
+        @it("remembers collection DateCreated Ascending")
+        function _()
+            m.assertCollectionRoundTrip("DateCreated", "Ascending")
+        end function
+
+        @it("remembers collection DateCreated Descending")
+        function _()
+            m.assertCollectionRoundTrip("DateCreated", "Descending")
+        end function
+
+        @it("remembers collection Favorites Ascending")
+        function _()
+            m.assertCollectionRoundTrip("Favorites", "Ascending")
+        end function
+
+        @it("remembers collection Favorites Descending")
+        function _()
+            m.assertCollectionRoundTrip("Favorites", "Descending")
+        end function
+
+        @it("opens an untouched collection without creating a state or index")
+        function _()
+            request = m.restoreRequest("untouched", "collection", "Movie,Series")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            section = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(request.accountKey))
+            m.assertFalse(section.Exists("library-view-state-untouched"))
+            m.assertFalse(section.Exists("library-view-state-index"))
+            m.assertEqual(request.sortBy, "SortName")
+            m.assertEqual(request.sortOrder, "Ascending")
+        end function
+
+        @it("returning a collection to Title ascending removes its preference")
+        function _()
+            request = m.restoreRequest("reset", "collection", "Movie,Series")
+            m.saveRestoreState(request, "DateCreated", -1, "", "Descending")
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            'bs:disable-next-line 1140
+            m.stubCall(reloadVideoLibraryForSort)
+
+            'bs:disable-next-line 1140
+            applySortSelection(LibraryBrowse.CreateSortSelection("SortName", "SortName", "Title"))
+
+            m.assertInvalid(LibraryViewStateStore.Load(request.accountKey, request.libraryId))
+            m.assertEqual(LibraryViewStateStore.List(request.accountKey).Count(), 0)
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Ascending")
+        end function
+
+        @it("returning Title descending to ascending removes its preference")
+        function _()
+            request = m.restoreRequest("direction-reset", "collection", "Movie")
+            m.saveRestoreState(request, "SortName", -1, "", "Descending")
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            'bs:disable-next-line 1140
+            m.stubCall(reloadVideoLibraryForSort)
+
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: "Ascending" })
+
+            m.assertInvalid(LibraryViewStateStore.Load(request.accountKey, request.libraryId))
+            m.assertEqual(m.node.pageState.selectedSort.sortOrder, "Ascending")
+        end function
+
+        @it("restores independent preferences when switching between parent and child requests")
+        function _()
+            parent = m.restoreRequest("parent", "collection", "Movie,Series")
+            child = m.restoreRequest("child", "collection", "Movie,Series")
+            m.saveRestoreState(parent, "PremiereDate", -1, "", "Descending")
+            m.saveRestoreState(child, "Favorites", -1, "", "Ascending")
+            'bs:disable-next-line 1140
+            prepareLoadRequest(parent)
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(child)
+            m.assertTrue(child.favoriteOnly)
+            'bs:disable-next-line 1140
+            prepareLoadRequest(parent)
+
+            m.assertEqual(parent.sortBy, "PremiereDate")
+            m.assertEqual(parent.sortOrder, "Descending")
+            m.assertFalse(parent.favoriteOnly)
+            m.assertEqual(LibraryViewStateStore.Load(parent.accountKey, child.libraryId).optionKey, "Favorites")
+        end function
+
+        @it("falls back without rewriting unsupported collection option Genre")
+        function _()
+            request = m.restoreRequest("unsupported", "collection", "Movie,Series")
+            m.saveRestoreState(request, "Genre", 1990, "Drama", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            'bs:disable-next-line 1140
+            pageRequest = buildVideoLibraryPageRequest(0)
+
+            m.assertEqual(pageRequest.sortBy, "SortName")
+            m.assertEqual(pageRequest.sortOrder, "Ascending")
+            m.assertFalse(pageRequest.favoriteOnly)
+            m.assertEqual(pageRequest.watchStatus, "All")
+            m.assertEqual(pageRequest.genre, "")
+            m.assertEqual(pageRequest.years, [])
+            m.assertEqual(LibraryViewStateStore.Load(request.accountKey, request.libraryId).optionKey, "Genre")
+        end function
+
+        @it("falls back without rewriting unsupported collection option Decade")
+        function _()
+            request = m.restoreRequest("unsupported", "collection", "Movie,Series")
+            m.saveRestoreState(request, "Decade", 1990, "Drama", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            'bs:disable-next-line 1140
+            pageRequest = buildVideoLibraryPageRequest(0)
+
+            m.assertEqual(pageRequest.sortBy, "SortName")
+            m.assertEqual(pageRequest.sortOrder, "Ascending")
+            m.assertFalse(pageRequest.favoriteOnly)
+            m.assertEqual(pageRequest.watchStatus, "All")
+            m.assertEqual(pageRequest.genre, "")
+            m.assertEqual(pageRequest.years, [])
+            m.assertEqual(LibraryViewStateStore.Load(request.accountKey, request.libraryId).optionKey, "Decade")
+        end function
+
+        @it("falls back without rewriting unsupported collection option Watched")
+        function _()
+            request = m.restoreRequest("unsupported", "collection", "Movie,Series")
+            m.saveRestoreState(request, "Watched", 1990, "Drama", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            'bs:disable-next-line 1140
+            pageRequest = buildVideoLibraryPageRequest(0)
+
+            m.assertEqual(pageRequest.sortBy, "SortName")
+            m.assertEqual(pageRequest.sortOrder, "Ascending")
+            m.assertFalse(pageRequest.favoriteOnly)
+            m.assertEqual(pageRequest.watchStatus, "All")
+            m.assertEqual(pageRequest.genre, "")
+            m.assertEqual(pageRequest.years, [])
+            m.assertEqual(LibraryViewStateStore.Load(request.accountKey, request.libraryId).optionKey, "Watched")
+        end function
+
+        @it("falls back without rewriting unsupported collection option Unwatched")
+        function _()
+            request = m.restoreRequest("unsupported", "collection", "Movie,Series")
+            m.saveRestoreState(request, "Unwatched", 1990, "Drama", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            'bs:disable-next-line 1140
+            pageRequest = buildVideoLibraryPageRequest(0)
+
+            m.assertEqual(pageRequest.sortBy, "SortName")
+            m.assertEqual(pageRequest.sortOrder, "Ascending")
+            m.assertFalse(pageRequest.favoriteOnly)
+            m.assertEqual(pageRequest.watchStatus, "All")
+            m.assertEqual(pageRequest.genre, "")
+            m.assertEqual(pageRequest.years, [])
+            m.assertEqual(LibraryViewStateStore.Load(request.accountKey, request.libraryId).optionKey, "Unwatched")
+        end function
+
+        @it("falls back without rewriting unsupported collection option DateLastContentAdded")
+        function _()
+            request = m.restoreRequest("unsupported", "collection", "Movie,Series")
+            m.saveRestoreState(request, "DateLastContentAdded", 1990, "Drama", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            'bs:disable-next-line 1140
+            pageRequest = buildVideoLibraryPageRequest(0)
+
+            m.assertEqual(pageRequest.sortBy, "SortName")
+            m.assertEqual(pageRequest.sortOrder, "Ascending")
+            m.assertFalse(pageRequest.favoriteOnly)
+            m.assertEqual(pageRequest.watchStatus, "All")
+            m.assertEqual(pageRequest.genre, "")
+            m.assertEqual(pageRequest.years, [])
+            m.assertEqual(LibraryViewStateStore.Load(request.accountKey, request.libraryId).optionKey, "DateLastContentAdded")
+        end function
+
+        @it("falls back without rewriting unsupported collection option unknown")
+        function _()
+            request = m.restoreRequest("unsupported", "collection", "Movie,Series")
+            m.saveRestoreState(request, "unknown", 1990, "Drama", "Descending")
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            'bs:disable-next-line 1140
+            pageRequest = buildVideoLibraryPageRequest(0)
+
+            m.assertEqual(pageRequest.sortBy, "SortName")
+            m.assertEqual(pageRequest.sortOrder, "Ascending")
+            m.assertFalse(pageRequest.favoriteOnly)
+            m.assertEqual(pageRequest.watchStatus, "All")
+            m.assertEqual(pageRequest.genre, "")
+            m.assertEqual(pageRequest.years, [])
+            m.assertEqual(LibraryViewStateStore.Load(request.accountKey, request.libraryId).optionKey, "unknown")
+        end function
+
+        @it("ignores malformed collection state without creating default preferences")
+        function _()
+            request = m.restoreRequest("malformed", "collection", "Movie")
+            section = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(request.accountKey))
+            section.Write("library-view-state-malformed", "not json")
+            section.Flush()
+
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            m.assertEqual(request.sortBy, "SortName")
+            m.assertEqual(request.sortOrder, "Ascending")
+            m.assertEqual(section.Read("library-view-state-malformed"), "not json")
+            m.assertFalse(section.Exists("library-view-state-index"))
+        end function
+
+        @it("continues persisting default movie library state")
+        function _()
+            request = m.restoreRequest("movie-default", "movies", "Movie")
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+
+            'bs:disable-next-line 1140
+            persistVideoLibraryViewState()
+
+            m.assertEqual(LibraryViewStateStore.Load(request.accountKey, request.libraryId).optionKey, "SortName")
+        end function
+
+        @it("keeps playlist persistence disabled")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertFalse(canPersistVideoLibraryViewState({ collectionType: "playlist", includeItemTypes: "Movie" }))
+        end function
+
+        private sub assertCollectionRoundTrip(optionKey as string, sortOrder as string)
+            request = m.restoreRequest("collection-round-trip", "collection", "Movie,Series")
+            'bs:disable-next-line 1140
+            prepareLoadRequest(request)
+            sortKey = optionKey
+            if optionKey = "Favorites" then sortKey = "SortName"
+            'bs:disable-next-line 1140
+            m.stubCall(reloadVideoLibraryForSort)
+            'bs:disable-next-line 1140
+            applySortSelection(LibraryBrowse.CreateSortSelection(optionKey, sortKey, "Browse"))
+            'bs:disable-next-line 1140
+            applySortOrderSelection({ sortOrder: sortOrder })
+
+            freshRequest = m.restoreRequest(request.libraryId, "collection", "Movie,Series")
+            'bs:disable-next-line 1140
+            prepareLoadRequest(freshRequest)
+            'bs:disable-next-line 1140
+            pageRequest = buildVideoLibraryPageRequest(0)
+
+            m.assertEqual(m.node.browseByButton.selectedSort.optionKey, optionKey)
+            m.assertEqual(m.node.sortButton.selectedSort.sortOrder, sortOrder)
+            m.assertEqual(pageRequest.sortBy, sortKey)
+            m.assertEqual(pageRequest.sortOrder, sortOrder)
+            m.assertEqual(pageRequest.favoriteOnly, optionKey = "Favorites")
+            m.assertEqual(LibraryViewStateStore.List(request.accountKey)[0].libraryId, request.libraryId)
+        end sub
 
         @describe("production persistence round trips")
 

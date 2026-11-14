@@ -3,15 +3,37 @@ namespace tests
     @suite("Library view-state store helpers")
     class LibraryViewStateStoreTests extends rooibos.BaseTestSuite
 
-        @describe("LibraryViewStateStore pure helpers")
-
-        @it("checks index membership and serializes deterministically")
-        function _()
-            ids = ["library-b", "library-a"]
-            m.assertTrue(LibraryViewStateStore.__IndexContains(ids, "library-a"))
-            m.assertFalse(LibraryViewStateStore.__IndexContains(ids, "library-c"))
-            m.assertEqual(LibraryViewStateStore.__SerializeIndex(ids), "[" + Json.String("library-b") + "," + Json.String("library-a") + "]")
+        protected override function beforeEach()
+            m.accountKey = "rooibos-view-state.invalid/user"
+            m.otherAccountKey = "rooibos-view-state.invalid/other"
+            m.snapshots = {}
+            registry = CreateObject("roRegistry")
+            for each accountKey in [m.accountKey, m.otherAccountKey]
+                name = RegistryStore.AccountSectionName(accountKey)
+                section = CreateObject("roRegistrySection", name)
+                m.snapshots[name] = section.ReadMulti(section.GetKeyList())
+                registry.Delete(name)
+            end for
+            registry.Flush()
+            m.section = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(m.accountKey))
+            m.state = { optionKey: "DateCreated", sortKey: "DateCreated", sortOrder: "Descending", selectedDecade: -1, selectedGenre: "", libraryTitle: "Collection", collectionType: "collection" }
         end function
+
+        protected override function afterEach()
+            registry = CreateObject("roRegistry")
+            for each name in m.snapshots
+                registry.Delete(name)
+                values = m.snapshots[name]
+                if values.Count() > 0 then
+                    section = CreateObject("roRegistrySection", name)
+                    section.WriteMulti(values)
+                    section.Flush()
+                end if
+            end for
+            registry.Flush()
+        end function
+
+        @describe("LibraryViewStateStore pure helpers")
 
         @it("accepts supported string and numeric fields")
         function _()
@@ -49,6 +71,134 @@ namespace tests
         @it("rejects invalid field types and unknown-only objects (case 5)")
         function _()
             m.assertFalse(LibraryViewStateStore.__IsValidState({ selectedDecade: "1990" }))
+        end function
+
+        @describe("registry-backed preferences")
+
+        @it("saves and restores all preference fields without creating an index")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+
+            m.assertEqual(LibraryViewStateStore.Load(m.accountKey, "one"), m.state)
+            m.assertEqual(m.section.GetKeyList().Count(), 1)
+            m.assertFalse(m.section.Exists("library-view-state-index"))
+        end function
+
+        @it("enumerates saved records directly in collection ID order")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "two", m.state)
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+
+            states = LibraryViewStateStore.List(m.accountKey)
+
+            m.assertEqual(states.Count(), 2)
+            m.assertEqual(states[0].libraryId, "one")
+            m.assertEqual(states[1].libraryId, "two")
+        end function
+
+        @it("ignores a stale index and discovers records absent from it")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+            m.section.Write("library-view-state-index", "[" + Json.String("missing") + "]")
+            m.section.Flush()
+
+            states = LibraryViewStateStore.List(m.accountKey)
+
+            m.assertEqual(states.Count(), 1)
+            m.assertEqual(states[0].libraryId, "one")
+            m.assertTrue(m.section.Exists("library-view-state-index"))
+        end function
+
+        @it("ignores unrelated keys and malformed preference records")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+            m.section.Write("theme", "blue")
+            m.section.Write("library-view-state-broken", "not json")
+            m.section.Write("library-view-state-", "{}")
+            m.section.Flush()
+
+            states = LibraryViewStateStore.List(m.accountKey)
+
+            m.assertEqual(states.Count(), 1)
+            m.assertEqual(states[0].libraryId, "one")
+        end function
+
+        @it("keeps collection preferences independent between accounts")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+            m.state.sortOrder = "Ascending"
+            LibraryViewStateStore.Save(m.otherAccountKey, "one", m.state)
+
+            m.assertEqual(LibraryViewStateStore.Load(m.accountKey, "one").sortOrder, "Descending")
+            m.assertEqual(LibraryViewStateStore.Load(m.otherAccountKey, "one").sortOrder, "Ascending")
+        end function
+
+        @it("removes only the requested preference")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+            LibraryViewStateStore.Save(m.accountKey, "two", m.state)
+
+            LibraryViewStateStore.Remove(m.accountKey, "one")
+
+            m.assertInvalid(LibraryViewStateStore.Load(m.accountKey, "one"))
+            m.assertEqual(LibraryViewStateStore.Load(m.accountKey, "two"), m.state)
+            m.assertEqual(LibraryViewStateStore.List(m.accountKey).Count(), 1)
+        end function
+
+        @it("removing the final preference leaves no saved state keys")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+
+            LibraryViewStateStore.Remove(m.accountKey, "one")
+
+            m.assertEqual(m.section.GetKeyList().Count(), 0)
+            m.assertEqual(LibraryViewStateStore.List(m.accountKey), [])
+        end function
+
+        @it("removing an absent preference preserves existing data")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+
+            LibraryViewStateStore.Remove(m.accountKey, "missing")
+
+            m.assertEqual(LibraryViewStateStore.Load(m.accountKey, "one"), m.state)
+            m.assertEqual(m.section.GetKeyList().Count(), 1)
+        end function
+
+        @it("saving an identical preference preserves its record")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+            previous = m.section.Read("library-view-state-one")
+
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+
+            m.assertEqual(m.section.Read("library-view-state-one"), previous)
+            m.assertEqual(m.section.GetKeyList().Count(), 1)
+        end function
+
+        @it("cleans up the obsolete index when saving a new preference")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+            m.section.Write("library-view-state-index", "[" + Json.String("one") + "]")
+            m.section.Flush()
+
+            LibraryViewStateStore.Save(m.accountKey, "two", m.state)
+
+            m.assertFalse(m.section.Exists("library-view-state-index"))
+            m.assertEqual(LibraryViewStateStore.Load(m.accountKey, "one"), m.state)
+            m.assertEqual(LibraryViewStateStore.Load(m.accountKey, "two"), m.state)
+        end function
+
+        @it("cleans up the obsolete index when saving an unchanged preference")
+        function _()
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+            m.section.Write("library-view-state-index", "[" + Json.String("one") + "]")
+            m.section.Flush()
+
+            LibraryViewStateStore.Save(m.accountKey, "one", m.state)
+
+            m.assertFalse(m.section.Exists("library-view-state-index"))
+            m.assertEqual(LibraryViewStateStore.Load(m.accountKey, "one"), m.state)
         end function
 
     end class

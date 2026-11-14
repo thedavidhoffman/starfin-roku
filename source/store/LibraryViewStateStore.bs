@@ -8,55 +8,6 @@ namespace LibraryViewStateStore
     end function
 
     '---------------------------------------------------------------------------
-    ' LibraryViewStateStore.__GetIndexKey
-    '---------------------------------------------------------------------------
-    function __GetIndexKey() as string
-        return "library-view-state-index"
-    end function
-
-    '---------------------------------------------------------------------------
-    ' LibraryViewStateStore.__IndexContains
-    '---------------------------------------------------------------------------
-    function __IndexContains(libraryIds as object, targetLibraryId as string) as boolean
-        for each libraryId in libraryIds
-            if libraryId = targetLibraryId then return true
-        end for
-        return false
-    end function
-
-    '---------------------------------------------------------------------------
-    ' LibraryViewStateStore.__LoadIndex
-    '---------------------------------------------------------------------------
-    function __LoadIndex(accountStore as object) as object
-        value = accountStore.Read(LibraryViewStateStore.__GetIndexKey())
-        if value = invalid or value = "" then return []
-
-        libraryIds = ParseJson(value)
-        if Type(libraryIds) <> "roArray" then return []
-
-        validLibraryIds = []
-        for each libraryId in libraryIds
-            libraryIdType = Type(libraryId)
-            isString = libraryIdType = "String" or libraryIdType = "roString"
-            if isString and libraryId <> "" and LibraryViewStateStore.__IndexContains(validLibraryIds, libraryId) = false then
-                validLibraryIds.Push(libraryId)
-            end if
-        end for
-        return validLibraryIds
-    end function
-
-    '---------------------------------------------------------------------------
-    ' LibraryViewStateStore.__SerializeIndex
-    '---------------------------------------------------------------------------
-    function __SerializeIndex(libraryIds as object) as string
-        parts = []
-        for each libraryId in libraryIds
-            parts.Push(Json.String(libraryId))
-        end for
-        return "[" + Json.JoinParts(parts) + "]"
-    end function
-
-    '---------------------------------------------------------------------------
     ' LibraryViewStateStore.__IsString
     '---------------------------------------------------------------------------
     function __IsString(value as dynamic) as boolean
@@ -123,14 +74,30 @@ namespace LibraryViewStateStore
             Json.Pair("collectionType", state.collectionType)
         ])
         accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
-        accountStore.Write(LibraryViewStateStore.__GetKey(libraryId), value)
 
-        libraryIds = LibraryViewStateStore.__LoadIndex(accountStore)
-        if LibraryViewStateStore.__IndexContains(libraryIds, libraryId) = false then
-            libraryIds.Push(libraryId)
+        key = __GetKey(libraryId)
+        changed = false
+        if accountStore.Read(key) <> value then
+            accountStore.Write(key, value)
+            changed = true
         end if
-        libraryIds.Sort()
-        accountStore.Write(LibraryViewStateStore.__GetIndexKey(), LibraryViewStateStore.__SerializeIndex(libraryIds))
+        if accountStore.Exists("library-view-state-index") then
+            accountStore.Delete("library-view-state-index")
+            changed = true
+        end if
+        if changed then accountStore.Flush()
+    end sub
+
+    '---------------------------------------------------------------------------
+    ' LibraryViewStateStore.Remove
+    '---------------------------------------------------------------------------
+    sub Remove(accountKey as string, libraryId as string)
+        if accountKey = "" or libraryId = "" then return
+
+        accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
+        key = __GetKey(libraryId)
+        if not accountStore.Exists(key) then return
+        accountStore.Delete(key)
         accountStore.Flush()
     end sub
 
@@ -142,14 +109,20 @@ namespace LibraryViewStateStore
         if accountKey = "" then return states
 
         accountStore = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(accountKey))
-        libraryIds = LibraryViewStateStore.__LoadIndex(accountStore)
-        for each libraryId in libraryIds
-            state = LibraryViewStateStore.Load(accountKey, libraryId)
+        prefix = __GetKey("")
+        for each key in accountStore.GetKeyList()
+            if Left(key, Len(prefix)) <> prefix then continue for
+            ' The obsolete index remains until this account next saves a preference.
+            if key = prefix + "index" then continue for
+            libraryId = Mid(key, Len(prefix) + 1)
+            if libraryId = "" then continue for
+            state = Load(accountKey, libraryId)
             if state <> invalid then
                 state.libraryId = libraryId
                 states.Push(state)
             end if
         end for
+        states.SortBy("libraryId")
         return states
     end function
 

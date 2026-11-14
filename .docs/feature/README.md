@@ -6,6 +6,8 @@ individual Starfin features.
 
 ## Table of Contents
 
+- [Collection Browse Preferences](collection-browse-preferences.md)
+
 - [System Information](system-information.md)
 
 - [Jellyfin Home Layout](home-layout.md)

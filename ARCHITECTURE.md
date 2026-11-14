@@ -219,6 +219,21 @@ VideoPlaybackInfoTask owns direct-launch item hydration before negotiation;
 VideoPlayer retains accepted metadata through its normal recovery lifecycle.
 AudioPlayer continues to own ordered album playback and pause/resume behavior.
 
+## Collection browse preferences
+
+VideoLibrary owns per-collection browse/sort restoration and normalization before
+its initial item request. It saves non-default choices per account and collection,
+and removes the saved preference when the user restores Title, ascending.
+LibraryViewStateStore saves or removes one preference record and skips unchanged
+writes. It enumerates stored preferences directly from registry keys rather than
+maintaining a separate index. Save also deletes any obsolete index in the same
+flush; Remove deletes only the requested preference and reads never perform cleanup.
+Registry operations are assumed available; persistence
+failure does not interrupt browsing or trigger recovery or acknowledgment messages.
+MainScene retains its existing navigation role.
+Other library persistence behavior and collection browse capabilities are unchanged.
+See [Collection Browse Preferences](.docs/feature/collection-browse-preferences.md).
+
 ## Movie supplemental content
 
 MovieSupplementalContent owns the movie's Extras/Cast region, correlated extras

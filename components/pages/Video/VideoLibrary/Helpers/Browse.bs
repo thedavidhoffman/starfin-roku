@@ -17,7 +17,7 @@ function canPersistVideoLibraryViewState(request as dynamic) as boolean
         return false
     end if
     collectionType = LCase(Strings.ToString(request.collectionType))
-    if collectionType = "collection" then return false
+    if collectionType = "collection" then return true
     if collectionType = "playlist" or collectionType = "playlists" then return false
     if collectionType = "movies" or collectionType = "tvshows" then return true
 
@@ -37,7 +37,7 @@ sub persistVideoLibraryViewState()
     if selection = invalid then
         return
     end if
-    LibraryViewStateStore.Save(Strings.ToString(request.accountKey), Strings.ToString(request.libraryId), {
+    state = {
         optionKey: LibraryBrowse.NormalizeVideoOption(m.pageState.selectedSortKey)
         sortKey: Strings.ToString(selection.sortKey, LibraryBrowse.SortKey.Title)
         sortOrder: LibraryBrowse.NormalizeSortOrder(selection.sortOrder)
@@ -45,7 +45,15 @@ sub persistVideoLibraryViewState()
         selectedGenre: m.pageState.filterSelection.genre
         libraryTitle: Strings.ToString(request.title)
         collectionType: Strings.ToString(request.collectionType)
-    })
+    }
+    accountKey = Strings.ToString(request.accountKey)
+    libraryId = Strings.ToString(request.libraryId)
+    isCollection = isCollectionContentRequest(request)
+    if isCollection and state.optionKey = LibraryBrowse.Option.Title and state.sortOrder = LibraryBrowse.SortOrder.Ascending then
+        LibraryViewStateStore.Remove(accountKey, libraryId)
+    else
+        LibraryViewStateStore.Save(accountKey, libraryId, state)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -55,6 +63,14 @@ sub applySavedVideoLibraryViewState(request as object, state as object)
     m.pageState.request = request
     optionKey = LibraryBrowse.NormalizeVideoOption(state.optionKey)
     sortOrder = LibraryBrowse.NormalizeSortOrder(state.sortOrder)
+    if isCollectionContentRequest(request) then
+        ' Collection capabilities exclude library filters and TV-only browse options.
+        rawOption = Strings.ToString(state.optionKey)
+        if rawOption <> LibraryBrowse.Option.Title and rawOption <> LibraryBrowse.Option.ReleaseDate and rawOption <> LibraryBrowse.Option.DateAdded and rawOption <> LibraryBrowse.Option.Favorites then
+            optionKey = LibraryBrowse.Option.Title
+            sortOrder = LibraryBrowse.SortOrder.Ascending
+        end if
+    end if
     if optionKey = LibraryBrowse.Option.Watched or optionKey = LibraryBrowse.Option.Unwatched then
         selection = buildSortSelection(optionKey, sortOrder)
     else if optionKey = LibraryBrowse.Option.Favorites then
