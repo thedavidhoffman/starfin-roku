@@ -28,6 +28,83 @@ namespace tests
             m.globalRegistrySnapshot = invalid
         end function
 
+        @describe("account key display")
+
+        @it("displays the active account key directly")
+        function _()
+            m.stubCall(AuthStore.GetActiveAccountKey, "server:8096/user-id")
+
+            'bs:disable-next-line 1140
+            section = getGlobalRegistrySection()
+
+            m.assertEqual(section.entries[0].value, "server:8096/user-id")
+        end function
+
+        @it("displays an account key without changing the account identity")
+        function _()
+            account = m.createAccount()
+            account.accountKey = "server:8096/user-id"
+            m.stubCall(SettingsStore.Load, SettingsStore.Defaults())
+            m.stubCall(LibraryViewStateStore.List, [])
+
+            'bs:disable-next-line 1140
+            section = getAccountRegistrySection(account)
+
+            m.assertEqual(section.entries[0].value, "server:8096/user-id")
+            m.assertEqual(account.accountKey, "server:8096/user-id")
+        end function
+
+        @describe("registry usage reporting")
+
+        @it("appends app registry usage after connection info")
+        function _()
+            'bs:disable-next-line 1140
+            section = getDeviceInfoSection()
+            entries = section.entries
+
+            m.assertEqual(section.title, "Roku Device Information")
+            m.assertEqual(entries[entries.Count() - 2].key, "connection info")
+            m.assertEqual(entries[entries.Count() - 1].key, "app registry usage")
+        end function
+
+        @it("formats partially used registry space in exact bytes")
+        function _()
+            'bs:disable-next-line 1140
+            value = registryUsageText(26624)
+
+            m.assertEqual(value, "6144 / 32768 bytes used")
+        end function
+
+        @it("formats empty registry space")
+        function _()
+            'bs:disable-next-line 1140
+            value = registryUsageText(32768)
+
+            m.assertEqual(value, "0 / 32768 bytes used")
+        end function
+
+        @it("formats full registry space")
+        function _()
+            'bs:disable-next-line 1140
+            value = registryUsageText(0)
+
+            m.assertEqual(value, "32768 / 32768 bytes used")
+        end function
+
+        @it("renders current app registry usage when refreshed")
+        function _()
+            content = m.createRenderedContent()
+            registry = CreateObject("roRegistry")
+            usedBytes = 32768 - registry.GetSpaceAvailable()
+            expectedValue = usedBytes.ToStr() + " / 32768 bytes used"
+
+            content.callFunc("updateSystemInformation")
+
+            m.assertEqual(content.sections[1].entries[5].value, expectedValue)
+            m.assertTrue(m.hasLabel(content, "APP REGISTRY USAGE"))
+            m.assertTrue(m.hasLabel(content, expectedValue))
+        end function
+
         @describe("global settings reporting")
 
         @it("preserves global entry order and section title")
@@ -290,6 +367,7 @@ namespace tests
 
             m.assertEqual(content.findNode("propertySheet").getChildCount(), initialCount)
         end function
+
         @it("focuses system information")
         function _()
             m.top.callFunc("focusSystemInformation")

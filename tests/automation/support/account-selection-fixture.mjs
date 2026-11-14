@@ -2,7 +2,7 @@ import dgram from 'node:dgram';
 import http from 'node:http';
 import { once } from 'node:events';
 
-// Two base paths deliberately share an authority and user IDs. This exercises
+// Two ports host separate servers with shared user IDs. This exercises
 // server identity without creating users or changing data on a real Jellyfin.
 export async function startAccountSelectionFixture(rokuHost) {
   const route = dgram.createSocket('udp4');
@@ -23,11 +23,12 @@ export async function startAccountSelectionFixture(rokuHost) {
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(body));
   };
-  const server = http.createServer(async (req, res) => {
+  const servers = new Map();
+  const createServer = id => http.createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const url = new URL(req.url, 'http://fixture');
-    const [, id, ...parts] = url.pathname.split('/');
+    const parts = url.pathname.slice(1).split('/');
     const path = `/${parts.join('/')}`.toLowerCase();
     const state = states.get(id);
     requests.push({ server: id, path, method: req.method });
@@ -70,11 +71,23 @@ export async function startAccountSelectionFixture(rokuHost) {
       pending.push({ id, kind, res, status, body });
     } else send(res, status, body);
   });
-  server.listen(0, address);
-  await once(server, 'listening');
+  try {
+    for (const id of states.keys()) {
+      const server = createServer(id);
+      servers.set(id, server);
+      server.listen(0, address);
+      await once(server, 'listening');
+    }
+  } catch (error) {
+    await Promise.all([...servers.values()].map(server => {
+      server.closeAllConnections();
+      return new Promise(resolve => server.close(() => resolve()));
+    }));
+    throw error;
+  }
   return {
     requests,
-    url: id => `http://${address}:${server.address().port}/${id}`,
+    url: id => `http://${address}:${servers.get(id).address().port}`,
     state: id => states.get(id),
     pendingCount: (id, kind) => pending.filter(entry => entry.id === id && entry.kind === kind && !entry.res.destroyed).length,
     release(id, kind) {
@@ -87,8 +100,10 @@ export async function startAccountSelectionFixture(rokuHost) {
       }
     },
     async close() {
-      server.closeAllConnections();
-      await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      await Promise.all([...servers.values()].map(server => {
+        server.closeAllConnections();
+        return new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      }));
     }
   };
 }

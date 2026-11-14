@@ -7,7 +7,7 @@ on the left and **Account badge** on the right. The TMDB API key remains below.
 The startup preference defaults to Off, saves with the existing settings close
 flow, applies to every account on this Roku, and takes effect on the next launch.
 It uses the global `select-account-at-startup` registry key with `off`/`on` values.
-Absent preference values use Off. Account identity migration is described below.
+Absent preference values use Off. Account key behavior is described below.
 
 With the preference Off, startup resumes the saved active account as before.
 With it On:
@@ -160,28 +160,23 @@ Device verification must exercise both layouts at HD/FHD, long addresses, lists
 longer than the viewport, nested sign-in cancellation, authentication failures,
 and cross-server switching without prior-session content appearing.
 
-## Account identity migration
+## Account keys
 
-Account keys use `v2/<encoded-server-identity>/<encoded-user-id>`. The shared
-`Url.ServerIdentity` helper normalizes scheme and hostname casing and trailing
-slashes, preserving ports, schemes, and case-sensitive paths as distinct server
-identities. Picker layout uses the same helper; no server alias discovery occurs.
+Account keys use `<hostname[:port]>/<user-id>`, matching Starfin 2.2.1.
+The server is normalized and lowercased; its HTTP/HTTPS protocol, path, query,
+and fragment are removed. Explicit ports are retained, and user IDs are appended
+without encoding or case changes. HTTP and HTTPS addresses and different base
+paths on the same authority share account storage for the same user ID.
 
-Before loading the saved session, AuthController asks AuthStore to migrate legacy
-account sections using their stored server and user ID. The complete section is
-copied, including tokens, account settings and library view state. Destination
-values win on retries; missing values are copied. The destination is flushed
-before updating the active reference, and legacy data is deleted only after those
-writes succeed. Incomplete migrations retain legacy records for the next launch.
-This changes local storage only and cannot recover records overwritten by an old
-account-key collision.
+Picker layout uses `Url.ServerIdentity` to compare full server addresses, including
+schemes and case-sensitive paths; this comparison does not determine storage keys.
 
 ## Automated regression workflows
 
 `tests/automation/specs/account-selection.spec.mjs` exercises the real startup gate,
 authorization tasks, picker controls and routing with an HTTP fixture reachable
-from the Roku. Two distinct server base paths share the same user ID, so switches
-also exercise the versioned account identity. The fixture records requests and
+from the Roku. Two server ports share the same user ID, so switches
+also exercise distinct account storage. The fixture records requests and
 can hold authorization/Home responses or return 401/503 responses.
 
 Scenarios cover zero/one/multiple accounts, preference persistence across launch,
@@ -189,8 +184,8 @@ no Home requests before successful selection, duplicate keys during authorizatio
 horizontal and vertical scrolling, long addresses, active-account protection,
 forget/cancel, keyboard/discovery/Quick Connect cancellation, password sign-in,
 Quick Connect completion, expiry and refreshed eligibility, failure recovery,
-startup Back exit, deferred deep-link resolution to Home fallback, legacy record
-migration, and cross-server settings/context adoption with delayed old responses.
+startup Back exit, deferred deep-link resolution to Home fallback, and cross-server
+settings/context adoption with delayed old responses.
 Each case snapshots and restores Starfin registry sections. Screenshots are taken
 by the tests for overflow/long-address evidence; visual correctness still needs
 inspection when device verification is authorized. The suite uses the existing
@@ -201,9 +196,8 @@ Authentication helpers enter Login with configured test credentials instead of
 silently selecting an arbitrary saved account. Node tests cover these helpers and
 the HTTP fixture itself.
 
-Rooibos additionally exercises destination write/flush failures, retry ordering,
-inactive-account migration and idempotence. `bsconfig-test.json` enables a small
-AuthStore factory substitution only in emitted test code, allowing deterministic
+Rooibos additionally exercises account-key formatting and failed account deletion.
+`bsconfig-test.json` enables a small AuthStore factory substitution only in emitted test code, allowing deterministic
 native-registry failures without filling the device registry. The factory is
 appended to the AuthStore test script so it is available in each importing
 component scope. Production source, production builds and automation builds do

@@ -6,6 +6,8 @@ individual Starfin features.
 
 ## Table of Contents
 
+- [System Information](system-information.md)
+
 - [Jellyfin Home Layout](home-layout.md)
 
 - [Trailers](trailers.md)

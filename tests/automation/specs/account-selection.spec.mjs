@@ -7,8 +7,7 @@ import { categories, openSettings, selectRadioOption, closeAndSaveSettings } fro
 
 const picker = '#startupAccountHost.0';
 const homePaths = new Set(['/userviews', '/items/latest', '/useritems/resume', '/shows/nextup']);
-const encode = value => encodeURIComponent(value).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-const keyFor = (server, userId) => `v2/${encode(server)}/${encode(userId)}`;
+const keyFor = (server, userId) => `${server.trim().toLowerCase().replace(/^https?:\/\//, '').split(/[/?#]/)[0]}/${userId}`;
 
 describe('Starfin startup account selection and switching', function () {
   this.timeout(120000);
@@ -386,29 +385,6 @@ describe('Starfin startup account selection and switching', function () {
     await environment.ecp.sendLaunchChannel({ channelId: 'dev', verifyLaunch: true, verifyLaunchTimeOut: 15000 });
     await waitForMainScene(environment);
     await visible(picker);
-  });
-
-  it('migrates a saved account before startup and preserves its credentials settings and active identity', async () => {
-    await seed([account(), account('b')]);
-    const server = fixture.url('a');
-    const oldKey = `${new URL(server).host}/u0`;
-    const newKey = keyFor(server, 'u0');
-    await environment.odc.deleteRegistrySections({ sections: [`STARFIN_ACCOUNT_${newKey}`] });
-    await environment.odc.writeRegistry({ values: {
-      [`STARFIN_ACCOUNT_${oldKey}`]: { server, 'user-id': 'u0', username: 'Legacy User', token: 'a-token', theme: 'grey', 'library-view': 'preserved' },
-      STARFIN_ROKU: { 'active-account-key': oldKey }
-    } });
-    await relaunchStarfin(environment);
-    await visible(picker);
-    const migrated = (await environment.odc.readRegistry()).values;
-    assert.equal(migrated[`STARFIN_ACCOUNT_${oldKey}`], undefined);
-    assert.equal(migrated.STARFIN_ROKU['active-account-key'], newKey);
-    assert.equal(migrated[`STARFIN_ACCOUNT_${newKey}`].token, 'a-token');
-    assert.equal(migrated[`STARFIN_ACCOUNT_${newKey}`]['library-view'], 'preserved');
-    await press('Select');
-    await ready();
-    assert.equal(await value('#homePage.settings.theme'), 'grey');
-    assert.equal(await value('#authController.authenticatedSession.accountKey'), newKey);
   });
 
 });

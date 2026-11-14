@@ -1,6 +1,5 @@
 import "pkg:/source/String.bs"
 import "pkg:/source/Url.bs"
-import "pkg:/source/Encode.bs"
 import "pkg:/source/store/RegistryStore.bs"
 namespace AuthStore
 
@@ -15,53 +14,23 @@ namespace AuthStore
     ' AuthStore.BuildAccountKey
     '---------------------------------------------------------------------------
     function BuildAccountKey(server as string, userId as dynamic) as string
-        return "v2/" + Encode.Url(Url.ServerIdentity(server)) + "/" + Encode.Url(Strings.ToString(userId))
-    end function
-
-    '---------------------------------------------------------------------------
-    ' AuthStore.MigrateAccounts
-    '---------------------------------------------------------------------------
-    function MigrateAccounts() as boolean
-        registry = CreateObject("roRegistry")
-        succeeded = true
-        for each sectionName in registry.GetSectionList()
-            if LCase(Left(sectionName, 16)) <> "starfin_account_" then continue for
-            oldKey = Mid(sectionName, 17)
-            legacy = CreateObject("roRegistrySection", sectionName)
-            server = legacy.Read("server")
-            userId = legacy.Read("user-id")
-            if server = "" or userId = "" then continue for
-            newKey = BuildAccountKey(server, userId)
-            if oldKey = newKey then continue for
-            try
-                if not __MigrateAccount(legacy, oldKey, newKey) then succeeded = false
-            catch error
-                succeeded = false
-            end try
-        end for
-        return succeeded
-    end function
-
-    '---------------------------------------------------------------------------
-    ' AuthStore.__MigrateAccount
-    '---------------------------------------------------------------------------
-    function __MigrateAccount(legacy as object, oldKey as string, newKey as string) as boolean
-        destination = CreateObject("roRegistrySection", RegistryStore.AccountSectionName(newKey))
-        ' Preserve all account-owned settings and resume safely after partial migration.
-        for each key in legacy.GetKeyList()
-            if not destination.Exists(key) then
-                if not destination.Write(key, legacy.Read(key)) then return false
-            end if
-        end for
-        if not destination.Flush() then return false
-        globalStore = __GetStore()
-        if globalStore.Read("active-account-key") = oldKey then
-            if not globalStore.Write("active-account-key", newKey) then return false
-            if not globalStore.Flush() then return false
+        authority = LCase(Url.NormalizeServer(server))
+        if Left(authority, 7) = "http://" then
+            authority = Mid(authority, 8)
+        else if Left(authority, 8) = "https://" then
+            authority = Mid(authority, 9)
         end if
-        registry = CreateObject("roRegistry")
-        if not registry.Delete(RegistryStore.AccountSectionName(oldKey)) then return false
-        return registry.Flush()
+
+        authorityEnd = Len(authority) + 1
+        pathStart = Instr(1, authority, "/")
+        queryStart = Instr(1, authority, "?")
+        fragmentStart = Instr(1, authority, "#")
+        if pathStart > 0 and pathStart < authorityEnd then authorityEnd = pathStart
+        if queryStart > 0 and queryStart < authorityEnd then authorityEnd = queryStart
+        if fragmentStart > 0 and fragmentStart < authorityEnd then authorityEnd = fragmentStart
+        authority = Left(authority, authorityEnd - 1)
+
+        return authority + "/" + Strings.ToString(userId)
     end function
 
     '---------------------------------------------------------------------------

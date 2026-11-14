@@ -3,9 +3,10 @@ import test from 'node:test';
 import { waitFor } from '../support/lifecycle.mjs';
 import { startAccountSelectionFixture } from '../support/account-selection-fixture.mjs';
 
-test('distinguishes servers by base path with the same user identity', async t => {
+test('distinguishes servers by port with the same user identity', async t => {
   const fixture = await startAccountSelectionFixture('127.0.0.1');
   t.after(() => fixture.close());
+  assert.notEqual(new URL(fixture.url('a')).port, new URL(fixture.url('b')).port);
   for (const id of ['a', 'b']) {
     const response = await fetch(`${fixture.url(id)}/Users/u0`);
     assert.equal(response.status, 200);

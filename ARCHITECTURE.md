@@ -434,11 +434,13 @@ is established before acknowledgment messages capture their return target.
 
 ### Account identity and picker recovery
 
-AuthStore owns versioned account identity and legacy-section migration before
-AuthController loads its saved session. `Url.ServerIdentity` defines normalized
-server identity for both persistence and picker presentation, retaining scheme,
-port and path distinctions. Migration preserves the complete account section and
-updates the active reference only after persisting its destination.
+AuthStore owns account keys in the `<hostname[:port]>/<user-id>` format used by
+Starfin 2.2.1. It normalizes and lowercases the server, removes the HTTP/HTTPS
+protocol and path/query/fragment, retains explicit ports, and appends the user ID
+without encoding or case changes. AuthController loads its saved session directly.
+Picker presentation uses `Url.ServerIdentity` to compare normalized server
+addresses, retaining scheme, port and case-sensitive path distinctions; this
+comparison does not determine account storage keys.
 
 MainScene retains originating surface and selected account identity while a dialog
 switch is pending. Connection failures reopen that picker and restore selection;
