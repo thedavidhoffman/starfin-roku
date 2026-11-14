@@ -11,25 +11,26 @@ Cast and the centered transport controls.
 
 The dialog uses the Settings navigation pattern: categories on the left and a
 content pane on the right. The category list leaves 24 pixels of breathing room
-between its focus highlight and the vertical divider. Categories are Media Info, Video, Audio, Subtitles,
-and Chapters, in that order. Audio appears for multiple tracks, Subtitles when
-subtitle tracks exist, and Chapters when chapters exist. Media Info and Video
-always appear. Opening selects Media Info and focuses navigation. Right or OK
+between its focus highlight and the vertical divider. Categories are Media Info,
+Video, Video bitrate, Audio, Subtitles, and Chapters, in that order. Audio appears for multiple tracks, Subtitles when
+subtitle tracks exist, and Chapters when chapters exist. Media Info, Video, and
+Video bitrate always appear. Opening selects Media Info and focuses navigation. Right or OK
 enters the pane; Left returns to navigation. Back closes and applies changes.
 There is no Done button or hint. The dialog title follows Settings' category
 breadcrumb pattern: `Media Options › Media Info` on opening, then
 `Media Options › <category>` as navigation changes categories.
 
-Video, Versions, Audio, Subtitles, and Chapters reuse SettingsCard for the glass
-background, category heading, and radio-list focus spacing. Cards occupy the
+Video, Video bitrate, Versions, Audio, Subtitles, and Chapters reuse SettingsCard
+for the glass background, category heading, and radio-list focus spacing. Cards occupy the
 existing right-hand pane at width 1030. Lists use 52-pixel rows starting at Y=68,
 with card height `84 + 52 * visibleRows` and at most ten visible rows. Longer
 lists scroll without dropping choices. Video uses a 660-pixel card; its focused
-mode description appears within the card at Y=300 with height 336. Other choice
-categories clear that description and fit their list. Version-loading status
+mode description appears within the card at Y=300 with height 336. Video bitrate
+uses the same card height with five rows and help text at Y=360 with height 260.
+Other choice categories clear that description and fit their list. Version-loading status
 remains in the footer beneath the cards. Media Info keeps its existing layout.
 
-Movies with multiple selectable sources add Versions immediately after Video.
+Movies with multiple selectable sources add Versions immediately after Video bitrate.
 See [Movie Versions](movie-versions.md) for version loading, draft behavior, and
 source-specific resume and playback.
 
@@ -56,9 +57,11 @@ zero seconds. Merely focusing a chapter does not select it.
 supplies an `optionsContext` through the `mediaOptions` OverlayHost request.
 It includes source data, option lists, initial selection, an opening generation,
 and optional playback diagnostics. The dialog publishes `result` before the
-normal close event, with optional `videoMode`, `audioStreamIndex`,
+normal close event, with optional `videoMode`, `maxVideoBitrate`, `audioStreamIndex`,
 `subtitleStreamIndex`, and `chapter` fields. Missing fields mean unchanged;
-subtitle index -1 explicitly means Off and -2 means Jellyfin Account Default.
+`maxVideoBitrate` uses bits per second and zero explicitly restores Device default. The choices are documented in
+[Video Playback Options](video-playback-options.md).
+Subtitle index -1 explicitly means Off and -2 means Jellyfin Account Default.
 For a version change it also publishes `mediaSourceId` and the retained
 `movieVersions` context, with final source-specific stream indices. Owners
 project the selected item from that context rather than receiving a duplicate

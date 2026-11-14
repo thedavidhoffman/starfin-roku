@@ -227,3 +227,39 @@ series-cast fallback is required. Episodes without usable people keep Cast hidde
 
 The unfocused-fill experiment is isolated to compact `PlayerToolbarButton`
 rendering. Removing that override restores the previous playback backgrounds.
+
+## Per-title maximum video bitrate
+
+Media Options provides a Video bitrate category beside Video, with a
+Maximum video bitrate card offering Device default, 2 Mbps, 4 Mbps, 6 Mbps,
+and 8 Mbps. The help text is "Lower this if playback buffers. Audio uses
+additional bandwidth." This is a video ceiling, not a network speed measurement
+or automatic adaptive quality setting.
+
+`maxVideoBitrate` is carried in the media selection and playback request in bits
+per second; absent or zero means Device default. Unsupported values normalize
+to zero. No device or account preference is saved. The selection applies to the
+current title, survives audio/subtitle changes, movie version switches, recovery,
+and return to its detail page. Loading another title or advancing a playback
+queue starts with Device default; extras and trailers do not inherit it.
+
+A selected limit adds a required VideoBitrate condition to the common video
+codec profile. It combines with the existing codec-specific conditions, so it
+can only lower the effective ceiling. This influences both direct-play
+eligibility and transcoded output, including codecs without their own bitrate
+constraint. Audio and combined-stream ceilings remain unchanged. Initial,
+automatic-subtitle followup, and recovery negotiations use the same limit.
+
+The dialog stages the limit with all other choices. Back applies one combined
+restart when it changes, using the captured position or selected chapter and
+the existing resume/focus behavior. Returning to the opening choice produces
+no change. Playback mode remains independent: Automatic can still direct-play
+a compatible source within the limit.
+
+Coverage includes all offered limits, default/invalid normalization, required
+source bitrate boundaries, followup negotiation, staged dialog changes, combined
+restart and chapter position, recovery, movie version drafts, page restoration,
+and reset on a new title. Builds, device playback, and UI verification remain
+subject to the development-cycle gate. Runtime acceptance should compare the
+same source at Device default and 4 Mbps, inspect the actual FFmpeg video target,
+and exercise long-pause/resume, recovery, and concurrent stream changes.

@@ -68,7 +68,7 @@ individual Starfin features.
 - [Automatic Subtitles](automatic-subtitles.md)
 - [Jellyfin Account Subtitle Settings](account-subtitle-settings.md)
 - [Video Playback Lifecycle](video-playback-lifecycle.md)
-- [Video Playback Options](video-playback-options.md)
+- [Video Playback Options and Per-Title Bitrate](video-playback-options.md)
 
 - [Message Dialog](message-dialog.md)
 

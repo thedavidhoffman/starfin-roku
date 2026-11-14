@@ -167,6 +167,29 @@ namespace tests
             m.assertEqual(MediaOptionsSession.DisplaySelection(result, result.selection).subtitleStreamIndex, 2)
         end function
 
+        @describe("bitrate selection contract")
+
+        @it("treats an absent bitrate and explicit device default as unchanged")
+        function _()
+            initial = { videoMode: "automatic", audioStreamIndex: -1, subtitleStreamIndex: -2 }
+            pending = MediaOptionsSession.CopySelection(initial)
+
+            m.assertEqual(pending.maxVideoBitrate, 0)
+            m.assertEqual(MediaOptionsSession.Changes(initial, pending), {})
+        end function
+
+        @it("preserves a bitrate in a selected version context")
+        function _()
+            original = TestMovieVersions.Context()
+            selected = MovieVersions.Select(original.movieVersions, "version-2")
+            selection = MediaOptionsSession.CopySelection(original.selection)
+            selection.maxVideoBitrate = 4000000
+
+            context = MediaOptionsSession.ForVersion(original, selected, selection)
+
+            m.assertEqual(context.selection.maxVideoBitrate, 4000000)
+        end function
+
     end class
 
 end namespace

@@ -15,6 +15,7 @@ sub handleStreamOptionsOverlayClosed(closed as object)
     if item = invalid or item.Id <> session.itemId then return
     result = closed.overlay.result
     if result = invalid then return
+    if result.maxVideoBitrate <> invalid then m.state.maxVideoBitrate = PlaybackBitrate.Normalize(result.maxVideoBitrate)
     if result.videoMode <> invalid then applyPlaybackVideoMode(result.videoMode)
     m.state.selectedStreams = MediaOptionsSession.ApplyStreamChanges(m.state.selectedStreams, session.context, result)
     applySelectedStreamsToPlaySelection(m.state.playSelection)
@@ -53,7 +54,7 @@ sub onVideoToolbarMediaInfoSelected()
     if item = invalid then return
     m.mediaToolbar.callFunc("deactivate")
     m.state.focusArea = "toolbar"
-    context = MediaOptionsSession.Context(item, m.state.videoMode, getSelectedAudioStreamIndex(), getSelectedSubtitleStreamIndex(), getAudioStreams(item), getSubtitleStreams(item))
+    context = MediaOptionsSession.Context(item, m.state.videoMode, getSelectedAudioStreamIndex(), getSelectedSubtitleStreamIndex(), getAudioStreams(item), getSubtitleStreams(item), invalid, m.state.maxVideoBitrate)
     m.state.mediaOptions.generation += 1
     context.generation = m.state.mediaOptions.generation
     m.state.mediaOptions.session = { context: context, itemId: item.Id }
@@ -110,6 +111,7 @@ sub applySelectedStreamsToPlaySelection(selection as dynamic)
     if selection = invalid then return
 
     selection.AddReplace("videoMode", m.state.videoMode)
+    selection.maxVideoBitrate = m.state.maxVideoBitrate
 
     audioIndex = getSelectedAudioStreamIndex()
     if audioIndex >= 0 then selection.AddReplace("audioStreamIndex", audioIndex)
@@ -151,11 +153,12 @@ function getSelectedStreamIndex(selection as dynamic, fallback as integer) as in
 end function
 
 '-------------------------------------------------------------------------------
-' applyPlaybackSubtitleSelection
+' applyPlaybackSelection
 '-------------------------------------------------------------------------------
-sub applyPlaybackSubtitleSelection(playRequest as dynamic)
+sub applyPlaybackSelection(playRequest as dynamic)
     if playRequest = invalid or m.state.request = invalid then return
     if Strings.ToString(playRequest.itemId) <> Strings.ToString(m.state.request.itemId) then return
+    m.state.maxVideoBitrate = PlaybackBitrate.Normalize(playRequest.maxVideoBitrate)
     streamIndex = Number.ToInteger(playRequest.subtitleStreamIndex, SubtitleSelection.NotSet)
     m.state.selectedStreams.subtitleOff = streamIndex = SubtitleSelection.None
     m.state.selectedStreams.subtitle = invalid

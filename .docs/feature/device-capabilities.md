@@ -96,7 +96,10 @@ decoder probes fail. It constrains direct-play eligibility and H.264 transcoding
 negotiation; missing source bitrate does not satisfy the required condition.
 HEVC (`hevc,h265`), VP9, and AV1 each have a required 40 Mbps video bitrate
 constraint, also independent of probe results. These match Jellyfin Roku's default
-codec limits. There is no user-facing bitrate control in this change.
+codec limits. Media Options can apply a per-title maximum video bitrate of
+2, 4, 6, or 8 Mbps. The required common VideoBitrate condition combines with
+codec-specific limits; Device default adds no common bitrate constraint.
+See [Video Playback Options](video-playback-options.md).
 
 Overall ceilings match the local Jellyfin Roku reference: the device profile
 advertises 120 Mbps streaming and 100 Mbps static, while PlaybackInfo requests

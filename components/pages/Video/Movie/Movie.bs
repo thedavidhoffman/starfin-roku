@@ -70,6 +70,7 @@ sub initReferences()
             subtitleOff: false
         }
         videoMode: PlaybackMode.Mode.Automatic
+        maxVideoBitrate: 0
         focusArea: MovieFocus.Area.Toolbar
         layout: {
             isCinematic: false
@@ -415,6 +416,7 @@ function buildPlaySelection(startPositionTicks as dynamic) as dynamic
 
     applySelectedStreamsToPlaySelection(selection)
     selection.AddReplace("videoMode", m.state.videoMode)
+    selection.maxVideoBitrate = m.state.maxVideoBitrate
     return selection
 end function
 
@@ -429,6 +431,7 @@ sub applyPlaybackSelection(playRequest as dynamic)
     itemId = Strings.ToString(item.Id)
     if itemId = "" or Strings.ToString(playRequest.itemId) <> itemId then return
 
+    m.state.maxVideoBitrate = PlaybackBitrate.Normalize(playRequest.maxVideoBitrate)
     if playRequest.movieVersions <> invalid and playRequest.movieVersions.itemId = itemId then
         restoredItem = MovieVersions.GetSelectedItem(playRequest.movieVersions)
         if restoredItem <> invalid then
@@ -481,6 +484,7 @@ sub handleStreamOptionsOverlayClosed(closed as object)
         session.context = MediaOptionsSession.ForVersion(session.context, selected, result)
         m.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
     end if
+    if result.maxVideoBitrate <> invalid then m.state.maxVideoBitrate = PlaybackBitrate.Normalize(result.maxVideoBitrate)
     if result.videoMode <> invalid then applyPlaybackVideoMode(result.videoMode)
     m.state.selectedStreams = MediaOptionsSession.ApplyStreamChanges(m.state.selectedStreams, session.context, result)
     renderMovie(item)
@@ -594,7 +598,7 @@ sub onVideoToolbarMediaInfoSelected()
     if m.state.mediaInfoPending then return
     m.mediaToolbar.callFunc("deactivate")
     m.state.focusArea = MovieFocus.Area.Toolbar
-    context = MediaOptionsSession.Context(item, m.state.videoMode, getSelectedAudioStreamIndex(), getSelectedSubtitleStreamIndex(), getAudioStreams(item), getSubtitleStreams(item))
+    context = MediaOptionsSession.Context(item, m.state.videoMode, getSelectedAudioStreamIndex(), getSelectedSubtitleStreamIndex(), getAudioStreams(item), getSubtitleStreams(item), invalid, m.state.maxVideoBitrate)
     if m.state.movieVersions <> invalid then
         context.movieVersions = m.state.movieVersions
         context.selection.mediaSourceId = m.state.movieVersions.selectedSourceId

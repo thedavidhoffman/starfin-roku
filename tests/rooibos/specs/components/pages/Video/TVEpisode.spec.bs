@@ -1011,6 +1011,7 @@ namespace tests
         end function
 
         private sub prepareMediaOptions()
+            m.node.state.maxVideoBitrate = 0
             item = { Id: "options-item", Name: "Options", Type: "Movie", MediaStreams: [{ Type: "Audio", Index: 1, Codec: "aac", Channels: 2 }, { Type: "Audio", Index: 2, Codec: "ac3", Channels: 6 }], Chapters: [{ StartPositionTicks: 600000000 }] }
             m.node.state.mediaInfoPending = false
             m.node.state.selectedStreams = { audio: invalid, subtitle: invalid, subtitleOff: false }
@@ -1058,7 +1059,7 @@ namespace tests
             m.node.state.playSelection = { itemId: "item", subtitleStreamIndex: 4 }
             m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
 
-            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", resolvedSubtitleStreamIndex: 4 })
+            m.top.callFunc("applyPlaybackSelection", { itemId: "item", resolvedSubtitleStreamIndex: 4 })
 
             m.assertInvalid(m.node.state.selectedStreams.subtitle)
             m.assertFalse(m.node.state.selectedStreams.subtitleOff)
@@ -1070,7 +1071,7 @@ namespace tests
             m.node.state.playSelection = { itemId: "item", subtitleStreamIndex: 4 }
             m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
 
-            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", subtitleStreamIndex: -1 })
+            m.top.callFunc("applyPlaybackSelection", { itemId: "item", subtitleStreamIndex: -1 })
 
             m.assertInvalid(m.node.state.selectedStreams.subtitle)
             m.assertTrue(m.node.state.selectedStreams.subtitleOff)
@@ -1082,7 +1083,7 @@ namespace tests
             m.node.state.playSelection = { itemId: "item", subtitleStreamIndex: 4 }
             m.node.state.selectedStreams = { audio: invalid, subtitle: { streamIndex: 4 }, subtitleOff: false }
 
-            m.top.callFunc("applyPlaybackSubtitleSelection", { itemId: "item", subtitleStreamIndex: 5 })
+            m.top.callFunc("applyPlaybackSelection", { itemId: "item", subtitleStreamIndex: 5 })
 
             m.assertEqual(m.node.state.selectedStreams.subtitle.streamIndex, 5)
         end function
@@ -1224,6 +1225,52 @@ namespace tests
             'bs:disable-next-line 1140
             m.assertFalse(onKeyEvent("play", false))
             m.assertInvalid(m.top.selectedEpisode)
+        end function
+
+        @describe("per-title video bitrate")
+
+        @it("commits the bitrate before chapter playback")
+        function _()
+            m.prepareMediaOptions()
+            m.top.callFunc("handleStreamOptionsOverlayClosed", { request: m.top.overlayRequested, overlay: { result: { maxVideoBitrate: 4000000, chapter: { startPositionTicks: 600000000&, startPositionSeconds: 60 } } } })
+
+            m.assertEqual(m.node.state.maxVideoBitrate, 4000000)
+            m.assertEqual(m.top.selectedEpisode.maxVideoBitrate, 4000000)
+            m.assertEqual(m.top.selectedEpisode.startPositionTicks, 600000000&)
+        end function
+
+        @it("restores the accepted bitrate after returning from playback")
+        function _()
+            m.prepareMediaOptions()
+            m.top.callFunc("applyPlaybackSelection", { itemId: "options-item", maxVideoBitrate: 6000000 })
+
+            'bs:disable-next-line 1140
+            onVideoToolbarMediaInfoSelected()
+
+            m.assertEqual(m.top.overlayRequested.optionsContext.selection.maxVideoBitrate, 6000000)
+        end function
+
+        @it("ignores a bitrate returned from another title")
+        function _()
+            m.prepareMediaOptions()
+            m.node.state.maxVideoBitrate = 4000000
+
+            m.top.callFunc("applyPlaybackSelection", { itemId: "other", maxVideoBitrate: 8000000 })
+
+            m.assertEqual(m.node.state.maxVideoBitrate, 4000000)
+        end function
+
+        @it("resets the bitrate when loading a new title")
+        function _()
+            m.node.state.detailsLoad = LatestRequestLifecycle.Create()
+            LatestRequestLifecycle.Queue(m.node.state.detailsLoad, { itemId: "old-item" })
+            LatestRequestLifecycle.TakeNext(m.node.state.detailsLoad)
+            m.node.state.maxVideoBitrate = 4000000
+            request = { server: "http://server", itemId: "new-item", settings: {}, item: { Id: "new-item", Type: "Episode" } }
+
+            m.top.loadRequest = request
+
+            m.assertEqual(m.node.state.maxVideoBitrate, 0)
         end function
 
     end class

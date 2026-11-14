@@ -25,7 +25,7 @@ namespace tests
             m.assertEqual(body, { DeviceProfile: { Name: "diagnostic-test" }, AlwaysBurnInSubtitleWhenTranscoding: false })
         end function
 
-        private function profileWithDiagnostics(includeSubtitles as boolean, diagnostics as object) as string
+        private function profileWithDiagnostics(includeSubtitles as boolean, diagnostics as object, maxVideoBitrate = 0 as integer) as string
             diagnostics.Append(["Capabilities device test", "Capabilities AV1 codecOnly=true"])
             return Json.Object([Json.Pair("Name", "diagnostic-test")])
         end function
@@ -870,6 +870,22 @@ namespace tests
             m.assertTrue(m.node.top.response.ok)
             m.assertEqual(m.node.top.response.movieVersions.selectedSourceId, "version-2")
             m.assertEqual(m.node.top.response.startPositionTicks, TestMovieVersions.Create().details["version-2"].UserData.PlaybackPositionTicks)
+        end function
+
+        @describe("per-title bitrate negotiation")
+
+        @it("retains the video-only override through automatic subtitle renegotiation")
+        function _()
+            m.runSubtitleNegotiation({ maxVideoBitrate: 4000000 }, 4)
+            capture = getGlobalAa().subtitleNegotiation
+
+            m.assertEqual(capture.calls.Count(), 2)
+            for each call in capture.calls
+                profile = ParseJson(call.body).DeviceProfile
+                m.assertEqual(profile.CodecProfiles[0].Conditions[2], { Condition: "LessThanEqual", Property: "VideoBitrate", Value: "4000000", IsRequired: true })
+                m.assertEqual(profile.MaxStreamingBitrate, 120000000)
+                m.assertTrue(Instr(1, LCase(call.url), "maxstreamingbitrate=140000000") > 0)
+            end for
         end function
 
     end class

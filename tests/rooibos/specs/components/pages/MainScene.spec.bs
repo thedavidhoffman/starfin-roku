@@ -2684,7 +2684,7 @@ namespace tests
             restorePlaybackReturn(request)
 
             m.assertEqual(getGlobalAa().preparedReturnRequest, request)
-            m.assertEqual(destination.calls[0], { name: "applyPlaybackSubtitleSelection", payload: request })
+            m.assertEqual(destination.calls[0], { name: "applyPlaybackSelection", payload: request })
             m.assertEqual(destination.calls[1].name, "refreshPlaybackState")
             m.assertEqual(destination.calls[2].name, "activate")
             m.assertFalse(original.visible)
@@ -4308,6 +4308,27 @@ namespace tests
             m.assertTrue(m.node.login.visible)
             m.assertFalse(m.node.startupAccount.busy)
             m.node.overlayHost.callFunc("closeOverlay")
+        end function
+
+        @describe("title bitrate routing")
+
+        @it("routes the detail bitrate into playback")
+        function _()
+            m.node.playbackController = { playRequest: invalid }
+
+            'bs:disable-next-line 1140
+            playerShow({ itemId: "movie-1", item: { Id: "movie-1", Type: "Movie" }, maxVideoBitrate: 4000000 })
+
+            m.assertEqual(m.node.playbackController.playRequest.maxVideoBitrate, 4000000)
+            m.node.playbackController = m.top.findNode("playbackController")
+        end function
+
+        @it("retains the bitrate when rebuilding the episode return page")
+        function _()
+            'bs:disable-next-line 1140
+            request = buildClosedPlayerTVEpisodeLoadRequest({ itemId: "episode", item: { Id: "episode", Type: "Episode" }, maxVideoBitrate: 4000000 })
+
+            m.assertEqual(request.maxVideoBitrate, 4000000)
         end function
 
     end class

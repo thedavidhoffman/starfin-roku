@@ -1,4 +1,5 @@
 import "pkg:/source/Number.bs"
+import "pkg:/source/PlaybackBitrate.bs"
 import "pkg:/source/String.bs"
 
 namespace DeviceCapabilities
@@ -18,7 +19,7 @@ namespace DeviceCapabilities
     '---------------------------------------------------------------------------
     ' DeviceCapabilities.BuildDeviceProfileJson
     '---------------------------------------------------------------------------
-    function BuildDeviceProfileJson(includeSubtitleProfiles = true as boolean, diagnostics = invalid as dynamic) as string
+    function BuildDeviceProfileJson(includeSubtitleProfiles = true as boolean, diagnostics = invalid as dynamic, maxVideoBitrate = 0 as integer) as string
         displaySize = GetVideoPlaybackSize()
         if diagnostics <> invalid then diagnostics.Push(__DeviceDiagnosticLine(CreateObject("roDeviceInfo")))
         bitrateLimits = DeviceCapabilities.GetBitrateLimits()
@@ -30,7 +31,7 @@ namespace DeviceCapabilities
             Json.String("DirectPlayProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__DirectPlayProfiles(diagnostics)) + "]"
             Json.String("TranscodingProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__TranscodingProfiles(diagnostics)) + "]"
             Json.String("ContainerProfiles") + ":[]"
-            Json.String("CodecProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__CodecProfiles(displaySize)) + "]"
+            Json.String("CodecProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__CodecProfiles(displaySize, maxVideoBitrate)) + "]"
             Json.String("SubtitleProfiles") + ":[" + Json.JoinParts(DeviceCapabilities.__GetSubtitleProfiles(includeSubtitleProfiles)) + "]"
         ])
     end function
@@ -201,16 +202,20 @@ namespace DeviceCapabilities
     '---------------------------------------------------------------------------
     ' DeviceCapabilities.__CodecProfiles
     '---------------------------------------------------------------------------
-    function __CodecProfiles(displaySize as object) as object
+    function __CodecProfiles(displaySize as object, maxVideoBitrate = 0 as integer) as object
         if displaySize = invalid then displaySize = { width: 1920, height: 1080 }
 
+        conditions = [
+            __ProfileConditionJson(Comparison.LessThanEqual, "Width", displaySize.width.ToStr())
+            __ProfileConditionJson(Comparison.LessThanEqual, "Height", displaySize.height.ToStr())
+        ]
+        bitrate = PlaybackBitrate.Normalize(maxVideoBitrate)
+        ' This shared video constraint covers every codec; codec-specific ceilings still apply.
+        if bitrate > 0 then conditions.Push(__ProfileConditionJson(Comparison.LessThanEqual, "VideoBitrate", bitrate.ToStr()))
         profiles = [
             Json.Object([
                 Json.Pair("Type", CodecProfileType.Video)
-                Json.String("Conditions") + ":[" + Json.JoinParts([
-                    __ProfileConditionJson(Comparison.LessThanEqual, "Width", displaySize.width.ToStr())
-                    __ProfileConditionJson(Comparison.LessThanEqual, "Height", displaySize.height.ToStr())
-                ]) + "]"
+                Json.String("Conditions") + ":[" + Json.JoinParts(conditions) + "]"
                 Json.String("ApplyConditions") + ":[]"
             ])
         ]

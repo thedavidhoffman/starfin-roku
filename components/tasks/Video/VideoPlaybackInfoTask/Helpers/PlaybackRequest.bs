@@ -2,9 +2,9 @@ import "pkg:/source/String.bs"
 '-------------------------------------------------------------------------------
 ' buildPlaybackInfoBody
 '-------------------------------------------------------------------------------
-function buildPlaybackInfoBody(alwaysBurnInSubtitleWhenTranscoding as boolean, includeSubtitleProfiles as boolean) as string
+function buildPlaybackInfoBody(alwaysBurnInSubtitleWhenTranscoding as boolean, includeSubtitleProfiles as boolean, maxVideoBitrate = 0 as integer) as string
     diagnostics = []
-    profileJson = DeviceCapabilities.BuildDeviceProfileJson(includeSubtitleProfiles, diagnostics)
+    profileJson = DeviceCapabilities.BuildDeviceProfileJson(includeSubtitleProfiles, diagnostics, maxVideoBitrate)
     for each line in diagnostics
         m.log.write(line)
     end for
@@ -113,7 +113,8 @@ function negotiatePlaybackInfo(request as object) as object
 
     requestUrl = request.server + "/Items/" + request.itemId + "/PlaybackInfo" + Url.BuildQueryString(params)
     alwaysBurnInSubtitleWhenTranscoding = shouldAlwaysBurnSubtitleWhenTranscoding(subtitleBurnInMode, requestedSubtitleStreamIndex)
-    body = buildPlaybackInfoBody(alwaysBurnInSubtitleWhenTranscoding, alwaysBurnSelectedSubtitle <> true)
+    body = buildPlaybackInfoBody(alwaysBurnInSubtitleWhenTranscoding, alwaysBurnSelectedSubtitle <> true, PlaybackBitrate.Normalize(request.maxVideoBitrate))
+    m.log.write("Requested maximum video bitrate=" + PlaybackBitrate.Normalize(request.maxVideoBitrate).ToStr() + " bps (0=device default)")
     m.log.write("Subtitle burn-in mode=" + subtitleBurnInMode + " activeSubtitle=" + boolToText(resolvedRequestedSubtitleIndex >= 0) + " alwaysBurnInSubtitleWhenTranscoding=" + boolToText(alwaysBurnInSubtitleWhenTranscoding))
     logPlaybackRequest(request, body)
 

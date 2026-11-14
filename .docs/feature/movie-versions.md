@@ -1,7 +1,7 @@
 # Movie Versions
 
 Movies with multiple distinct, nonempty Jellyfin `MediaSources` IDs expose a
-Versions category after Video in Media Options, on movie details and in the
+Versions category after Video bitrate in Media Options, on movie details and in the
 player. Choices retain server order and use the original movie catalog's source
 names, with numbered labels when a name is missing. Loading individual-version
 details refreshes source metadata while preserving those labels, even when the

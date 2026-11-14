@@ -50,7 +50,8 @@ async function openOptions(environment, playback = false) {
 async function chooseVersion(environment, index) {
   await environment.ecp.sendKeypress(environment.ecp.Key.Down);
   await environment.ecp.sendKeypress(environment.ecp.Key.Down);
-  assert.equal(await value(environment, '#categories.content.2.title'), 'Versions');
+  await environment.ecp.sendKeypress(environment.ecp.Key.Down);
+  assert.equal(await value(environment, '#categories.content.3.title'), 'Versions');
   await environment.ecp.sendKeypress(environment.ecp.Key.Right);
   const current = await value(environment, '#optionList.itemFocused');
   const key = index > current ? environment.ecp.Key.Down : environment.ecp.Key.Up;

@@ -63,7 +63,7 @@ end sub
 sub renderCategories()
     context = m.selection.context
     currentCategory = m.selection.category
-    m.selection.categories = [MediaOptionsSession.Category.Information, MediaOptionsSession.Category.Video]
+    m.selection.categories = [MediaOptionsSession.Category.Information, MediaOptionsSession.Category.Video, MediaOptionsSession.Category.Bitrate]
     if MovieVersions.Options(m.versions.context).Count() > 1 then m.selection.categories.Push(MediaOptionsSession.Category.Versions)
     if context.audioOptions.Count() > 1 then m.selection.categories.Push(MediaOptionsSession.Category.Audio)
     if context.subtitleOptions.Count() > 1 then m.selection.categories.Push(MediaOptionsSession.Category.Subtitles)
@@ -104,6 +104,9 @@ sub showCategory()
     if category = MediaOptionsSession.Category.Video then
         m.selection.options = MediaOptionsSession.VideoOptions()
         key = m.selection.pending.videoMode
+    else if category = MediaOptionsSession.Category.Bitrate then
+        m.selection.options = MediaOptionsSession.BitrateOptions()
+        key = m.selection.pending.maxVideoBitrate.ToStr()
     else if category = MediaOptionsSession.Category.Versions then
         m.selection.options = MovieVersions.Options(m.versions.context)
         key = m.selection.pending.mediaSourceId
@@ -128,9 +131,16 @@ sub showCategory()
     visibleRows = m.selection.options.Count()
     if visibleRows > 10 then visibleRows = 10
     m.controls.options.numRows = visibleRows
+    m.controls.choices.descriptionTop = 300
+    m.controls.choices.descriptionHeight = 336
     m.controls.choices.title = category
+    if category = MediaOptionsSession.Category.Bitrate then
+        m.controls.choices.title = "Maximum video bitrate"
+        m.controls.choices.descriptionTop = 360
+        m.controls.choices.descriptionHeight = 260
+    end if
     m.controls.choices.cardHeight = 84 + 52 * visibleRows
-    if category = MediaOptionsSession.Category.Video then m.controls.choices.cardHeight = 660
+    if category = MediaOptionsSession.Category.Video or category = MediaOptionsSession.Category.Bitrate then m.controls.choices.cardHeight = 660
     ' Apply card-owned insets after its consumer-provided radio list exists.
     m.controls.choices.callFunc("updateCard")
     m.controls.options.content = content
@@ -145,6 +155,10 @@ end sub
 '-------------------------------------------------------------------------------
 sub showDescription()
     m.controls.choices.description = ""
+    if m.selection.category = MediaOptionsSession.Category.Bitrate then
+        m.controls.choices.description = "Lower this if playback buffers. Audio uses additional bandwidth."
+        return
+    end if
     if m.selection.category <> MediaOptionsSession.Category.Video then return
     index = m.controls.options.itemFocused
     if index < 0 or index >= m.selection.options.Count() then index = m.controls.options.checkedItem
@@ -162,6 +176,8 @@ sub selectOption()
     category = m.selection.category
     if category = MediaOptionsSession.Category.Video then
         m.selection.pending.videoMode = option.key
+    else if category = MediaOptionsSession.Category.Bitrate then
+        m.selection.pending.maxVideoBitrate = option.value
     else if category = MediaOptionsSession.Category.Versions then
         selectVersion(option.key)
         return
