@@ -503,3 +503,18 @@ Initial/full refresh resolves preferences before content; playback refresh reuse
 that layout. The same eligibility path gates reconciliation requests. AuthController
 continues to retain library exclusions, and MainScene remains a router. See
 [Home Layout](.docs/feature/home-layout.md).
+
+### Feature authentication and Settings registration
+
+ThemeAudioController and TrailerDialog own rejection of stale authentication
+responses and stop their workflows before emitting authenticationRequired with
+the captured request and response. MainScene observes the controller directly
+and receives trailer events through OverlayHost's existing event routing. It
+matches server, user ID and token to the current session before delegating to
+account expiry. TrailerCatalogTask retains failure metadata. Cleanup tasks remain
+best-effort and do not initiate authentication UI.
+
+SettingsContent owns a single ordered category definition containing presentation
+metadata and user/device membership. List metadata and storage are derived from
+that definition; SettingsNavigation.Category names all existing indices. Local
+category handlers and lazy panel ownership remain unchanged.

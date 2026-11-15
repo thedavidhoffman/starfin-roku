@@ -35,3 +35,20 @@ downloads through the local HTTP fixture. They do not establish HTTPS certificat
 behavior. Device verification for this change should cover HTTPS sign-in/API
 requests and trickplay downloads, followed by Roku static analysis of the new
 package to confirm the deprecated-API warnings are gone.
+
+## Feature-owned session expiry
+
+ThemeAudioController and TrailerDialog emit an always-notified
+`authenticationRequired` event containing `{ request, response }` only after
+their current-request lifecycle accepts a Jellyfin authentication failure.
+They stop their work before publishing. MainScene observes the controller and
+receives trailer events through OverlayHost, matches the captured server, user
+ID and nonempty token against the current session, and delegates to the existing
+account-expiry route. Superseded, cancelled, duplicate and previous-session
+responses cannot expire a replacement session.
+
+Trailer catalog failures preserve status, authentication and failure details.
+Authentication failures do not also display the generic trailer retry dialog.
+Access denial, transport failures and YouTube errors retain their existing
+feature behavior; trailer encoding cleanup remains best-effort. Component
+coverage exercises owner cancellation, failure classification and shell routing.

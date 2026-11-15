@@ -255,6 +255,21 @@ describe('Starfin official Intro and Outro playback', function () {
         await waitFor(async () => await value(environment, `${requestPath}.requestId`) > previousRequest
           && await value(environment, '#playbackController.0.playRequest.videoMode') === 'transcode-no-remux'
           && await value(environment, '#videoPlayer.state') === 'playing', 'changed stream to resume', 120000);
+      } else {
+        // Transcode startup does not consume the remaining Outro. Start the
+        // skip deadline when the replacement plays, or accept immediate Up Next
+        // if automatic completion already removed the player.
+        await waitFor(async () => {
+          const count = await value(environment, '#dynamicPageHost.getChildCount()');
+          for (let index = 0; index < count; index++) {
+            const candidate = `#dynamicPageHost.${index}`;
+            if (await value(environment, `${candidate}.subtype()`) === 'TVEpisodeUpNextAutoPlay'
+              && await value(environment, `${candidate}.visible`) === true) return true;
+          }
+          return await value(environment, `${requestPath}.requestId`) > previousRequest
+            && await value(environment, '#playbackController.0.playRequest.videoMode') === 'transcode-no-remux'
+            && await value(environment, '#videoPlayer.state') === 'playing';
+        }, 'changed Outro stream to resume or complete automatically', 120000);
       }
       if (type === 'Intro') {
         await waitFor(async () => await value(environment, '#videoPlayer.position') >= fixture.ranges.Intro.end - 1,

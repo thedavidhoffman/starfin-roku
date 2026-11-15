@@ -1,6 +1,6 @@
 namespace tests
 
-    @SGNode("TrailerDialog")
+    @SGNode("TrailerDialogTestHarness")
     @suite("Trailer dialog")
     class TrailerdialogTests extends rooibos.BaseTestSuite
 
@@ -13,7 +13,7 @@ namespace tests
         @it("loads using explicit context with the frame hidden and spinner active")
         function _()
             m.open()
-            request = getGlobalAa().trailerTaskRequests[0].request
+            request = m.node.trailer.tasks[0].request
 
             m.assertEqual(request.itemId, "parent")
             m.assertEqual(request.token, "token")
@@ -38,8 +38,8 @@ namespace tests
             m.catalog(m.candidates())
 
             m.assertEqual(m.top.dialogHeight, 628)
-            m.assertEqual(m.node.panel.height, 628)
-            m.assertEqual(m.node.panel.translation, [420, 226])
+            m.assertEqual(m.node.panel.height, 628.0)
+            m.assertEqual(m.node.panel.translation, [420.0, 226.0])
             m.assertTrue(m.node.trailer.content.findNode("row1").visible)
             m.assertFalse(m.node.trailer.content.findNode("row2").visible)
             m.assertFalse(m.node.trailer.content.findNode("position").visible)
@@ -53,8 +53,8 @@ namespace tests
             m.catalog(entries)
 
             m.assertEqual(m.top.dialogHeight, 840)
-            m.assertEqual(m.node.panel.height, 840)
-            m.assertEqual(m.node.panel.translation, [420, 120])
+            m.assertEqual(m.node.panel.height, 840.0)
+            m.assertEqual(m.node.panel.translation, [420.0, 120.0])
             m.assertTrue(m.node.trailer.content.findNode("row2").visible)
         end function
 
@@ -67,7 +67,7 @@ namespace tests
             m.assertFalse(m.top.findNode("dialog").visible)
             m.assertTrue(m.node.trailer.directPlayback)
             m.assertEqual(m.node.trailer.content.statusText, "")
-            m.assertEqual(getGlobalAa().trailerTaskRequests.Peek().name, "TrailerResolveTask")
+            m.assertEqual(m.node.trailer.tasks.Peek().id, "TrailerResolveTask")
         end function
 
         @it("returns multi-trailer playback to the retained selection through real child events")
@@ -195,7 +195,7 @@ namespace tests
         function _()
             m.catalog(m.localCandidates())
             m.node.trailer.content.itemSelected = 0
-            request = getGlobalAa().trailerTaskRequests.Peek().request
+            request = m.node.trailer.tasks.Peek().request
 
             m.assertEqual(request.itemId, "local")
             m.assertEqual(request.startPositionTicks, 0)
@@ -225,7 +225,7 @@ namespace tests
             m.node.trailer.activePlayer.ended = { playbackId: m.node.trailer.activePlaybackId - 1, message: "", reason: "completed" }
 
             m.assertEqual(m.node.trailer.state, "playing")
-            m.assertEqual(getGlobalAa().trailerCleanupSessions.Count(), 0)
+            m.assertEqual(m.top.cleanupSessions.Count(), 0)
         end function
 
         @it("rejects a matching identity from an obsolete player")
@@ -239,7 +239,7 @@ namespace tests
             onTrailerEnded(m.event({ playbackId: m.node.trailer.activePlaybackId, message: "" }, previousPlayer))
 
             m.assertEqual(m.node.trailer.state, "playing")
-            m.assertEqual(getGlobalAa().trailerCleanupSessions.Count(), 1)
+            m.assertEqual(m.top.cleanupSessions.Count(), 1)
         end function
 
         @it("cleans local encoding exactly once across completion and repeated teardown")
@@ -253,7 +253,7 @@ namespace tests
             m.top.callFunc("deactivateTrailers")
             m.top.callFunc("deactivateTrailers")
 
-            m.assertEqual(getGlobalAa().trailerCleanupSessions.Count(), 1)
+            m.assertEqual(m.top.cleanupSessions.Count(), 1)
             m.assertEqual(m.node.trailer.loadingIndicator.control, "stop")
             m.assertEqual(previousPlayer.findNode("loading").control, "stop")
             m.assertInvalid(m.node.trailer.activePlayer)
@@ -266,32 +266,23 @@ namespace tests
             previousPlayer.ended = { playbackId: m.node.trailer.activePlaybackId, message: "", reason: "cancelled", hasStarted: false }
 
             m.assertEqual(m.node.trailer.state, "choosing")
-            m.assertEqual(getGlobalAa().trailerCleanupSessions.Count(), 1)
+            m.assertEqual(m.top.cleanupSessions.Count(), 1)
             m.assertEqual(previousPlayer.findNode("video").control, "stop")
         end function
 
-        private sub open()
+        private function open()
             m.top.callFunc("deactivateTrailers")
+            m.top.authenticationRequired = invalid
             m.top.closeRequested = false
             m.top.trailerRequest = { item: { Id: "parent" }, server: "https://server", token: "token", userId: "user" }
-            getGlobalAa().trailerTaskRequests = []
             getGlobalAa().trailerMessage = ""
-            getGlobalAa().trailerCleanupSessions = []
-            'bs:disable-next-line 1001
-            m.stubCall(startTrailerTask, function(name, request, handler)
-                getGlobalAa().trailerTaskRequests.Push({ name: name, request: request })
-                return CreateObject("roSGNode", "TrailerResolveTask")
-            end function)
-            'bs:disable-next-line 1001
-            m.stubCall(stopLocalEncoding, sub(playSessionId)
-                getGlobalAa().trailerCleanupSessions.Push(playSessionId)
-            end sub)
+            m.top.cleanupSessions = []
             m.stubCall(AppMessage.Dismiss, invalid)
             m.stubCall(AppMessage.Show, sub(message, title)
                 getGlobalAa().trailerMessage = message
             end sub)
             m.top.callFunc("openTrailers")
-        end sub
+        end function
 
         private sub catalog(entries as object, ok = true as boolean)
             m.open()
@@ -329,6 +320,159 @@ namespace tests
 
         private function localCandidates() as object
             return [{ key: "local:local", source: "local", item: { Id: "local", UserData: { PlaybackPositionTicks: 999 } }, title: "Local", thumbnail: "" }, m.candidates()[0]]
+        end function
+
+        @describe("local authentication failures")
+
+        @it("stops trailer catalog before reporting expiry")
+        function _()
+            m.open()
+
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event({ requestId: m.node.trailer.generation, ok: false, authExpired: true, status: 401, items: [] }))
+
+            m.assertEqual(m.top.authenticationRequired.request.token, "token")
+            m.assertEqual(m.top.authenticationRequired.request.userId, "user")
+            m.assertEqual(m.node.trailer.state, "closed")
+            m.assertEqual(m.node.trailer.loadingIndicator.control, "stop")
+            m.assertInvalid(m.node.trailer.activePlayer)
+            m.assertEqual(getGlobalAa().trailerMessage, "")
+            m.assertEqual(m.top.errorMessage, "")
+        end function
+
+        @it("ignores cancelled trailer catalog expiry")
+        function _()
+            m.open()
+            failure = { requestId: m.node.trailer.generation, ok: false, authExpired: true, status: 401, items: [] }
+            m.top.callFunc("deactivateTrailers")
+
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event(failure))
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("ignores superseded trailer catalog expiry")
+        function _()
+            m.open()
+            failure = { requestId: m.node.trailer.generation, ok: false, authExpired: true, status: 401, items: [] }
+            'bs:disable-next-line 1140
+            loadTrailers()
+
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event(failure))
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("ignores duplicate trailer catalog expiry")
+        function _()
+            m.open()
+            failure = { requestId: m.node.trailer.generation, ok: false, authExpired: true, status: 401, items: [] }
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event(failure))
+            m.top.authenticationRequired = invalid
+
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event(failure))
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("keeps ordinary catalog failure on the retry path")
+        function _()
+            m.open()
+
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event({ requestId: m.node.trailer.generation, ok: false, status: 403, items: [] }))
+
+            m.assertInvalid(m.top.authenticationRequired)
+            m.assertEqual(m.node.trailer.state, "choosing")
+            m.assertTrue(getGlobalAa().trailerMessage <> "")
+        end function
+
+        @it("stops trailer negotiation before reporting expiry")
+        function _()
+            m.catalog(m.localCandidates())
+            m.node.trailer.content.itemSelected = 0
+
+            'bs:disable-next-line 1140
+            onLocalResponse(m.event({ requestId: m.node.trailer.generation, ok: false, authExpired: true, status: 401, items: [] }))
+
+            m.assertEqual(m.top.authenticationRequired.request.token, "token")
+            m.assertEqual(m.top.authenticationRequired.request.userId, "user")
+            m.assertEqual(m.node.trailer.state, "closed")
+            m.assertEqual(m.node.trailer.loadingIndicator.control, "stop")
+            m.assertInvalid(m.node.trailer.activePlayer)
+            m.assertEqual(getGlobalAa().trailerMessage, "")
+            m.assertEqual(m.top.errorMessage, "")
+        end function
+
+        @it("ignores cancelled trailer negotiation expiry")
+        function _()
+            m.catalog(m.localCandidates())
+            m.node.trailer.content.itemSelected = 0
+            failure = { requestId: m.node.trailer.generation, ok: false, authExpired: true, status: 401, items: [] }
+            m.top.callFunc("deactivateTrailers")
+
+            'bs:disable-next-line 1140
+            onLocalResponse(m.event(failure))
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("ignores superseded trailer negotiation expiry")
+        function _()
+            m.catalog(m.localCandidates())
+            m.node.trailer.content.itemSelected = 0
+            failure = { requestId: m.node.trailer.generation, ok: false, authExpired: true, status: 401, items: [] }
+            'bs:disable-next-line 1140
+            loadTrailers()
+
+            'bs:disable-next-line 1140
+            onLocalResponse(m.event(failure))
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("ignores duplicate trailer negotiation expiry")
+        function _()
+            m.catalog(m.localCandidates())
+            m.node.trailer.content.itemSelected = 0
+            failure = { requestId: m.node.trailer.generation, ok: false, authExpired: true, status: 401, items: [] }
+            'bs:disable-next-line 1140
+            onLocalResponse(m.event(failure))
+            m.top.authenticationRequired = invalid
+
+            'bs:disable-next-line 1140
+            onLocalResponse(m.event(failure))
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("keeps ordinary negotiation failure on the retry path")
+        function _()
+            m.catalog(m.localCandidates())
+            m.node.trailer.content.itemSelected = 0
+
+            'bs:disable-next-line 1140
+            onLocalResponse(m.event({ requestId: m.node.trailer.generation, ok: false, status: 403, items: [] }))
+
+            m.assertInvalid(m.top.authenticationRequired)
+            m.assertEqual(m.node.trailer.state, "choosing")
+            m.assertTrue(getGlobalAa().trailerMessage <> "")
+        end function
+
+        @it("retains captured session context if the input field changes")
+        function _()
+            m.open()
+            m.top.trailerRequest = { server: "https://other", userId: "other", token: "other" }
+
+            'bs:disable-next-line 1140
+            onCatalogResponse(m.event({ requestId: 1, ok: false, authExpired: true }))
+
+            m.assertEqual(m.top.authenticationRequired.request.server, "https://server")
+            m.assertEqual(m.top.authenticationRequired.request.token, "token")
         end function
 
     end class

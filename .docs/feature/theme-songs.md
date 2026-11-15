@@ -132,3 +132,12 @@ uses the MediaBrowser Authorization header accepted by this server and the catal
 title "Magnum, P.I." (1980). Rooibos was explicitly excluded from this verification.
 A playing Audio node verifies the device pipeline, not audible TV/speaker output;
 listening or external audio capture is still a separate check.
+
+## Authentication recovery
+
+Accepted authentication failures from either song lookup or stream resolution
+stop both task lifecycles and audio before publishing `authenticationRequired`
+with the captured request and response. MainScene matches the complete session
+identity before invoking the existing expiry route. Ordinary lookup/playback
+failures still stop progress without expiring the account. Stale or duplicate
+responses never publish this event.

@@ -245,3 +245,16 @@ progressive fallback, 720p-first/1080p-second discovery, exhausted and post-star
 failures, audible original audio, picker focus, Back during each
 loading stage, errors, and theme-audio exclusivity. Live provider compatibility
 cannot be inferred from mocked tests or successful compilation.
+
+## Authentication recovery
+
+The dialog captures its Jellyfin request context when opened and retains it for
+catalog loading, local negotiation, media authentication and encoding cleanup.
+The catalog task preserves HTTP failure metadata alongside items and requestId.
+A current catalog or local-negotiation authentication failure deactivates the
+dialog's work, then emits `authenticationRequired` with `{ request, response }`.
+The overlay request subscribes through `eventFields`; MainScene validates the
+captured session and uses the existing login recovery route. This path does not
+close normally, restart theme music or show a competing trailer retry message.
+Cancelled/superseded responses are ignored. YouTube and ordinary network errors
+retain their existing behavior, and cleanup remains best-effort.

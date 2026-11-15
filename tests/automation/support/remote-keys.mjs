@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { authorizationHeader } from './jellyfin-auth.mjs';
 import { waitFor } from './lifecycle.mjs';
 import { openConfiguredLibrary } from './library-navigation.mjs';
 import { stopPlaybackForCleanup } from './tv-series.mjs';
@@ -36,7 +37,7 @@ export async function getItem(environment, id, type) {
   const server = (session.server.includes('://') ? session.server : `http://${session.server}`).replace(/\/$/, '');
   const url = new URL(`${server}/Users/${encodeURIComponent(session.userId)}/Items/${encodeURIComponent(id)}`);
   url.search = new URLSearchParams({ UserId: session.userId }).toString();
-  const response = await fetch(url, { headers: { 'X-Emby-Token': session.token } });
+  const response = await fetch(url, { headers: { Authorization: authorizationHeader(session.token) } });
   assert.equal(response.ok, true, `Item ${id} must load successfully (HTTP ${response.status}).`);
   const item = await response.json();
   assert.equal(item.Type, type, `Item ${id} must be ${type}.`);

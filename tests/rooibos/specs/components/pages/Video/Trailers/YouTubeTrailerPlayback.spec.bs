@@ -13,7 +13,7 @@ namespace tests
         @it("starts the highest ranked candidate with its playback identity")
         function _()
             m.start()
-            player = m.top.getChild(0)
+            player = m.node.playback.player
 
             m.assertEqual(player.findNode("video").content.url, "https://video/1080")
             m.assertEqual(player.findNode("video").control, "play")
@@ -24,9 +24,9 @@ namespace tests
         @it("creates a fresh fallback player through the production ended observer")
         function _()
             m.start()
-            previousPlayer = m.top.getChild(0)
+            previousPlayer = m.node.playback.player
             previousPlayer.findNode("video").state = "error"
-            nextPlayer = m.top.getChild(0)
+            nextPlayer = m.node.playback.player
 
             m.assertFalse(nextPlayer.isSameNode(previousPlayer))
             m.assertEqual(nextPlayer.findNode("video").content.url, "https://video/720")
@@ -38,11 +38,11 @@ namespace tests
         @it("stops after three startup failures even with another candidate available")
         function _()
             m.start()
-            m.top.getChild(0).findNode("video").state = "error"
-            m.top.getChild(0).findNode("video").state = "error"
-            m.top.getChild(0).findNode("video").state = "error"
+            m.node.playback.player.findNode("video").state = "error"
+            m.node.playback.player.findNode("video").state = "error"
+            m.node.playback.player.findNode("video").state = "error"
 
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertInvalid(m.node.playback.player)
             m.assertEqual(m.top.ended.reason, "failed")
             m.assertEqual(m.top.ended.playbackId, 41)
             m.assertFalse(m.top.visible)
@@ -51,11 +51,11 @@ namespace tests
         @it("does not retry an error after playing")
         function _()
             m.start()
-            videoNode = m.top.getChild(0).findNode("video")
+            videoNode = m.node.playback.player.findNode("video")
             videoNode.state = "playing"
             videoNode.state = "error"
 
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertInvalid(m.node.playback.player)
             m.assertTrue(m.top.ended.hasStarted)
             m.assertEqual(m.top.ended.playbackId, 41)
         end function
@@ -63,60 +63,60 @@ namespace tests
         @it("cancels on Back without a fallback")
         function _()
             m.start()
-            previousPlayer = m.top.getChild(0)
+            previousPlayer = m.node.playback.player
             'bs:disable-next-line 1140
             onKeyEvent("back", true)
 
             m.assertEqual(m.top.ended.reason, "cancelled")
             m.assertEqual(m.top.ended.playbackId, 41)
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertInvalid(m.node.playback.player)
             m.assertEqual(previousPlayer.findNode("loading").control, "stop")
         end function
 
         @it("forwards natural completion through the child event")
         function _()
             m.start()
-            m.top.getChild(0).findNode("video").state = "finished"
+            m.node.playback.player.findNode("video").state = "finished"
 
             m.assertEqual(m.top.ended.reason, "completed")
             m.assertEqual(m.top.ended.playbackId, 41)
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertInvalid(m.node.playback.player)
         end function
 
         @it("rejects a queued event from a replaced child")
         function _()
             m.start()
-            previousPlayer = m.top.getChild(0)
+            previousPlayer = m.node.playback.player
             previousPlayer.findNode("video").state = "error"
-            nextPlayer = m.top.getChild(0)
+            nextPlayer = m.node.playback.player
             'bs:disable-next-line 1140
             onCandidateEnded(m.event(previousPlayer, 41))
 
-            m.assertTrue(m.top.getChild(0).isSameNode(nextPlayer))
+            m.assertTrue(m.node.playback.player.isSameNode(nextPlayer))
             m.assertInvalid(m.top.ended)
         end function
 
         @it("rejects the wrong selection identity even from the current child")
         function _()
             m.start()
-            player = m.top.getChild(0)
+            player = m.node.playback.player
             player.ended = { playbackId: 40, reason: "failed", hasStarted: false, message: "" }
 
-            m.assertTrue(m.top.getChild(0).isSameNode(player))
+            m.assertTrue(m.node.playback.player.isSameNode(player))
             m.assertInvalid(m.top.ended)
         end function
 
         @it("ignores child completion after teardown")
         function _()
             m.start()
-            previousPlayer = m.top.getChild(0)
+            previousPlayer = m.node.playback.player
             m.top.callFunc("stopPlayback")
             'bs:disable-next-line 1140
             onCandidateEnded(m.event(previousPlayer, 41))
 
             m.assertInvalid(m.top.ended)
             m.assertInvalid(m.node.playback.playbackId)
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertInvalid(m.node.playback.player)
         end function
 
         @it("preserves identity when the candidate list is empty")
@@ -126,7 +126,7 @@ namespace tests
 
             m.assertEqual(m.top.ended.reason, "failed")
             m.assertEqual(m.top.ended.playbackId, 42)
-            m.assertEqual(m.top.getChildCount(), 0)
+            m.assertInvalid(m.node.playback.player)
         end function
 
         private sub start()

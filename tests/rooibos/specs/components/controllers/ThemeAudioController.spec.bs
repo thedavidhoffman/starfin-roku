@@ -9,6 +9,7 @@ namespace tests
         @describe("request ownership and playback")
 
         protected override function beforeEach()
+            m.top.authenticationRequired = invalid
             m.node.themeAudioState.lookup = LatestRequestLifecycle.Create()
             m.node.themeAudioState.lookupPool = { nodes: [{}, {}], nextIndex: 0 }
             m.node.themeAudioState.lifecycle = LatestRequestLifecycle.Create()
@@ -390,6 +391,149 @@ namespace tests
             m.assertTrue(m.node.themeAudioState.isActive)
             m.assertInvalid(m.node.themeAudioState.lifecycle.active)
             m.assertInvalid(m.node.themeAudioState.lifecycle.pending)
+        end function
+
+        @describe("accepted authentication failures")
+
+        @it("stops both theme stages before reporting lookup expiry")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: false, authExpired: true })
+
+            m.assertEqual(m.top.authenticationRequired.request.token, "fresh")
+            m.assertTrue(m.top.authenticationRequired.response.authExpired)
+            m.assertInvalid(m.node.themeAudioState.request)
+            m.assertInvalid(m.node.themeAudioState.lookup.active)
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertEqual(m.node.audio.control, "stop")
+            m.assertInvalid(m.node.audio.content)
+        end function
+
+        @it("ignores cancelled lookup authentication failure")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            stopTheme()
+
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: false, authExpired: true })
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("ignores superseded lookup authentication failure")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: false, authExpired: true })
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("ignores duplicate lookup authentication failure")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: false, authExpired: true })
+            m.top.authenticationRequired = invalid
+
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: false, authExpired: true })
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("does not expire the session for ordinary lookup failure")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+
+            'bs:disable-next-line 1140
+            handleThemeSongsResponse({ requestId: 1, action: "themeSongs", ok: false, status: 403, failureKind: "accessDenied" })
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("stops both theme stages before reporting stream expiry")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false, authExpired: true })
+
+            m.assertEqual(m.top.authenticationRequired.request.token, "fresh")
+            m.assertTrue(m.top.authenticationRequired.response.authExpired)
+            m.assertInvalid(m.node.themeAudioState.request)
+            m.assertInvalid(m.node.themeAudioState.lookup.active)
+            m.assertInvalid(m.node.themeAudioState.lifecycle.active)
+            m.assertEqual(m.node.audio.control, "stop")
+            m.assertInvalid(m.node.audio.content)
+        end function
+
+        @it("ignores cancelled stream authentication failure")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+            'bs:disable-next-line 1140
+            stopTheme()
+
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false, authExpired: true })
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("ignores superseded stream authentication failure")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false, authExpired: true })
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("ignores duplicate stream authentication failure")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false, authExpired: true })
+            m.top.authenticationRequired = invalid
+
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false, authExpired: true })
+
+            m.assertInvalid(m.top.authenticationRequired)
+        end function
+
+        @it("does not expire the session for ordinary stream failure")
+        function _()
+            'bs:disable-next-line 1140
+            playTheme(m.request())
+            m.completeLookup()
+
+            'bs:disable-next-line 1140
+            handlePlaybackInfoResponse({ requestId: 1, action: "themeAudioPlaybackInfo", ok: false, status: 403, failureKind: "accessDenied" })
+
+            m.assertInvalid(m.top.authenticationRequired)
         end function
 
     end class

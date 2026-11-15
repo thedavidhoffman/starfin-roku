@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { authorizationHeader } from './jellyfin-auth.mjs';
 import { value, press, focusItem, page, openLibrary, waitForVideo } from './remote-keys.mjs';
 import { categories, openSettings, selectRadioOption, closeAndSaveSettings } from './settings.mjs';
 import { waitFor } from './lifecycle.mjs';
@@ -17,7 +18,7 @@ export async function loadSegmentFixture(environment, {
     url.search = new URLSearchParams({ userId, ...query }).toString();
     const response = await fetch(url, {
       method: method ?? (body === undefined ? 'GET' : 'POST'),
-      headers: { 'X-Emby-Token': token, 'Content-Type': 'application/json' },
+      headers: { Authorization: authorizationHeader(token), 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(30000)
     });

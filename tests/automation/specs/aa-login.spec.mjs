@@ -4,22 +4,10 @@ import { addEvidenceMetadata, captureEvidence } from '../support/evidence.mjs';
 import { getAutomationEnvironment } from '../support/environment.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 
-const coreHomeTaskIds = [
-  'librariesTask',
-  'continueWatchingTask',
-  'continueListeningTask',
-  'nextUpTask',
-  'liveTvOnNowTask'
-];
-
 const requiredCredentialsMessage = 'Server address and username are required.';
 const unreachableServer = '127.0.0.1:1';
 const unreachableServerMessage = "Login failed: Couldn't connect to the server.";
 const invalidCredentialsMessage = 'Login failed: The server rejected the request.';
-
-function isTaskComplete(state) {
-  return ['done', 'stop'].includes(String(state ?? '').toLowerCase());
-}
 
 async function setLoginCredentials(environment, { server, username, password }) {
   await environment.odc.setValue({
@@ -74,19 +62,19 @@ async function waitForHomeReady(environment) {
   return waitFor(async () => {
     const requests = {
       home: { base: 'scene', keyPath: '#homePage.visible' },
+      ready: { base: 'scene', keyPath: '#homePage.ready' },
       login: { base: 'scene', keyPath: '#login.visible' },
       shelves: { base: 'scene', keyPath: '#shelvesGroup.getChildCount()' },
       spinner: { base: 'scene', keyPath: '#loadingSpinner.visible' },
       statusVisible: { base: 'scene', keyPath: '#messageOverlayHost.visible' },
       statusText: { base: 'scene', keyPath: '#messageOverlayHost.0.message' }
     };
-    for (const taskId of coreHomeTaskIds) {
-      requests[taskId] = { base: 'scene', keyPath: `#${taskId}.state` };
-    }
     const values = await environment.odc.getValues({ requests });
     if (values.results.home?.value !== true || values.results.login?.value !== false) return false;
 
-    if (coreHomeTaskIds.some(taskId => !isTaskComplete(values.results[taskId]?.value))) return false;
+    // Completed tasks are detached; Home owns readiness across enabled sections
+    // and library-dependent latest shelves.
+    if (values.results.ready?.value !== true) return false;
 
     if (values.results.statusVisible?.value === true) {
       throw new Error(`Home reported an initial-load error: ${values.results.statusText?.value ?? 'Unknown error'}`);

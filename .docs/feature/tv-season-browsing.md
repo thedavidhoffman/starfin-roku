@@ -1,5 +1,11 @@
 # TV Season Browsing
 
+Season cards on the series page show the year and total episode count. The
+Seasons request explicitly asks for `ChildCount` and `RecursiveItemCount`, since
+Jellyfin can omit both fields unless requested. The existing card rendering uses
+`RecursiveItemCount` with `ChildCount` as its fallback. This metadata is separate
+from the unwatched episode-count badge.
+
 The TV show page reads the independent TV Series preference and applies Full
 Backdrop or Corner backdrop as selected, both on load and committed settings changes.
 Cinematic is unavailable for series; existing saved values normalize to Corner

@@ -30,7 +30,13 @@ const resultsDir = path.join(
   buildResolutionResultsDirectoryName(runId, requestedResolution)
 );
 const grepArgumentIndex = process.argv.indexOf('--grep');
-const automationTestGrep = grepArgumentIndex >= 0 ? process.argv[grepArgumentIndex + 1]?.trim() : '';
+const grepFileIndex = process.argv.indexOf('--grep-file');
+if (grepArgumentIndex >= 0 && grepFileIndex >= 0) throw new Error('Use either --grep or --grep-file.');
+if (grepFileIndex >= 0 && !process.argv[grepFileIndex + 1]) throw new Error('--grep-file requires a pattern file.');
+const automationTestGrep = grepFileIndex >= 0
+  ? (await fs.readFile(process.argv[grepFileIndex + 1], 'utf8')).trim()
+  : grepArgumentIndex >= 0 ? process.argv[grepArgumentIndex + 1]?.trim() : '';
+if (grepFileIndex >= 0 && !automationTestGrep) throw new Error('--grep-file must contain a test-title pattern.');
 if (grepArgumentIndex >= 0 && !automationTestGrep) throw new Error('--grep requires a test-title pattern.');
 if (releaseReportEnabled && automationTestGrep) throw new Error('Release reports must run the complete automation suite.');
 
@@ -345,6 +351,7 @@ try {
       `reportDir=${resultsDir},reportFilename=report,saveHtml=true,saveJson=true,overwrite=false,quiet=true`
     ];
     if (automationTestGrep) mochaArguments.push('--grep', automationTestGrep);
+    if (process.argv.includes('--bail')) mochaArguments.push('--bail');
 
     await run(process.execPath, mochaArguments, {
       env: {

@@ -457,6 +457,24 @@ namespace tests
             m.top.callFunc("closeOverlay")
         end function
 
+        @it("forwards trailer authentication through the configured event boundary")
+        function _()
+            m.top.callFunc("closeOverlay", false)
+            request = m.trailerRequest()
+            request.eventFields = ["authenticationRequired"]
+            overlay = m.top.callFunc("openOverlay", request)
+            task = overlay.findNode("TrailerCatalogTask")
+
+            task.response = { requestId: task.request.requestId, ok: false, authExpired: true, status: 401 }
+
+            m.assertEqual(m.top.eventRaised.field, "authenticationRequired")
+            m.assertEqual(m.top.eventRaised.request.id, "trailers")
+            m.assertEqual(m.top.eventRaised.value.request.token, "token")
+            m.assertTrue(m.top.eventRaised.value.response.authExpired)
+            m.assertEqual(overlay.findNode("trailerSpinner").control, "stop")
+            m.top.callFunc("closeOverlay", false)
+        end function
+
     end class
 
 end namespace

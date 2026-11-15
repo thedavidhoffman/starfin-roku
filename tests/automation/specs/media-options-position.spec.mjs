@@ -33,12 +33,20 @@ describe('Starfin stream restart position', function () {
       });
       // Reach setup positions by normal playback so default seek rounding cannot
       // fail setup before the stream restart under test.
-      await waitFor(async () => await value(environment, '#videoPlayer.state') === 'playing'
-        && await value(environment, '#videoPlayer.position') >= target, 'initial playback target', 120000);
+      await waitFor(async () => {
+        const snapshot = await environment.odc.getValues({ requests: {
+          state: { base: 'scene', keyPath: '#videoPlayer.state' },
+          position: { base: 'scene', keyPath: '#videoPlayer.position' }
+        } });
+        return snapshot.results.state?.value === 'playing' && snapshot.results.position?.value >= target;
+      }, 'initial playback target', 120000);
       await press(environment, 'Play');
       await waitFor(async () => await value(environment, '#videoPlayer.state') === 'paused', 'paused initial playback');
       const capturedPosition = await value(environment, '#videoPlayer.position');
-      assert.ok(Math.abs(capturedPosition - target) <= 2, `Initial playback must be near ${target}; got ${capturedPosition}.`);
+      // Polling and the ECP pause round trip can advance setup playback. The
+      // restart assertions below remain relative to the actual paused position.
+      assert.ok(capturedPosition >= target && capturedPosition <= target + 5,
+        `Initial playback must pause between ${target} and ${target + 5}; got ${capturedPosition}.`);
       const player = '#playbackController.0';
       const previousRequest = await value(environment, `${player}.#playbackInfoTask.response.requestId`);
       if (!await value(environment, '#playbackControls.visible')) await press(environment, 'Up');

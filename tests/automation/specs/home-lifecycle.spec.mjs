@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { authorizationHeader } from '../support/jellyfin-auth.mjs';
 import { ensureAuthenticated, relaunchAuthenticatedStarfin } from '../support/authentication.mjs';
 import { value, set, press, page, getItem, homeShelfItem, focusHomeItem } from '../support/remote-keys.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
@@ -20,7 +21,7 @@ describe('Home lifecycle reconciliation', function () {
       url.search = new URLSearchParams({ userId, ...query });
       const response = await fetch(url, {
         method: body === undefined ? 'GET' : 'POST',
-        headers: { 'X-Emby-Token': token, 'Content-Type': 'application/json' },
+        headers: { Authorization: authorizationHeader(token), 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(30000)
       });

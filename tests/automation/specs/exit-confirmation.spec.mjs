@@ -1,22 +1,24 @@
 import assert from 'node:assert/strict';
 import { relaunchAuthenticatedStarfin } from '../support/authentication.mjs';
-import { value, press, focusItem } from '../support/remote-keys.mjs';
+import { value, press, focusHomeItem } from '../support/remote-keys.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 
 async function openHomeItem(index) {
   const environment = await relaunchAuthenticatedStarfin();
+  await waitFor(async () => await value(environment, '#homePage.ready') === true,
+    'Home initial loading and focus assignment', 45000);
   const target = await waitFor(async () => {
     const count = await value(environment, '#shelvesGroup.getChildCount()');
     for (let row = 0; row < count; row++) {
       const shelf = `#shelvesGroup.${row}`;
       if (await value(environment, `${shelf}.rowContent.getChildCount()`) <= index) continue;
       const id = await value(environment, `${shelf}.rowContent.${index}.raw.Id`);
-      if (id) return { control: `${shelf}.#items`, id };
+      if (id) return { rowKey: await value(environment, `${shelf}.rowContent.rowKey`), id };
     }
     return false;
   }, `Home shelf with item ${index}`, 45000);
-  await focusItem(environment, target.control, target.id, true);
-  return { environment, ...target };
+  const focused = await focusHomeItem(environment, target.rowKey, target.id);
+  return { environment, ...focused };
 }
 
 async function openConfirmation(environment) {

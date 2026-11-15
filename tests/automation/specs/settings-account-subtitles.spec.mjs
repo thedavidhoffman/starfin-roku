@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { authorizationHeader } from '../support/jellyfin-auth.mjs';
 import { ensureAuthenticated } from '../support/authentication.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
@@ -23,7 +24,7 @@ describe('Starfin Jellyfin account subtitle settings', function () {
   async function api(route, body) {
     const response = await fetch(server + route, {
       method: body ? 'POST' : 'GET',
-      headers: { 'X-Emby-Token': token, 'Content-Type': 'application/json' },
+      headers: { Authorization: authorizationHeader(token), 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(15000)
     });

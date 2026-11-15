@@ -3518,7 +3518,8 @@ namespace tests
         private function recordThemeCalls()
             getGlobalAa().themeCalls = []
             m.node.themeAudioController = { callFunc: function(name, request = invalid)
-                getGlobalAa().themeCalls.Push({ name: name, request: request })
+                capture = getGlobalAa()
+                capture.themeCalls.Push({ name: name, request: request })
             end function }
         end function
 
@@ -4329,6 +4330,98 @@ namespace tests
             request = buildClosedPlayerTVEpisodeLoadRequest({ itemId: "episode", item: { Id: "episode", Type: "Episode" }, maxVideoBitrate: 4000000 })
 
             m.assertEqual(request.maxVideoBitrate, 4000000)
+        end function
+
+        @describe("feature authentication routing")
+
+        @it("routes the observed theme event to the current account")
+        function _()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+
+            m.node.themeAudioController.authenticationRequired = { request: { server: "http://server", userId: "user", token: "token" }, response: { authExpired: true, errorMessage: "Theme session expired" } }
+
+            m.assertEqual(m.node.authController.expireActiveSessionRequested.accountKey, "account-1")
+            m.assertEqual(m.node.authController.expireActiveSessionRequested.message, "Theme session expired")
+        end function
+
+        @it("routes trailer authentication from the overlay event to the current account")
+        function _()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+
+            m.node.overlayHost.eventRaised = { request: { id: "trailers" }, field: "authenticationRequired", value: { request: { server: "http://server", userId: "user", token: "token" }, response: { authExpired: true, errorMessage: "Trailer session expired" } } }
+
+            m.assertEqual(m.node.authController.expireActiveSessionRequested.accountKey, "account-1")
+            m.assertEqual(m.node.authController.expireActiveSessionRequested.message, "Trailer session expired")
+        end function
+
+        @it("ignores feature expiry from a replaced token")
+        function _()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+            request = { server: "http://server", userId: "user", token: "token" }
+            request.token = "old-token"
+
+            'bs:disable-next-line 1140
+            authHandleFeatureAuthenticationRequired({ request: request, response: { authExpired: true } })
+
+            m.assertInvalid(m.node.authController.expireActiveSessionRequested)
+        end function
+
+        @it("ignores feature expiry from a different user")
+        function _()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+            request = { server: "http://server", userId: "user", token: "token" }
+            request.userId = "other-user"
+
+            'bs:disable-next-line 1140
+            authHandleFeatureAuthenticationRequired({ request: request, response: { authExpired: true } })
+
+            m.assertInvalid(m.node.authController.expireActiveSessionRequested)
+        end function
+
+        @it("ignores feature expiry from a different server")
+        function _()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+            request = { server: "http://server", userId: "user", token: "token" }
+            request.server = "http://other-server"
+
+            'bs:disable-next-line 1140
+            authHandleFeatureAuthenticationRequired({ request: request, response: { authExpired: true } })
+
+            m.assertInvalid(m.node.authController.expireActiveSessionRequested)
+        end function
+
+        @it("ignores feature expiry from an empty token")
+        function _()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+            request = { server: "http://server", userId: "user", token: "token" }
+            request.token = ""
+
+            'bs:disable-next-line 1140
+            authHandleFeatureAuthenticationRequired({ request: request, response: { authExpired: true } })
+
+            m.assertInvalid(m.node.authController.expireActiveSessionRequested)
+        end function
+
+        @it("ignores feature expiry from a missing session")
+        function _()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+            request = { server: "http://server", userId: "user", token: "token" }
+            m.node.session = invalid
+
+            'bs:disable-next-line 1140
+            authHandleFeatureAuthenticationRequired({ request: request, response: { authExpired: true } })
+
+            m.assertInvalid(m.node.authController.expireActiveSessionRequested)
+        end function
+
+        @it("does not convert an ordinary feature failure into expiry")
+        function _()
+            m.node.authController = { expireActiveSessionRequested: invalid }
+
+            'bs:disable-next-line 1140
+            authHandleFeatureAuthenticationRequired({ request: { server: "http://server", userId: "user", token: "token" }, response: { ok: false, status: 403, failureKind: "accessDenied" } })
+
+            m.assertInvalid(m.node.authController.expireActiveSessionRequested)
         end function
 
     end class

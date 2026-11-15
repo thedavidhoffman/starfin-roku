@@ -23,7 +23,7 @@ sub init()
     initReferences()
     initCategoryList()
     initHandlers()
-    showCategory(0)
+    showCategory(SettingsNavigation.Category.Libraries)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -66,24 +66,43 @@ end sub
 sub initReferences()
     m.deviceCategoryList = m.top.findNode("deviceCategoryList")
     m.userCategoryList = m.top.findNode("userCategoryList")
-    m.categoryPanels = [invalid, invalid, invalid, invalid, invalid, invalid, invalid, invalid, invalid, invalid, invalid]
-    m.categoryControls = [[], [], [], [], [], [], [], [], [], [], []]
+    m.categoryPanels = []
+    m.categoryControls = []
     m.settingsControls = {}
     m.resetStarfinState = { confirmationVisible: false }
     m.accountUi = { state: invalid }
     m.categoryState = {
-        userTitles: ["Libraries", "Media shell", "Theme", "Playback", "Subtitles", "TV", "Home", "Screensaver"]
-        panelComponents: ["SettingsLibrariesPanel", "SettingsMediaShellPanel", "SettingsThemePanel", "SettingsPlaybackPanel", "SettingsSubtitlesPanel", "SettingsTVPanel", "SettingsHomePanel", "SettingsScreensaverPanel", "SettingsGeneralPanel", "SettingsVideoPanel", "SettingsAdvancedPanel"]
-        panelIds: ["libraryPanel", "mediaShellPanel", "themePanel", "playbackPanel", "accountSubtitlesPanel", "tvPanel", "homePanel", "screensaverPanel", "systemPanel", "videoPanel", "advancedPanel"]
-        deviceTitles: ["General", "Video", "Advanced"]
+        definitions: [
+            { title: "Libraries", componentName: "SettingsLibrariesPanel", panelId: "libraryPanel", isDevice: false }
+            { title: "Media shell", componentName: "SettingsMediaShellPanel", panelId: "mediaShellPanel", isDevice: false }
+            { title: "Theme", componentName: "SettingsThemePanel", panelId: "themePanel", isDevice: false }
+            { title: "Playback", componentName: "SettingsPlaybackPanel", panelId: "playbackPanel", isDevice: false }
+            { title: "Subtitles", componentName: "SettingsSubtitlesPanel", panelId: "accountSubtitlesPanel", isDevice: false }
+            { title: "TV", componentName: "SettingsTVPanel", panelId: "tvPanel", isDevice: false }
+            { title: "Home", componentName: "SettingsHomePanel", panelId: "homePanel", isDevice: false }
+            { title: "Screensaver", componentName: "SettingsScreensaverPanel", panelId: "screensaverPanel", isDevice: false }
+            { title: "General", componentName: "SettingsGeneralPanel", panelId: "systemPanel", isDevice: true }
+            { title: "Video", componentName: "SettingsVideoPanel", panelId: "videoPanel", isDevice: true }
+            { title: "Advanced", componentName: "SettingsAdvancedPanel", panelId: "advancedPanel", isDevice: true }
+        ]
+        userTitles: []
+        deviceTitles: []
     }
+    for each category in m.categoryState.definitions
+        m.categoryPanels.Push(invalid)
+        m.categoryControls.Push([])
+        if category.isDevice then
+            m.categoryState.deviceTitles.Push(category.title)
+        else
+            m.categoryState.userTitles.Push(category.title)
+        end if
+    end for
     m.categoryState.userCount = m.categoryState.userTitles.Count()
     m.categoryState.deviceCount = m.categoryState.deviceTitles.Count()
     m.categoryState.deviceOffset = m.categoryState.userCount
     m.categoryState.lastUserIndex = m.categoryState.userCount - 1
-    m.categoryState.resetIndex = m.categoryPanels.Count() - 1
     m.focusState = {
-        categoryIndex: 0
+        categoryIndex: SettingsNavigation.Category.Libraries
         controlIndex: 0
         activeKeyboardField: invalid
         returnFocus: invalid
@@ -112,8 +131,8 @@ sub ensureCategoryPanel(index as integer)
     if m.categoryPanels[index] <> invalid then return
 
     ' Layout-only panels share this owner's state and are retained for this session.
-    panel = CreateObject("roSGNode", m.categoryState.panelComponents[index])
-    panel.id = m.categoryState.panelIds[index]
+    panel = CreateObject("roSGNode", m.categoryState.definitions[index].componentName)
+    panel.id = m.categoryState.definitions[index].panelId
     panel.translation = [400, 0]
     panel.visible = false
     m.top.appendChild(panel)
@@ -134,10 +153,10 @@ end sub
 ' initCategoryReferences
 '-------------------------------------------------------------------------------
 sub initCategoryReferences(index as integer, panel as object)
-    if index = 0 then
+    if index = SettingsNavigation.Category.Libraries then
         m.settingsControls.librarySettingsGrid = panel.findNode("librarySettingsGrid")
         m.categoryControls[index] = [m.settingsControls.librarySettingsGrid]
-    else if index = 1 then
+    else if index = SettingsNavigation.Category.MediaShell then
         m.settingsControls.movieShellLayoutOptions = panel.findNode("movieShellLayoutOptions")
         m.settingsControls.seriesShellLayoutOptions = panel.findNode("seriesShellLayoutOptions")
         m.settingsControls.episodeShellLayoutOptions = panel.findNode("episodeShellLayoutOptions")
@@ -162,46 +181,46 @@ sub initCategoryReferences(index as integer, panel as object)
                 index: SettingsNavigation.MediaShellPage.Layouts
             }
         }
-    else if index = 2 then
+    else if index = SettingsNavigation.Category.Theme then
         m.settingsControls.themeOptions = panel.findNode("themeOptions")
         m.settingsControls.showUnwatchedEpisodeCountOptions = panel.findNode("showUnwatchedEpisodeCountOptions")
         m.settingsControls.watchedIndicatorOptions = panel.findNode("watchedIndicatorOptions")
         m.categoryControls[index] = [m.settingsControls.themeOptions, m.settingsControls.watchedIndicatorOptions, m.settingsControls.showUnwatchedEpisodeCountOptions]
-    else if index = 3 then
+    else if index = SettingsNavigation.Category.Playback then
         m.settingsControls.nextItemPlaybackOptions = panel.findNode("nextItemPlaybackOptions")
         m.nextItemPlaybackCard = panel.findNode("nextItemPlaybackCard")
         m.settingsControls.autoSkipIntrosOptions = panel.findNode("autoSkipIntrosOptions")
         m.settingsControls.autoSkipCreditsOptions = panel.findNode("autoSkipCreditsOptions")
         m.settingsControls.nextEpisodePromptButton = panel.findNode("nextEpisodePromptButton")
         m.categoryControls[index] = [m.settingsControls.nextItemPlaybackOptions, m.settingsControls.autoSkipIntrosOptions, m.settingsControls.autoSkipCreditsOptions, m.settingsControls.nextEpisodePromptButton]
-    else if index = 4 then
+    else if index = SettingsNavigation.Category.Subtitles then
         m.settingsControls.subtitleBurnInOptions = panel.findNode("subtitleBurnInOptions")
         m.subtitleBurnInCard = panel.findNode("subtitleBurnInCard")
         m.categoryControls[index] = []
         initAccountSubtitleReferences(panel)
-    else if index = 5 then
+    else if index = SettingsNavigation.Category.TV then
         m.settingsControls.showSeasonSummaryCardOptions = panel.findNode("showSeasonSummaryCardOptions")
         m.settingsControls.skipSingleSeasonSeriesOptions = panel.findNode("skipSingleSeasonSeriesOptions")
         m.settingsControls.tvEpisodeListDisplayOptions = panel.findNode("tvEpisodeListDisplayOptions")
         m.categoryControls[index] = [m.settingsControls.tvEpisodeListDisplayOptions, m.settingsControls.showSeasonSummaryCardOptions, m.settingsControls.skipSingleSeasonSeriesOptions]
-    else if index = 6 then
+    else if index = SettingsNavigation.Category.Home then
         m.settingsControls.homeEpisodeImagesOptions = panel.findNode("homeEpisodeImagesOptions")
         m.settingsControls.combineWatchingOptions = panel.findNode("combineWatchingOptions")
         m.categoryControls[index] = [m.settingsControls.combineWatchingOptions, m.settingsControls.homeEpisodeImagesOptions]
-    else if index = 7 then
+    else if index = SettingsNavigation.Category.Screensaver then
         m.settingsControls.screensaverTypeOptions = panel.findNode("screensaverTypeOptions")
         m.settingsControls.screensaverDelayOptions = panel.findNode("screensaverDelayOptions")
         m.categoryControls[index] = [m.settingsControls.screensaverTypeOptions, m.settingsControls.screensaverDelayOptions]
-    else if index = 8 then
+    else if index = SettingsNavigation.Category.General then
         m.settingsControls.selectAccountAtStartupOptions = panel.findNode("selectAccountAtStartupOptions")
         m.settingsControls.displayAccountBadgeOptions = panel.findNode("displayAccountBadgeOptions")
         m.settingsControls.tmdbApiKeyInput = panel.findNode("tmdbApiKeyInput")
         m.categoryControls[index] = [m.settingsControls.selectAccountAtStartupOptions, m.settingsControls.displayAccountBadgeOptions, m.settingsControls.tmdbApiKeyInput]
-    else if index = 9 then
+    else if index = SettingsNavigation.Category.Video then
         m.settingsControls.videoStreamingModeOptions = panel.findNode("videoStreamingModeOptions")
         m.videoStreamingModeCard = panel.findNode("videoStreamingModeCard")
         m.categoryControls[index] = [m.settingsControls.videoStreamingModeOptions]
-    else if index = 10 then
+    else if index = SettingsNavigation.Category.Advanced then
         m.settingsControls.resetStarfinButton = panel.findNode("resetStarfinButton")
         m.settingsControls.abortResetButton = panel.findNode("abortResetButton")
         m.settingsControls.eraseAllDataButton = panel.findNode("eraseAllDataButton")
@@ -215,45 +234,45 @@ end sub
 ' initCategoryHandlers
 '-------------------------------------------------------------------------------
 sub initCategoryHandlers(index as integer)
-    if index = 0 then
+    if index = SettingsNavigation.Category.Libraries then
         m.settingsControls.librarySettingsGrid.observeField("selectionChanged", "onLibrarySelectionChanged")
         m.settingsControls.librarySettingsGrid.observeField("focusExitLeft", "onLibraryFocusExitLeft")
-    else if index = 1 then
+    else if index = SettingsNavigation.Category.MediaShell then
         m.settingsControls.themeMusicOptions.observeField("itemSelected", "onThemeMusicSelected")
         for each layout in m.mediaShellState.layouts
             layout.control.observeField("itemSelected", "onMediaShellLayoutSelected")
         end for
-    else if index = 2 then
+    else if index = SettingsNavigation.Category.Theme then
         m.settingsControls.showUnwatchedEpisodeCountOptions.observeField("itemSelected", "onUnwatchedEpisodeCountSelected")
         m.settingsControls.watchedIndicatorOptions.observeField("itemSelected", "onWatchedIndicatorSelected")
         m.settingsControls.themeOptions.observeField("itemSelected", "onThemeSelected")
-    else if index = 3 then
+    else if index = SettingsNavigation.Category.Playback then
         m.settingsControls.nextItemPlaybackOptions.observeField("itemSelected", "onNextItemPlaybackSelected")
         m.settingsControls.nextItemPlaybackOptions.observeField("itemFocused", "onNextItemPlaybackFocused")
         m.settingsControls.autoSkipIntrosOptions.observeField("itemSelected", "onAutoSkipSelected")
         m.settingsControls.autoSkipCreditsOptions.observeField("itemSelected", "onAutoSkipSelected")
         m.settingsControls.nextEpisodePromptButton.observeField("buttonSelected", "onNextEpisodePromptRequested")
-    else if index = 4 then
+    else if index = SettingsNavigation.Category.Subtitles then
         m.settingsControls.subtitleBurnInOptions.observeField("itemSelected", "onSubtitleBurnInSelected")
         m.settingsControls.subtitleBurnInOptions.observeField("itemFocused", "onSubtitleBurnInFocused")
         initAccountSubtitleHandlers()
-    else if index = 5 then
+    else if index = SettingsNavigation.Category.TV then
         m.settingsControls.showSeasonSummaryCardOptions.observeField("itemSelected", "onShowSeasonSummaryCardSelected")
         m.settingsControls.skipSingleSeasonSeriesOptions.observeField("itemSelected", "onSkipSingleSeasonSeriesSelected")
         m.settingsControls.tvEpisodeListDisplayOptions.observeField("itemSelected", "onTVEpisodeListDisplaySelected")
-    else if index = 6 then
+    else if index = SettingsNavigation.Category.Home then
         m.settingsControls.homeEpisodeImagesOptions.observeField("itemSelected", "onHomeEpisodeImagesSelected")
         m.settingsControls.combineWatchingOptions.observeField("itemSelected", "onCombineWatchingSelected")
-    else if index = 7 then
+    else if index = SettingsNavigation.Category.Screensaver then
         m.settingsControls.screensaverTypeOptions.observeField("itemSelected", "onScreensaverTypeSelected")
         m.settingsControls.screensaverDelayOptions.observeField("itemSelected", "onScreensaverDelaySelected")
-    else if index = 8 then
+    else if index = SettingsNavigation.Category.General then
         m.settingsControls.selectAccountAtStartupOptions.observeField("itemSelected", "onSelectAccountAtStartupSelected")
         m.settingsControls.displayAccountBadgeOptions.observeField("itemSelected", "onDisplayAccountBadgeSelected")
-    else if index = 9 then
+    else if index = SettingsNavigation.Category.Video then
         m.settingsControls.videoStreamingModeOptions.observeField("itemSelected", "onVideoStreamingModeSelected")
         m.settingsControls.videoStreamingModeOptions.observeField("itemFocused", "onVideoStreamingModeFocused")
-    else if index = 10 then
+    else if index = SettingsNavigation.Category.Advanced then
         m.settingsControls.resetStarfinButton.observeField("buttonSelected", "onResetStarfinSelected")
         m.settingsControls.abortResetButton.observeField("buttonSelected", "onAbortResetSelected")
         m.settingsControls.eraseAllDataButton.observeField("buttonSelected", "onEraseAllDataSelected")
@@ -264,9 +283,9 @@ end sub
 ' applyCategoryValues
 '-------------------------------------------------------------------------------
 sub applyCategoryValues(index as integer)
-    if index = 0 then
+    if index = SettingsNavigation.Category.Libraries then
         m.settingsControls.librarySettingsGrid.selections = getLibrarySettingsValues()
-    else if index = 1 then
+    else if index = SettingsNavigation.Category.MediaShell then
         for each layout in m.mediaShellState.layouts
             value = SettingsStore.GetSettingValue(m.settingsState.values, layout.key)
             for optionIndex = 0 to layout.values.Count() - 1
@@ -274,32 +293,32 @@ sub applyCategoryValues(index as integer)
             end for
         end for
         setOnOffOption(m.settingsControls.themeMusicOptions, m.settingsState.values[SettingsStore.Key.ThemeMusic])
-    else if index = 2 then
+    else if index = SettingsNavigation.Category.Theme then
         setUnwatchedEpisodeCountOption(m.settingsState.values[SettingsStore.Key.ShowUnwatchedEpisodeCount])
         setWatchedIndicatorOption(m.settingsState.values[SettingsStore.Key.WatchedIndicatorStyle])
         setThemeOption(m.settingsState.values[SettingsStore.Key.Theme])
-    else if index = 3 then
+    else if index = SettingsNavigation.Category.Playback then
         setNextItemPlaybackOption(m.settingsState.values[SettingsStore.Key.NextItemPlayback])
         setOnOffOption(m.settingsControls.autoSkipIntrosOptions, SettingsStore.GetSettingValue(m.settingsState.values, SettingsStore.Key.AutoSkipIntros))
         setOnOffOption(m.settingsControls.autoSkipCreditsOptions, SettingsStore.GetSettingValue(m.settingsState.values, SettingsStore.Key.AutoSkipCredits))
         setNextEpisodePromptSecondsOption(m.settingsState.values[SettingsStore.Key.NextEpisodePromptSeconds])
-    else if index = 4 then
+    else if index = SettingsNavigation.Category.Subtitles then
         setSubtitleBurnInOption(m.settingsState.values[SettingsStore.Key.SubtitleBurnInMode])
-    else if index = 5 then
+    else if index = SettingsNavigation.Category.TV then
         setOnOffOption(m.settingsControls.showSeasonSummaryCardOptions, m.settingsState.values[SettingsStore.Key.ShowSeasonSummaryCard])
         setOnOffOption(m.settingsControls.skipSingleSeasonSeriesOptions, m.settingsState.values[SettingsStore.Key.SkipSingleSeasonSeries])
         setTVEpisodeListDisplayOption(m.settingsState.values[SettingsStore.Key.TvEpisodeListDisplay])
-    else if index = 6 then
+    else if index = SettingsNavigation.Category.Home then
         setHomeEpisodeImagesOption(m.settingsState.values[SettingsStore.Key.HomeEpisodeImages])
         setOnOffOption(m.settingsControls.combineWatchingOptions, m.settingsState.values[SettingsStore.Key.CombineContinueWatchingNextUp])
-    else if index = 7 then
+    else if index = SettingsNavigation.Category.Screensaver then
         setScreensaverTypeOption(m.settingsState.values[SettingsStore.Key.ScreensaverType])
         setScreensaverDelayOption(m.settingsState.values[SettingsStore.Key.ScreensaverDelay])
-    else if index = 8 then
+    else if index = SettingsNavigation.Category.General then
         setOnOffOption(m.settingsControls.selectAccountAtStartupOptions, m.settingsState.values[SettingsStore.Key.SelectAccountAtStartup])
         setOnOffOption(m.settingsControls.displayAccountBadgeOptions, m.settingsState.values[SettingsStore.Key.DisplayAccountBadge])
         m.settingsControls.tmdbApiKeyInput.text = m.settingsState.values[SettingsStore.Key.TmdbApiKey]
-    else if index = 9 then
+    else if index = SettingsNavigation.Category.Video then
         setVideoStreamingModeOption(m.settingsState.values[SettingsStore.Key.VideoStreamingMode])
     end if
 end sub
@@ -316,9 +335,9 @@ end sub
 ' initCategoryOptions
 '-------------------------------------------------------------------------------
 sub initCategoryOptions(index as integer)
-    if index = 0 then
+    if index = SettingsNavigation.Category.Libraries then
         return
-    else if index = 1 then
+    else if index = SettingsNavigation.Category.MediaShell then
         for each layout in m.mediaShellState.layouts
             titles = []
             for each value in layout.values
@@ -335,35 +354,35 @@ sub initCategoryOptions(index as integer)
             setOptionTitles(layout.control, titles)
         end for
         setOptionTitles(m.settingsControls.themeMusicOptions, ["Off", "On"])
-    else if index = 2 then
+    else if index = SettingsNavigation.Category.Theme then
         setOptionTitles(m.settingsControls.showUnwatchedEpisodeCountOptions, ["Off", "Subtle", "High contrast"])
         setOptionTitles(m.settingsControls.watchedIndicatorOptions, ["Subtle", "High contrast"])
         setOptionTitles(m.settingsControls.themeOptions, ["Blue gradient", "Black gradient", "Grey gradient", "Pure Black"])
-    else if index = 3 then
+    else if index = SettingsNavigation.Category.Playback then
         setOptionTitles(m.settingsControls.nextItemPlaybackOptions, ["Show " + Char.DoubleQuote + "Up Next" + Char.DoubleQuote, "Play next immediately"])
         setOptionTitles(m.settingsControls.autoSkipIntrosOptions, ["Off", "On"])
         setOptionTitles(m.settingsControls.autoSkipCreditsOptions, ["Off", "On"])
-    else if index = 4 then
+    else if index = SettingsNavigation.Category.Subtitles then
         subtitleModeTitles = []
         for each option in AccountSubtitles.Modes()
             subtitleModeTitles.Push(option.title)
         end for
         setOptionTitles(m.accountUi.modes, subtitleModeTitles)
         setOptionTitles(m.settingsControls.subtitleBurnInOptions, ["During transcoding", "Prefer external subtitles", "Always burn in"])
-    else if index = 5 then
+    else if index = SettingsNavigation.Category.TV then
         setOptionTitles(m.settingsControls.showSeasonSummaryCardOptions, ["Off", "On"])
         setOptionTitles(m.settingsControls.skipSingleSeasonSeriesOptions, ["Off", "On"])
         setOptionTitles(m.settingsControls.tvEpisodeListDisplayOptions, ["Horizontal", "Vertical"])
-    else if index = 6 then
+    else if index = SettingsNavigation.Category.Home then
         setOptionTitles(m.settingsControls.homeEpisodeImagesOptions, ["Series artwork", "Episode thumbnail with logo", "Episode thumbnail without logo"])
         setOptionTitles(m.settingsControls.combineWatchingOptions, ["Off", "On"])
-    else if index = 7 then
+    else if index = SettingsNavigation.Category.Screensaver then
         setOptionTitles(m.settingsControls.screensaverTypeOptions, ["None", "Bouncing artwork", "Starfield"])
         setOptionTitles(m.settingsControls.screensaverDelayOptions, ["1 minute", "5 minutes", "15 minutes", "30 minutes"])
-    else if index = 8 then
+    else if index = SettingsNavigation.Category.General then
         setOptionTitles(m.settingsControls.selectAccountAtStartupOptions, ["Off", "On"])
         setOptionTitles(m.settingsControls.displayAccountBadgeOptions, ["Off", "On"])
-    else if index = 9 then
+    else if index = SettingsNavigation.Category.Video then
         setOptionTitles(m.settingsControls.videoStreamingModeOptions, ["Automatic", "Automatic (remux disabled)", "Force transcode (allow remux)", "Force transcode (remux disabled)"])
     end if
 end sub
@@ -500,12 +519,8 @@ sub showCategory(index as integer)
     ensureCategoryPanel(index)
     m.focusState.categoryIndex = index
     m.focusState.controlIndex = 0
-    if index < m.categoryState.userCount then
-        m.top.categoryTitle = m.categoryState.userTitles[index]
-    else
-        m.top.categoryTitle = m.categoryState.deviceTitles[index - m.categoryState.deviceOffset]
-    end if
-    if index <> m.categoryState.resetIndex and m.resetStarfinState.confirmationVisible then showResetStarfinState()
+    m.top.categoryTitle = m.categoryState.definitions[index].title
+    if index <> SettingsNavigation.Category.Advanced and m.resetStarfinState.confirmationVisible then showResetStarfinState()
     for i = 0 to m.categoryPanels.Count() - 1
         if m.categoryPanels[i] <> invalid then m.categoryPanels[i].visible = (i = index)
     end for
@@ -533,7 +548,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if key = Remote.Key.Down and m.deviceCategoryList.isInFocusChain() and getListIndex(m.deviceCategoryList.itemFocused, m.categoryState.deviceCount) = m.categoryState.deviceCount - 1 then
             m.userCategoryList.jumpToItem = 0
             m.userCategoryList.setFocus(true)
-            showCategory(0)
+            showCategory(SettingsNavigation.Category.Libraries)
             return true
         end if
         if key = Remote.Key.Down and m.userCategoryList.isInFocusChain() and getListIndex(m.userCategoryList.itemFocused, m.categoryState.userCount) = m.categoryState.lastUserIndex then
@@ -597,7 +612,7 @@ sub onResetStarfinSelected()
     m.settingsControls.resetStarfinButton.visible = false
     m.resetStarfinState.description.visible = false
     m.resetStarfinState.confirmationGroup.visible = true
-    m.categoryControls[m.categoryState.resetIndex] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
+    m.categoryControls[SettingsNavigation.Category.Advanced] = [m.settingsControls.abortResetButton, m.settingsControls.eraseAllDataButton]
     focusCategoryControl(0, invalid)
 end sub
 
@@ -624,7 +639,7 @@ sub showResetStarfinState()
     m.settingsControls.resetStarfinButton.visible = true
     m.resetStarfinState.description.visible = true
     m.resetStarfinState.confirmationGroup.visible = false
-    m.categoryControls[m.categoryState.resetIndex] = [m.settingsControls.resetStarfinButton]
+    m.categoryControls[SettingsNavigation.Category.Advanced] = [m.settingsControls.resetStarfinButton]
 end sub
 
 '-------------------------------------------------------------------------------
@@ -956,7 +971,7 @@ end function
 ' clearResetStarfinButtonFocus
 '-------------------------------------------------------------------------------
 sub clearResetStarfinButtonFocus()
-    if m.categoryPanels[m.categoryState.resetIndex] = invalid then return
+    if m.categoryPanels[SettingsNavigation.Category.Advanced] = invalid then return
     m.settingsControls.resetStarfinButton.hasFocusVisual = false
     m.settingsControls.abortResetButton.hasFocusVisual = false
     m.settingsControls.eraseAllDataButton.hasFocusVisual = false

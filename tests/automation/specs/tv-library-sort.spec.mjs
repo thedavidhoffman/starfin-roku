@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { authorizationHeader } from '../support/jellyfin-auth.mjs';
 import { ensureAuthenticated, relaunchAuthenticatedStarfin } from '../support/authentication.mjs';
 import { getAutomationEnvironment } from '../support/environment.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
@@ -121,7 +122,7 @@ async function serverItems(environment, sortBy, direction) {
       Limit: '100', EnableTotalRecordCount: 'true'
     }).toString();
     const response = await fetch(url, {
-      headers: { 'X-Emby-Token': request.token }, signal: AbortSignal.timeout(120000)
+      headers: { Authorization: authorizationHeader(request.token) }, signal: AbortSignal.timeout(120000)
     });
     assert.equal(response.ok, true, 'Jellyfin sorting query HTTP ' + response.status);
     const payload = await response.json();

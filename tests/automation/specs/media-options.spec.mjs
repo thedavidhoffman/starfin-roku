@@ -14,10 +14,23 @@ async function value(environment, keyPath) {
 
 async function openOptions(environment, playback = false) {
   if (playback) {
-    if (!await value(environment, '#playbackControls.visible')) {
-      await environment.ecp.sendKeypress(environment.ecp.Key.Up);
+    // A visibility snapshot can precede the auto-hide animation completing.
+    // Reveal through remote input and navigate the visible toolbar, keeping the
+    // production focus/timer owners involved instead of forcing hidden focus.
+    await waitFor(async () => {
+      if (await value(environment, '#playbackControls.visible') === true
+        && await environment.odc.hasFocus({ base: 'scene', keyPath: '#playbackControls.#progressBarGroup' })) return true;
+      await environment.ecp.sendKeypress(environment.ecp.Key.Up, { wait: 150 });
+      return false;
+    }, 'visible playback progress focus');
+    await environment.ecp.sendKeypress(environment.ecp.Key.Down, { wait: 150 });
+    await waitFor(async () => !await environment.odc.hasFocus({ base: 'scene', keyPath: '#playbackControls.#progressBarGroup' }),
+      'toolbar focus after Down');
+    for (let index = 0; index < 6 && !await environment.odc.hasFocus({ base: 'scene', keyPath: '#playbackControls.#mediaOptionsButton' }); index++) {
+      await environment.ecp.sendKeypress(environment.ecp.Key.Left, { wait: 150 });
     }
-    await environment.odc.callFunc({ base: 'scene', keyPath: '#playbackControls', funcName: 'focusMediaOptions' });
+    assert.equal(await environment.odc.hasFocus({ base: 'scene', keyPath: '#playbackControls.#mediaOptionsButton' }), true,
+      'Remote navigation must focus the visible Media Options button.');
   } else {
     await environment.odc.callFunc({ base: 'scene', keyPath: '#mediaToolbar', funcName: 'activate' });
     for (let index = 0; index < 10 && !await environment.odc.hasFocus({ base: 'scene', keyPath: '#mediaToolbar.#mediaInfoButton' }); index++) {

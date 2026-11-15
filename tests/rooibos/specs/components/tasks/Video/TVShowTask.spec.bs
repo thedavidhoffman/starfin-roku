@@ -589,6 +589,27 @@ namespace tests
             return m.createRequest()
         end function
 
+        @describe("season count metadata")
+
+        @it("explicitly requests and preserves total episode counts for season cards")
+        function _()
+            getGlobalAa().tvShowSeasonCountRequest = ""
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().tvShowSeasonCountRequest = requestUrl
+                return { ok: true, data: { Items: [{ Id: "season", ChildCount: 21, RecursiveItemCount: 21 }] } }
+            end function)
+
+            'bs:disable-next-line 1140
+            response = loadSeasons(m.createRequest())
+
+            requestUrl = getGlobalAa().tvShowSeasonCountRequest
+            m.assertTrue(Instr(1, requestUrl, "/Shows/series/Seasons?") > 0)
+            m.assertTrue(Instr(1, requestUrl, "fields=ChildCount%2CRecursiveItemCount") > 0)
+            m.assertEqual(response.data.Items[0].ChildCount, 21)
+            m.assertEqual(response.data.Items[0].RecursiveItemCount, 21)
+            getGlobalAa().Delete("tvShowSeasonCountRequest")
+        end function
+
         @describe("episode cast metadata")
 
         @it("requests and preserves People for the Play target")
@@ -874,7 +895,7 @@ namespace tests
 
         @it("requests trailer metadata with series details")
         function _()
-            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers)
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs)
                 getGlobalAa().trailerSeriesUrl = requestUrl
                 return { ok: true, data: { Id: "series" } }
             end function)

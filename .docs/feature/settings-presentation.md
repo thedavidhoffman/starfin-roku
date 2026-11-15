@@ -149,3 +149,19 @@ Home follows TV and contains the account-specific combine option above the exist
 episode artwork preference. TV retains episode scrolling, season cards and the
 single-season shortcut. Panels retain lazy initialization and generic vertical
 radio navigation. See [Combined Home Watching Row](combined-home-watching.md).
+
+## Category registration
+
+SettingsContent keeps one ordered definition for category titles, panel component
+names, panel IDs and device/user membership. It derives list titles, counts,
+offsets and panel/control storage from that definition. All category dispatch
+uses the complete SettingsNavigation.Category constants, preserving indices
+0 through 10 and the existing order. User categories precede device categories
+in the definition, matching the navigation offset contract.
+
+Category-specific references, handlers, options and value application remain
+owned by SettingsContent. Panels are still created lazily and retained, edits
+survive category changes, and subtitle paging, previews, focus restoration and
+Advanced reset confirmation keep their existing behavior. Separate category
+tests exercise list-driven initialization alongside existing navigation and
+retained-state coverage.

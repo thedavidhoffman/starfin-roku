@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { authorizationHeader } from '../support/jellyfin-auth.mjs';
 import { ensureAuthenticated, relaunchAuthenticatedStarfin } from '../support/authentication.mjs';
 import { captureEvidence } from '../support/evidence.mjs';
 import { waitFor } from '../support/lifecycle.mjs';
@@ -19,7 +20,7 @@ async function findMovie(environment) {
   assert.equal(response.ok, true, 'The automation account must authenticate.');
   const session = await response.json();
   const itemsResponse = await fetch(`${server}/Users/${session.User.Id}/Items?Recursive=true&IncludeItemTypes=Movie&Fields=MediaSources&Limit=2000`, {
-    headers: { 'X-Emby-Token': session.AccessToken }
+    headers: { Authorization: authorizationHeader(session.AccessToken) }
   });
   assert.equal(itemsResponse.ok, true, 'The movie catalog must load.');
   const catalog = await itemsResponse.json();

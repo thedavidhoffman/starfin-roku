@@ -55,7 +55,7 @@ individual Starfin features.
 - [Search](search.md)
 - [Sign In and Unified Server Picker](sign-in.md)
 - [Settings Migrations](settings-migrations.md)
-- [Settings Presentation and Lazy Category Lifecycle](settings-presentation.md)
+- [Settings Presentation, Category Registration and Lazy Lifecycle](settings-presentation.md)
 - [Media Shell Layout Preferences](media-shell-layout.md)
 - [Themes](themes.md)
 - [Theme Songs](theme-songs.md)

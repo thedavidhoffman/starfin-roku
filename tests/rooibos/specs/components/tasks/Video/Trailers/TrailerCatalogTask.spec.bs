@@ -36,6 +36,22 @@ namespace tests
             m.assertEqual(m.top.response.items.Count(), 1)
         end function
 
+        @it("preserves authentication failure details and catalog correlation")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: false, authExpired: true, status: 401, failureKind: "authenticationRequired", errorMessage: "Expired" })
+            m.top.request = { requestId: 9, server: "https://server", token: "token", userId: "user", itemId: "parent", item: {} }
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertTrue(m.top.response.authExpired)
+            m.assertEqual(m.top.response.status, 401)
+            m.assertEqual(m.top.response.failureKind, "authenticationRequired")
+            m.assertEqual(m.top.response.errorMessage, "Expired")
+            m.assertEqual(m.top.response.requestId, 9)
+            m.assertEqual(m.top.response.items, [])
+        end function
+
     end class
 
 end namespace

@@ -1,3 +1,4 @@
+import "pkg:/source/PlaybackRequest.bs"
 import "pkg:/source/Trailers.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/AsyncLifecycle.bs"
@@ -18,6 +19,7 @@ sub openTrailers()
     m.top.closeOnContentSelected = false
     m.top.contentComponentName = "TrailerContent"
     m.trailer = {
+        request: PlaybackRequest.Create(m.top.trailerRequest)
         directPlayback: false
         loadingIndicator: m.top.findNode("trailerSpinner")
         state: invalid
@@ -48,7 +50,7 @@ sub loadTrailers()
     m.trailer.generation += 1
     AsyncLifecycle.Begin(m.trailer.lifecycle, m.trailer.generation)
     m.trailer.catalogGeneration = m.trailer.generation
-    request = m.top.trailerRequest
+    request = m.trailer.request
     startTrailerTask("TrailerCatalogTask", { requestId: m.trailer.generation, server: request.server, token: request.token, userId: request.userId, item: request.item, itemId: request.item.Id }, "onCatalogResponse")
 end sub
 
@@ -82,6 +84,7 @@ end function
 sub onCatalogResponse(event as object)
     response = event.getData()
     if not AsyncLifecycle.IsCurrentResponse(m.trailer.lifecycle, response, "requestId") then return
+    if handleTrailerAuthenticationFailure(response) then return
     AsyncLifecycle.Deactivate(m.trailer.lifecycle)
     m.trailer.items = response.items
     if m.trailer.items = invalid then m.trailer.items = []
@@ -139,7 +142,7 @@ sub playTrailer(index as integer)
     if item.source = Trailers.Source.YouTube then
         m.trailer.pending = startTrailerTask("TrailerResolveTask", { requestId: m.trailer.generation, videoId: item.videoId }, "onYouTubeResponse")
     else
-        session = m.top.trailerRequest
+        session = m.trailer.request
         request = { requestId: m.trailer.generation, server: session.server, token: session.token, userId: session.userId, itemId: item.item.Id, item: item.item, startPositionTicks: 0, videoMode: PlaybackMode.Mode.Automatic, subtitleStreamIndex: SubtitleSelection.None }
         m.trailer.pending = startTrailerTask("VideoPlaybackInfoTask", request, "onLocalResponse")
     end if
@@ -167,6 +170,7 @@ end sub
 sub onLocalResponse(event as object)
     response = event.getData()
     if not AsyncLifecycle.IsCurrentResponse(m.trailer.lifecycle, response, "requestId") then return
+    if handleTrailerAuthenticationFailure(response) then return
     AsyncLifecycle.Deactivate(m.trailer.lifecycle)
     if response.ok <> true then
         returnFromTrailer("This local trailer could not be loaded. Select it to try again.")
@@ -177,7 +181,7 @@ sub onLocalResponse(event as object)
     m.top.appendChild(m.trailer.activePlayer)
     m.trailer.activePlayer.observeFieldScoped("ended", "onTrailerEnded")
     transitionTrailer(Trailers.State.Playing)
-    m.trailer.activePlayer.callFunc("playStream", response, m.top.trailerRequest, m.trailer.activePlaybackId)
+    m.trailer.activePlayer.callFunc("playStream", response, m.trailer.request, m.trailer.activePlaybackId)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -249,7 +253,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub stopLocalEncoding(playSessionId as string)
     if playSessionId = "" then return
-    session = m.top.trailerRequest
+    session = m.trailer.request
     cleanup = CreateObject("roSGNode", "TrailerCleanupTask")
     cleanup.request = { server: session.server, token: session.token, playSessionId: playSessionId }
     cleanup.control = TaskControl.Command.Run
@@ -317,5 +321,16 @@ function focusContent() as boolean
     else
         m.top.setFocus(true)
     end if
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' handleTrailerAuthenticationFailure
+'-------------------------------------------------------------------------------
+function handleTrailerAuthenticationFailure(response as object) as boolean
+    if response.authExpired <> true then return false
+    request = m.trailer.request
+    deactivateTrailers()
+    m.top.authenticationRequired = { request: request, response: response }
     return true
 end function

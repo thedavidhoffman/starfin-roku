@@ -13,8 +13,14 @@ async function exerciseTmdbApiKey(context, value, checkpoint) {
     const { environment, accountKey } = await openSettings(categories.general);
     await environment.odc.focusNode({
       base: 'scene',
-      keyPath: '#tmdbApiKeyInput'
+      keyPath: '#deviceCategoryList'
     });
+    await environment.ecp.sendKeypress(environment.ecp.Key.Right);
+    for (let index = 0; index < 3 && !await environment.odc.hasFocus({ base: 'scene', keyPath: '#tmdbApiKeyInput' }); index++) {
+      await environment.ecp.sendKeypress(environment.ecp.Key.Down, { wait: 150 });
+    }
+    await waitFor(() => environment.odc.hasFocus({ base: 'scene', keyPath: '#tmdbApiKeyInput' }),
+      'remote navigation to the TMDB API key field');
     await environment.ecp.sendKeypress(environment.ecp.Key.Ok);
 
     await waitFor(async () => {
