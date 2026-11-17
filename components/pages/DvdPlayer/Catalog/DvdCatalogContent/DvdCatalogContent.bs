@@ -1,0 +1,81 @@
+import "pkg:/source/Remote.bs"
+import "pkg:/source/String.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.nodes = { list: m.top.findNode("titles"), status: m.top.findNode("status") }
+    m.catalog = { demos: [], loading: false, titlesView: false }
+    m.nodes.list.observeField("itemSelected", "onTitleSelected")
+end sub
+
+'-------------------------------------------------------------------------------
+' showEntries
+'-------------------------------------------------------------------------------
+sub showEntries(demos as object, titlesView as boolean)
+    m.catalog.demos = demos
+    m.catalog.titlesView = titlesView
+    if demos.Count() = 0 then
+        message = "No enabled DVD libraries are available."
+        if titlesView then message = "No published DVD scans are available in this library."
+        showStatus(message + Chr(10) + "Press OK to refresh or Back to return.", false)
+        return
+    end if
+    m.catalog.loading = false
+    m.nodes.status.text = ""
+    content = CreateObject("roSGNode", "ContentNode")
+    for each demo in demos
+        content.createChild("ContentNode").title = Strings.ToString(demo.name, demo.id)
+    end for
+    m.nodes.list.content = content
+    m.nodes.list.visible = true
+    m.nodes.list.jumpToItem = 0
+    focusItems()
+end sub
+
+'-------------------------------------------------------------------------------
+' showStatus
+'-------------------------------------------------------------------------------
+sub showStatus(message as string, loading as boolean)
+    m.catalog.loading = loading
+    m.nodes.list.visible = false
+    m.nodes.status.text = message
+    m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' focusItems
+'-------------------------------------------------------------------------------
+sub focusItems()
+    if m.nodes.list.visible then
+        m.nodes.list.setFocus(true)
+    else
+        m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onTitleSelected
+'-------------------------------------------------------------------------------
+sub onTitleSelected()
+    index = m.nodes.list.itemSelected
+    if index < 0 or index >= m.catalog.demos.Count() then return
+    m.top.selectedDemo = m.catalog.demos[index]
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = Remote.Key.Options then
+        if m.top.allowRefresh and not m.catalog.loading then m.top.retryRequested = true
+        return true
+    end if
+    if key = Remote.Key.OK and not m.nodes.list.visible then
+        if m.top.allowRefresh and not m.catalog.loading then m.top.retryRequested = true
+        return true
+    end if
+    return false
+end function

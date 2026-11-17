@@ -1,0 +1,123 @@
+namespace tests
+
+    @SGNode("DvdDemoTask")
+    @suite("DVD demo task")
+    class DvdDemoTaskTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.request = { server: "http://server/jellyfin/", token: "test-token", requestId: 7 }
+        end function
+
+        @describe("plugin contract")
+
+        @it("rejects an absent session without making an HTTP request")
+        function _()
+            m.top.request = invalid
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, -1)
+        end function
+
+        @it("fetches catalog and manifest with MediaBrowser authentication and base path")
+        function _()
+            getGlobalAa().dvdRequests = []
+            m.stubCall(HttpClient.Request, function(url, method, token, body, headers, displayRequest, timeoutMs)
+                requests = getGlobalAa().dvdRequests
+                requests.Push({ url: url, method: method, headers: headers })
+                if requests.Count() = 1 then return { ok: true, data: { schemaVersion: "starfin-dvd-demo-catalog/0.1", demos: [{ id: "robots-of-death-special-edition", manifestPath: "Starfin/Dvd/Demos/robots-of-death-special-edition/Manifest" }] } }
+                return { ok: true, data: { schemaVersion: "starfin-dvd-demo/0.1", id: "robots-of-death-special-edition", initialScreen: "home" } }
+            end function)
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            requests = getGlobalAa().dvdRequests
+            m.assertEqual(requests.Count(), 2)
+            m.assertEqual(requests[0].url, "http://server/jellyfin/Starfin/Dvd/Demos")
+            m.assertEqual(requests[1].url, "http://server/jellyfin/Starfin/Dvd/Demos/robots-of-death-special-edition/Manifest")
+            m.assertTrue(Instr(1, requests[0].headers.Authorization, "MediaBrowser ") = 1)
+            m.assertTrue(Instr(1, requests[1].headers.Authorization, "test-token") > 0)
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 7)
+            m.assertEqual(m.top.response.action, "dvdDemoLoad")
+        end function
+
+        @it("rejects an unsupported catalog version")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: true, data: { schemaVersion: "unknown", demos: [] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.errorMessage, "Unsupported DVD demo catalog.")
+        end function
+
+        @it("rejects an unsupported manifest version")
+        function _()
+            getGlobalAa().dvdRequestCount = 0
+            m.stubCall(HttpClient.Request, function(url, method, token, body, headers, displayRequest, timeoutMs)
+                getGlobalAa().dvdRequestCount++
+                if getGlobalAa().dvdRequestCount = 1 then return { ok: true, data: { schemaVersion: "starfin-dvd-demo-catalog/0.1", demos: [{ id: "robots-of-death-special-edition", manifestPath: "Starfin/Dvd/Demos/robots-of-death-special-edition/Manifest" }] } }
+                return { ok: true, data: { schemaVersion: "future", id: "robots-of-death-special-edition" } }
+            end function)
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.errorMessage, "Unsupported DVD demo manifest.")
+        end function
+
+        @it("reports a missing demo")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: true, data: { schemaVersion: "starfin-dvd-demo-catalog/0.1", demos: [] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertTrue(Instr(1, m.top.response.errorMessage, "not installed") > 0)
+        end function
+
+        @it("does not follow an external manifest URL")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: true, data: { schemaVersion: "starfin-dvd-demo-catalog/0.1", demos: [{ id: "robots-of-death-special-edition", manifestPath: "https://other/Manifest" }] } })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.errorMessage, "Invalid DVD manifest path.")
+        end function
+
+        @it("preserves authentication failure classification")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: false, status: 401, failureKind: "unauthorized", errorMessage: "Unauthorized" })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.status, 401)
+            m.assertEqual(m.top.response.failureKind, "unauthorized")
+            m.assertEqual(m.top.response.requestId, 7)
+        end function
+
+        @it("converts malformed payloads into a correlated failure")
+        function _()
+            m.stubCall(HttpClient.Request, { ok: true, data: invalid })
+
+            'bs:disable-next-line 1140
+            executeRequest()
+
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.requestId, 7)
+        end function
+
+    end class
+
+end namespace

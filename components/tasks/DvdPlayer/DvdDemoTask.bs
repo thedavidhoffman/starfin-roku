@@ -1,0 +1,74 @@
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Contracts.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    result = TaskRequest.ValidateRequest(request, DvdMenu.Request.Load)
+    if result = invalid then
+        try
+            result = loadLibraryData(request)
+        catch error
+            result = { ok: false, errorMessage: "Invalid DVD library response." }
+        end try
+    end if
+    result.action = DvdMenu.Request.Load
+    if request <> invalid and request.action = DvdMenu.Request.Catalog then result.action = DvdMenu.Request.Catalog
+    if request <> invalid and request.action = DvdMenu.Request.Library then result.action = DvdMenu.Request.Library
+    result.requestId = -1
+    if request <> invalid then result.requestId = Number.ToInteger(request.requestId, -1)
+    m.top.response = result
+end sub
+
+'-------------------------------------------------------------------------------
+' loadLibraryData
+'-------------------------------------------------------------------------------
+function loadLibraryData(request as object) as object
+    headers = JellyfinAuth.BuildTokenHeaders(request.token)
+    if request.action = DvdMenu.Request.Catalog then
+        result = HttpClient.Request(Url.Resolve(request.server, "Starfin/Dvd/Libraries"), "GET", invalid, invalid, headers)
+        if not result.ok then return result
+        catalog = result.data
+        if catalog.schemaVersion <> "starfin-dvd-library-catalog/1" or type(catalog.libraries) <> "roArray" then throw "Invalid catalog."
+        for each library in catalog.libraries
+            if not DvdPaths.IsScoped(library.libraryPath, "Libraries", library.id) then throw "Invalid library path."
+        end for
+        return { ok: true, payload: catalog.libraries }
+    end if
+    if request.action = DvdMenu.Request.Library then
+        library = request.library
+        if not DvdPaths.IsScoped(library.libraryPath, "Libraries", library.id) then throw "Invalid library path."
+        result = HttpClient.Request(Url.Resolve(request.server, library.libraryPath), "GET", invalid, invalid, headers)
+        if not result.ok then return result
+        data = result.data
+        if data.schemaVersion <> "starfin-dvd-library/1" or not DvdPaths.SameId(data.id, library.id) or type(data.titles) <> "roArray" then throw "Invalid library."
+        for each title in data.titles
+            if not DvdPaths.IsScoped(title.manifestPath, "Discs", title.id) then throw "Invalid manifest path."
+        end for
+        return { ok: true, payload: data.titles }
+    end if
+    title = request.demo
+    if title = invalid then throw "Missing DVD selection."
+    path = Strings.ToString(title.manifestPath)
+    if not DvdPaths.IsScoped(path, "Discs", title.id) then throw "Invalid manifest path."
+    result = HttpClient.Request(Url.Resolve(request.server, path), "GET", invalid, invalid, headers)
+    if result.ok <> true then return result
+    manifest = result.data
+    if manifest.schemaVersion <> "starfin-dvd-disc/1" or not DvdPaths.SameId(manifest.id, title.id) then return { ok: false, errorMessage: "Unsupported scanned DVD manifest." }
+    if not DvdPaths.SameId(manifest.libraryId, request.library.id) then throw "DVD library changed."
+    return { ok: true, payload: manifest }
+end function

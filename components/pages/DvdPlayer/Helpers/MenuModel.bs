@@ -1,0 +1,281 @@
+'-------------------------------------------------------------------------------
+' resolveScreen
+'-------------------------------------------------------------------------------
+function resolveScreen(name as string) as string
+    aliases = m.menu.manifest.menuMap.aliases
+    if type(aliases) = "roAssociativeArray" then
+        targets = aliases[name]
+        if type(targets) = "roArray" then
+            index = 0
+            if name = "audio" then index = m.menu.featureAudio - 1
+            if name = "subtitles" and m.menu.subtitles then index = 1
+            if name = "extras2" and m.menu.infoText then index = 1
+            if index >= 0 and index < targets.Count() then return targets[index]
+        end if
+    end if
+    return name
+end function
+
+'-------------------------------------------------------------------------------
+' initializeSelection
+'-------------------------------------------------------------------------------
+sub initializeSelection()
+    manifest = m.menu.manifest
+    defaults = manifest.defaultSelection
+    if manifest.schemaVersion = "starfin-dvd-disc/1" and type(defaults) <> "roAssociativeArray" then
+        ' A partial scan can provide browsable menus without any playable title.
+        m.menu.autoChain = {}
+        return
+    end if
+    if type(defaults) <> "roAssociativeArray" then
+        ' Older manifests expose their default choice as a reviewed root action.
+        for each key in manifest.menuMap.screens[manifest.initialScreen].buttons
+            mapping = manifest.menuMap.screens[manifest.initialScreen].buttons[key]
+            if mapping.action = DvdMenu.Action.SelectTitle then
+                defaults = { titleNumber: mapping.title, chapterNumber: mapping.chapter, audioTrackNumber: 1 }
+                exit for
+            end if
+        end for
+    end if
+    if defaults = invalid then throw "Missing DVD default selection."
+    title = findNumbered(manifest.disc.titles, Number.ToInteger(defaults.titleNumber, -1))
+    if title = invalid then throw "Invalid DVD default title."
+    m.menu.featureTitleSet = title.titleSet
+    m.menu.featureAudio = Number.ToInteger(defaults.audioTrackNumber, 1)
+    m.menu.autoChain = {}
+    if not selectTitle(title.number, Number.ToInteger(defaults.chapterNumber, 1)) then throw "Invalid DVD default chapter."
+end sub
+
+'-------------------------------------------------------------------------------
+' goScreen
+'-------------------------------------------------------------------------------
+sub goScreen(name as string, requestedFocus = invalid as dynamic, push = true as boolean)
+    name = resolveScreen(name)
+    screen = m.menu.manifest.menuMap.screens[name]
+    if screen = invalid then throw "Unknown DVD screen."
+    if push and m.menu.screen <> "" and m.menu.screen <> name then m.menu.history.Push(m.menu.screen)
+    m.menu.screen = name
+    renderScreen(screen, requestedFocus)
+end sub
+
+'-------------------------------------------------------------------------------
+' backScreen
+'-------------------------------------------------------------------------------
+sub backScreen()
+    if m.loading.phase <> DvdMenu.Phase.Ready then
+        m.top.closeRequested = true
+        return
+    end if
+    if m.menu.history.Count() = 0 then
+        if m.menu.screen = m.menu.manifest.initialScreen then
+            m.top.closeRequested = true
+        else
+            goScreen(m.menu.manifest.initialScreen, invalid, false)
+        end if
+        return
+    end if
+    previous = m.menu.history.Pop()
+    ' Resolve historical toggle artwork against current preferences.
+    if Left(previous, 5) = "audio" then previous = "audio"
+    if Left(previous, 10) = "subtitles-" then previous = "subtitles"
+    if Left(previous, 8) = "extras2-" then previous = "extras2"
+    goScreen(previous, invalid, false)
+end sub
+
+'-------------------------------------------------------------------------------
+' findNumbered
+'-------------------------------------------------------------------------------
+function findNumbered(items as dynamic, itemNumber as integer) as dynamic
+    if type(items) <> "roArray" then return invalid
+    for each item in items
+        if item.number = itemNumber then return item
+    end for
+    return invalid
+end function
+
+'-------------------------------------------------------------------------------
+' availableAudio
+'-------------------------------------------------------------------------------
+function availableAudio(title as object) as object
+    titleSet = findNumbered(m.menu.manifest.disc.titleSets, title.titleSet)
+    enabled = {}
+    for each pgcNumber in title.pgcs
+        pgc = findNumbered(titleSet.programChains, pgcNumber)
+        if pgc <> invalid then
+            for each mapping in pgc.audioMappings
+                enabled[Strings.ToString(mapping.trackNumber)] = true
+            end for
+        end if
+    end for
+    tracks = []
+    for each track in titleSet.audio
+        if enabled.DoesExist(Strings.ToString(track.number)) then tracks.Push(track)
+    end for
+    return tracks
+end function
+
+'-------------------------------------------------------------------------------
+' selectTitle
+'-------------------------------------------------------------------------------
+function selectTitle(titleNumber as integer, chapterNumber as integer) as boolean
+    playable = m.menu.manifest.playableTitles
+    if type(playable) = "roArray" then
+        allowed = false
+        for each candidate in playable
+            if candidate = titleNumber then allowed = true
+        end for
+        if not allowed then return false
+    end if
+    title = findNumbered(m.menu.manifest.disc.titles, titleNumber)
+    if title = invalid then return false
+    chapter = findNumbered(title.chapters, chapterNumber)
+    if chapter = invalid then return false
+    tracks = availableAudio(title)
+    desired = 1
+    if title.titleSet = m.menu.featureTitleSet then desired = m.menu.featureAudio
+    audio = invalid
+    if tracks.Count() > 0 then audio = tracks[0].number
+    if findNumbered(tracks, desired) <> invalid then audio = desired
+    m.menu.title = titleNumber
+    m.menu.chapter = chapterNumber
+    m.menu.audio = audio
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' activateButton
+'-------------------------------------------------------------------------------
+sub activateButton()
+    mapping = m.menu.manifest.menuMap.screens[m.menu.screen].buttons[m.menu.focused.ToStr()]
+    if mapping = invalid then throw "Missing reviewed action."
+    if mapping.action = DvdMenu.Action.Navigate then
+        goScreen(mapping.screen, mapping.focusButton)
+    else if mapping.action = DvdMenu.Action.SelectTitle then
+        if not selectTitle(Number.ToInteger(mapping.title, -1), Number.ToInteger(mapping.chapter, -1)) then throw "Invalid title/chapter mapping."
+        playSelection()
+    else if mapping.action = DvdMenu.Action.Audio then
+        track = Number.ToInteger(mapping.track, 0)
+        if track < 1 or track > 3 then throw "Invalid feature audio track."
+        m.menu.featureAudio = track
+        selectTitle(m.menu.title, m.menu.chapter)
+        target = Strings.ToString(mapping.screen, "audio")
+        goScreen(target, m.menu.focused, false)
+    else if mapping.action = DvdMenu.Action.Subtitles then
+        m.menu.subtitles = mapping.enabled = true
+        goScreen(Strings.ToString(mapping.screen, "subtitles"), m.menu.focused, false)
+    else if mapping.action = DvdMenu.Action.InfoText then
+        m.menu.infoText = mapping.enabled = true
+        goScreen(Strings.ToString(mapping.screen, "extras2"), m.menu.focused, false)
+    else if mapping.action = DvdMenu.Action.Resume then
+        playSelection()
+    else
+        showPlaybackMessage(Strings.ToString(mapping.reason, "This DVD menu action is not supported yet."))
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' selectionRequest
+'-------------------------------------------------------------------------------
+function selectionRequest() as object
+    title = findNumbered(m.menu.manifest.disc.titles, m.menu.title)
+    chapter = findNumbered(title.chapters, m.menu.chapter)
+    mappingStatus = "off"
+    if m.menu.subtitles or m.menu.infoText then mappingStatus = "unresolved"
+    return {
+        schemaVersion: "starfin-dvd-selection/0.2-preview"
+        discId: m.menu.manifest.disc.ifoSha256
+        titleNumber: title.number
+        titleSet: title.titleSet
+        titleWithinSet: title.titleWithinSet
+        chapterNumber: chapter.number
+        pgc: chapter.pgc
+        program: chapter.program
+        audioTrackNumber: m.menu.audio
+        subtitleTrackNumber: invalid
+        requestedSubtitlesEnabled: m.menu.subtitles
+        requestedInfoTextEnabled: m.menu.infoText
+        subtitleMappingStatus: mappingStatus
+        approximateStartSecondsInPgc: chapter.startSecondsInPgc
+        mode: "preview-only"
+        mappingStatus: "reviewed-candidate"
+    }
+end function
+
+'-------------------------------------------------------------------------------
+' selectionLabel
+'-------------------------------------------------------------------------------
+function selectionLabel() as string
+    root = m.menu.manifest.menuMap.screens[m.menu.manifest.initialScreen]
+    for each key in root.buttons
+        button = root.buttons[key]
+        if button.action = DvdMenu.Action.SelectTitle and button.title = m.menu.title then return Strings.ToString(button.label, "Title " + m.menu.title.ToStr())
+    end for
+    annotations = m.menu.manifest.disc.reviewedInterpretation
+    if type(annotations) = "roAssociativeArray" then
+        for each group in [annotations.episodes, annotations.specialFeatures]
+            if type(group) = "roArray" then
+                for each entry in group
+                    if entry.candidateTitle = m.menu.title then return entry.label
+                end for
+            end if
+        end for
+    end if
+    return "Title " + m.menu.title.ToStr()
+end function
+
+'-------------------------------------------------------------------------------
+' playSelection
+'-------------------------------------------------------------------------------
+sub playSelection()
+    if m.menu.title = 0 then
+        showPlaybackMessage("No playable title is selected for this scanned disc.")
+        return
+    end if
+    m.rendering.selection = selectionRequest()
+    capability = m.menu.manifest.playback
+    if m.menu.manifest.playbackAvailable = true and type(capability) = "roAssociativeArray" then
+        if capability.schemaVersion = "starfin-dvd-playback/0.1" then
+            if m.menu.subtitles or m.menu.infoText then
+                showPlaybackMessage("Subtitle and Info Text playback are not supported yet. Turn them off in the DVD menus and select the title again.")
+            else
+                startContent(capability)
+            end if
+            return
+        end if
+    end if
+    m.rendering.awaitingMessage = true
+    m.rendering.lostFocus = false
+    stopPreview()
+    audio = "No audio declared"
+    if m.menu.audio <> invalid then audio = "Audio track " + m.menu.audio.ToStr()
+    subtitles = "Off"
+    infoText = "Off"
+    if m.menu.subtitles then subtitles = "On requested (stream unresolved)"
+    if m.menu.infoText then infoText = "On requested (stream unresolved)"
+    message = selectionLabel() + " - title " + m.menu.title.ToStr() + ", chapter " + m.menu.chapter.ToStr()
+    message += Chr(10) + audio + Chr(10) + "Subtitles: " + subtitles + Chr(10) + "Info Text: " + infoText
+    message += Chr(10) + Chr(10) + "Playback is unavailable for this scan. Check the source ISO and rescan it if it has changed."
+    AppMessage.Show(message, "DVD selection")
+end sub
+
+'-------------------------------------------------------------------------------
+' fitMenuRect
+'-------------------------------------------------------------------------------
+function fitMenuRect(video as object, viewportWidth as float, viewportHeight as float) as object
+    parts = Strings.ToString(video.aspectRatio).Split(":")
+    if parts.Count() <> 2 then throw "Invalid DVD display aspect ratio."
+    numerator = Number.ToFloat(parts[0], 0)
+    denominator = Number.ToFloat(parts[1], 0)
+    if numerator <= 0 or denominator <= 0 then throw "Invalid DVD display aspect ratio."
+    sourceWidth = Number.ToFloat(video.width, 0)
+    sourceHeight = Number.ToFloat(video.height, 0)
+    if sourceWidth <= 0 or sourceHeight <= 0 then throw "Invalid DVD source dimensions."
+    ratio = numerator / denominator
+    width = viewportWidth
+    height = width / ratio
+    if height > viewportHeight then
+        height = viewportHeight
+        width = height * ratio
+    end if
+    return { x: (viewportWidth - width) / 2, y: (viewportHeight - height) / 2, width: width, height: height, scaleX: width / sourceWidth, scaleY: height / sourceHeight }
+end function

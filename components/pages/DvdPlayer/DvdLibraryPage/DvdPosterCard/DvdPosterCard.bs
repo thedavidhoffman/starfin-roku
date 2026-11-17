@@ -1,0 +1,83 @@
+import "pkg:/source/MaskAssets.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.nodes = { host: m.top.findNode("posterHost"), title: m.top.findNode("title"), caption: m.top.findNode("caption") }
+    m.poster = { node: invalid }
+    MaskAssets.Apply(m.nodes.host, "poster-6-col-mask.png", [252, 378], [168, 252])
+    m.top.observeField("itemContent", "renderCard")
+    m.top.observeField("itemHasFocus", "updateFocus")
+    renderCard()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderCard
+'-------------------------------------------------------------------------------
+sub renderCard()
+    ' A recycled grid cell must never accept completion from its previous image.
+    previous = m.poster.node
+    m.poster.node = invalid
+    if previous <> invalid then
+        previous.unobserveField("loadStatus")
+        previous.uri = ""
+        m.nodes.host.removeChild(previous)
+    end if
+    m.nodes.title.text = ""
+    m.nodes.caption.text = ""
+    content = m.top.itemContent
+    if content = invalid then
+        updateFocus()
+        return
+    end if
+    m.nodes.title.text = content.title
+    m.nodes.caption.text = content.caption
+    updateFocus()
+    if not DvdPaths.IsMetadataPoster(content.posterPath, content.metadataId) then return
+    session = content.session
+    ' Request physical display pixels while retaining the metadata version cache key.
+    imageWidth = 252
+    if ResolutionProfile.IsHd() then imageWidth = 168
+    posterPath = content.posterPath
+    separator = "?"
+    if Instr(1, posterPath, "?") > 0 then separator = "&"
+    posterPath += separator + "width=" + imageWidth.ToStr()
+    media = JellyfinAuth.BuildMediaRequest(session.server, posterPath, session.token, session.userId)
+    if media.headers.Authorization = invalid then return
+    poster = m.nodes.host.createChild("Poster")
+    m.poster.node = poster
+    poster.width = 252
+    poster.height = 378
+    poster.loadDisplayMode = "scaleToFit"
+    poster.visible = false
+    agent = CreateObject("roHttpAgent")
+    agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    agent.AddHeader("Authorization", media.headers.Authorization)
+    poster.setHttpAgent(agent)
+    poster.observeField("loadStatus", "onPosterStatus")
+    poster.uri = media.url
+end sub
+
+'-------------------------------------------------------------------------------
+' onPosterStatus
+'-------------------------------------------------------------------------------
+sub onPosterStatus(event as object)
+    if m.poster.node = invalid then return
+    if not event.getRoSGNode().isSameNode(m.poster.node) then return
+    m.poster.node.visible = event.getData() = "ready"
+end sub
+
+'-------------------------------------------------------------------------------
+' updateFocus
+'-------------------------------------------------------------------------------
+sub updateFocus()
+    repeats = 0
+    if m.top.itemHasFocus then repeats = -1
+    m.nodes.title.repeatCount = repeats
+    m.nodes.caption.repeatCount = repeats
+end sub

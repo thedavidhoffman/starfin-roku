@@ -6,6 +6,8 @@ individual Starfin features.
 
 ## Table of Contents
 
+- [DVD Metadata Browser, Menus and ISO Playback POC](dvd-menu-demo.md)
+
 - [Collection Browse Preferences](collection-browse-preferences.md)
 
 - [System Information](system-information.md)

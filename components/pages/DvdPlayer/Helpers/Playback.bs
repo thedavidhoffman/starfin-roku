@@ -1,0 +1,224 @@
+'-------------------------------------------------------------------------------
+' startContent
+'-------------------------------------------------------------------------------
+sub startContent(capability as object)
+    if m.playback.active then return
+    stopPreview()
+    requestId = CreateObject("roDeviceInfo").GetRandomUUID()
+    m.playback = { active: true, stopping: false, task: invalid, video: invalid, timer: invalid, requestId: requestId, pauseRequested: false, buffering: true }
+    m.top.setFocus(true)
+    m.nodes.status.text = "Starting " + selectionLabel() + Chr(10) + "Back returns to the DVD menu"
+    m.nodes.spinner.control = SpinnerControl.Command.Start
+    timer = m.top.createChild("Timer")
+    m.playback.timer = timer
+    timer.duration = 60
+    timer.repeat = false
+    timer.observeField("fire", "onContentTimeout")
+    timer.control = TimerControl.Command.Start
+    task = m.top.createChild("DvdPlaybackTask")
+    m.playback.task = task
+    request = { server: m.session.server, token: m.session.token, userId: m.session.userId, requestId: requestId, startPath: capability.startPath, selection: m.rendering.selection }
+    request.discId = m.menu.manifest.id
+    task.request = request
+    task.observeField("response", "onContentResponse")
+    m.top.taskCreated = task
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onContentResponse
+'-------------------------------------------------------------------------------
+sub onContentResponse(event as object)
+    if not m.loading.active or m.playback.task = invalid then return
+    if not event.getRoSGNode().isSameNode(m.playback.task) then return
+    response = event.getData()
+    if response.requestId <> m.playback.requestId then return
+    if response.action = DvdMenu.PlaybackEvent.Closed then
+        task = m.playback.task
+        m.playback.task = invalid
+        task.unobserveField("response")
+        m.top.removeChild(task)
+        m.top.taskCreated = invalid
+        releaseContentVideo()
+        m.playback.active = false
+        m.playback.stopping = false
+        m.nodes.host.visible = true
+        m.nodes.contentHost.visible = false
+        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.nodes.status.text = ""
+        focusButton(m.menu.focused)
+        if Strings.ToString(response.message) <> "" then
+            showPlaybackMessage(response.message)
+        else
+            startPreview()
+        end if
+    else if response.action = DvdMenu.PlaybackEvent.Ready and not m.playback.stopping then
+        try
+            openContentVideo(response.payload)
+        catch error
+            stopContent(true)
+        end try
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' openContentVideo
+'-------------------------------------------------------------------------------
+sub openContentVideo(session as object)
+    media = JellyfinAuth.BuildMediaRequest(m.session.server, session.playlistPath, m.session.token, m.session.userId)
+    if media.headers.Authorization = invalid then throw "Missing DVD playback authentication."
+    video = m.nodes.contentHost.createChild("Video")
+    m.playback.video = video
+    video.width = 1920
+    video.height = 1080
+    video.enableUI = false
+    video.enableTrickPlay = false
+    video.loop = false
+    video.mute = false
+    agent = CreateObject("roHttpAgent")
+    agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    agent.AddHeader("Authorization", media.headers.Authorization)
+    video.setHttpAgent(agent)
+    content = JellyfinAuth.CreateContent(m.session.server, session.playlistPath, m.session.token, m.session.userId)
+    content.streamFormat = "hls"
+    content.live = false
+    ' EVENT HLS is finite content; start at the selected chapter, not its live edge.
+    content.playStart = 0
+    video.content = content
+    video.observeField("state", "onContentState")
+    video.control = MediaControl.Command.Play
+end sub
+
+'-------------------------------------------------------------------------------
+' onContentState
+'-------------------------------------------------------------------------------
+sub onContentState(event as object)
+    if not m.playback.active or m.playback.stopping or m.playback.video = invalid then return
+    if not event.getRoSGNode().isSameNode(m.playback.video) then return
+    state = event.getData()
+    m.log.write("Content state=" + Strings.ToString(state))
+    if state = VideoPlayerState.Value.Playing or state = VideoPlayerState.Value.Paused then
+        m.playback.buffering = false
+        m.playback.timer.control = TimerControl.Command.Stop
+        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.nodes.host.visible = false
+        m.nodes.contentHost.visible = true
+        m.nodes.status.text = ""
+        if state = VideoPlayerState.Value.Paused then m.nodes.status.text = "Paused — press Play or OK to resume"
+        if state = VideoPlayerState.Value.Playing and m.playback.pauseRequested then m.playback.video.control = MediaControl.Command.Pause
+        if state = VideoPlayerState.Value.Paused and not m.playback.pauseRequested then m.playback.video.control = MediaControl.Command.Resume
+    else if state = VideoPlayerState.Value.Buffering then
+        m.nodes.spinner.control = SpinnerControl.Command.Start
+        ' Repeated buffering events must not extend the same timeout indefinitely.
+        if not m.playback.buffering then m.playback.timer.control = TimerControl.Command.Start
+        m.playback.buffering = true
+    else if state = VideoPlayerState.Value.Finished then
+        stopContent(false)
+    else if state = VideoPlayerState.Value.Error then
+        m.log.write("Content errorCode=" + Strings.ToString(m.playback.video.errorCode))
+        stopContent(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' handleContentKey
+'-------------------------------------------------------------------------------
+function handleContentKey(key as string) as boolean
+    if key = Remote.Key.Back then
+        stopContent(false)
+    else if not m.playback.stopping and m.playback.video <> invalid then
+        if key = Remote.Key.Play or key = Remote.Key.PlayPause or key = Remote.Key.OK then
+            state = m.playback.video.state
+            if state = VideoPlayerState.Value.Playing or state = VideoPlayerState.Value.Paused then
+                m.playback.pauseRequested = not m.playback.pauseRequested
+                if m.playback.pauseRequested then
+                    m.playback.video.control = MediaControl.Command.Pause
+                else
+                    m.playback.video.control = MediaControl.Command.Resume
+                end if
+            end if
+        end if
+    end if
+    ' The page retains focus; arrows/replay/trick-play never reach the Video node.
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' onContentTimeout
+'-------------------------------------------------------------------------------
+sub onContentTimeout(event as object)
+    if m.playback.timer = invalid then return
+    if not event.getRoSGNode().isSameNode(m.playback.timer) then return
+    stopContent(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' stopContent
+'-------------------------------------------------------------------------------
+sub stopContent(diagnose as boolean)
+    if not m.playback.active then return
+    m.playback.stopping = true
+    releaseContentVideo()
+    m.nodes.contentHost.visible = false
+    m.nodes.host.visible = true
+    m.nodes.status.text = "Returning to DVD menu…"
+    m.nodes.spinner.control = SpinnerControl.Command.Start
+    if m.playback.task <> invalid then
+        if diagnose then
+            m.playback.task.diagnoseRequested = true
+        else
+            m.playback.task.cancelRequested = true
+        end if
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseContentVideo
+'-------------------------------------------------------------------------------
+sub releaseContentVideo()
+    video = m.playback.video
+    timer = m.playback.timer
+    m.playback.video = invalid
+    m.playback.timer = invalid
+    if video <> invalid then
+        video.unobserveField("state")
+        video.control = MediaControl.Command.Stop
+        video.content = invalid
+        m.nodes.contentHost.removeChild(video)
+    end if
+    if timer <> invalid then
+        timer.unobserveField("fire")
+        timer.control = TimerControl.Command.Stop
+        m.top.removeChild(timer)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' abandonContent
+'-------------------------------------------------------------------------------
+sub abandonContent()
+    task = m.playback.task
+    m.playback.task = invalid
+    m.playback.active = false
+    if task <> invalid then
+        task.unobserveField("response")
+        task.cancelRequested = true
+        ' Do not STOP the task: it must DELETE even when POST completes late.
+        m.top.removeChild(task)
+        m.top.taskCreated = invalid
+    end if
+    releaseContentVideo()
+    m.nodes.contentHost.visible = false
+    m.nodes.host.visible = true
+end sub
+
+'-------------------------------------------------------------------------------
+' showPlaybackMessage
+'-------------------------------------------------------------------------------
+sub showPlaybackMessage(message as string)
+    stopPreview()
+    focusButton(m.menu.focused)
+    m.rendering.awaitingMessage = true
+    m.rendering.lostFocus = false
+    AppMessage.Show(message, "DVD playback")
+end sub

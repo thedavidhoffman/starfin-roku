@@ -53,6 +53,43 @@ namespace tests
 
         @describe("Home media navigation")
 
+        @it("opens the DVD browser with the existing session and visible shell")
+        function _()
+            m.node.homePage.visible = true
+
+            'bs:disable-next-line 1140
+            dvdHandleHeaderSelected()
+
+            m.assertNotInvalid(m.node.dvdLibraryPage)
+            m.assertInvalid(m.node.dvdPlayerPage)
+            m.assertEqual(m.node.dvdLibraryPage.loadRequest.server, "http://server")
+            m.assertEqual(m.node.dvdLibraryPage.loadRequest.token, "token")
+            m.assertTrue(m.node.header.visible)
+            m.assertFalse(m.node.homePage.visible)
+            'bs:disable-next-line 1140
+            resetDynamicPages()
+        end function
+
+        @it("DVD browser closure restores Home and entry focus")
+        function _()
+            m.node.header.settings = { "display-account-badge": "off" }
+            'bs:disable-next-line 1140
+            dvdHandleHeaderSelected()
+            page = m.node.dvdLibraryPage
+            event = { source: page, getRoSGNode: function()
+                return m.source
+            end function }
+
+            'bs:disable-next-line 1140
+            dvdHandleLibraryClosed(event)
+
+            m.assertInvalid(m.node.dvdLibraryPage)
+            m.assertFalse(page.visible)
+            m.assertTrue(m.node.homePage.visible)
+            m.assertTrue(m.node.header.visible)
+            m.assertTrue(m.node.header.findNode("dvdDemoButton").hasFocus())
+        end function
+
         @it("opening a Home photo hides Home and closing restores it")
         function _()
             m.node.homePage.visible = true

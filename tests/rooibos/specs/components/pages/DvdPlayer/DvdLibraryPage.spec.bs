@@ -1,0 +1,146 @@
+namespace tests
+
+    @SGNode("DvdLibraryPage")
+    @suite("DVD library browser navigation")
+    class DvdLibraryPageTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            m.top.callFunc("deactivate")
+            m.top.loadRequest = { server: "http://server", token: "token", userId: "user" }
+            m.node.library.active = true
+            m.node.library.view = DvdMenu.BrowserView.Catalog
+            m.node.library.libraries = []
+            m.node.library.groups = []
+            m.node.library.catalogKey = ""
+            m.node.library.key = ""
+            m.node.library.index = 0
+            m.top.closeRequested = false
+        end function
+
+        protected override function afterEach()
+            m.top.callFunc("deactivate")
+        end function
+
+        function catalogEvent(libraries as object) as object
+            task = m.top.createChild("DvdDemoTask")
+            task.request = m.top.loadRequest
+            m.node.library.task = task
+            m.node.library.generation = 1
+            return { source: task, data: { requestId: 1, ok: true, payload: libraries }, getRoSGNode: function()
+                return m.source
+            end function, getData: function()
+                return m.data
+            end function }
+        end function
+
+        @describe("library discovery")
+
+        @it("opens a single library directly without an overlay")
+        function _()
+            'bs:disable-next-line 1001
+            m.stubCall(loadLibrary)
+            event = m.catalogEvent([{ id: "one", name: "DVDs", libraryPath: "Starfin/Dvd/Libraries/one" }])
+
+            'bs:disable-next-line 1140
+            onLibraryResponse(event)
+
+            m.assertEqual(m.node.library.view, DvdMenu.BrowserView.Library)
+            m.assertEqual(m.top.loadRequest.library.id, "one")
+            m.assertInvalid(m.top.overlayRequested)
+        end function
+
+        @it("renders multiple libraries as placeholder poster cards")
+        function _()
+            event = m.catalogEvent([{ id: "one", name: "Doctor Who", titleCount: 5 }, { id: "two", name: "Disney", titleCount: 2 }])
+
+            'bs:disable-next-line 1140
+            onLibraryResponse(event)
+
+            m.assertEqual(m.node.library.view, DvdMenu.BrowserView.Catalog)
+            m.assertEqual(m.node.nodes.grid.content.getChildCount(), 2)
+            m.assertEqual(m.node.nodes.grid.content.getChild(0).title, "Doctor Who")
+            m.assertEqual(m.node.nodes.grid.content.getChild(0).posterPath, "")
+            m.assertEqual(m.node.nodes.grid.content.getChild(1).caption, "2 DVDs")
+        end function
+
+        @it("returns to the selected library card when backing out of a drilldown")
+        function _()
+            m.node.library.view = DvdMenu.BrowserView.Library
+            m.node.library.libraries = [{ id: "one", name: "One" }, { id: "two", name: "Two" }]
+            m.node.library.catalogKey = "two"
+
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertEqual(m.node.library.view, DvdMenu.BrowserView.Catalog)
+            m.assertEqual(m.node.library.key, "two")
+            m.assertEqual(m.node.library.index, 1)
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("closes the browser from a single library")
+        function _()
+            m.node.library.view = DvdMenu.BrowserView.Library
+            m.node.library.libraries = [{ id: "one" }]
+
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("shows an empty state when no libraries exist")
+        function _()
+            event = m.catalogEvent([])
+
+            'bs:disable-next-line 1140
+            onLibraryResponse(event)
+
+            m.assertFalse(m.node.nodes.grid.visible)
+            m.assertTrue(m.node.nodes.status.text.Instr("No enabled DVD libraries") >= 0)
+        end function
+
+        @it("ignores responses from a replaced request")
+        function _()
+            event = m.catalogEvent([{ id: "old" }])
+            m.node.library.generation = 2
+
+            'bs:disable-next-line 1140
+            onLibraryResponse(event)
+
+            m.assertEqual(m.node.library.libraries.Count(), 0)
+            m.assertEqual(m.node.library.generation, 2)
+        end function
+
+        @describe("simple card presentation")
+
+        @it("uses year for single discs and count for grouped discs")
+        function _()
+            m.node.library.view = DvdMenu.BrowserView.Library
+            groups = [
+                { key: "a", name: "Film", year: "1981", discs: [{ name: "Long repeated filename" }], posterPath: "", metadataId: "" }
+                { key: "b", name: "Series", year: "1979", discs: [{}, {}, {}], posterPath: "", metadataId: "" }
+            ]
+
+            'bs:disable-next-line 1140
+            renderGroups(groups)
+
+            m.assertEqual(m.node.nodes.grid.content.getChild(0).caption, "1981")
+            m.assertEqual(m.node.nodes.grid.content.getChild(1).caption, "3 discs")
+            m.assertInvalid(m.top.findNode("overview"))
+        end function
+
+        @it("requests header focus from the first row")
+        function _()
+            m.node.nodes.grid.visible = false
+            m.top.focusExitUp = false
+
+            'bs:disable-next-line 1140
+            onKeyEvent("up", true)
+
+            m.assertTrue(m.top.focusExitUp)
+        end function
+
+    end class
+
+end namespace

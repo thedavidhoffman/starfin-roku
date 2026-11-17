@@ -1,0 +1,49 @@
+import "pkg:/source/String.bs"
+
+namespace DvdPaths
+
+    '---------------------------------------------------------------------------
+    ' DvdPaths.IsMetadataPoster
+    '---------------------------------------------------------------------------
+    function IsMetadataPoster(path as dynamic, metadataId as dynamic) as boolean
+        value = Strings.ToString(path)
+        pieces = value.Split("?")
+        if pieces.Count() > 2 then return false
+        if pieces.Count() = 2 then
+            version = CreateObject("roRegex", "^v=[A-Za-z0-9._~-]+$", "")
+            if not version.IsMatch(pieces[1]) then return false
+        end if
+        parts = pieces[0].Split("/")
+        if parts.Count() <> 5 then return false
+        expectedId = Strings.ToString(metadataId)
+        if expectedId = "" then expectedId = parts[3]
+        return IsScoped(pieces[0], "Metadata", expectedId) and parts[4] = "Poster"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DvdPaths.SameId
+    '---------------------------------------------------------------------------
+    function SameId(first as dynamic, second as dynamic) as boolean
+        leftId = LCase(Strings.ToString(first)).Replace("-", "")
+        rightId = LCase(Strings.ToString(second)).Replace("-", "")
+        uuid = CreateObject("roRegex", "^[0-9a-f]{32}$", "")
+        return uuid.IsMatch(leftId) and leftId = rightId
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DvdPaths.IsScoped
+    '---------------------------------------------------------------------------
+    function IsScoped(path as dynamic, collection as string, id as dynamic) as boolean
+        value = Strings.ToString(path)
+        safe = CreateObject("roRegex", "^[A-Za-z0-9._~/-]+$", "")
+        if not safe.IsMatch(value) then return false
+        parts = value.Split("/")
+        if parts.Count() < 4 then return false
+        if parts[0] <> "Starfin" or parts[1] <> "Dvd" or parts[2] <> collection then return false
+        if not SameId(parts[3], id) then return false
+        for each part in parts
+            if part = "" or part = "." or part = ".." then return false
+        end for
+        return true
+    end function
+end namespace

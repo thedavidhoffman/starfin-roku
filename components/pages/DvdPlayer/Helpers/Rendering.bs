@@ -1,0 +1,364 @@
+'-------------------------------------------------------------------------------
+' renderScreen
+'-------------------------------------------------------------------------------
+sub renderScreen(screen as object, requestedFocus as dynamic)
+    clearMenu()
+    screenName = m.menu.screen
+    asset = invalid
+    for each candidate in m.menu.manifest.disc.menuAssets
+        if candidate.id = screen.assetId then asset = candidate
+    end for
+    if asset = invalid then throw "Missing DVD menu asset."
+    if asset.titleSet = 0 then
+        videoAttributes = m.menu.manifest.disc.videoManagerMenuVideo
+    else
+        titleSet = findNumbered(m.menu.manifest.disc.titleSets, asset.titleSet)
+        videoAttributes = titleSet.menuVideo
+    end if
+    ' The SceneGraph design space is 1920x1080 even on a 720p output.
+    rect = fitMenuRect(videoAttributes, 1920, 1080)
+    root = m.nodes.host.createChild("Group")
+    root.translation = [rect.x, rect.y]
+    m.rendering.root = root
+    m.rendering.rect = rect
+    m.rendering.asset = asset
+    previewHost = root.createChild("Group")
+    previewHost.id = "previewHost"
+    m.rendering.previewHost = previewHost
+    ' The retained artwork must cover the video plane during loop transitions.
+    image = root.createChild("Poster")
+    image.id = "menuImage"
+    image.width = rect.width
+    image.height = rect.height
+    image.loadDisplayMode = "scaleToFill"
+    media = menuMediaRequest(asset.image)
+    agent = CreateObject("roHttpAgent")
+    agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    agent.AddHeader("Authorization", media.headers.Authorization)
+    image.setHttpAgent(agent)
+    m.rendering.image = image
+    image.observeField("loadStatus", "onImageStatus")
+    image.uri = media.url
+    hotspots = root.createChild("Group")
+    hotspots.id = "hotspots"
+    navigation = asset.navigation[0]
+    for each geometry in navigation.buttons
+        if geometry.group = Number.ToInteger(screen.buttonGroup, 1) then
+            mapping = screen.buttons[Strings.ToString(geometry.number)]
+            if mapping = invalid then throw "Missing DVD button mapping."
+            if Number.ToFloat(geometry.width, 0) <= 0 or Number.ToFloat(geometry.height, 0) <= 0 then throw "Invalid DVD hotspot size."
+            hotspot = hotspots.createChild("Group")
+            hotspot.id = "dvdButton" + Strings.ToString(geometry.number)
+            hotspot.focusable = true
+            hotspot.translation = [geometry.x * rect.scaleX, geometry.y * rect.scaleY]
+            hotspot.addFields({ audioGuideText: Strings.ToString(mapping.label), hiddenHighlight: mapping.hidden = true })
+            width = geometry.width * rect.scaleX
+            height = geometry.height * rect.scaleY
+            highlight = hotspot.createChild("Group")
+            highlight.visible = false
+            fill = highlight.createChild("Rectangle")
+            fill.width = width
+            fill.height = height
+            fill.color = &hFFE08035
+            for each edge in [[0, 0, width, 3], [0, height - 3, width, 3], [0, 0, 3, height], [width - 3, 0, 3, height]]
+                line = highlight.createChild("Rectangle")
+                line.translation = [edge[0], edge[1]]
+                line.width = edge[2]
+                line.height = edge[3]
+                line.color = &hFFE080FF
+            end for
+            m.rendering.buttons[Strings.ToString(geometry.number)] = hotspot
+            m.rendering.geometry.Push(geometry)
+        end if
+    end for
+    if m.rendering.geometry.Count() = 0 then throw "DVD menu has no buttons."
+    focus = requestedFocus
+    if focus = invalid then focus = navigation.forcedSelect
+    if not m.rendering.buttons.DoesExist(Strings.ToString(focus)) then focus = m.rendering.geometry[0].number
+    m.loading.phase = DvdMenu.Phase.Ready
+    m.nodes.status.text = ""
+    focusButton(Number.ToInteger(focus, 0))
+    if m.menu.screen <> screenName then return
+    startPreview()
+end sub
+
+'-------------------------------------------------------------------------------
+' menuMediaRequest
+'-------------------------------------------------------------------------------
+function menuMediaRequest(path as dynamic, live = false as boolean) as object
+    path = Strings.ToString(path)
+    if not DvdPaths.IsScoped(path, "Discs", m.menu.manifest.id) then throw "Invalid DVD asset path."
+    parts = path.Split("/")
+    if parts.Count() < 6 then throw "Invalid DVD asset path."
+    if live then
+        if parts[4] <> "Loops" then throw "Invalid DVD loop path."
+    else
+        if parts[4] <> "Assets" then throw "Invalid DVD asset path."
+    end if
+    media = JellyfinAuth.BuildMediaRequest(m.session.server, path, m.session.token, m.session.userId)
+    if media.headers.Authorization = invalid then throw "DVD assets require session authentication."
+    return media
+end function
+
+'-------------------------------------------------------------------------------
+' focusButton
+'-------------------------------------------------------------------------------
+sub focusButton(buttonNumber as integer)
+    key = buttonNumber.ToStr()
+    if not m.rendering.buttons.DoesExist(key) then return
+    m.menu.focused = buttonNumber
+    for each buttonKey in m.rendering.buttons
+        button = m.rendering.buttons[buttonKey]
+        button.getChild(0).visible = buttonKey = key and button.hiddenHighlight <> true
+    end for
+    m.rendering.buttons[key].setFocus(true)
+    for each geometry in m.rendering.geometry
+        if geometry.number = buttonNumber and geometry.autoAction = true then
+            mapping = m.menu.manifest.menuMap.screens[m.menu.screen].buttons[key]
+            if mapping.action <> DvdMenu.Action.Navigate then return
+            chainKey = m.menu.screen + ":" + key
+            if m.menu.autoChain.DoesExist(chainKey) or m.menu.autoChain.Count() >= 16 then throw "Automatic DVD navigation cycle."
+            m.menu.autoChain[chainKey] = true
+            goScreen(mapping.screen, mapping.focusButton)
+            return
+        end if
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' clearMenu
+'-------------------------------------------------------------------------------
+sub clearMenu()
+    m.rendering.awaitingMessage = false
+    m.rendering.lostFocus = false
+    stopPreview()
+    if m.rendering.image <> invalid then m.rendering.image.unobserveField("loadStatus")
+    if m.rendering.root <> invalid then m.nodes.host.removeChild(m.rendering.root)
+    m.rendering.root = invalid
+    m.rendering.image = invalid
+    m.rendering.asset = invalid
+    m.rendering.buttons = {}
+    m.rendering.geometry = []
+    m.rendering.previewHost = invalid
+    m.rendering.preview = invalid
+    m.rendering.selection = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' startPreview
+'-------------------------------------------------------------------------------
+sub startPreview()
+    stopPreview()
+    if not m.loading.active or m.rendering.asset = invalid then return
+    m.nodes.status.text = ""
+    path = Strings.ToString(m.rendering.asset.previewLoop)
+    live = path <> ""
+    if not live then path = Strings.ToString(m.rendering.asset.previewVideo)
+    if path = "" then return
+    if live and m.rendering.previewFailures.DoesExist(path) then
+        if m.rendering.previewFailures[path].TotalMilliseconds() < 30000 then return
+        m.rendering.previewFailures.Delete(path)
+    end if
+    try
+        m.rendering.preview = { covered: true, awaitingWrap: false, lastPosition: -1.0, playing: false, live: live, path: path }
+        media = menuMediaRequest(path, live)
+        video = m.rendering.previewHost.createChild("Video")
+        m.rendering.video = video
+        video.id = "menuPreview"
+        video.width = m.rendering.rect.width
+        video.height = m.rendering.rect.height
+        video.visible = true
+        video.enableUI = false
+        video.enableTrickPlay = false
+        video.mute = false
+        ' Only finite MP4s loop locally; live HLS repeats on the server.
+        video.loop = not live
+        video.notificationInterval = 0.1
+        agent = CreateObject("roHttpAgent")
+        agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        agent.AddHeader("Authorization", media.headers.Authorization)
+        video.setHttpAgent(agent)
+        content = JellyfinAuth.CreateContent(m.session.server, path, m.session.token, m.session.userId)
+        content.streamFormat = "mp4"
+        if live then content.streamFormat = "hls"
+        m.log.write("Preview start asset=" + Strings.ToString(m.rendering.asset.id) + " format=" + content.streamFormat + " clientLoop=" + Strings.ToString(video.loop))
+        video.content = content
+        video.observeField("state", "onPreviewState")
+        video.observeField("position", "onPreviewPosition")
+        timer = m.rendering.previewHost.createChild("Timer")
+        m.rendering.timer = timer
+        timer.duration = 20
+        ' Allow the server's 15-second startup deadline plus Roku buffering.
+        if live then timer.duration = 35
+        timer.repeat = false
+        timer.observeField("fire", "onPreviewTimeout")
+        timer.control = TimerControl.Command.Start
+        video.control = MediaControl.Command.Play
+    catch error
+        failPreview()
+    end try
+end sub
+
+'-------------------------------------------------------------------------------
+' failPreview
+'-------------------------------------------------------------------------------
+sub failPreview()
+    if m.rendering.preview <> invalid then
+        if m.rendering.preview.live = true then
+            ' No automatic retry; revisiting the menu must respect Retry-After: 30.
+            m.rendering.previewFailures[m.rendering.preview.path] = CreateObject("roTimespan")
+        end if
+    end if
+    stopPreview()
+    if m.loading.active then m.nodes.status.text = "Preview unavailable. Press Options to refresh DVD menus."
+end sub
+
+'-------------------------------------------------------------------------------
+' stopPreview
+'-------------------------------------------------------------------------------
+sub stopPreview()
+    video = m.rendering.video
+    timer = m.rendering.timer
+    ' Revoke ownership before stopping: queued events must not affect a new screen.
+    m.rendering.video = invalid
+    m.rendering.timer = invalid
+    setPreviewCovered(true)
+    if timer <> invalid then
+        timer.unobserveField("fire")
+        timer.control = TimerControl.Command.Stop
+        m.rendering.previewHost.removeChild(timer)
+    end if
+    if video <> invalid then
+        m.log.write("Preview stop")
+        video.unobserveField("state")
+        video.unobserveField("position")
+        video.control = MediaControl.Command.Stop
+        video.content = invalid
+        m.rendering.previewHost.removeChild(video)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onPreviewState
+'-------------------------------------------------------------------------------
+sub onPreviewState(event as object)
+    if not m.loading.active or m.rendering.video = invalid then return
+    if not event.getRoSGNode().isSameNode(m.rendering.video) then return
+    state = event.getData()
+    m.log.write("Preview state=" + Strings.ToString(state) + " live=" + Strings.ToString(m.rendering.preview.live) + " position=" + Strings.ToString(m.rendering.video.position) + " duration=" + Strings.ToString(m.rendering.video.duration))
+    if state = VideoPlayerState.Value.Error then
+        details = "Preview errorCode=" + Strings.ToString(m.rendering.video.errorCode) + " errorMsg=" + Strings.ToString(m.rendering.video.errorMsg) + " errorStr=" + Strings.ToString(m.rendering.video.errorStr)
+        token = Strings.ToString(m.session.token)
+        if token <> "" then details = details.Replace(token, "[redacted]")
+        m.log.write(details)
+    end if
+    if state = VideoPlayerState.Value.Playing then
+        m.rendering.preview.playing = true
+    else if state = VideoPlayerState.Value.Buffering or state = VideoPlayerState.Value.Finished then
+        if state = VideoPlayerState.Value.Finished and m.rendering.preview.live = true then
+            failPreview()
+            return
+        end if
+        m.rendering.preview.playing = false
+        if state = VideoPlayerState.Value.Finished then m.rendering.preview.awaitingWrap = true
+        setPreviewCovered(true)
+    else if state = VideoPlayerState.Value.Error then
+        failPreview()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onPreviewPosition
+'-------------------------------------------------------------------------------
+sub onPreviewPosition(event as object)
+    if not m.loading.active or m.rendering.video = invalid then return
+    if not event.getRoSGNode().isSameNode(m.rendering.video) then return
+    updatePreviewPosition(Number.ToFloat(event.getData(), -1), Number.ToFloat(m.rendering.video.duration, 0))
+end sub
+
+'-------------------------------------------------------------------------------
+' updatePreviewPosition
+'-------------------------------------------------------------------------------
+sub updatePreviewPosition(position as float, duration as float)
+    if position < 0 then return
+    previous = m.rendering.preview.lastPosition
+    m.rendering.preview.lastPosition = position
+    if m.rendering.preview.live = true then
+        ' Live duration describes a moving window, not an approaching loop boundary.
+        if m.rendering.preview.playing and previous >= 0 and position > previous then setPreviewCovered(false)
+        return
+    end if
+    lead = 0.75
+    if duration > 0 and duration < 3 then lead = duration / 4
+    if duration > 0 and position >= duration - lead then
+        ' Cover before EOF: native loops need not publish an intervening state.
+        m.rendering.preview.awaitingWrap = true
+        setPreviewCovered(true)
+        return
+    end if
+    if m.rendering.preview.awaitingWrap then
+        if previous >= 0 and position < previous then m.rendering.preview.awaitingWrap = false
+        return
+    end if
+    ' A playing state alone can precede usable video. Wait for forward progress.
+    if m.rendering.preview.playing and previous >= 0 and position > previous and position >= 0.15 then setPreviewCovered(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' setPreviewCovered
+'-------------------------------------------------------------------------------
+sub setPreviewCovered(covered as boolean)
+    if m.rendering.image <> invalid then m.rendering.image.visible = covered
+    if m.rendering.preview = invalid then return
+    changed = m.rendering.preview.covered <> covered
+    m.rendering.preview.covered = covered
+    if changed then m.log.write("Preview cover=" + Strings.ToString(covered) + " live=" + Strings.ToString(m.rendering.preview.live) + " awaitingWrap=" + Strings.ToString(m.rendering.preview.awaitingWrap) + " position=" + Strings.ToString(m.rendering.preview.lastPosition))
+    if m.rendering.timer = invalid then return
+    if covered then
+        if changed then m.rendering.timer.control = TimerControl.Command.Start
+    else
+        m.rendering.timer.control = TimerControl.Command.Stop
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onPreviewTimeout
+'-------------------------------------------------------------------------------
+sub onPreviewTimeout(event as object)
+    if m.rendering.timer = invalid then return
+    if not event.getRoSGNode().isSameNode(m.rendering.timer) then return
+    m.log.write("Preview covered timeout")
+    failPreview()
+end sub
+
+'-------------------------------------------------------------------------------
+' onImageStatus
+'-------------------------------------------------------------------------------
+sub onImageStatus(event as object)
+    if m.rendering.image = invalid or not m.loading.active then return
+    if not event.getRoSGNode().isSameNode(m.rendering.image) then return
+    if event.getData() = "failed" then
+        ' A late menu-artwork failure must not interrupt content playback.
+        if m.playback.active then return
+        if not m.loading.refreshedAssets then
+            m.loading.refreshedAssets = true
+            beginLoad()
+        else
+            showFailure("The DVD menu image could not be loaded. The scan may have changed.")
+        end if
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onFocusChanged
+'-------------------------------------------------------------------------------
+sub onFocusChanged()
+    if not m.loading.active or not m.rendering.awaitingMessage then return
+    if not m.top.isInFocusChain() then
+        m.rendering.lostFocus = true
+    else if m.rendering.lostFocus then
+        m.rendering.awaitingMessage = false
+        m.rendering.lostFocus = false
+        startPreview()
+    end if
+end sub

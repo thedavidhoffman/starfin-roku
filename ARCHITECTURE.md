@@ -183,6 +183,29 @@ the normal routing checks.
 
 ## Media flow
 
+The temporary DVD demo is isolated under `components/pages/DvdPlayer`.
+`DvdLibraryPage` owns correlated catalog and library requests, automatic
+single-library entry, placeholder library cards, metadata grouping, poster presentation,
+and retained grid focus. Its `DvdPosterCard` owns authenticated image loading and
+stale-load isolation. `Helpers/LibraryModel.bs` stays feature-local. Multi-disc
+selection uses `Catalog/DvdDiscDialog` through the top-level OverlayHost.
+The feature-local Paths namespace validates returned UUID-scoped relative paths,
+including metadata poster version queries, for tasks and rendering.
+MainScene passes explicit session context and retains the hidden browser while
+DvdPlayer is active. Player exit restores the retained browser grid and focus without a refresh;
+browser exit returns Home. DvdLibraryPage owns inline catalog/library navigation: a single library is opened directly, multiple libraries use placeholder poster cards. The browser is transparent beneath the shared header/clock; only DVD menus and playback hide the header. Global reset cleans up both pages. Disc
+paths, initial selections, settings aliases, and button groups follow the manifest.
+The feature also owns
+its component-local geometry, state, and rendering helpers. DvdPlayer owns the
+plugin manifest task, authenticated menu artwork/previews, remote focus,
+history, and plugin-backed ISO content playback. Its local Playback helper owns
+the finite fullscreen Video surface, pause/Back controls, and exact menu return.
+DvdPlaybackTask serializes session start, 30-second heartbeats, failure status,
+and deletion, including cancellation while POST is pending. Missing capability
+retains the selection acknowledgment. MainScene routes entry and
+exit with explicit session context; the existing playback controllers are not
+involved. See [.docs/feature/dvd-menu-demo.md](.docs/feature/dvd-menu-demo.md).
+
 Libraries own loading, filtering, paging, and their grid state. Selecting an item
 emits the context required to open a detail page. Detail pages own metadata,
 watched state, stream selection, local browse state, and playback selections.

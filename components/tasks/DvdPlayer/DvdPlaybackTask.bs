@@ -1,0 +1,123 @@
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/Json.bs"
+import "pkg:/source/Logger.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Contracts.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    m.log = new Logger("DvdPlaybackTask", m.global.logService)
+    request = m.top.request
+    m.playback = { request: request, headers: invalid, basePath: "", sessionPath: "", started: false, authExpired: false }
+    m.playback.headers = JellyfinAuth.BuildTokenHeaders(request.token)
+    m.playback.basePath = Strings.ToString(request.startPath)
+    m.playback.sessionPath = m.playback.basePath + "/" + request.requestId
+    message = ""
+    try
+        message = runSession()
+    catch error
+        message = "The DVD playback session could not be completed."
+    end try
+    ' This task is allowed to finish cleanup even after the page is removed.
+    if m.playback.started then
+        result = playbackRequest(m.playback.sessionPath, "DELETE", invalid)
+        if not result.ok and message = "" then message = "Playback stopped, but server cleanup failed. The session will expire automatically."
+    end if
+    m.top.response = { action: DvdMenu.PlaybackEvent.Closed, requestId: request.requestId, message: message, errorMessage: message, authExpired: m.playback.authExpired }
+end sub
+
+'-------------------------------------------------------------------------------
+' runSession
+'-------------------------------------------------------------------------------
+function runSession() as string
+    if not DvdPaths.IsScoped(m.playback.basePath, "Discs", m.playback.request.discId) then return "Invalid DVD playback endpoint."
+    parts = m.playback.basePath.Split("/")
+    if parts.Count() <> 5 or parts[4] <> "Playback" then return "Invalid DVD playback endpoint."
+    uuid = CreateObject("roRegex", "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", "")
+    if not uuid.IsMatch(m.playback.request.requestId) then return "Invalid DVD playback request identity."
+    if m.top.cancelRequested then return ""
+    selection = m.playback.request.selection
+    body = Json.Object([
+        Json.Pair("requestId", m.playback.request.requestId),
+        Json.NumberPair("titleNumber", selection.titleNumber),
+        Json.NumberPair("chapterNumber", selection.chapterNumber),
+        Json.String("audioTrackNumber") + ":" + Json.Serialize(selection.audioTrackNumber),
+        Json.BooleanPair("requestedSubtitlesEnabled", selection.requestedSubtitlesEnabled),
+        Json.BooleanPair("requestedInfoTextEnabled", selection.requestedInfoTextEnabled)
+    ])
+    ' Even a lost POST response can leave a session; DELETE uses the known UUID.
+    m.playback.started = true
+    result = playbackRequest(m.playback.basePath, "POST", body)
+    if m.top.cancelRequested then return ""
+    if not result.ok then return Strings.ToString(result.errorMessage, "Unable to start DVD playback.")
+    data = result.data
+    if not validSession(data) then
+        details = Strings.ToString(result.responseText)
+        token = Strings.ToString(m.playback.request.token)
+        if token <> "" then details = details.Replace(token, "[redacted]")
+        m.log.write("Rejected playback response status=" + Strings.ToString(result.status) + " parsedType=" + type(data) + " body=" + details)
+        return "The plugin returned an unsupported playback session."
+    end if
+    if data.state = DvdMenu.PlaybackState.Failed then return Strings.ToString(data.error, "DVD playback failed.")
+    m.top.response = { action: DvdMenu.PlaybackEvent.Ready, requestId: m.playback.request.requestId, payload: data }
+    port = CreateObject("roMessagePort")
+    m.top.observeField("cancelRequested", port)
+    m.top.observeField("diagnoseRequested", port)
+    heartbeat = CreateObject("roTimespan")
+    while not m.top.cancelRequested
+        if m.top.diagnoseRequested then
+            status = playbackRequest(data.statusPath, "GET", invalid)
+            if status.ok and status.data <> invalid then
+                detail = Strings.ToString(status.data.error)
+                if detail <> "" then return detail
+            else if not status.ok then
+                return Strings.ToString(status.errorMessage, "Unable to read DVD playback status.")
+            end if
+            return "The DVD stream could not be played. Please select it again to retry."
+        end if
+        if heartbeat.TotalMilliseconds() >= 30000 then
+            heartbeat.Mark()
+            result = playbackRequest(data.heartbeatPath, "POST", "")
+            if not result.ok then return Strings.ToString(result.errorMessage, "The DVD playback session could not be kept alive.")
+        end if
+        wait(1000, port)
+    end while
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' validSession
+'-------------------------------------------------------------------------------
+function validSession(data as dynamic) as boolean
+    if type(data) <> "roAssociativeArray" then return false
+    if data.schemaVersion <> "starfin-dvd-playback/0.1" then return false
+    ' Jellyfin serializes GUID values without hyphens; route strings retain them.
+    sessionId = LCase(Strings.ToString(data.sessionId))
+    requestId = LCase(m.playback.request.requestId)
+    if sessionId <> requestId and sessionId <> requestId.Replace("-", "") then return false
+    if data.playlistPath <> m.playback.sessionPath + "/index.m3u8" or data.statusPath <> m.playback.sessionPath then return false
+    if data.stopPath <> m.playback.sessionPath or data.heartbeatPath <> m.playback.sessionPath + "/Heartbeat" then return false
+    if data.streamFormat <> "hls" or data.isLive <> false or data.loop <> false or data.canSeek <> false then return false
+    if data.canPause <> true or data.heartbeatIntervalSeconds <> 30 then return false
+    return data.state = DvdMenu.PlaybackState.Starting or data.state = DvdMenu.PlaybackState.Streaming or data.state = DvdMenu.PlaybackState.Completed or data.state = DvdMenu.PlaybackState.Failed
+end function
+
+'-------------------------------------------------------------------------------
+' playbackRequest
+'-------------------------------------------------------------------------------
+function playbackRequest(path as string, method as string, body as dynamic) as object
+    result = HttpClient.Request(Url.Resolve(m.playback.request.server, path), method, invalid, body, m.playback.headers, true, 15000)
+    if method <> "DELETE" and result.authExpired = true then m.playback.authExpired = true
+    return result
+end function

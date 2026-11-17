@@ -1,0 +1,293 @@
+import "pkg:/source/String.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/Remote.bs"
+import "pkg:/source/TaskControl.bs"
+import "pkg:/source/SpinnerControl.bs"
+import "pkg:/source/VideoCardGridLayout.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Contracts.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/LibraryModel.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    m.library = { active: false, task: invalid, generation: 0, groups: [], key: "", index: 0, libraries: [], catalogKey: "", view: DvdMenu.BrowserView.Catalog }
+    spec = VideoCardGridLayout.GetSpec("poster", "cards", 6)
+    m.nodes.grid.itemSize = spec.itemSize
+    m.nodes.grid.itemSpacing = spec.itemSpacing
+    m.nodes.grid.focusBitmapUri = spec.focusBitmapUri
+    initHandlers()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.nodes = { grid: m.top.findNode("posters"), name: m.top.findNode("libraryName"), status: m.top.findNode("status"), spinner: m.top.findNode("loading") }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.nodes.grid.observeField("itemFocused", "onGroupFocused")
+    m.nodes.grid.observeField("itemSelected", "onGroupSelected")
+end sub
+
+'-------------------------------------------------------------------------------
+' activate
+'-------------------------------------------------------------------------------
+sub activate()
+    if m.library.active then
+        focusBrowser()
+        return
+    end if
+    m.library.active = true
+    m.top.visible = true
+    ' Returning from a DVD reuses the retained grid and decoded posters.
+    if m.nodes.grid.visible and m.library.groups.Count() > 0 then
+        focusBrowser()
+    else
+        loadLibrary()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    m.library.active = false
+    m.top.visible = false
+    releaseLibraryTask()
+    m.nodes.spinner.control = SpinnerControl.Command.Stop
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseLibraryTask
+'-------------------------------------------------------------------------------
+sub releaseLibraryTask()
+    task = m.library.task
+    m.library.task = invalid
+    if task = invalid then return
+    task.unobserveField("response")
+    task.control = TaskControl.Command.Stop
+    m.top.removeChild(task)
+end sub
+
+'-------------------------------------------------------------------------------
+' loadLibrary
+'-------------------------------------------------------------------------------
+sub loadLibrary()
+    if not m.library.active then return
+    releaseLibraryTask()
+    m.library.generation++
+    m.nodes.status.text = ""
+    m.nodes.grid.visible = false
+    m.nodes.name.text = "DVD libraries"
+    if m.library.view = DvdMenu.BrowserView.Library then m.nodes.name.text = Strings.ToString(m.top.loadRequest.library.name, "DVD library")
+    m.nodes.spinner.control = SpinnerControl.Command.Start
+    m.top.setFocus(true)
+    task = m.top.createChild("DvdDemoTask")
+    m.library.task = task
+    request = {}
+    request.Append(m.top.loadRequest)
+    request.action = DvdMenu.Request.Catalog
+    if m.library.view = DvdMenu.BrowserView.Library then request.action = DvdMenu.Request.Library
+    request.requestId = m.library.generation
+    task.request = request
+    m.top.taskCreated = task
+    task.observeField("response", "onLibraryResponse")
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onLibraryResponse
+'-------------------------------------------------------------------------------
+sub onLibraryResponse(event as object)
+    if not m.library.active or m.library.task = invalid then return
+    if not event.getRoSGNode().isSameNode(m.library.task) then return
+    response = event.getData()
+    if response.requestId <> m.library.generation then return
+    request = m.library.task.request
+    releaseLibraryTask()
+    m.nodes.spinner.control = SpinnerControl.Command.Stop
+    if response.authExpired = true then
+        deactivate()
+        m.top.authenticationRequired = { request: request, response: response }
+        return
+    end if
+    if response.ok <> true then
+        m.nodes.grid.visible = false
+        m.nodes.status.text = Strings.ToString(response.errorMessage, "Unable to load DVDs.") + Chr(10) + "Press OK to retry or Back to return."
+        m.top.setFocus(true)
+        return
+    end if
+    if m.library.view = DvdMenu.BrowserView.Catalog then
+        m.library.libraries = response.payload
+        if m.library.libraries.Count() = 1 then
+            openLibrary(m.library.libraries[0])
+        else
+            showLibraries()
+        end if
+    else
+        renderGroups(groupLibraryDiscs(response.payload))
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderGroups
+'-------------------------------------------------------------------------------
+sub renderGroups(groups as object)
+    restoreIndex = m.library.index
+    if restoreIndex >= groups.Count() then restoreIndex = groups.Count() - 1
+    if restoreIndex < 0 then restoreIndex = 0
+    content = CreateObject("roSGNode", "ContentNode")
+    session = m.top.loadRequest
+    for index = 0 to groups.Count() - 1
+        group = groups[index]
+        if group.key = m.library.key then restoreIndex = index
+        caption = group.discs.Count().ToStr() + " discs"
+        if group.discs.Count() = 1 then caption = Strings.ToString(group.year)
+        if m.library.view = DvdMenu.BrowserView.Catalog then caption = Strings.ToString(group.library.titleCount, "0") + " DVDs"
+        card = content.createChild("ContentNode")
+        card.title = group.name
+        card.addFields({ caption: caption, posterPath: group.posterPath, metadataId: group.metadataId, session: { server: session.server, token: session.token, userId: session.userId } })
+    end for
+    m.library.groups = groups
+    m.nodes.grid.content = content
+    m.nodes.grid.visible = groups.Count() > 0
+    m.nodes.status.text = ""
+    if groups.Count() = 0 then
+        m.nodes.status.text = "No published DVD scans are available in this library. Press OK to refresh or Back to return."
+        if m.library.view = DvdMenu.BrowserView.Catalog then m.nodes.status.text = "No enabled DVD libraries are available. Press OK to refresh or Back to return."
+    else
+        m.nodes.grid.jumpToItem = restoreIndex
+        showGroup(restoreIndex)
+    end if
+    focusBrowser()
+end sub
+
+'-------------------------------------------------------------------------------
+' showGroup
+'-------------------------------------------------------------------------------
+sub showGroup(index as integer)
+    if index < 0 or index >= m.library.groups.Count() then return
+    group = m.library.groups[index]
+    m.library.index = index
+    m.library.key = group.key
+end sub
+
+'-------------------------------------------------------------------------------
+' onGroupFocused
+'-------------------------------------------------------------------------------
+sub onGroupFocused()
+    showGroup(m.nodes.grid.itemFocused)
+end sub
+
+'-------------------------------------------------------------------------------
+' onGroupSelected
+'-------------------------------------------------------------------------------
+sub onGroupSelected()
+    if not m.library.active or m.library.task <> invalid then return
+    index = m.nodes.grid.itemSelected
+    if index < 0 or index >= m.library.groups.Count() then return
+    showGroup(index)
+    group = m.library.groups[index]
+    if m.library.view = DvdMenu.BrowserView.Catalog then
+        openLibrary(group.library)
+        return
+    end if
+    if group.discs.Count() = 1 then
+        m.top.discSelected = group.discs[0]
+    else
+        m.top.overlayRequested = { id: DvdMenu.Overlay.Discs, componentName: "DvdDiscDialog", openFunction: "openPicker", closeField: "closeRequested", groupKey: group.key, groupName: group.name, discs: group.discs }
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' handleDiscPickerClosed
+'-------------------------------------------------------------------------------
+sub handleDiscPickerClosed(groupKey as string, selectedDisc as dynamic)
+    if not m.library.active then return
+    if selectedDisc <> invalid and groupKey = m.library.key then
+        for each disc in m.library.groups[m.library.index].discs
+            if DvdPaths.SameId(disc.id, selectedDisc.id) then
+                m.top.discSelected = disc
+                return
+            end if
+        end for
+    end if
+    focusBrowser()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusBrowser
+'-------------------------------------------------------------------------------
+sub focusBrowser()
+    if not m.library.active then return
+    if m.nodes.grid.visible and m.library.task = invalid then
+        m.nodes.grid.setFocus(true)
+    else
+        m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = Remote.Key.Up then
+        if not m.nodes.grid.visible or m.nodes.grid.itemFocused < m.nodes.grid.numColumns then
+            m.top.focusExitUp = true
+            return true
+        end if
+    end if
+    if key = Remote.Key.Back then
+        if m.library.view = DvdMenu.BrowserView.Library and m.library.libraries.Count() > 1 then
+            showLibraries()
+        else
+            m.top.closeRequested = true
+        end if
+        return true
+    end if
+    if key = Remote.Key.OK and not m.nodes.grid.visible then
+        if m.library.task = invalid then loadLibrary()
+        return true
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' showLibraries
+'-------------------------------------------------------------------------------
+sub showLibraries()
+    releaseLibraryTask()
+    m.nodes.spinner.control = SpinnerControl.Command.Stop
+    m.library.view = DvdMenu.BrowserView.Catalog
+    m.library.key = m.library.catalogKey
+    m.library.index = 0
+    m.nodes.name.text = "DVD libraries"
+    groups = []
+    for each library in m.library.libraries
+        groups.Push({ key: library.id, name: library.name, library: library, discs: [], posterPath: "", metadataId: "", year: "" })
+    end for
+    renderGroups(groups)
+end sub
+
+'-------------------------------------------------------------------------------
+' openLibrary
+'-------------------------------------------------------------------------------
+sub openLibrary(library as object)
+    m.library.catalogKey = library.id
+    m.library.view = DvdMenu.BrowserView.Library
+    m.library.key = ""
+    m.library.index = 0
+    request = {}
+    request.Append(m.top.loadRequest)
+    request.library = library
+    m.top.loadRequest = request
+    loadLibrary()
+end sub

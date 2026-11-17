@@ -1,0 +1,101 @@
+import "pkg:/components/pages/DvdPlayer/Helpers/Contracts.bs"
+
+'-------------------------------------------------------------------------------
+' dvdHandleHeaderSelected
+'-------------------------------------------------------------------------------
+sub dvdHandleHeaderSelected()
+    if m.session = invalid then return
+    resetDynamicPages()
+    hideHome()
+    page = CreateObject("roSGNode", "DvdLibraryPage")
+    page.id = "dvdLibrary"
+    page.observeField("closeRequested", "dvdHandleLibraryClosed")
+    page.observeField("discSelected", "dvdHandleDiscSelected")
+    page.observeField("overlayRequested", "dvdHandleOverlayRequested")
+    page.observeField("focusExitUp", "navHandleHomeFocusExitUp")
+    page.observeField("authenticationRequired", "dvdHandleAuthenticationRequired")
+    page.loadRequest = { server: m.session.server, token: m.session.token, userId: m.session.userId }
+    m.dvdLibraryPage = page
+    authAppendDynamicPage(page)
+    m.header.visible = true
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleLibraryClosed
+'-------------------------------------------------------------------------------
+sub dvdHandleLibraryClosed(event as object)
+    if m.dvdLibraryPage = invalid then return
+    if not event.getRoSGNode().isSameNode(m.dvdLibraryPage) then return
+    resetDynamicPages()
+    showHome()
+    m.header.callFunc("focusDvdDemoButton")
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleOverlayRequested
+'-------------------------------------------------------------------------------
+sub dvdHandleOverlayRequested(event as object)
+    if m.dvdLibraryPage = invalid then return
+    if not event.getRoSGNode().isSameNode(m.dvdLibraryPage) then return
+    m.overlayHost.callFunc("openOverlay", event.getData())
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleDiscPickerClosed
+'-------------------------------------------------------------------------------
+sub dvdHandleDiscPickerClosed(closed as object)
+    if m.dvdLibraryPage = invalid or closed.overlay = invalid then return
+    m.dvdLibraryPage.callFunc("handleDiscPickerClosed", closed.request.groupKey, closed.overlay.selectedDisc)
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleDiscSelected
+'-------------------------------------------------------------------------------
+sub dvdHandleDiscSelected(event as object)
+    if m.dvdLibraryPage = invalid or m.dvdPlayerPage <> invalid then return
+    if not event.getRoSGNode().isSameNode(m.dvdLibraryPage) then return
+    request = {}
+    request.Append(m.dvdLibraryPage.loadRequest)
+    request.demo = event.getData()
+    m.dvdLibraryPage.callFunc("deactivate")
+    m.header.visible = false
+    page = CreateObject("roSGNode", "DvdPlayer")
+    page.id = "dvdPlayer"
+    page.observeField("closeRequested", "dvdHandleCloseRequested")
+    page.loadRequest = request
+    m.dvdPlayerPage = page
+    authAppendDynamicPage(page)
+    page.callFunc("activate")
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleCloseRequested
+'-------------------------------------------------------------------------------
+sub dvdHandleCloseRequested(event as object)
+    if m.dvdPlayerPage = invalid then return
+    if not event.getRoSGNode().isSameNode(m.dvdPlayerPage) then return
+    page = m.dvdPlayerPage
+    m.dvdPlayerPage = invalid
+    if page <> invalid then
+        page.unobserveField("closeRequested")
+        page.callFunc("deactivate")
+        m.dynamicPageHost.removeChild(page)
+    end if
+    if m.dvdLibraryPage <> invalid then
+        m.header.visible = true
+        m.dvdLibraryPage.callFunc("activate")
+    else
+        showHome()
+        m.header.callFunc("focusDvdDemoButton")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleAuthenticationRequired
+'-------------------------------------------------------------------------------
+sub dvdHandleAuthenticationRequired(event as object)
+    if m.dvdLibraryPage = invalid then return
+    if not event.getRoSGNode().isSameNode(m.dvdLibraryPage) then return
+    authHandleFeatureAuthenticationRequired(event.getData())
+end sub
