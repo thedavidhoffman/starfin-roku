@@ -1,0 +1,68 @@
+import "pkg:/source/TaskControl.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/DiscoveryContracts.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.discovery = { task: invalid, generation: 0 }
+end sub
+
+'-------------------------------------------------------------------------------
+' reset
+'-------------------------------------------------------------------------------
+sub reset()
+    m.discovery.generation++
+    releaseTask()
+    m.top.presentation = { available: false }
+    m.top.available = false
+    m.top.version = ""
+    m.top.status = DvdDiscovery.Status.Unknown
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseTask
+'-------------------------------------------------------------------------------
+sub releaseTask()
+    task = m.discovery.task
+    m.discovery.task = invalid
+    if task = invalid then return
+    task.unobserveField("response")
+    task.control = TaskControl.Command.Stop
+    m.top.removeChild(task)
+end sub
+
+'-------------------------------------------------------------------------------
+' discover
+'-------------------------------------------------------------------------------
+sub discover(session as object)
+    reset()
+    request = { server: session.server, token: session.token, userId: session.userId, requestId: m.discovery.generation }
+    task = m.top.createChild("DvdDiscoveryTask")
+    m.discovery.task = task
+    task.request = request
+    task.observeField("response", "onResponse")
+    m.top.status = DvdDiscovery.Status.Loading
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onResponse
+'-------------------------------------------------------------------------------
+sub onResponse(event as object)
+    if m.discovery.task = invalid then return
+    if not event.getRoSGNode().isSameNode(m.discovery.task) then return
+    response = event.getData()
+    if response.requestId <> m.discovery.generation then return
+    request = m.discovery.task.request
+    releaseTask()
+    m.top.status = response.discoveryStatus
+    m.top.version = response.version
+    m.top.available = response.discoveryStatus = DvdDiscovery.Status.Available
+    m.top.presentation = { available: m.top.available, homeImageTag: response.homeImageTag, server: request.server, token: request.token, userId: request.userId }
+    if response.authExpired = true then
+        m.top.authenticationRequired = { request: request, response: response }
+    else if response.discoveryStatus = DvdDiscovery.Status.AccessDenied then
+        m.top.accessDenied = { request: request, response: response }
+    end if
+end sub

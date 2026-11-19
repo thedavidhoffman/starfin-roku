@@ -8,8 +8,8 @@ import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.nodes = { host: m.top.findNode("posterHost"), title: m.top.findNode("title"), caption: m.top.findNode("caption") }
-    m.poster = { node: invalid }
+    m.nodes = { host: m.top.findNode("posterHost"), placeholder: m.top.findNode("placeholder"), title: m.top.findNode("title"), caption: m.top.findNode("caption"), discCount: m.top.findNode("discCount") }
+    m.poster = { node: invalid, width: 252, height: 378, requestWidth: 252 }
     MaskAssets.Apply(m.nodes.host, "poster-6-col-mask.png", [252, 378], [168, 252])
     m.top.observeField("itemContent", "renderCard")
     m.top.observeField("itemHasFocus", "updateFocus")
@@ -30,19 +30,28 @@ sub renderCard()
     end if
     m.nodes.title.text = ""
     m.nodes.caption.text = ""
+    m.nodes.discCount.text = ""
+    m.nodes.discCount.visible = false
     content = m.top.itemContent
     if content = invalid then
         updateFocus()
         return
     end if
+    applyArtworkLayout(content)
     m.nodes.title.text = content.title
     m.nodes.caption.text = content.caption
+    m.nodes.discCount.text = Strings.ToString(content.discCountLabel)
+    m.nodes.discCount.visible = m.nodes.discCount.text <> ""
+    if m.nodes.discCount.visible then m.nodes.caption.maxWidth = 84
     updateFocus()
-    if not DvdPaths.IsMetadataPoster(content.posterPath, content.metadataId) then return
+    if Strings.ToString(content.libraryId) <> "" then
+        if not DvdPaths.IsImage(content.posterPath, "Libraries", content.libraryId) then return
+    else
+        if not DvdPaths.IsMetadataPoster(content.posterPath, content.metadataId) then return
+    end if
     session = content.session
     ' Request physical display pixels while retaining the metadata version cache key.
-    imageWidth = 252
-    if ResolutionProfile.IsHd() then imageWidth = 168
+    imageWidth = m.poster.requestWidth
     posterPath = content.posterPath
     separator = "?"
     if Instr(1, posterPath, "?") > 0 then separator = "&"
@@ -51,8 +60,8 @@ sub renderCard()
     if media.headers.Authorization = invalid then return
     poster = m.nodes.host.createChild("Poster")
     m.poster.node = poster
-    poster.width = 252
-    poster.height = 378
+    poster.width = m.poster.width
+    poster.height = m.poster.height
     poster.loadDisplayMode = "scaleToFit"
     poster.visible = false
     agent = CreateObject("roHttpAgent")
@@ -80,4 +89,36 @@ sub updateFocus()
     if m.top.itemHasFocus then repeats = -1
     m.nodes.title.repeatCount = repeats
     m.nodes.caption.repeatCount = repeats
+end sub
+
+'-------------------------------------------------------------------------------
+' applyArtworkLayout
+'-------------------------------------------------------------------------------
+sub applyArtworkLayout(content as object)
+    m.poster.width = 252
+    m.poster.height = 378
+    m.poster.requestWidth = 252
+    if ResolutionProfile.IsHd() then m.poster.requestWidth = 168
+    mask = "poster-6-col-mask.png"
+    hdSize = [168, 252]
+    placeholder = "pkg:/images/media-card/poster-placeholder-252x378.png"
+    if Strings.ToString(content.libraryId) <> "" then
+        m.poster.width = 441
+        m.poster.height = 249
+        m.poster.requestWidth = 441
+        if ResolutionProfile.IsHd() then m.poster.requestWidth = 294
+        mask = "thumbnail-4-col-mask.png"
+        hdSize = [294, 166]
+        placeholder = "pkg:/images/media-card/thumbnail-placeholder-441x249.png"
+    end if
+    MaskAssets.Apply(m.nodes.host, mask, [m.poster.width, m.poster.height], hdSize)
+    m.nodes.placeholder.width = m.poster.width
+    m.nodes.placeholder.height = m.poster.height
+    m.nodes.placeholder.uri = placeholder
+    m.nodes.title.translation = [0, m.poster.height + 12]
+    m.nodes.title.maxWidth = m.poster.width
+    m.nodes.caption.translation = [0, m.poster.height + 51]
+    m.nodes.caption.maxWidth = m.poster.width
+    m.nodes.discCount.translation = [96, m.poster.height + 51]
+    m.nodes.discCount.width = m.poster.width - 96
 end sub

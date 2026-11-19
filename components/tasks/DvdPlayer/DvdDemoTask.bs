@@ -68,7 +68,10 @@ function loadLibraryData(request as object) as object
     result = HttpClient.Request(Url.Resolve(request.server, path), "GET", invalid, invalid, headers)
     if result.ok <> true then return result
     manifest = result.data
-    if manifest.schemaVersion <> "starfin-dvd-disc/1" or not DvdPaths.SameId(manifest.id, title.id) then return { ok: false, errorMessage: "Unsupported scanned DVD manifest." }
+    if manifest.schemaVersion <> "starfin-dvd-disc/2" or not DvdPaths.SameId(manifest.id, title.id) then return { ok: false, errorMessage: "Unsupported scanned DVD manifest." }
     if not DvdPaths.SameId(manifest.libraryId, request.library.id) then throw "DVD library changed."
+    if manifest.mode <> "native-session" or type(manifest.session) <> "roAssociativeArray" then throw "Native DVD sessions are required."
+    if manifest.session.schemaVersion <> "starfin-dvd-session/1" then throw "Unsupported native DVD session schema."
+    if not DvdPaths.IsScoped(manifest.session.startPath, "Discs", title.id) then throw "Invalid session start path."
     return { ok: true, payload: manifest }
 end function

@@ -1,4 +1,5 @@
 import "pkg:/source/HomeLayout.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/HomeEntry.bs"
 import "pkg:/components/pages/HomePage/Helpers/HomeLayoutLoading.bs"
 import "pkg:/source/MediaCardContent.bs"
 import "pkg:/source/Playstate.bs"
@@ -85,6 +86,7 @@ end sub
 ' initHandlers
 '-------------------------------------------------------------------------------
 sub initHandlers()
+    m.top.observeField("dvdPresentation", "onDvdPresentationChanged")
     m.top.observeField("settings", "onSettingsChanged")
     m.top.observeField("loadRequest", "onLoadRequestChanged")
     m.episodeCountRefresh.observeField("response", "onEpisodeCountsRefreshed")
@@ -197,7 +199,12 @@ sub selectHomeItem(item as dynamic)
     itemId = Format.FirstNonEmpty([item.Id], "")
     if itemId = "" then return
 
-    if item.Type = MediaItem.Type.Program then
+    if itemId = DvdMenu.LocalItem.Library then
+        if dvdHomeAvailable() then
+            captureHomeFocus(HomeLayout.Section.Libraries, itemId)
+            m.top.dvdSelected = true
+        end if
+    else if item.Type = MediaItem.Type.Program then
         channelId = Strings.ToString(item.ChannelId)
         if channelId <> "" then m.top.selectedLiveTV = { itemId: channelId, item: { Id: channelId, Name: Format.FirstNonEmpty([item.ChannelName, item.Name], "Live TV"), Type: MediaItem.Type.TvChannel, CurrentProgram: item } }
     else if item.Type = MediaItem.Type.Audio or item.Type = MediaItem.Type.AudioBook then
@@ -750,6 +757,7 @@ function buildRowContent(key as string, title as string, items as object) as obj
         child.AddFields(fields)
     end for
 
+    if key = HomeLayout.Section.Libraries then addDvdHomeCard(content)
     return content
 end function
 

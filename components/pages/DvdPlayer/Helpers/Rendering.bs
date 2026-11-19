@@ -1,85 +1,114 @@
 '-------------------------------------------------------------------------------
 ' renderScreen
 '-------------------------------------------------------------------------------
-sub renderScreen(screen as object, requestedFocus as dynamic)
-    clearMenu()
-    screenName = m.menu.screen
-    asset = invalid
-    for each candidate in m.menu.manifest.disc.menuAssets
-        if candidate.id = screen.assetId then asset = candidate
-    end for
-    if asset = invalid then throw "Missing DVD menu asset."
-    if asset.titleSet = 0 then
-        videoAttributes = m.menu.manifest.disc.videoManagerMenuVideo
-    else
-        titleSet = findNumbered(m.menu.manifest.disc.titleSets, asset.titleSet)
-        videoAttributes = titleSet.menuVideo
+sub renderScreen(menu as object)
+    if type(menu.buttons) <> "roArray" then throw "Missing native DVD buttons."
+    sources = { image: Strings.ToString(menu.imagePath), loop: Strings.ToString(menu.loopPath), video: Strings.ToString(menu.videoPath) }
+    sameBackground = false
+    if m.rendering.sources <> invalid and m.rendering.root <> invalid then
+        previous = m.rendering.sources
+        sameBackground = previous.image = sources.image and previous.loop = sources.loop and previous.video = sources.video
     end if
-    ' The SceneGraph design space is 1920x1080 even on a 720p output.
-    rect = fitMenuRect(videoAttributes, 1920, 1080)
-    root = m.nodes.host.createChild("Group")
-    root.translation = [rect.x, rect.y]
-    m.rendering.root = root
+    rect = fitMenuRect(menu, 1920, 1080)
+    if not sameBackground then replaceMenuBackground(menu, sources)
     m.rendering.rect = rect
-    m.rendering.asset = asset
-    previewHost = root.createChild("Group")
-    previewHost.id = "previewHost"
-    m.rendering.previewHost = previewHost
-    ' The retained artwork must cover the video plane during loop transitions.
-    image = root.createChild("Poster")
-    image.id = "menuImage"
-    image.width = rect.width
-    image.height = rect.height
+    m.rendering.root.translation = [rect.x, rect.y]
+    m.rendering.image.width = rect.width
+    m.rendering.image.height = rect.height
+    if m.rendering.video <> invalid then
+        m.rendering.video.width = rect.width
+        m.rendering.video.height = rect.height
+    end if
+    renderMenuButtons(menu)
+end sub
+
+'-------------------------------------------------------------------------------
+' replaceMenuBackground
+'-------------------------------------------------------------------------------
+sub replaceMenuBackground(menu as object, sources as object)
+    stopPreview()
+    clearMenuButtons()
+    if m.rendering.image <> invalid then m.rendering.image.unobserveField("loadStatus")
+    if m.rendering.root <> invalid then
+        ' Never replace a decoded fallback with a still that has not loaded yet.
+        if m.rendering.image.loadStatus = "ready" then
+            if m.rendering.retainedRoot <> invalid then m.nodes.host.removeChild(m.rendering.retainedRoot)
+            m.rendering.retainedRoot = m.rendering.root
+        else
+            m.nodes.host.removeChild(m.rendering.root)
+        end if
+    end if
+    m.rendering.sources = sources
+    m.rendering.previewStarted = false
+    m.rendering.preview = invalid
+    m.rendering.asset = { id: menu.assetId, image: sources.image, previewVideo: sources.video, previewLoop: sources.loop }
+    m.rendering.root = m.nodes.host.createChild("Group")
+    m.rendering.previewHost = m.rendering.root.createChild("Group")
+    image = m.rendering.root.createChild("Poster")
     image.loadDisplayMode = "scaleToFill"
-    media = menuMediaRequest(asset.image)
+    media = menuMediaRequest(sources.image)
     agent = CreateObject("roHttpAgent")
     agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
     agent.AddHeader("Authorization", media.headers.Authorization)
     image.setHttpAgent(agent)
     m.rendering.image = image
     image.observeField("loadStatus", "onImageStatus")
-    image.uri = media.url
-    hotspots = root.createChild("Group")
-    hotspots.id = "hotspots"
-    navigation = asset.navigation[0]
-    for each geometry in navigation.buttons
-        if geometry.group = Number.ToInteger(screen.buttonGroup, 1) then
-            mapping = screen.buttons[Strings.ToString(geometry.number)]
-            if mapping = invalid then throw "Missing DVD button mapping."
-            if Number.ToFloat(geometry.width, 0) <= 0 or Number.ToFloat(geometry.height, 0) <= 0 then throw "Invalid DVD hotspot size."
-            hotspot = hotspots.createChild("Group")
-            hotspot.id = "dvdButton" + Strings.ToString(geometry.number)
-            hotspot.focusable = true
-            hotspot.translation = [geometry.x * rect.scaleX, geometry.y * rect.scaleY]
-            hotspot.addFields({ audioGuideText: Strings.ToString(mapping.label), hiddenHighlight: mapping.hidden = true })
-            width = geometry.width * rect.scaleX
-            height = geometry.height * rect.scaleY
-            highlight = hotspot.createChild("Group")
-            highlight.visible = false
-            fill = highlight.createChild("Rectangle")
-            fill.width = width
-            fill.height = height
-            fill.color = &hFFE08035
-            for each edge in [[0, 0, width, 3], [0, height - 3, width, 3], [0, 0, 3, height], [width - 3, 0, 3, height]]
-                line = highlight.createChild("Rectangle")
-                line.translation = [edge[0], edge[1]]
-                line.width = edge[2]
-                line.height = edge[3]
-                line.color = &hFFE080FF
-            end for
-            m.rendering.buttons[Strings.ToString(geometry.number)] = hotspot
-            m.rendering.geometry.Push(geometry)
-        end if
-    end for
-    if m.rendering.geometry.Count() = 0 then throw "DVD menu has no buttons."
-    focus = requestedFocus
-    if focus = invalid then focus = navigation.forcedSelect
-    if not m.rendering.buttons.DoesExist(Strings.ToString(focus)) then focus = m.rendering.geometry[0].number
-    m.loading.phase = DvdMenu.Phase.Ready
     m.nodes.status.text = ""
-    focusButton(Number.ToInteger(focus, 0))
-    if m.menu.screen <> screenName then return
-    startPreview()
+    image.uri = media.url
+end sub
+
+'-------------------------------------------------------------------------------
+' renderMenuButtons
+'-------------------------------------------------------------------------------
+sub renderMenuButtons(menu as object)
+    clearMenuButtons()
+    rect = m.rendering.rect
+    hotspots = m.rendering.root.createChild("Group")
+    m.rendering.hotspots = hotspots
+    for each geometry in menu.buttons
+        if Number.ToFloat(geometry.width, 0) <= 0 or Number.ToFloat(geometry.height, 0) <= 0 then throw "Invalid DVD hotspot size."
+        hotspot = hotspots.createChild("Group")
+        hotspot.id = "dvdButton" + Strings.ToString(geometry.id)
+        hotspot.focusable = true
+        hotspot.translation = [geometry.x * rect.scaleX, geometry.y * rect.scaleY]
+        width = geometry.width * rect.scaleX
+        height = geometry.height * rect.scaleY
+        highlight = hotspot.createChild("Group")
+        highlight.visible = false
+        fill = highlight.createChild("Rectangle")
+        fill.width = width
+        fill.height = height
+        fill.color = &hFFE08035
+        for each edge in [[0, 0, width, 3], [0, height - 3, width, 3], [0, 0, 3, height], [width - 3, 0, 3, height]]
+            line = highlight.createChild("Rectangle")
+            line.translation = [edge[0], edge[1]]
+            line.width = edge[2]
+            line.height = edge[3]
+            line.color = &hFFE080FF
+        end for
+        m.rendering.buttons[Strings.ToString(geometry.id)] = hotspot
+        m.rendering.geometry.Push(geometry)
+    end for
+    focus = Number.ToInteger(menu.selectedButton, 0)
+    if not m.rendering.buttons.DoesExist(focus.ToStr()) and m.rendering.geometry.Count() > 0 then focus = m.rendering.geometry[0].id
+    m.menu.focused = focus
+    if m.rendering.geometry.Count() > 0 then
+        focusButton(focus)
+    else
+        m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' clearMenuButtons
+'-------------------------------------------------------------------------------
+sub clearMenuButtons()
+    if m.rendering.hotspots <> invalid then
+        m.rendering.root.removeChild(m.rendering.hotspots)
+        m.rendering.hotspots = invalid
+    end if
+    m.rendering.buttons = {}
+    m.rendering.geometry = []
 end sub
 
 '-------------------------------------------------------------------------------
@@ -107,41 +136,38 @@ sub focusButton(buttonNumber as integer)
     key = buttonNumber.ToStr()
     if not m.rendering.buttons.DoesExist(key) then return
     m.menu.focused = buttonNumber
-    for each buttonKey in m.rendering.buttons
-        button = m.rendering.buttons[buttonKey]
-        button.getChild(0).visible = buttonKey = key and button.hiddenHighlight <> true
-    end for
-    m.rendering.buttons[key].setFocus(true)
+    showHighlight = true
     for each geometry in m.rendering.geometry
-        if geometry.number = buttonNumber and geometry.autoAction = true then
-            mapping = m.menu.manifest.menuMap.screens[m.menu.screen].buttons[key]
-            if mapping.action <> DvdMenu.Action.Navigate then return
-            chainKey = m.menu.screen + ":" + key
-            if m.menu.autoChain.DoesExist(chainKey) or m.menu.autoChain.Count() >= 16 then throw "Automatic DVD navigation cycle."
-            m.menu.autoChain[chainKey] = true
-            goScreen(mapping.screen, mapping.focusButton)
-            return
+        if geometry.id = buttonNumber then
+            showHighlight = geometry.autoAction <> true
+            exit for
         end if
     end for
+    for each buttonKey in m.rendering.buttons
+        m.rendering.buttons[buttonKey].getChild(0).visible = buttonKey = key and showHighlight
+    end for
+    m.rendering.buttons[key].setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
 ' clearMenu
 '-------------------------------------------------------------------------------
 sub clearMenu()
-    m.rendering.awaitingMessage = false
-    m.rendering.lostFocus = false
     stopPreview()
+    clearMenuButtons()
     if m.rendering.image <> invalid then m.rendering.image.unobserveField("loadStatus")
     if m.rendering.root <> invalid then m.nodes.host.removeChild(m.rendering.root)
     m.rendering.root = invalid
+    if m.rendering.retainedRoot <> invalid then m.nodes.host.removeChild(m.rendering.retainedRoot)
+    m.rendering.retainedRoot = invalid
     m.rendering.image = invalid
     m.rendering.asset = invalid
+    m.rendering.sources = invalid
+    m.rendering.previewStarted = false
     m.rendering.buttons = {}
     m.rendering.geometry = []
     m.rendering.previewHost = invalid
     m.rendering.preview = invalid
-    m.rendering.selection = invalid
 end sub
 
 '-------------------------------------------------------------------------------
@@ -156,8 +182,12 @@ sub startPreview()
     if not live then path = Strings.ToString(m.rendering.asset.previewVideo)
     if path = "" then return
     if live and m.rendering.previewFailures.DoesExist(path) then
-        if m.rendering.previewFailures[path].TotalMilliseconds() < 30000 then return
-        m.rendering.previewFailures.Delete(path)
+        if m.rendering.previewFailures[path].TotalMilliseconds() < 30000 then
+            path = Strings.ToString(m.rendering.asset.previewVideo)
+            live = false
+            if path = "" then return
+        end if
+        if live then m.rendering.previewFailures.Delete(path)
     end if
     try
         m.rendering.preview = { covered: true, awaitingWrap: false, lastPosition: -1.0, playing: false, live: live, path: path }
@@ -210,7 +240,14 @@ sub failPreview()
         end if
     end if
     stopPreview()
-    if m.loading.active then m.nodes.status.text = "Preview unavailable. Press Options to refresh DVD menus."
+    if m.loading.active and m.rendering.asset <> invalid then
+        if Strings.ToString(m.rendering.asset.previewLoop) <> "" and Strings.ToString(m.rendering.asset.previewVideo) <> "" then
+            m.rendering.asset.previewLoop = ""
+            startPreview()
+        else
+            m.nodes.status.text = "Preview unavailable. DVD menu controls remain available."
+        end if
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -337,28 +374,17 @@ end sub
 sub onImageStatus(event as object)
     if m.rendering.image = invalid or not m.loading.active then return
     if not event.getRoSGNode().isSameNode(m.rendering.image) then return
-    if event.getData() = "failed" then
-        ' A late menu-artwork failure must not interrupt content playback.
-        if m.playback.active then return
-        if not m.loading.refreshedAssets then
-            m.loading.refreshedAssets = true
-            beginLoad()
-        else
-            showFailure("The DVD menu image could not be loaded. The scan may have changed.")
+    if not m.nodes.host.visible then return
+    if event.getData() = "ready" then
+        if m.rendering.retainedRoot <> invalid then
+            m.nodes.host.removeChild(m.rendering.retainedRoot)
+            m.rendering.retainedRoot = invalid
+        end if
+        ' Start only after the replacement still can cover buffering/failure.
+        if not m.rendering.previewStarted then
+            m.rendering.previewStarted = true
+            startPreview()
         end if
     end if
-end sub
-
-'-------------------------------------------------------------------------------
-' onFocusChanged
-'-------------------------------------------------------------------------------
-sub onFocusChanged()
-    if not m.loading.active or not m.rendering.awaitingMessage then return
-    if not m.top.isInFocusChain() then
-        m.rendering.lostFocus = true
-    else if m.rendering.lostFocus then
-        m.rendering.awaitingMessage = false
-        m.rendering.lostFocus = false
-        startPreview()
-    end if
+    if event.getData() = "failed" then showFailure("The DVD menu image could not be loaded. Rescan the disc if its assets are missing.")
 end sub

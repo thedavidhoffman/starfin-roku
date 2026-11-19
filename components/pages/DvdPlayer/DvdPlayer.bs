@@ -2,19 +2,18 @@ import "pkg:/source/Number.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Remote.bs"
-import "pkg:/source/AsyncLifecycle.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/SpinnerControl.bs"
 import "pkg:/source/MediaControl.bs"
 import "pkg:/source/VideoPlayerState.bs"
 import "pkg:/source/TimerControl.bs"
-import "pkg:/source/AppMessage.bs"
 import "pkg:/source/api/JellyfinAuth.bs"
-import "pkg:/components/pages/DvdPlayer/Helpers/Contracts.bs"
-import "pkg:/components/pages/DvdPlayer/Helpers/MenuModel.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/SessionContracts.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Rendering.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Playback.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/TransportControls.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/MenuModel.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -23,10 +22,12 @@ sub init()
     m.log = new Logger("DvdPlayer", m.global.logService)
     initReferences()
     m.session = invalid
-    m.loading = { active: false, generation: 0, task: invalid, lifecycle: AsyncLifecycle.Create(), phase: DvdMenu.Phase.Loading, refreshedAssets: false }
-    m.menu = { manifest: invalid, screen: "", title: 0, chapter: 1, featureAudio: 1, featureTitleSet: 0, audio: 1, subtitles: false, infoText: false, history: [], focused: 0, autoChain: {} }
-    m.rendering = { root: invalid, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, awaitingMessage: false, lostFocus: false, selection: invalid, previewFailures: {} }
-    m.playback = { active: false, stopping: false, task: invalid, video: invalid, timer: invalid, requestId: "", pauseRequested: false, buffering: false }
+    m.loading = { active: false, generation: 0, task: invalid, failed: false }
+    m.native = { task: invalid, requestId: "", revision: -1, state: "", snapshot: invalid, queue: [], inFlight: invalid, navigating: false }
+    m.menu = { manifest: invalid, focused: 0 }
+    m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {} }
+    m.playback = { active: false, video: invalid, timer: invalid, id: "", started: false, completed: false, pauseRequested: false, buffering: false, progress: 0 }
+    m.transport = { title: "", year: "" }
     initHandlers()
     onLoadRequestChanged()
 end sub
@@ -35,8 +36,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.nodes = { host: m.top.findNode("menuHost"), status: m.top.findNode("status"), spinner: m.top.findNode("loading") }
-    m.nodes.contentHost = m.top.findNode("contentHost")
+    m.nodes = { host: m.top.findNode("menuHost"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), contentHost: m.top.findNode("contentHost"), controls: m.top.findNode("playbackControls"), controlsTimer: m.top.findNode("controlsHideTimer") }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -44,7 +44,9 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.top.observeField("loadRequest", "onLoadRequestChanged")
-    m.top.observeField("focusedChild", "onFocusChanged")
+    m.nodes.controls.observeField("playPausePressed", "toggleContentPause")
+    m.nodes.controls.observeField("interaction", "restartControlsTimer")
+    m.nodes.controlsTimer.observeField("fire", "onControlsTimeout")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -65,12 +67,12 @@ sub activate()
     m.top.visible = true
     if not wasActive then
         beginLoad()
-    else if m.playback.active then
-        m.top.setFocus(true)
-    else if m.loading.phase <> DvdMenu.Phase.Ready then
-        m.top.setFocus(true)
-    else
+    else if m.nodes.controls.visible then
+        m.nodes.controls.callFunc("focusControls")
+    else if m.native.state = DvdSession.State.Menu then
         focusButton(m.menu.focused)
+    else
+        m.top.setFocus(true)
     end if
 end sub
 
@@ -78,11 +80,12 @@ end sub
 ' deactivate
 '-------------------------------------------------------------------------------
 sub deactivate()
+    hideControls()
     m.loading.active = false
-    abandonContent()
-    AsyncLifecycle.Deactivate(m.loading.lifecycle)
+    abandonSession()
     releaseTask()
     clearMenu()
+    releaseContentVideo()
     m.nodes.spinner.control = SpinnerControl.Command.Stop
     m.top.visible = false
 end sub
@@ -91,36 +94,56 @@ end sub
 ' releaseTask
 '-------------------------------------------------------------------------------
 sub releaseTask()
-    if m.loading.task = invalid then return
     task = m.loading.task
     m.loading.task = invalid
+    if task = invalid then return
     task.unobserveField("response")
     task.control = TaskControl.Command.Stop
     m.top.removeChild(task)
-    m.top.taskCreated = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' abandonSession
+'-------------------------------------------------------------------------------
+sub abandonSession()
+    task = m.native.task
+    m.native.task = invalid
+    m.native.queue = []
+    m.native.inFlight = invalid
+    if task = invalid then return
+    task.unobserveField("response")
+    task.cancelRequested = true
+    ' Leave the worker running so a late POST is followed by DELETE.
+    m.top.removeChild(task)
 end sub
 
 '-------------------------------------------------------------------------------
 ' beginLoad
 '-------------------------------------------------------------------------------
 sub beginLoad()
-    abandonContent()
-    AppMessage.Dismiss()
+    hideControls()
+    abandonSession()
     releaseTask()
     clearMenu()
+    releaseContentVideo()
     m.loading.generation++
-    AsyncLifecycle.Begin(m.loading.lifecycle, m.loading.generation)
-    m.loading.phase = DvdMenu.Phase.Loading
+    m.loading.failed = false
+    m.native.revision = -1
+    m.native.state = ""
+    m.native.snapshot = invalid
+    m.native.navigating = false
     m.nodes.status.text = ""
+    m.nodes.host.visible = true
+    m.nodes.contentHost.visible = false
     m.nodes.spinner.control = SpinnerControl.Command.Start
     m.top.setFocus(true)
     task = m.top.createChild("DvdDemoTask")
     m.loading.task = task
-    task.observeField("response", "onDemoResponse")
     request = {}
-    if m.session <> invalid then request.Append(m.session)
+    request.Append(m.session)
     request.requestId = m.loading.generation
     task.request = request
+    task.observeField("response", "onDemoResponse")
     m.top.taskCreated = task
     task.control = TaskControl.Command.Run
 end sub
@@ -129,42 +152,200 @@ end sub
 ' onDemoResponse
 '-------------------------------------------------------------------------------
 sub onDemoResponse(event as object)
+    if not m.loading.active or m.loading.task = invalid then return
+    if not event.getRoSGNode().isSameNode(m.loading.task) then return
     response = event.getData()
-    if not AsyncLifecycle.IsCurrentResponse(m.loading.lifecycle, response, "requestId", DvdMenu.Request.Load) then return
-    AsyncLifecycle.Deactivate(m.loading.lifecycle)
+    if response.requestId <> m.loading.generation then return
     releaseTask()
-    m.nodes.spinner.control = SpinnerControl.Command.Stop
     if response.ok <> true then
-        showFailure(Strings.ToString(response.errorMessage, "Unable to load the DVD demo."))
+        showFailure(Strings.ToString(response.errorMessage, "Unable to load the DVD."))
         return
     end if
-    try
-        manifest = response.payload
-        if Strings.ToString(manifest.initialScreen) = "" or type(manifest.menuMap) <> "roAssociativeArray" then
-            showFailure("DVD menu navigation is unavailable for this scan. Rescan the title after navigation support changes.")
-            return
+    m.menu.manifest = response.payload
+    updateControlsMetadata()
+    m.native.requestId = CreateObject("roDeviceInfo").GetRandomUUID()
+    task = m.top.createChild("DvdSessionTask")
+    m.native.task = task
+    task.request = { server: m.session.server, token: m.session.token, userId: m.session.userId, requestId: m.native.requestId, discId: m.menu.manifest.id, startPath: m.menu.manifest.session.startPath }
+    task.observeField("response", "onSessionResponse")
+    m.top.taskCreated = task
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' onSessionResponse
+'-------------------------------------------------------------------------------
+sub onSessionResponse(event as object)
+    if not m.loading.active or m.native.task = invalid then return
+    if not event.getRoSGNode().isSameNode(m.native.task) then return
+    response = event.getData()
+    if response.requestId <> m.native.requestId then return
+    if response.action = DvdSession.Event.Closed then
+        task = m.native.task
+        m.native.task = invalid
+        task.unobserveField("response")
+        m.top.removeChild(task)
+        if Strings.ToString(response.message) <> "" then
+            showFailure(response.message)
+        else
+            m.top.closeRequested = true
         end if
-        if type(manifest.menuMap.screens) <> "roAssociativeArray" or type(manifest.disc.menuAssets) <> "roArray" then throw "Invalid DVD screens."
-        if manifest.menuMap.screens[manifest.initialScreen] = invalid then
-            showFailure("This scan has no available initial DVD menu.")
-            return
+    else if response.action = DvdSession.Event.Command then
+        if m.native.inFlight <> invalid then
+            if response.commandId = m.native.inFlight.requestId then
+                if response.ok and isMenuNavigationAction(m.native.inFlight.action) then
+                    if DvdPaths.SameId(m.native.inFlight.interruptedPlaybackId, m.playback.id) then releaseContentVideo()
+                    hideControls()
+                end if
+                if response.payload <> invalid then applySnapshot(response.payload)
+                if response.conflict then m.native.navigating = false
+                if m.native.inFlight.action = DvdSession.Action.Button and m.native.state = DvdSession.State.Menu then m.native.navigating = false
+                m.native.inFlight = invalid
+                reconcileContentPause()
+                dispatchCommand()
+                syncControls()
+                restartControlsTimer()
+            end if
         end if
-        m.menu = { manifest: manifest, screen: "", title: 0, chapter: 1, featureAudio: 1, featureTitleSet: 0, audio: 1, subtitles: false, infoText: false, history: [], focused: 0, autoChain: {} }
-        initializeSelection()
-        goScreen(manifest.initialScreen, invalid, false)
-    catch error
-        showFailure("The DVD manifest contains an invalid menu or selection.")
-    end try
+    else if response.action = DvdSession.Event.Snapshot then
+        try
+            applySnapshot(response.payload)
+        catch error
+            showFailure("The native DVD session supplied an invalid menu or playback unit.")
+        end try
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' applySnapshot
+'-------------------------------------------------------------------------------
+sub applySnapshot(snapshot as object)
+    revision = Number.ToInteger(snapshot.revision, -1)
+    if revision < m.native.revision then return
+    if revision = m.native.revision then
+        m.native.snapshot = snapshot
+        return
+    end if
+    previousState = m.native.state
+    m.native.revision = revision
+    m.native.snapshot = snapshot
+    m.native.state = snapshot.state
+    state = snapshot.state
+    m.log.write("Native session state=" + state + " revision=" + revision.ToStr())
+    preparing = state = DvdSession.State.Starting or state = DvdSession.State.Preparing
+    keepMenu = preparing and m.rendering.root <> invalid and m.nodes.host.visible and (previousState = DvdSession.State.Menu or previousState = DvdSession.State.Starting or previousState = DvdSession.State.Preparing)
+    ' Retain menu presentation while resolving navigation, never over content.
+    m.nodes.host.visible = state = DvdSession.State.Menu or keepMenu
+    if state = DvdSession.State.Starting or state = DvdSession.State.Preparing then
+        if m.native.inFlight <> invalid then
+            if isMenuNavigationAction(m.native.inFlight.action) then
+                releaseContentVideo()
+                hideControls()
+            end if
+        end if
+        if not keepMenu then stopPreview()
+        if m.playback.video <> invalid then m.playback.video.control = MediaControl.Command.Pause
+        if m.playback.timer <> invalid then m.playback.timer.control = TimerControl.Command.Stop
+        if keepMenu then
+            m.nodes.spinner.control = SpinnerControl.Command.Stop
+        else
+            m.nodes.spinner.control = SpinnerControl.Command.Start
+        end if
+        m.top.setFocus(true)
+    else if state = DvdSession.State.Menu then
+        hideControls()
+        m.native.navigating = false
+        releaseContentVideo()
+        m.nodes.contentHost.visible = false
+        m.nodes.host.visible = true
+        renderScreen(snapshot.menu)
+        m.nodes.spinner.control = SpinnerControl.Command.Stop
+    else if state = DvdSession.State.Playing or state = DvdSession.State.AwaitingCompletion then
+        clearMenu()
+        m.native.navigating = false
+        if not DvdPaths.SameId(m.playback.id, snapshot.playback.playbackId) then openContentVideo(snapshot.playback)
+    else if state = DvdSession.State.Still then
+        m.native.navigating = false
+        stopPreview()
+        if m.playback.video <> invalid then m.playback.video.control = MediaControl.Command.Pause
+        if m.playback.timer <> invalid then m.playback.timer.control = TimerControl.Command.Stop
+        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.nodes.status.text = ""
+        m.top.setFocus(true)
+    else if state = DvdSession.State.Failed then
+        hideControls()
+        stopPreview()
+        releaseContentVideo()
+        m.nodes.contentHost.visible = false
+        m.nodes.host.visible = false
+        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.nodes.status.text = Strings.ToString(snapshot.error, "Native DVD session failed.")
+    else if state <> DvdSession.State.Stopped then
+        throw "Unknown native DVD state."
+    end if
+    reconcileContentPause()
+    syncControls()
+    if m.nodes.controls.visible then m.nodes.controls.callFunc("focusControls")
+end sub
+
+'-------------------------------------------------------------------------------
+' queueCommand
+'-------------------------------------------------------------------------------
+sub queueCommand(action as string, playbackId = invalid as dynamic, value = invalid as dynamic)
+    if m.native.task = invalid then return
+    command = { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: action }
+    if playbackId <> invalid then
+        command.playbackId = playbackId
+    else
+        command.revision = m.native.revision
+    end if
+    if isMenuNavigationAction(action) then command.interruptedPlaybackId = m.playback.id
+    if action = DvdSession.Action.Button then command.button = value
+    if action = DvdSession.Action.Progress then command.positionSeconds = value
+    m.native.queue.Push(command)
+    dispatchCommand()
+    syncControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' dispatchCommand
+'-------------------------------------------------------------------------------
+sub dispatchCommand()
+    if m.native.task = invalid or m.native.inFlight <> invalid then return
+    while m.native.queue.Count() > 0
+        command = m.native.queue.Shift()
+        snapshot = m.native.snapshot
+        valid = true
+        if command.playbackId <> invalid then
+            valid = false
+            if snapshot <> invalid and snapshot.playback <> invalid then valid = DvdPaths.SameId(command.playbackId, snapshot.playback.playbackId)
+        else
+            valid = command.revision = m.native.revision
+        end if
+        if valid then
+            m.native.inFlight = command
+            m.native.task.command = command
+            return
+        else if isMenuNavigationAction(command.action) or command.action = DvdSession.Action.Button then
+            m.native.navigating = false
+        end if
+    end while
 end sub
 
 '-------------------------------------------------------------------------------
 ' showFailure
 '-------------------------------------------------------------------------------
 sub showFailure(message as string)
-    clearMenu()
-    m.loading.phase = DvdMenu.Phase.Failed
+    hideControls()
+    abandonSession()
+    releaseTask()
+    stopPreview()
+    releaseContentVideo()
+    m.loading.failed = true
+    m.nodes.contentHost.visible = false
+    m.nodes.host.visible = false
     m.nodes.spinner.control = SpinnerControl.Command.Stop
-    m.nodes.status.text = message + Chr(10) + "Press OK to retry or Back to leave."
+    m.nodes.status.text = message + Chr(10) + "Press OK to restart the DVD or Back to leave."
     m.top.setFocus(true)
 end sub
 
@@ -173,39 +354,74 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press or not m.loading.active then return false
-    if m.playback.active then return handleContentKey(key)
-    if m.rendering.awaitingMessage then return true
-    m.menu.autoChain = {}
-    try
-        if key = Remote.Key.Back then
-            backScreen()
+    if key = Remote.Key.Back then
+        if m.nodes.controls.visible then
+            hideControls()
             return true
         end if
-        if m.loading.phase = DvdMenu.Phase.Failed and key = Remote.Key.OK then
-            beginLoad()
+        if not m.loading.failed and (m.native.state = DvdSession.State.Playing or m.native.state = DvdSession.State.AwaitingCompletion or m.native.state = DvdSession.State.Still) then
+            requestLastMenu()
             return true
         end if
-        if m.loading.phase <> DvdMenu.Phase.Ready then return true
-        if key = Remote.Key.Options then
-            m.loading.refreshedAssets = false
-            beginLoad()
-            return true
-        end if
+        deactivate()
+        m.top.closeRequested = true
+        return true
+    end if
+    if m.loading.failed then
+        if key = Remote.Key.OK then beginLoad()
+        return true
+    end if
+    if key = Remote.Key.Options then
+        requestDvdMenu()
+        return true
+    end if
+    if m.native.navigating then return true
+    if m.native.state = DvdSession.State.Menu then
+        if m.native.inFlight <> invalid or m.native.queue.Count() > 0 then return true
         if key = Remote.Key.OK then
-            activateButton()
-            return true
+            activateMenuButton(m.menu.focused)
+        else if key = Remote.Key.Up or key = Remote.Key.Down or key = Remote.Key.Left or key = Remote.Key.Right then
+            navigateMenu(key)
         end if
-        if key = Remote.Key.Up or key = Remote.Key.Down or key = Remote.Key.Left or key = Remote.Key.Right then
-            for each button in m.rendering.geometry
-                if button.number = m.menu.focused then
-                    focusButton(Number.ToInteger(button[key], 0))
-                    exit for
-                end if
-            end for
-            return true
+    else if m.native.state = DvdSession.State.Playing or m.native.state = DvdSession.State.AwaitingCompletion or m.native.state = DvdSession.State.Still then
+        if key = Remote.Key.Play or key = Remote.Key.PlayPause then
+            toggleContentPause()
+        else if key = Remote.Key.OK or key = Remote.Key.Up or key = Remote.Key.Down or key = Remote.Key.Left or key = Remote.Key.Right then
+            showControls()
         end if
-    catch error
-        showFailure("The DVD menu contains an invalid action.")
-    end try
-    return false
+    end if
+    return true
 end function
+
+'-------------------------------------------------------------------------------
+' activateMenuButton
+'-------------------------------------------------------------------------------
+sub activateMenuButton(buttonId as integer)
+    if m.native.task = invalid or m.native.state <> DvdSession.State.Menu then return
+    if m.native.navigating or m.native.inFlight <> invalid or m.native.queue.Count() > 0 then return
+    if not m.rendering.buttons.DoesExist(buttonId.ToStr()) then return
+    m.native.navigating = true
+    queueCommand(DvdSession.Action.Button, invalid, buttonId)
+end sub
+
+'-------------------------------------------------------------------------------
+' navigateMenu
+'-------------------------------------------------------------------------------
+sub navigateMenu(direction as string)
+    destination = 0
+    for each button in m.rendering.geometry
+        if button.id = m.menu.focused then
+            destination = Number.ToInteger(button[direction], 0)
+            exit for
+        end if
+    end for
+    if not m.rendering.buttons.DoesExist(destination.ToStr()) then return
+    for each button in m.rendering.geometry
+        if button.id = destination then
+            focusButton(destination)
+            ' Only a user directional selection triggers authored auto-action.
+            if button.autoAction = true then activateMenuButton(destination)
+            return
+        end if
+    end for
+end sub

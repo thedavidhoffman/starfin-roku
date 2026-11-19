@@ -1,0 +1,77 @@
+import "pkg:/source/Remote.bs"
+import "pkg:/source/Theme.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    colors = Theme.Get()
+    m.nodes.title.color = colors.text.light.primary
+    m.nodes.year.color = colors.text.light.secondary
+    initHandlers()
+    render()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.nodes = { title: m.top.findNode("title"), year: m.top.findNode("year"), play: m.top.findNode("playPause") }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("presentation", "render")
+    m.nodes.play.observeField("buttonSelected", "onPlaySelected")
+end sub
+
+'-------------------------------------------------------------------------------
+' render
+'-------------------------------------------------------------------------------
+sub render()
+    presentation = m.top.presentation
+    if presentation = invalid then return
+    m.nodes.title.text = presentation.title
+    m.nodes.year.text = presentation.year
+    m.nodes.play.enabled = presentation.canPause
+    iconName = "pause"
+    if presentation.paused then iconName = "play"
+    m.nodes.play.icon = "pkg:/images/icons/playback-controls/" + iconName + "-unfocused.png"
+    m.nodes.play.focusedIcon = "pkg:/images/icons/playback-controls/" + iconName + "-focused.png"
+    if m.top.visible and m.top.isInFocusChain() then focusControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusControls
+'-------------------------------------------------------------------------------
+sub focusControls()
+    if m.nodes.play.enabled then
+        m.nodes.play.setFocus(true)
+    else
+        m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onPlaySelected
+'-------------------------------------------------------------------------------
+sub onPlaySelected()
+    m.top.interaction = true
+    m.top.playPausePressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    m.top.interaction = true
+    if key = Remote.Key.Left or key = Remote.Key.Right then
+        return true
+    end if
+    if key = Remote.Key.Up or key = Remote.Key.Down then return true
+    return false
+end function

@@ -1,0 +1,185 @@
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/Json.bs"
+import "pkg:/source/Number.bs"
+import "pkg:/source/DateTime.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/SessionContracts.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    m.native = { request: request, headers: JellyfinAuth.BuildTokenHeaders(request.token), path: "", started: false, snapshot: invalid, revision: -1, commandId: "", authExpired: false, mediaId: "", heartbeat: CreateObject("roTimespan") }
+    m.port = CreateObject("roMessagePort")
+    m.top.observeField("cancelRequested", m.port)
+    m.top.observeField("command", m.port)
+    message = ""
+    try
+        message = runSession()
+    catch error
+        message = "The native DVD session returned invalid data."
+    end try
+    ' Cleanup survives a detached page and even a lost start response.
+    if m.native.started then
+        result = sessionRequest(m.native.path, "DELETE", invalid)
+        if not result.ok and result.status <> 404 and result.status <> 410 and message = "" then message = "DVD cleanup failed; the server session will expire automatically."
+    end if
+    m.top.response = { action: DvdSession.Event.Closed, requestId: request.requestId, message: message, errorMessage: message, authExpired: m.native.authExpired }
+end sub
+
+'-------------------------------------------------------------------------------
+' runSession
+'-------------------------------------------------------------------------------
+function runSession() as string
+    request = m.native.request
+    path = Strings.ToString(request.startPath)
+    if not DvdPaths.IsScoped(path, "Discs", request.discId) then return "Invalid native DVD session endpoint."
+    parts = path.Split("/")
+    if parts.Count() <> 5 or parts[4] <> "Sessions" then return "Invalid native DVD session endpoint."
+    if not DvdPaths.SameId(request.requestId, request.requestId) then return "Invalid session identity."
+    m.native.path = path + "/" + request.requestId
+    if m.top.cancelRequested then return ""
+    m.native.started = true
+    body = Json.Object([Json.Pair("requestId", request.requestId)])
+    result = requestWithRetry(path, "POST", body)
+    if m.top.cancelRequested then return ""
+    if not result.ok then return Strings.ToString(result.errorMessage, "Unable to start the DVD.")
+    acceptSnapshot(result.data)
+    while not m.top.cancelRequested
+        snapshot = m.native.snapshot
+        if snapshot.state = DvdSession.State.Failed then return Strings.ToString(snapshot.error, "Native DVD session failed.")
+        if snapshot.state = DvdSession.State.Stopped then return ""
+        if m.native.heartbeat.TotalMilliseconds() >= 30000 then
+            m.native.heartbeat.Mark()
+            result = requestWithRetry(snapshot.heartbeatPath, "POST", "")
+            if not result.ok then return Strings.ToString(result.errorMessage, "Unable to keep the DVD session alive.")
+        end if
+        command = m.top.command
+        if command <> invalid and command.requestId <> m.native.commandId then
+            result = sendCommand(command)
+            if not result.ok and result.status <> 409 then return Strings.ToString(result.errorMessage, "DVD command failed.")
+        else if snapshot.state = DvdSession.State.Still and snapshot.still.expiresUtc <> invalid then
+            expiry = DateTime.FromIsoSeconds(snapshot.still.expiresUtc)
+            now = CreateObject("roDateTime")
+            now.Mark()
+            if expiry > 0 and now.AsSeconds() >= expiry then
+                command = { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: DvdSession.Action.StillComplete, revision: snapshot.revision }
+                result = sendCommand(command, false)
+                if not result.ok and result.status <> 409 then return Strings.ToString(result.errorMessage, "Unable to continue after DVD still.")
+            end if
+        end if
+        if m.top.cancelRequested then exit while
+        wait(400, m.port)
+        if m.top.cancelRequested then exit while
+        result = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)
+        if not result.ok then return Strings.ToString(result.errorMessage, "Unable to read DVD session status.")
+        acceptSnapshot(result.data)
+    end while
+    return ""
+end function
+
+'-------------------------------------------------------------------------------
+' sendCommand
+'-------------------------------------------------------------------------------
+function sendCommand(command as object, notifyPage = true as boolean) as object
+    pairs = [Json.Pair("requestId", command.requestId), Json.Pair("action", command.action)]
+    if command.playbackId <> invalid then
+        pairs.Push(Json.Pair("playbackId", command.playbackId))
+    else
+        pairs.Push(Json.NumberPair("revision", command.revision))
+    end if
+    if command.button <> invalid then pairs.Push(Json.NumberPair("button", command.button))
+    if command.positionSeconds <> invalid then pairs.Push(Json.NumberPair("positionSeconds", command.positionSeconds))
+    result = requestWithRetry(m.native.snapshot.commandPath, "POST", Json.Object(pairs))
+    if m.top.cancelRequested then return result
+    if result.ok then
+        acceptSnapshot(result.data)
+    else if result.status = 409 then
+        status = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)
+        if not status.ok then return status
+        acceptSnapshot(status.data)
+        snapshot = m.native.snapshot
+        ' EOF may beat encoder completion. Keep the identical command pending.
+        if command.action = DvdSession.Action.Complete and snapshot.playback <> invalid then
+            if DvdPaths.SameId(snapshot.playback.playbackId, command.playbackId) then return result
+        end if
+    end if
+    if notifyPage then
+        m.native.commandId = command.requestId
+        m.top.response = { action: DvdSession.Event.Command, requestId: m.native.request.requestId, commandId: command.requestId, ok: result.ok, conflict: result.status = 409, payload: m.native.snapshot }
+    end if
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' acceptSnapshot
+'-------------------------------------------------------------------------------
+sub acceptSnapshot(data as dynamic)
+    if type(data) <> "roAssociativeArray" then throw "Missing session snapshot."
+    if data.schemaVersion <> "starfin-dvd-session/1" or not DvdPaths.SameId(data.sessionId, m.native.request.requestId) then throw "Invalid session identity."
+    if data.statusPath <> m.native.path or data.stopPath <> m.native.path then throw "Invalid session paths."
+    if data.commandPath <> m.native.path + "/Commands" or data.heartbeatPath <> m.native.path + "/Heartbeat" then throw "Invalid command paths."
+    revision = Number.ToInteger(data.revision, -1)
+    if revision < 0 then throw "Invalid session revision."
+    if revision < m.native.revision then return
+    m.native.snapshot = data
+    if revision = m.native.revision then return
+    if data.state = DvdSession.State.Playing or data.state = DvdSession.State.AwaitingCompletion then
+        playback = data.playback
+        if playback = invalid then throw "Missing playback."
+        if playback.streamFormat <> "hls" or playback.loop <> false or playback.canSeek <> false then throw "Unsupported playback."
+        path = Strings.ToString(playback.playlistPath)
+        parts = path.Split("/")
+        if parts.Count() <> 9 then throw "Invalid playback path."
+        if not DvdPaths.IsScoped(path, "Discs", m.native.request.discId) then throw "Invalid playback disc."
+        if parts[4] <> "Sessions" or not DvdPaths.SameId(parts[5], data.sessionId) or parts[6] <> "Media" or not DvdPaths.SameId(parts[7], playback.playbackId) or parts[8] <> "index.m3u8" then throw "Invalid playback identity."
+        if m.native.mediaId <> playback.playbackId then
+            ' Do not hand Roku an unpublished playlist; 503 requests wait two seconds.
+            result = requestWithRetry(path, "GET", invalid)
+            if not result.ok then throw "DVD playlist could not be published."
+            m.native.mediaId = playback.playbackId
+        end if
+    end if
+    m.native.revision = revision
+    if not m.top.cancelRequested then m.top.response = { action: DvdSession.Event.Snapshot, requestId: m.native.request.requestId, payload: data }
+end sub
+
+'-------------------------------------------------------------------------------
+' requestWithRetry
+'-------------------------------------------------------------------------------
+function requestWithRetry(path as string, method as string, body as dynamic) as object
+    result = { ok: false, errorMessage: "DVD session cancelled." }
+    for attempt = 0 to 2
+        if m.top.cancelRequested then return result
+        result = sessionRequest(path, method, body)
+        if result.ok then return result
+        status = Number.ToInteger(result.status, 0)
+        if status > 0 and status < 500 then return result
+        if attempt < 2 then
+            deadline = CreateObject("roTimespan")
+            while deadline.TotalMilliseconds() < 2000 and not m.top.cancelRequested
+                wait(100, m.port)
+            end while
+        end if
+    end for
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' sessionRequest
+'-------------------------------------------------------------------------------
+function sessionRequest(path as string, method as string, body as dynamic) as object
+    result = HttpClient.Request(Url.Resolve(m.native.request.server, path), method, invalid, body, m.native.headers, false, 10000)
+    if result.authExpired = true then m.native.authExpired = true
+    return result
+end function

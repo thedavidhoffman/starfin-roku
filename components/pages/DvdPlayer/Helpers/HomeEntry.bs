@@ -1,0 +1,58 @@
+import "pkg:/components/pages/DvdPlayer/Helpers/Contracts.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/source/ResolutionProfile.bs"
+
+'-------------------------------------------------------------------------------
+' dvdHomeAvailable
+'-------------------------------------------------------------------------------
+function dvdHomeAvailable() as boolean
+    data = m.top.dvdPresentation
+    request = m.homeState.request
+    if data = invalid or request = invalid then return false
+    return data.available = true and data.server = request.server and data.token = request.token and data.userId = request.userId
+end function
+
+'-------------------------------------------------------------------------------
+' onDvdPresentationChanged
+'-------------------------------------------------------------------------------
+sub onDvdPresentationChanged()
+    if m.homeState.layout.loading or m.homeState.request = invalid then return
+    libraries = m.homeState.sectionItems[HomeLayout.Section.Libraries]
+    if libraries = invalid then libraries = []
+    if isHomeSectionEnabled(HomeLayout.Section.Libraries) then
+        setHomeRowContent(HomeLayout.Section.Libraries, "My Media", libraries)
+    else
+        m.homeState.rows.Delete(HomeLayout.Section.Libraries)
+    end if
+    renderRows()
+end sub
+
+'-------------------------------------------------------------------------------
+' addDvdHomeCard
+'-------------------------------------------------------------------------------
+sub addDvdHomeCard(content as object)
+    if not dvdHomeAvailable() or not isHomeSectionEnabled(HomeLayout.Section.Libraries) then return
+    item = { Id: DvdMenu.LocalItem.Library, Name: "DVDs" }
+    card = content.createChild("ContentNode")
+    card.title = item.Name
+    card.addFields({ raw: item, imageAspect: VideoCardPresentation.Type.Thumbnail, fitArtwork: true, showArtworkBackground: true, tracksPlaybackProgress: false, showWatchedIndicator: false })
+    card.addFields(MediaCardContent.Build(item, false))
+    data = m.top.dvdPresentation
+    if Strings.ToString(data.homeImageTag) = "" then return
+    path = "Starfin/Dvd/Images/Home?tag=" + Encode.Url(data.homeImageTag)
+    if not DvdPaths.IsImage(path, "Home") then return
+    imageWidth = 441
+    if ResolutionProfile.IsHd() then imageWidth = 294
+    media = JellyfinAuth.BuildMediaRequest(data.server, path + "&width=" + imageWidth.ToStr(), data.token, data.userId)
+    card.HDPosterUrl = media.url
+    card.addFields({ imageHeaders: media.headers })
+end sub
+
+'-------------------------------------------------------------------------------
+' focusDvdLibrary
+'-------------------------------------------------------------------------------
+sub focusDvdLibrary()
+    captureHomeFocus(HomeLayout.Section.Libraries, DvdMenu.LocalItem.Library)
+    restoreHomeFocus()
+end sub

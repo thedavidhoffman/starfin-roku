@@ -1,278 +1,280 @@
-# DVD menu demo and ISO playback POC
+# DVD library and native playback
 
-The temporary **DVD Demo** HeaderButton occupies the top-left account-badge area
-when Display Account Badge is off. From Header Home, press Left to reach it.
-Home remains the normal header focus entry. Enabling the badge hides the demo
-button without changing the saved setting.
+Home's **My Media** row appends one **DVDs** card after plugin discovery succeeds.
+It respects the Libraries-row visibility preference and is independent of the
+account badge. There is no DVD header button or alternate entry when the row is
+hidden. The local card has a stable identity, never enters Jellyfin library or
+Recently Added requests, and restores focus when the DVD browser closes. Home
+composes it with ordinary libraries regardless of response arrival order.
 
-DVD Demo opens the transparent `DvdLibraryPage` inside the normal app shell.
-The configured ThemeBackground, top navigation and clock remain visible. The
-browser owns catalog discovery: one enabled library opens directly; multiple
-libraries appear as poster cards using the existing placeholder artwork. No
-library-selection dialog is opened. Back from a multi-library drilldown restores
-the focused library card; Back from a single library or the root returns Home.
-Up from the first poster row focuses the header; Down returns to the browser.
+DVDs opens the transparent `DvdLibraryPage` inside the normal app shell. Catalog
+loading starts only on entry: one enabled library opens directly; multiple
+libraries appear in a four-column landscape grid with authenticated artwork.
+Back from a multi-library drilldown restores the focused library card; Back from
+a single library or catalog returns to the Home DVD card. The header and clock
+remain visible. Titles inside a library retain the six-column poster grid. Both DVD grids use a
+24-pixel vertical row gap in the 1080p design space, preserving room below title
+and caption lines; horizontal spacing and card geometry follow the shared layouts.
 
-## Metadata browser (plugin 0.1.20)
+## Plugin discovery and artwork
 
-The browser displays six posters across in one visible, vertically scrolling row,
+After login or saved-session restoration, `DvdDiscoveryTask` requests
+`Starfin/Dvd/Info` with a 3,000 ms timeout, preserving the configured server base
+path and existing `Authorization: MediaBrowser` authentication. Home does not wait
+for discovery. HTTP 200 with a nonempty string `version` enables the DVD card;
+no exact plugin-version match is required. Discovery confirms availability only,
+not configured libraries or playback readiness. There is no `/Version` fallback.
+
+`homeImageTag` is opaque: Starfin URL-encodes it into
+`Starfin/Dvd/Images/Home?tag=<encoded-tag>&width=<physical-width>`. Home artwork is
+requested directly, with no startup catalog fetch. A missing tag keeps the card
+usable with local placeholder artwork. No random session query, polling, or
+client ETag file cache is used. New tags are picked up on a new authenticated
+connection; the plugin owns tag changes after upload/reset/default replacement.
+
+404 means the endpoint is unavailable (including an older backend). Timeout,
+network errors, 5xx, malformed success and unexpected responses are temporary
+failures. Neither result is persisted; retry occurs on the next authenticated
+connection or app restart. 401 uses session-expiry handling; 403 reports access
+denied without expiring an otherwise working session. Both keep the card hidden.
+
+DvdDiscovery owns task cancellation and generation/node correlation. MainScene
+passes its session-scoped presentation to HomePage. Server/user/token matching
+prevents stale availability or credentials from crossing sessions. Sign-out and
+login routing reset discovery. Returning from playback does not rediscover or
+refresh the retained DVD browser.
+
+Home and library cards contain artwork without stretching/cropping. The plugin
+serves its embedded default when no custom image is configured. Starfin's local
+placeholder covers loading/failure; the earlier generated concept is not bundled.
+Home and library images request width 441 at 1080p or 294 at 720p. Title posters
+request 252 or 168 respectively. All remote images use the MediaBrowser header.
+Optional authenticated-image support in shared cards replaces recycled Poster
+nodes to isolate credentials and old loads; ordinary card rendering is retained.
+
+The library chooser consumes supplied `artworkPath`; titles consume `posterPath`.
+Feature-local validation accepts `Images/Home`, `Images/Libraries/{libraryId}`,
+and `Images/Titles/{metadataId}/Poster`, preserving the supplied `tag` query before
+appending width. The retired `Metadata/{metadataId}/Poster` route is not accepted.
+Library responses replace old results; catalog selection is retained by library ID.
+
+Deployment requires the new `/Info` and unified image routes. The backend handoff
+states package 0.1.40 still has the old discovery contract. No backend build or
+deployment was performed here. Source/diff review only: no test changes, builds,
+automated validation, or device checks. Pending checks cover response ordering,
+hidden My Media, absent tags, custom/default/failed artwork, session changes,
+recycled cells, base paths, both resolutions, empty/multiple/removed libraries,
+poster-route migration, and focus return.
+
+## Metadata browser (plugin 0.1.29)
+
+The browser displays a six-column, two-row poster grid with vertical scrolling,
 below the app header. It shows the library heading and card labels, without a
 focused-title overview/details block. Overviews remain in the data for future UI.
 ScrollingLabel uses maxWidth=252; only the focused card scrolls overflowing text.
-Single-disc captions show the year when present; grouped cards show disc count.
+Title cards show the year on the left when present. Multi-disc cards also show
+the disc count right-aligned on the same caption row; single-disc cards omit it.
 The browser has no footer control hints or Options refresh action. OK opens the focused card and Back retains the navigation described above. Empty and failed libraries show page-owned retry instructions; OK retries an empty or failed result.
 
 Discs are grouped only within the selected library by nonempty `metadataId`,
 normalizing UUID case/hyphens. Missing metadata IDs produce individual disc cards;
 names and provider IDs never merge groups. Groups retain catalog order and use
-the first member's metadata. Original disc labels are retained in the multidisc picker. OK on one disc opens its menu directly. OK
-on a multi-disc group opens a top-level disc picker with original labels, sorting
-positive disc numbers first, then labels; unnumbered discs follow. Back dismisses
-that picker to the same focused card. The disc picker uses an 800 x 590 dialog with a 680-pixel-wide list, five visible 72-pixel rows, and floating focus. Additional discs scroll naturally without wrapping; there is no right-hand detail label. Unavailable ISO content remains browsable.
+the first member's metadata. OK on one disc starts its native DVD session at authored first-play. OK
+on a multi-disc group opens a top-level disc picker, sorting by disc number, then
+side number, then case-insensitive name and ID. Positive numbers precede missing
+values at each numeric level. The picker shows `Disc 2, Side 1`, `Disc 2`, or
+`Side 1` according to available values; when neither number exists, it uses the name/ID
+fallback. Missing or null `sideNumber` in older responses is treated as absent. Back dismisses
+that picker to the same focused card. The disc picker uses an 800 x 590 dialog with a 680-pixel-wide list, five visible 72-pixel rows, and floating focus. Additional discs scroll naturally without wrapping; there is no right-hand detail label. Titles without matched metadata or posters remain browsable with the existing fallback name and artwork. The backend excludes missing ISOs from its results.
 
-Posters use explicit session authentication and preserve the full `?v=` cache key. The client appends `width=252` at 1080p or `width=168` at 720p to request the displayed pixel width instead of the full-size image, after validating the supplied metadata path.
+Posters use explicit session authentication and preserve the full `?tag=` cache key. The client appends `width=252` at 1080p or `width=168` at 720p to request the displayed pixel width instead of the full-size image, after validating the supplied metadata path.
 A separate metadata-poster path validator permits only the plugin's UUID-scoped
-Metadata/Poster route and version query. Shared six-column mask/focus assets keep
+Images/Titles/Poster route and tag query. Shared six-column mask/focus assets keep
 artwork and native grid highlights aligned. Each recycled card creates a fresh
 Poster and checks node identity before applying load events; missing, loading,
 and failed artwork retain a local placeholder.
 
-MainScene retains the hidden browser while DvdPlayer is open. Back from the DVD
-root restores the app header and focuses the retained browser grid without fetching
+MainScene retains the hidden browser while DvdPlayer is open. Back from the DVD restores the app header and focuses the retained browser grid without fetching
 library data or rebuilding poster nodes. Selection and scroll position remain intact.
-Reopening DVD Demo from Home creates a new browser and fetches fresh data.
+Reopening DVDs from Home creates a new browser and fetches fresh data. Each successful library load replaces the groups and grid content rather than appending; entries removed by the backend disappear on that load. Entries are not filtered by metadata, poster availability, disc number, or side number.
 Loading blocks selection until its correlated request completes. Closing a page
 cancels its request and ignores stale responses. Authentication expiry follows
 the existing task observation route. Account/session reset removes both pages.
 Identify, scanning, and metadata configuration remain in Jellyfin administration.
 
-## Ownership and isolation
+## Native DVD sessions (plugin 0.1.22)
 
-`components/pages/DvdPlayer/` owns the fullscreen feature and its `Helpers/`
-files. Geometry, navigation state, rendering, and selection construction remain
-component-local; no DVD helper is added to `/source`. LibraryModel remains feature-local; DvdLibraryPage owns loading, grouping, and grid focus. The API task lives under
-`components/tasks/DvdPlayer/`. MainScene only passes explicit session context,
-hosts the browser/player, stops theme audio, and routes their return focus.
-The existing player, playback negotiation, progress, and watched-state flows
-are not used. Release version metadata and the plugin project are unchanged.
+This is a breaking client/server migration. The client accepts only
+`starfin-dvd-disc/2`, `mode: native-session`, and `session.schemaVersion:
+starfin-dvd-session/1`. The catalog, metadata, poster sizing, and retained library
+browser stay unchanged. Static menu maps, local audio/subtitle selection aliases,
+title/chapter playback selection, and the old playback endpoint are removed.
+Opening a disc starts original first-play, including authored intros and language
+choices. Authored audio choices are owned by libdvdnav on the server.
 
-## Plugin contract and authentication
+### Ownership
 
-The task starts at `Starfin/Dvd/Libraries` (`starfin-dvd-library-catalog/1`),
-follows the selected `libraryPath` (`starfin-dvd-library/1`), and fetches the
-selected `manifestPath` (`starfin-dvd-disc/1`) on title selection. Embedded demos
-are not injected or used as a fallback. The returned disc/library UUIDs are
-matched across compact/hyphenated forms. Feature-local `Helpers/Paths.bs` checks
-returned relative paths against the selected library/disc, rejecting external
-URLs and traversal. Asset generations and playback start paths come from the
-manifest; the client does not construct demo URLs. Plugin-configured libraries
-are available to authenticated users, without Jellyfin library-specific access
-restrictions; no admin configuration or filesystem paths are requested.
-The inspector-derived plugin contract intentionally uses camelCase, unlike
-ordinary Jellyfin DTOs. No mixed-case fallback fields are used.
+`DvdPlayer` owns the current session revision, command queue, focus, and visible
+media. Feature-local `Rendering.bs` handles menu artwork, previews, and button
+geometry; `MenuModel.bs` contains only aspect-ratio fitting. `Playback.bs` owns
+finite Roku Video units and reports actual player events. `SessionContracts.bs`
+names the native states, commands, and task events. No DVD helpers move to source.
 
-All URLs retain the configured Jellyfin base path. JSON requests use
-`JellyfinAuth.BuildTokenHeaders`; original images use a scoped HTTP agent with
-the same Authorization header; previews use `JellyfinAuth.CreateContent` and a
-dedicated Video HTTP agent carrying `Authorization: MediaBrowser …`. Tokens
-never enter query strings. Catalog and manifest failures produce a page-owned
-error with OK to retry and Back to exit. Requests carry generation IDs and are
-invalidated on reload/deactivation. Tasks participate in the existing shell
-authentication-expiry observation.
+`DvdSessionTask` owns the authenticated HTTP session lifetime: start, serialized
+commands, status polls, 30-second heartbeats, and DELETE cleanup. `DvdDemoTask`
+continues to load discovery and manifests. MainScene owns only routing and the
+explicit server/token/user session handoff. Existing playback controllers and
+watched-state flows are not involved. The old `DvdPlaybackTask` is removed.
 
-A rescan can invalidate generation-specific assets. A failed menu image triggers
-one fresh manifest load per page before showing an error; it cannot interrupt
-active content playback. Options on a menu explicitly reloads the manifest and
-returns to its current root with fresh selection state. Preview failures retain
-the still and offer this refresh action instead of automatically retrying HLS.
-Removed libraries/discs disappear on refresh, and HTTP errors remain retryable.
-Absent initial menus show navigation unavailable. A partial scan without a default
-selection may still browse supported menus; Resume cannot invent a title, and
-unsupported actions continue to show an explanation without issuing playback.
+### Lifecycle and commands
 
-## Rendering and navigation
+Each opening generates a new UUID and POSTs `{ "requestId": "..." }` to the
+manifest's validated session start path. That identity also determines cleanup
+when a start response is lost. Status, commands, heartbeat, and stop paths are
+checked against that session. All URLs preserve the configured server base path.
+Every API request and Video/Poster HTTP agent uses `Authorization: MediaBrowser`;
+tokens never enter URLs. HLS ContentNodes also carry the authorization header.
 
-The menu is centered on black inside the app's 1920x1080 design coordinate
-space. Its declared display aspect ratio determines the fitted rectangle;
-source width/height separately determine hotspot scale. For the fixture's
-720x480, 4:3 menus, the rectangle is 1440x1080 at x=240. The still, preview,
-and highlight layers share this rectangle. Title-set zero uses the video
-manager's menu video attributes.
+The worker polls at approximately 400 ms between requests and sends heartbeats
+while a menu, paused video, or still is visible. Only increasing revisions change
+the UI. A single in-flight command plus a page-owned queue serializes remote/player
+commands; obsolete queued revisions/playback IDs are dropped. Transport/server
+failures retry at most twice after two-second waits, preserving the exact command
+body and UUID. A 409 refreshes state before accepting another navigation action.
+Actual EOF that arrives before encoding completes retains its identical complete
+command and retries after polling while that playback ID is current.
 
-The screen's `buttonGroup` (default 1) selects buttons from the first navigation
-record. Hidden buttons retain directional geometry without a visible highlight.
-Raw `autoAction` focus executes only a reviewed navigate action, honors destination
-focus, and uses a visited screen/button set with a 16-transition limit to reject
-cycles. Other DVD commands remain unexecuted. Focus
-uses a requested button, then forcedSelect, then the first button. Arrow keys
-follow the supplied neighbor IDs, with unavailable targets retaining focus.
-OK uses reviewed menu-map actions only; commandHex and forced activation are
-never executed. Hotspots are focusable with translucent gold fill and borders.
+Back hides visible playback controls first. During content playback/stills it requests returnToLastMenu; from menus/errors it exits the DVD, stops local players, and signals worker
+cancellation. The detached worker is allowed to finish its request and DELETE the
+session; it is never forcibly stopped. An authored stop also deletes the session
+and returns to the retained library browser. Failed sessions display the server
+error and close the session. OK on that error starts a fresh session; Back exits.
+404/410/429 failures are not retried. No static interpretation fallback exists.
 
-Menu previews prefer the optional `disc.menuAssets[].previewLoop` from plugin
-0.1.2. This relative path resolves against the configured server base URL,
-including any base path. It plays as live HLS with audio enabled, native looping
-disabled, and no seeking. The plugin repeats the clip; the client never treats
-live duration as an approaching EOF or covers video at source-clip boundaries.
-Older manifests without `previewLoop` retain MP4 playback through `previewVideo`,
-also with audio enabled. Still-only assets remain artwork only.
+### Menus and remote controls
 
-The same scoped authentication config applies to the player and content. Roku's
-[content metadata documentation](https://developer.roku.com/dev/docs/content-metadata)
-describes HTTP headers and dedicated agents, but header delivery on initial
-playlists, refreshes, and child segments remains unverified on the device.
+Menu snapshots reconcile background media separately from button overlays. Exact
+image/HLS/MP4 source paths identify the background within the current session;
+asset IDs and visual similarity do not establish equivalence. Declared sources
+are stored separately from runtime HLS-to-MP4 fallback state. Unchanged sources
+retain Poster/Video nodes, audio, position, timers, and failure/fallback state while
+buttons, links, auto-action flags, selected focus, and display geometry update.
 
-HLS keeps the still visible until playback advances, covers genuine buffering,
-and retains the still on errors, unexpected EOF, or timeout. Its covered timeout
-is 35 seconds to allow the plugin's 15-second startup deadline plus Roku
-buffering. There is no automatic retry. A failed HLS URL has a 30-second cooldown
-within the page instance, including menu revisits and message dismissal. A later
-attempt opens the original manifest playlist URL, never a cached segment URL.
-Roku's own HTTP retry behavior and handling of the server's 503 response still
-need device verification. HLS failures stay on artwork; MP4 is the compatibility
-path for manifests without HLS. Stopping or switching menus releases the player;
-no server stop API is called. Shared server streams expire after 60 seconds idle
-and may start playback partway through the source clip.
+Menu-originated preparation keeps the background playing without a loading overlay.
+Input remains locked through command acknowledgment. Changed sources stop the old
+preview and retain its ready still until the replacement still loads; repeated
+replacements cannot displace that ready fallback with an unfinished image. The new
+preview starts after its still is ready to cover buffering. Replaced-node events
+are ignored. Content playback clears menu media before presenting titles/trailers.
+No background update itself activates an auto-action button.
 
-Finite MP4 samples use the Video node's native `loop` field.
-Loop boundaries retain the same Video node and content instead of stopping and
-recreating the player. The original still remains loaded above the preview and
-below the focus overlays. `setPreviewCovered` is the single writer of its
-visibility. A playing notification alone does not uncover video: the timeline
-must advance beyond 0.15 seconds. Position notifications are requested every
-0.1 seconds. The still covers the final 0.75 seconds before EOF (one quarter of
-the duration for clips shorter than three seconds), then remains until the
-position wraps and advances again. This handles loops without intervening
-buffering/finished notifications. Buffering and finished events also request
-cover. A 20-second covered-transition timeout removes the preview while
-preserving menu input. Repeated cover requests do not reset that deadline.
+Pending device verification includes unchanged-background audio/video continuity,
+geometry changes, genuine source replacement, rapid unfinished replacements,
+preview failure, repeated/stale snapshots, command locks, and menu-to-content
+transitions. This change received source/diff review only, with no test changes,
+builds, automated validation, deployment, or device checks.
 
-The user observed a black flash with native looping and no visible fallback.
-The previous state-only presentation path could not anticipate that boundary.
-This correction deliberately trades a brief still-image pause for covering
-the transition; it does not provide frame-perfect seamless motion. On November
-15, 2026, the user confirmed on their device that the still now replaces the
-jarring blank screen. Preserve this as the improved POC baseline while exploring
-uninterrupted motion; this observation is not comprehensive device verification.
-The older [Roku looping example](https://forum.developer.roku.com/t/looping-video/527)
-uses a black canvas and recreates roVideoScreen, so it is not a gapless-loop
-solution for this SceneGraph page.
-Every new preview attempt has fresh node ownership; events from retired nodes
-are ignored. A failed still produces a retryable page error.
+Plugin 0.1.38 adds optional `menu.buttons[].autoAction`. Directional selection of
+an authored destination with `autoAction: true` immediately sends the normal
+`button` command using its ID, the current revision, and one new request UUID.
+Missing/false flags keep normal OK activation. Auto-action buttons receive no client highlight, including when selected by a snapshot; their focus, directional links, and activation remain intact. Small buttons remain in the graph,
+including self-linked destinations; no geometry or title heuristics apply.
+Initial focus, redraws, polling, and replayed snapshots never activate buttons.
 
-History records screen transitions. Toggle artwork replaces the current screen
-without pushing history. Back resolves historical audio/subtitle/Info Text
-aliases against current preferences, then falls back to the disc root; Back
-at the root with empty history exits. State resets when the demo reopens.
+OK and automatic activation share one command path. Menu input is blocked while
+a command is queued/in flight or navigation is pending, including the interval
+between a new menu snapshot and its command acknowledgment. Retries retain the
+same command UUID. An acknowledgment that leaves the session in a menu releases
+the navigation lock even if its revision did not change. Normal revision/node
+correlation and backend-selected focus handle the returned menu. Timed/forced
+activation is outside this change. Source/diff review only; device verification
+of The Aristocats, self-links, ordinary buttons, rapid input, unchanged-revision
+acknowledgments, conflicts, and stale/repeated snapshots remains deferred.
 
-## Selection and ISO playback
+Menus use `imagePath`, optional `loopPath` (preferred), and `videoPath` (fallback).
+The live HLS preview has audio enabled, client looping disabled, and no seeking.
+MP4 fallback retains the previous local looping/cover behavior. A failed HLS
+preview can fall back to MP4; otherwise artwork and button controls remain.
+Preview startup/buffering has a 35-second HLS or 20-second MP4 timeout, with no
+rapid retry of failed live preview URLs. New menu artwork retains the previous
+image underneath until loading completes. Node identity guards reject old events.
 
-Initial title, chapter, and audio come from `defaultSelection` when present.
-Scanned manifests without it do not infer a title from catalog order or commands.
-`playableTitles`, when supplied, limits content selections.
-Subtitle and Info Text intent start off. Feature audio preference survives extra selection. Effective
-audio uses the selected title's PGC mappings, choosing the preference when
-available, otherwise its first available track, or no audio.
-The default title determines the feature title set. Menu aliases come from
-`menuMap.aliases`; settings actions honor their optional target screen, allowing
-Raiders' three audio choices to retain its setup artwork. Unsupported and unknown
-actions show a reason without substituting a title or posting playback. Asset,
-menu HLS, and content endpoints use the selected disc ID. A new page per disc
-resets menu state and preview failure caches; paths also include the disc ID.
+`sourceWidth`, `sourceHeight`, and `aspectRatio` define one fitted display rectangle
+in the 1920 x 1080 design space. Both artwork/video and button coordinates use that
+rectangle. The server's selected button is used when valid, otherwise the first
+button. Arrows follow supplied neighbors locally; OK sends a button ID with the
+current revision. No authored commands, forced activation, or title shortcuts are
+interpreted on Roku. Options requests the authored DVD Root Menu (Title Menu is
+the server fallback); this interrupts current media rather than resuming an exact
+position. Back exits from authored submenus. During content playback, Back first dismisses visible playback controls.
 
-Select and Resume call local `playSelection`. When `playbackAvailable` is true
-and the manifest supplies `playback.schemaVersion = starfin-dvd-playback/0.1`,
-the selection opens plugin 0.1.4 ISO playback. Absent capability/prerequisites
-retain the title/chapter/track acknowledgment with an unavailable explanation.
-Subtitle or Info Text intent blocks playback with an explanatory AppMessage;
-neither saved preference is silently cleared. PDF screens remain artwork only.
+### Finite content and stills
 
-The local selection snapshot still includes reviewed chapter/PGC metadata, but
-the task sends only the contract's six fields: a fresh UUID `requestId`, global
-`titleNumber`, one-based `chapterNumber`, logical `audioTrackNumber` (null when
-absent), and the two subtitle/Info Text intent booleans. Outbound JSON uses
-explicit camelCase keys through `Json` helpers. No file paths, PGC/program, or
-approximate seek offsets are sent. There is no automatic POST retry. Resume
-currently starts the retained title/chapter; it does not restore elapsed time.
+`starting`/`preparingPlayback` retains an already visible menu background while resolving menu navigation. When entered from content it keeps menu artwork hidden and retains the previous content Video node when available. Menu stills are used only for menu previews. Title/trailer startup and buffering keep the content surface visible, showing its retained frame or black with the loading indicator; they never reuse an earlier menu image. Starting a content unit clears the obsolete menu artwork.
+A new `playbackId` starts HLS exactly once after the worker confirms the original
+playlist is published. A 503 preflight waits two seconds before retrying. The
+finite player disables looping, seeking, and native trick-play controls. It starts
+at the beginning of each supplied media unit, not the HLS live edge.
 
-`Helpers/Playback.bs` owns a separate fullscreen native Video surface following
-the trailer-player pattern. It deliberately bypasses ordinary VideoPlayer's
-Jellyfin item negotiation, queue, progress, and watched-state behavior. The
-surface uses authenticated finite HLS, audio on, looping off, Live false, and
-PlayStart zero to begin the selected chapter. No seek commands are issued.
-Play/OK toggles pause; arrows/replay/seek keys are consumed by the page. Menu
-preview audio stops before content starts. The menu tree, history, selections,
-and hotspot remain retained; artwork and Spinner cover startup.
+Roku Playing sends `started`; forward position updates report `progress` at most
+once per ten seconds. Play/OK pauses or resumes locally and queues the matching
+server command. Only Roku Finished sends `complete`; neither
+`awaitingCompletion` nor `encodingComplete` advances the DVD on its own.
+Duplicate EOF and stale events from replaced Video nodes are ignored. Player
+failure reports `playbackFailed`; buffering timeout closes the session.
 
-`DvdPlaybackTask` owns the complete HTTP session lifetime using captured session
-authentication. It accepts the response session UUID in hyphenated or compact
-form, case-insensitively: the installed Jellyfin serializer emits compact GUID
-values while the plugin's route strings retain hyphens. It continues to validate
-all response paths exactly against the known hyphenated request UUID,
-preserves server base paths, and supplies MediaBrowser authentication. Heartbeats
-run every 30 seconds after POST returns, including player startup, buffering,
-and pause. POST and subsequent control requests have a 15-second timeout. The
-task queries status on player failure or a 60-second startup/buffering timeout,
-then deletes the session. Backend `completed` means encoding finished and does
-not end client playback: only the Video finished event does that.
+The Video node is retained across EOF/still rather than stopped or removed until
+the next media/menu transition. Actual last-frame retention depends on Roku
+runtime behavior and is not yet verified. Finite still completion uses the
+server's `expiresUtc` via the existing DateTime helper, followed by a
+revision-checked `stillComplete`; indefinite stills wait for Options or Back.
+Heartbeats continue in both cases. No seeking, saved resume, subtitle rendering,
+angle switching, or watched-state updates are implemented.
 
-Back, natural EOF, failures, and page removal share cleanup. Video/timer ownership
-is revoked before stopping; late events and responses are checked by node and
-request UUID. Cancellation during POST lets the task finish and DELETE the known
-session instead of force-stopping its thread. Cleanup continues after page removal.
-Normal return waits for cleanup, restores the existing hotspot, and reopens the
-original menu preview URL. Errors use AppMessage and restart the preview after
-dismissal. Cleanup is best-effort if transport fails; server idle expiry remains
-the backstop. No user-facing retries loop POST or change the selected tracks.
+### Verification status
 
-## Coverage and verification status
+Source and diffs only during this development cycle. No tests were added or
+updated; previous static-navigation/playback tests describe the removed contract
+and require replacement when test work is authorized. No build, compilation,
+automated validation, deployment, or device checks have been run for this change.
 
-Rooibos coverage is grouped under the owning page and task suites, with Header
-and MainScene regression cases. It covers geometry, state transitions,
-authentication, request correlation, failures, selection payloads, preview
-events, cleanup, and focus. Automation uses remote keys for the menu workflow;
-network fixture setup can force preview failures before entry.
-The automation suite requires the installed Robots of Death plugin on the
-configured test account's server. It reads that server's manifest for directional
-paths rather than injecting button events. The preview-failure proxy is scoped
-to the test and the original session and badge preference are restored afterward.
+Pending authorized verification: full applicable Rooibos/device suite and reachable
+remote workflows; native first-play and language menus; actual EOF continuation
+versus early encoder EOF; duplicate/stale commands; pause/resume and buffering;
+finite/indefinite stills; Options menu interruption; Back/account reset during
+start; capacity/404/410/409/503 handling; token/base-path authentication on every HLS
+playlist, refresh, and segment; 1080p/720p highlights and retained browser focus.
+Seamless transitions between finite media units are not claimed.
 
-The HLS integration and audio changes have source review only. Per the user's
-experimental POC instruction, no test coverage was added or updated for them.
-The plugin handoff reports 0.1.2 source complete but not built or deployed;
-installed 0.1.1 manifests continue to use MP4 until the plugin is deployed.
-Pending HLS checks include authenticated refreshes/segments, continuous audio
-and video across repetitions, switching, fallback, and overlay alignment. A
-musical cut already present in the excerpt is not necessarily a streaming gap.
+## Playback controls: transport version 1
 
-POC diagnostics use the existing Logger with the `DvdPlayer` label. Preview
-starts report the asset, chosen format, and client-loop flag; state changes
-report live mode, position, and duration. Cover transitions report whether an
-MP4 wrap is pending. Stops, error codes, and covered timeouts are also logged.
-Player failures include `errorMsg` and `errorStr` before cleanup, with the session
-token redacted. Native diagnostics may include the failing media URL; request
-headers are not logged. These distinguish MP4 EOF cover
-from HLS buffering before changing the confirmed still-image fallback again.
-Rejected content-session responses log the HTTP status, parsed value type, and
-response body under `DvdPlaybackTask`, with the session token redacted, to identify
-wire-contract differences before changing session validation.
+The [agreed transport scope](dvd-playback-controls-handoff.md) supersedes the
+Previous/Next and title-timeline proposal. The dedicated DvdPlaybackControls
+component displays a centered Play/Pause button and available name/year metadata.
+Previous/Next, custom chapter selection, and a title progress bar are omitted.
+Authored menus remain responsible for scene selection and audio choices.
 
-Implementation source/diff review is separate from verification. Tests, builds,
-function-header/whitespace validation, automation, and real-device inspection
-remain deferred until explicitly authorized. Device acceptance includes the
-installed plugin, preview fallback, modal focus restoration, and highlight
-alignment at both 1080p and 720p. The 0.1.4 content integration is source-reviewed
-only, with no tests added or updated per the experimental POC instruction. Pending
-device checks include exact chapter/audio selection, authenticated child requests,
-finite EVENT-HLS start/end, pause/heartbeat, cancellation during startup, and exact
-menu/focus restoration. This uses the plugin's fixed ISO fixture, not a DVD VM.
-The two-disc picker and Raiders navigation additions are also source-reviewed
-only. No test coverage changes, builds, validation, or UI/device checks were run.
-The scanned-library migration has the same deferred-verification status. Pending
-checks include library/title Back navigation, empty and removed libraries, missing
-metadata, partial scans, generation refresh, and scanned-disc HLS/playback paths.
+Capabilities and current transport flags gate actions; absent fields disable them.
+Pause is local and server-owned, with authoritative snapshot reconciliation after
+acceptance or rejection. Accepted DVD Menu navigation stops old media, clears the
+old playback identity, and follows the new native snapshots. The session task
+includes its latest snapshot in command acknowledgments, including 409 refreshes.
 
-Metadata browser verification is deferred during the open POC development cycle.
-No tests were added or updated for this iteration. Device review should cover
-authenticated posters, grouped/disc selection, refresh and removal, session reset,
-and focus/highlight placement at 1080p and 720p when explicitly authorized.
+OK/direction reveals controls without performing an action. Play toggles directly;
+Options requests DVD Menu. Directional presses keep focus on the single control. Auto-hide is
+five seconds while playing; pause/buffering keeps the overlay visible. Back hides
+visible controls first, then requests returnToLastMenu during playback/stills. Plugin 0.1.27 restores its latest interactive menu and selected button, or performs Root/Title fallback if no checkpoint exists. Back from an authored menu exits. DVD menus hide the overlay;
+Options can still request the authored menu when available. Overlay timers stop
+on failure, exit, and cleanup. Standard player controls remain unchanged.
+
+Source and diff review only; no tests changed or checks run. The plugin handoff
+reports source changes only, without a newly published/deployed package. Runtime
+pause/buffering, menu-from-pause, stale events, HLS authentication, remote focus,
+metadata fallbacks, cleanup, and both resolution layouts remain unverified.
+
+Playback Back requires the advertised returnToLastMenu capability and current
+canReturnToLastMenu availability; hasMenuCheckpoint is informational, not a gate.
+The Options main-menu shortcut remains separate; the overlay has no DVD menu button. Both actions revoke old media
+on acceptance and use current revisions/UUIDs. Restored audio/language registers
+come from the backend checkpoint, rolling back later authored changes. Return
+while paused and stale-event/focus behavior remain unverified on Roku.

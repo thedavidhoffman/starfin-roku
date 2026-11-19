@@ -1,0 +1,148 @@
+'-------------------------------------------------------------------------------
+' transportAvailability
+'-------------------------------------------------------------------------------
+function transportAvailability() as object
+    available = { canPause: false, canMenu: false, canReturn: false }
+    snapshot = m.native.snapshot
+    if snapshot = invalid or m.native.task = invalid or m.loading.failed then return available
+    if m.native.inFlight <> invalid or m.native.queue.Count() > 0 or m.native.navigating then return available
+    if snapshot.capabilities = invalid or snapshot.transport = invalid then return available
+
+    state = snapshot.state
+    playable = state = DvdSession.State.Playing or state = DvdSession.State.AwaitingCompletion
+    available.canReturn = snapshot.capabilities.returnToLastMenu = true and snapshot.transport.canReturnToLastMenu = true and (playable or state = DvdSession.State.Menu or state = DvdSession.State.Still)
+    if Number.ToInteger(snapshot.capabilities.transportVersion, 0) < 1 then return available
+    if playable and snapshot.playback <> invalid and m.playback.video <> invalid and not m.playback.completed and not m.playback.failed then
+        localState = m.playback.video.state
+        available.canPause = snapshot.capabilities.canPause = true and snapshot.transport.canPause = true and DvdPaths.SameId(snapshot.playback.playbackId, m.playback.id) and (localState = VideoPlayerState.Value.Playing or localState = VideoPlayerState.Value.Paused)
+    end if
+    available.canMenu = snapshot.capabilities.dvdMenu = true and snapshot.transport.canRequestMenu = true and (playable or state = DvdSession.State.Menu or state = DvdSession.State.Still)
+    return available
+end function
+
+'-------------------------------------------------------------------------------
+' updateControlsMetadata
+'-------------------------------------------------------------------------------
+sub updateControlsMetadata()
+    manifest = m.menu.manifest
+    metadata = manifest.metadata
+    if type(metadata) <> "roAssociativeArray" then metadata = {}
+    m.transport.title = Strings.Trim(metadata.name)
+    if m.transport.title = "" then m.transport.title = Strings.ToString(manifest.name, Strings.ToString(m.session.demo.name))
+    year = metadata.year
+    if year = invalid then year = manifest.year
+    m.transport.year = ""
+    if Number.ToInteger(year, 0) > 0 then m.transport.year = Strings.ToString(year)
+    syncControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' syncControls
+'-------------------------------------------------------------------------------
+sub syncControls()
+    availability = transportAvailability()
+    m.nodes.controls.presentation = { title: m.transport.title, year: m.transport.year, paused: m.playback.pauseRequested, canPause: availability.canPause }
+    if m.nodes.controls.visible and (m.playback.pauseRequested or m.playback.buffering or m.native.navigating) then m.nodes.controlsTimer.control = TimerControl.Command.Stop
+end sub
+
+'-------------------------------------------------------------------------------
+' showControls
+'-------------------------------------------------------------------------------
+sub showControls()
+    if m.loading.failed or m.native.state = DvdSession.State.Menu then return
+    if m.playback.video = invalid and m.native.state <> DvdSession.State.Still then return
+    m.nodes.controls.visible = true
+    syncControls()
+    m.nodes.controls.callFunc("focusControls")
+    restartControlsTimer()
+end sub
+
+'-------------------------------------------------------------------------------
+' hideControls
+'-------------------------------------------------------------------------------
+sub hideControls()
+    m.nodes.controlsTimer.control = TimerControl.Command.Stop
+    hadFocus = m.nodes.controls.isInFocusChain()
+    m.nodes.controls.visible = false
+    if hadFocus then m.top.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' restartControlsTimer
+'-------------------------------------------------------------------------------
+sub restartControlsTimer()
+    m.nodes.controlsTimer.control = TimerControl.Command.Stop
+    if not m.nodes.controls.visible or m.playback.video = invalid then return
+    if m.playback.video.state <> VideoPlayerState.Value.Playing or m.playback.pauseRequested or m.native.navigating then return
+    m.nodes.controlsTimer.control = TimerControl.Command.Start
+end sub
+
+'-------------------------------------------------------------------------------
+' onControlsTimeout
+'-------------------------------------------------------------------------------
+sub onControlsTimeout()
+    if not m.loading.active or m.playback.video = invalid then return
+    if m.playback.video.state = VideoPlayerState.Value.Playing and not m.playback.pauseRequested then hideControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' toggleContentPause
+'-------------------------------------------------------------------------------
+sub toggleContentPause()
+    availability = transportAvailability()
+    if not availability.canPause then return
+    m.playback.pauseRequested = m.playback.video.state <> VideoPlayerState.Value.Paused
+    if m.playback.pauseRequested then
+        m.playback.video.control = MediaControl.Command.Pause
+        queueCommand(DvdSession.Action.Pause, m.playback.id)
+    else
+        m.playback.video.control = MediaControl.Command.Resume
+        queueCommand(DvdSession.Action.Resume, m.playback.id)
+    end if
+    showControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' reconcileContentPause
+'-------------------------------------------------------------------------------
+sub reconcileContentPause()
+    snapshot = m.native.snapshot
+    if snapshot = invalid or m.playback.video = invalid or snapshot.playback = invalid then return
+    if not DvdPaths.SameId(snapshot.playback.playbackId, m.playback.id) or m.playback.completed then return
+    if m.native.state <> DvdSession.State.Playing and m.native.state <> DvdSession.State.AwaitingCompletion then return
+    pendingPause = false
+    if m.native.inFlight <> invalid then pendingPause = m.native.inFlight.action = DvdSession.Action.Pause or m.native.inFlight.action = DvdSession.Action.Resume
+    if not pendingPause then m.playback.pauseRequested = snapshot.paused = true
+    state = m.playback.video.state
+    if m.playback.pauseRequested and state = VideoPlayerState.Value.Playing then m.playback.video.control = MediaControl.Command.Pause
+    if not m.playback.pauseRequested and state = VideoPlayerState.Value.Paused then m.playback.video.control = MediaControl.Command.Resume
+end sub
+
+'-------------------------------------------------------------------------------
+' requestDvdMenu
+'-------------------------------------------------------------------------------
+sub requestDvdMenu()
+    availability = transportAvailability()
+    if not availability.canMenu then return
+    m.native.navigating = true
+    queueCommand(DvdSession.Action.Menu)
+    syncControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' requestLastMenu
+'-------------------------------------------------------------------------------
+sub requestLastMenu()
+    availability = transportAvailability()
+    if not availability.canReturn then return
+    m.native.navigating = true
+    queueCommand(DvdSession.Action.ReturnToLastMenu)
+    syncControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' isMenuNavigationAction
+'-------------------------------------------------------------------------------
+function isMenuNavigationAction(action as string) as boolean
+    return action = DvdSession.Action.Menu or action = DvdSession.Action.ReturnToLastMenu
+end function

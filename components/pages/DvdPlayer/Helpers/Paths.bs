@@ -6,18 +6,28 @@ namespace DvdPaths
     ' DvdPaths.IsMetadataPoster
     '---------------------------------------------------------------------------
     function IsMetadataPoster(path as dynamic, metadataId as dynamic) as boolean
-        value = Strings.ToString(path)
-        pieces = value.Split("?")
+        return IsImage(path, "Titles", metadataId)
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DvdPaths.IsImage
+    '---------------------------------------------------------------------------
+    function IsImage(path as dynamic, kind as string, expectedId = "" as dynamic) as boolean
+        pieces = Strings.ToString(path).Split("?")
         if pieces.Count() > 2 then return false
         if pieces.Count() = 2 then
-            version = CreateObject("roRegex", "^v=[A-Za-z0-9._~-]+$", "")
-            if not version.IsMatch(pieces[1]) then return false
+            query = CreateObject("roRegex", "^tag=([A-Za-z0-9._~!$'()*+,;=:@/?-]|%[0-9A-Fa-f]{2})+$", "")
+            if not query.IsMatch(pieces[1]) then return false
         end if
         parts = pieces[0].Split("/")
-        if parts.Count() <> 5 then return false
-        expectedId = Strings.ToString(metadataId)
-        if expectedId = "" then expectedId = parts[3]
-        return IsScoped(pieces[0], "Metadata", expectedId) and parts[4] = "Poster"
+        if parts.Count() < 4 then return false
+        if parts[0] <> "Starfin" or parts[1] <> "Dvd" or parts[2] <> "Images" or parts[3] <> kind then return false
+        if kind = "Home" then return parts.Count() = 4
+        if kind <> "Libraries" and kind <> "Titles" then return false
+        if parts.Count() < 5 then return false
+        if not SameId(parts[4], expectedId) then return false
+        if kind = "Libraries" then return parts.Count() = 5
+        return parts.Count() = 6 and parts[5] = "Poster"
     end function
 
     '---------------------------------------------------------------------------

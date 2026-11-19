@@ -6,7 +6,8 @@ individual Starfin features.
 
 ## Table of Contents
 
-- [DVD Metadata Browser, Menus and ISO Playback POC](dvd-menu-demo.md)
+- [DVD Library, Artwork, and Native Playback](dvd-menu-demo.md)
+- [DVD Playback Controls: Agreed Transport Scope](dvd-playback-controls-handoff.md)
 
 - [Collection Browse Preferences](collection-browse-preferences.md)
 

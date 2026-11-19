@@ -14,10 +14,7 @@ import "pkg:/components/pages/DvdPlayer/Helpers/LibraryModel.bs"
 sub init()
     initReferences()
     m.library = { active: false, task: invalid, generation: 0, groups: [], key: "", index: 0, libraries: [], catalogKey: "", view: DvdMenu.BrowserView.Catalog }
-    spec = VideoCardGridLayout.GetSpec("poster", "cards", 6)
-    m.nodes.grid.itemSize = spec.itemSize
-    m.nodes.grid.itemSpacing = spec.itemSpacing
-    m.nodes.grid.focusBitmapUri = spec.focusBitmapUri
+    applyLibraryLayout()
     initHandlers()
 end sub
 
@@ -140,6 +137,7 @@ end sub
 ' renderGroups
 '-------------------------------------------------------------------------------
 sub renderGroups(groups as object)
+    applyLibraryLayout()
     restoreIndex = m.library.index
     if restoreIndex >= groups.Count() then restoreIndex = groups.Count() - 1
     if restoreIndex < 0 then restoreIndex = 0
@@ -148,12 +146,15 @@ sub renderGroups(groups as object)
     for index = 0 to groups.Count() - 1
         group = groups[index]
         if group.key = m.library.key then restoreIndex = index
-        caption = group.discs.Count().ToStr() + " discs"
-        if group.discs.Count() = 1 then caption = Strings.ToString(group.year)
+        caption = Strings.ToString(group.year)
+        discCountLabel = ""
+        if group.discs.Count() > 1 then discCountLabel = group.discs.Count().ToStr() + " discs"
         if m.library.view = DvdMenu.BrowserView.Catalog then caption = Strings.ToString(group.library.titleCount, "0") + " DVDs"
         card = content.createChild("ContentNode")
         card.title = group.name
-        card.addFields({ caption: caption, posterPath: group.posterPath, metadataId: group.metadataId, session: { server: session.server, token: session.token, userId: session.userId } })
+        libraryId = ""
+        if group.library <> invalid then libraryId = group.library.id
+        card.addFields({ caption: caption, discCountLabel: discCountLabel, posterPath: group.posterPath, metadataId: group.metadataId, libraryId: libraryId, session: { server: session.server, token: session.token, userId: session.userId } })
     end for
     m.library.groups = groups
     m.nodes.grid.content = content
@@ -272,7 +273,7 @@ sub showLibraries()
     m.nodes.name.text = "DVD libraries"
     groups = []
     for each library in m.library.libraries
-        groups.Push({ key: library.id, name: library.name, library: library, discs: [], posterPath: "", metadataId: "", year: "" })
+        groups.Push({ key: library.id, name: library.name, library: library, discs: [], posterPath: Strings.ToString(library.artworkPath), metadataId: "", year: "" })
     end for
     renderGroups(groups)
 end sub
@@ -290,4 +291,19 @@ sub openLibrary(library as object)
     request.library = library
     m.top.loadRequest = request
     loadLibrary()
+end sub
+
+'-------------------------------------------------------------------------------
+' applyLibraryLayout
+'-------------------------------------------------------------------------------
+sub applyLibraryLayout()
+    spec = VideoCardGridLayout.GetSpec("poster", "cards", 6)
+    if m.library.view = DvdMenu.BrowserView.Catalog then spec = VideoCardGridLayout.GetSpec("thumbnail", "cards", 4)
+    m.nodes.grid.numColumns = spec.numColumns
+    m.nodes.grid.numRows = spec.numRows
+    m.nodes.grid.itemSize = spec.itemSize
+    ' DVD cards reserve both title and caption lines; keep rows separated.
+    m.nodes.grid.itemSpacing = [spec.itemSpacing[0], 24]
+    m.nodes.grid.focusBitmapUri = spec.focusBitmapUri
+    m.nodes.grid.translation = [spec.translation[0], 225]
 end sub

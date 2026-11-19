@@ -1,0 +1,46 @@
+import "pkg:/source/TaskRequest.bs"
+import "pkg:/source/String.bs"
+import "pkg:/source/Url.bs"
+import "pkg:/source/api/HttpClient.bs"
+import "pkg:/source/api/JellyfinAuth.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/DiscoveryContracts.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.top.functionName = "executeRequest"
+end sub
+
+'-------------------------------------------------------------------------------
+' executeRequest
+'-------------------------------------------------------------------------------
+sub executeRequest()
+    request = m.top.request
+    result = TaskRequest.ValidateRequest(request, "discover")
+    if result = invalid then
+        try
+            headers = JellyfinAuth.BuildTokenHeaders(request.token)
+            result = HttpClient.Request(Url.Resolve(request.server, "Starfin/Dvd/Info"), "GET", invalid, invalid, headers, true, 3000)
+        catch error
+            result = { ok: false }
+        end try
+    end if
+    result.discoveryStatus = DvdDiscovery.Status.TemporaryFailure
+    result.version = ""
+    result.homeImageTag = ""
+    if result.status = 200 and type(result.data) = "roAssociativeArray" then
+        if type(result.data.homeImageTag) = "String" or type(result.data.homeImageTag) = "roString" then result.homeImageTag = result.data.homeImageTag
+        if type(result.data.version) = "String" or type(result.data.version) = "roString" then
+            result.version = Strings.Trim(result.data.version)
+            if result.version <> "" then result.discoveryStatus = DvdDiscovery.Status.Available
+        end if
+    else if result.status = 404 then
+        result.discoveryStatus = DvdDiscovery.Status.Absent
+    else if result.status = 401 or result.status = 403 then
+        result.discoveryStatus = DvdDiscovery.Status.AccessDenied
+    end if
+    result.requestId = -1
+    if request <> invalid then result.requestId = request.requestId
+    m.top.response = result
+end sub

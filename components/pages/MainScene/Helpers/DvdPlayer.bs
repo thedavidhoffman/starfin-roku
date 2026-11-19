@@ -1,10 +1,10 @@
 import "pkg:/components/pages/DvdPlayer/Helpers/Contracts.bs"
 
 '-------------------------------------------------------------------------------
-' dvdHandleHeaderSelected
+' dvdHandleHomeSelected
 '-------------------------------------------------------------------------------
-sub dvdHandleHeaderSelected()
-    if m.session = invalid then return
+sub dvdHandleHomeSelected()
+    if m.session = invalid or not m.dvdDiscovery.available then return
     resetDynamicPages()
     hideHome()
     page = CreateObject("roSGNode", "DvdLibraryPage")
@@ -29,7 +29,7 @@ sub dvdHandleLibraryClosed(event as object)
     if not event.getRoSGNode().isSameNode(m.dvdLibraryPage) then return
     resetDynamicPages()
     showHome()
-    m.header.callFunc("focusDvdDemoButton")
+    m.homePage.callFunc("focusDvdLibrary")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -87,7 +87,7 @@ sub dvdHandleCloseRequested(event as object)
         m.dvdLibraryPage.callFunc("activate")
     else
         showHome()
-        m.header.callFunc("focusDvdDemoButton")
+        m.homePage.callFunc("focusDvdLibrary")
     end if
 end sub
 
@@ -98,4 +98,29 @@ sub dvdHandleAuthenticationRequired(event as object)
     if m.dvdLibraryPage = invalid then return
     if not event.getRoSGNode().isSameNode(m.dvdLibraryPage) then return
     authHandleFeatureAuthenticationRequired(event.getData())
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleAvailability
+'-------------------------------------------------------------------------------
+sub dvdHandleAvailability()
+    m.homePage.dvdPresentation = m.dvdDiscovery.presentation
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleDiscoveryAuthentication
+'-------------------------------------------------------------------------------
+sub dvdHandleDiscoveryAuthentication()
+    authHandleFeatureAuthenticationRequired(m.dvdDiscovery.authenticationRequired)
+end sub
+
+'-------------------------------------------------------------------------------
+' dvdHandleDiscoveryAccessDenied
+'-------------------------------------------------------------------------------
+sub dvdHandleDiscoveryAccessDenied()
+    failure = m.dvdDiscovery.accessDenied
+    if failure = invalid or m.session = invalid then return
+    request = failure.request
+    if request.server <> m.session.server or request.userId <> m.session.userId or request.token <> m.session.token then return
+    AppMessage.Show("DVD access is unavailable for this account.")
 end sub

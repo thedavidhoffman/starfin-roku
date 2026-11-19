@@ -21,7 +21,7 @@ end sub
 ' initBase
 '-------------------------------------------------------------------------------
 sub initBase()
-    m.cardState = { content: invalid, badgeSize: 42, layout: invalid }
+    m.cardState = { content: invalid, badgeSize: 42, layout: invalid, authenticatedArtwork: false }
     m.cardNodes = {
         contentGroup: m.top.findNode("contentGroup")
         cardMask: m.top.findNode("cardMask")
@@ -53,6 +53,7 @@ sub onItemContentChanged()
     content = m.top.itemContent
     if m.cardState.content <> invalid then m.cardState.content.unobserveField("raw")
     m.cardState.content = content
+    configureArtworkRequest(content)
     if content = invalid then
         for each label in [m.cardNodes.title, m.cardNodes.metadataLabel, m.cardNodes.line3]
             label.text = ""
@@ -250,4 +251,34 @@ sub onCardFocusChanged()
             end if
         end if
     end for
+end sub
+
+'-------------------------------------------------------------------------------
+' configureArtworkRequest
+'-------------------------------------------------------------------------------
+sub configureArtworkRequest(content as dynamic)
+    headers = invalid
+    if content <> invalid then headers = content.imageHeaders
+    authenticated = type(headers) = "roAssociativeArray"
+    if authenticated or m.cardState.authenticatedArtwork then
+        previous = m.cardNodes.poster
+        previous.uri = ""
+        poster = CreateObject("roSGNode", "Poster")
+        poster.id = "poster"
+        poster.width = previous.width
+        poster.height = previous.height
+        poster.translation = previous.translation
+        if authenticated then
+            poster.loadingBitmapUri = m.top.placeholderUri
+            poster.failedBitmapUri = m.top.placeholderUri
+            agent = CreateObject("roHttpAgent")
+            agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+            agent.SetHeaders(headers)
+            poster.setHttpAgent(agent)
+        end if
+        m.cardNodes.posterMask.removeChild(previous)
+        m.cardNodes.posterMask.insertChild(poster, 1)
+        m.cardNodes.poster = poster
+    end if
+    m.cardState.authenticatedArtwork = authenticated
 end sub

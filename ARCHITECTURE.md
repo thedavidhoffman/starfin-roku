@@ -183,7 +183,7 @@ the normal routing checks.
 
 ## Media flow
 
-The temporary DVD demo is isolated under `components/pages/DvdPlayer`.
+The DVD library and native playback feature is isolated under `components/pages/DvdPlayer`.
 `DvdLibraryPage` owns correlated catalog and library requests, automatic
 single-library entry, placeholder library cards, metadata grouping, poster presentation,
 and retained grid focus. Its `DvdPosterCard` owns authenticated image loading and
@@ -193,18 +193,47 @@ The feature-local Paths namespace validates returned UUID-scoped relative paths,
 including metadata poster version queries, for tasks and rendering.
 MainScene passes explicit session context and retains the hidden browser while
 DvdPlayer is active. Player exit restores the retained browser grid and focus without a refresh;
-browser exit returns Home. DvdLibraryPage owns inline catalog/library navigation: a single library is opened directly, multiple libraries use placeholder poster cards. The browser is transparent beneath the shared header/clock; only DVD menus and playback hide the header. Global reset cleans up both pages. Disc
-paths, initial selections, settings aliases, and button groups follow the manifest.
-The feature also owns
-its component-local geometry, state, and rendering helpers. DvdPlayer owns the
-plugin manifest task, authenticated menu artwork/previews, remote focus,
-history, and plugin-backed ISO content playback. Its local Playback helper owns
-the finite fullscreen Video surface, pause/Back controls, and exact menu return.
-DvdPlaybackTask serializes session start, 30-second heartbeats, failure status,
-and deletion, including cancellation while POST is pending. Missing capability
-retains the selection acknowledgment. MainScene routes entry and
-exit with explicit session context; the existing playback controllers are not
-involved. See [.docs/feature/dvd-menu-demo.md](.docs/feature/dvd-menu-demo.md).
+browser exit returns Home. DvdLibraryPage owns inline catalog/library navigation: a single library is opened directly, multiple libraries use four-column landscape cards with supplied authenticated artwork. The browser is transparent beneath the shared header/clock; only DVD menus and playback hide the header. Global reset cleans up both pages. Disc
+menus and finite media now come from the plugin's libdvdnav session snapshots.
+DvdPlayer owns revision-checked state, serialized command intent, button focus,
+and authenticated menu/finite-media rendering. Its local Playback helper reports
+actual Roku started/progress/pause/resume/EOF events; encoding completion alone
+never advances the DVD. Options requests the authored main menu; playback Back requests the backend last-menu checkpoint. Back dismisses visible controls first and exits from authored menus/errors.
+DvdSessionTask owns start, status polling, command retries, heartbeats, timed still
+completion, and DELETE, including cleanup after a cancelled/lost start request.
+Static mappings and the old DvdPlaybackTask are removed. All DVD helpers remain
+under DvdPlayer/Helpers; MainScene retains only shell routing/session handoff.
+The existing playback controllers are not involved. See
+[.docs/feature/dvd-menu-demo.md](.docs/feature/dvd-menu-demo.md).
+
+DVD menu rendering reconciles declared background sources independently of hotspot
+updates. The feature-local rendering helper owns background reuse, ready-still
+retention, preview fallback, and overlay replacement; DvdPlayer owns pending
+navigation visibility and command locks. Unchanged sources keep playing through
+menu/preparation updates; content playback clears menu media before presentation.
+
+DVD discovery is owned by `DvdDiscovery` under the DVD feature, with authenticated
+three-second `/Starfin/Dvd/Info` requests in `DvdDiscoveryTask`. MainScene passes
+new authenticated sessions, resets discovery on logout/login routing, and routes
+availability and the opaque home artwork tag to HomePage plus correlated
+authentication/access events. The feature owns cancellation, response correlation,
+and session-only discovery state. Its HomeEntry helper composes a local DVDs card
+into My Media without adding it to server library data or Recently Added queries.
+Home owns row visibility and focus; MainScene routes selection and browser return.
+The header has no DVD entry. Discovery does not load libraries, poll, or participate
+in playback return. Home artwork uses Images/Home with the encoded tag directly;
+library and title artwork use supplied tag-versioned image paths. VideoMediaCardBase
+supports optional image headers and isolates authenticated Poster reuse; DVD path
+construction/validation remains feature-local.
+
+DVD transport controls remain feature-owned: DvdPlaybackControls owns metadata,
+Play/Pause presentation/focus and emits narrow intent events.
+DvdPlayer's TransportControls helper owns availability, local/server pause
+reconciliation, and overlay timing; DvdSessionTask returns authoritative snapshots
+with command acknowledgments. Accepted main-menu or last-menu navigation revokes the previous Video
+before subsequent media begins. PlayerToolbarButton/assets are reused without
+changing standard player controls. Previous/Next and title timelines are deferred.
+See [.docs/feature/dvd-playback-controls-handoff.md](.docs/feature/dvd-playback-controls-handoff.md).
 
 Libraries own loading, filtering, paging, and their grid state. Selecting an item
 emits the context required to open a detail page. Detail pages own metadata,
