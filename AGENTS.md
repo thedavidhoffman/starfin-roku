@@ -35,6 +35,7 @@
 
 ## BrighterScript naming
 
+- Use meaningful, domain-specific names for variables and parameters that describe what the value represents, rather than generic names such as `number` or `name`. For example, use `channelNumber` and `channelName` for a LiveTV channel. Avoid names that collide with namespaces, including namespaces introduced through transitive imports; BrighterScript names are case-insensitive.
 - Put shared helpers under `/source` in a namespace named for their responsibility. Qualify calls across namespace boundaries, such as `AuthStore.Load()` or `PlaybackProgress.GetTicksFromItem()`. Within the same namespace, prefer unqualified calls unless explicit qualification is needed to resolve ambiguity.
 - Name public namespace members in PascalCase without repeating the namespace in the member name.
 - For namespace helpers that are internal to a single file, use a leading `__` prefix, such as `__GetCollapseSeriesQueryValue()`.

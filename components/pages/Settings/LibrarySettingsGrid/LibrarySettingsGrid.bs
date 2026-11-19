@@ -21,6 +21,7 @@ sub init()
         { title: "Playlist items", settingKey: SettingsStore.Key.PlaylistItemsLayout }
         { title: "Music videos", settingKey: SettingsStore.Key.MusicVideosLayout }
         { title: "Home videos", settingKey: SettingsStore.Key.HomeVideosLayout }
+        { title: "DVD titles", settingKey: SettingsStore.Key.DvdTitlesLayout, posterOnly: true }
     ]
     m.gridState = { syncing: false, focusedRow: 0, focusedPosition: 0, columnButtons: [] }
     initializeContent()
@@ -37,10 +38,12 @@ sub initializeContent()
         labels.createChild("ContentNode").title = row.title
     end for
     m.libraryLabels.content = labels
-    for each options in m.presentationLists
+    ' The final DVD row has no Thumb/Detailed cells; keep earlier row indices aligned.
+    for presentationIndex = 0 to m.presentationLists.Count() - 1
+        options = m.presentationLists[presentationIndex]
         content = CreateObject("roSGNode", "ContentNode")
         for each row in m.rows
-            content.createChild("ContentNode").title = ""
+            if row.posterOnly <> true or presentationIndex = 0 then content.createChild("ContentNode").title = ""
         end for
         options.content = content
     end for
@@ -84,9 +87,9 @@ sub onSelectionsChanged()
     checkedStates = [[], [], []]
     m.gridState.syncing = true
     for rowIndex = 0 to m.rows.Count() - 1
-        layout = LibraryLayoutSetting.Parse(selections[m.rows[rowIndex].settingKey])
+        layout = getRowLayout(rowIndex)
         for columnIndex = 0 to checkedStates.Count() - 1
-            checkedStates[columnIndex].Push(m.presentationValues[columnIndex] = layout.presentation)
+            if m.rows[rowIndex].posterOnly <> true or columnIndex = 0 then checkedStates[columnIndex].Push(m.presentationValues[columnIndex] = layout.presentation)
         end for
         renderColumnButtons(rowIndex, layout)
     end for
@@ -149,6 +152,7 @@ sub commitPresentation(columnIndex as integer)
     if m.gridState.syncing then return
     rowIndex = Number.ToInteger(m.presentationLists[columnIndex].itemSelected, -1)
     if rowIndex < 0 or rowIndex >= m.rows.Count() then return
+    if m.rows[rowIndex].posterOnly = true then return
     presentation = m.presentationValues[columnIndex]
     commitSelection(rowIndex, LibraryLayoutSetting.Format(presentation, LibraryLayoutSetting.DefaultColumns(presentation)))
 end sub
@@ -188,7 +192,7 @@ end sub
 function getRowLayout(rowIndex as integer) as object
     selections = m.top.selections
     if selections = invalid then selections = {}
-    return LibraryLayoutSetting.Parse(selections[m.rows[rowIndex].settingKey])
+    return LibraryLayoutSetting.Parse(SettingsStore.GetSettingValue(selections, m.rows[rowIndex].settingKey))
 end function
 
 '-------------------------------------------------------------------------------
@@ -214,6 +218,7 @@ sub focusPosition(rowIndex as integer, position as integer)
     maxPosition = 3 + m.gridState.columnButtons[rowIndex].Count() - 1
     if position > maxPosition then position = maxPosition
     if position < 0 then position = 0
+    if m.rows[rowIndex].posterOnly = true and (position = 1 or position = 2) then position = 0
     m.gridState.focusedRow = rowIndex
     m.gridState.focusedPosition = position
     if position < 3 then
@@ -236,6 +241,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end for
     movement = LibrarySettingsNavigation.Move(m.gridState.focusedRow, m.gridState.focusedPosition, key, positionCounts)
     if movement.handled <> true then return false
+    if m.rows[movement.row].posterOnly = true then
+        if key = Remote.Key.Right and movement.position = 1 then movement.position = 3
+        if key = Remote.Key.Left and movement.position = 2 then movement.position = 0
+    end if
     if movement.exit then
         m.top.focusExitLeft = true
     else

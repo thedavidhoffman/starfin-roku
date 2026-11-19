@@ -1,3 +1,4 @@
+import "pkg:/source/Number.bs"
 import "pkg:/source/MaskAssets.bs"
 import "pkg:/source/ResolutionAssets.bs"
 import "pkg:/source/ResolutionProfile.bs"
@@ -41,7 +42,7 @@ sub renderCard()
     m.nodes.title.text = content.title
     m.nodes.caption.text = content.caption
     m.nodes.discCount.text = Strings.ToString(content.discCountLabel)
-    m.nodes.discCount.visible = m.nodes.discCount.text <> ""
+    m.nodes.discCount.visible = m.nodes.discCount.text <> "" and m.nodes.caption.visible
     if m.nodes.discCount.visible then m.nodes.caption.maxWidth = 84
     updateFocus()
     if Strings.ToString(content.libraryId) <> "" then
@@ -95,14 +96,22 @@ end sub
 ' applyArtworkLayout
 '-------------------------------------------------------------------------------
 sub applyArtworkLayout(content as object)
+    cardColumns = 6
     m.poster.width = 252
     m.poster.height = 378
-    m.poster.requestWidth = 252
-    if ResolutionProfile.IsHd() then m.poster.requestWidth = 168
-    mask = "poster-6-col-mask.png"
-    hdSize = [168, 252]
+    if content.cardLayout <> invalid then
+        m.poster.width = Number.ToInteger(content.cardLayout.artworkSize[0], 252)
+        m.poster.height = Number.ToInteger(content.cardLayout.artworkSize[1], 378)
+        cardColumns = Number.ToInteger(content.cardLayout.numColumns, 6)
+    end if
+    m.poster.requestWidth = m.poster.width
+    hdSize = [Number.ToInteger(m.poster.width * 0.6667), Number.ToInteger(m.poster.height * 0.6667)]
+    if ResolutionProfile.IsHd() then m.poster.requestWidth = hdSize[0]
+    mask = "poster-" + cardColumns.ToStr() + "-col-mask.png"
+    m.nodes.caption.visible = cardColumns <> 3
     placeholder = "pkg:/images/media-card/poster-placeholder-252x378.png"
     if Strings.ToString(content.libraryId) <> "" then
+        m.nodes.caption.visible = true
         m.poster.width = 441
         m.poster.height = 249
         m.poster.requestWidth = 441

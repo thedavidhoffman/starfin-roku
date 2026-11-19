@@ -12,7 +12,10 @@ loading starts only on entry: one enabled library opens directly; multiple
 libraries appear in a four-column landscape grid with authenticated artwork.
 Back from a multi-library drilldown restores the focused library card; Back from
 a single library or catalog returns to the Home DVD card. The header and clock
-remain visible. Titles inside a library retain the six-column poster grid. Both DVD grids use a
+remain visible. The library heading uses the same centered `LabelHeading` as the
+movie/TV library, including its large bold font, theme color, and vertical position.
+Inside a library, the heading is prefixed with `DVD: `; the chooser retains `DVD libraries`.
+Titles inside a library use the account's DVD titles poster-column preference (3-6, default 6). Both DVD grids use a
 24-pixel vertical row gap in the 1080p design space, preserving room below title
 and caption lines; horizontal spacing and card geometry follow the shared layouts.
 
@@ -101,6 +104,67 @@ Loading blocks selection until its correlated request completes. Closing a page
 cancels its request and ignores stale responses. Authentication expiry follows
 the existing task observation route. Account/session reset removes both pages.
 Identify, scanning, and metadata configuration remain in Jellyfin administration.
+
+## DVD title layout settings
+
+Settings > Libraries includes a DVD titles row, fixed to Poster with 3, 4, 5,
+or 6 columns (default 6). Thumb and Detailed are unavailable and skipped by
+horizontal focus navigation. The account-scoped `dvd-titles-layout` setting uses
+existing SettingsStore save/cancel behavior; unsupported presentations fall back
+to Poster with six columns. The dialog is 968 pixels tall and its Libraries card
+is 708 pixels tall, preserving the existing 68-pixel row pitch and button sizes.
+
+DvdLibraryPage receives settings explicitly from MainScene, including updates to
+an already open/retained page. It applies shared poster grid sizes and focus assets;
+DvdPosterCard applies matching masks, image dimensions, and physical-pixel poster
+request widths. Layout changes retain the selected group and sort without fetching
+the library again. Folder selection remains four-column thumbnails.
+
+Three-column cards follow the shared poster presentation: the grid starts at the
+shared 207-pixel top position and the year/disc-count caption is hidden to keep
+the title within the screen. Other column counts retain both caption values.
+
+Deferred device checks include all four sizes at 1080p/720p, image/highlight
+alignment, settings navigation and save/cancel, account restoration, open-page
+updates, and unchanged folder navigation. No tests or builds were run for this change.
+
+## DVD browse preferences (plugin 0.1.44)
+
+Inside a DVD library, the shared Browse By and Sort controls offer Title and
+Release Date, with ascending/descending direction. The controls form a right-aligned
+group at the grid's visible artwork right edge for each column count, with an 8-pixel gap; the heading stays centered. The library chooser
+hides them, and loading/error states disable them. Up from the first grid row
+reaches Browse By; Left/Right selects a control; Up reaches the header. Down or
+Back from a control returns to the grid. Closing Browse By restores that button.
+
+DvdLibraryPage sorts the complete loaded groups in memory, with no library,
+manifest, or title-details request when preferences change. Multi-disc groups
+remain intact and preserve disc/side ordering. Sorting retains the selected group
+by its stable key and returns focus to the activated control.
+
+Release Date uses disc `premiereDate`, falling back to summary `metadata.premiereDate`,
+then year if no usable full date exists. Calendar dates compare without timezone
+conversion. Year-only values sort at the start of their year internally; cards
+continue displaying only the year. Unknown dates/years stay last in both directions.
+Equal dates use case-insensitive title ascending, then stable group identity;
+Title sorting reverses names with direction and uses identity to break ties.
+For TV, the date is the series premiere. Existing titles gain full dates on the
+backend's next enrichment scan; older responses remain usable with year fallback.
+
+The page uses LibraryViewStateStore under the existing server/user account key
+and a `dvd:`-prefixed library ID. It saves option/direction immediately and restores
+before the first title render. Invalid preferences default to Title ascending;
+changing the browse option resets direction to ascending. Returning from playback
+retains preferences, loaded cards, and selection without a refresh.
+
+The lightweight metadata summary is sufficient for browsing. Full `metadataPath`
+requests are deferred until a future details UI needs them; missing overview and
+other detail fields are acceptable. Provider runtime never drives DVD timelines.
+
+Source/diff review only; no test changes or automated/device checks. Deferred
+acceptance covers both sort directions, equal/missing/year-only dates, grouping,
+registry isolation and restart restoration, remote focus, dialog cancellation,
+loading/errors, playback return, absence of sort API calls, and 1080p/720p layout.
 
 ## Native DVD sessions (plugin 0.1.22)
 
@@ -278,3 +342,80 @@ The Options main-menu shortcut remains separate; the overlay has no DVD menu but
 on acceptance and use current revisions/UUIDs. Restored audio/language registers
 come from the backend checkpoint, rolling back later authored changes. Return
 while paused and stale-event/focus behavior remain unverified on Roku.
+
+## Automatic continuation countdown (plugin 0.1.50)
+
+Finite still screens show a nonfocusable bottom-right badge, inset 72 pixels from
+right and 60 pixels from bottom in the 1080p design space. White text on a dark,
+translucent rounded background reads `Continuing in <remaining>s`, updated once
+per second from `still.expiresUtc`. At expiry it reads `Continuing...` until the
+backend state changes. Indefinite stills have no badge. Existing remote actions
+are unchanged; there is no new Skip command.
+
+DvdPlayer's feature-local ContinuationCountdown helper owns display updates only.
+DvdSessionTask remains the sole owner of automatic `stillComplete` requests.
+Accepted snapshots synchronize the deadline without restarting it on polling;
+stale revisions do not update it. Leaving the still state, restarting, failure,
+or cleanup stops the display timer and clears the badge. Late timer callbacks
+read current state and cannot resurrect an expired session's display.
+
+Source/diff review only. Deferred device scenarios: decreasing countdown, zero
+while awaiting transition, indefinite stills, changed deadlines, repeated/stale
+snapshots, user navigation before expiry, cleanup/reopen, and 1080p/720p placement.
+
+Timed menus additionally use nullable `automaticContinuation` (`timerId`,
+`expiresUtc`) and `serverTimeUtc`. Remaining time is computed from the server's
+date difference, including fractional seconds, and then reduced using a local
+monotonic timespan, never Roku UTC. The label rounds up positive remaining seconds
+and shows `Continuing...` at zero. Repeated snapshots reconcile the same deadline
+without extending it or restarting the display timer; a new ID starts a new timer.
+Null/missing timing or leaving menu state clears the menu countdown. Timing starts
+at backend publication, so the first displayed value can be below the full duration.
+
+The session task continues polling menus and forwards same-revision menu snapshots
+for time reconciliation. A newer revision with identical menu data updates timing
+without rebuilding hotspots, resetting local selection, or restarting media.
+Timed menus advance only on the backend: the countdown sends no completion,
+stillComplete, or button commands. Finite/indefinite still behavior is unchanged.
+Deferred checks include late timing publication, descriptor removal, new IDs,
+fractional rounding, unsynchronized device clocks, zero during delayed transitions,
+repeated/stale snapshots, menu media/focus continuity, and existing still completion.
+
+The countdown badge is normally 274 x 54 at [1574,966] in 1080p design coordinates.
+Timers initially displaying 100 seconds or more use 294 x 54 at [1554,966]; that
+width remains fixed for the timer's lifetime. Both sizes preserve the right edge.
+Its dark translucent fill has a rounded, opaque white two-pixel design border,
+with matching 1080p/720p PNGs produced by `scripts/generate-dvd-countdown-assets.mjs`.
+The 174-pixel wording field gives the full phrase additional room to avoid truncation and removes excess space before the seconds while keeping
+the badge right edge anchored. The wording, right-aligned two-digit seconds field
+(three digits for longer timers), and `s` suffix use fixed
+positions, so changing digit widths does not move surrounding text. At zero,
+`Continuing...` uses the same left text origin and hides the numeric field/suffix.
+Asset generation is implementation only; border rendering and 12-to-11/10-to-9
+transitions remain deferred device checks. No builds or tests were run.
+
+Fresh DVD library entry explicitly selects the first sorted title. DvdLibraryPage
+blocks focus/selection updates during loading and grid replacement, so the outgoing
+folder index cannot leak into the title grid. Grid item focus and jump target are
+both committed to the resolved index before focus events are accepted again.
+Sort/layout changes retain the selected title by key; playback return retains the
+grid; returning to the chooser restores the selected folder. Deferred device checks
+cover each folder's initial title, sorting/layout changes, playback return, and
+countdown transitions 12-to-11, 10-to-9, and 100-to-99. Source/diff review only.
+
+Menu selection reconciliation distinguishes command acknowledgments from passive
+snapshots. Successful button/menu-navigation acknowledgments restore the backend's
+selected hotspot even when the menu data and revision are unchanged. Timing-only
+poll updates preserve local selection. Both paths reuse the background and never
+activate auto-action buttons merely by restoring focus.
+
+Countdown dimensions are owned by
+`components/pages/DvdPlayer/Helpers/continuation-countdown-layout.json`.
+DvdPlayer loads the bundled layout once; the runtime helper derives text positions
+and badge width from it, and the asset generator reads the same definition. XML
+owns only nodes and text styling. Changing geometry requires regenerating badge
+assets, not manually synchronizing XML/helper/generator constants.
+
+Source/diff review only for these fixes. Deferred scenarios include auto-action
+commands returning unchanged menus, same-revision command acknowledgments, passive
+timing updates after local navigation, and countdown geometry at both resolutions.

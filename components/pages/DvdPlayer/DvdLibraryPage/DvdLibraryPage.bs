@@ -1,3 +1,6 @@
+import "pkg:/components/pages/DvdPlayer/Helpers/LibraryBrowse.bs"
+import "pkg:/source/store/SettingsStore.bs"
+import "pkg:/source/LibraryLayoutSetting.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/Remote.bs"
@@ -13,22 +16,30 @@ import "pkg:/components/pages/DvdPlayer/Helpers/LibraryModel.bs"
 '-------------------------------------------------------------------------------
 sub init()
     initReferences()
-    m.library = { active: false, task: invalid, generation: 0, groups: [], key: "", index: 0, libraries: [], catalogKey: "", view: DvdMenu.BrowserView.Catalog }
+    m.library = { active: false, rendering: false, loading: false, entryPending: false, task: invalid, generation: 0, groups: [], key: "", index: 0, libraries: [], catalogKey: "", view: DvdMenu.BrowserView.Catalog }
+    m.layout = { columns: 6, spec: invalid }
+    m.browse = { selection: dvdBrowseSelection(LibraryBrowse.Option.Title), ready: false }
     applyLibraryLayout()
     initHandlers()
+    onDvdLayoutChanged()
 end sub
 
 '-------------------------------------------------------------------------------
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.nodes = { grid: m.top.findNode("posters"), name: m.top.findNode("libraryName"), status: m.top.findNode("status"), spinner: m.top.findNode("loading") }
+    m.nodes = { grid: m.top.findNode("posters"), name: m.top.findNode("libraryName"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), browse: m.top.findNode("browseByButton"), sort: m.top.findNode("sortButton") }
 end sub
 
 '-------------------------------------------------------------------------------
 ' initHandlers
 '-------------------------------------------------------------------------------
 sub initHandlers()
+    m.top.observeField("settings", "onDvdLayoutChanged")
+    m.nodes.browse.observeField("overlayRequested", "onDvdBrowseRequested")
+    m.nodes.browse.observeField("focusExitDown", "focusBrowser")
+    m.nodes.sort.observeField("focusExitDown", "focusBrowser")
+    m.nodes.sort.observeField("sortOrderChanged", "onDvdSortChanged")
     m.nodes.grid.observeField("itemFocused", "onGroupFocused")
     m.nodes.grid.observeField("itemSelected", "onGroupSelected")
 end sub
@@ -42,6 +53,7 @@ sub activate()
         return
     end if
     m.library.active = true
+    syncDvdBrowseControls()
     m.top.visible = true
     ' Returning from a DVD reuses the retained grid and decoded posters.
     if m.nodes.grid.visible and m.library.groups.Count() > 0 then
@@ -58,6 +70,7 @@ sub deactivate()
     m.library.active = false
     m.top.visible = false
     releaseLibraryTask()
+    syncDvdBrowseControls()
     m.nodes.spinner.control = SpinnerControl.Command.Stop
 end sub
 
@@ -78,12 +91,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub loadLibrary()
     if not m.library.active then return
+    m.library.loading = true
     releaseLibraryTask()
+    m.browse.ready = false
+    syncDvdBrowseControls()
     m.library.generation++
     m.nodes.status.text = ""
     m.nodes.grid.visible = false
     m.nodes.name.text = "DVD libraries"
-    if m.library.view = DvdMenu.BrowserView.Library then m.nodes.name.text = Strings.ToString(m.top.loadRequest.library.name, "DVD library")
+    if m.library.view = DvdMenu.BrowserView.Library then m.nodes.name.text = "DVD: " + Strings.ToString(m.top.loadRequest.library.name, "Library")
     m.nodes.spinner.control = SpinnerControl.Command.Start
     m.top.setFocus(true)
     task = m.top.createChild("DvdDemoTask")
@@ -129,23 +145,26 @@ sub onLibraryResponse(event as object)
             showLibraries()
         end if
     else
-        renderGroups(groupLibraryDiscs(response.payload))
+        m.browse.ready = true
+        renderGroups(sortLibraryGroups(groupLibraryDiscs(response.payload), m.browse.selection))
     end if
 end sub
 
 '-------------------------------------------------------------------------------
 ' renderGroups
 '-------------------------------------------------------------------------------
-sub renderGroups(groups as object)
+sub renderGroups(groups as object, focusGrid = true as boolean)
+    m.library.rendering = true
     applyLibraryLayout()
     restoreIndex = m.library.index
+    if m.library.entryPending then restoreIndex = 0
     if restoreIndex >= groups.Count() then restoreIndex = groups.Count() - 1
     if restoreIndex < 0 then restoreIndex = 0
     content = CreateObject("roSGNode", "ContentNode")
     session = m.top.loadRequest
     for index = 0 to groups.Count() - 1
         group = groups[index]
-        if group.key = m.library.key then restoreIndex = index
+        if not m.library.entryPending and group.key = m.library.key then restoreIndex = index
         caption = Strings.ToString(group.year)
         discCountLabel = ""
         if group.discs.Count() > 1 then discCountLabel = group.discs.Count().ToStr() + " discs"
@@ -154,7 +173,7 @@ sub renderGroups(groups as object)
         card.title = group.name
         libraryId = ""
         if group.library <> invalid then libraryId = group.library.id
-        card.addFields({ caption: caption, discCountLabel: discCountLabel, posterPath: group.posterPath, metadataId: group.metadataId, libraryId: libraryId, session: { server: session.server, token: session.token, userId: session.userId } })
+        card.addFields({ cardLayout: m.layout.spec, caption: caption, discCountLabel: discCountLabel, posterPath: group.posterPath, metadataId: group.metadataId, libraryId: libraryId, session: { server: session.server, token: session.token, userId: session.userId } })
     end for
     m.library.groups = groups
     m.nodes.grid.content = content
@@ -165,9 +184,13 @@ sub renderGroups(groups as object)
         if m.library.view = DvdMenu.BrowserView.Catalog then m.nodes.status.text = "No enabled DVD libraries are available. Press OK to refresh or Back to return."
     else
         m.nodes.grid.jumpToItem = restoreIndex
+        m.nodes.grid.itemFocused = restoreIndex
         showGroup(restoreIndex)
     end if
-    focusBrowser()
+    m.library.entryPending = false
+    m.library.loading = false
+    m.library.rendering = false
+    if focusGrid then focusBrowser()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -184,6 +207,8 @@ end sub
 ' onGroupFocused
 '-------------------------------------------------------------------------------
 sub onGroupFocused()
+    if not m.library.active or m.library.loading or m.library.rendering then return
+    if not m.nodes.grid.visible or not m.nodes.grid.isInFocusChain() then return
     showGroup(m.nodes.grid.itemFocused)
 end sub
 
@@ -191,7 +216,7 @@ end sub
 ' onGroupSelected
 '-------------------------------------------------------------------------------
 sub onGroupSelected()
-    if not m.library.active or m.library.task <> invalid then return
+    if not m.library.active or m.library.loading or m.library.rendering or m.library.task <> invalid then return
     index = m.nodes.grid.itemSelected
     if index < 0 or index >= m.library.groups.Count() then return
     showGroup(index)
@@ -240,6 +265,7 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
+    if handleDvdBrowseKey(key) then return true
     if key = Remote.Key.Up then
         if not m.nodes.grid.visible or m.nodes.grid.itemFocused < m.nodes.grid.numColumns then
             m.top.focusExitUp = true
@@ -268,6 +294,8 @@ sub showLibraries()
     releaseLibraryTask()
     m.nodes.spinner.control = SpinnerControl.Command.Stop
     m.library.view = DvdMenu.BrowserView.Catalog
+    m.library.entryPending = false
+    m.browse.ready = false
     m.library.key = m.library.catalogKey
     m.library.index = 0
     m.nodes.name.text = "DVD libraries"
@@ -282,6 +310,8 @@ end sub
 ' openLibrary
 '-------------------------------------------------------------------------------
 sub openLibrary(library as object)
+    m.library.loading = true
+    m.library.entryPending = true
     m.library.catalogKey = library.id
     m.library.view = DvdMenu.BrowserView.Library
     m.library.key = ""
@@ -290,6 +320,7 @@ sub openLibrary(library as object)
     request.Append(m.top.loadRequest)
     request.library = library
     m.top.loadRequest = request
+    restoreDvdBrowseState()
     loadLibrary()
 end sub
 
@@ -297,13 +328,34 @@ end sub
 ' applyLibraryLayout
 '-------------------------------------------------------------------------------
 sub applyLibraryLayout()
-    spec = VideoCardGridLayout.GetSpec("poster", "cards", 6)
+    spec = VideoCardGridLayout.GetSpec("poster", "cards", m.layout.columns)
     if m.library.view = DvdMenu.BrowserView.Catalog then spec = VideoCardGridLayout.GetSpec("thumbnail", "cards", 4)
+    m.layout.spec = spec
     m.nodes.grid.numColumns = spec.numColumns
     m.nodes.grid.numRows = spec.numRows
     m.nodes.grid.itemSize = spec.itemSize
     ' DVD cards reserve both title and caption lines; keep rows separated.
     m.nodes.grid.itemSpacing = [spec.itemSpacing[0], 24]
     m.nodes.grid.focusBitmapUri = spec.focusBitmapUri
-    m.nodes.grid.translation = [spec.translation[0], 225]
+    gridTop = 225
+    ' Three-column posters use the shared top position to keep titles on screen.
+    if m.library.view = DvdMenu.BrowserView.Library and m.layout.columns = 3 then gridTop = spec.translation[1]
+    m.nodes.grid.translation = [spec.translation[0], gridTop]
+    artworkRight = VideoCardGridLayout.GetVisibleRightEdge(m.nodes.grid, spec)
+    sortLeft = artworkRight - 48
+    m.nodes.browse.translation = [sortLeft - 8 - m.nodes.browse.buttonWidth, 132]
+    m.nodes.sort.translation = [sortLeft, 132]
+    syncDvdBrowseControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' onDvdLayoutChanged
+'-------------------------------------------------------------------------------
+sub onDvdLayoutChanged()
+    titleLayout = LibraryLayoutSetting.Parse(SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.DvdTitlesLayout))
+    if titleLayout.columns = m.layout.columns then return
+    m.layout.columns = titleLayout.columns
+    if m.library.view = DvdMenu.BrowserView.Library and m.browse.ready then
+        renderGroups(m.library.groups, false)
+    end if
 end sub

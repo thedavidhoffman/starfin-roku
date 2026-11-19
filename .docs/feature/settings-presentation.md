@@ -1,6 +1,6 @@
 # Settings presentation
 
-Settings uses a centered 1680px-wide, 900px-high dialog. The category lists and
+Settings uses a centered 1680px-wide, 968px-high dialog. The category lists and
 vertical divider retain their positions; the right-hand panels start at x=400
 within the dialog content area and contain 1160px-wide glass cards.
 
@@ -57,9 +57,12 @@ content children exist. SettingsCard derives radio positions and widths while
 preserving each page's vertical layout. With a 24px inset and 32px native focus
 overhang, radio lists start at x=56 and use 1048px items, leaving equal margins.
 
-Libraries uses one titleless 1160 x 640px card around its unchanged table. The
-1045px table is centered at x=57.5 with a 24px vertical inset; all eight rows,
-column spacing, controls and navigation remain intact. Playback groups next-item
+Libraries uses one titleless 1160 x 708px card. The 1045px table is centered at
+x=57.5 with a 24px vertical inset and nine rows at the existing 68px pitch.
+DVD titles is Poster-only with 3/4/5/6 columns; unavailable Thumb/Detailed cells
+show dashes left-aligned with the checkbox columns and are skipped by horizontal navigation. The selected column count
+is saved per account and applies only to DVD title grids, not folder thumbnails.
+The taller dialog and 738px divider accommodate the row without shrinking controls. Playback groups next-item
 behavior, paired auto-skip controls, and a compact next-episode prompt selector on
 one page. Its nine-option picker opens above Settings through the confirmation
 OverlayHost; selection or Back returns focus without closing or saving Settings.

@@ -184,6 +184,16 @@ the normal routing checks.
 ## Media flow
 
 The DVD library and native playback feature is isolated under `components/pages/DvdPlayer`.
+`DvdLibraryPage` also owns in-memory title/release-date sorting and account/library
+browse preferences through the existing LibraryViewStateStore with DVD-prefixed
+keys. Its feature-local LibraryBrowse helper coordinates shared Browse By/Sort
+controls and BrowseDialog via OverlayHost; MainScene passes the account key and
+routes close events only. DateTime owns calendar-date parsing for sorting. Full
+metadata endpoints are not fetched for cards or sorting. MainScene also passes account
+settings to the retained DVD browser. DvdLibraryPage owns the poster-column layout;
+DvdPosterCard consumes its shared grid spec for image size, masks, and request widths.
+SettingsStore owns the Poster-only DVD titles preference; folder cards remain fixed
+four-column thumbnails.
 `DvdLibraryPage` owns correlated catalog and library requests, automatic
 single-library entry, placeholder library cards, metadata grouping, poster presentation,
 and retained grid focus. Its `DvdPosterCard` owns authenticated image loading and
@@ -199,6 +209,13 @@ DvdPlayer owns revision-checked state, serialized command intent, button focus,
 and authenticated menu/finite-media rendering. Its local Playback helper reports
 actual Roku started/progress/pause/resume/EOF events; encoding completion alone
 never advances the DVD. Options requests the authored main menu; playback Back requests the backend last-menu checkpoint. Back dismisses visible controls first and exits from authored menus/errors.
+DvdPlayer's feature-local ContinuationCountdown helper owns the nonfocusable menu/still
+countdown and its one-second UI timer. Menu timing uses server-time differences and
+local monotonic elapsed time; still timing retains its existing expiry behavior. The
+helper never sends session commands. Its feature-local JSON layout is shared by
+the runtime renderer and badge asset generator. Timing-only menu updates preserve
+media and focus; successful menu command acknowledgments separately reconcile
+backend selection without rebuilding unchanged media. State changes and session cleanup clear the display.
 DvdSessionTask owns start, status polling, command retries, heartbeats, timed still
 completion, and DELETE, including cleanup after a cancelled/lost start request.
 Static mappings and the old DvdPlaybackTask are removed. All DVD helpers remain

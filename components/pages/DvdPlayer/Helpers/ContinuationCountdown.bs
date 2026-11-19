@@ -1,0 +1,131 @@
+import "pkg:/source/DateTime.bs"
+
+'-------------------------------------------------------------------------------
+' syncContinuationCountdown
+'-------------------------------------------------------------------------------
+sub syncContinuationCountdown(snapshot as object)
+    if snapshot.state = DvdSession.State.Menu then
+        timing = snapshot.automaticContinuation
+        if type(timing) <> "roAssociativeArray" then
+            stopContinuationCountdown()
+            return
+        end if
+        if Strings.ToString(timing.timerId) = "" or Strings.ToString(timing.expiresUtc) = "" or Strings.ToString(snapshot.serverTimeUtc) = "" then
+            stopContinuationCountdown()
+            return
+        end if
+        elapsedSeconds = m.continuationCountdown.clock.TotalMilliseconds() / 1000.0
+        serverRemaining = DateTime.IsoDifferenceSeconds(snapshot.serverTimeUtc, timing.expiresUtc)
+        sameTimer = m.continuationCountdown.timerId = timing.timerId and m.continuationCountdown.expiresUtc = timing.expiresUtc
+        targetElapsed = elapsedSeconds + serverRemaining
+        ' Reconcile polling without extending the same timer or restarting its UI tick.
+        if not sameTimer or targetElapsed < m.continuationCountdown.targetElapsed then m.continuationCountdown.targetElapsed = targetElapsed
+        m.continuationCountdown.timerId = timing.timerId
+        m.continuationCountdown.expiresUtc = timing.expiresUtc
+        if not sameTimer then
+            m.continuationCountdown.layoutReady = false
+            m.nodes.countdownTimer.control = TimerControl.Command.Start
+        end if
+        updateContinuationCountdown()
+        return
+    end if
+    if m.continuationCountdown.timerId <> "" then stopContinuationCountdown()
+    if snapshot.state <> DvdSession.State.Still or snapshot.still = invalid then
+        stopContinuationCountdown()
+        return
+    end if
+    expiresUtc = Strings.ToString(snapshot.still.expiresUtc)
+    if expiresUtc = "" then
+        stopContinuationCountdown()
+        return
+    end if
+    if expiresUtc <> m.continuationCountdown.expiresUtc then
+        m.continuationCountdown.layoutReady = false
+        m.continuationCountdown.expiresUtc = expiresUtc
+        m.continuationCountdown.expiry = DateTime.FromIsoSeconds(expiresUtc)
+        if m.continuationCountdown.expiry > 0 then m.nodes.countdownTimer.control = TimerControl.Command.Start
+    end if
+    updateContinuationCountdown()
+end sub
+
+'-------------------------------------------------------------------------------
+' updateContinuationCountdown
+'-------------------------------------------------------------------------------
+sub updateContinuationCountdown()
+    if not m.loading.active or m.loading.failed then
+        stopContinuationCountdown()
+        return
+    end if
+    if m.native.state = DvdSession.State.Menu and m.continuationCountdown.timerId <> "" then
+        remainingSeconds = m.continuationCountdown.targetElapsed - m.continuationCountdown.clock.TotalMilliseconds() / 1000.0
+    else if m.native.state = DvdSession.State.Still and m.continuationCountdown.expiry > 0 then
+        currentTime = CreateObject("roDateTime")
+        currentTime.Mark()
+        remainingSeconds = m.continuationCountdown.expiry - currentTime.AsSeconds()
+    else
+        stopContinuationCountdown()
+        return
+    end if
+    displaySeconds = Number.ToInteger(remainingSeconds, 0)
+    if remainingSeconds > displaySeconds then displaySeconds++
+    if not m.continuationCountdown.layoutReady then applyCountdownWidth(displaySeconds)
+    if remainingSeconds > 0 then
+        m.nodes.countdownText.text = "Continuing in"
+        m.nodes.countdownSeconds.text = displaySeconds.ToStr()
+        m.nodes.countdownSuffix.visible = true
+    else
+        m.nodes.countdownText.text = "Continuing" + Chr(8230)
+        m.nodes.countdownSeconds.text = ""
+        m.nodes.countdownSuffix.visible = false
+        m.nodes.countdownTimer.control = TimerControl.Command.Stop
+    end if
+    m.nodes.countdown.visible = true
+end sub
+
+'-------------------------------------------------------------------------------
+' stopContinuationCountdown
+'-------------------------------------------------------------------------------
+sub stopContinuationCountdown()
+    m.nodes.countdownTimer.control = TimerControl.Command.Stop
+    m.nodes.countdown.visible = false
+    m.nodes.countdownText.text = ""
+    m.nodes.countdownSeconds.text = ""
+    m.nodes.countdownSuffix.visible = false
+    m.continuationCountdown.layoutReady = false
+    m.continuationCountdown.timerId = ""
+    m.continuationCountdown.targetElapsed = 0
+    m.continuationCountdown.expiry = 0
+    m.continuationCountdown.expiresUtc = ""
+end sub
+
+
+'-------------------------------------------------------------------------------
+' applyCountdownWidth
+'-------------------------------------------------------------------------------
+sub applyCountdownWidth(startingSeconds as integer)
+    layout = m.continuationCountdown.layout
+    secondsWidth = layout.secondsWidth
+    assetName = "continuation-countdown.png"
+    if startingSeconds >= layout.wideThreshold then
+        secondsWidth = layout.wideSecondsWidth
+        assetName = "continuation-countdown-wide.png"
+    end if
+    secondsLeft = layout.padding + layout.labelWidth
+    badgeWidth = secondsLeft + secondsWidth + layout.suffixWidth + layout.padding
+    profileName = "fhd"
+    if ResolutionProfile.IsHd() then profileName = "hd"
+    m.nodes.countdownBackground.uri = "pkg:/images/dvd/" + profileName + "/" + assetName
+    m.nodes.countdownBackground.width = badgeWidth
+    m.nodes.countdownBackground.height = layout.height
+    m.nodes.countdown.translation = [layout.rightEdge - badgeWidth, layout.top]
+    m.nodes.countdownText.translation = [layout.padding, 0]
+    m.nodes.countdownText.width = layout.labelWidth
+    m.nodes.countdownText.height = layout.height
+    m.nodes.countdownSeconds.translation = [secondsLeft, 0]
+    m.nodes.countdownSeconds.height = layout.height
+    m.nodes.countdownSuffix.width = layout.suffixWidth
+    m.nodes.countdownSuffix.height = layout.height
+    m.nodes.countdownSeconds.width = secondsWidth
+    m.nodes.countdownSuffix.translation = [secondsLeft + secondsWidth, 0]
+    m.continuationCountdown.layoutReady = true
+end sub

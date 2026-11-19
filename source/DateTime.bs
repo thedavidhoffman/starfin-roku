@@ -1,3 +1,5 @@
+import "pkg:/source/Number.bs"
+
 namespace DateTime
 
     '---------------------------------------------------------------------------
@@ -145,6 +147,41 @@ namespace DateTime
         if hours > 0 then return hours.ToStr() + "h " + minutes.ToStr() + "m"
 
         return minutes.ToStr() + "m"
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DateTime.ToYYYYMMDD
+    '---------------------------------------------------------------------------
+    ' Returns integer YYYYMMDD from a date or ISO timestamp string, ignoring time.
+    ' Returns 0 for non-string input or an invalid calendar date.
+    '---------------------------------------------------------------------------
+    function ToYYYYMMDD(value as dynamic) as integer
+        if type(value) <> "String" and type(value) <> "roString" then return 0
+        pattern = CreateObject("roRegex", "^[0-9]{4}-[0-9]{2}-[0-9]{2}($|T)", "")
+        if not pattern.IsMatch(value) then return 0
+        year = Number.ToInteger(Left(value, 4), 0)
+        month = Number.ToInteger(Mid(value, 6, 2), 0)
+        day = Number.ToInteger(Mid(value, 9, 2), 0)
+        if year < 1 or month < 1 or month > 12 or day < 1 then return 0
+        days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if year mod 4 = 0 and (year mod 100 <> 0 or year mod 400 = 0) then days[1] = 29
+        if day > days[month - 1] then return 0
+        ' Compare provider calendar dates without timezone conversion or epoch limits.
+        return year * 10000 + month * 100 + day
+    end function
+
+    '---------------------------------------------------------------------------
+    ' DateTime.IsoDifferenceSeconds
+    '---------------------------------------------------------------------------
+    function IsoDifferenceSeconds(startUtc as string, endUtc as string) as double
+        difference = FromIsoSeconds(endUtc) - FromIsoSeconds(startUtc)
+        fractionPattern = CreateObject("roRegex", "[.]([0-9]+)", "")
+        startFraction = fractionPattern.Match(startUtc)
+        endFraction = fractionPattern.Match(endUtc)
+        fractionalDifference = 0.0
+        if endFraction.Count() > 1 then fractionalDifference += Number.ToFloat("0." + endFraction[1])
+        if startFraction.Count() > 1 then fractionalDifference -= Number.ToFloat("0." + startFraction[1])
+        return difference + fractionalDifference
     end function
 
 end namespace

@@ -1,0 +1,173 @@
+import "pkg:/source/LibraryBrowse.bs"
+import "pkg:/source/DateTime.bs"
+import "pkg:/source/Json.bs"
+import "pkg:/source/store/RegistryStore.bs"
+import "pkg:/source/store/LibraryViewStateStore.bs"
+
+'-------------------------------------------------------------------------------
+' dvdBrowseSelection
+'-------------------------------------------------------------------------------
+function dvdBrowseSelection(optionKey as string, sortOrder = LibraryBrowse.SortOrder.Ascending as string) as object
+    label = "Title"
+    if optionKey = LibraryBrowse.Option.ReleaseDate then label = "Release Date"
+    return LibraryBrowse.CreateSortSelection(optionKey, optionKey, label, sortOrder)
+end function
+
+'-------------------------------------------------------------------------------
+' restoreDvdBrowseState
+'-------------------------------------------------------------------------------
+sub restoreDvdBrowseState()
+    request = m.top.loadRequest
+    m.browse.selection = dvdBrowseSelection(LibraryBrowse.Option.Title)
+    state = LibraryViewStateStore.Load(Strings.ToString(request.accountKey), "dvd:" + LCase(request.library.id))
+    if state = invalid then return
+    if state.optionKey <> LibraryBrowse.Option.Title and state.optionKey <> LibraryBrowse.Option.ReleaseDate then return
+    if state.sortOrder <> LibraryBrowse.SortOrder.Ascending and state.sortOrder <> LibraryBrowse.SortOrder.Descending then return
+    m.browse.selection = dvdBrowseSelection(state.optionKey, state.sortOrder)
+end sub
+
+'-------------------------------------------------------------------------------
+' syncDvdBrowseControls
+'-------------------------------------------------------------------------------
+sub syncDvdBrowseControls()
+    visible = m.library.view = DvdMenu.BrowserView.Library
+    enabled = visible and m.browse.ready and m.library.active and m.library.task = invalid
+    m.nodes.browse.visible = visible
+    m.nodes.sort.visible = visible
+    m.nodes.browse.focusable = enabled
+    m.nodes.sort.sortEnabled = enabled
+    m.nodes.browse.opacity = 1.0
+    if not enabled then m.nodes.browse.opacity = 0.45
+    m.nodes.browse.selectedSort = m.browse.selection
+    m.nodes.sort.selectedSort = m.browse.selection
+end sub
+
+'-------------------------------------------------------------------------------
+' onDvdBrowseRequested
+'-------------------------------------------------------------------------------
+sub onDvdBrowseRequested()
+    if not m.browse.ready or not m.library.active or m.library.task <> invalid then return
+    m.top.overlayRequested = {
+        id: DvdMenu.Overlay.Browse
+        componentName: "BrowseDialog"
+        openFunction: "openBrowse"
+        closeFields: ["closeRequested", "sortSelected"]
+        libraryId: m.top.loadRequest.library.id
+        generation: m.library.generation
+        selectedSortKey: m.browse.selection.optionKey
+        sortOptions: [dvdBrowseSelection(LibraryBrowse.Option.Title), dvdBrowseSelection(LibraryBrowse.Option.ReleaseDate)]
+    }
+end sub
+
+'-------------------------------------------------------------------------------
+' handleBrowseClosed
+'-------------------------------------------------------------------------------
+sub handleBrowseClosed(request as object, selection as dynamic)
+    if not m.library.active or not m.browse.ready or m.library.view <> DvdMenu.BrowserView.Library then return
+    if request.generation <> m.library.generation or request.libraryId <> m.top.loadRequest.library.id then return
+    if selection <> invalid then
+        if selection.optionKey = LibraryBrowse.Option.Title or selection.optionKey = LibraryBrowse.Option.ReleaseDate then
+            if selection.optionKey <> m.browse.selection.optionKey then commitDvdBrowseSelection(dvdBrowseSelection(selection.optionKey))
+        end if
+    end if
+    m.nodes.browse.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onDvdSortChanged
+'-------------------------------------------------------------------------------
+sub onDvdSortChanged()
+    if not m.browse.ready or not m.library.active or m.library.task <> invalid then return
+    selection = m.nodes.sort.sortOrderChanged
+    commitDvdBrowseSelection(dvdBrowseSelection(m.browse.selection.optionKey, selection.sortOrder))
+    m.nodes.sort.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' commitDvdBrowseSelection
+'-------------------------------------------------------------------------------
+sub commitDvdBrowseSelection(selection as object)
+    m.browse.selection = selection
+    request = m.top.loadRequest
+    state = {
+        optionKey: selection.optionKey
+        sortKey: selection.sortKey
+        sortOrder: selection.sortOrder
+        libraryTitle: Strings.ToString(request.library.name)
+        collectionType: "dvd"
+    }
+    LibraryViewStateStore.Save(Strings.ToString(request.accountKey), "dvd:" + LCase(request.library.id), state)
+    renderGroups(sortLibraryGroups(m.library.groups, selection), false)
+end sub
+
+'-------------------------------------------------------------------------------
+' handleDvdBrowseKey
+'-------------------------------------------------------------------------------
+function handleDvdBrowseKey(key as string) as boolean
+    if m.library.view <> DvdMenu.BrowserView.Library or not m.browse.ready then return false
+    onBrowse = m.nodes.browse.isInFocusChain()
+    onSort = m.nodes.sort.isInFocusChain()
+    if onBrowse or onSort then
+        if key = Remote.Key.Left or key = Remote.Key.Right then
+            if key = Remote.Key.Left then m.nodes.browse.setFocus(true) else m.nodes.sort.setFocus(true)
+            return true
+        end if
+        if key = Remote.Key.Up then
+            m.top.focusExitUp = true
+            return true
+        end if
+    else if key = Remote.Key.Up then
+        if not m.nodes.grid.visible or m.nodes.grid.itemFocused < m.nodes.grid.numColumns then
+            m.nodes.browse.setFocus(true)
+            return true
+        end if
+    end if
+    return false
+end function
+
+'-------------------------------------------------------------------------------
+' sortLibraryGroups
+'-------------------------------------------------------------------------------
+function sortLibraryGroups(groups as object, selection as object) as object
+    sorted = []
+    for each group in groups
+        group.releaseSortKey = DateTime.ToYYYYMMDD(group.premiereDate)
+        if group.releaseSortKey = 0 then
+            year = Number.ToInteger(group.year, 0)
+            if year > 0 and year <= 9999 then group.releaseSortKey = year * 10000 + 101
+        end if
+        index = sorted.Count()
+        sorted.Push(group)
+        while index > 0
+            if not libraryGroupComesBefore(group, sorted[index - 1], selection) then exit while
+            sorted[index] = sorted[index - 1]
+            index--
+        end while
+        sorted[index] = group
+    end for
+    return sorted
+end function
+
+'-------------------------------------------------------------------------------
+' libraryGroupComesBefore
+'-------------------------------------------------------------------------------
+function libraryGroupComesBefore(first as object, second as object, selection as object) as boolean
+    descending = selection.sortOrder = LibraryBrowse.SortOrder.Descending
+    byDate = selection.optionKey = LibraryBrowse.Option.ReleaseDate
+    if byDate then
+        if first.releaseSortKey = 0 and second.releaseSortKey <> 0 then return false
+        if first.releaseSortKey <> 0 and second.releaseSortKey = 0 then return true
+        if first.releaseSortKey <> second.releaseSortKey then
+            if descending then return first.releaseSortKey > second.releaseSortKey
+            return first.releaseSortKey < second.releaseSortKey
+        end if
+    end if
+    firstName = LCase(first.name)
+    secondName = LCase(second.name)
+    if firstName <> secondName then
+        if not byDate and descending then return firstName > secondName
+        return firstName < secondName
+    end if
+    return first.key < second.key
+end function
+

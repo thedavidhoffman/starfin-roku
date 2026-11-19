@@ -1,3 +1,5 @@
+import "pkg:/components/pages/DvdPlayer/Helpers/ContinuationCountdown.bs"
+import "pkg:/source/ResolutionProfile.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/Logger.bs"
 import "pkg:/source/String.bs"
@@ -28,6 +30,8 @@ sub init()
     m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {} }
     m.playback = { active: false, video: invalid, timer: invalid, id: "", started: false, completed: false, pauseRequested: false, buffering: false, progress: 0 }
     m.transport = { title: "", year: "" }
+    m.continuationCountdown = { layoutReady: false, expiry: 0, expiresUtc: "", timerId: "", targetElapsed: 0, clock: CreateObject("roTimespan") }
+    m.continuationCountdown.layout = ParseJson(ReadAsciiFile("pkg:/components/pages/DvdPlayer/Helpers/continuation-countdown-layout.json"))
     initHandlers()
     onLoadRequestChanged()
 end sub
@@ -36,7 +40,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.nodes = { host: m.top.findNode("menuHost"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), contentHost: m.top.findNode("contentHost"), controls: m.top.findNode("playbackControls"), controlsTimer: m.top.findNode("controlsHideTimer") }
+    m.nodes = { host: m.top.findNode("menuHost"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), contentHost: m.top.findNode("contentHost"), controls: m.top.findNode("playbackControls"), controlsTimer: m.top.findNode("controlsHideTimer"), countdown: m.top.findNode("continuationCountdown"), countdownBackground: m.top.findNode("continuationCountdownBackground"), countdownText: m.top.findNode("continuationCountdownText"), countdownSeconds: m.top.findNode("continuationCountdownSeconds"), countdownSuffix: m.top.findNode("continuationCountdownSuffix"), countdownTimer: m.top.findNode("continuationCountdownTimer") }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -46,6 +50,7 @@ sub initHandlers()
     m.top.observeField("loadRequest", "onLoadRequestChanged")
     m.nodes.controls.observeField("playPausePressed", "toggleContentPause")
     m.nodes.controls.observeField("interaction", "restartControlsTimer")
+    m.nodes.countdownTimer.observeField("fire", "updateContinuationCountdown")
     m.nodes.controlsTimer.observeField("fire", "onControlsTimeout")
 end sub
 
@@ -106,6 +111,7 @@ end sub
 ' abandonSession
 '-------------------------------------------------------------------------------
 sub abandonSession()
+    stopContinuationCountdown()
     task = m.native.task
     m.native.task = invalid
     m.native.queue = []
@@ -197,7 +203,7 @@ sub onSessionResponse(event as object)
                     if DvdPaths.SameId(m.native.inFlight.interruptedPlaybackId, m.playback.id) then releaseContentVideo()
                     hideControls()
                 end if
-                if response.payload <> invalid then applySnapshot(response.payload)
+                if response.payload <> invalid then applySnapshot(response.payload, response.ok and (m.native.inFlight.action = DvdSession.Action.Button or isMenuNavigationAction(m.native.inFlight.action)))
                 if response.conflict then m.native.navigating = false
                 if m.native.inFlight.action = DvdSession.Action.Button and m.native.state = DvdSession.State.Menu then m.native.navigating = false
                 m.native.inFlight = invalid
@@ -219,18 +225,22 @@ end sub
 '-------------------------------------------------------------------------------
 ' applySnapshot
 '-------------------------------------------------------------------------------
-sub applySnapshot(snapshot as object)
+sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
     revision = Number.ToInteger(snapshot.revision, -1)
     if revision < m.native.revision then return
     if revision = m.native.revision then
         m.native.snapshot = snapshot
+        syncContinuationCountdown(snapshot)
+        if restoreMenuSelection and snapshot.state = DvdSession.State.Menu then restoreBackendMenuSelection(snapshot.menu)
         return
     end if
+    previousSnapshot = m.native.snapshot
     previousState = m.native.state
     m.native.revision = revision
     m.native.snapshot = snapshot
     m.native.state = snapshot.state
     state = snapshot.state
+    syncContinuationCountdown(snapshot)
     m.log.write("Native session state=" + state + " revision=" + revision.ToStr())
     preparing = state = DvdSession.State.Starting or state = DvdSession.State.Preparing
     keepMenu = preparing and m.rendering.root <> invalid and m.nodes.host.visible and (previousState = DvdSession.State.Menu or previousState = DvdSession.State.Starting or previousState = DvdSession.State.Preparing)
@@ -258,7 +268,16 @@ sub applySnapshot(snapshot as object)
         releaseContentVideo()
         m.nodes.contentHost.visible = false
         m.nodes.host.visible = true
-        renderScreen(snapshot.menu)
+        sameMenu = false
+        if previousState = DvdSession.State.Menu and previousSnapshot <> invalid then
+            ' A timing-only revision must preserve the user's locally selected hotspot.
+            sameMenu = FormatJson(previousSnapshot.menu) = FormatJson(snapshot.menu)
+        end if
+        if not sameMenu then
+            renderScreen(snapshot.menu)
+        else if restoreMenuSelection then
+            restoreBackendMenuSelection(snapshot.menu)
+        end if
         m.nodes.spinner.control = SpinnerControl.Command.Stop
     else if state = DvdSession.State.Playing or state = DvdSession.State.AwaitingCompletion then
         clearMenu()
