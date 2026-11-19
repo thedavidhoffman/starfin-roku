@@ -19,7 +19,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    m.native = { request: request, headers: JellyfinAuth.BuildTokenHeaders(request.token), path: "", started: false, snapshot: invalid, revision: -1, commandId: "", authExpired: false, mediaId: "", heartbeat: CreateObject("roTimespan") }
+    m.native = { request: request, headers: JellyfinAuth.BuildTokenHeaders(request.token), path: "", started: false, snapshot: invalid, revision: -1, commandId: "", authExpired: false, errorCode: "", mediaId: "", heartbeat: CreateObject("roTimespan") }
     m.port = CreateObject("roMessagePort")
     m.top.observeField("cancelRequested", m.port)
     m.top.observeField("command", m.port)
@@ -31,10 +31,12 @@ sub executeRequest()
     end try
     ' Cleanup survives a detached page and even a lost start response.
     if m.native.started then
+        saveFinalPosition()
         result = sessionRequest(m.native.path, "DELETE", invalid)
         if not result.ok and result.status <> 404 and result.status <> 410 and message = "" then message = "DVD cleanup failed; the server session will expire automatically."
     end if
-    m.top.response = { action: DvdSession.Event.Closed, requestId: request.requestId, message: message, errorMessage: message, authExpired: m.native.authExpired }
+    m.top.response = { action: DvdSession.Event.Closed, requestId: request.requestId, message: message, errorMessage: message, errorCode: m.native.errorCode, authExpired: m.native.authExpired }
+    if m.top.cleanupCompletion <> invalid then m.top.cleanupCompletion.completed = true
 end sub
 
 '-------------------------------------------------------------------------------
@@ -50,14 +52,21 @@ function runSession() as string
     m.native.path = path + "/" + request.requestId
     if m.top.cancelRequested then return ""
     m.native.started = true
-    body = Json.Object([Json.Pair("requestId", request.requestId)])
+    body = Json.Object([Json.Pair("requestId", request.requestId), Json.Pair("startMode", Strings.ToString(request.startMode, DvdSession.StartMode.Normal))])
     result = requestWithRetry(path, "POST", body)
     if m.top.cancelRequested then return ""
-    if not result.ok then return Strings.ToString(result.errorMessage, "Unable to start the DVD.")
+    if not result.ok then
+        failure = ParseJson(Strings.ToString(result.responseText))
+        if type(failure) = "roAssociativeArray" then m.native.errorCode = Strings.ToString(failure.error)
+        return Strings.ToString(result.errorMessage, "Unable to start the DVD.")
+    end if
     acceptSnapshot(result.data)
     while not m.top.cancelRequested
         snapshot = m.native.snapshot
-        if snapshot.state = DvdSession.State.Failed then return Strings.ToString(snapshot.error, "Native DVD session failed.")
+        if snapshot.state = DvdSession.State.Failed then
+            m.native.errorCode = Strings.ToString(snapshot.errorCode)
+            return Strings.ToString(snapshot.error, "Native DVD session failed.")
+        end if
         if snapshot.state = DvdSession.State.Stopped then return ""
         if m.native.heartbeat.TotalMilliseconds() >= 30000 then
             m.native.heartbeat.Mark()
@@ -95,9 +104,8 @@ function sendCommand(command as object, notifyPage = true as boolean) as object
     pairs = [Json.Pair("requestId", command.requestId), Json.Pair("action", command.action)]
     if command.playbackId <> invalid then
         pairs.Push(Json.Pair("playbackId", command.playbackId))
-    else
-        pairs.Push(Json.NumberPair("revision", command.revision))
     end if
+    if command.revision <> invalid then pairs.Push(Json.NumberPair("revision", command.revision))
     if command.button <> invalid then pairs.Push(Json.NumberPair("button", command.button))
     if command.positionSeconds <> invalid then pairs.Push(Json.NumberPair("positionSeconds", command.positionSeconds))
     result = requestWithRetry(m.native.snapshot.commandPath, "POST", Json.Object(pairs))
@@ -188,3 +196,18 @@ function sessionRequest(path as string, method as string, body as dynamic) as ob
     if result.authExpired = true then m.native.authExpired = true
     return result
 end function
+
+'-------------------------------------------------------------------------------
+' saveFinalPosition
+'-------------------------------------------------------------------------------
+sub saveFinalPosition()
+    command = m.top.finalCommand
+    if command = invalid then return
+    body = Json.Object([Json.Pair("requestId", command.requestId), Json.Pair("action", DvdSession.Action.Stop), Json.Pair("playbackId", command.playbackId), Json.NumberPair("positionSeconds", command.positionSeconds)])
+    for attempt = 0 to 2
+        result = sessionRequest(m.native.path + "/Commands", "POST", body)
+        if result.ok then return
+        status = Number.ToInteger(result.status, 0)
+        if status > 0 and status < 500 then return
+    end for
+end sub

@@ -202,7 +202,8 @@ selection uses `Catalog/DvdDiscDialog` through the top-level OverlayHost.
 The feature-local Paths namespace validates returned UUID-scoped relative paths,
 including metadata poster version queries, for tasks and rendering.
 MainScene passes explicit session context and retains the hidden browser while
-DvdPlayer is active. Player exit restores the retained browser grid and focus without a refresh;
+DvdPlayer is active. Player exit restores the retained browser grid and focus without rebuilding posters;
+DvdLibraryPage separately refreshes and merges disc user data for resume availability;
 browser exit returns Home. DvdLibraryPage owns inline catalog/library navigation: a single library is opened directly, multiple libraries use four-column landscape cards with supplied authenticated artwork. The browser is transparent beneath the shared header/clock; only DVD menus and playback hide the header. Global reset cleans up both pages. Disc
 menus and finite media now come from the plugin's libdvdnav session snapshots.
 DvdPlayer owns revision-checked state, serialized command intent, button focus,
@@ -217,7 +218,15 @@ the runtime renderer and badge asset generator. Timing-only menu updates preserv
 media and focus; successful menu command acknowledgments separately reconcile
 backend selection without rebuilding unchanged media. State changes and session cleanup clear the display.
 DvdSessionTask owns start, status polling, command retries, heartbeats, timed still
-completion, and DELETE, including cleanup after a cancelled/lost start request.
+completion, final-position stop before DELETE, and cleanup after a cancelled/lost start request.
+DvdPlayer's Resume helper owns startup choice, resume-unavailable fallback and final
+position capture. Resume/DvdResumeDialog reuses the DVD catalog list content with
+two rows through OverlayHost. MainScene only routes these overlay events.
+DvdLibraryPage owns correlated bookmark refresh and pending selection by group key.
+The session task signals cleanup through a per-session completion node; MainScene
+hands that node back to the browser on immediate player exit. The browser observes
+completion before refreshing user data, without owning or cancelling the session
+worker. Initial startup choices are consumed when a session snapshot is accepted.
 Static mappings and the old DvdPlaybackTask are removed. All DVD helpers remain
 under DvdPlayer/Helpers; MainScene retains only shell routing/session handoff.
 The existing playback controllers are not involved. See
@@ -243,8 +252,9 @@ library and title artwork use supplied tag-versioned image paths. VideoMediaCard
 supports optional image headers and isolates authenticated Poster reuse; DVD path
 construction/validation remains feature-local.
 
-DVD transport controls remain feature-owned: DvdPlaybackControls owns metadata,
-Play/Pause presentation/focus and emits narrow intent events.
+DVD transport controls remain feature-owned: DvdPlaybackControls owns the compact
+bottom metadata/Play-Pause presentation, focus, reduced gradient and shared Clock
+visibility through its parent overlay, and emits narrow intent events.
 DvdPlayer's TransportControls helper owns availability, local/server pause
 reconciliation, and overlay timing; DvdSessionTask returns authoritative snapshots
 with command acknowledgments. Accepted main-menu or last-menu navigation revokes the previous Video

@@ -37,8 +37,11 @@ end sub
 ' dvdHandleOverlayRequested
 '-------------------------------------------------------------------------------
 sub dvdHandleOverlayRequested(event as object)
-    if m.dvdLibraryPage = invalid then return
-    if not event.getRoSGNode().isSameNode(m.dvdLibraryPage) then return
+    owner = event.getRoSGNode()
+    valid = false
+    if m.dvdLibraryPage <> invalid then valid = owner.isSameNode(m.dvdLibraryPage)
+    if m.dvdPlayerPage <> invalid then valid = valid or owner.isSameNode(m.dvdPlayerPage)
+    if not valid then return
     m.overlayHost.callFunc("openOverlay", event.getData())
 end sub
 
@@ -63,6 +66,7 @@ sub dvdHandleDiscSelected(event as object)
     m.header.visible = false
     page = CreateObject("roSGNode", "DvdPlayer")
     page.id = "dvdPlayer"
+    page.observeField("overlayRequested", "dvdHandleOverlayRequested")
     page.observeField("closeRequested", "dvdHandleCloseRequested")
     page.loadRequest = request
     m.dvdPlayerPage = page
@@ -77,6 +81,7 @@ sub dvdHandleCloseRequested(event as object)
     if m.dvdPlayerPage = invalid then return
     if not event.getRoSGNode().isSameNode(m.dvdPlayerPage) then return
     page = m.dvdPlayerPage
+    cleanupCompletion = page.cleanupCompletion
     m.dvdPlayerPage = invalid
     if page <> invalid then
         page.unobserveField("closeRequested")
@@ -86,6 +91,7 @@ sub dvdHandleCloseRequested(event as object)
     if m.dvdLibraryPage <> invalid then
         m.header.visible = true
         m.dvdLibraryPage.callFunc("activate")
+        m.dvdLibraryPage.callFunc("resumeAfterPlayback", cleanupCompletion)
     else
         showHome()
         m.homePage.callFunc("focusDvdLibrary")

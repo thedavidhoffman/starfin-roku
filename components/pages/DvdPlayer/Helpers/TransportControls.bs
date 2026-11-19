@@ -1,3 +1,5 @@
+import "pkg:/source/DateTime.bs"
+
 '-------------------------------------------------------------------------------
 ' transportAvailability
 '-------------------------------------------------------------------------------
@@ -41,7 +43,15 @@ end sub
 '-------------------------------------------------------------------------------
 sub syncControls()
     availability = transportAvailability()
-    m.nodes.controls.presentation = { title: m.transport.title, year: m.transport.year, paused: m.playback.pauseRequested, canPause: availability.canPause }
+    runtime = ""
+    snapshot = m.native.snapshot
+    if snapshot <> invalid then
+        if (snapshot.state = DvdSession.State.Playing or snapshot.state = DvdSession.State.AwaitingCompletion) and snapshot.playback <> invalid then
+            durationSeconds = Number.ToFloat(snapshot.playback.durationSeconds, 0)
+            if durationSeconds > 0 then runtime = "Runtime: " + DateTime.FormatPositionSeconds(durationSeconds)
+        end if
+    end if
+    m.nodes.controls.presentation = { runtime: runtime, title: m.transport.title, year: m.transport.year, paused: m.playback.pauseRequested, canPause: availability.canPause }
     if m.nodes.controls.visible and (m.playback.pauseRequested or m.playback.buffering or m.native.navigating) then m.nodes.controlsTimer.control = TimerControl.Command.Stop
 end sub
 
@@ -64,6 +74,8 @@ sub hideControls()
     m.nodes.controlsTimer.control = TimerControl.Command.Stop
     hadFocus = m.nodes.controls.isInFocusChain()
     m.nodes.controls.visible = false
+    ' Focusing an ancestor alone can retain the hidden Play/Pause child.
+    m.nodes.controls.callFunc("releaseFocus")
     if hadFocus then m.top.setFocus(true)
 end sub
 
@@ -93,8 +105,8 @@ sub toggleContentPause()
     if not availability.canPause then return
     m.playback.pauseRequested = m.playback.video.state <> VideoPlayerState.Value.Paused
     if m.playback.pauseRequested then
-        m.playback.video.control = MediaControl.Command.Pause
         queueCommand(DvdSession.Action.Pause, m.playback.id)
+        m.playback.video.control = MediaControl.Command.Pause
     else
         m.playback.video.control = MediaControl.Command.Resume
         queueCommand(DvdSession.Action.Resume, m.playback.id)
@@ -106,6 +118,7 @@ end sub
 ' reconcileContentPause
 '-------------------------------------------------------------------------------
 sub reconcileContentPause()
+    if m.native.navigating then return
     snapshot = m.native.snapshot
     if snapshot = invalid or m.playback.video = invalid or snapshot.playback = invalid then return
     if not DvdPaths.SameId(snapshot.playback.playbackId, m.playback.id) or m.playback.completed then return

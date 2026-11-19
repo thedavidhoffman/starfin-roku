@@ -45,7 +45,8 @@ DvdDiscovery owns task cancellation and generation/node correlation. MainScene
 passes its session-scoped presentation to HomePage. Server/user/token matching
 prevents stale availability or credentials from crossing sessions. Sign-out and
 login routing reset discovery. Returning from playback does not rediscover or
-refresh the retained DVD browser.
+rebuild the retained DVD browser; it refreshes only per-disc user data for saved
+resume availability.
 
 Home and library cards contain artwork without stretching/cropping. The plugin
 serves its embedded default when no custom image is configured. Starfin's local
@@ -155,7 +156,8 @@ The page uses LibraryViewStateStore under the existing server/user account key
 and a `dvd:`-prefixed library ID. It saves option/direction immediately and restores
 before the first title render. Invalid preferences default to Title ascending;
 changing the browse option resets direction to ascending. Returning from playback
-retains preferences, loaded cards, and selection without a refresh.
+retains preferences, loaded cards, and selection; a separate user-data refresh
+updates saved resume availability without replacing the cards.
 
 The lightweight metadata summary is sufficient for browsing. Full `metadataPath`
 requests are deferred until a future details UI needs them; missing overview and
@@ -281,7 +283,7 @@ finite player disables looping, seeking, and native trick-play controls. It star
 at the beginning of each supplied media unit, not the HLS live edge.
 
 Roku Playing sends `started`; forward position updates report `progress` at most
-once per ten seconds. Play/OK pauses or resumes locally and queues the matching
+once per fifteen seconds while playing. Play/OK pauses or resumes locally and queues the matching
 server command. Only Roku Finished sends `complete`; neither
 `awaitingCompletion` nor `encodingComplete` advances the DVD on its own.
 Duplicate EOF and stale events from replaced Video nodes are ignored. Player
@@ -292,7 +294,7 @@ the next media/menu transition. Actual last-frame retention depends on Roku
 runtime behavior and is not yet verified. Finite still completion uses the
 server's `expiresUtc` via the existing DateTime helper, followed by a
 revision-checked `stillComplete`; indefinite stills wait for Options or Back.
-Heartbeats continue in both cases. No seeking, saved resume, subtitle rendering,
+Heartbeats continue in both cases. No seeking, subtitle rendering,
 angle switching, or watched-state updates are implemented.
 
 ### Verification status
@@ -419,3 +421,81 @@ assets, not manually synchronizing XML/helper/generator constants.
 Source/diff review only for these fixes. Deferred scenarios include auto-action
 commands returning unchanged menus, same-revision command acknowledgments, passive
 timing updates after local navigation, and countdown geometry at both resolutions.
+
+
+## Compact playback overlay
+
+DVD controls use a single bottom row: the shared 75-pixel Play/Pause button at
+the left, with the title and an optional year/runtime line alongside it. Missing
+metadata is omitted without a dangling separator; the title centers vertically
+beside the button when both year and runtime are absent. There is no timeline,
+scrubbing affordance, or reserved timeline space.
+
+The existing soft bottom gradient is fitted into the bottom 280 pixels of the
+1080p design layout. The shared Clock uses the standard player's top-right
+position and styling. It is a child of the controls overlay, so clock and controls
+show/hide together and remain hidden on authored menus. Remote behavior and
+the five-second auto-hide remain unchanged. Standard player components and
+artwork are unchanged.
+
+Both Back dismissal and auto-hide explicitly release the overlay's Play/Pause
+child focus before returning focus to DvdPlayer. Hidden controls do not consume
+directional input or reacquire focus. Repeated DOWN → dismiss → DOWN and timed
+auto-hide → DOWN cycles remain deferred device acceptance scenarios.
+
+Source/diff review only; gradient contrast, long titles, missing metadata, clock
+visibility and layout at 1080p/720p await authorized device checks.
+
+## Saved DVD resume (plugin 0.1.53)
+
+Disc-level `userData.resume` controls the Resume / Start over prompt after disc
+selection. DvdPlayer owns the prompt and startup mode; the feature dialog uses
+OverlayHost and the existing DVD list content with two visible rows. Cancel
+returns to the retained library selection. The session POST sends `startMode`
+(`normal`, `resume`, or `startOver`) with a new UUID. Both HTTP and asynchronous
+`resume-unavailable` failures offer normal startup or Start over; neither choice
+is inferred silently. Once a session snapshot is accepted, the initial startup
+choice is consumed and subsequent error recovery uses normal startup; an earlier
+Start over choice cannot clear newly saved progress again. Transport retries
+retain the original UUID/body. Bookmarks and native checkpoints remain server-owned.
+
+Each new playback ID starts HLS with `live=false` and `playStart=0`. The player
+reports `started` after actual playback and reports advancing Video positions at
+15-second intervals. Positions are playback-unit-relative, never title offsets
+or HLS duration. Pause and authored menu navigation capture the current position
+before pausing locally and include the playback ID; menu commands retain their
+revision as well. Navigation rejection reconciles the local paused state.
+
+On user exit, DvdPlayer captures the final position before releasing Video. The
+session worker sends `stop` with that position before DELETE and retries the same
+UUID/body on transient failures. Exit returns immediately to the browser. A session-specific completion node
+notifies the browser after worker cleanup, preventing bookmark refresh from
+racing the save without blocking navigation behind network timeouts. Pending
+title selection waits for cleanup and refresh; folder navigation and Back remain
+available. Browser deactivation releases the completion observer.
+Forced page teardown leaves that cleanup to the detached worker. Completed media
+is not saved again on exit; actual EOF still sends `complete`.
+
+After playback, DvdLibraryPage refreshes library user data and merges it by disc ID
+without replacing grid ContentNodes or poster images. A selection during refresh
+waits for the response and is correlated by group key; failure offers retry on
+selection rather than launching from stale bookmark availability. Account/session
+context stays explicit and no user data is shared between accounts. Sorting
+continues to use the retained groups without network requests.
+
+Controls display optional `Runtime` from `playback.durationSeconds` only for
+playable content. This is the DVD-declared full authored title duration, including
+chapter-menu entry, not a timeline, elapsed position or provider runtime.
+
+Source/diff review only. Deferred device acceptance: prompt cancellation and
+multi-disc choice; missing/incompatible bookmarks at POST and later preparation;
+resumed HLS position across playlist sliding; progress/pause/menu/exit saves;
+exit during an in-flight command; identical retry bodies; natural completion;
+authentication failures; account isolation; retained posters/focus and sorting
+during bookmark refresh; runtime absence; layouts at 1080p and 720p. No tests,
+builds, automated checks, deployment or device verification run for this change.
+
+Deferred regression scenarios also include Start over ? playback/progress ? error
+? OK recovery without clearing the bookmark; exit with a stalled request; cleanup
+finishing before/after browser activation; folder navigation during cleanup; and
+leaving the browser before cleanup completes. Source/diff review only.

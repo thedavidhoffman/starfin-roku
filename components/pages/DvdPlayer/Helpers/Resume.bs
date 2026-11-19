@@ -1,0 +1,58 @@
+import "pkg:/components/pages/DvdPlayer/Helpers/Contracts.bs"
+
+'-------------------------------------------------------------------------------
+' promptResume
+'-------------------------------------------------------------------------------
+sub promptResume(unavailable as boolean)
+    m.resume.prompting = true
+    m.resume.requestId = CreateObject("roDeviceInfo").GetRandomUUID()
+    m.top.overlayRequested = { id: DvdMenu.Overlay.Resume, componentName: "DvdResumeDialog", openFunction: "openPicker", closeField: "closeRequested", resumeUnavailable: unavailable, requestId: m.resume.requestId, generation: m.loading.generation, discId: m.session.demo.id }
+end sub
+
+'-------------------------------------------------------------------------------
+' handleResumeClosed
+'-------------------------------------------------------------------------------
+sub handleResumeClosed(request as object, mode as string)
+    if not m.loading.active or not m.resume.prompting then return
+    if request.requestId <> m.resume.requestId then return
+    if request.generation <> m.loading.generation or request.discId <> m.session.demo.id then return
+    m.resume.prompting = false
+    if mode <> DvdSession.StartMode.Normal and mode <> DvdSession.StartMode.Resume and mode <> DvdSession.StartMode.StartOver then
+        closeDvdSession()
+        return
+    end if
+    m.resume.mode = mode
+    beginLoad()
+end sub
+
+'-------------------------------------------------------------------------------
+' finalPositionCommand
+'-------------------------------------------------------------------------------
+function finalPositionCommand(action as string) as dynamic
+    if m.playback.video = invalid or not m.playback.started or m.playback.completed then return invalid
+    if m.playback.id = "" then return invalid
+    positionSeconds = Number.ToFloat(m.playback.video.position, -1)
+    if positionSeconds < 0 then return invalid
+    return { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: action, playbackId: m.playback.id, positionSeconds: positionSeconds }
+end function
+
+'-------------------------------------------------------------------------------
+' closeDvdSession
+'-------------------------------------------------------------------------------
+sub closeDvdSession()
+    if m.resume.closing then return
+    m.resume.closing = true
+    hideControls()
+    stopContinuationCountdown()
+    if m.native.task = invalid then
+        m.top.closeRequested = true
+        return
+    end if
+    ' Cleanup survives page removal; the browser waits for its completion signal
+    ' before refreshing bookmarks, without trapping the viewer on this page.
+    m.native.task.finalCommand = finalPositionCommand(DvdSession.Action.Stop)
+    m.native.task.cancelRequested = true
+    releaseContentVideo()
+    clearMenu()
+    m.top.closeRequested = true
+end sub

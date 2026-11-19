@@ -4,6 +4,7 @@ import "pkg:/source/LibraryLayoutSetting.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/Remote.bs"
+import "pkg:/source/AppMessage.bs"
 import "pkg:/source/TaskControl.bs"
 import "pkg:/source/SpinnerControl.bs"
 import "pkg:/source/VideoCardGridLayout.bs"
@@ -17,6 +18,7 @@ import "pkg:/components/pages/DvdPlayer/Helpers/LibraryModel.bs"
 sub init()
     initReferences()
     m.library = { active: false, rendering: false, loading: false, entryPending: false, task: invalid, generation: 0, groups: [], key: "", index: 0, libraries: [], catalogKey: "", view: DvdMenu.BrowserView.Catalog }
+    m.bookmarks = { task: invalid, generation: 0, pendingKey: "", stale: false, completion: invalid }
     m.layout = { columns: 6, spec: invalid }
     m.browse = { selection: dvdBrowseSelection(LibraryBrowse.Option.Title), ready: false }
     applyLibraryLayout()
@@ -68,6 +70,8 @@ end sub
 '-------------------------------------------------------------------------------
 sub deactivate()
     m.library.active = false
+    releaseCleanupCompletion()
+    releaseBookmarkTask()
     m.top.visible = false
     releaseLibraryTask()
     syncDvdBrowseControls()
@@ -91,6 +95,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub loadLibrary()
     if not m.library.active then return
+    releaseBookmarkTask()
     m.library.loading = true
     releaseLibraryTask()
     m.browse.ready = false
@@ -145,6 +150,7 @@ sub onLibraryResponse(event as object)
             showLibraries()
         end if
     else
+        m.bookmarks.stale = false
         m.browse.ready = true
         renderGroups(sortLibraryGroups(groupLibraryDiscs(response.payload), m.browse.selection))
     end if
@@ -217,8 +223,20 @@ end sub
 '-------------------------------------------------------------------------------
 sub onGroupSelected()
     if not m.library.active or m.library.loading or m.library.rendering or m.library.task <> invalid then return
-    index = m.nodes.grid.itemSelected
+    AppMessage.Dismiss()
+    selectLibraryGroup(m.nodes.grid.itemSelected)
+end sub
+
+'-------------------------------------------------------------------------------
+' selectLibraryGroup
+'-------------------------------------------------------------------------------
+sub selectLibraryGroup(index as integer)
     if index < 0 or index >= m.library.groups.Count() then return
+    if m.library.view = DvdMenu.BrowserView.Library and (m.bookmarks.stale or m.bookmarks.completion <> invalid) then
+        m.bookmarks.pendingKey = m.library.groups[index].key
+        refreshBookmarks()
+        return
+    end if
     showGroup(index)
     group = m.library.groups[index]
     if m.library.view = DvdMenu.BrowserView.Catalog then
@@ -291,6 +309,7 @@ end function
 ' showLibraries
 '-------------------------------------------------------------------------------
 sub showLibraries()
+    releaseBookmarkTask()
     releaseLibraryTask()
     m.nodes.spinner.control = SpinnerControl.Command.Stop
     m.library.view = DvdMenu.BrowserView.Catalog
@@ -310,6 +329,8 @@ end sub
 ' openLibrary
 '-------------------------------------------------------------------------------
 sub openLibrary(library as object)
+    releaseBookmarkTask()
+    m.bookmarks.stale = false
     m.library.loading = true
     m.library.entryPending = true
     m.library.catalogKey = library.id
@@ -358,4 +379,109 @@ sub onDvdLayoutChanged()
     if m.library.view = DvdMenu.BrowserView.Library and m.browse.ready then
         renderGroups(m.library.groups, false)
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' refreshBookmarks
+'-------------------------------------------------------------------------------
+sub refreshBookmarks()
+    if not m.library.active or m.library.view <> DvdMenu.BrowserView.Library then return
+    m.bookmarks.stale = true
+    if m.bookmarks.completion <> invalid then return
+    if m.bookmarks.task <> invalid then return
+    m.bookmarks.generation++
+    task = m.top.createChild("DvdDemoTask")
+    m.bookmarks.task = task
+    request = {}
+    request.Append(m.top.loadRequest)
+    request.action = DvdMenu.Request.Library
+    request.requestId = m.bookmarks.generation
+    task.request = request
+    task.observeField("response", "onBookmarksResponse")
+    task.control = TaskControl.Command.Run
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseBookmarkTask
+'-------------------------------------------------------------------------------
+sub releaseBookmarkTask()
+    task = m.bookmarks.task
+    m.bookmarks.task = invalid
+    m.bookmarks.pendingKey = ""
+    if task = invalid then return
+    task.unobserveField("response")
+    task.control = TaskControl.Command.Stop
+    m.top.removeChild(task)
+end sub
+
+'-------------------------------------------------------------------------------
+' onBookmarksResponse
+'-------------------------------------------------------------------------------
+sub onBookmarksResponse(event as object)
+    if not m.library.active or m.bookmarks.task = invalid then return
+    if not event.getRoSGNode().isSameNode(m.bookmarks.task) then return
+    response = event.getData()
+    if response.requestId <> m.bookmarks.generation then return
+    request = m.bookmarks.task.request
+    pendingKey = m.bookmarks.pendingKey
+    releaseBookmarkTask()
+    if response.authExpired = true then
+        deactivate()
+        m.top.authenticationRequired = { request: request, response: response }
+        return
+    end if
+    if response.ok <> true then
+        if pendingKey <> "" then AppMessage.Show("Unable to check saved DVD progress. Select the title again to retry.")
+        return
+    end if
+    ' Update only user data, retaining grid ContentNodes, poster decodes and focus.
+    byId = {}
+    for each disc in response.payload
+        byId[LCase(Strings.ToString(disc.id)).Replace("-", "")] = disc
+    end for
+    for each group in m.library.groups
+        for each disc in group.discs
+            current = byId[LCase(Strings.ToString(disc.id)).Replace("-", "")]
+            disc.userData = invalid
+            if current <> invalid then disc.userData = current.userData
+        end for
+    end for
+    m.bookmarks.stale = false
+    if pendingKey <> "" and pendingKey = m.library.key and m.nodes.grid.isInFocusChain() then selectLibraryGroup(m.library.index)
+end sub
+
+'-------------------------------------------------------------------------------
+' resumeAfterPlayback
+'-------------------------------------------------------------------------------
+sub resumeAfterPlayback(completion as dynamic)
+    releaseCleanupCompletion()
+    m.bookmarks.stale = true
+    m.bookmarks.completion = completion
+    if completion = invalid then
+        refreshBookmarks()
+        return
+    end if
+    completion.observeField("completed", "onCleanupCompleted")
+    ' Cleanup may have finished before the shell handed back the browser.
+    onCleanupCompleted()
+end sub
+
+'-------------------------------------------------------------------------------
+' onCleanupCompleted
+'-------------------------------------------------------------------------------
+sub onCleanupCompleted()
+    completion = m.bookmarks.completion
+    if completion = invalid then return
+    if not completion.completed then return
+    releaseCleanupCompletion()
+    refreshBookmarks()
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseCleanupCompletion
+'-------------------------------------------------------------------------------
+sub releaseCleanupCompletion()
+    completion = m.bookmarks.completion
+    m.bookmarks.completion = invalid
+    if completion <> invalid then completion.unobserveField("completed")
 end sub

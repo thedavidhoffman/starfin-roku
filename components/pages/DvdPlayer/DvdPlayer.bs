@@ -1,4 +1,5 @@
 import "pkg:/components/pages/DvdPlayer/Helpers/ContinuationCountdown.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Resume.bs"
 import "pkg:/source/ResolutionProfile.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/Logger.bs"
@@ -29,6 +30,7 @@ sub init()
     m.menu = { manifest: invalid, focused: 0 }
     m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {} }
     m.playback = { active: false, video: invalid, timer: invalid, id: "", started: false, completed: false, pauseRequested: false, buffering: false, progress: 0 }
+    m.resume = { requestId: "", mode: DvdSession.StartMode.Normal, prompting: false, closing: false }
     m.transport = { title: "", year: "" }
     m.continuationCountdown = { layoutReady: false, expiry: 0, expiresUtc: "", timerId: "", targetElapsed: 0, clock: CreateObject("roTimespan") }
     m.continuationCountdown.layout = ParseJson(ReadAsciiFile("pkg:/components/pages/DvdPlayer/Helpers/continuation-countdown-layout.json"))
@@ -71,7 +73,12 @@ sub activate()
     m.loading.active = true
     m.top.visible = true
     if not wasActive then
-        beginLoad()
+        disc = m.session.demo
+        if disc.userData <> invalid and disc.userData.resume <> invalid then
+            promptResume(false)
+        else
+            beginLoad()
+        end if
     else if m.nodes.controls.visible then
         m.nodes.controls.callFunc("focusControls")
     else if m.native.state = DvdSession.State.Menu then
@@ -118,6 +125,7 @@ sub abandonSession()
     m.native.inFlight = invalid
     if task = invalid then return
     task.unobserveField("response")
+    if task.finalCommand = invalid then task.finalCommand = finalPositionCommand(DvdSession.Action.Stop)
     task.cancelRequested = true
     ' Leave the worker running so a late POST is followed by DELETE.
     m.top.removeChild(task)
@@ -172,7 +180,11 @@ sub onDemoResponse(event as object)
     m.native.requestId = CreateObject("roDeviceInfo").GetRandomUUID()
     task = m.top.createChild("DvdSessionTask")
     m.native.task = task
-    task.request = { server: m.session.server, token: m.session.token, userId: m.session.userId, requestId: m.native.requestId, discId: m.menu.manifest.id, startPath: m.menu.manifest.session.startPath }
+    completion = CreateObject("roSGNode", "Node")
+    completion.addFields({ completed: false })
+    m.top.cleanupCompletion = completion
+    task.cleanupCompletion = completion
+    task.request = { server: m.session.server, token: m.session.token, userId: m.session.userId, requestId: m.native.requestId, discId: m.menu.manifest.id, startPath: m.menu.manifest.session.startPath, startMode: m.resume.mode }
     task.observeField("response", "onSessionResponse")
     m.top.taskCreated = task
     task.control = TaskControl.Command.Run
@@ -186,12 +198,19 @@ sub onSessionResponse(event as object)
     if not event.getRoSGNode().isSameNode(m.native.task) then return
     response = event.getData()
     if response.requestId <> m.native.requestId then return
+    if m.resume.closing and response.action <> DvdSession.Event.Closed then return
     if response.action = DvdSession.Event.Closed then
         task = m.native.task
         m.native.task = invalid
         task.unobserveField("response")
         m.top.removeChild(task)
-        if Strings.ToString(response.message) <> "" then
+        if m.resume.closing then
+            m.top.closeRequested = true
+        else if response.errorCode = "resume-unavailable" then
+            releaseContentVideo()
+            m.nodes.spinner.control = SpinnerControl.Command.Stop
+            promptResume(true)
+        else if Strings.ToString(response.message) <> "" then
             showFailure(response.message)
         else
             m.top.closeRequested = true
@@ -228,6 +247,9 @@ end sub
 sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
     revision = Number.ToInteger(snapshot.revision, -1)
     if revision < m.native.revision then return
+    ' A successfully established session consumes the initial startup choice.
+    ' Recovery must not clear progress saved since an earlier Start over.
+    m.resume.mode = DvdSession.StartMode.Normal
     if revision = m.native.revision then
         m.native.snapshot = snapshot
         syncContinuationCountdown(snapshot)
@@ -321,6 +343,14 @@ sub queueCommand(action as string, playbackId = invalid as dynamic, value = inva
     if isMenuNavigationAction(action) then command.interruptedPlaybackId = m.playback.id
     if action = DvdSession.Action.Button then command.button = value
     if action = DvdSession.Action.Progress then command.positionSeconds = value
+    if action = DvdSession.Action.Pause or isMenuNavigationAction(action) then
+        positionCommand = finalPositionCommand(action)
+        if positionCommand <> invalid then
+            command.playbackId = positionCommand.playbackId
+            command.positionSeconds = positionCommand.positionSeconds
+            if isMenuNavigationAction(action) then m.playback.video.control = MediaControl.Command.Pause
+        end if
+    end if
     m.native.queue.Push(command)
     dispatchCommand()
     syncControls()
@@ -373,6 +403,7 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press or not m.loading.active then return false
+    if m.resume.closing or m.resume.prompting then return true
     if key = Remote.Key.Back then
         if m.nodes.controls.visible then
             hideControls()
@@ -382,8 +413,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             requestLastMenu()
             return true
         end if
-        deactivate()
-        m.top.closeRequested = true
+        closeDvdSession()
         return true
     end if
     if m.loading.failed then

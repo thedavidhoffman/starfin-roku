@@ -1,5 +1,6 @@
 import "pkg:/source/Remote.bs"
 import "pkg:/source/Theme.bs"
+import "pkg:/source/String.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -8,7 +9,7 @@ sub init()
     initReferences()
     colors = Theme.Get()
     m.nodes.title.color = colors.text.light.primary
-    m.nodes.year.color = colors.text.light.secondary
+    m.nodes.metadata.color = colors.text.light.secondary
     initHandlers()
     render()
 end sub
@@ -17,7 +18,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.nodes = { title: m.top.findNode("title"), year: m.top.findNode("year"), play: m.top.findNode("playPause") }
+    m.nodes = { title: m.top.findNode("title"), metadata: m.top.findNode("metadata"), play: m.top.findNode("playPause") }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -35,7 +36,17 @@ sub render()
     presentation = m.top.presentation
     if presentation = invalid then return
     m.nodes.title.text = presentation.title
-    m.nodes.year.text = presentation.year
+    metadataText = Strings.Trim(presentation.year)
+    runtimeText = Strings.Trim(presentation.runtime)
+    if runtimeText <> "" then
+        if metadataText <> "" then metadataText += "  " + Chr(8226) + "  "
+        metadataText += runtimeText
+    end if
+    m.nodes.metadata.text = metadataText
+    m.nodes.metadata.visible = metadataText <> ""
+    titleTop = 935
+    if metadataText = "" then titleTop = 960
+    m.nodes.title.translation = [210, titleTop]
     m.nodes.play.enabled = presentation.canPause
     iconName = "pause"
     if presentation.paused then iconName = "play"
@@ -48,11 +59,21 @@ end sub
 ' focusControls
 '-------------------------------------------------------------------------------
 sub focusControls()
+    if not m.top.visible then return
     if m.nodes.play.enabled then
         m.nodes.play.setFocus(true)
     else
         m.top.setFocus(true)
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseFocus
+'-------------------------------------------------------------------------------
+sub releaseFocus()
+    m.nodes.play.setFocus(false)
+    m.nodes.play.hasFocusVisual = false
+    m.top.setFocus(false)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -67,7 +88,7 @@ end sub
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
-    if not press then return false
+    if not press or not m.top.visible then return false
     m.top.interaction = true
     if key = Remote.Key.Left or key = Remote.Key.Right then
         return true
