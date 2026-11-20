@@ -345,83 +345,35 @@ on acceptance and use current revisions/UUIDs. Restored audio/language registers
 come from the backend checkpoint, rolling back later authored changes. Return
 while paused and stale-event/focus behavior remain unverified on Roku.
 
-## Automatic continuation countdown (plugin 0.1.50)
+## Automatic continuation and menu selection
 
-Finite still screens show a nonfocusable bottom-right badge, inset 72 pixels from
-right and 60 pixels from bottom in the 1080p design space. White text on a dark,
-translucent rounded background reads `Continuing in <remaining>s`, updated once
-per second from `still.expiresUtc`. At expiry it reads `Continuing...` until the
-backend state changes. Indefinite stills have no badge. Existing remote actions
-are unchanged; there is no new Skip command.
+The ?Continuing in? countdown display has been removed: false triggers made it
+unhelpful. There is no countdown badge, UI timer, deadline reconciliation, layout
+file, or generated countdown artwork. The unused shared ISO-difference helper
+has also been removed. Starfin does not interpret `automaticContinuation` for UI.
 
-DvdPlayer's feature-local ContinuationCountdown helper owns display updates only.
-DvdSessionTask remains the sole owner of automatic `stillComplete` requests.
-Accepted snapshots synchronize the deadline without restarting it on polling;
-stale revisions do not update it. Leaving the still state, restarting, failure,
-or cleanup stops the display timer and clears the badge. Late timer callbacks
-read current state and cannot resurrect an expired session's display.
-
-Source/diff review only. Deferred device scenarios: decreasing countdown, zero
-while awaiting transition, indefinite stills, changed deadlines, repeated/stale
-snapshots, user navigation before expiry, cleanup/reopen, and 1080p/720p placement.
-
-Timed menus additionally use nullable `automaticContinuation` (`timerId`,
-`expiresUtc`) and `serverTimeUtc`. Remaining time is computed from the server's
-date difference, including fractional seconds, and then reduced using a local
-monotonic timespan, never Roku UTC. The label rounds up positive remaining seconds
-and shows `Continuing...` at zero. Repeated snapshots reconcile the same deadline
-without extending it or restarting the display timer; a new ID starts a new timer.
-Null/missing timing or leaving menu state clears the menu countdown. Timing starts
-at backend publication, so the first displayed value can be below the full duration.
-
-The session task continues polling menus and forwards same-revision menu snapshots
-for time reconciliation. A newer revision with identical menu data updates timing
-without rebuilding hotspots, resetting local selection, or restarting media.
-Timed menus advance only on the backend: the countdown sends no completion,
-stillComplete, or button commands. Finite/indefinite still behavior is unchanged.
-Deferred checks include late timing publication, descriptor removal, new IDs,
-fractional rounding, unsynchronized device clocks, zero during delayed transitions,
-repeated/stale snapshots, menu media/focus continuity, and existing still completion.
-
-The countdown badge is normally 274 x 54 at [1574,966] in 1080p design coordinates.
-Timers initially displaying 100 seconds or more use 294 x 54 at [1554,966]; that
-width remains fixed for the timer's lifetime. Both sizes preserve the right edge.
-Its dark translucent fill has a rounded, opaque white two-pixel design border,
-with matching 1080p/720p PNGs produced by `scripts/generate-dvd-countdown-assets.mjs`.
-The 174-pixel wording field gives the full phrase additional room to avoid truncation and removes excess space before the seconds while keeping
-the badge right edge anchored. The wording, right-aligned two-digit seconds field
-(three digits for longer timers), and `s` suffix use fixed
-positions, so changing digit widths does not move surrounding text. At zero,
-`Continuing...` uses the same left text origin and hides the numeric field/suffix.
-Asset generation is implementation only; border rendering and 12-to-11/10-to-9
-transitions remain deferred device checks. No builds or tests were run.
+Backend-driven timed menus continue advancing through the existing session
+polling. Finite still screens retain `still.expiresUtc` and task-owned
+`stillComplete`; indefinite stills retain their existing behavior. No Skip button
+or new completion command is added. Same-revision polls no longer generate
+countdown-only page notifications; command acknowledgments still supply snapshots.
 
 Fresh DVD library entry explicitly selects the first sorted title. DvdLibraryPage
 blocks focus/selection updates during loading and grid replacement, so the outgoing
-folder index cannot leak into the title grid. Grid item focus and jump target are
-both committed to the resolved index before focus events are accepted again.
-Sort/layout changes retain the selected title by key; playback return retains the
-grid; returning to the chooser restores the selected folder. Deferred device checks
-cover each folder's initial title, sorting/layout changes, playback return, and
-countdown transitions 12-to-11, 10-to-9, and 100-to-99. Source/diff review only.
+folder index cannot leak into the title grid. Sort/layout changes retain the title
+by key; playback return retains the grid; returning to the chooser restores its
+selected folder.
 
 Menu selection reconciliation distinguishes command acknowledgments from passive
 snapshots. Successful button/menu-navigation acknowledgments restore the backend's
-selected hotspot even when the menu data and revision are unchanged. Timing-only
-poll updates preserve local selection. Both paths reuse the background and never
-activate auto-action buttons merely by restoring focus.
+selected hotspot even when menu data and revision are unchanged. Passive updates
+preserve local selection. Both paths reuse the background and never activate
+auto-action buttons merely by restoring focus.
 
-Countdown dimensions are owned by
-`components/pages/DvdPlayer/Helpers/continuation-countdown-layout.json`.
-DvdPlayer loads the bundled layout once; the runtime helper derives text positions
-and badge width from it, and the asset generator reads the same definition. XML
-owns only nodes and text styling. Changing geometry requires regenerating badge
-assets, not manually synchronizing XML/helper/generator constants.
-
-Source/diff review only for these fixes. Deferred scenarios include auto-action
-commands returning unchanged menus, same-revision command acknowledgments, passive
-timing updates after local navigation, and countdown geometry at both resolutions.
-
+Source/diff review only. Deferred device scenarios include timed menu advancement,
+finite/indefinite stills without a badge, unchanged-menu command acknowledgments,
+background continuity, and retained library selection. No tests, builds, automated
+validation or device checks were run for this removal.
 
 ## Compact playback overlay
 

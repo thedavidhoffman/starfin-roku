@@ -210,13 +210,9 @@ DvdPlayer owns revision-checked state, serialized command intent, button focus,
 and authenticated menu/finite-media rendering. Its local Playback helper reports
 actual Roku started/progress/pause/resume/EOF events; encoding completion alone
 never advances the DVD. Options requests the authored main menu; playback Back requests the backend last-menu checkpoint. Back dismisses visible controls first and exits from authored menus/errors.
-DvdPlayer's feature-local ContinuationCountdown helper owns the nonfocusable menu/still
-countdown and its one-second UI timer. Menu timing uses server-time differences and
-local monotonic elapsed time; still timing retains its existing expiry behavior. The
-helper never sends session commands. Its feature-local JSON layout is shared by
-the runtime renderer and badge asset generator. Timing-only menu updates preserve
-media and focus; successful menu command acknowledgments separately reconcile
-backend selection without rebuilding unchanged media. State changes and session cleanup clear the display.
+DVD automatic menu continuation remains backend-owned, without a countdown UI.
+Finite still completion remains task-owned. Menu updates preserve unchanged media
+and local focus; successful command acknowledgments reconcile backend selection.
 DvdSessionTask owns start, status polling, command retries, heartbeats, timed still
 completion, final-position stop before DELETE, and cleanup after a cancelled/lost start request.
 DvdPlayer's Resume helper owns startup choice, resume-unavailable fallback and final
