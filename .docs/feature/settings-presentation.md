@@ -39,8 +39,9 @@ highlight.
 ## Categories and cards
 
 Current user contains Libraries, Media shell, Theme, Playback, Subtitles,
-TV, Home, and Screensaver. All eight rows are visible. The Device heading is
-at y=488 and its three-row list starts at y=522: General, Video, and Advanced.
+TV, Home, Screensaver, and DVD. All nine rows are visible at the existing 50px
+pitch. The Device heading is at y=518 and its three-row list starts at y=552:
+General, Video, and Advanced.
 Category navigation wraps across both lists: Up from Libraries moves to Advanced,
 and Down from Advanced moves to Libraries, updating the displayed panel with focus.
 
@@ -57,12 +58,28 @@ content children exist. SettingsCard derives radio positions and widths while
 preserving each page's vertical layout. With a 24px inset and 32px native focus
 overhang, radio lists start at x=56 and use 1048px items, leaving equal margins.
 
-Libraries uses one titleless 1160 x 708px card. The 1045px table is centered at
-x=57.5 with a 24px vertical inset and nine rows at the existing 68px pitch.
-DVD titles is Poster-only with 3/4/5/6 columns; unavailable Thumb/Detailed cells
-show dashes left-aligned with the checkbox columns and are skipped by horizontal navigation. The selected column count
-is saved per account and applies only to DVD title grids, not folder thumbnails.
-The taller dialog and 738px divider accommodate the row without shrinking controls. Playback groups next-item
+Libraries uses one titleless 1160 x 640px card. The 1045px table is centered at
+x=57.5 with a 24px vertical inset and eight rows at the existing 68px pitch.
+The DVD row, unavailable-cell dashes, and Poster-only navigation exceptions have
+been removed from this table. The dialog remains 968px tall with a 738px divider.
+
+The user-scoped DVD category contains Title columns (3/4/5/6 square buttons) and
+Menu highlights (Original DVD / Rectangle radio options). Poster presentation is
+fixed, so no Poster/Thumb/Detailed selector is displayed. The existing
+`dvd-titles-layout` value is retained without migration; default is Poster with six
+columns. Left/Right moves between column buttons, Down enters highlight options,
+and Up from the first highlight option returns to the last column button used.
+Left from the first column or highlight list returns to categories; Back follows
+the existing settings save/cancel flow. Both values live in the current settings
+editor until that flow commits them.
+
+The account-scoped `dvd-menu-highlights` preference defaults to `original`;
+`rectangle` disables sheet loading. Invalid saved values use the default. MainScene
+passes the normalized choice when opening a DVD, so highlight changes apply on the
+next opening. Column changes continue updating the retained DVD browser without
+reloading its catalog. Folder cards remain four-column thumbnails.
+
+Playback groups next-item
 behavior, paired auto-skip controls, and a compact next-episode prompt selector on
 one page. Its nine-option picker opens above Settings through the confirmation
 OverlayHost; selection or Back returns focus without closing or saving Settings.
@@ -168,3 +185,9 @@ survive category changes, and subtitle paging, previews, focus restoration and
 Advanced reset confirmation keep their existing behavior. Separate category
 tests exercise list-driven initialization alongside existing navigation and
 retained-state coverage.
+
+DVD settings source/diff review only. Deferred device checks: nine-category focus
+and wrap, column-button/radio navigation, save/cancel and account isolation,
+existing column preference preservation, 1080p/720p layout, both highlight modes,
+rectangle mode without sheet requests, and original-artwork fallback. No tests
+changed or run, builds, automated validation, deployment or device checks.

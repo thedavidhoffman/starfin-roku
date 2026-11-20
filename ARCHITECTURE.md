@@ -192,8 +192,11 @@ routes close events only. DateTime owns calendar-date parsing for sorting. Full
 metadata endpoints are not fetched for cards or sorting. MainScene also passes account
 settings to the retained DVD browser. DvdLibraryPage owns the poster-column layout;
 DvdPosterCard consumes its shared grid spec for image size, masks, and request widths.
-SettingsStore owns the Poster-only DVD titles preference; folder cards remain fixed
-four-column thumbnails.
+SettingsStore owns the account-scoped Poster-only DVD title columns and menu
+highlight mode. SettingsContent owns the DVD category via its DvdSettings helper
+and layout-only SettingsDvdPanel; the Libraries table excludes DVD titles.
+MainScene passes the normalized highlight choice explicitly when opening DvdPlayer;
+rectangle mode bypasses sheet loading. Folder cards remain four-column thumbnails.
 `DvdLibraryPage` owns correlated catalog and library requests, automatic
 single-library entry, placeholder library cards, metadata grouping, poster presentation,
 and retained grid focus. Its `DvdPosterCard` owns authenticated image loading and
@@ -233,6 +236,14 @@ updates. The feature-local rendering helper owns background reuse, ready-still
 retention, preview fallback, and overlay replacement; DvdPlayer owns pending
 navigation visibility and command locks. Unchanged sources keep playing through
 menu/preparation updates; content playback clears menu media before presentation.
+The renderer's feature-local HighlightSheet helper validates optional authored
+session-selected sprite descriptors against live raster bounds and button IDs,
+and owns authenticated sheet loading, crop/transform presentation, rectangle
+fallback and stale-load cleanup.
+DvdPlayer supplies command activation/acknowledgment state; live session buttons
+remain authoritative. The backend owns stream/palette/menu-context selection;
+the client never chooses manifest variants. Immutable sheet path/dimensions own
+image identity independently of sprite mappings and menu background identity.
 
 DVD discovery is owned by `DvdDiscovery` under the DVD feature, with authenticated
 three-second `/Starfin/Dvd/Info` requests in `DvdDiscoveryTask`. MainScene passes

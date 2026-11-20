@@ -1,0 +1,172 @@
+namespace DvdHighlight
+    enum State
+        Selected = "selected"
+        Activated = "activated"
+    end enum
+end namespace
+
+'-------------------------------------------------------------------------------
+' syncHighlightSheet
+'-------------------------------------------------------------------------------
+sub syncHighlightSheet(menu as object)
+    descriptor = invalid
+    try
+        descriptor = validatedHighlightSheet(menu)
+    catch error
+        ' Optional highlight data must never prevent ordinary DVD navigation.
+        descriptor = invalid
+    end try
+    if descriptor = invalid then
+        clearHighlightSheet()
+        return
+    end if
+    identity = descriptor.path + ":" + Strings.ToString(descriptor.width) + "x" + Strings.ToString(descriptor.height)
+    if m.highlights.identity = identity then
+        ' The server may update sprite mappings while keeping the immutable PNG.
+        m.highlights.descriptor = descriptor
+        return
+    end if
+    clearHighlightSheet()
+    try
+        media = menuMediaRequest(descriptor.path)
+        m.highlights.identity = identity
+        m.highlights.descriptor = descriptor
+        m.highlights.root = m.nodes.host.createChild("Group")
+        m.highlights.root.visible = false
+        m.highlights.root.scaleRotateCenter = [0, 0]
+        m.highlights.clip = m.highlights.root.createChild("Group")
+        poster = m.highlights.clip.createChild("Poster")
+        m.highlights.poster = poster
+        poster.width = descriptor.width
+        poster.height = descriptor.height
+        poster.loadWidth = descriptor.width
+        poster.loadHeight = descriptor.height
+        poster.loadDisplayMode = "scaleToFill"
+        agent = CreateObject("roHttpAgent")
+        agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        agent.AddHeader("Authorization", media.headers.Authorization)
+        poster.setHttpAgent(agent)
+        poster.observeField("loadStatus", "onHighlightSheetStatus")
+        poster.uri = media.url
+    catch error
+        clearHighlightSheet()
+    end try
+end sub
+
+'-------------------------------------------------------------------------------
+' validatedHighlightSheet
+'-------------------------------------------------------------------------------
+function validatedHighlightSheet(menu as object) as dynamic
+    if m.session.useOriginalHighlights = false then return invalid
+    descriptor = menu.highlightSheet
+    if type(descriptor) <> "roAssociativeArray" then return invalid
+    if descriptor.schemaVersion <> "starfin-dvd-highlight-sheet/1" then return invalid
+    for each dimension in ["width", "height", "sourceWidth", "sourceHeight", "buttonGroup"]
+        value = Number.ToFloat(descriptor[dimension], -1)
+        if value <= 0 or value <> Number.ToInteger(value, -1) then return invalid
+        if descriptor[dimension] <> value then return invalid
+    end for
+    if descriptor.sourceWidth <> menu.sourceWidth or descriptor.sourceHeight <> menu.sourceHeight then return invalid
+    if descriptor.width > 2048 or descriptor.height > 2048 then return invalid
+    if descriptor.buttonGroup <> 1 then return invalid
+    if type(descriptor.path) <> "String" and type(descriptor.path) <> "roString" then return invalid
+    if descriptor.path = "" or type(descriptor.sprites) <> "roArray" then return invalid
+    if type(menu.buttons) <> "roArray" then return invalid
+    liveButtons = {}
+    for each button in menu.buttons
+        buttonKey = Strings.ToString(button.id)
+        if liveButtons.DoesExist(buttonKey) then return invalid
+        liveButtons[buttonKey] = true
+    end for
+    seenSprites = {}
+    for each sprite in descriptor.sprites
+        if type(sprite) <> "roAssociativeArray" then return invalid
+        if sprite.state <> DvdHighlight.State.Selected and sprite.state <> DvdHighlight.State.Activated then return invalid
+        buttonKey = Strings.ToString(sprite.buttonId)
+        if not liveButtons.DoesExist(buttonKey) then return invalid
+        spriteKey = buttonKey + ":" + sprite.state
+        if seenSprites.DoesExist(spriteKey) then return invalid
+        seenSprites[spriteKey] = true
+        if not validHighlightRect(sprite.source, descriptor.width, descriptor.height) then return invalid
+        if not validHighlightRect(sprite.destination, descriptor.sourceWidth, descriptor.sourceHeight) then return invalid
+    end for
+    return descriptor
+end function
+
+'-------------------------------------------------------------------------------
+' validHighlightRect
+'-------------------------------------------------------------------------------
+function validHighlightRect(rect as dynamic, boundsWidth as float, boundsHeight as float) as boolean
+    if type(rect) <> "roAssociativeArray" then return false
+    for each coordinate in ["x", "y", "width", "height"]
+        value = Number.ToFloat(rect[coordinate], -1)
+        if value < 0 or value <> Number.ToInteger(value, -1) then return false
+        if rect[coordinate] <> value then return false
+    end for
+    return rect.width > 0 and rect.height > 0 and rect.x + rect.width <= boundsWidth and rect.y + rect.height <= boundsHeight
+end function
+
+'-------------------------------------------------------------------------------
+' onHighlightSheetStatus
+'-------------------------------------------------------------------------------
+sub onHighlightSheetStatus(event as object)
+    if not m.loading.active or m.loading.failed or m.highlights.poster = invalid then return
+    if m.native.state <> DvdSession.State.Menu then return
+    if not event.getRoSGNode().isSameNode(m.highlights.poster) then return
+    renderMenuHighlight()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderMenuHighlight
+'-------------------------------------------------------------------------------
+sub renderMenuHighlight()
+    key = m.menu.focused.ToStr()
+    showHighlight = false
+    for each geometry in m.rendering.geometry
+        if geometry.id = m.menu.focused then
+            showHighlight = geometry.autoAction <> true
+            exit for
+        end if
+    end for
+    sprite = invalid
+    if m.highlights.root <> invalid then m.highlights.root.visible = false
+    if showHighlight and m.highlights.poster <> invalid then
+        if m.highlights.poster.loadStatus = "ready" then
+            selectedSprite = invalid
+            for each candidate in m.highlights.descriptor.sprites
+                if candidate.buttonId = m.menu.focused then
+                    if candidate.state = DvdHighlight.State.Selected then selectedSprite = candidate
+                    if candidate.state = m.highlights.state then sprite = candidate
+                end if
+            end for
+            if sprite = invalid and m.highlights.state = DvdHighlight.State.Activated then sprite = selectedSprite
+        end if
+    end if
+    if sprite <> invalid then
+        rect = m.rendering.rect
+        source = sprite.source
+        destination = sprite.destination
+        m.highlights.root.translation = [rect.x + destination.x * rect.scaleX, rect.y + destination.y * rect.scaleY]
+        m.highlights.root.scale = [rect.scaleX * destination.width / source.width, rect.scaleY * destination.height / source.height]
+        m.highlights.clip.clippingRect = [0, 0, source.width, source.height]
+        m.highlights.poster.translation = [-source.x, -source.y]
+        m.highlights.root.visible = true
+    end if
+    for each buttonKey in m.rendering.buttons
+        m.rendering.buttons[buttonKey].getChild(0).visible = buttonKey = key and showHighlight and sprite = invalid
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' clearHighlightSheet
+'-------------------------------------------------------------------------------
+sub clearHighlightSheet()
+    if m.highlights.poster <> invalid then m.highlights.poster.unobserveField("loadStatus")
+    if m.highlights.root <> invalid then m.nodes.host.removeChild(m.highlights.root)
+    m.highlights.poster = invalid
+    m.highlights.root = invalid
+    m.highlights.clip = invalid
+    m.highlights.descriptor = invalid
+    m.highlights.identity = ""
+    m.highlights.state = DvdHighlight.State.Selected
+end sub

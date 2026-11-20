@@ -108,12 +108,21 @@ Identify, scanning, and metadata configuration remain in Jellyfin administration
 
 ## DVD title layout settings
 
-Settings > Libraries includes a DVD titles row, fixed to Poster with 3, 4, 5,
-or 6 columns (default 6). Thumb and Detailed are unavailable and skipped by
-horizontal focus navigation. The account-scoped `dvd-titles-layout` setting uses
-existing SettingsStore save/cancel behavior; unsupported presentations fall back
-to Poster with six columns. The dialog is 968 pixels tall and its Libraries card
-is 708 pixels tall, preserving the existing 68-pixel row pitch and button sizes.
+Settings > DVD contains Title columns with just 3, 4, 5, and 6 buttons (default 6).
+Poster presentation remains fixed; no Poster/Thumb/Detailed controls or unavailable
+placeholders are displayed. The existing account-scoped `dvd-titles-layout` value
+is preserved, using the normal SettingsStore save/cancel behavior. Unsupported
+presentations fall back to Poster with six columns. The old DVD row has been
+removed from Settings > Libraries.
+
+The same DVD category offers Menu highlights: Original DVD (default) or Rectangle.
+The account-scoped `dvd-menu-highlights` key stores `original` or `rectangle`;
+missing/invalid values default to original. MainScene passes an explicit
+`useOriginalHighlights` boolean at player creation. Rectangle mode bypasses sheet
+validation/loading entirely; original mode retains authored sprites and fallback.
+Both preserve suppressed auto-action highlights and existing navigation. The choice
+applies to all DVDs on this Roku for that account, takes effect on the next DVD
+opening, and is not synced to Jellyfin or stored per disc.
 
 DvdLibraryPage receives settings explicitly from MainScene, including updates to
 an already open/retained page. It applies shared poster grid sizes and focus assets;
@@ -451,3 +460,57 @@ Deferred regression scenarios also include Start over ? playback/progress ? erro
 ? OK recovery without clearing the bookmark; exit with a stalled request; cleanup
 finishing before/after browser activation; folder navigation during cleanup; and
 leaving the browser before cleanup completes. Source/diff review only.
+
+
+## Original DVD menu highlights
+
+Starfin uses only the active session's optional `menu.highlightSheet`, selected by
+the server for the current menu context, stream, palette and button definition.
+It does not choose scan variants from `disc.menuAssets[].highlightSheets` or read
+the retired singular manifest field. There are no title-specific definitions,
+manual installation paths or diagnostic-navigation dependencies in the renderer.
+
+The feature-local HighlightSheet helper accepts `starfin-dvd-highlight-sheet/1`
+with positive integral dimensions, a maximum 2048-by-2048 atlas, group 1, and source
+dimensions matching the live DVD raster. It checks crop/destination bounds, live
+button membership, and duplicate button/state entries. Sparse sprites are valid:
+missing or invisible artwork falls back to rectangles. Null/absent descriptors,
+unknown schemas, malformed data and unsupported groups also use rectangles without
+interrupting navigation or playback. Server diagnostic matching remains server-owned.
+
+The PNG uses existing authenticated, disc-scoped asset requests with the configured
+server base path and MediaBrowser header. Poster decode/render dimensions preserve
+the original sheet. A translated Poster inside a clipped Group selects the source
+crop before the enclosing Group applies destination position and independent DVD
+horizontal/vertical scaling. Alpha, aspect ratio and letterboxing are preserved.
+
+Sheet identity is its immutable asset path and pixel dimensions. Selection changes
+and mapping updates on the same sheet reuse the loaded Poster and update crops
+locally, without reassignment of its URI or restarting menu media. Until loading
+succeeds, or on image failure, rectangles remain visible. Sprite and rectangle
+highlights never display together; auto-action buttons stay unhighlighted.
+An update with no buttons also reconciles highlight visibility, hiding any previous
+sprite even when the loaded sheet is reused.
+
+OK may display the activated sprite while sending the normal button command without
+an animation delay. If activated artwork is absent, selected artwork is retained;
+if neither exists, the rectangle remains. Command acknowledgment or rejection
+reconciles the selected state with the current menu and focus.
+
+Changing sheets, leaving menu state, failure and cleanup release the overlay and
+its load observer. Only events from the current Poster in an active menu are
+accepted, preventing stale artwork from appearing after transitions. Returning to
+a menu loads its current session-selected sheet through the same fallback path.
+
+Deployment requires the updated plugin and complete native helper, followed by a
+normal library scan using `dvd-menu-h264-30fps-gop60-no-bframes-aac128-highlights/3`.
+Scanner limitations or extraction failures yield rectangle fallback; there are no
+frontend heuristics for missing, changing or delayed subpictures. Older plugin
+responses without the session descriptor continue using rectangles.
+
+Source/diff review only; no test changes, builds, automated validation, deployment
+or device checks. Deferred acceptance includes multiple menus/discs and sheet
+sizes, sparse sprites, selected/activated fallback, transparency and anamorphic
+alignment at 1080p/720p, same-sheet focus/mapping changes without downloads, late
+loads after sheet replacement, null/unsupported descriptors, image failures,
+submenu transitions, background continuity and unchanged command behavior.

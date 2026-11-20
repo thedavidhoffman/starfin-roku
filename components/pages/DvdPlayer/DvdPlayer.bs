@@ -29,6 +29,7 @@ sub init()
     m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {} }
     m.playback = { active: false, video: invalid, timer: invalid, id: "", started: false, completed: false, pauseRequested: false, buffering: false, progress: 0 }
     m.resume = { requestId: "", mode: DvdSession.StartMode.Normal, prompting: false, closing: false }
+    m.highlights = { identity: "", descriptor: invalid, root: invalid, clip: invalid, poster: invalid, state: DvdHighlight.State.Selected }
     m.transport = { title: "", year: "" }
     initHandlers()
     onLoadRequestChanged()
@@ -212,6 +213,7 @@ sub onSessionResponse(event as object)
     else if response.action = DvdSession.Event.Command then
         if m.native.inFlight <> invalid then
             if response.commandId = m.native.inFlight.requestId then
+                m.highlights.state = DvdHighlight.State.Selected
                 if response.ok and isMenuNavigationAction(m.native.inFlight.action) then
                     if DvdPaths.SameId(m.native.inFlight.interruptedPlaybackId, m.playback.id) then releaseContentVideo()
                     hideControls()
@@ -220,6 +222,7 @@ sub onSessionResponse(event as object)
                 if response.conflict then m.native.navigating = false
                 if m.native.inFlight.action = DvdSession.Action.Button and m.native.state = DvdSession.State.Menu then m.native.navigating = false
                 m.native.inFlight = invalid
+                if m.native.state = DvdSession.State.Menu then renderMenuHighlight()
                 reconcileContentPause()
                 dispatchCommand()
                 syncControls()
@@ -255,6 +258,7 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
     m.native.snapshot = snapshot
     m.native.state = snapshot.state
     state = snapshot.state
+    if state <> DvdSession.State.Menu then clearHighlightSheet()
     m.log.write("Native session state=" + state + " revision=" + revision.ToStr())
     preparing = state = DvdSession.State.Starting or state = DvdSession.State.Preparing
     keepMenu = preparing and m.rendering.root <> invalid and m.nodes.host.visible and (previousState = DvdSession.State.Menu or previousState = DvdSession.State.Starting or previousState = DvdSession.State.Preparing)
@@ -377,6 +381,7 @@ end sub
 ' showFailure
 '-------------------------------------------------------------------------------
 sub showFailure(message as string)
+    clearHighlightSheet()
     hideControls()
     abandonSession()
     releaseTask()
@@ -442,6 +447,8 @@ sub activateMenuButton(buttonId as integer)
     if m.native.navigating or m.native.inFlight <> invalid or m.native.queue.Count() > 0 then return
     if not m.rendering.buttons.DoesExist(buttonId.ToStr()) then return
     m.native.navigating = true
+    m.highlights.state = DvdHighlight.State.Activated
+    renderMenuHighlight()
     queueCommand(DvdSession.Action.Button, invalid, buttonId)
 end sub
 

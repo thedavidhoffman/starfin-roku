@@ -1,3 +1,5 @@
+import "pkg:/components/pages/DvdPlayer/Helpers/HighlightSheet.bs"
+
 '-------------------------------------------------------------------------------
 ' renderScreen
 '-------------------------------------------------------------------------------
@@ -19,6 +21,7 @@ sub renderScreen(menu as object)
         m.rendering.video.width = rect.width
         m.rendering.video.height = rect.height
     end if
+    syncHighlightSheet(menu)
     renderMenuButtons(menu)
 end sub
 
@@ -26,6 +29,7 @@ end sub
 ' replaceMenuBackground
 '-------------------------------------------------------------------------------
 sub replaceMenuBackground(menu as object, sources as object)
+    clearHighlightSheet()
     stopPreview()
     clearMenuButtons()
     if m.rendering.image <> invalid then m.rendering.image.unobserveField("loadStatus")
@@ -102,6 +106,7 @@ sub restoreBackendMenuSelection(menu as object)
     if m.rendering.geometry.Count() > 0 then
         focusButton(focus)
     else
+        renderMenuHighlight()
         m.top.setFocus(true)
     end if
 end sub
@@ -143,16 +148,8 @@ sub focusButton(buttonNumber as integer)
     key = buttonNumber.ToStr()
     if not m.rendering.buttons.DoesExist(key) then return
     m.menu.focused = buttonNumber
-    showHighlight = true
-    for each geometry in m.rendering.geometry
-        if geometry.id = buttonNumber then
-            showHighlight = geometry.autoAction <> true
-            exit for
-        end if
-    end for
-    for each buttonKey in m.rendering.buttons
-        m.rendering.buttons[buttonKey].getChild(0).visible = buttonKey = key and showHighlight
-    end for
+    m.highlights.state = DvdHighlight.State.Selected
+    renderMenuHighlight()
     m.rendering.buttons[key].setFocus(true)
 end sub
 
@@ -160,6 +157,7 @@ end sub
 ' clearMenu
 '-------------------------------------------------------------------------------
 sub clearMenu()
+    clearHighlightSheet()
     stopPreview()
     clearMenuButtons()
     if m.rendering.image <> invalid then m.rendering.image.unobserveField("loadStatus")
