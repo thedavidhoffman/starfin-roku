@@ -1,0 +1,107 @@
+import "pkg:/source/Remote.bs"
+import "pkg:/source/Number.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.nodes = { list: m.top.findNode("filters"), status: m.top.findNode("status") }
+    m.catalog = { initialized: false }
+    m.nodes.list.observeField("itemSelected", "onFilterSelected")
+    m.top.observeField("model", "onModelChanged")
+    onModelChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' onModelChanged
+'-------------------------------------------------------------------------------
+sub onModelChanged()
+    if m.top.model = invalid then return
+    m.top.model.observeFieldScoped("presentation", "render")
+    render()
+end sub
+
+'-------------------------------------------------------------------------------
+' render
+'-------------------------------------------------------------------------------
+sub render()
+    state = m.top.model.presentation
+    if state = invalid then return
+    content = m.nodes.list.content
+    focusedId = ""
+    focusedIndex = Number.ToInteger(m.nodes.list.itemFocused, 0)
+    rebuild = content = invalid
+    if content <> invalid then
+        focused = content.getChild(focusedIndex)
+        if focused <> invalid then focusedId = focused.id
+        rebuild = content.getChildCount() <> state.items.Count()
+        if not rebuild then
+            for itemIndex = 0 to state.items.Count() - 1
+                if content.getChild(itemIndex).id <> state.items[itemIndex].id then rebuild = true
+            end for
+        end if
+    end if
+    if rebuild then content = CreateObject("roSGNode", "ContentNode")
+    selectedPresent = false
+    for each item in state.items
+        if item.id = state.selectedId then selectedPresent = true
+    end for
+    ' Cached choices can be focused immediately; the refresh must not jump back later.
+    initialSelection = not m.catalog.initialized and (selectedPresent or not state.loading)
+    if initialSelection then focusedId = state.selectedId
+    nextIndex = 0
+    for itemIndex = 0 to state.items.Count() - 1
+        item = state.items[itemIndex]
+        if rebuild then
+            entry = content.createChild("ContentNode")
+            entry.id = item.id
+            entry.addField("filterPresentation", "assocarray", true)
+        else
+            entry = content.getChild(itemIndex)
+        end if
+        rowPresentation = { name: item.name, description: item.description, selected: item.id = state.selectedId, enabled: item.enabled }
+        previous = entry.filterPresentation
+        changed = previous = invalid
+        if previous <> invalid then changed = previous.name <> rowPresentation.name or previous.description <> rowPresentation.description or previous.selected <> rowPresentation.selected or previous.enabled <> rowPresentation.enabled
+        if changed then entry.filterPresentation = rowPresentation
+        if item.id = focusedId then nextIndex = itemIndex
+    end for
+    ' Keep the same list and focused item during capability/acknowledgment updates.
+    if rebuild then m.nodes.list.content = content
+    if rebuild or initialSelection then m.nodes.list.jumpToItem = nextIndex
+    if initialSelection then m.catalog.initialized = true
+    m.nodes.status.text = state.message
+end sub
+
+'-------------------------------------------------------------------------------
+' focusItems
+'-------------------------------------------------------------------------------
+sub focusItems()
+    m.nodes.list.setFocus(true)
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilterSelected
+'-------------------------------------------------------------------------------
+sub onFilterSelected()
+    entry = m.nodes.list.content.getChild(m.nodes.list.itemSelected)
+    if entry = invalid then return
+    if entry.filterPresentation.enabled then m.top.model.selectionRequested = entry.id
+end sub
+
+'-------------------------------------------------------------------------------
+' onKeyEvent
+'-------------------------------------------------------------------------------
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = Remote.Key.Back then return false
+    if key = Remote.Key.Options then m.top.model.refreshRequested = true
+    return true
+end function
+
+'-------------------------------------------------------------------------------
+' cleanup
+'-------------------------------------------------------------------------------
+sub cleanup()
+    if m.top.model <> invalid then m.top.model.unobserveFieldScoped("presentation")
+end sub

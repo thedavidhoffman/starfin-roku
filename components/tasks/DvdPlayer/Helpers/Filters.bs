@@ -1,0 +1,64 @@
+'-------------------------------------------------------------------------------
+' sendFilterCommand
+'-------------------------------------------------------------------------------
+function sendFilterCommand(command as object) as object
+    body = Json.Object([Json.Pair("requestId", command.requestId), Json.Pair("action", command.action), Json.NumberPair("revision", command.revision), Json.Pair("filterId", command.filterId), Json.Pair("playbackId", command.playbackId), Json.NumberPair("positionSeconds", command.positionSeconds)])
+    ' Transport retries keep the exact UUID and body; explicit pending replies poll instead.
+    for attempt = 0 to 2
+        result = sessionRequest(m.native.snapshot.commandPath, "POST", body)
+        if m.top.cancelRequested or result.ok or Number.ToInteger(result.status, 0) > 0 then exit for
+        if attempt < 2 then
+            retryDelay = CreateObject("roTimespan")
+            while retryDelay.TotalMilliseconds() < 2000 and not m.top.cancelRequested
+                wait(100, m.port)
+            end while
+        end if
+    end for
+    if m.top.cancelRequested then return result
+    if result.status = 401 or result.status = 403 or result.status = 404 or result.status = 410 then return result
+    m.native.commandId = command.requestId
+    failure = result.data
+    if type(failure) <> "roAssociativeArray" then failure = ParseJson(Strings.ToString(result.responseText))
+    errorCode = ""
+    message = "The video filter could not be changed."
+    if type(failure) = "roAssociativeArray" then
+        errorCode = Strings.ToString(failure.error)
+        message = Strings.ToString(failure.message, message)
+    end if
+    if result.ok then
+        acceptSnapshot(result.data)
+        publishFilterResult(command.requestId, true, "", "")
+    else if errorCode = DvdFilter.Error.Pending or Number.ToInteger(result.status, 0) <= 0 or (result.status >= 500 and errorCode <> DvdFilter.Error.Checking) then
+        m.native.pendingFilter = command
+        status = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)
+        if status.ok then acceptSnapshot(status.data)
+    else
+        status = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)
+        if not status.ok then return status
+        acceptSnapshot(status.data)
+        publishFilterResult(command.requestId, false, errorCode, message)
+    end if
+    result.keepSession = true
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' reconcilePendingFilter
+'-------------------------------------------------------------------------------
+sub reconcilePendingFilter()
+    if m.native.pendingFilter = invalid or m.top.cancelRequested then return
+    change = m.native.snapshot.filterChange
+    if type(change) <> "roAssociativeArray" then return
+    if not DvdPaths.SameId(change.requestId, m.native.pendingFilter.requestId) then return
+    if change.state <> DvdFilter.Change.Accepted and change.state <> DvdFilter.Change.Rejected then return
+    requestId = m.native.pendingFilter.requestId
+    m.native.pendingFilter = invalid
+    publishFilterResult(requestId, change.state = DvdFilter.Change.Accepted, Strings.ToString(change.errorCode), Strings.ToString(change.message))
+end sub
+
+'-------------------------------------------------------------------------------
+' publishFilterResult
+'-------------------------------------------------------------------------------
+sub publishFilterResult(commandId as string, accepted as boolean, errorCode as string, message as string)
+    m.top.response = { action: DvdSession.Event.Command, requestId: m.native.request.requestId, commandId: commandId, ok: accepted, conflict: false, errorCode: errorCode, message: message, payload: m.native.snapshot }
+end sub

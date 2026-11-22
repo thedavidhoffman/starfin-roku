@@ -4,6 +4,8 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/DateTime.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/FilterContracts.bs"
+import "pkg:/components/tasks/DvdPlayer/Helpers/Filters.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/SessionContracts.bs"
 
@@ -19,7 +21,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
-    m.native = { request: request, headers: JellyfinAuth.BuildTokenHeaders(request.token), path: "", started: false, snapshot: invalid, revision: -1, commandId: "", authExpired: false, errorCode: "", mediaId: "", heartbeat: CreateObject("roTimespan") }
+    m.native = { request: request, headers: JellyfinAuth.BuildTokenHeaders(request.token), path: "", started: false, snapshot: invalid, revision: -1, commandId: "", pendingFilter: invalid, authExpired: false, errorCode: "", mediaId: "", heartbeat: CreateObject("roTimespan") }
     m.port = CreateObject("roMessagePort")
     m.top.observeField("cancelRequested", m.port)
     m.top.observeField("command", m.port)
@@ -52,7 +54,7 @@ function runSession() as string
     m.native.path = path + "/" + request.requestId
     if m.top.cancelRequested then return ""
     m.native.started = true
-    body = Json.Object([Json.Pair("requestId", request.requestId), Json.Pair("startMode", Strings.ToString(request.startMode, DvdSession.StartMode.Normal))])
+    body = Json.Object([Json.Pair("requestId", request.requestId), Json.Pair("startMode", Strings.ToString(request.startMode, DvdSession.StartMode.Normal)), Json.Pair("filterId", DvdFilter.None)])
     result = requestWithRetry(path, "POST", body)
     if m.top.cancelRequested then return ""
     if not result.ok then
@@ -76,8 +78,8 @@ function runSession() as string
         command = m.top.command
         if command <> invalid and command.requestId <> m.native.commandId then
             result = sendCommand(command)
-            if not result.ok and result.status <> 409 then return Strings.ToString(result.errorMessage, "DVD command failed.")
-        else if snapshot.state = DvdSession.State.Still and snapshot.still.expiresUtc <> invalid then
+            if not result.ok and result.status <> 409 and result.keepSession <> true then return Strings.ToString(result.errorMessage, "DVD command failed.")
+        else if m.native.pendingFilter = invalid and snapshot.state = DvdSession.State.Still and snapshot.still.expiresUtc <> invalid then
             expiry = DateTime.FromIsoSeconds(snapshot.still.expiresUtc)
             now = CreateObject("roDateTime")
             now.Mark()
@@ -88,7 +90,9 @@ function runSession() as string
             end if
         end if
         if m.top.cancelRequested then exit while
-        wait(400, m.port)
+        pollDelay = 400
+        if m.native.pendingFilter <> invalid then pollDelay = 2000
+        wait(pollDelay, m.port)
         if m.top.cancelRequested then exit while
         result = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)
         if not result.ok then return Strings.ToString(result.errorMessage, "Unable to read DVD session status.")
@@ -101,6 +105,7 @@ end function
 ' sendCommand
 '-------------------------------------------------------------------------------
 function sendCommand(command as object, notifyPage = true as boolean) as object
+    if command.action = DvdSession.Action.SetFilter then return sendFilterCommand(command)
     pairs = [Json.Pair("requestId", command.requestId), Json.Pair("action", command.action)]
     if command.playbackId <> invalid then
         pairs.Push(Json.Pair("playbackId", command.playbackId))
@@ -141,7 +146,10 @@ sub acceptSnapshot(data as dynamic)
     if revision < 0 then throw "Invalid session revision."
     if revision < m.native.revision then return
     m.native.snapshot = data
-    if revision = m.native.revision then return
+    if revision = m.native.revision then
+        reconcilePendingFilter()
+        return
+    end if
     if data.state = DvdSession.State.Playing or data.state = DvdSession.State.AwaitingCompletion then
         playback = data.playback
         if playback = invalid then throw "Missing playback."
@@ -160,6 +168,7 @@ sub acceptSnapshot(data as dynamic)
     end if
     m.native.revision = revision
     if not m.top.cancelRequested then m.top.response = { action: DvdSession.Event.Snapshot, requestId: m.native.request.requestId, payload: data }
+    reconcilePendingFilter()
 end sub
 
 '-------------------------------------------------------------------------------

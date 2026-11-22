@@ -6,6 +6,7 @@ import "pkg:/source/String.bs"
 ' init
 '-------------------------------------------------------------------------------
 sub init()
+    m.focusState = { filter: false }
     initReferences()
     colors = Theme.Get()
     m.nodes.title.color = colors.text.light.primary
@@ -18,7 +19,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.nodes = { title: m.top.findNode("title"), metadata: m.top.findNode("metadata"), play: m.top.findNode("playPause") }
+    m.nodes = { title: m.top.findNode("title"), metadata: m.top.findNode("metadata"), play: m.top.findNode("playPause"), filter: m.top.findNode("filter") }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -27,6 +28,7 @@ end sub
 sub initHandlers()
     m.top.observeField("presentation", "render")
     m.nodes.play.observeField("buttonSelected", "onPlaySelected")
+    m.nodes.filter.observeField("buttonSelected", "onFilterSelected")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -46,7 +48,8 @@ sub render()
     m.nodes.metadata.visible = metadataText <> ""
     titleTop = 935
     if metadataText = "" then titleTop = 960
-    m.nodes.title.translation = [210, titleTop]
+    m.nodes.title.translation = [492, titleTop]
+    m.nodes.filter.enabled = presentation.canFilter
     m.nodes.play.enabled = presentation.canPause
     iconName = "pause"
     if presentation.paused then iconName = "play"
@@ -60,17 +63,20 @@ end sub
 '-------------------------------------------------------------------------------
 sub focusControls()
     if not m.top.visible then return
-    if m.nodes.play.enabled then
-        m.nodes.play.setFocus(true)
-    else
-        m.top.setFocus(true)
-    end if
+    ' Availability changes must not choose a different action for the viewer.
+    target = m.nodes.play
+    if m.focusState.filter then target = m.nodes.filter
+    target.setFocus(true)
+    target.hasFocusVisual = target.enabled
 end sub
 
 '-------------------------------------------------------------------------------
 ' releaseFocus
 '-------------------------------------------------------------------------------
 sub releaseFocus()
+    m.focusState.filter = false
+    m.nodes.filter.setFocus(false)
+    m.nodes.filter.hasFocusVisual = false
     m.nodes.play.setFocus(false)
     m.nodes.play.hasFocusVisual = false
     m.top.setFocus(false)
@@ -91,8 +97,32 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if not press or not m.top.visible then return false
     m.top.interaction = true
     if key = Remote.Key.Left or key = Remote.Key.Right then
+        if key = Remote.Key.Right and m.nodes.filter.enabled then
+            m.focusState.filter = true
+            m.nodes.filter.setFocus(true)
+        end if
+        if key = Remote.Key.Left and m.nodes.play.enabled then
+            m.focusState.filter = false
+            m.nodes.play.setFocus(true)
+        end if
         return true
     end if
     if key = Remote.Key.Up or key = Remote.Key.Down then return true
     return false
 end function
+
+'-------------------------------------------------------------------------------
+' onFilterSelected
+'-------------------------------------------------------------------------------
+sub onFilterSelected()
+    m.top.interaction = true
+    m.top.filterPressed = true
+end sub
+
+'-------------------------------------------------------------------------------
+' focusFilter
+'-------------------------------------------------------------------------------
+sub focusFilter()
+    m.focusState.filter = true
+    focusControls()
+end sub

@@ -6,7 +6,7 @@ individual Starfin features.
 
 ## Table of Contents
 
-- [DVD Library, Artwork, Native Playback, and Menu Highlights](dvd-menu-demo.md)
+- [DVD Library, Artwork, Native Playback, Menu Highlights, and Video Filters](dvd-menu-demo.md)
 - [DVD Playback Controls: Agreed Transport Scope](dvd-playback-controls-handoff.md)
 
 - [Collection Browse Preferences](collection-browse-preferences.md)

@@ -1,0 +1,84 @@
+import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/Number.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    initReferences()
+    m.binding = { item: invalid }
+    checkboxUri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
+    m.nodes.background.uri = "pkg:/images/settings/" + ResolutionProfile.GetName() + "/settings-card-glass.9.png"
+    m.nodes.focusBackground.uri = checkboxUri
+    m.nodes.checkboxBorder.uri = checkboxUri
+    m.nodes.checkboxFill.uri = checkboxUri
+    initHandlers()
+    onItemContentChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.nodes = { background: m.top.findNode("background"), focusBackground: m.top.findNode("focusBackground"), checkbox: m.top.findNode("checkbox"), checkboxBorder: m.top.findNode("checkboxBorder"), checkboxFill: m.top.findNode("checkboxFill"), name: m.top.findNode("name"), description: m.top.findNode("description") }
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("itemContent", "onItemContentChanged")
+    m.top.observeField("focusPercent", "renderFocus")
+    m.top.observeField("listHasFocus", "renderFocus")
+end sub
+
+'-------------------------------------------------------------------------------
+' onItemContentChanged
+'-------------------------------------------------------------------------------
+sub onItemContentChanged()
+    if m.binding.item <> invalid then m.binding.item.unobserveFieldScoped("filterPresentation")
+    m.binding.item = m.top.itemContent
+    if m.binding.item <> invalid then m.binding.item.observeFieldScoped("filterPresentation", "render")
+    render()
+end sub
+
+'-------------------------------------------------------------------------------
+' render
+'-------------------------------------------------------------------------------
+sub render()
+    if m.binding.item = invalid then return
+    item = m.binding.item.filterPresentation
+    if item = invalid then return
+    m.nodes.name.text = item.name
+    m.nodes.description.text = item.description
+    m.nodes.checkbox.visible = item.selected
+    m.nodes.checkbox.blendColor = &hFFFFFFFF
+    textOpacity = 1.0
+    if not item.enabled then textOpacity = 0.5
+    m.nodes.name.opacity = textOpacity
+    m.nodes.description.opacity = textOpacity
+    m.nodes.checkbox.opacity = textOpacity
+    m.nodes.checkboxBorder.opacity = textOpacity
+    renderFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderFocus
+'-------------------------------------------------------------------------------
+sub renderFocus()
+    focusAmount = Number.ToFloat(m.top.focusPercent, 0)
+    if not m.top.listHasFocus then focusAmount = 0
+    if focusAmount < 0 then focusAmount = 0
+    if focusAmount > 1 then focusAmount = 1
+    m.nodes.focusBackground.opacity = focusAmount
+    textColor = &hF3F7FBFF
+    ' Switch contrast halfway through the fade, without waiting for itemHasFocus.
+    if focusAmount >= 0.5 then
+        textColor = &h0F1A2AFF
+    end if
+    m.nodes.name.color = textColor
+    m.nodes.description.color = textColor
+    m.nodes.checkboxBorder.blendColor = textColor
+    m.nodes.checkboxFill.blendColor = &h172635FF
+end sub

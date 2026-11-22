@@ -514,3 +514,89 @@ sizes, sparse sprites, selected/activated fallback, transparency and anamorphic
 alignment at 1080p/720p, same-sheet focus/mapping changes without downloads, late
 loads after sheet replacement, null/unsupported descriptors, image failures,
 submenu transitions, background continuity and unchanged command behavior.
+
+
+## Playback video filters
+
+DVD playback controls offer a Video filter button beside Play/Pause. Each session
+starts with None; the choice is not stored in account settings. Authored menus and
+highlight sheets remain unfiltered. The standard Jellyfin player is unchanged.
+
+DvdFilterDialog opens centered through OverlayHost (900 x 740 in the 1080p
+layout), using the standard dialog backdrop. A vertical MarkupList displays three
+rounded cards with a name, description and checkmark for the accepted selection.
+The list starts 140 pixels below the panel top; supporting text starts 30 pixels
+below the list viewport, keeping the header compact and the instructions separated.
+Up/Down browses; OK selects and dismisses the dialog. Back closes without changing
+the filter. Selecting the active filter simply closes the dialog without a request
+or spinner. Checkbox squares stay dark blue on both focused and unfocused cards;
+selected checkmarks stay white.
+Card highlights follow `focusPercent` during movement rather than waiting for the
+scroll animation to finish. Both background images remain loaded; only highlight
+opacity and contrast change during focus movement. Losing list focus hides the
+highlight. Description and selection rendering stay separate from focus animation.
+
+An actual selection opens a blocking, cancellable Spinner owned by DvdPlayer's
+filter transition state. It covers acknowledgment and replacement buffering, not
+just the command request. Other remote actions are blocked; Back exits DVD playback
+and uses the existing cancellation/session cleanup path. The spinner releases when
+the replacement is playing or paused, on rejection, or on a terminal/menu/still
+transition. Rejections use AppMessage and keep the backend's accepted selection.
+The dialog is not reopened automatically. The standard buffering spinner is hidden
+behind this filter spinner while the transition is active, avoiding duplicate UI.
+
+Identical presentation updates are suppressed, changed rows update in place and
+catalog loading preserves focus. Routine progress commands do not dim choices:
+selection intent queues behind progress and captures revision/position at dispatch.
+Toolbar focus stays on the chosen action during temporary disabling; disabled
+buttons ignore OK, and their focus styling returns when they become enabled again.
+Left/Right still moves only to enabled actions.
+If the targeted playback has ended or changed, the intent is rejected locally.
+
+DvdPlayer's Filters helper owns a session-scoped DvdFilterModel presentation/event
+bridge, catalog requests, capability timer and selection intent. The dialog and
+content only present data and emit intent; MainScene routes opening/closing.
+DvdFiltersTask loads the authenticated Filters catalog on opening or Options retry.
+Names, descriptions and IDs come from the server; a local None entry remains
+available if loading fails. Info is polled every two seconds after responses while
+capability is checking and the panel is open. Shader choices require available;
+None does not require shader capability. All selections wait for playable content
+and serialized transport availability. Closing cancels capability work, not an
+already submitted filter change. Catalog errors remain in the panel; command errors use AppMessage. Server base paths and MediaBrowser authentication are preserved.
+
+The session task serializes setFilter with a UUID, current revision/playback ID,
+and the actual Roku position captured at dispatch. Known capability/checkpoint
+rejections are nonfatal. Rejections refresh state before another user attempt,
+which gets a new UUID. Network retries preserve the exact UUID and body; explicit
+pending replies are not resubmitted. After pending or exhausted uncertain transport
+responses, status polling every two seconds matches filterChange.requestId until
+accepted or rejected. Unrelated/null results never release the lock. filter.pending is
+rendering lag and does not lock commands after acknowledgment. Existing session
+polling resumes after acknowledgment. Back exits through the blocking spinner throughout acknowledgment and startup; shutdown still cancels polling and deletes the
+session. Session expiration follows the existing recovery path.
+
+Every actual filter change during title playback replaces the playback identity,
+including shader-to-shader changes. No client restart flag is sent. Acceptance
+releases the acknowledgment lock, but filter choices stay disabled while the
+session is starting or the replacement is buffering. The existing snapshot path
+loads the new playback ID/URL at position zero with the server pause state, without
+seeking to the submitted old-player position. The spinner covers startup; the
+picker remains dismissed. Backend checkpoint restoration may rewind up to 2.5 seconds.
+Selecting the already selected filter is a local no-op and never waits for a new
+playback ID. Rejected checkpoint changes retain the old player and selection.
+Replaced-player events remain guarded by node/playback identity, progress belongs
+to the new player, and stale queued playback commands are discarded through the
+existing dispatcher. Menus remain unfiltered; this picker is playback-only.
+
+This requires the backend release that replaces streams for all title filter
+changes. The backend handoff reports that implementation is not yet packaged;
+the previous ZIP still changes shader-to-shader effects in place.
+
+Source/diff review only. No tests added or changed, tests/builds/automated checks,
+deployment or device checks run. Deferred acceptance: centered vertical layout and description fit at 1080p/720p;
+selection dismissal, blocking-spinner Back exit before/after acknowledgment; remote browse/apply/Back and accepted checkmarks;
+capability checking/unavailable/access failures and retry; focus during status
+updates and buffering; replacement across all filter pairs while playing/paused;
+same-filter no-ops, zero-based progress and old-player events; late acceptance,
+late rejection, stale IDs and checkpoint failures; cleanup, expiry, and exit while
+pending. Runtime filter availability depends on the deployed backend contract.

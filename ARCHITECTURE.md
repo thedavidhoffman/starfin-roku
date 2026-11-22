@@ -245,6 +245,25 @@ remain authoritative. The backend owns stream/palette/menu-context selection;
 the client never chooses manifest variants. Immutable sheet path/dimensions own
 image identity independently of sprite mappings and menu background identity.
 
+DVD playback filter selection is owned by DvdPlayer's feature-local Filters helper.
+DvdFilterModel carries presentation and selection/refresh intent between that owner
+and the centered DvdFilterDialog/DvdFilterContent through OverlayHost.
+DvdFilterContent owns vertical MarkupList focus; DvdFilterItem renders rounded rows and
+read-only contrast-aware checkbox indicators from item presentation data.
+Unchanged presentation is suppressed at the owner and row boundaries; filter
+intent may queue behind progress, with revision/position captured by dispatch. MainScene
+routes close events only. DvdFiltersTask owns authenticated catalog/capability
+requests; DvdPlayer owns their lifetime and visible-picker capability timer.
+DvdSessionTask's Filters helper owns setFilter serialization, recoverable rejection
+handling and request-correlated late acknowledgments. It polls the existing session
+status instead of creating a competing session worker. Selected-versus-rendered
+state is distinct from command acknowledgment. Every actual title filter change
+uses the existing playback-identity replacement path, including shader-to-shader;
+Roku starts the replacement at zero and reconciles the session pause state.
+DvdPlayer also owns a cancellable blocking filter spinner from selection through
+replacement readiness; acknowledgment alone does not clear it. The dialog closes
+on selection, and failures use AppMessage. No filter preference is persisted.
+
 DVD discovery is owned by `DvdDiscovery` under the DVD feature, with authenticated
 three-second `/Starfin/Dvd/Info` requests in `DvdDiscoveryTask`. MainScene passes
 new authenticated sessions, resets discovery on logout/login routing, and routes
